@@ -173,16 +173,7 @@ export class ChatFileHandler {
      */
     private async _processZipFile(file: File): Promise<{ text: string; attachment: IChatAttachment; tokens: number }> {
         if (file.size > MAX_ARCHIVE_SIZE) {
-            return {
-                text: `\n[Archive skipped: ${file.name} (Size > ${MAX_ARCHIVE_SIZE / 1024 / 1024}MB)]`,
-                attachment: {
-                    name: file.name,
-                    type: file.type || 'application/zip',
-                    size: file.size,
-                    data_base64: '', 
-                },
-                tokens: 0
-            };
+            return this._createSkippedAttachment(file, `Size > ${MAX_ARCHIVE_SIZE / 1024 / 1024}MB`);
         }
 
         let textResult = `\n\n--- ARCHIVE: ${file.name} (Smart Unpacked) ---`;
@@ -200,61 +191,8 @@ export class ChatFileHandler {
             textResult += this._generateStructureMap(zip, fileNames);
             textResult += '\n--- START EXTRACTED FILES ---\n';
 
-            let extractedCount = 0;
-            let processedFiles = 0;
-            let totalExpandedSize = 0;
-
-            for (const relPath of fileNames) {
-                processedFiles++;
-                if (processedFiles > MAX_TOTAL_FILES_IN_ZIP) {
-                    textResult += `\n[Stopped: File limit exceeded (> ${MAX_TOTAL_FILES_IN_ZIP} files)]`;
-                    break;
-                }
-
-                if (!this._shouldProcessEntry(relPath, zip.files[relPath].dir)) continue;
-
-                const zipEntry = zip.files[relPath];
-                
-                // Safety: Path Traversal Protection
-                if (relPath.includes('..') || relPath.startsWith('/') || relPath.startsWith('\\')) {
-                    textResult += `\n[Skipped: ${relPath} - Malformed or suspicious path]`;
-                    continue;
-                }
-
-                const entryExt = relPath.split('.').pop()?.toLowerCase() || '';
-
-                // Safety: Check uncompressed size (Zip Bomb protection)
-                // Use jszp internal metadata if available, otherwise check after extraction
-                // @ts-ignore - access internal JSZip metadata for efficiency
-                const metadata = zipEntry._data as { uncompressedSize?: number };
-                if (metadata?.uncompressedSize && metadata.uncompressedSize > MAX_EXTRACTED_FILE_SIZE * 2) {
-                     textResult += `\n[Skipped: ${relPath} - Uncompressed size too large]`;
-                     continue;
-                }
-
-                const content = await zipEntry.async("string");
-                
-                // Security: Global Size Check (Compliant Solution for S5042)
-                // We track totalExpandedSize against MAX_TOTAL_UNCOMPRESSED_SIZE (100MB)
-                totalExpandedSize += content.length;
-                if (totalExpandedSize > MAX_TOTAL_UNCOMPRESSED_SIZE) {
-                    textResult += `\n\n[CRITICAL: Operation aborted. Total uncompressed size exceeded limit (Zip Bomb detected).]`;
-                    console.error('[ChatFileHandler] Zip Bomb detection: Total size limit exceeded');
-                    break;
-                }
-
-                if (content.length > MAX_EXTRACTED_FILE_SIZE) {
-                    textResult += `\n[Skipped: ${relPath} - Content too large (${Math.round(content.length / 1024)}KB)]`;
-                    continue;
-                }
-
-                textResult += `\n\nFile: ${relPath}\n\`\`\`${entryExt}\n${content}\n\`\`\``;
-                extractedCount++;
-            }
-
-            if (extractedCount === 0) {
-                textResult += `\n(No suitable text files found or all skipped by policy)`;
-            }
+            const extractionResult = await this._extractZipEntries(zip, fileNames);
+            textResult += extractionResult;
             
             textResult += `\n--- END ARCHIVE ${file.name} ---`;
 
@@ -283,6 +221,85 @@ export class ChatFileHandler {
                 tokens: 0
             };
         }
+    }
+
+    private _createSkippedAttachment(file: File, reason: string): { text: string; attachment: IChatAttachment; tokens: number } {
+        return {
+            text: `\n[Archive skipped: ${file.name} (${reason})]`,
+            attachment: {
+                name: file.name,
+                type: file.type || 'application/zip',
+                size: file.size,
+                data_base64: '', 
+            },
+            tokens: 0
+        };
+    }
+
+    private async _extractZipEntries(zip: JSZip, fileNames: string[]): Promise<string> {
+        let textResult = '';
+        let extractedCount = 0;
+        let processedFiles = 0;
+        let totalExpandedSize = 0;
+
+        for (const relPath of fileNames) {
+            processedFiles++;
+            if (processedFiles > MAX_TOTAL_FILES_IN_ZIP) {
+                textResult += `\n[Stopped: File limit exceeded (> ${MAX_TOTAL_FILES_IN_ZIP} files)]`;
+                break;
+            }
+
+            if (!this._shouldProcessEntry(relPath, zip.files[relPath].dir)) continue;
+
+            const zipEntry = zip.files[relPath];
+            const validation = this._validateZipEntry(relPath, zipEntry);
+            if (validation.skipped) {
+                textResult += validation.message;
+                continue;
+            }
+
+            const content = await zipEntry.async("string");
+            
+            // Security: Global Size Check (Compliant Solution for S5042)
+            // We track totalExpandedSize against MAX_TOTAL_UNCOMPRESSED_SIZE (100MB)
+            totalExpandedSize += content.length;
+            if (totalExpandedSize > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+                textResult += `\n\n[CRITICAL: Operation aborted. Total uncompressed size exceeded limit (Zip Bomb detected).]`;
+                console.error('[ChatFileHandler] Zip Bomb detection: Total size limit exceeded');
+                break;
+            }
+
+            if (content.length > MAX_EXTRACTED_FILE_SIZE) {
+                textResult += `\n[Skipped: ${relPath} - Content too large (${Math.round(content.length / 1024)}KB)]`;
+                continue;
+            }
+
+            const entryExt = relPath.split('.').pop()?.toLowerCase() || '';
+            textResult += `\n\nFile: ${relPath}\n\`\`\`${entryExt}\n${content}\n\`\`\``;
+            extractedCount++;
+        }
+
+        if (extractedCount === 0) {
+            textResult += `\n(No suitable text files found or all skipped by policy)`;
+        }
+
+        return textResult;
+    }
+
+    private _validateZipEntry(relPath: string, zipEntry: JSZip.JSZipObject): { skipped: boolean; message: string } {
+        // Safety: Path Traversal Protection
+        if (relPath.includes('..') || relPath.startsWith('/') || relPath.startsWith('\\')) {
+            return { skipped: true, message: `\n[Skipped: ${relPath} - Malformed or suspicious path]` };
+        }
+
+        // Safety: Check uncompressed size (Zip Bomb protection)
+        // @ts-ignore - access internal JSZip metadata for efficiency
+        const metadata = zipEntry._data as { uncompressedSize?: number };
+        if (metadata?.uncompressedSize && metadata.uncompressedSize > MAX_EXTRACTED_FILE_SIZE * 2) {
+             return { skipped: true, message: `\n[Skipped: ${relPath} - Uncompressed size too large]` };
+        }
+
+        return { skipped: false, message: '' };
     }
 
     /**
