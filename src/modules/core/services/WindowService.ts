@@ -35,7 +35,7 @@ export class WindowService {
     private _currentZoom: number = 1;
     private readonly _MIN_ZOOM = 0.5;
     private readonly _MAX_ZOOM = 2;
-    private _saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
 
     constructor(private readonly _tauri: TauriProvider) {}
 
