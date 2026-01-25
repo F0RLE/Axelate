@@ -92,6 +92,12 @@ export class DebugUI {
         draggable.addEventListener('mousedown', handleMouseDown);
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
+        
+        this.unsubscribers.push(() => {
+            draggable.removeEventListener('mousedown', handleMouseDown);
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        });
     }
 
     private bindDropzone(): void {
@@ -169,18 +175,31 @@ export class DebugUI {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const win = globalThis as any;
         if (typeof win.showToast === 'function') {
-            win.showToast('Логи очищены', 'success', 1500);
+            const msg = globalThis.t ? globalThis.t('ui.debug.logs_cleared', 'Logs cleared') : 'Logs cleared';
+            win.showToast(msg, 'success', 1500);
         }
     }
 
+    private pollInterval: number | null = null;
+    private unsubscribers: (() => void)[] = [];
+
+    public destroy(): void {
+        if (this.pollInterval) {
+            globalThis.clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
+        this.unsubscribers.forEach(fn => fn());
+        this.unsubscribers = [];
+    }
+
     private startLogPolling() {
-        // 1 sec polling
-        setInterval(async () => {
+        if (this.pollInterval) globalThis.clearInterval(this.pollInterval);
+        this.pollInterval = globalThis.setInterval(async () => {
             const newLogs = await this.service.fetchLogs();
             if (newLogs.length > 0) {
                 this.renderLogs();
             }
-        }, 1000);
+        }, 1000) as unknown as number;
     }
 
     private renderLogs(clear = false): void {
@@ -189,14 +208,7 @@ export class DebugUI {
 
         if (clear) container.innerHTML = '';
 
-        const logs = this.service.getLogs(); // All logs
-        // If not clear, we should theoretically only append new ones,
-        // but simple renderAll is safer for sync unless perf issues.
-        // Legacy implementation was smarter (appended).
-        // Let's just re-render all for simplicity or optimize if needed.
-        // Optimization: checking child count is tricky if we clear.
-
-        // Optimized: clear and render all
+        const logs = this.service.getLogs();
         container.innerHTML = '';
         const fragment = document.createDocumentFragment();
 
@@ -206,8 +218,23 @@ export class DebugUI {
             const sNorm = (log.source || '').trim().replaceAll(/[^a-z0-9_]/gi, '').toUpperCase();
             const prefix = sNorm === 'SYSTEM' ? '⚙️' : '📝';
             const time = new Date(log.timestamp * 1000).toLocaleTimeString();
-            const msg = log.message.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-            div.innerHTML = `<span class="log-time">${time}</span><span class="log-src src-${sNorm}">${prefix} ${sNorm || log.source}</span><span class="log-msg">${msg}</span>`;
+
+            // Safe DOM creation (XSS Proof)
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'log-time';
+            timeSpan.textContent = time;
+
+            const srcSpan = document.createElement('span');
+            srcSpan.className = `log-src src-${sNorm}`;
+            srcSpan.textContent = `${prefix} ${sNorm || log.source}`;
+
+            const msgSpan = document.createElement('span');
+            msgSpan.className = 'log-msg';
+            msgSpan.textContent = log.message;
+
+            div.appendChild(timeSpan);
+            div.appendChild(srcSpan);
+            div.appendChild(msgSpan);
             fragment.appendChild(div);
         });
 

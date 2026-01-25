@@ -170,12 +170,18 @@ async fn handle_openai(
 
     let mut stream = res.bytes_stream();
     let mut full_content = String::new();
+    let mut buffer = String::new();
 
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| e.to_string())?;
-        let text = String::from_utf8_lossy(&chunk);
+        let chunk_str = String::from_utf8_lossy(&chunk);
+        buffer.push_str(&chunk_str);
 
-        for line in text.lines() {
+        while let Some(pos) = buffer.find('\n') {
+            let line = buffer[..pos].trim().to_string();
+            // Remove processed line including newline
+            buffer.drain(..=pos);
+
             if line.starts_with("data: ") {
                 let data = line.trim_start_matches("data: ");
                 // Terminate processing if [DONE] signal is received.
@@ -329,12 +335,17 @@ async fn handle_gemini(window: tauri::Window, req: ChatRequest) -> Result<ChatRe
     let mut stream = res.bytes_stream();
     let mut full_content = String::new();
     let mut thought_signature: Option<String> = None;
+    let mut buffer = String::new();
 
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| e.to_string())?;
-        let text = String::from_utf8_lossy(&chunk);
+        let chunk_str = String::from_utf8_lossy(&chunk);
+        buffer.push_str(&chunk_str);
 
-        for line in text.lines() {
+        while let Some(pos) = buffer.find('\n') {
+            let line = buffer[..pos].trim().to_string();
+            buffer.drain(..=pos);
+
             if line.starts_with("data: ") {
                 let data = line.trim_start_matches("data: ");
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)

@@ -6,8 +6,9 @@ pub async fn download_module(
     app: AppHandle,
     module_id: String,
     repo_url: String,
+    expected_hash: Option<String>,
 ) -> Result<(), String> {
-    downloader::download_module(app, module_id, repo_url).await
+    downloader::download_module(app, module_id, repo_url, expected_hash).await
 }
 
 #[tauri::command]

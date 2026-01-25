@@ -66,13 +66,17 @@ export class ModuleService {
             return await this._tauri.invoke<boolean>('check_module_installed', { moduleId });
 
         } catch (e) {
-            console.error('Check installed failed:', e);
+            console.error('[ModuleService] Check installed failed:', e);
             return false;
         }
     }
 
     /**
      * Triggers the download and installation of a module.
+     *
+     * @param moduleId - The ID of the module to download
+     * @param repoUrl - The URL of the repository
+     * @throws Error if not in Tauri environment
      */
     public async downloadModule(moduleId: string, repoUrl: string): Promise<void> {
         if (!this._tauri.isTauri()) {
@@ -93,6 +97,9 @@ export class ModuleService {
 
     /**
      * Permanently deletes a module and its associated files.
+     *
+     * @param moduleId - The ID of the module to delete
+     * @returns True if deletion started successfully
      */
     public async deleteModule(moduleId: string): Promise<boolean> {
         if (!this._tauri.isTauri()) {
@@ -106,13 +113,16 @@ export class ModuleService {
              delete this._downloadState[moduleId];
              return true;
         } catch (e) {
-             console.error('Delete failed:', e);
+             console.error('[ModuleService] Delete failed:', e);
              return false;
         }
     }
 
     /**
      * Controls a module service (start, stop, restart).
+     *
+     * @param serviceName - The name of the service/module
+     * @param action - The action to perform (start, stop, restart)
      */
     public async control(serviceName: string, action: string): Promise<boolean> {
         console.log(`[ModuleService] Control ${serviceName} -> ${action}`);
@@ -126,24 +136,11 @@ export class ModuleService {
                 });
                 return true;
             } catch (e) {
-                console.error('Control failed:', e);
+                console.error('[ModuleService] Control failed:', e);
                 return false;
             }
         } else {
-            // Mock or API fallback
-            if (import.meta.env.DEV) {
-                try {
-                    const res = await fetch('http://localhost:3000/api/control', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ service: serviceName, action: action.toLowerCase() }),
-                    });
-                    return res.ok;
-                } catch (e) {
-                    console.error('API Control failed:', e);
-                    return false;
-                }
-            }
+            console.warn('[ModuleService] Control not available in web mode');
             return false;
         }
     }

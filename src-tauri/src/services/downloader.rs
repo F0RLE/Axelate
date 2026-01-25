@@ -72,17 +72,19 @@ pub async fn download_module(
     app: AppHandle,
     module_id: String,
     repo_url: String,
+    expected_hash: Option<String>,
 ) -> Result<(), String> {
     validate_module_id(&module_id)?;
 
     // 1. Transform GitHub URL to ZIP URL if needed
-    // Note: We use a smarter logic in download_and_extract_internal to handle branch names
     let download_url = repo_url.clone();
 
     let zip_path = TEMP_DIR.join(format!("{}.zip.tmp", module_id));
 
     // Execute download and extraction and ensure cleanup via the wrapper
-    let result = download_and_extract_internal(&app, &module_id, &download_url, &zip_path).await;
+    let result =
+        download_and_extract_internal(&app, &module_id, &download_url, &zip_path, expected_hash)
+            .await;
 
     // Guaranteed cleanup of the temp file
     if zip_path.exists() {
@@ -111,6 +113,7 @@ async fn download_and_extract_internal(
     module_id: &str,
     download_url: &str,
     zip_path: &std::path::Path,
+    expected_hash: Option<String>,
 ) -> Result<(), String> {
     emit_progress(app, module_id, "connecting", "Connecting...", 0.0, 0, 0);
 
@@ -203,6 +206,49 @@ async fn download_and_extract_internal(
                 total_size,
             );
         }
+    }
+
+    // Hash Verification
+    if let Some(expected_hash) = expected_hash {
+        emit_progress(
+            app,
+            module_id,
+            "verifying",
+            "Verifying Integrity...",
+            1.0,
+            0,
+            0,
+        );
+
+        let path_clone = zip_path.to_path_buf();
+        let computed_hash = tokio::task::spawn_blocking(move || {
+            use sha2::{Digest, Sha256};
+            use std::io::Read;
+
+            let mut file = std::fs::File::open(&path_clone).map_err(|e| e.to_string())?;
+            let mut hasher = Sha256::new();
+            let mut buffer = [0; 8192];
+
+            loop {
+                let count = file.read(&mut buffer).map_err(|e| e.to_string())?;
+                if count == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..count]);
+            }
+            Ok::<String, String>(hex::encode(hasher.finalize()))
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+
+        if computed_hash.to_lowercase() != expected_hash.to_lowercase() {
+            return Err(format!(
+                "Integrity check failed. Expected {}, got {}",
+                expected_hash, computed_hash
+            ));
+        }
+
+        log::info!("Integrity verified for {}", module_id);
     }
 
     // 2. Extract

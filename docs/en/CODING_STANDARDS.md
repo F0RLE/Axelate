@@ -1990,7 +1990,70 @@ if (type === 'xyz123') { }  // What is xyz123?
 
 ---
 
-*Document updated: 2026-01-23*  
-*Version: 2.1.0*  
+## 36. Clean Code & Minimalism (The Zen of Flux)
+
+### 36.1. The "No Dead Code" Policy (Zero Tolerance)
+
+**We do not store trash.** Code must be alive or deleted.
+
+- **Prohibited:** Commented-out blocks of code (unless it's a specific example). Git is your history; you don't need to keep old chunks "just in case".
+- **Prohibited:** Unused interfaces, variables, or imports.
+- **Prohibited:** Methods that are never called.
+
+```typescript
+// ❌ Bad: Dead code graveyard
+// function oldWay() {
+//    return true;
+// }
+
+// ❌ Bad: Speculative interface (nothing uses this)
+interface IFutureFeature {
+    teleport(): void;
+}
+
+// ✅ Good: Only what executes runs
+```
+
+### 36.2. YAGNI (You Aren't Gonna Need It)
+
+Do not implement features, types, or abstractions for "the future". Update standards when the need arises, not before.
+
+- Don't create a `BaseManagerAbstractFactory` if you just need a function.
+- Don't add fields to interfaces "because we might use them later".
+
+### 36.3. Conciseness (Less is More)
+
+**We prefer compact code.** Excessive verbosity adds noise and makes the codebase harder to scan.
+
+- **Minimize LOC (Lines of Code).** If logic can be expressed in 1 line, do not stretch it to 5.
+- **Ternaries are fine.** Use them to assign values conditionally without temporary variables.
+- **Fail fast.** Return early to avoid deep nesting, but keep it short.
+
+```typescript
+// ❌ Bad: Unnecessary verbosity
+let status;
+if (user.isActive) {
+    status = 'Active';
+} else {
+    status = 'Inactive';
+}
+
+// ✅ Good: Concise
+const status = user.isActive ? 'Active' : 'Inactive';
+```
+
+### 36.4. The Boy Scout Rule
+
+**"Always leave the campground cleaner than you found it."**
+
+- If you open a file to fix a bug and see a typo in a comment — fix it.
+- If you see a variable named `x` — rename it to `timeoutMs`.
+- If you see dead code — delete it.
+- **Small, constant improvements prevent technical debt accumulation.**
+
+---
+
+*Document updated: 2026-01-25*  
+*Version: 2.2.0*  
 *Maintainer: Flux Platform Team*  
-*Total Sections: 35 + 3 Appendices*
+*Total Sections: 36 + 3 Appendices*

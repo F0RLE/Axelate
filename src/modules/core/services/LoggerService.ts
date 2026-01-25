@@ -114,18 +114,26 @@ export class LoggerService {
         }
     }
 
-    /**
-     * Handles complex objects with circular reference checks.
-     */
     private _stringifyComplex(obj: unknown): string {
         const cache = new Set();
-        return JSON.stringify(obj, (_key, value) => {
+        return JSON.stringify(obj, (key, value) => {
             if (typeof value === 'object' && value !== null) {
                 if (cache.has(value)) return '[Circular]';
                 cache.add(value);
             }
-            return value;
+            return this._redact(key, value);
         });
+    }
+
+    /**
+     * Redacts sensitive keys from logs.
+     */
+    private _redact(key: string, value: unknown): unknown {
+        const SENSITIVE_KEYS = /password|token|secret|key|auth|authorization|credit_card/i;
+        if (key && SENSITIVE_KEYS.test(key)) {
+            return '[REDACTED]';
+        }
+        return value;
     }
 
     /**

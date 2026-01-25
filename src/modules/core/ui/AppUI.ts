@@ -594,7 +594,7 @@ export class AppUI {
     }
 
     private _handleStopModule(app: IApp, updateToStopped: () => void, actionBtn: HTMLElement) {
-        console.log('Stop app clicked:', app.id);
+        console.log('[AppUI] Stop app clicked:', app.id);
         if (app.type === 'api' || ['gpt', 'gemini'].includes(app.id)) {
             if (globalThis.aiBridge) globalThis.aiBridge.stopProvider();
         } else {
@@ -606,7 +606,7 @@ export class AppUI {
     }
 
     private async _handleStartModule(app: IApp, updateToRunning: () => void, actionBtn: HTMLElement) {
-        console.log('Launch app clicked:', app.id);
+        console.log('[AppUI] Launch app clicked:', app.id);
         if (app.type === 'api' || ['gpt', 'gemini'].includes(app.id)) {
             if (globalThis.aiBridge) {
                 const success = await globalThis.aiBridge.startProvider(app.id);

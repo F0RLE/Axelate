@@ -795,9 +795,9 @@ export class SettingsUI {
         } else if (type === 'select') {
             (input as HTMLSelectElement).onchange = () => { save((input as HTMLSelectElement).value).catch(e => console.error(e)); };
         } else if (type === 'number') {
-            (input as HTMLInputElement).oninput = () => { save(Number((input as HTMLInputElement).value)).catch(e => console.error(e)); };
+            (input as HTMLInputElement).onchange = () => { save(Number((input as HTMLInputElement).value)).catch(e => console.error(e)); };
         } else {
-            (input as HTMLInputElement).oninput = () => { save((input as HTMLInputElement).value).catch(e => console.error(e)); };
+            (input as HTMLInputElement).onchange = () => { save((input as HTMLInputElement).value).catch(e => console.error(e)); };
         }
     }
 }

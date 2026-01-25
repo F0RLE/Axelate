@@ -251,7 +251,7 @@ export class ChatUI {
             const rawHtml = marked.parse(finalContent) as string;
             textNode.innerHTML = DOMPurify.sanitize(rawHtml);
         } catch (e) {
-            console.error('Markdown render error:', e);
+            console.error('[ChatUI] Markdown render error:', e);
             textNode.textContent = finalContent;
         }
         

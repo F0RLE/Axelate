@@ -60,7 +60,7 @@ export class NavigationService {
      * Navigates to a specific page.
      */
     public navigate(pageId: string): void {
-        console.log(`Navigating to: ${pageId}`);
+        console.log(`[NavigationService] Navigating to: ${pageId}`);
         if (this._currentIndex < this._historyStack.length - 1) {
             this._historyStack.splice(this._currentIndex + 1); // Clear forward history
         }
@@ -84,7 +84,7 @@ export class NavigationService {
     public goBack(): void {
         if (this._currentIndex > 0) {
             this._currentIndex--;
-            console.log(`Navigating back to: ${this._historyStack[this._currentIndex]}`);
+            console.log(`[NavigationService] Navigating back to: ${this._historyStack[this._currentIndex]}`);
         }
     }
 
@@ -94,7 +94,7 @@ export class NavigationService {
     public goForward(): void {
         if (this._currentIndex < this._historyStack.length - 1) {
             this._currentIndex++;
-            console.log(`Navigating forward to: ${this._historyStack[this._currentIndex]}`);
+            console.log(`[NavigationService] Navigating forward to: ${this._historyStack[this._currentIndex]}`);
         }
     }
 

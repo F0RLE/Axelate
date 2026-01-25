@@ -13,21 +13,11 @@ import { eventBus } from '@/modules/core/services/EventBus';
 import { NavigationService } from '../services/NavigationService';
 import { SoundService } from '../services/SoundService';
 
-interface INavigationGlobal {
-    soundService?: SoundService;
-    openAppSelection?: (category: string) => void;
-    closeAppSelection?: () => void;
-}
-
 export class NavigationUI {
-    private readonly _cleanupAbort: AbortController = new AbortController();
-
     constructor(
         private readonly _service: NavigationService,
         private readonly _sounds?: SoundService
-    ) {
-        this._initEventListeners();
-    }
+    ) {}
 
     /**
      * Initializes click listeners for all [data-page] navigation buttons.
@@ -37,15 +27,11 @@ export class NavigationUI {
         console.debug('[NavigationUI] Navigation initialized (pure service mode).');
     }
 
-    private _initEventListeners(): void {
-        // Obsolete: EventHandler manages delegation
-    }
-
     /**
      * Cleanup listeners.
      */
     public destroy(): void {
-        this._cleanupAbort.abort();
+        // No internal listeners to clean up (delegated to EventHandler)
     }
 
     /**

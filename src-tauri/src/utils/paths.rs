@@ -1,26 +1,68 @@
+use crate::errors::AppError;
 use once_cell::sync::Lazy;
 use std::fs;
 use std::path::PathBuf;
 
+/// Root directory for application data.
+/// Defaults to:
+/// - Windows: `%APPDATA%/FluxData`
+/// - Linux: `$XDG_CONFIG_HOME/FluxData` or `~/.config/FluxData`
+/// - macOS: `~/Library/Application Support/FluxData`
 pub static APPDATA_ROOT: Lazy<PathBuf> = Lazy::new(|| {
     let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     path.push("FluxData");
     path
 });
 
+/// User-specific data root (`FluxData/User`)
 pub static USER_ROOT: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("User"));
+
+/// Configuration directory for user settings (`FluxData/User/Configs`)
 pub static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("Configs"));
+
+/// Directory for UI persistence state (`FluxData/User/UI`)
 pub static UI_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("UI"));
 
+/// System root for internal app data (`FluxData/System`)
 pub static SYSTEM_ROOT: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("System"));
+
+/// Log files directory (`FluxData/System/Logs`)
 pub static LOG_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Logs"));
+
+/// Temporary files directory (`FluxData/System/Temp`)
 pub static TEMP_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Temp"));
+
+/// Downloaded modules directory (`FluxData/System/Modules`)
 pub static MODULES_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Modules"));
 
-// Points to src-tauri/resources during dev. In prod this should be handled differently (e.g. resource_dir)
-// Points to src-tauri/resources during dev. In prod this should be handled differently (e.g. resource_dir)
+/// Path to application resources.
+///
+/// # Resolution Logic
+/// 1. Tries to locate resources relative to the running executable (Production).
+/// 2. If not found, falls back to source directories (Development).
+///
+/// This Lazy initialization performs I/O checks (filesystem existence)
+/// to determine the correct path.
 pub static RESOURCES_DIR: Lazy<PathBuf> = Lazy::new(|| {
-    // Try multiple possible locations
+    // 1. Production Check: Look relative to the running executable
+    // Tauri bundles often place resources in the same folder or a specific relative structure
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            // Common production layouts
+            let prod_candidates = [
+                exe_dir.join("resources"),
+                exe_dir.join("_up_").join("resources"), // Some updater structures
+            ];
+
+            for path in &prod_candidates {
+                if path.exists() {
+                    return path.clone();
+                }
+            }
+        }
+    }
+
+    // 2. Development Check: Try source paths relative to CWD
     let candidates = [
         PathBuf::from("src-tauri").join("resources"),
         PathBuf::from("resources"),
@@ -33,20 +75,31 @@ pub static RESOURCES_DIR: Lazy<PathBuf> = Lazy::new(|| {
         }
     }
 
-    // Fallback default
+    // Fallback default (even if not exists, to prevent crash)
     PathBuf::from("src-tauri").join("resources")
 });
 
+/// Application cache directory (`FluxData/Cache`)
 pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("Cache"));
 
+/// Path to env file (`FluxData/User/Configs/.env`)
 pub static FILE_ENV: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join(".env"));
+
+/// Path to generation config (`FluxData/User/Configs/generation_config.json`)
 pub static FILE_GEN_CONFIG: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join("generation_config.json"));
+
+/// Path to UI state file (`FluxData/User/UI/ui_state.json`)
 pub static FILE_UI_STATE: Lazy<PathBuf> = Lazy::new(|| UI_DIR.join("ui_state.json"));
 
 /// Maximum number of log files to keep
 const MAX_LOG_FILES: usize = 5;
 
-pub fn init_filesystem() -> Result<(), String> {
+/// Initializes the application filesystem structure.
+/// Creates all necessary directories if they don't exist.
+///
+/// # Errors
+/// Returns `AppError::Io` if directory creation fails.
+pub fn init_filesystem() -> Result<(), AppError> {
     let dirs = [
         &*CONFIG_DIR,
         &*UI_DIR,
@@ -58,7 +111,7 @@ pub fn init_filesystem() -> Result<(), String> {
     ];
 
     for dir in dirs {
-        fs::create_dir_all(dir).map_err(|e| format!("Failed to create {:?}: {}", dir, e))?;
+        fs::create_dir_all(dir)?;
     }
 
     // Cleanup old log files (keep only last MAX_LOG_FILES)
@@ -67,14 +120,16 @@ pub fn init_filesystem() -> Result<(), String> {
     Ok(())
 }
 
-/// Remove old log files, keeping only the most recent MAX_LOG_FILES
-fn cleanup_old_logs() -> Result<(), String> {
+/// Remove old log files, keeping only the most recent MAX_LOG_FILES.
+///
+/// # Errors
+/// Returns `AppError::Io` if reading the directory or deleting files fails.
+fn cleanup_old_logs() -> Result<(), AppError> {
     if !LOG_DIR.exists() {
         return Ok(());
     }
 
-    let mut log_files: Vec<_> = fs::read_dir(&*LOG_DIR)
-        .map_err(|e| format!("Failed to read logs dir: {}", e))?
+    let mut log_files: Vec<_> = fs::read_dir(&*LOG_DIR)?
         .filter_map(|entry| entry.ok())
         .filter(|entry| {
             entry

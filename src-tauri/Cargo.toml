@@ -44,6 +44,7 @@ machine-uid = "0.5.4"
 sha2 = "0.10.9"
 zip = "7.2.0"
 tempfile = "3.24.0"
+hex = "0.4.3"
 
 [profile.release]
 codegen-units = 1
