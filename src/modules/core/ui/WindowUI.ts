@@ -23,8 +23,11 @@ export class WindowUI {
     private _modulesWarning: HTMLElement | null = null;
     private _settingsWarning: HTMLElement | null = null;
     private _maximizeIcon: HTMLElement | null = null;
+    private _soundToggle: HTMLElement | null = null;
     private _monitoringTimeout: ReturnType<typeof setTimeout> | null = null;
     private _splashTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _gracePeriodTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _isInGracePeriod = true;
 
     constructor(
         private readonly _service: WindowService, 
@@ -49,6 +52,12 @@ export class WindowUI {
         
         // Initial check
         this._checkWidth();
+        this._initSoundState();
+
+        // End grace period after 2 seconds
+        this._gracePeriodTimeout = setTimeout(() => {
+            this._isInGracePeriod = false;
+        }, 2000);
     }
 
     /**
@@ -59,6 +68,7 @@ export class WindowUI {
         this._modulesWarning = document.getElementById('modules-width-warning');
         this._settingsWarning = document.getElementById('settings-width-warning');
         this._maximizeIcon = document.getElementById('maximize-icon');
+        this._soundToggle = document.getElementById('sound-toggle-btn');
     }
 
     /**
@@ -70,6 +80,7 @@ export class WindowUI {
         if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
         if (this._monitoringTimeout) clearTimeout(this._monitoringTimeout);
         if (this._splashTimeout) clearTimeout(this._splashTimeout);
+        if (this._gracePeriodTimeout) clearTimeout(this._gracePeriodTimeout);
     }
 
     /**
@@ -87,7 +98,7 @@ export class WindowUI {
 
         // 2. Monitoring Pause on Blur/Hide
         const updateMonitoring = (): void => {
-             const shouldPause = document.hidden || !document.hasFocus();
+             const shouldPause = !this._isInGracePeriod && (document.hidden || !document.hasFocus());
              this._service.setMonitoringPaused(shouldPause);
         };
         document.addEventListener('visibilitychange', updateMonitoring, { signal });
@@ -289,6 +300,59 @@ export class WindowUI {
             svg.appendChild(useEl);
             this._maximizeIcon.appendChild(svg);
         }
+
+        // Toggle body class for styling adjustments (e.g. squaring off corners)
+        if (isMaximized) {
+            document.body.classList.add('maximized');
+        } else {
+            document.body.classList.remove('maximized');
+        }
+    }
+
+    /**
+     * Toggles the global sound state and updates the UI.
+     * @sideeffect Modifies SoundService and DOM
+     */
+    public toggleSound(): void {
+        const win = globalThis as unknown as { core?: { soundService: { setEnabled: (e: boolean) => void; isEnabled: () => boolean } } };
+        const service = win.core?.soundService;
+        if (!service) return;
+
+        const newState = !service.isEnabled();
+        service.setEnabled(newState);
+        localStorage.setItem('launcher_sound_enabled', newState.toString());
+        
+        this.updateSoundUI(newState);
+    }
+
+    /**
+     * Initializes the sound state from persistence.
+     */
+    private _initSoundState(): void {
+        const saved = localStorage.getItem('launcher_sound_enabled');
+        const win = globalThis as unknown as { core?: { soundService: { setEnabled: (e: boolean) => void } } };
+        const isEnabled = saved === null ? true : saved === 'true';
+        
+        win.core?.soundService.setEnabled(isEnabled);
+        this.updateSoundUI(isEnabled);
+    }
+
+    /**
+     * Updates the sound toggle button icon and style.
+     */
+    public updateSoundUI(enabled: boolean): void {
+        if (!this._soundToggle) return;
+
+        const use = this._soundToggle.querySelector('use');
+        if (use) {
+            use.setAttribute('href', enabled ? '#icon-volume' : '#icon-volume-x');
+        }
+
+        if (enabled) {
+            this._soundToggle.classList.remove('muted');
+        } else {
+            this._soundToggle.classList.add('muted');
+        }
     }
 
     /**
@@ -298,7 +362,13 @@ export class WindowUI {
     private _checkWidth(): void {
         const g = globalThis as unknown as IWindowUIGlobal;
         const width = g.innerWidth;
-        const MIN_WIDTH = 950;
+        const height = globalThis.innerHeight;
+        const aspectRatio = width / (height || 1);
+
+        // Dynamic threshold based on aspect ratio
+        // Landscape/Square (AR > 0.8): 950px (Supports half-screen on 1920 monitors)
+        // Portrait (AR <= 0.8): 650px (Supports 9:16 monitors)
+        const MIN_WIDTH = aspectRatio > 0.8 ? 950 : 650;
 
         if (width < MIN_WIDTH) {
             if (this._modulesWarning) {

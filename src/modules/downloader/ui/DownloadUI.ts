@@ -49,6 +49,8 @@ export class DownloadUI {
         SD_MODEL_URL_FIELD: 'field-sd-model-url'
     };
 
+    private _boundHandleUpdate: ((e: Event) => void) | null = null;
+
     constructor() {
         this.loadSettings();
     }
@@ -57,8 +59,21 @@ export class DownloadUI {
      * Initializes the downloader UI.
      */
     public init(): void {
+        console.log('[DownloadUI] Initializing...');
         this.startDownloadsPolling();
         this._initSettingsListeners();
+    }
+
+    /**
+     * Cleans up listeners to prevent memory leaks.
+     * MANDATORY cleanup method required by Section 4.3.
+     */
+    public destroy(): void {
+        if (this._boundHandleUpdate) {
+            globalThis.removeEventListener('download-progress-update', this._boundHandleUpdate);
+            this._boundHandleUpdate = null;
+        }
+        console.log('[DownloadUI] Destroyed.');
     }
 
     /**
@@ -239,7 +254,7 @@ export class DownloadUI {
         if (mainCard) mainCard.classList.add('hidden');
         if (emptyText) emptyText.classList.remove('hidden');
 
-        const handleUpdate = (e: Event) => {
+        this._boundHandleUpdate = (e: Event) => {
             const payload = (e as CustomEvent).detail as ModuleDownloadState;
             this.renderDownloadsProgress({
                 percent: payload.progress * 100,
@@ -252,7 +267,7 @@ export class DownloadUI {
             });
         };
 
-        globalThis.addEventListener('download-progress-update', handleUpdate);
+        globalThis.addEventListener('download-progress-update', this._boundHandleUpdate);
     }
 
     /**

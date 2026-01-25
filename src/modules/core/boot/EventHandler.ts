@@ -74,9 +74,7 @@ export class EventHandler {
             }
 
             // 4. Window Controls
-            if (target.closest('#minimize-btn')) this._core.windowService.minimize();
-            if (target.closest('#maximize-btn')) this._core.windowService.toggleMaximize();
-            if (target.closest('#close-btn')) this._core.windowService.close();
+            if (this._handleWindowControls(target)) return;
 
             // 5. Debug Console Logic
             if (target.closest('#clear-logs-btn')) {
@@ -216,5 +214,26 @@ export class EventHandler {
                 this._core.downloadUI.saveSettings();
             });
         }
+    }
+
+
+    private _handleWindowControls(target: HTMLElement): boolean {
+        if (target.closest('#minimize-btn')) {
+            this._core.windowService.minimize();
+            return true;
+        }
+        if (target.closest('#maximize-btn')) {
+            this._core.windowService.toggleMaximize();
+            return true;
+        }
+        if (target.closest('#close-btn')) {
+            this._core.windowService.close();
+            return true;
+        }
+        if (target.closest('#sound-toggle-btn')) {
+            this._core.windowUI.toggleSound();
+            return true;
+        }
+        return false;
     }
 }

@@ -5,7 +5,7 @@
     padding: var(--content-padding-top) 1.5rem 1.5rem 1.5rem;
     align-items: center;
     position: relative;
-    background: linear-gradient(180deg, transparent 0%, rgba(138, 43, 226, 0.02) 100%);
+    background: linear-gradient(180deg, transparent 0%, rgba(var(--primary-raw), 0.02) 100%);
 }
 
 #page-settings .console-header {
@@ -99,17 +99,17 @@
 }
 
 .settings-nav .nav-btn:hover {
-    background: rgba(138, 43, 226, 0.15);
+    background: rgba(var(--primary-raw), 0.15);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.2);
-    border-color: rgba(138, 43, 226, 0.3);
+    box-shadow: 0 4px 12px rgba(var(--primary-raw), 0.2);
+    border-color: rgba(var(--primary-raw), 0.3);
     z-index: 10;
 }
 
 .settings-nav .nav-btn.active {
     background: var(--primary);
     color: white;
-    box-shadow: 0 4px 16px rgba(138, 43, 226, 0.4);
+    box-shadow: 0 4px 16px rgba(var(--primary-raw), 0.4);
     transform: translateY(-2px);
 }
 
@@ -209,19 +209,17 @@
 }
 
 .settings-card {
-
-    border: none;
-    outline: none;
-    border-radius: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
     padding: 1.75rem;
     margin-bottom: 1rem;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
     animation: cardSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    background: rgba(26, 25, 32, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
 }
 
 .settings-card:nth-child(1) {
@@ -302,7 +300,7 @@
 }
 
 .card-resize-handle:hover {
-    background: rgba(138, 43, 226, 0.4);
+    background: rgba(var(--primary-raw), 0.4);
 }
 
 .card-resize-handle:active {
@@ -457,7 +455,7 @@ body.resizing * {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(138, 43, 226, 0.2), rgba(168, 85, 247, 0.15), rgba(93, 220, 255, 0.1));
+    background: linear-gradient(135deg, rgba(var(--primary-raw), 0.2), rgba(var(--primary-alt-raw), 0.15), rgba(var(--accent-raw), 0.1));
     opacity: 0;
     transition: opacity 0.3s ease;
     border-radius: 12px;
@@ -468,7 +466,7 @@ body.resizing * {
 }
 
 .monitor-toggle-btn.active {
-    background: linear-gradient(145deg, rgba(138, 43, 226, 0.3), rgba(168, 85, 247, 0.2));
+    background: linear-gradient(145deg, rgba(var(--primary-raw), 0.3), rgba(var(--primary-alt-raw), 0.2));
 }
 
 .monitor-toggle-btn.active::before {
@@ -487,7 +485,7 @@ body.resizing * {
 .monitor-toggle-btn.active .toggle-icon {
     color: #fff;
     opacity: 1;
-    filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.8));
+    filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.8));
 }
 
 .monitor-toggle-btn .toggle-label {
@@ -537,7 +535,7 @@ body.resizing * {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(138, 43, 226, 0.2), rgba(168, 85, 247, 0.15), rgba(93, 220, 255, 0.1));
+    background: linear-gradient(135deg, rgba(var(--primary-raw), 0.2), rgba(var(--primary-alt-raw), 0.15), rgba(var(--accent-raw), 0.1));
     opacity: 0;
     transition: opacity 0.3s ease;
     border-radius: 12px;
@@ -553,7 +551,7 @@ body.resizing * {
 }
 
 .taskbar-toggle-item.active {
-    background: linear-gradient(145deg, rgba(138, 43, 226, 0.3), rgba(168, 85, 247, 0.2));
+    background: linear-gradient(145deg, rgba(var(--primary-raw), 0.3), rgba(var(--primary-alt-raw), 0.2));
 }
 
 .taskbar-toggle-item.active::before {
@@ -572,7 +570,7 @@ body.resizing * {
 .taskbar-toggle-item.active .toggle-icon {
     color: #fff;
     opacity: 1;
-    filter: drop-shadow(0 0 10px rgba(138, 43, 226, 0.8));
+    filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.8));
 }
 
 .taskbar-toggle-item .toggle-label {
@@ -678,7 +676,7 @@ body.resizing * {
 }
 
 .save-all-btn .btn {
-    box-shadow: 0 4px 16px rgba(138, 43, 226, 0.4);
+    box-shadow: 0 4px 16px rgba(var(--primary-raw), 0.4);
     font-weight: 600;
     position: relative;
     overflow: hidden;
@@ -700,7 +698,7 @@ body.resizing * {
 
 .save-all-btn .btn:hover {
     transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 8px 24px rgba(138, 43, 226, 0.5);
+    box-shadow: 0 8px 24px rgba(var(--primary-raw), 0.5);
 }
 
 .save-all-btn .btn:hover::before {
@@ -778,7 +776,7 @@ body.resizing * {
     width: 40px;
     height: 40px;
     border-radius: 10px;
-    background: rgba(138, 43, 226, 0.1);
+    background: rgba(var(--primary-raw), 0.1);
     display: flex;
     align-items: center;
     justify-content: center;

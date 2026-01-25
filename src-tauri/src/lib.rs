@@ -91,7 +91,7 @@ pub fn run() {
         path.push("Cache");
         path.push("com.flux.platform");
         if let Err(e) = std::fs::create_dir_all(&path) {
-            eprintln!("Failed to create custom data directory: {}", e);
+            log::error!("Failed to create custom data directory: {}", e);
         } else {
             unsafe {
                 std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
@@ -244,8 +244,13 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
     // Build tray icon
+    let icon = app
+        .default_window_icon()
+        .expect("system must have a default window icon configured in tauri.conf.json")
+        .clone();
+
     let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(icon)
         .tooltip("Flux Platform")
         .menu(&menu)
         .show_menu_on_left_click(false)

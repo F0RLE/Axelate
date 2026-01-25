@@ -96,7 +96,7 @@
     align-items: center;
     justify-content: center;
     color: white;
-    box-shadow: 0 8px 24px rgba(138, 43, 226, 0.3);
+    box-shadow: 0 8px 24px rgba(var(--primary-raw), 0.3);
     animation: downloadsIconPulse 2s ease-in-out infinite;
 }
 
@@ -104,11 +104,11 @@
 
     0%,
     100% {
-        box-shadow: 0 8px 24px rgba(138, 43, 226, 0.3);
+        box-shadow: 0 8px 24px rgba(var(--primary-raw), 0.3);
     }
 
     50% {
-        box-shadow: 0 8px 32px rgba(138, 43, 226, 0.5);
+        box-shadow: 0 8px 32px rgba(var(--primary-raw), 0.5);
     }
 }
 
@@ -191,7 +191,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at right, rgba(138, 43, 226, 0.1), transparent 70%);
+    background: radial-gradient(circle at right, rgba(var(--primary-raw), 0.1), transparent 70%);
     pointer-events: none;
 }
 
@@ -215,7 +215,7 @@
     width: 48px;
     height: 48px;
     border-radius: 12px;
-    background: rgba(138, 43, 226, 0.15);
+    background: rgba(var(--primary-raw), 0.15);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -271,8 +271,8 @@
 }
 
 .downloads-status-pill.completed {
-    background: rgba(138, 43, 226, 0.2);
-    border-color: rgba(138, 43, 226, 0.4);
+    background: rgba(var(--primary-raw), 0.2);
+    border-color: rgba(var(--primary-raw), 0.4);
     color: var(--primary);
 }
 
@@ -325,7 +325,7 @@
     animation: waveFlow 4s ease-in-out infinite;
     transform-origin: left center;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 8px rgba(138, 43, 226, 0.3);
+    box-shadow: 0 0 8px rgba(var(--primary-raw), 0.3);
 }
 
 .downloads-stats-grid {
@@ -444,8 +444,8 @@
     left: 20px;
     width: 36px;
     height: 36px;
-    background: rgba(138, 43, 226, 0.15);
-    border: 1px solid rgba(138, 43, 226, 0.3);
+    background: rgba(var(--primary-raw), 0.15);
+    border: 1px solid rgba(var(--primary-raw), 0.3);
     border-radius: 8px;
     color: var(--primary);
     cursor: pointer;
@@ -458,8 +458,8 @@
 
 #open-download-settings:hover,
 #open-download-settings:focus {
-    background: rgba(138, 43, 226, 0.25);
-    border-color: rgba(138, 43, 226, 0.5);
+    background: rgba(var(--primary-raw), 0.25);
+    border-color: rgba(var(--primary-raw), 0.5);
 }
 
 

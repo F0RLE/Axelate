@@ -175,7 +175,6 @@
   "ui.gemini.error.unavailable": "错误 503：Gemini 服务暂时不可用。请稍后再试。(模型: {model})",
   "ui.launcher.module.files_short": "文件",
   "ui.launcher.module.files_logged": "文件列表已发送至控制台",
-  "ui.launcher.web.expand_window": "展开窗口以查看所有模块",
   "ui.launcher.status.running": "正在运行",
   "ui.launcher.button.stop": "停止",
   "ui.launcher.web.status_waiting": "等待",
@@ -275,5 +274,6 @@
   "ui.chat.greeting.47": "限制只在你的脑海里。Flux 帮你消除它们。",
   "ui.chat.greeting.48": "新会话 —— 新机遇。",
   "ui.chat.greeting.49": "正在连接你的创造力... 连接已建立。",
-  "ui.chat.greeting.50": "Flux Platform：你通往无限的发射台。"
+  "ui.chat.greeting.50": "Flux Platform：你通往无限的发射台。",
+  "ui.launcher.web.expand_window": "展开窗口以查看正常界面显示"
 }

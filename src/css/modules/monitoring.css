@@ -128,8 +128,8 @@
     width: 0%;
     background: linear-gradient(90deg, var(--primary), var(--primary-light));
     border-radius: 999px;
-    transition: width 0.5s ease;
-    box-shadow: 0 0 8px rgba(138, 43, 226, 0.3);
+    transform: scale(1);
+    box-shadow: 0 0 8px rgba(var(--primary-raw), 0.3);
 }
 
 .sysmon-fill.low {
@@ -187,7 +187,7 @@
     background: linear-gradient(
         135deg,
         var(--bg-light),
-        rgba(138, 43, 226, 0.05)
+        rgba(var(--primary-raw), 0.05)
     );
     border-radius: 10px;
     font-size: 0.85rem;
@@ -196,14 +196,14 @@
 }
 
 .gpu-info:hover {
-    border-color: rgba(138, 43, 226, 0.3);
+    border-color: rgba(var(--primary-raw), 0.3);
     background: linear-gradient(
         135deg,
         var(--bg-light),
-        rgba(138, 43, 226, 0.1)
+        rgba(var(--primary-raw), 0.1)
     );
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.15);
+    box-shadow: 0 4px 12px rgba(var(--primary-raw), 0.15);
 }
 
 .gpu-info.detected {

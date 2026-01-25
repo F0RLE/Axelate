@@ -55,6 +55,7 @@ export class WindowService {
 
                 if (typeof zoom === 'number') {
                     this._currentZoom = zoom;
+                    document.documentElement.style.setProperty('--app-zoom', zoom.toString());
                 }
             } catch (e) {
                 console.warn('[WindowService] Failed to get initial zoom (or timeout):', e);
@@ -156,6 +157,7 @@ export class WindowService {
         if (this._tauri.isTauri()) {
             try {
                 await this._tauri.invoke('set_webview_zoom', { zoom: this._currentZoom });
+                document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toString());
             } catch (e) {
                 console.error('[WindowService] Zoom error:', e);
             }
@@ -207,6 +209,13 @@ export class WindowService {
         win.updateSpeedDisplay?.(0, 0);
         const screenWidth = globalThis.screen.availWidth || globalThis.screen.width;
         const screenHeight = globalThis.screen.availHeight || globalThis.screen.height;
+
+        // Lenient check for portrait screens: if height is large, allow smaller width
+        const isPortrait = screenHeight > screenWidth;
+        if (isPortrait && screenHeight >= 1000) {
+            return screenWidth < 700; // Only protect very narrow portrait screens
+        }
+
         return screenWidth < minWidth || screenHeight < minHeight;
     }
 

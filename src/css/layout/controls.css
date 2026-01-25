@@ -8,32 +8,28 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 1.5rem;
-    /* Left padding matches sidebar align */
-    padding-right: 20px;
-    /* Specific right padding for controls */
+    padding: 0 1rem;
+    padding-right: 0;
     z-index: 900;
 
     /* Liquid Glass Effect */
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
 
-    /* Glossy gradient + dark tint */
+    /* Glossy gradient + extreme transparency */
     background: linear-gradient(135deg,
-            rgba(255, 255, 255, 0.05) 0%,
-            rgba(255, 255, 255, 0.01) 50%,
-            rgba(0, 0, 0, 0.2) 100%);
+            rgba(255, 255, 255, 0.02) 0%,
+            rgba(255, 255, 255, 0.0) 50%,
+            rgba(0, 0, 0, 0.04) 100%);
 
     /* Depth and Edges */
     box-shadow:
-        inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
         /* Top highlight */
-        inset 0 -1px 0 0 rgba(255, 255, 255, 0.05),
-        /* Bottom subtle rim */
-        0 4px 20px rgba(0, 0, 0, 0.2);
-    /* Drop shadow */
+        inset 0 -1px 0 0 rgba(255, 255, 255, 0.02);
+    /* Bottom subtle rim */
 
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     /* Subtle border */
     transition: none;
     -webkit-app-region: drag;
@@ -46,82 +42,76 @@ body.snapping #app-header {
 /* Top Right Controls (now inside header) */
 .top-controls {
     display: flex;
-    gap: 12px;
-    /* Consistent gap between buttons */
-    padding-right: 4px;
-    /* Tiny adjustment for visual balance */
+    gap: 0;
+    height: 100%;
+    align-self: stretch;
     -webkit-app-region: no-drag;
-    transition: filter 0.3s ease;
-    filter: blur(0px);
-    transform: translateZ(0);
+    
+    /* Adjustable Positioning */
+    position: relative;
+    transform: translate(var(--win-controls-x, 0px), var(--win-controls-y, 0px));
 }
 
 .window-control-btn {
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    /* Slightly tighter radius */
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0;
     padding: 0;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    /* Keep click target large */
-    height: 32px;
-    /* Shorter height to fit header better */
-    font-size: 1.2rem;
-    transition: all 0.2s;
+    width: 48px;
+    height: 100%;
+    transition: background 0.2s var(--ease-smooth);
     color: var(--text-secondary);
-    /* -webkit-app-region: no-drag; -> handled by parent container */
     -webkit-app-region: no-drag;
 }
 
 .window-control-btn svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.5rem;
+    height: 1.5rem;
     stroke: currentColor;
     fill: none;
     pointer-events: none;
+    display: block;
 }
 
-
 .window-control-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08) !important;
     color: var(--text-primary);
-    transform: none;
-    /* simple highlight */
 }
 
 .window-control-btn:active {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.12) !important;
 }
 
 .close-btn {
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    padding: 0;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 32px;
-    font-size: 1.2rem;
-    transition: all 0.2s;
-    color: var(--text-secondary);
-    /* -webkit-app-region: no-drag; -> handled by parent container */
+    transition: background 0.2s var(--ease-smooth), color 0.2s var(--ease-smooth);
+    /* Removed rounding as per user request */
+    border-radius: 0 !important; 
+    overflow: hidden;
 }
 
 .close-btn:hover {
-    background: #d32f2f !important;
+    background: #e81123 !important; /* Windows Standard Red */
     color: #ffffff !important;
-    box-shadow: 0 0 10px rgba(211, 47, 47, 0.4) !important;
 }
 
 .close-btn:active {
-    transform: scale(0.95);
+    background: #f1707a !important;
+}
+
+/* When maximized, the close button hits the screen edge, so it should be square */
+body.maximized .close-btn {
+    border-radius: 0 !important;
+}
+
+/* Header Groups */
+.header-left-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
 /* Language Switcher - Slide Out Redesign (now inside header) */
@@ -137,6 +127,52 @@ body.snapping #app-header {
     z-index: 1000;
     -webkit-app-region: no-drag;
     /* Buttons must be clickable */
+}
+
+.sound-toggle-btn {
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.3s var(--ease-smooth);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    -webkit-app-region: no-drag;
+
+    /* Squircle Shape - matching lang-btn */
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.sound-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-primary);
+}
+
+.sound-toggle-btn:active {
+    transform: scale(0.96);
+}
+
+.sound-toggle-btn svg {
+    width: 22px !important;
+    height: 22px !important;
+    stroke: currentColor;
+    fill: none;
+    pointer-events: none;
+}
+
+.sound-toggle-btn.muted {
+    opacity: 0.5;
+}
+
+.sound-toggle-btn.muted:hover {
+    opacity: 0.8;
 }
 
 /* Removed specific body.snapping rule for lang-switcher as parent handles it */
@@ -172,12 +208,11 @@ body.snapping #app-header {
 
 /* Common Button Styles */
 .lang-btn {
-    background: rgba(30, 30, 30, 0.6);
-    border: none;
-    /* No border as requested */
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s var(--ease-smooth);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -185,25 +220,21 @@ body.snapping #app-header {
     -webkit-app-region: no-drag;
 
     /* Squircle Shape */
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: 10px;
-    /* Squircle-ish */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .lang-btn:hover {
-    background: rgba(50, 50, 50, 0.8);
-    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
     color: var(--text-primary);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
 }
 
 .lang-btn:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transform: scale(0.96);
 }
 
 .lang-btn .flag-icon,
@@ -216,27 +247,28 @@ body.snapping #app-header {
 /* Main Trigger Button specific styles */
 .current-lang-trigger {
     z-index: 2;
-    background: rgba(40, 40, 40, 0.8);
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 .current-lang-trigger:hover {
-    background: rgba(60, 60, 60, 0.9);
+    background: rgba(255, 255, 255, 0.1) !important;
 }
 
 .lang-btn .flag-icon {
     margin: 0;
     display: block;
-    width: 24px;
-    height: 18px;
-    border-radius: 3px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    width: 28px;
+    height: 21px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Flag icons (SVG, avoids OS emoji font issues showing GB/RU as text) */
 .flag-icon {
-    width: 26px;
-    height: 19.5px;
-    border-radius: 4px;
+    width: 30px;
+    height: 22.5px;
+    border-radius: 5px;
     overflow: hidden;
     display: inline-block;
     background-size: cover;

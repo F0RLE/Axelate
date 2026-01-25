@@ -14,7 +14,7 @@
         "withGlobalTauri": true,
         "windows": [
             {
-                "title": "Flux Platform (Beta)",
+                "title": "Flux Platform",
                 "width": 1400,
                 "height": 900,
                 "minWidth": 1000,

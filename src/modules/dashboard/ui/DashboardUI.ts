@@ -15,4 +15,11 @@ export class DashboardUI {
         console.log('[DashboardUI] Initialized');
         // Dashboard widgets and data visualization will be added here in future releases.
     }
+
+    /**
+     * Cleans up the dashboard UI resources.
+     */
+    public destroy(): void {
+        console.log('[DashboardUI] Destroyed.');
+    }
 }

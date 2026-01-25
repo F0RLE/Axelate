@@ -94,7 +94,7 @@
     width: 40px;
     height: 40px;
     border-radius: 10px;
-    background: rgba(138, 43, 226, 0.1);
+    background: rgba(var(--primary-raw), 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -133,7 +133,7 @@ html[lang="zh"] .splash-title {
 
 /* Body Base Overrides */
 body.app-body {
-    background-color: #111015;
+    background-color: var(--bg-dark);
 }
 
 /* System Monitor Spacing */

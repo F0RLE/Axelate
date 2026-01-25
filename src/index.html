@@ -47,37 +47,45 @@
             id="app-header"
             class="fade-in-init"
         >
-            <!-- Left: Language Switcher -->
-            <div class="lang-switcher-root">
-                <!-- Sliding Menu Items (Other Languages) -->
-                <div class="lang-menu-items" id="lang-menu-items">
+            <!-- Left: Sound & Language Switcher -->
+            <div class="header-left-group">
+                <button class="lang-btn sound-toggle-btn" id="sound-toggle-btn" data-i18n-title="ui.launcher.web.toggle_sound" title="Toggle Sound">
+                    <svg class="icon">
+                        <use href="#icon-volume"></use>
+                    </svg>
+                </button>
+
+                <div class="lang-switcher-root">
+                    <!-- Sliding Menu Items (Other Languages) -->
+                    <div class="lang-menu-items" id="lang-menu-items">
+                        <button
+                            class="lang-btn"
+                            data-lang="en"
+                        >
+                            <span class="flag-icon flag-gb"></span>
+                        </button>
+                        <button
+                            class="lang-btn"
+                            data-lang="ru"
+                        >
+                            <span class="flag-icon flag-ru"></span>
+                        </button>
+                        <button
+                            class="lang-btn"
+                            data-lang="zh"
+                        >
+                            <span class="flag-icon flag-cn"></span>
+                        </button>
+                    </div>
+
+                    <!-- Current Language Trigger -->
                     <button
-                        class="lang-btn"
-                        data-lang="en"
+                        class="lang-btn current-lang-trigger"
+                        id="current-lang-trigger"
                     >
                         <span class="flag-icon flag-gb"></span>
                     </button>
-                    <button
-                        class="lang-btn"
-                        data-lang="ru"
-                    >
-                        <span class="flag-icon flag-ru"></span>
-                    </button>
-                    <button
-                        class="lang-btn"
-                        data-lang="zh"
-                    >
-                        <span class="flag-icon flag-cn"></span>
-                    </button>
                 </div>
-
-                <!-- Current Language Trigger -->
-                <button
-                    class="lang-btn current-lang-trigger"
-                    id="current-lang-trigger"
-                >
-                    <span class="flag-icon flag-gb"></span>
-                </button>
             </div>
 
             <!-- Right: Window Controls -->
@@ -866,18 +874,20 @@
             class="width-warning hidden"
         >
             <div class="width-warning-content">
-                <span class="warning-icon">⚠️</span>
-                <span
-                    class="warning-text"
-                    data-i18n="ui.launcher.web.expand_window"
-                    >Expand the window to see all modules</span
-                >
-                <div class="zoom-hint">
-                    <div class="zoom-icons">
-                        <div class="ctrl-key">CTRL</div>
-                        <span class="zoom-plus-icon">+</span>
-                        <div class="mouse-icon">
-                            <div class="wheel"></div>
+                <div class="width-warning-inner">
+                    <span class="warning-icon">⚠️</span>
+                    <span
+                        class="warning-text"
+                        data-i18n="ui.launcher.web.expand_window"
+                        >Expand the window to see all modules</span
+                    >
+                    <div class="zoom-hint">
+                        <div class="zoom-icons">
+                            <div class="ctrl-key">CTRL</div>
+                            <span class="zoom-plus-icon">+</span>
+                            <div class="mouse-icon">
+                                <div class="wheel"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -890,18 +900,20 @@
             class="width-warning hidden"
         >
             <div class="width-warning-content">
-                <span class="warning-icon">⚠️</span>
-                <span
-                    class="warning-text"
-                    data-i18n="ui.launcher.web.expand_window"
-                    >Expand the window to see all modules</span
-                >
-                <div class="zoom-hint">
-                    <div class="zoom-icons">
-                        <div class="ctrl-key">CTRL</div>
-                        <span class="zoom-plus-icon">+</span>
-                        <div class="mouse-icon">
-                            <div class="wheel"></div>
+                <div class="width-warning-inner">
+                    <span class="warning-icon">⚠️</span>
+                    <span
+                        class="warning-text"
+                        data-i18n="ui.launcher.web.expand_window"
+                        >Expand window to see normal interface display</span
+                    >
+                    <div class="zoom-hint">
+                        <div class="zoom-icons">
+                            <div class="ctrl-key">CTRL</div>
+                            <span class="zoom-plus-icon">+</span>
+                            <div class="mouse-icon">
+                                <div class="wheel"></div>
+                            </div>
                         </div>
                     </div>
                 </div>

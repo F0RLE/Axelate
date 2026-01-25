@@ -18,6 +18,8 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     animation: cardSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
 }
 
@@ -111,7 +113,7 @@
 }
 
 .card-resize-handle:hover {
-    background: rgba(138, 43, 226, 0.4);
+    background: rgba(var(--primary-raw), 0.4);
 }
 
 .card-resize-handle:active {

@@ -124,7 +124,7 @@ pub async fn control(
                 .and_then(|l| l.start.clone())
                 .ok_or_else(|| AppError::Config("No start script defined".to_string()))?;
 
-            println!("Spawning start script for {}: {}", module_id, start_script);
+            log::info!("Spawning start script for {}: {}", module_id, start_script);
 
             #[cfg(target_os = "windows")]
             let child = Command::new("cmd")
@@ -143,7 +143,7 @@ pub async fn control(
             let pid = child.id();
             let pid_file = module_path.join("module.pid");
             if let Err(e) = fs::write(&pid_file, pid.to_string()) {
-                println!("Failed to write PID file: {}", e);
+                log::error!("Failed to write PID file: {}", e);
             }
 
             Ok(ControlResponse {
@@ -160,7 +160,7 @@ pub async fn control(
             if pid_file.exists() {
                 if let Ok(pid_str) = fs::read_to_string(&pid_file) {
                     let pid_str = pid_str.trim();
-                    println!("Stopping {} (PID: {})", module_id, pid_str);
+                    log::info!("Stopping {} (PID: {})", module_id, pid_str);
 
                     #[cfg(target_os = "windows")]
                     let kill_cmd = Command::new("taskkill")
@@ -177,11 +177,11 @@ pub async fn control(
                             } else {
                                 let stderr = String::from_utf8_lossy(&output.stderr);
                                 message = format!("Failed to kill PID {}: {}", pid_str, stderr);
-                                println!("{}", message);
+                                log::error!("{}", message);
                             }
                         }
                         Err(e) => {
-                            println!("Failed to execute kill command: {}", e);
+                            log::error!("Failed to execute kill command: {}", e);
                         }
                     }
                 }
@@ -192,7 +192,7 @@ pub async fn control(
 
             // 2. Run stop script if defined (for graceful cleanup)
             if let Some(stop_script) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
-                println!("Running stop script for {}: {}", module_id, stop_script);
+                log::info!("Running stop script for {}: {}", module_id, stop_script);
                 // We run this blocking, just in case
                 #[cfg(target_os = "windows")]
                 let _ = Command::new("cmd")
@@ -218,7 +218,7 @@ pub async fn control(
             };
 
             if let Some(cmd_str) = script {
-                println!("Executing blocking script for {}: {}", module_id, cmd_str);
+                log::info!("Executing blocking script for {}: {}", module_id, cmd_str);
 
                 #[cfg(target_os = "windows")]
                 let result = Command::new("cmd")

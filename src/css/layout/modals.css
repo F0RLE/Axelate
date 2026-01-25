@@ -460,7 +460,7 @@ button[onclick*="close"],
     bottom: 2rem;
     left: 50%;
     transform: translateX(-50%) translateY(100px);
-    background: #0d3e23;
+    background: var(--success-dark);
     color: white;
     padding: 0.75rem 1.5rem;
     border-radius: 12px;

@@ -46,13 +46,13 @@
 
 .chat-bubble ::selection,
 .chat-bubble *::selection {
-    background: rgba(138, 43, 226, 0.45) !important;
+    background: rgba(var(--primary-raw), 0.45) !important;
     color: white !important;
 }
 
 .chat-row.user .chat-bubble {
-    background: rgba(138, 43, 226, 0.18);
-    border-color: rgba(138, 43, 226, 0.35);
+    background: rgba(var(--primary-raw), 0.18);
+    border-color: rgba(var(--primary-raw), 0.35);
 }
 
 .chat-meta {

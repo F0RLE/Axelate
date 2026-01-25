@@ -1,4 +1,6 @@
 {
+  "ui.launcher.web.app_title": "Flux Platform",
+  "ui.launcher.web.toggle_sound": "Toggle Sound",
   "ui.launcher.web.main_menu": "Main Menu",
   "ui.launcher.web.chat": "Chat",
   "ui.launcher.web.modules": "Modules",
@@ -175,7 +177,7 @@
   "ui.gemini.error.unavailable": "Error 503: Gemini Service is temporarily unavailable. Please try again later. (model: {model})",
   "ui.launcher.module.files_short": "Files",
   "ui.launcher.module.files_logged": "File list sent to console",
-  "ui.launcher.web.expand_window": "Expand the window to see all modules",
+  "ui.launcher.web.expand_window": "Expand window to see normal interface display",
   "ui.launcher.status.running": "Running",
   "ui.launcher.button.stop": "Stop",
   "ui.launcher.web.status_waiting": "Waiting",

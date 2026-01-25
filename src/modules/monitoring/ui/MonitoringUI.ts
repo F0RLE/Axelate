@@ -88,10 +88,9 @@ export class MonitoringUI {
         const networkProgressEl = document.getElementById('network-progress');
 
         if (networkStatusEl) {
-            // Compact format: ↓10 • ↑5 MB/s
-            const down = this._formatSimpleMB(downRate);
-            const up = this._formatSimpleMB(upRate);
-            this._setValueWithSecondary(networkStatusEl, `↓${down} • ↑${up}`, ' MB/s');
+            // Smart conversion: if > 1024 MB/s, switch both to GB/s
+            const { val1, val2, unit } = this._formatSmartRate(downRate, upRate);
+            this._setValueWithSecondary(networkStatusEl, `↓${val1} • ↑${val2}`, ` ${unit}`);
         }
         if (networkProgressEl) {
             const netPercent = Math.min(100, (netPeak / 10) * 100);
@@ -120,10 +119,9 @@ export class MonitoringUI {
         const diskProgressEl = document.getElementById('disk-progress');
 
         if (diskUsageEl) {
-             // Compact format: R:10 • W:5 MB/s
-             const read = this._formatSimpleMB(readRate);
-             const write = this._formatSimpleMB(writeRate);
-             this._setValueWithSecondary(diskUsageEl, `R:${read} • W:${write}`, ' MB/s');
+             // Smart conversion: if > 1024 MB/s, switch both to GB/s
+             const { val1, val2, unit } = this._formatSmartRate(readRate, writeRate);
+             this._setValueWithSecondary(diskUsageEl, `R:${val1} • W:${val2}`, ` ${unit}`);
              const used = stats.disk?.used_gb || 0;
              const total = stats.disk?.total_gb || 0;
              diskUsageEl.title = `Space: ${used.toFixed(1)} / ${total.toFixed(1)} GB (Usage: ${diskPct.toFixed(1)}%)`;
@@ -269,5 +267,28 @@ export class MonitoringUI {
     private _formatSimpleMB(bytes: number): string {
         const mb = Math.round(bytes / (1024 * 1024));
         return `${mb}`;
+    }
+
+    /**
+     * Formats two sibling rates with a unified unit (MB/s or GB/s) based on the peak value.
+     */
+    private _formatSmartRate(bytes1: number, bytes2: number): { val1: string, val2: string, unit: string } {
+        const mb1 = bytes1 / (1024 * 1024);
+        const mb2 = bytes2 / (1024 * 1024);
+        const peakMB = Math.max(mb1, mb2);
+
+        if (peakMB >= 1000) {
+            return {
+                val1: (mb1 / 1024).toFixed(1),
+                val2: (mb2 / 1024).toFixed(1),
+                unit: 'GB/s'
+            };
+        }
+
+        return {
+            val1: Math.round(mb1).toString(),
+            val2: Math.round(mb2).toString(),
+            unit: 'MB/s'
+        };
     }
 }
