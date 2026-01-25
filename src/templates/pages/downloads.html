@@ -1,0 +1,116 @@
+<!-- Downloads Page -->
+<div id="page-downloads" class="page">
+    <div id="downloads-container">
+        <div class="downloads-inner-wrapper">
+            <div class="downloads-header">
+                <div class="downloads-header-content">
+                    <div class="downloads-title-wrapper">
+                        <div class="downloads-title-icon">
+                            <svg class="icon">
+                                <use href="#icon-download"></use>
+                            </svg>
+                        </div>
+                        <div class="downloads-title-container">
+                            <h1 class="downloads-title" data-i18n="ui.launcher.web.downloads">Downloads</h1>
+                            <p class="downloads-subtitle" data-i18n="ui.launcher.web.downloads_subtitle">
+                                Manage model and module downloads
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button id="open-download-settings">
+                <svg class="icon">
+                    <use href="#icon-settings"></use>
+                </svg>
+            </button>
+
+            <div id="downloads-body" class="downloads-layout">
+                <div class="downloads-card-main hidden relative" id="downloads-main-card">
+                    <div class="downloads-card-header">
+                        <div class="downloads-meta-section">
+                            <div class="downloads-icon-wrapper">
+                                <svg class="icon downloads-file-icon">
+                                    <use href="#icon-folder"></use>
+                                </svg>
+                            </div>
+                            <div class="downloads-meta-content">
+                                <div class="downloads-label" id="downloads-active-label" data-i18n="ui.launcher.web.downloads_active">
+                                    Active Download
+                                </div>
+                                <div class="downloads-item-label" id="downloads-item-label" data-i18n="ui.launcher.web.no_active_downloads">
+                                    No active downloads
+                                </div>
+                            </div>
+                        </div>
+                        <div id="downloads-status" class="downloads-status-pill" data-i18n="ui.launcher.web.status_waiting">
+                            Waiting
+                        </div>
+                    </div>
+
+                    <div class="downloads-progress-section">
+                        <div class="downloads-progress-header">
+                            <span class="downloads-progress-label" data-i18n="ui.launcher.web.progress">Progress</span>
+                            <span id="downloads-progress-text" class="downloads-progress-percent">0%</span>
+                        </div>
+                        <div class="downloads-bar-outer">
+                            <div id="downloads-progress-bar" class="downloads-bar-inner"></div>
+                        </div>
+                    </div>
+
+                    <div class="downloads-stats-grid">
+                        <div class="downloads-stat-item">
+                            <div class="downloads-stat-label">
+                                <svg class="icon icon-sm"><use href="#icon-download"></use></svg>
+                                <span data-i18n="ui.launcher.web.downloaded">Downloaded</span>
+                            </div>
+                            <div id="downloads-downloaded" class="downloads-stat-value">0 MB</div>
+                        </div>
+                        <div class="downloads-stat-item">
+                            <div class="downloads-stat-label">
+                                <svg class="icon icon-sm"><use href="#icon-folder"></use></svg>
+                                <span data-i18n="ui.launcher.web.total">Total</span>
+                            </div>
+                            <div id="downloads-total" class="downloads-stat-value">-- MB</div>
+                        </div>
+                        <div class="downloads-stat-item">
+                            <div class="downloads-stat-label">
+                                <svg class="icon icon-sm"><use href="#icon-network"></use></svg>
+                                <span data-i18n="ui.launcher.web.speed">Speed</span>
+                            </div>
+                            <div id="downloads-speed" class="downloads-stat-value">0 KB/s</div>
+                        </div>
+                        <div class="downloads-stat-item">
+                            <div class="downloads-stat-label">
+                                <svg class="icon icon-sm"><use href="#icon-clock"></use></svg>
+                                <span data-i18n="ui.launcher.web.eta_label">ETA</span>
+                            </div>
+                            <div id="downloads-eta" class="downloads-stat-value">--</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="downloads-info-card">
+                    <div class="downloads-info-header">
+                        <svg class="icon downloads-info-header-icon"><use href="#icon-info"></use></svg>
+                        <span data-i18n="ui.launcher.web.information">Information</span>
+                    </div>
+                    <div class="downloads-info-content">
+                        <p class="downloads-info-text" data-i18n="ui.launcher.web.downloads_hint">
+                            Model and module downloads are displayed here in real-time.
+                        </p>
+                        <div class="downloads-empty-state" id="downloads-empty-text">
+                            <svg class="icon downloads-empty-icon"><use href="#icon-download"></use></svg>
+                            <p data-i18n="ui.launcher.web.no_active_downloads">No active downloads yet</p>
+                            <p class="downloads-empty-hint" data-i18n="ui.launcher.web.start_download_hint">
+                                Start a module or model installation to see progress here
+                            </p>
+                            <p class="downloads-empty-sub" data-i18n="ui.launcher.web.not_downloading">Not downloading yet</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

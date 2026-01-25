@@ -1,0 +1,55 @@
+﻿@font-face {
+    font-family: 'Monocraft';
+    src: url('/assets/fonts/Monocraft.otf') format('opentype'),
+        url('/api/fonts/Monocraft.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Cubic11';
+    src: url('/assets/fonts/Cubic_11.ttf') format('truetype'),
+        url('/api/fonts/Cubic_11.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    --bg-dark: #111015;
+    --bg-med: #1a1920;
+    --bg-light: #26252d;
+    --surface: #31303a;
+    --border-color: #31303a;
+    --primary: #8a2be2;
+    --primary-light: #9d4edd;
+    --primary-dark: #7b2cbf;
+    --success: #218838;
+    --danger: #c22131;
+    --warning: #ffc107;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --text-muted: #6c757d;
+    
+    /* Glassmorphism */
+    --glass-surface: rgba(255, 255, 255, 0.03);
+    --glass-surface-hover: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-light: rgba(255, 255, 255, 0.15);
+    
+    /* Common UI Tokens */
+    --card-bg: rgba(255, 255, 255, 0.03);
+    --card-bg-hover: rgba(255, 255, 255, 0.06);
+    --premium-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+
+    /* Radii */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 16px;
+
+    /* Layout Dimensions */
+    --header-height: 60px;
+    --content-padding-top: 90px;
+    /* Header + 30px buffer */
+}

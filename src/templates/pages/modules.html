@@ -1,0 +1,52 @@
+<!-- Modules Page -->
+<div id="page-modules" class="page">
+    <div class="models-container">
+        <div class="models-header">
+            <h1 class="models-title" data-i18n="ui.launcher.web.models_title">Model Functions</h1>
+            <p class="models-subtitle" data-i18n="ui.launcher.models_subtitle">
+                Select an AI capability to start generating
+            </p>
+        </div>
+
+        <div class="models-grid">
+            <!-- AI Module Card -->
+            <div id="ai-module-card" class="model-card-premium ai empty">
+                <div class="model-icon-wrapper">
+                    <svg class="icon"><use href="#icon-ai"></use></svg>
+                </div>
+                <div class="model-card-title" data-i18n="ui.launcher.models.ai">AI</div>
+                <div class="model-card-desc" data-i18n="ui.launcher.models.ai_desc">
+                    Unified platform for high-quality text, image, and code generation.
+                </div>
+                <div id="ai-module-add-btn" class="model-card-action" data-i18n="ui.launcher.open">Open</div>
+            </div>
+
+            <!-- Services Module Card -->
+            <div id="services-module-card" class="model-card-premium services empty">
+                <div class="model-icon-wrapper">
+                    <svg class="icon"><use href="#icon-services"></use></svg>
+                </div>
+                <div class="model-card-title" data-i18n="ui.launcher.models.services">Services</div>
+                <div class="model-card-desc" data-i18n="ui.launcher.models.services_desc">
+                    Manage auxiliary services, API connectors, and background processes.
+                </div>
+                <div id="services-module-add-btn" class="model-card-action" data-i18n="ui.launcher.open">Open</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- App Selection Modal -->
+    <div id="app-selection-modal" class="modal-backdrop hidden">
+        <div class="app-modal">
+            <div class="app-modal-header">
+                <h2 id="app-modal-title" class="app-modal-title">Select App</h2>
+                <button id="close-app-selection-btn" class="app-close-btn">
+                    <svg class="icon"><use href="#icon-close"></use></svg>
+                </button>
+            </div>
+            <div id="app-modal-list" class="app-grid">
+                <!-- Apps will be injected here -->
+            </div>
+        </div>
+    </div>
+</div>

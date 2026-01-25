@@ -1,0 +1,193 @@
+[
+  {
+    "id": "gpt",
+    "name": "GPT",
+    "description": "Автономные агенты и глубокая логика.",
+    "icon": "🤖",
+    "stats": { "speed": 9, "logic": 10, "creative": 10 },
+    "type": "api",
+    "baseUrl": "https://api.openai.com/v1",
+    "models": {
+      "gpt-5.2-pro": {
+        "name": "GPT-5.2 Pro",
+        "desc": "Best model for autonomous agents",
+        "descKey": "ui.gpt.model.gpt52.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$1.75" },
+           { "tier": "Output", "note": "$14.00" }
+        ],
+        "stats": { "speed": 5, "logic": 10, "creative": 10 },
+        "apiModels": { "text": "gpt-5.2-2025-12-11" }
+      },
+      "gpt-5.2-standard": {
+        "name": "GPT-5.2",
+        "desc": "Balanced speed and intelligence",
+        "descKey": "ui.gpt.model.gpt52std.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$1.75" },
+           { "tier": "Output", "note": "$14.00" }
+        ],
+        "stats": { "speed": 7, "logic": 9, "creative": 9 },
+        "apiModels": { "text": "gpt-5.2-standard" }
+      },
+
+      "gpt-5-mini": {
+        "name": "GPT-5 Mini",
+        "desc": "Fast and cost-effective",
+        "descKey": "ui.gpt.model.gpt5mini.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$0.15" },
+           { "tier": "Output", "note": "$0.60" }
+        ],
+        "stats": { "speed": 10, "logic": 5, "creative": 5 },
+        "apiModels": { "text": "gpt-5-mini-2025-08-07" }
+      }
+    }
+  },
+  {
+    "id": "claude",
+    "name": "Claude",
+    "description": "Продвинутый ИИ для анализа и творчества.",
+    "descKey": "ui.launcher.app.claude.desc",
+    "icon": "✱",
+    "stats": { "speed": 8, "logic": 10, "creative": 10 },
+    "type": "api",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "models": {
+      "claude-4.5-opus": {
+        "name": "Claude 4.5 Opus",
+        "desc": "Unmatched intelligence (Nov 2025)",
+        "descKey": "ui.claude.model.45opus.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$5.00" },
+           { "tier": "Output", "note": "$25.00" }
+        ],
+        "stats": { "speed": 3, "logic": 10, "creative": 10 },
+        "apiModels": { "text": "anthropic/claude-4.5-opus" }
+      },
+      "claude-4.5-sonnet": {
+        "name": "Claude 4.5 Sonnet",
+        "desc": "Hybrid reasoning (Sep 2025)",
+        "descKey": "ui.claude.model.45sonnet.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$3.00" },
+           { "tier": "Output", "note": "$15.00" }
+        ],
+        "stats": { "speed": 7, "logic": 9, "creative": 8 },
+        "apiModels": { "text": "claude-sonnet-4-5" }
+      },
+      "claude-4.5-haiku": {
+        "name": "Claude 4.5 Haiku",
+        "desc": "Lightning fast speed",
+        "descKey": "ui.claude.model.haiku.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$1.00" },
+           { "tier": "Output", "note": "$5.00" }
+        ],
+        "stats": { "speed": 10, "logic": 6, "creative": 5 },
+        "apiModels": { "text": "anthropic/claude-4.5-haiku" }
+      }
+    }
+  },
+  {
+    "id": "gemini",
+    "name": "Gemini",
+    "description": "Мультимодальность и огромный контекст.",
+    "icon": "✨",
+    "stats": { "speed": 10, "logic": 9, "creative": 10 },
+    "type": "gemini",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+    "models": {
+      "gemini-3-pro": {
+        "name": "Gemini 3 Pro",
+        "desc": "Advanced flagship reasoning",
+        "descKey": "ui.gemini.model.pro.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$2.00" },
+           { "tier": "Output", "note": "$12.00" }
+        ],
+        "stats": { "speed": 6, "logic": 10, "creative": 10 },
+        "apiModels": { "text": "gemini-3-pro-preview" }
+      },
+      "gemini-3-flash": {
+        "name": "Gemini 3 Flash",
+        "desc": "Ultra-fast multimodal agent",
+        "descKey": "ui.gemini.model.flash.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$0.50" },
+           { "tier": "Output", "note": "$3.00" }
+        ],
+        "stats": { "speed": 10, "logic": 9, "creative": 8 },
+        "apiModels": { "text": "gemini-3-flash-preview" }
+      }
+    }
+  },
+  {
+    "id": "llama",
+    "name": "Llama",
+    "description": "Мощные открытые модели для локального и облачного использования.",
+    "descKey": "ui.launcher.app.llama.desc",
+    "icon": "🦙",
+    "stats": { "speed": 9, "logic": 9, "creative": 8 },
+    "type": "api",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "models": {
+      "llama-4-behemoth": {
+        "name": "Llama 4 Behemoth",
+        "desc": "Most powerful open model (2T)",
+        "descKey": "ui.llama.model.behemoth.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$2.00" },
+           { "tier": "Output", "note": "$6.00" }
+        ],
+        "stats": { "speed": 3, "logic": 9, "creative": 9 },
+        "apiModels": { "text": "meta-llama/llama-4-behemoth" }
+      },
+      "llama-4-scout": {
+        "name": "Llama 4 Scout",
+        "desc": "Efficient MoE model (109B)",
+        "descKey": "ui.llama.model.scout.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$0.70" },
+           { "tier": "Output", "note": "$1.40" }
+        ],
+        "stats": { "speed": 7, "logic": 7, "creative": 7 },
+        "apiModels": { "text": "meta-llama/llama-4-scout" }
+      }
+    }
+  },
+  {
+    "id": "deepseek",
+    "name": "DeepSeek",
+    "description": "Специализированные модели для программирования и математики.",
+    "descKey": "ui.launcher.app.deepseek.desc",
+    "icon": "🧠",
+    "stats": { "speed": 10, "logic": 10, "creative": 8 },
+    "type": "api",
+    "baseUrl": "https://api.deepseek.com",
+    "models": {
+      "deepseek-reasoner-v2": {
+        "name": "DeepSeek Reasoner",
+        "desc": "Chain of thought for highest accuracy",
+        "descKey": "ui.deepseek.model.reasoner.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$0.55" },
+           { "tier": "Output", "note": "$2.19" }
+        ],
+        "stats": { "speed": 3, "logic": 10, "creative": 6 },
+        "apiModels": { "text": "deepseek-reasoner-v2" }
+      },
+      "deepseek-v4": {
+        "name": "DeepSeek V4",
+        "desc": "SOTA in coding and math",
+        "descKey": "ui.deepseek.model.v4.desc",
+        "pricing": [
+           { "tier": "Input", "note": "$0.14" },
+           { "tier": "Output", "note": "$0.28" }
+        ],
+        "stats": { "speed": 9, "logic": 9, "creative": 6 },
+        "apiModels": { "text": "deepseek-v4" }
+      }
+    }
+  }
+]

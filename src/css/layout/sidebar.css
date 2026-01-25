@@ -1,0 +1,630 @@
+﻿#sidebar {
+    width: var(--sidebar-width, 280px);
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    background: #0D1117 !important;
+    backdrop-filter: blur(20px);
+    /* Improved border rendering to avoid subpixel gaps */
+    box-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.08); 
+    border-right: none;
+    padding: 1rem;
+    padding-bottom: 1rem;
+    flex-shrink: 0;
+    min-width: 80px;
+    max-width: 500px;
+    user-select: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-app-region: drag;
+    transition: width 0.3s var(--ease-smooth), filter 0.3s ease;
+    filter: blur(0px);
+    transform: translateZ(0);
+    z-index: 1000;
+    box-sizing: border-box;
+}
+
+/* ... */
+
+.logo-area {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 1.5rem;
+    flex-direction: column;
+    text-align: center;
+    -webkit-app-region: no-drag;
+    justify-content: center;
+    /* Adjusted for better vertical centering with header */
+    padding-top: 0.75rem; 
+    cursor: pointer;
+    border-radius: 12px;
+}
+
+.logo-icon-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+    width: 100%;
+    cursor: pointer;
+}
+
+.status-under-icon {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    margin-left: 0;
+    -webkit-app-region: no-drag;
+}
+
+.status-under-icon .status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+}
+
+.launcher-status-badge {
+    background: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.launcher-status-badge .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: pulse 2s infinite;
+}
+
+.launcher-status-badge.offline .status-dot {
+    background: var(--text-muted);
+    box-shadow: none;
+    animation: none;
+}
+
+/* Launcher Icon (Hidden by default, shown when collapsed) */
+.sidebar-logo-icon {
+    display: none;
+    width: 40px;
+    height: 40px;
+    margin: 0 auto;
+    cursor: pointer;
+    /* animation: fadeIn 0.3s ease; Removed, logic in #sidebar.collapsed rule if needed, or keeping it but adding inner svg anim */
+}
+
+/* Ensure it shows when collapsed - usually handled by #sidebar.collapsed rule further down or in JS toggling class on wrapper?
+   Actually the rule is likely: #sidebar.collapsed .sidebar-logo-icon { display: block; }
+   found elsewhere. But here we define base style. */
+
+.sidebar-logo-icon svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 8px rgba(138, 43, 226, 0.5));
+    /* Add animation here for when it becomes visible */
+    animation: logoPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    cursor: pointer;
+    pointer-events: none;
+}
+
+.sidebar-logo-icon:active svg {
+    transform: scale(0.9);
+    transition: transform 0.1s;
+}
+
+@keyframes logoPopIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.5) rotate(-15deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0);
+    }
+}
+
+/* Sidebar Title Wrapper (Visible by default) */
+.sidebar-title-wrapper {
+    width: 100%;
+    overflow: hidden;
+    transition: opacity 0.3s var(--ease-smooth), transform 0.3s var(--ease-smooth), max-height 0.3s var(--ease-smooth), visibility 0.3s;
+    text-align: center;
+    cursor: pointer;
+    transform: translateY(0);
+    max-height: 100px;
+}
+
+.app-title {
+    font-weight: 700;
+    font-size: 1.5rem;
+    background: linear-gradient(
+        90deg,
+        #8a2be2,
+        #9d4edd,
+        #c77dff,
+        #9d4edd,
+        #8a2be2
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-top: 0.5rem;
+    cursor: pointer;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+/* Collapsed Sidebar State */
+#sidebar.collapsed {
+    width: 80px !important;
+    padding: 1rem 0.5rem;
+}
+
+#sidebar.collapsed .status-under-icon,
+#sidebar.collapsed .nav-btn span,
+#sidebar.collapsed .nav-section-title,
+#sidebar.collapsed .sysmon-label-text,
+#sidebar.collapsed .sysmon-value,
+#sidebar.collapsed .sysmon-track,
+#sidebar.collapsed .sidebar-lang-switcher .lang-menu-items,
+#sidebar.collapsed #system-monitor,
+#sidebar.collapsed #sidebar-footer {
+    display: none !important;
+}
+
+#sidebar.collapsed .sidebar-title-wrapper {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    max-height: 0;
+    margin: 0;
+    transition: opacity 0.3s var(--ease-smooth), transform 0.3s var(--ease-smooth), max-height 0.3s var(--ease-smooth), visibility 0.3s;
+}
+
+#sidebar.collapsed .app-title {
+    opacity: 0;
+}
+
+#sidebar.collapsed .sidebar-logo-icon {
+    display: block;
+}
+
+#sidebar.collapsed .logo-area {
+    margin-bottom: 1rem;
+}
+
+#sidebar.collapsed .nav-btn {
+    justify-content: center;
+    padding: 1.25rem 0;
+    margin-bottom: 0.5rem;
+}
+
+#sidebar.collapsed .nav-btn svg {
+    margin-right: 0;
+    width: 32px;
+    height: 32px;
+}
+
+#sidebar.collapsed .nav-btn:hover {
+    transform: none;
+    background: rgba(138, 43, 226, 0.2); /* Optional: keep the background change but no movement */
+}
+
+#sidebar.collapsed .sidebar-lang-switcher {
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+.sidebar-bottom .nav-btn:last-child {
+    margin-bottom: 0;
+}
+
+/* Language Switcher in Sidebar */
+.sidebar-lang-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 1rem;
+    padding: 0 0.5rem;
+}
+
+/* Sidebar Lang Menu (Popup) */
+#sidebar-lang-menu {
+    position: absolute;
+    left: 100%;
+    top: 0;
+    margin-left: 10px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    border-radius: 12px;
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-10px);
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+}
+
+#sidebar-lang-menu.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+
+
+.app-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.nav-section {
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    -webkit-app-region: no-drag;
+}
+
+.sysmon-spacer {
+    margin: auto 0;
+    padding: 1rem 0;
+}
+
+.nav-section .nav-btn:last-child {
+    margin-bottom: 0;
+}
+
+.section-label {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    letter-spacing: 0.5px;
+}
+
+.nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Center the text */
+    width: 100%;
+    padding: 0.75rem 0.85rem;
+    padding-left: 2.5rem;
+    /* Space for icon */
+    /* Space for icon */
+    background: rgba(138, 43, 226, 0.05) !important; /* Subtle launcher color tint */
+    border: 1px solid rgba(138, 43, 226, 0.15) !important;
+    font-size: 1rem; /* Increased from 16px to 1rem (approx 16px but scales better) or could go slightly larger like 1.05rem if needed */
+    font-weight: 600; /* Made slightly bolder */
+    color: #E0E0E0 !important; /* Softened from #FFFFFF */
+    cursor: pointer !important;
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+    font-family: "Monocraft", "Inter", "Segoe UI", sans-serif;
+    -webkit-app-region: no-drag;
+    position: relative;
+    overflow: hidden;
+    /* Consolidate all transitions into one property */
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.5s ease,
+        margin 0.5s ease,
+        padding 0.5s ease;
+    max-height: 40px;
+    /* Approximate height of nav btn */
+}
+
+.nav-btn.nav-item-hiding {
+    opacity: 0;
+    transform: translateX(-20px);
+    max-height: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border: none;
+    pointer-events: none;
+}
+
+.nav-btn::before {
+    display: none;
+    /* Remove swipe effect */
+}
+
+.nav-btn:hover {
+    background: rgba(138, 43, 226, 0.12);
+    color: #ffffff;
+    transform: translateX(4px);
+    border-color: rgba(138, 43, 226, 0.2);
+    box-shadow: 0 2px 8px rgba(138, 43, 226, 0.15);
+}
+
+.nav-btn:active {
+    transform: scale(0.98);
+    /* Subtle click feedback only */
+    transition: all 0.1s ease;
+}
+
+.nav-btn.active {
+    background: rgba(138, 43, 226, 0.3);
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 0 12px rgba(138, 43, 226, 0.25);
+    border-color: rgba(138, 43, 226, 0.5);
+    transform: translateX(2px);
+}
+
+.nav-btn.active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60%;
+    background: var(--primary);
+    border-radius: 0 3px 3px 0;
+    box-shadow: 0 0 8px rgba(138, 43, 226, 0.5);
+    opacity: 1;
+    animation: navIndicatorPulse 2s ease-in-out infinite;
+}
+
+@keyframes navIndicatorPulse {
+    0%,
+    100% {
+        box-shadow: 0 0 8px rgba(138, 43, 226, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 0 16px rgba(138, 43, 226, 0.8);
+    }
+}
+
+.nav-btn .icon {
+    position: absolute;
+    left: 0.75rem;
+    width: 22px;
+    height: 22px;
+    transition: transform 0.25s
+        var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1));
+    flex-shrink: 0;
+}
+
+.nav-btn:hover .icon {
+    transform: scale(1.15);
+}
+
+.nav-btn.active .icon {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 4px rgba(138, 43, 226, 0.5));
+}
+
+.nav-btn svg,
+.nav-btn span,
+.nav-btn .icon {
+    cursor: pointer;
+    pointer-events: none; /* Let clicks pass through to the button */
+    white-space: nowrap;
+}
+
+.nav-btn span {
+    transition: opacity 0.2s ease;
+}
+
+/* Dragging visibility overrides removed */
+
+.modules-title-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 8px 24px rgba(138, 43, 226, 0.3);
+    animation: none;
+    /* Removed pulse animation */
+}
+
+/* --- SERVICE & SYSTEM CARDS --- */
+.card {
+    background: var(--bg-med);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 12px;
+    font-family: "Monocraft", "Inter", "Segoe UI", sans-serif;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.monitor-card {
+    background: rgba(25, 25, 35, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* Sidebar Drag Handle */
+/* Sidebar Drag Handle - Global Position */
+/* Sidebar Drag Handle Removed */
+
+/* Duplicates removed and merged above */
+
+.service-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem; /* Increased from 11px */
+    transition: background 0.2s;
+    border-radius: 8px;
+    margin-bottom: 0.25rem;
+    font-family: "Monocraft", "Inter", "Segoe UI", sans-serif;
+    -webkit-app-region: no-drag;
+}
+
+.service-row:hover {
+    background: rgba(138, 43, 226, 0.1);
+}
+
+.service-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.status-dot.running {
+    background: var(--success);
+    box-shadow: 0 0 8px #28a74580;
+}
+
+.status-dot.starting {
+    background: var(--warning);
+    animation: pulse 1.5s infinite;
+}
+
+.status-dot.stopping {
+    background: var(--warning);
+    opacity: 0.8;
+}
+
+.status-dot.error {
+    background: var(--danger);
+    box-shadow: 0 0 10px rgba(220, 53, 69, 0.55);
+    animation: pulse 1.2s infinite;
+}
+
+.service-name {
+    font-weight: 500;
+    flex: 1;
+    color: #E0E0E0 !important; /* Higher contrast light gray */
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+
+
+.btn-toggle-service {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+}
+
+.btn-toggle-service:hover {
+    background: var(--primary);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(138, 43, 226, 0.3);
+    border-color: var(--primary);
+}
+
+.btn-toggle-service:active {
+    transform: translateY(0px) scale(0.95);
+}
+
+.btn-toggle-service.stop:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+.btn-toggle-service.restart {
+    background: rgba(255, 165, 0, 0.2);
+    border-color: rgba(255, 165, 0, 0.3);
+    opacity: 0.8;
+}
+
+.btn-toggle-service.restart:hover {
+    background: var(--warning);
+    border-color: var(--warning);
+    opacity: 1;
+    transform: translateY(-1px) rotate(180deg);
+}
+
+.btn-toggle-service .icon {
+    width: 14px;
+    height: 14px;
+}
+
+#sidebar-footer {
+    margin-top: auto;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* Center the main navigation menu ONLY in collapsed state */
+#sidebar.collapsed .main-menu {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}

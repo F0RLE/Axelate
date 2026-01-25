@@ -1,0 +1,44 @@
+﻿/* Base Reset & Body Styles */
+* {
+    box-sizing: border-box;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    cursor: default; /* Visual feedback */
+}
+
+/* Globally disable text selection on everything */
+
+html {
+    scroll-behavior: smooth;
+    overflow: hidden;
+    height: 100%;
+    /* Fluid Scaling: Min 12px, Ideal 14px + 0.4vw, Max 18px */
+    font-size: clamp(12px, 0.8rem + 0.4vw, 18px);
+}
+
+body {
+    font-family: "Monocraft", "Inter", sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-size: 14px;
+    box-sizing: border-box;
+    opacity: 1;
+    /* Changed for splash screen handling */
+    transition: opacity 0.5s ease-in;
+}
+
+/* Globals moved to top */
+
+/* Re-enable for inputs and text areas */
+input, textarea, [contenteditable] {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    cursor: text;
+}
+

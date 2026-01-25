@@ -1,0 +1,39 @@
+<!-- App Header Component -->
+<header id="app-header" class="fade-in-init">
+    <!-- Left: Language Switcher -->
+    <div class="lang-switcher-root">
+        <div class="lang-menu-items" id="lang-menu-items">
+            <button class="lang-btn" data-lang="en">
+                <span class="flag-icon flag-gb"></span>
+            </button>
+            <button class="lang-btn" data-lang="ru">
+                <span class="flag-icon flag-ru"></span>
+            </button>
+            <button class="lang-btn" data-lang="zh">
+                <span class="flag-icon flag-cn"></span>
+            </button>
+        </div>
+        <button class="lang-btn current-lang-trigger" id="current-lang-trigger">
+            <span class="flag-icon flag-gb"></span>
+        </button>
+    </div>
+
+    <!-- Right: Window Controls -->
+    <div class="top-controls">
+        <button class="window-control-btn minimize-btn" id="minimize-btn" aria-label="Minimize" data-i18n-aria-label="ui.launcher.button.minimize">
+            <svg class="icon">
+                <use href="#icon-minimize"></use>
+            </svg>
+        </button>
+        <button class="window-control-btn maximize-btn" id="maximize-btn" aria-label="Maximize" data-i18n-aria-label="ui.launcher.button.maximize">
+            <svg class="icon" id="maximize-icon">
+                <use href="#icon-maximize"></use>
+            </svg>
+        </button>
+        <button class="window-control-btn close-btn" id="close-btn" aria-label="Close" data-i18n-aria-label="ui.launcher.button.close">
+            <svg class="icon">
+                <use href="#icon-close"></use>
+            </svg>
+        </button>
+    </div>
+</header>

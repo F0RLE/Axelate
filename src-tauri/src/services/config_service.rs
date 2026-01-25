@@ -1,0 +1,193 @@
+use crate::errors::AppError;
+use crate::models::modules::ConfigField;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiModelConfig {
+    pub text: Option<String>,
+    pub image: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModelPricing {
+    pub tier: String,
+    #[serde(rename = "in")]
+    pub price_in: Option<String>,
+    #[serde(rename = "out")]
+    pub price_out: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModelStats {
+    pub speed: u8,
+    pub logic: u8,
+    pub creative: u8,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AiModel {
+    #[serde(rename = "descKey")]
+    pub desc_key: String,
+    pub name: String,
+    pub desc: String,
+    pub pricing: Vec<ModelPricing>,
+    pub stats: ModelStats,
+    #[serde(rename = "apiModels")]
+    pub api_models: Option<ApiModelConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModuleItem {
+    pub id: String,
+    #[serde(rename = "nameKey")]
+    pub name_key: String,
+    #[serde(rename = "descKey")]
+    pub desc_key: String,
+    pub name: String,
+    pub desc: String,
+    pub icon: String,
+    #[serde(rename = "type")]
+    pub type_name: String, // 'type' is reserved
+    #[serde(rename = "repoUrl")]
+    pub repo_url: Option<String>,
+    #[serde(skip_deserializing, default)]
+    pub installed: bool,
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    pub config_schema: Option<std::collections::HashMap<String, ConfigField>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigModels {
+    pub gpt: HashMap<String, AiModel>,
+    pub gemini: HashMap<String, AiModel>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigCatalog {
+    pub ai: Vec<ModuleItem>,
+    pub services: Vec<ModuleItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ApiProviderConfig {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(rename = "descKey")]
+    pub desc_key: Option<String>,
+    pub icon: Option<String>,
+    pub stats: Option<ModelStats>,
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    #[serde(rename = "baseUrl")]
+    pub base_url: Option<String>,
+    pub models: Option<HashMap<String, AiModel>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppConfig {
+    pub catalog: ConfigCatalog,
+    pub models: Option<ConfigModels>,
+    #[serde(default)]
+    pub api_providers: Vec<ApiProviderConfig>,
+}
+
+pub fn get_defaults_path(app: &AppHandle) -> Result<PathBuf, AppError> {
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let prod_path = resource_dir
+            .join("resources")
+            .join("config")
+            .join("defaults.json");
+        if prod_path.exists() {
+            return Ok(prod_path);
+        }
+    }
+
+    let dev_path_1 = PathBuf::from("src-tauri/resources/config/defaults.json");
+    if dev_path_1.exists() {
+        return Ok(dev_path_1);
+    }
+
+    let dev_path_2 = PathBuf::from("resources/config/defaults.json");
+    if dev_path_2.exists() {
+        return Ok(dev_path_2);
+    }
+
+    Err(AppError::Config(
+        "Defaults not found in any expected location".to_string(),
+    ))
+}
+
+pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
+    let defaults_path = get_defaults_path(app)?;
+
+    let content = std::fs::read_to_string(&defaults_path).map_err(|e| {
+        AppError::Config(format!(
+            "Failed to read defaults at {:?}: {}",
+            defaults_path, e
+        ))
+    })?;
+
+    let mut config: AppConfig = serde_json::from_str(&content)
+        .map_err(|e| AppError::Config(format!("Failed to parse config: {}", e)))?;
+
+    // Ensure config.models is initialized
+    if config.models.is_none() {
+        config.models = Some(ConfigModels {
+            gpt: HashMap::new(),
+            gemini: HashMap::new(),
+        });
+    }
+
+    // Load api_providers.json and inject details
+    let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
+
+    if providers_path.exists()
+        && let Ok(providers_content) = std::fs::read_to_string(&providers_path)
+        && let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&providers_content)
+    {
+        config.api_providers = providers.clone();
+
+        for provider in providers {
+            // Update catalog if not present
+            if !config.catalog.ai.iter().any(|m| m.id == provider.id) {
+                let virtual_module = ModuleItem {
+                    id: provider.id.clone(),
+                    name_key: format!("ui.module.{}", provider.id),
+                    desc_key: provider
+                        .desc_key
+                        .clone()
+                        .unwrap_or_else(|| "ui.module.desc_generic".to_string()),
+                    name: provider.name.clone(),
+                    desc: provider
+                        .description
+                        .clone()
+                        .unwrap_or_else(|| "Cloud AI Provider".to_string()),
+                    icon: provider.icon.clone().unwrap_or_else(|| "cloud".to_string()),
+                    type_name: "api".to_string(),
+                    repo_url: None,
+                    installed: true,
+                    config_schema: None,
+                };
+                config.catalog.ai.push(virtual_module);
+            }
+
+            // Inject models into legacy map for compatibility
+            if let Some(provider_models) = provider.models
+                && let Some(ref mut models_map) = config.models
+            {
+                if provider.id == "gpt" {
+                    models_map.gpt.extend(provider_models);
+                } else if provider.id == "gemini" {
+                    models_map.gemini.extend(provider_models);
+                }
+            }
+        }
+    }
+
+    Ok(config)
+}

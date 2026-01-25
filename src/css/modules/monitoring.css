@@ -1,0 +1,239 @@
+/* ============================================
+   SYS MONITOR STYLES (RESTORED)
+   ============================================ */
+
+/* System Monitor Card */
+.sysmon-card {
+    font-family: "Monocraft", "Inter", sans-serif;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 10px; /* Reduced padding to gain horizontal space */
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    max-width: 100%;
+    -webkit-app-region: no-drag;
+    transition: all 0.3s ease;
+}
+
+.sysmon-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+    opacity: 1;
+    max-height: 80px;
+    transition: opacity 0.25s ease, max-height 0.25s ease;
+}
+
+.sysmon-stat.hiding {
+    opacity: 0;
+    max-height: 0;
+}
+
+.sysmon-stat.hidden {
+    display: none !important;
+}
+
+.sysmon-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    min-width: 0;
+    gap: 4px; /* Reduced gap to prevent cut-off */
+}
+
+.sysmon-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 50px;
+    max-width: 50%;
+    color: #a0a0b0;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.sysmon-label-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem !important; /* Uniform size */
+}
+
+.sysmon-icon {
+    width: 12px;
+    height: 12px;
+    opacity: 0.9;
+    flex-shrink: 0;
+}
+
+/* Hyper-specific override to force font size application */
+#sidebar #system-monitor .sysmon-stat .sysmon-header .sysmon-value {
+    font-size: 0.75rem !important; /* Reduced further */
+    font-family: "Monocraft", monospace !important;
+}
+
+#sidebar #system-monitor .sysmon-stat .sysmon-header .sysmon-label .sysmon-label-text {
+    font-size: 0.75rem !important; /* Reduced further */
+}
+
+.sysmon-value {
+    flex-shrink: 0;
+    color: #ffffff;
+    font-family: "Monocraft", monospace;
+    font-size: 0.75rem !important; /* Fallback reduced */
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* Ensures alignment to the right edge */
+    gap: 4px;
+}
+
+.sysmon-value-sub {
+    color: #888; /* Explicit gray for separation */
+    opacity: 1;
+    font-size: 0.75rem; /* Matched to main value size */
+    font-weight: 500;
+    margin-left: 1px;
+}
+
+.sysmon-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 2px 0;
+    transition: all 0.3s;
+}
+
+.sysmon-divider.hidden {
+    display: none;
+}
+
+.sysmon-track {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.sysmon-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    border-radius: 999px;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(138, 43, 226, 0.3);
+}
+
+.sysmon-fill.low {
+    background: linear-gradient(90deg, #8a2be2, #d442ff);
+}
+
+.sysmon-fill.medium {
+    background: linear-gradient(90deg, #ffa500, #ffd700);
+}
+
+.sysmon-fill.high {
+    background: linear-gradient(90deg, #ff4444, #ff6666);
+}
+
+/* Sidebar Footer & Status Badge */
+.launcher-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.launcher-status-badge .status-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--success);
+    border-radius: 50%;
+    box-shadow: 0 0 6px var(--success);
+    animation: statusBlink 2s ease-in-out infinite;
+}
+
+@keyframes statusBlink {
+    0%,
+    100% {
+        opacity: 1;
+        box-shadow: 0 0 6px var(--success);
+    }
+
+    50% {
+        opacity: 0.5;
+        box-shadow: 0 0 12px var(--success);
+    }
+}
+
+/* GPU & Telemetry Details (Refactored from system-info.css) */
+.gpu-info {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: linear-gradient(
+        135deg,
+        var(--bg-light),
+        rgba(138, 43, 226, 0.05)
+    );
+    border-radius: 10px;
+    font-size: 0.85rem;
+    border: 1px solid rgba(138, 43, 226, 0.1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gpu-info:hover {
+    border-color: rgba(138, 43, 226, 0.3);
+    background: linear-gradient(
+        135deg,
+        var(--bg-light),
+        rgba(138, 43, 226, 0.1)
+    );
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.15);
+}
+
+.gpu-info.detected {
+    color: var(--success);
+}
+.gpu-info.not-detected {
+    color: var(--text-muted);
+}
+
+.gpu-info-details {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.status-indicator-live {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator-live.ok {
+    background: var(--success);
+}
+.status-indicator-live.warning {
+    background: var(--warning);
+}
+.status-indicator-live.error {
+    background: var(--danger);
+}

@@ -1,0 +1,76 @@
+{
+  "catalog": {
+    "ai": [
+      { "id": "flux-localai", "nameKey": "ui.launcher.app.flux_localai.name", "descKey": "ui.launcher.app.flux_localai.desc", "name": "Flux Platform", "desc": "Universal hub for pro-grade images and text.", "icon": "🌌", "type": "Local", "repoUrl": "https://github.com/F0RLE/flux_LocalAI_module" },
+      { "id": "gpt", "nameKey": "ui.launcher.app.gpt.name", "descKey": "ui.launcher.app.gpt.desc", "name": "GPT", "desc": "Smart assistant for chat, coding and images.", "icon": "🤖", "type": "API" },
+      { "id": "gemini", "nameKey": "ui.launcher.app.gemini.name", "descKey": "ui.launcher.app.gemini.desc", "name": "Gemini", "desc": "Massive-context analysis and creative visuals.", "icon": "✨", "type": "API" }
+    ],
+    "services": [
+      { "id": "flux-telegram-bot", "nameKey": "ui.launcher.app.flux_telegram.name", "descKey": "ui.launcher.app.flux_telegram.desc", "name": "Flux Telegram Bot", "desc": "LLM rewriting, image gen, channel posting.", "icon": "🤖", "type": "Local", "repoUrl": "https://github.com/F0RLE/flux-telegram-bot-module" }
+    ]
+  },
+  "models": {
+    "gpt": {
+      "gpt-5.2": {
+        "descKey": "ui.gpt.model.gpt52.desc",
+        "name": "GPT-5.2",
+        "pricing": [
+          { "tier": "1M", "in": "$1.75", "out": "$14.00" }
+        ],
+        "stats": { "speed": 3, "logic": 5, "creative": 5 },
+        "desc": "The best model for coding and agentic tasks across industries",
+        "apiModels": { "text": "gpt-5.2-2025-12-11" }
+      },
+      "gpt-5-mini": {
+        "descKey": "ui.gpt.model.gptmini.desc",
+        "name": "GPT-5 mini",
+        "pricing": [
+          { "tier": "1M", "in": "$0.25", "out": "$2.00" }
+        ],
+        "stats": { "speed": 4, "logic": 3, "creative": 3 },
+        "desc": "A faster, cost-efficient version of GPT-5 for well-defined tasks",
+        "apiModels": { "text": "gpt-5-mini-2025-08-07" }
+      },
+      "gpt-5-nano": {
+        "descKey": "ui.gpt.model.gptnano.desc",
+        "name": "GPT-5 nano",
+        "pricing": [
+          { "tier": "1M", "in": "$0.05", "out": "$0.40" }
+        ],
+        "stats": { "speed": 5, "logic": 2, "creative": 2 },
+        "desc": "Fastest, most cost-efficient version of GPT-5",
+        "apiModels": { "text": "gpt-5-nano-2025-08-07" }
+      }
+    },
+    "gemini": {
+      "gemini-3-pro": {
+        "descKey": "ui.gemini.model.pro.desc",
+        "name": "Gemini 3 Pro",
+        "desc": "State-of-the-art reasoning and creative visuals",
+        "pricing": [
+          { "tier": "≤ 200k", "in": "$2.00", "out": "$12.00" },
+          { "tier": "> 200k", "in": "$4.00", "out": "$18.00" }
+        ],
+        "stats": { "speed": 3, "logic": 5, "creative": 5 },
+        "apiModels": {
+          "text": "gemini-3-pro-preview",
+          "image": "gemini-3-pro-image-preview"
+        }
+      },
+      "gemini-3-flash": {
+        "descKey": "ui.gemini.model.flash.desc",
+        "name": "Gemini 3 Flash",
+        "desc": "Fast, lower intelligence, best for quick tasks",
+        "pricing": [
+          { "tier": "1M", "in": "$0.50", "out": "$3.00" },
+          { "tier": "Free", "note": "20 req/day" }
+        ],
+        "stats": { "speed": 5, "logic": 3, "creative": 3 },
+        "apiModels": {
+          "text": "gemini-3-flash-preview",
+          "image": "gemini-2.5-flash-image"
+        }
+      }
+    }
+  }
+}

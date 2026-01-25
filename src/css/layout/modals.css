@@ -1,0 +1,487 @@
+﻿/* Confirmation Modal */
+/* Blur launcher when closing - apply to all content containers */
+body.launcher-blur .page,
+body.launcher-blur .top-controls,
+body.launcher-blur #sidebar,
+body.launcher-blur #app-header,
+body.launcher-blur #main-area {
+    filter: blur(10px);
+    -webkit-filter: blur(10px);
+    transition: filter 0.3s ease;
+    pointer-events: none !important;
+}
+
+/* Block all buttons and clickable elements except modal buttons */
+body.launcher-blur button:not(.modal-btn),
+body.launcher-blur a:not(.modal-btn),
+body.launcher-blur [onclick]:not(.modal-btn):not(.modal-overlay),
+body.launcher-blur [role="button"]:not(.modal-btn),
+body.launcher-blur input[type="button"],
+body.launcher-blur input[type="submit"] {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+}
+
+/* Exclude window controls from pointer-events blocking */
+body.launcher-blur .window-control-btn,
+body.launcher-blur .close-btn {
+    filter: none !important;
+    -webkit-filter: none !important;
+    pointer-events: auto !important;
+}
+
+/* Modal overlay and modal should never be blurred - create new stacking context */
+body.launcher-blur .modal-overlay {
+    filter: none !important;
+    -webkit-filter: none !important;
+    transform: translateZ(0);
+    isolation: isolate;
+    pointer-events: auto;
+}
+
+body.launcher-blur .modal-overlay *,
+body.launcher-blur .modal,
+body.launcher-blur .modal * {
+    filter: none !important;
+    -webkit-filter: none !important;
+    pointer-events: auto;
+}
+
+/* Ensure modal is above everything */
+body.launcher-blur .modal {
+    z-index: 10002 !important;
+    transform: translateZ(0);
+    isolation: isolate;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000000 !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.4s ease, visibility 0s linear 0.4s;
+}
+
+.modal-overlay.show {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 2000001 !important;
+    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.4s ease, visibility 0s linear 0s;
+}
+
+.modal-overlay .modal {
+    z-index: 10002 !important;
+    position: relative;
+}
+
+.modal-overlay.module-settings-overlay {
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(20, 20, 25, 0.15) !important;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    box-sizing: border-box;
+}
+
+@media (max-width: 1200px) {
+    .modal-overlay.module-settings-overlay {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+}
+
+.modal-overlay.module-settings-overlay.show {
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    background: rgba(20, 20, 25, 0.25) !important;
+}
+
+/* Make overlay not block clicks on sidebar and controls */
+.modal-overlay.module-settings-overlay::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 240px;
+    height: 100%;
+    z-index: 10003;
+    pointer-events: none;
+}
+
+.modal-overlay.module-settings-overlay::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 150px;
+    height: 80px;
+    z-index: 10003;
+    pointer-events: none;
+}
+
+/* Ensure sidebar and window controls are above blur overlay and clickable */
+#sidebar {
+    position: relative;
+    z-index: 10002 !important;
+    pointer-events: auto !important;
+}
+
+.top-controls {
+    position: fixed !important;
+    top: 1rem !important;
+    right: 1rem !important;
+    z-index: 10002 !important;
+    pointer-events: auto !important;
+}
+
+.window-control-btn,
+button[onclick*="minimize"],
+button[onclick*="maximize"],
+button[onclick*="close"],
+.close-btn {
+    position: relative;
+    z-index: 10002 !important;
+    pointer-events: auto !important;
+}
+
+/* Allow clicks through overlay to sidebar and controls */
+
+
+.modal-overlay.module-settings-overlay>* {
+    pointer-events: auto;
+}
+
+.modal {
+    background: var(--bg-med);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.3s ease;
+    transform: scale(0.95) translateY(20px);
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-overlay.show .modal {
+    transform: scale(1) translateY(0);
+}
+
+.module-settings-modal {
+    background: var(--bg-med);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 0;
+    max-width: 100%;
+    width: 100%;
+    max-height: calc(100vh - 4rem);
+    min-width: 1000px;
+    min-height: 600px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* Use global scaleIn */
+    animation: scaleIn 0.4s var(--ease-smooth);
+    position: relative;
+    z-index: 10000;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 1600px) {
+    .module-settings-modal {
+        min-width: 900px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .module-settings-modal {
+        min-width: 0;
+        min-height: 500px;
+    }
+}
+
+
+.module-settings-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.module-settings-modal-icon {
+    display: none;
+}
+
+.module-settings-modal-title-text {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+
+.module-settings-modal-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 1rem;
+    min-height: 0;
+    max-height: calc(90vh - 200px);
+}
+
+.module-settings-modal-content form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+    gap: 2rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 1200px) {
+    .module-settings-modal-content form {
+        grid-template-columns: 1fr;
+    }
+}
+
+.module-settings-modal-footer {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    background: var(--bg-med);
+}
+
+.module-settings-modal-content .form-group {
+    margin-bottom: 1.5rem;
+    /* Use global fadeInLeft */
+    animation: fadeInLeft 0.4s var(--ease-smooth) backwards;
+}
+
+.module-settings-modal-content .form-group:nth-child(1) {
+    animation-delay: 0.05s;
+}
+
+.module-settings-modal-content .form-group:nth-child(2) {
+    animation-delay: 0.1s;
+}
+
+.module-settings-modal-content .form-group:nth-child(3) {
+    animation-delay: 0.15s;
+}
+
+.module-settings-modal-content .form-group:nth-child(4) {
+    animation-delay: 0.2s;
+}
+
+.module-settings-modal-content .form-group:nth-child(5) {
+    animation-delay: 0.25s;
+}
+
+.module-settings-modal-content .form-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.module-settings-modal-content .form-input {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.module-settings-modal-content .form-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(138, 43, 226, 0.1);
+}
+
+.module-settings-modal-content .form-textarea {
+    min-height: 100px;
+    font-family: 'Monocraft', 'Consolas', 'Monaco', monospace;
+    resize: vertical;
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    text-align: center;
+}
+
+.modal-message {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.modal-btn {
+    padding: 0.6rem 1.25rem;
+    border-radius: 12px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.modal-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.modal-btn:active {
+    transform: translateY(0px) scale(0.98);
+}
+
+.modal-btn-cancel {
+    background: var(--bg-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.modal-btn-cancel:hover {
+    background: var(--surface);
+}
+
+.modal-btn-confirm {
+    background: var(--danger);
+    color: white;
+}
+
+.modal-btn-confirm:hover {
+    filter: brightness(1.1);
+}
+
+.modal-btn-primary {
+    background: var(--primary);
+    color: white;
+}
+
+/* SD reinstall progress */
+.progress-animated {
+    position: relative;
+    width: 100%;
+    height: 10px;
+    background: var(--bg-light);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.progress-animated .bar {
+    position: absolute;
+    height: 100%;
+    width: 40%;
+    background: linear-gradient(90deg, #d3a93a, #ffde7a, #d3a93a);
+    box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+    border-radius: 8px;
+    /* Use optimized global animation */
+    animation: progressIndeterminate 1.5s infinite linear;
+    /* Reset left/width for transform-based animation */
+    left: 0;
+    will-change: transform;
+}
+
+@keyframes waveFlow {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.sysmon-fill-gold {
+    background: linear-gradient(90deg, #d3a93a, #ffde7a, #d3a93a);
+    box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
+}
+
+.modal-btn-primary:hover {
+    filter: brightness(1.1);
+}
+
+/* --- CLOSE CONFIRMATION MODAL --- */
+.close-confirm-modal {
+    max-width: 400px;
+}
+
+.close-confirm-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.close-confirm-message {
+    text-align: center;
+}
+
+/* --- AUTO-SAVE INDICATOR --- */
+.save-indicator {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: #0d3e23;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 3000000;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.save-indicator::before {
+    content: '✓';
+    font-size: 1.1rem;
+}
+
+.save-indicator.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}

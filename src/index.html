@@ -1,0 +1,913 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: blob: https:; connect-src 'self' ipc: http://ipc.localhost https:; base-uri 'self';"
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Flux Platform (Beta)</title>
+        <link rel="stylesheet" href="/css/main.css" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+        />
+
+
+    </head>
+
+    <body class="app-body no-overflow">
+        <!-- Splash Screen -->
+        <div id="splash-screen">
+            <div class="splash-content">
+                <div class="splash-logo-container">
+                    <!-- Injected by logos.js -->
+                </div>
+                <div class="splash-title">Flux Platform</div>
+                <div class="splash-progress-container">
+                    <div class="splash-progress-bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Failsafe Splash Hider -->
+        <script type="module" src="modules/core/boot/failsafe.ts"></script>
+        <!-- SVG Icon Definitions (Injected via JS) -->
+        <script type="module" src="assets/icons.ts"></script>
+        <script type="module" src="assets/logos.ts"></script>
+
+        <!-- Sidebar Placeholder (Loaded dynamically via TemplateLoader) -->
+        <aside id="sidebar" class="fade-in-init"></aside>
+
+        <!-- App Header (Glass Panel) -->
+        <header
+            id="app-header"
+            class="fade-in-init"
+        >
+            <!-- Left: Language Switcher -->
+            <div class="lang-switcher-root">
+                <!-- Sliding Menu Items (Other Languages) -->
+                <div class="lang-menu-items" id="lang-menu-items">
+                    <button
+                        class="lang-btn"
+                        data-lang="en"
+                    >
+                        <span class="flag-icon flag-gb"></span>
+                    </button>
+                    <button
+                        class="lang-btn"
+                        data-lang="ru"
+                    >
+                        <span class="flag-icon flag-ru"></span>
+                    </button>
+                    <button
+                        class="lang-btn"
+                        data-lang="zh"
+                    >
+                        <span class="flag-icon flag-cn"></span>
+                    </button>
+                </div>
+
+                <!-- Current Language Trigger -->
+                <button
+                    class="lang-btn current-lang-trigger"
+                    id="current-lang-trigger"
+                >
+                    <span class="flag-icon flag-gb"></span>
+                </button>
+            </div>
+
+            <!-- Right: Window Controls -->
+            <div class="top-controls">
+                <button
+                    class="window-control-btn minimize-btn"
+                    id="minimize-btn"
+                    aria-label="Minimize"
+                >
+                    <svg class="icon">
+                        <use href="#icon-minimize"></use>
+                    </svg>
+                </button>
+                <button
+                    class="window-control-btn maximize-btn"
+                    id="maximize-btn"
+                    aria-label="Maximize"
+                >
+                    <svg class="icon" id="maximize-icon">
+                        <use href="#icon-maximize"></use>
+                    </svg>
+                </button>
+                <button
+                    class="window-control-btn close-btn"
+                    id="close-btn"
+                    aria-label="Close"
+                >
+                    <svg class="icon">
+                        <use href="#icon-close"></use>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+
+
+
+
+
+        <!-- Toast Container -->
+        <div class="toast-container" id="toast-container"></div>
+
+        <!-- Action Feedback -->
+        <div class="action-feedback" id="action-feedback">
+            <div class="action-feedback-icon"></div>
+        </div>
+
+        <main id="main-area" class="fade-in-init">
+            <!-- Home Page -->
+            <div id="page-home" class="page active">
+                <div class="home-content">
+                    <div
+                        class="home-title"
+                        data-i18n="ui.launcher.web.home_title"
+                    >
+                        Main Menu
+                    </div>
+                </div>
+            </div>
+
+
+
+            <!-- Downloads Page -->
+            <div id="page-downloads" class="page">
+                <div id="downloads-container">
+                    <div class="downloads-inner-wrapper">
+                        <div class="downloads-header">
+                            <div class="downloads-header-content">
+                                <div class="downloads-title-wrapper">
+                                    <div class="downloads-title-icon">
+                                        <svg class="icon">
+                                            <use href="#icon-download"></use>
+                                        </svg>
+                                    </div>
+                                    <div
+                                        class="downloads-title-container"
+                                    >
+                                        <h1
+                                            class="downloads-title"
+                                            data-i18n="ui.launcher.web.downloads"
+                                        >
+                                            Downloads
+                                        </h1>
+                                        <p
+                                            class="downloads-subtitle"
+                                            data-i18n="ui.launcher.web.downloads_subtitle"
+                                        >
+                                            Manage model and module downloads
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Global Download Settings Button - Top Left -->
+                        <button id="open-download-settings">
+                            <svg class="icon">
+                                <use href="#icon-settings"></use>
+                            </svg>
+                        </button>
+
+                        <!-- Test Controls Removed -->
+
+                        <div
+                            id="downloads-body"
+                            class="downloads-layout"
+                        >
+                            <div
+                                class="downloads-card-main hidden relative"
+                                id="downloads-main-card"
+                            >
+                                <div class="downloads-card-header">
+                                    <div class="downloads-meta-section">
+                                        <div class="downloads-icon-wrapper">
+                                            <svg
+                                                class="icon downloads-file-icon"
+                                            >
+                                                <use href="#icon-folder"></use>
+                                            </svg>
+                                        </div>
+                                        <div class="downloads-meta-content">
+                                            <div
+                                                class="downloads-label"
+                                                id="downloads-active-label"
+                                                data-i18n="ui.launcher.web.downloads_active"
+                                            >
+                                                Active Download
+                                            </div>
+                                            <div
+                                                class="downloads-item-label"
+                                                id="downloads-item-label"
+                                                data-i18n="ui.launcher.web.no_active_downloads"
+                                            >
+                                                No active downloads
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div
+                                        id="downloads-status"
+                                        class="downloads-status-pill"
+                                        data-i18n="ui.launcher.web.status_waiting"
+                                    >
+                                        Waiting
+                                    </div>
+                                </div>
+
+                                <div class="downloads-progress-section">
+                                    <div class="downloads-progress-header">
+                                        <span
+                                            class="downloads-progress-label"
+                                            data-i18n="ui.launcher.web.progress"
+                                            >Progress</span
+                                        >
+                                        <span
+                                            id="downloads-progress-text"
+                                            class="downloads-progress-percent"
+                                            >0%</span
+                                        >
+                                    </div>
+                                    <div class="downloads-bar-outer">
+                                        <div
+                                            id="downloads-progress-bar"
+                                            class="downloads-bar-inner"
+                                        ></div>
+                                    </div>
+                                </div>
+
+                                <div class="downloads-stats-grid">
+                                    <div class="downloads-stat-item">
+                                        <div class="downloads-stat-label">
+                                            <svg
+                                                class="icon icon-sm"
+                                            >
+                                                <use
+                                                    href="#icon-download"
+                                                ></use>
+                                            </svg>
+                                            <span
+                                                data-i18n="ui.launcher.web.downloaded"
+                                                >Downloaded</span
+                                            >
+                                        </div>
+                                        <div
+                                            id="downloads-downloaded"
+                                            class="downloads-stat-value"
+                                        >
+                                            0 MB
+                                        </div>
+                                    </div>
+                                    <div class="downloads-stat-item">
+                                        <div class="downloads-stat-label">
+                                            <svg
+                                                class="icon icon-sm"
+                                            >
+                                                <use href="#icon-folder"></use>
+                                            </svg>
+                                            <span
+                                                data-i18n="ui.launcher.web.total"
+                                                >Total</span
+                                            >
+                                        </div>
+                                        <div
+                                            id="downloads-total"
+                                            class="downloads-stat-value"
+                                        >
+                                            -- MB
+                                        </div>
+                                    </div>
+                                    <div class="downloads-stat-item">
+                                        <div class="downloads-stat-label">
+                                            <svg
+                                                class="icon icon-sm"
+                                            >
+                                                <use href="#icon-network"></use>
+                                            </svg>
+                                            <span
+                                                data-i18n="ui.launcher.web.speed"
+                                                >Speed</span
+                                            >
+                                        </div>
+                                        <div
+                                            id="downloads-speed"
+                                            class="downloads-stat-value"
+                                        >
+                                            0 KB/s
+                                        </div>
+                                    </div>
+                                    <div class="downloads-stat-item">
+                                        <div class="downloads-stat-label">
+                                            <svg
+                                                class="icon icon-sm"
+                                            >
+                                                <use href="#icon-clock"></use>
+                                            </svg>
+                                            <span
+                                                data-i18n="ui.launcher.web.eta_label"
+                                                >ETA</span
+                                            >
+                                        </div>
+                                        <div
+                                            id="downloads-eta"
+                                            class="downloads-stat-value"
+                                        >
+                                            --
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="downloads-info-card">
+                                <div class="downloads-info-header">
+                                    <svg
+                                        class="icon downloads-info-header-icon"
+                                    >
+                                        <use href="#icon-info"></use>
+                                    </svg>
+                                    <span
+                                        data-i18n="ui.launcher.web.information"
+                                        >Information</span
+                                    >
+                                </div>
+                                <div class="downloads-info-content">
+                                    <p
+                                        class="downloads-info-text"
+                                        data-i18n="ui.launcher.web.downloads_hint"
+                                    >
+                                        Загрузки моделей и модулей отображаются
+                                        здесь в реальном времени. Вы можете
+                                        отслеживать прогресс, скорость загрузки
+                                        и оставшееся время.
+                                    </p>
+                                    <div
+                                        class="downloads-empty-state"
+                                        id="downloads-empty-text"
+                                    >
+                                        <svg
+                                            class="icon downloads-empty-icon"
+                                        >
+                                            <use href="#icon-download"></use>
+                                        </svg>
+                                        <p
+                                            data-i18n="ui.launcher.web.no_active_downloads"
+                                        >
+                                            No active downloads yet
+                                        </p>
+                                        <p
+                                            class="downloads-empty-hint"
+                                            data-i18n="ui.launcher.web.start_download_hint"
+                                        >
+                                            Start a module or model installation
+                                            to see progress here
+                                        </p>
+                                        <p
+                                            class="downloads-empty-sub"
+                                            data-i18n="ui.launcher.web.not_downloading"
+                                        >
+                                            Not downloading yet
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modules Page -->
+            <div id="page-modules" class="page">
+                <div class="models-container">
+                    <div class="models-header">
+                        <h1
+                            class="models-title"
+                            data-i18n="ui.launcher.web.models_title"
+                        >
+                            Model Functions
+                        </h1>
+                        <p
+                            class="models-subtitle"
+                            data-i18n="ui.launcher.models_subtitle"
+                        >
+                            Select an AI capability to start generating
+                        </p>
+                    </div>
+
+                    <div class="models-grid">
+                        <!-- Image Generation -->
+                        <!-- AI (Unified) -->
+                        <div
+                            id="ai-module-card"
+                            class="model-card-premium ai empty"
+                        >
+                            <div class="model-icon-wrapper">
+                                <svg class="icon">
+                                    <use href="#icon-ai"></use>
+                                </svg>
+                            </div>
+                            <div
+                                class="model-card-title"
+                                data-i18n="ui.launcher.models.ai"
+                            >
+                                AI
+                            </div>
+                            <div
+                                class="model-card-desc"
+                                data-i18n="ui.launcher.models.ai_desc"
+                            >
+                                Unified platform for high-quality text, image,
+                                and code generation.
+                            </div>
+                            <div
+                                id="ai-module-add-btn"
+                                class="model-card-action"
+                                data-i18n="ui.launcher.open"
+                            >
+                                Open
+                            </div>
+                        </div>
+
+                        <!-- Services -->
+                        <!-- Services -->
+                        <div
+                            id="services-module-card"
+                            class="model-card-premium services empty"
+                        >
+                            <div class="model-icon-wrapper">
+                                <svg class="icon">
+                                    <use href="#icon-services"></use>
+                                </svg>
+                            </div>
+                            <div
+                                class="model-card-title"
+                                data-i18n="ui.launcher.models.services"
+                            >
+                                Services
+                            </div>
+                            <div
+                                class="model-card-desc"
+                                data-i18n="ui.launcher.models.services_desc"
+                            >
+                                Manage auxiliary services, API connectors, and
+                                background processes.
+                            </div>
+                            <div
+                                id="services-module-add-btn"
+                                class="model-card-action"
+                                data-i18n="ui.launcher.open"
+                            >
+                                Open
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                </div>
+
+            <!-- Modules Page End -->
+
+            <!-- Debug Page (Console) -->
+            <div id="page-debug" class="page">
+                <div class="debug-layout">
+                    <!-- Page Header (Matches Settings Header) -->
+                    <!-- Header removed by user request -->
+
+                    <!-- Console Card (Matches Settings Card) -->
+                    <div class="console-card">
+                        <!-- Card Header with Tabs and Actions -->
+                        <div class="console-card-header">
+                            <div class="console-tabs-group">
+                                <button
+                                    class="console-tab active"
+                                    data-view="general"
+                                >
+                                    <span
+                                        data-i18n="ui.launcher.web.logs_general"
+                                        >General</span
+                                    >
+                                </button>
+                            </div>
+
+                            <div class="console-actions">
+                                <button
+                                    id="clear-logs-btn"
+                                    class="console-btn"
+                                    title="Clear Console"
+                                >
+                                    <svg class="icon">
+                                        <use href="#icon-trash"></use>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Card Content (Logs) -->
+                        <div id="console-container" class="console-logs-area">
+                            <div id="logs">
+                                <div
+                                    id="logs-general"
+                                    class="logs-pane active"
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Debug Page -->
+            </div>
+
+            <!-- Settings Page (Loaded dynamically via TemplateLoader) -->
+            <div id="page-settings" class="page"></div>
+
+            <!-- Chat Page -->
+            <div id="page-chat" class="page">
+                <div id="chat-container">
+                    <div
+                        class="chat-header-question"
+                        id="chat-header-question"
+                    >
+                        What are you focused on?
+                    </div>
+
+                    <div id="chat-messages">
+                        <!-- messages -->
+                    </div>
+
+                    <!-- Clear chat button (floating, bottom-right) -->
+                    <button
+                        id="clear-chat-btn"
+                        class="chat-clear-btn"
+                        title="Clear Chat"
+                    >
+                        <svg class="icon">
+                            <use href="#icon-trash"></use>
+                        </svg>
+                        <span
+                            class="chat-clear-text"
+                            data-i18n="ui.launcher.web.chat_clear"
+                        >Clear Chat</span>
+                    </button>
+
+                    <div id="chat-compose" class="chat-compose-wrapper">
+                        <div
+                            id="chat-attachments"
+                            class="hidden"
+                        ></div>
+                        <div class="chat-input-bar">
+                            <input
+                                id="chat-file-input"
+                                type="file"
+                                multiple
+                                class="hidden"
+                            />
+                            <button
+                                id="chat-attach-btn"
+                                class="chat-action-btn"
+                                title="Attach"
+                            >
+                                <svg
+                                    class="icon icon-chat"
+                                >
+                                    <use href="#icon-plus"></use>
+                                </svg>
+                            </button>
+                            <textarea
+                                id="chat-input"
+                                class="chat-textarea mono"
+                                placeholder="Ask something..."
+                                rows="1"
+                                data-i18n-placeholder="ui.launcher.web.chat_placeholder_ask"
+                            ></textarea>
+                            <button
+                                id="chat-voice-btn"
+                                class="chat-action-btn"
+                                title="Voice"
+                            >
+                                <svg
+                                    class="icon icon-chat"
+                                >
+                                    <use href="#icon-mic"></use>
+                                </svg>
+                            </button>
+                            <button
+                                id="chat-send-btn"
+                                class="chat-action-btn primary"
+                                title="Send"
+                            >
+                                <svg
+                                    class="icon icon-chat"
+                                >
+                                    <use href="#icon-send"></use>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- App Selection Modal (Moved here for proper positioning) -->
+            <div id="app-selection-modal" class="modal-backdrop hidden">
+                <div class="app-modal">
+                    <div class="app-modal-header">
+                        <h2 id="app-modal-title" class="app-modal-title">
+                            Select App
+                        </h2>
+                        <button
+                            id="close-app-selection-btn"
+                            class="app-close-btn"
+                        >
+                            <svg class="icon">
+                                <use href="#icon-close"></use>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="app-modal-list" class="app-grid">
+                        <!-- Apps will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div id="lang-modal" class="modal-overlay hidden">
+            <div class="modal">
+                <div
+                    class="modal-title"
+                    data-i18n="ui.launcher.web.select_language"
+                >
+                    Select Language
+                </div>
+                <div
+                    class="modal-desc"
+                    data-i18n="ui.launcher.web.select_language_desc"
+                >
+                    Choose your preferred language for the interface
+                </div>
+                <div class="lang-selector">
+                    <div
+                        class="lang-option lang-modal-btn"
+                        data-lang="en"
+                    >
+                        <div class="lang-option-icon">🇬🇧</div>
+                        <div
+                            class="lang-option-name"
+                            data-i18n="ui.launcher.language.english"
+                        >
+                            English
+                        </div>
+                        <div class="lang-option-native">English</div>
+                    </div>
+                    <div
+                        class="lang-option lang-modal-btn"
+                        data-lang="ru"
+                    >
+                        <div class="lang-option-icon">🇷🇺</div>
+                            <div
+                                class="lang-option-name"
+                                data-i18n="ui.launcher.language.russian"
+                            >
+                                Russian
+                            </div>
+                            <div class="lang-option-native">Russian</div>
+                    </div>
+                    <div
+                        class="lang-option lang-modal-btn"
+                        data-lang="zh"
+                    >
+                        <div class="lang-option-icon">🇨🇳</div>
+                        <div
+                            class="lang-option-name"
+                            data-i18n="ui.launcher.language.chinese"
+                        >
+                            Chinese
+                        </div>
+                        <div class="lang-option-native">中文</div>
+                    </div>
+                </div>
+                <button
+                    id="confirm-lang-btn"
+                    class="btn btn-primary"
+                    data-i18n="ui.launcher.web.confirm"
+                >
+                    Confirm
+                </button>
+            </div>
+        </div>
+
+        <!-- Module Settings Modal -->
+
+
+        <!-- Close Confirmation Modal -->
+        <div
+            id="close-confirm-modal"
+            class="modal-overlay hidden"
+        >
+            <div class="modal close-confirm-modal">
+                <div
+                    class="modal-title close-confirm-title"
+                    data-i18n="ui.launcher.modal.confirm_close_title"
+                >
+                    Confirm Close
+                </div>
+                <div
+                    class="modal-message close-confirm-message"
+                    data-i18n="ui.launcher.web.close_warning"
+                >
+                    Are you sure you want to close the launcher? All services
+                    will be stopped.
+                </div>
+                <div class="modal-actions">
+                    <button
+                        id="cancel-close-btn"
+                        class="modal-btn modal-btn-cancel"
+                        data-i18n="ui.launcher.button.cancel"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        id="confirm-close-btn"
+                        class="modal-btn modal-btn-confirm"
+                        data-i18n="ui.launcher.button.close"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download Settings Modal -->
+        <div
+            id="download-settings-overlay"
+            class="modal-overlay hidden"
+        >
+            <div
+                class="modal download-settings-modal"
+            >
+                <div
+                    class="modal-title download-settings-title"
+                >
+                    <svg
+                        class="icon download-settings-title-icon"
+                    >
+                        <use href="#icon-settings"></use>
+                    </svg>
+                    <span data-i18n="ui.launcher.settings.download_settings_title">Download Settings</span>
+                </div>
+
+                <div class="download-settings-body">
+                    <label class="download-settings-row">
+                        <span
+                            class="download-limit-label"
+                            data-i18n="ui.launcher.settings.limit_speed"
+                            >Limit Speed</span
+                        >
+                        <input
+                            type="checkbox"
+                            id="download-speed-limit-toggle"
+                            class="download-speed-toggle"
+                        />
+                    </label>
+
+                    <div
+                        id="speed-limit-controls"
+                        class="opacity-50 pointer-none"
+                    >
+                        <label
+                            for="download-speed-slider"
+                            class="download-slider-label"
+                        >
+                            <span data-i18n="ui.launcher.settings.max_speed">Max Speed:</span>
+                            <span
+                                id="speed-limit-value"
+                                class="download-slider-value"
+                                >50</span
+                            >
+                            MB/s
+                        </label>
+                        <input
+                            type="range"
+                            id="download-speed-slider"
+                            class="download-speed-slider"
+                            min="1"
+                            max="200"
+                            value="50"
+                        />
+                        <div class="download-slider-range">
+                            <span>1 MB/s</span>
+                            <span>200 MB/s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="download-settings-footer">
+                    <button
+                        id="close-download-settings-btn"
+                        class="modal-btn modal-btn-primary w-100"
+                        data-i18n="ui.launcher.web.confirm"
+                    >
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Module Settings Modal -->
+        <div
+            id="module-settings-modal"
+            class="modal-overlay module-settings-overlay hidden"
+        >
+            <div class="app-modal module-settings-modal-inner">
+                <div class="app-modal-header">
+                    <h2
+                        id="module-settings-title"
+                        class="app-modal-title"
+                        data-i18n="ui.launcher.module.settings_title"
+                    >
+                        Module Settings
+                    </h2>
+                    <button
+                        id="close-module-settings-btn"
+                        class="app-close-btn"
+                    >
+                        <svg class="icon">
+                            <use href="#icon-close"></use>
+                        </svg>
+                    </button>
+                </div>
+                <div
+                    id="module-settings-content"
+                    class="module-settings-content"
+                >
+                    <!-- Dynamic settings will be injected here -->
+                    <div id="module-config-modal-active" class="module-config-modal-active">
+                        <div class="module-settings-empty">
+                            <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Footer removed for auto-save behavior -->
+            </div>
+        </div>
+
+
+        <script type="module" src="./modules/core/core.ts"></script>
+        <script type="module" src="./modules/chat/chat.ts"></script>
+
+        <!-- Global Width Warnings -->
+        <div
+            id="modules-width-warning"
+            class="width-warning hidden"
+        >
+            <div class="width-warning-content">
+                <span class="warning-icon">⚠️</span>
+                <span
+                    class="warning-text"
+                    data-i18n="ui.launcher.web.expand_window"
+                    >Expand the window to see all modules</span
+                >
+                <div class="zoom-hint">
+                    <div class="zoom-icons">
+                        <div class="ctrl-key">CTRL</div>
+                        <span class="zoom-plus-icon">+</span>
+                        <div class="mouse-icon">
+                            <div class="wheel"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <div
+            id="settings-width-warning"
+            class="width-warning hidden"
+        >
+            <div class="width-warning-content">
+                <span class="warning-icon">⚠️</span>
+                <span
+                    class="warning-text"
+                    data-i18n="ui.launcher.web.expand_window"
+                    >Expand the window to see all modules</span
+                >
+                <div class="zoom-hint">
+                    <div class="zoom-icons">
+                        <div class="ctrl-key">CTRL</div>
+                        <span class="zoom-plus-icon">+</span>
+                        <div class="mouse-icon">
+                            <div class="wheel"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="debug-overlay"></div>
+
+    </body>
+</html>

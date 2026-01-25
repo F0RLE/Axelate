@@ -1,0 +1,15 @@
+pub mod ai_service;
+pub mod config_service;
+pub mod downloader;
+pub mod health;
+pub mod license;
+pub mod logs;
+pub mod module_controller;
+pub mod module_lifecycle;
+pub mod secure_storage;
+pub mod settings;
+pub mod system_monitor;
+pub mod theme;
+pub mod translations;
+pub mod ui_state;
+pub mod window_settings;
