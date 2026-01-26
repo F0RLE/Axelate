@@ -3,8 +3,8 @@ import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 const LIMITS = {
-    js: 500 * 1024,   // 500KB
-    css: 100 * 1024,  // 100KB
+    js: 500 * 1024, // 500KB
+    css: 100 * 1024, // 100KB
 };
 
 const DIST_DIR = path.resolve(process.cwd(), 'dist');
@@ -12,7 +12,7 @@ const DIST_DIR = path.resolve(process.cwd(), 'dist');
 function getAllFiles(dir, fileList = []) {
     if (!fs.existsSync(dir)) return fileList;
     const files = fs.readdirSync(dir);
-    files.forEach(file => {
+    files.forEach((file) => {
         const filePath = path.join(dir, file);
         if (fs.statSync(filePath).isDirectory()) {
             getAllFiles(filePath, fileList);
@@ -25,7 +25,7 @@ function getAllFiles(dir, fileList = []) {
 
 function checkSizes() {
     console.log('📦 Checking bundle sizes...');
-    
+
     if (!fs.existsSync(DIST_DIR)) {
         console.error('❌ dist directory not found. Run build first.');
         process.exit(1);
@@ -34,7 +34,7 @@ function checkSizes() {
     const files = getAllFiles(DIST_DIR);
     let hasError = false;
 
-    files.forEach(file => {
+    files.forEach((file) => {
         const ext = path.extname(file).toLowerCase().replace('.', '');
         if (!['js', 'css'].includes(ext)) return;
 
