@@ -2,9 +2,9 @@ name: Strict CI
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ["beta", "alpha"]
   pull_request:
-    branches: ["main", "master"]
+    branches: ["beta", "alpha"]
 
 env:
   CARGO_TERM_COLOR: always
