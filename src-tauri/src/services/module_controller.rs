@@ -100,7 +100,7 @@ pub async fn control(
     }
 
     // 0. Validate ID
-    downloader::validate_module_id(module_id).map_err(|e| AppError::Validation(e))?;
+    downloader::validate_module_id(module_id).map_err(AppError::Validation)?;
 
     // 1. Resolve path
     let module_path = downloader::get_module_path(module_id);

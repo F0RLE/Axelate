@@ -46,18 +46,20 @@ pub static MODULES_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Modules")
 pub static RESOURCES_DIR: Lazy<PathBuf> = Lazy::new(|| {
     // 1. Production Check: Look relative to the running executable
     // Tauri bundles often place resources in the same folder or a specific relative structure
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            // Common production layouts
-            let prod_candidates = [
-                exe_dir.join("resources"),
-                exe_dir.join("_up_").join("resources"), // Some updater structures
-            ];
+    if let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .as_deref()
+        .and_then(|p| p.parent())
+    {
+        // Common production layouts
+        let prod_candidates = [
+            exe_dir.join("resources"),
+            exe_dir.join("_up_").join("resources"), // Some updater structures
+        ];
 
-            for path in &prod_candidates {
-                if path.exists() {
-                    return path.clone();
-                }
+        for path in &prod_candidates {
+            if path.exists() {
+                return path.clone();
             }
         }
     }
