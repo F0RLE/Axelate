@@ -17,7 +17,7 @@ html {
 }
 
 body {
-    font-family: "Monocraft", "Inter", sans-serif;
+    font-family: 'Monocraft', 'Inter', sans-serif;
     background: var(--bg-dark);
     color: var(--text-primary);
     margin: 0;
@@ -36,9 +36,10 @@ body {
 /* Globals moved to top */
 
 /* Re-enable for inputs and text areas */
-input, textarea, [contenteditable] {
+input,
+textarea,
+[contenteditable] {
     -webkit-user-select: text !important;
     user-select: text !important;
     cursor: text;
 }
-

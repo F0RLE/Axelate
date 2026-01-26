@@ -1,4 +1,3 @@
-
 /**
  * @module core/services/I18nService
  * @description Internationalization service for managing translations and language settings
@@ -61,7 +60,7 @@ export class I18nService {
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Timeout')), 1000),
             );
-            const res = await Promise.race([invokePromise, timeoutPromise]) as string | undefined;
+            const res = (await Promise.race([invokePromise, timeoutPromise])) as string | undefined;
 
             if (res && res !== 'unknown') return res;
         } catch {
@@ -77,10 +76,12 @@ export class I18nService {
         try {
             const res = await fetch('/api/system_language');
             if (res.ok) {
-                const data = await res.json() as { language?: string };
+                const data = (await res.json()) as { language?: string };
                 if (data.language && data.language !== 'unknown') return data.language;
             }
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
         return null;
     }
 
@@ -96,7 +97,7 @@ export class I18nService {
         // Load English Base
         try {
             base = await this._fetchTranslations('en');
-        } catch(e) {
+        } catch (e) {
             console.error('[I18n] Failed to load base English', e);
         }
 
@@ -104,7 +105,7 @@ export class I18nService {
         if (lang !== 'en') {
             try {
                 target = await this._fetchTranslations(lang);
-            } catch(e) {
+            } catch (e) {
                 console.warn(`[I18n] Failed to load ${lang}`, e);
             }
         }
@@ -114,7 +115,7 @@ export class I18nService {
         document.documentElement.lang = lang;
 
         // Persist only to backend
-        this._syncToBackend(lang).catch(e => console.error(e));
+        this._syncToBackend(lang).catch((e) => console.error(e));
     }
 
     /**
@@ -126,12 +127,14 @@ export class I18nService {
 
         if (this._tauri.isTauri()) {
             const p = this._tauri.invoke<Record<string, string>>('get_translations', { lang });
-            const t = new Promise<Record<string, string>>((_, r) => setTimeout(() => r(new Error(failMsg)), timeoutMs));
+            const t = new Promise<Record<string, string>>((_, r) =>
+                setTimeout(() => r(new Error(failMsg)), timeoutMs),
+            );
             return await Promise.race([p, t]);
         } else {
             const res = await fetch(`/api/translations?lang=${lang}`);
             if (!res.ok) throw new Error(res.statusText);
-            return await res.json() as Record<string, string>;
+            return (await res.json()) as Record<string, string>;
         }
     }
 
@@ -145,12 +148,12 @@ export class I18nService {
                 await this._tauri.invoke('save_setting', { key: 'BOT_LANGUAGE', value: '' });
             } else {
                 await fetch('/api/settings', {
-                     method: 'POST',
-                     headers: {'Content-Type': 'application/json'},
-                     body: JSON.stringify({ key: 'LANGUAGE', value: lang }),
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key: 'LANGUAGE', value: lang }),
                 });
             }
-        } catch(e) {
+        } catch (e) {
             console.warn('[I18n] Sync to settings failed', e);
         }
     }
@@ -162,7 +165,7 @@ export class I18nService {
         let text = this._translations[key] || defaultText || key;
 
         for (const [k, v] of Object.entries(params)) {
-             text = text.replace(`{${k}}`, String(v));
+            text = text.replace(`{${k}}`, String(v));
         }
         return text;
     }

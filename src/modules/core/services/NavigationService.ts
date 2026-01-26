@@ -21,7 +21,7 @@ export class NavigationService {
 
     private constructor() {
         if (NavigationService._instance) {
-             console.warn('[NavigationService] Instance already exists!');
+            console.warn('[NavigationService] Instance already exists!');
         }
         NavigationService._instance = this;
     }
@@ -84,7 +84,9 @@ export class NavigationService {
     public goBack(): void {
         if (this._currentIndex > 0) {
             this._currentIndex--;
-            console.log(`[NavigationService] Navigating back to: ${this._historyStack[this._currentIndex]}`);
+            console.log(
+                `[NavigationService] Navigating back to: ${this._historyStack[this._currentIndex]}`,
+            );
         }
     }
 
@@ -94,7 +96,9 @@ export class NavigationService {
     public goForward(): void {
         if (this._currentIndex < this._historyStack.length - 1) {
             this._currentIndex++;
-            console.log(`[NavigationService] Navigating forward to: ${this._historyStack[this._currentIndex]}`);
+            console.log(
+                `[NavigationService] Navigating forward to: ${this._historyStack[this._currentIndex]}`,
+            );
         }
     }
 

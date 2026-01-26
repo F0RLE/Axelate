@@ -20,10 +20,15 @@ describe('VoiceInputService', () => {
 
         it('should return true when webkitSpeechRecognition is available', () => {
             // Mock the API
-            (globalThis as Record<string, unknown>).webkitSpeechRecognition = class MockSpeechRecognition {
-                start() { /* mock start */ }
-                stop() { /* mock stop */ }
-            };
+            (globalThis as Record<string, unknown>).webkitSpeechRecognition =
+                class MockSpeechRecognition {
+                    start() {
+                        /* mock start */
+                    }
+                    stop() {
+                        /* mock stop */
+                    }
+                };
             const newService = new VoiceInputService();
             expect(newService.isSupported()).toBe(true);
             delete (globalThis as Record<string, unknown>).webkitSpeechRecognition;

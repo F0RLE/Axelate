@@ -46,7 +46,7 @@ export class DownloadUI {
         MODAL_SPEED: 'download-speed-text',
         MODAL_DOWNLOADED: 'download-downloaded',
         MODAL_TOTAL: 'download-total',
-        SD_MODEL_URL_FIELD: 'field-sd-model-url'
+        SD_MODEL_URL_FIELD: 'field-sd-model-url',
     };
 
     private _boundHandleUpdate: ((e: Event) => void) | null = null;
@@ -125,7 +125,11 @@ export class DownloadUI {
 
         const hasActive = !!(
             progress.hasActive ||
-            ((percent > 0 || downloaded > 0) && !completed && !error && total > 0 && label.trim() !== '') ||
+            ((percent > 0 || downloaded > 0) &&
+                !completed &&
+                !error &&
+                total > 0 &&
+                label.trim() !== '') ||
             (completed && label.trim() !== '')
         );
 
@@ -135,14 +139,23 @@ export class DownloadUI {
     /**
      * Updates the layout (visibility and classes) of the downloads area.
      */
-    private _updateDownloadsLayout(els: { mainCard: HTMLElement | null; downloadsBody: HTMLElement | null; downloadsHeader: HTMLElement | null; downloadsContainer: HTMLElement | null }, hasActive: boolean): void {
+    private _updateDownloadsLayout(
+        els: {
+            mainCard: HTMLElement | null;
+            downloadsBody: HTMLElement | null;
+            downloadsHeader: HTMLElement | null;
+            downloadsContainer: HTMLElement | null;
+        },
+        hasActive: boolean,
+    ): void {
         if (els.mainCard) els.mainCard.classList.toggle('hidden', !hasActive);
         if (els.downloadsBody) els.downloadsBody.classList.toggle('empty-state', !hasActive);
         if (els.downloadsHeader) {
             els.downloadsHeader.classList.toggle('compact', hasActive);
             els.downloadsHeader.classList.toggle('full', !hasActive);
         }
-        if (els.downloadsContainer) els.downloadsContainer.classList.toggle('active-download', hasActive);
+        if (els.downloadsContainer)
+            els.downloadsContainer.classList.toggle('active-download', hasActive);
     }
 
     /**
@@ -155,7 +168,17 @@ export class DownloadUI {
     /**
      * Updates the progress bar and labels.
      */
-    private _updateProgressVisuals(els: { bar: HTMLElement | null; text: HTMLElement | null; speedEl: HTMLElement | null; downloadedEl: HTMLElement | null; totalEl: HTMLElement | null; labelEl: HTMLElement | null }, state: DownloadProgress): void {
+    private _updateProgressVisuals(
+        els: {
+            bar: HTMLElement | null;
+            text: HTMLElement | null;
+            speedEl: HTMLElement | null;
+            downloadedEl: HTMLElement | null;
+            totalEl: HTMLElement | null;
+            labelEl: HTMLElement | null;
+        },
+        state: DownloadProgress,
+    ): void {
         const { percent, speed, downloaded, total, label, hasActive } = state;
         const win = globalThis as unknown as IDownloaderGlobal;
 
@@ -167,8 +190,10 @@ export class DownloadUI {
         if (els.totalEl) els.totalEl.textContent = total > 0 ? this._formatBytes(total) : '--';
 
         if (els.labelEl) {
-            const fallback = win.t ? win.t('ui.downloads.no_active', 'No active downloads') : 'No active downloads';
-            els.labelEl.textContent = hasActive ? label : (label || fallback);
+            const fallback = win.t
+                ? win.t('ui.downloads.no_active', 'No active downloads')
+                : 'No active downloads';
+            els.labelEl.textContent = hasActive ? label : label || fallback;
             els.labelEl.title = label;
         }
     }
@@ -202,16 +227,24 @@ export class DownloadUI {
 
         els.statusEl.classList.remove('active', 'completed', 'error');
         if (completed) {
-            els.statusEl.textContent = win.t ? win.t('ui.downloads.status.completed', 'Completed') : 'Completed';
+            els.statusEl.textContent = win.t
+                ? win.t('ui.downloads.status.completed', 'Completed')
+                : 'Completed';
             els.statusEl.classList.add('completed');
         } else if (error) {
-            els.statusEl.textContent = win.t ? win.t('ui.downloads.status.error', 'Error') : 'Error';
+            els.statusEl.textContent = win.t
+                ? win.t('ui.downloads.status.error', 'Error')
+                : 'Error';
             els.statusEl.classList.add('error');
         } else if (hasActive) {
-            els.statusEl.textContent = win.t ? win.t('ui.downloads.status.in_progress', 'In Progress') : 'In Progress';
+            els.statusEl.textContent = win.t
+                ? win.t('ui.downloads.status.in_progress', 'In Progress')
+                : 'In Progress';
             els.statusEl.classList.add('active');
         } else {
-            els.statusEl.textContent = win.t ? win.t('ui.downloads.status.waiting', 'Waiting') : 'Waiting';
+            els.statusEl.textContent = win.t
+                ? win.t('ui.downloads.status.waiting', 'Waiting')
+                : 'Waiting';
         }
     }
 
@@ -232,7 +265,7 @@ export class DownloadUI {
             const seconds = remainingBytes / speed;
             const s = win.t ? win.t('ui.common.time.s', 's') : 's';
             const m = win.t ? win.t('ui.common.time.m', 'm') : 'm';
-            
+
             if (seconds < 60) {
                 els.etaEl.textContent = `${Math.floor(seconds)}${s}`;
             } else {
@@ -261,9 +294,15 @@ export class DownloadUI {
                 downloaded: payload.downloaded,
                 total: payload.total,
                 label: payload.message || '',
-                hasActive: payload.status === 'downloading' || payload.status === 'connecting' || payload.status === 'extracting',
+                hasActive:
+                    payload.status === 'downloading' ||
+                    payload.status === 'connecting' ||
+                    payload.status === 'extracting',
                 completed: payload.status === 'complete',
-                error: payload.status === 'error' ? (payload.error as string || 'Unknown error') : null,
+                error:
+                    payload.status === 'error'
+                        ? (payload.error as string) || 'Unknown error'
+                        : null,
             });
         };
 
@@ -301,7 +340,10 @@ export class DownloadUI {
 
             const win = globalThis as unknown as IDownloaderGlobal;
             if (win.uiState) {
-                win.uiState.setDownloadSettings(this._settings.limitEnabled, this._settings.maxSpeed);
+                win.uiState.setDownloadSettings(
+                    this._settings.limitEnabled,
+                    this._settings.maxSpeed,
+                );
             }
         }
     }

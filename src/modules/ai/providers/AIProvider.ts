@@ -24,28 +24,28 @@ export interface IAIProvider {
 
     /**
      * Initializes the provider with required credentials and parameters.
-     * 
+     *
      * @param config - Provider-specific configuration record
      */
     initialize(config: IAIProviderConfig): Promise<void>;
 
     /**
      * Evaluates the validity of the configured API credentials.
-     * 
+     *
      * @returns Promise resolving to boolean indicating credential health
      */
     validateKey(): Promise<boolean>;
 
     /**
      * Evaluates if the provider is in a ready state for message processing.
-     * 
+     *
      * @returns Boolean indicating operational status
      */
     isReady(): boolean;
 
     /**
      * Dispatches a message and retrieves the provider's response.
-     * 
+     *
      * @param text - Plain text prompt
      * @param history - Current conversation context
      * @returns Promise resolving to assistant content
@@ -54,7 +54,7 @@ export interface IAIProvider {
 
     /**
      * Retrieves the list of available models supported by this provider instance.
-     * 
+     *
      * @returns Promise resolving to an array of model identifiers
      */
     getAvailableModels(): Promise<string[]>;

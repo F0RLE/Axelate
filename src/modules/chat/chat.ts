@@ -35,10 +35,12 @@ export class ChatController {
             this._ui.updateAttachments(files, onRemove);
             this._updateTokenCount();
         });
-        
+
         // Sync initial state
         if (chatFileHandler.hasFiles()) {
-             this._ui.updateAttachments(chatFileHandler.getFiles(), (idx) => chatFileHandler.removeFile(idx));
+            this._ui.updateAttachments(chatFileHandler.getFiles(), (idx) =>
+                chatFileHandler.removeFile(idx),
+            );
         }
 
         // Randomize Greeting
@@ -117,7 +119,6 @@ export class ChatController {
         g.clearChat = () => this.clearChat();
     }
 
-
     // --- Actions ---
 
     /**
@@ -160,8 +161,8 @@ export class ChatController {
         const listenerId = 'chat-stream-' + Date.now();
         // Defined as structural type to avoid heavy UI dependency import
         interface IStreamingHandle {
-             update: (chunk: string) => void;
-             finalize: (text: string, stats?: Record<string, unknown>) => void;
+            update: (chunk: string) => void;
+            finalize: (text: string, stats?: Record<string, unknown>) => void;
         }
         let streamingHandle: IStreamingHandle | null = null;
 
@@ -170,8 +171,8 @@ export class ChatController {
             const tokenCount = await chatFileHandler.getTotalTokenEstimate(text);
 
             const { attachments, combinedText } = await chatFileHandler.processForSend(text);
-            this._ui.updateTokenCount(0); 
-            
+            this._ui.updateTokenCount(0);
+
             this._ui.appendMessage('user', text, { attachments: attachments, tokens: tokenCount });
             this._chatHistory.push({ role: 'user', content: combinedText });
 
@@ -181,8 +182,11 @@ export class ChatController {
             // Set up real-time streaming listener
             const win = globalThis as unknown as Record<string, unknown>;
             // Cast to specific interface to allow property access
-            const aiBridge = win.aiBridge as { onChunk: (id: string, cb: (c: string) => void) => void; removeChunkListener: (id: string) => void };
-            
+            const aiBridge = win.aiBridge as {
+                onChunk: (id: string, cb: (c: string) => void) => void;
+                removeChunkListener: (id: string) => void;
+            };
+
             aiBridge.onChunk(listenerId, (chunk: string) => {
                 if (!streamingHandle) {
                     this._ui.removeTyping(typingId);
@@ -194,18 +198,24 @@ export class ChatController {
             });
 
             const historyHead = this._chatHistory.slice(-40);
-            const response = await this._service.sendMessage(combinedText, historyHead, attachments);
+            const response = await this._service.sendMessage(
+                combinedText,
+                historyHead,
+                attachments,
+            );
 
             // Cleanup listener
             aiBridge.removeChunkListener(listenerId);
             this._ui.removeTyping(typingId);
 
             this._handleChatResponse(response, streamingHandle);
-
         } catch (e: unknown) {
             const win = globalThis as unknown as Record<string, unknown>;
-            if (win.aiBridge) (win.aiBridge as { removeChunkListener: (id: string) => void }).removeChunkListener(listenerId);
-            
+            if (win.aiBridge)
+                (win.aiBridge as { removeChunkListener: (id: string) => void }).removeChunkListener(
+                    listenerId,
+                );
+
             const errorMsg = e instanceof Error ? e.message : 'Unknown error';
             this._handleError(errorMsg);
         }
@@ -228,44 +238,54 @@ export class ChatController {
     private _checkAIActive(input: HTMLTextAreaElement): boolean {
         const win = globalThis as unknown as Record<string, unknown>;
         const aiBridge = win.aiBridge as Record<string, unknown>;
-        const isAIActive = typeof aiBridge?.isActive === 'function' ? (aiBridge.isActive as () => boolean)() : false;
+        const isAIActive =
+            typeof aiBridge?.isActive === 'function'
+                ? (aiBridge.isActive as () => boolean)()
+                : false;
 
         if (!isAIActive) {
-             const text = input ? input.value.trim() : '';
-             if (text) this._ui.appendMessage('user', text);
-             setTimeout(() => {
-                  const t = win.t as (_k: string, _d: string) => string;
-                  this._ui.appendMessage('assistant',
-                      t?.('ui.ai.no_provider', 'No AI module running. Please launch a module first.')
-                      || 'No AI module running. Please launch a module first.',
-                      { error: true },
-                  );
-             }, 500);
-             if (input) input.value = '';
-             return false;
+            const text = input ? input.value.trim() : '';
+            if (text) this._ui.appendMessage('user', text);
+            setTimeout(() => {
+                const t = win.t as (_k: string, _d: string) => string;
+                this._ui.appendMessage(
+                    'assistant',
+                    t?.(
+                        'ui.ai.no_provider',
+                        'No AI module running. Please launch a module first.',
+                    ) || 'No AI module running. Please launch a module first.',
+                    { error: true },
+                );
+            }, 500);
+            if (input) input.value = '';
+            return false;
         }
         return true;
     }
 
-
-
     /**
      * Handles AI response and updates UI.
      */
-    private _handleChatResponse(response: IChatResponse, streamingHandle?: { update: (chunk: string) => void; finalize: (text: string, stats?: Record<string, unknown>) => void } | null): void {
+    private _handleChatResponse(
+        response: IChatResponse,
+        streamingHandle?: {
+            update: (chunk: string) => void;
+            finalize: (text: string, stats?: Record<string, unknown>) => void;
+        } | null,
+    ): void {
         if (response.ok) {
             const replyText = response.message || response.reply?.text || '';
 
             if (replyText) {
-                 const tokens = estimateTokenCount(replyText);
-                 
-                 if (streamingHandle) {
-                     streamingHandle.finalize(replyText, { tokens });
-                 } else {
-                     this._ui.appendMessage('assistant', replyText, { tokens });
-                 }
-                 
-                 this._chatHistory.push({ role: 'assistant', content: replyText });
+                const tokens = estimateTokenCount(replyText);
+
+                if (streamingHandle) {
+                    streamingHandle.finalize(replyText, { tokens });
+                } else {
+                    this._ui.appendMessage('assistant', replyText, { tokens });
+                }
+
+                this._chatHistory.push({ role: 'assistant', content: replyText });
             }
         } else {
             const friendlyMsg = this._getFriendlyErrorMessage(response.error || '', response.model);
@@ -287,26 +307,34 @@ export class ChatController {
         // 1. Detect common error codes (handles both plain text and JSON strings)
         // 503 / Unavailable / Overloaded
         if (msg.includes('503') || msg.includes('unavailable') || msg.includes('overloaded')) {
-            return t('ui.gemini.error.unavailable', `Error 503: Service Unavailable (${modelName})`)
-                    .replace('{model}', modelName);
+            return t(
+                'ui.gemini.error.unavailable',
+                `Error 503: Service Unavailable (${modelName})`,
+            ).replace('{model}', modelName);
         }
-        
+
         // 429 / Quota / Rate Limit
         if (msg.includes('429') || msg.includes('quota') || msg.includes('limit reached')) {
-            return t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`)
-                    .replace('{model}', modelName);
+            return t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`).replace(
+                '{model}',
+                modelName,
+            );
         }
 
         // 403 / Auth / Key
         if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('api key')) {
-            return t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`)
-                    .replace('{model}', modelName);
+            return t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`).replace(
+                '{model}',
+                modelName,
+            );
         }
 
         // 2. Generic API / OpenAI Fallbacks
         if (msg.includes('quota')) return t('ui.chat.error.quota', 'Quota limit reached');
-        if (msg.includes('auth') || msg.includes('api key')) return t('ui.chat.error.auth', 'Invalid API Key');
-        if (msg.includes('server error') || msg.includes('500')) return t('ui.chat.error.server', 'Server error. Please try again later.');
+        if (msg.includes('auth') || msg.includes('api key'))
+            return t('ui.chat.error.auth', 'Invalid API Key');
+        if (msg.includes('server error') || msg.includes('500'))
+            return t('ui.chat.error.server', 'Server error. Please try again later.');
 
         return errorMsg;
     }
@@ -315,7 +343,7 @@ export class ChatController {
      * Handles errors by showing them in the UI.
      */
     private _handleError(errorMsg: string = 'Unknown Error', _model?: string): void {
-         this._ui.appendMessage('assistant', errorMsg, { error: true });
+        this._ui.appendMessage('assistant', errorMsg, { error: true });
     }
 
     /**
@@ -330,7 +358,7 @@ export class ChatController {
     }
 
     // --- Voice Implementation using VoiceInputService ---
-    
+
     public toggleVoiceInput(): void {
         if (voiceInputService.isActive()) {
             this.stopVoiceRecording();
@@ -344,7 +372,7 @@ export class ChatController {
 
         voiceInputService.start(
             (text) => this._onVoiceResult(text),
-            (isRecording) => this._onVoiceStateChange(isRecording)
+            (isRecording) => this._onVoiceStateChange(isRecording),
         );
     }
 
@@ -392,9 +420,13 @@ export class ChatController {
         const t = win.t as (key: string, def?: string) => string;
 
         if (isRecording) {
-            input.placeholder = t ? t('ui.launcher.web.voice_listening', 'Listening...') : 'Listening...';
+            input.placeholder = t
+                ? t('ui.launcher.web.voice_listening', 'Listening...')
+                : 'Listening...';
         } else {
-            input.placeholder = t ? t('ui.launcher.web.chat_placeholder_ask', 'Ask anything...') : 'Ask anything...';
+            input.placeholder = t
+                ? t('ui.launcher.web.chat_placeholder_ask', 'Ask anything...')
+                : 'Ask anything...';
         }
     }
 
@@ -416,26 +448,29 @@ export class ChatController {
      * Randomizes the chat greeting.
      */
     private _randomizeGreeting(forceIndex?: number): void {
-         const el = document.getElementById('chat-header-question');
-         if (el) {
-             // Use forced index if provided, otherwise random new one
-             if (typeof forceIndex === 'number') {
-                 this._currentGreetingIndex = forceIndex;
-             } else {
-                 const array = new Uint32Array(1);
-                 crypto.getRandomValues(array);
-                 this._currentGreetingIndex = (array[0] % 50) + 1;
-             }
+        const el = document.getElementById('chat-header-question');
+        if (el) {
+            // Use forced index if provided, otherwise random new one
+            if (typeof forceIndex === 'number') {
+                this._currentGreetingIndex = forceIndex;
+            } else {
+                const array = new Uint32Array(1);
+                crypto.getRandomValues(array);
+                this._currentGreetingIndex = (array[0] % 50) + 1;
+            }
 
-             const win = globalThis as unknown as Record<string, unknown>;
-             const t = win.t as (key: string, def?: string) => string;
-             
-             if (t) {
-                el.textContent = t(`ui.chat.greeting.${this._currentGreetingIndex}`, 'How can I help you today?');
-             } else {
+            const win = globalThis as unknown as Record<string, unknown>;
+            const t = win.t as (key: string, def?: string) => string;
+
+            if (t) {
+                el.textContent = t(
+                    `ui.chat.greeting.${this._currentGreetingIndex}`,
+                    'How can I help you today?',
+                );
+            } else {
                 el.textContent = 'How can I help you today?';
-             }
-         }
+            }
+        }
     }
 }
 
@@ -446,8 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Listen for language changes to update greeting in real-time
     globalThis.addEventListener('lang:changed', () => {
-        // @ts-ignore - Valid private method access for this specific context or we could make it public
+        // Valid private method access for this specific context or we could make it public
         _controller['_randomizeGreeting'](_controller['_currentGreetingIndex']);
     });
 });
-

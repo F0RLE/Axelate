@@ -17,7 +17,13 @@ export class AppUI {
     private toastQueue: ToastElement[] = [];
 
     // --- Toast System ---
-    public showToast(message: string, type: string = 'info', duration: number = 3000, title: string | null = null, id: string | null = null) {
+    public showToast(
+        message: string,
+        type: string = 'info',
+        duration: number = 3000,
+        title: string | null = null,
+        id: string | null = null,
+    ) {
         const container = this._ensureToastContainer();
 
         // Check for existing toast with this ID
@@ -43,7 +49,12 @@ export class AppUI {
         return container;
     }
 
-    private _updateExistingToast(toast: ToastElement, message: string, title: string | null, duration: number) {
+    private _updateExistingToast(
+        toast: ToastElement,
+        message: string,
+        title: string | null,
+        duration: number,
+    ) {
         const contentEl = toast.querySelector('.toast-content');
         if (contentEl) {
             contentEl.innerHTML = DOMPurify.sanitize(`
@@ -61,12 +72,19 @@ export class AppUI {
             toast.classList.add('leaving');
             setTimeout(() => {
                 toast.remove();
-                this.toastQueue = this.toastQueue.filter(t => t !== toast);
+                this.toastQueue = this.toastQueue.filter((t) => t !== toast);
             }, 300);
         }, duration);
     }
 
-    private _createToast(container: HTMLElement, message: string, type: string, duration: number, title: string | null, id: string | null) {
+    private _createToast(
+        container: HTMLElement,
+        message: string,
+        type: string,
+        duration: number,
+        title: string | null,
+        id: string | null,
+    ) {
         const toast = document.createElement('div') as ToastElement;
         toast.className = `toast ${type}`;
         if (id) toast.id = `toast-${id}`;
@@ -85,7 +103,7 @@ export class AppUI {
             toast.classList.add('leaving');
             setTimeout(() => {
                 toast.remove();
-                this.toastQueue = this.toastQueue.filter(t => t !== toast);
+                this.toastQueue = this.toastQueue.filter((t) => t !== toast);
             }, 300);
         }, duration);
     }
@@ -121,8 +139,8 @@ export class AppUI {
         if (!container) return;
 
         if (typeof globalThis.showSkeletonLoaders === 'function') {
-             globalThis.showSkeletonLoaders(containerId, count);
-             return;
+            globalThis.showSkeletonLoaders(containerId, count);
+            return;
         }
 
         for (let i = 1; i <= count; i++) {
@@ -179,7 +197,8 @@ export class AppUI {
     }
 
     public updateModuleCard(category: string, app: IApp) {
-        const selector = category === 'ai' ? '.model-card-premium.ai' : '.model-card-premium.services';
+        const selector =
+            category === 'ai' ? '.model-card-premium.ai' : '.model-card-premium.services';
         const card = document.querySelector(selector) as HTMLElement;
         if (!card) return;
 
@@ -205,7 +224,7 @@ export class AppUI {
             const nameA = (a.name || '').toLowerCase();
             const nameB = (b.name || '').toLowerCase();
             const getP = (n: string) => {
-                const idx = priority.findIndex(p => n.includes(p));
+                const idx = priority.findIndex((p) => n.includes(p));
                 return idx === -1 ? 999 : idx;
             };
             const priorityDiff = getP(nameA) - getP(nameB);
@@ -219,7 +238,7 @@ export class AppUI {
         card.className = 'app-card';
 
         const isApi = app.type === 'api' || ['gpt', 'gemini'].includes(app.id);
-        const isInstalled = isApi ? true : (app.installed === true);
+        const isInstalled = isApi ? true : app.installed === true;
 
         card.innerHTML = DOMPurify.sanitize(`
             ${this._getAppDeleteBadgeHtml(isApi, isInstalled)}
@@ -254,7 +273,12 @@ export class AppUI {
         if (!isApi && !app.installed) {
             if (globalThis.showToast) {
                 globalThis.showToast(
-                    globalThis.t ? globalThis.t('ui.launcher.web.download_first', 'Download the module first') : 'Download the module first',
+                    globalThis.t
+                        ? globalThis.t(
+                              'ui.launcher.web.download_first',
+                              'Download the module first',
+                          )
+                        : 'Download the module first',
                     'info',
                 );
             }
@@ -285,7 +309,12 @@ export class AppUI {
             }
         } catch (err) {
             console.error('Delete error:', err);
-            this.showToast(globalThis.t ? globalThis.t('ui.launcher.web.delete_model_error', 'Delete error') : 'Delete error', 'error');
+            this.showToast(
+                globalThis.t
+                    ? globalThis.t('ui.launcher.web.delete_model_error', 'Delete error')
+                    : 'Delete error',
+                'error',
+            );
         }
     }
 
@@ -324,7 +353,9 @@ export class AppUI {
         } else if (globalThis.showToast) {
             const prevName = card.dataset.currentModuleName || previousModuleId;
             globalThis.showToast(
-                globalThis.t ? globalThis.t('ui.launcher.module.stopped', `${prevName} stopped`) : `${prevName} stopped`,
+                globalThis.t
+                    ? globalThis.t('ui.launcher.module.stopped', `${prevName} stopped`)
+                    : `${prevName} stopped`,
                 'info',
             );
         }
@@ -347,15 +378,17 @@ export class AppUI {
         const isInstalled = app.installed !== false;
 
         if (!isApi && !isInstalled) {
-           this._setupDownloadActionBtn(actionBtn, app);
+            this._setupDownloadActionBtn(actionBtn, app);
         } else {
-           this._setupLaunchActionBtn(actionBtn, app);
+            this._setupLaunchActionBtn(actionBtn, app);
         }
     }
 
     private _setupDownloadActionBtn(actionBtn: HTMLElement, app: IApp) {
         actionBtn.style.display = 'block';
-        actionBtn.textContent = globalThis.t ? globalThis.t('ui.launcher.module.download', 'Download') : 'Download';
+        actionBtn.textContent = globalThis.t
+            ? globalThis.t('ui.launcher.module.download', 'Download')
+            : 'Download';
         actionBtn.classList.remove('active-module-btn');
         actionBtn.classList.add('download-module-btn');
         actionBtn.removeAttribute('onclick'); // Clear inline handlers
@@ -363,7 +396,9 @@ export class AppUI {
             e.stopImmediatePropagation();
             e.preventDefault();
             console.log('Download module clicked (card):', app.id);
-            actionBtn.textContent = globalThis.t ? globalThis.t('ui.launcher.module.downloading', 'Downloading...') : 'Downloading...';
+            actionBtn.textContent = globalThis.t
+                ? globalThis.t('ui.launcher.module.downloading', 'Downloading...')
+                : 'Downloading...';
             actionBtn.style.pointerEvents = 'none';
 
             try {
@@ -371,7 +406,11 @@ export class AppUI {
                     await globalThis.downloadModule(app.id, app.repo_url);
                     if (globalThis.showToast) globalThis.showToast('Module downloaded!', 'success');
                     app.installed = true;
-                    this._configureActionBtn((actionBtn.closest('.model-card-premium') as HTMLElement) || actionBtn.parentElement?.parentElement as HTMLElement, app); // Refresh btn
+                    this._configureActionBtn(
+                        (actionBtn.closest('.model-card-premium') as HTMLElement) ||
+                            (actionBtn.parentElement?.parentElement as HTMLElement),
+                        app,
+                    ); // Refresh btn
                 } else if (globalThis.showToast) {
                     globalThis.showToast('Download not available', 'warning');
                 }
@@ -380,7 +419,10 @@ export class AppUI {
                 if (globalThis.showToast) globalThis.showToast('Download failed', 'error');
             }
             actionBtn.style.pointerEvents = 'auto';
-            if (!app.installed) actionBtn.textContent = globalThis.t ? globalThis.t('ui.launcher.module.download', 'Download') : 'Download';
+            if (!app.installed)
+                actionBtn.textContent = globalThis.t
+                    ? globalThis.t('ui.launcher.module.download', 'Download')
+                    : 'Download';
         };
     }
 
@@ -394,17 +436,18 @@ export class AppUI {
         const setupRunning = () => this._setBtnStateRunning(actionBtn);
         const setupStopped = () => this._setBtnStateStopped(actionBtn);
 
-        this._checkModuleStatus(app, isApi).then(running => {
-             // Set running state via dataset for styles/logic
-             actionBtn.dataset.running = running ? 'true' : 'false';
-             if (running) {
-                 setupRunning();
-             } else {
-                 setupStopped();
-             }
+        this._checkModuleStatus(app, isApi).then((running) => {
+            // Set running state via dataset for styles/logic
+            actionBtn.dataset.running = running ? 'true' : 'false';
+            if (running) {
+                setupRunning();
+            } else {
+                setupStopped();
+            }
         });
 
-        actionBtn.onclick = (e) => this._handleLaunchClick(e, app, actionBtn, setupStopped, setupRunning);
+        actionBtn.onclick = (e) =>
+            this._handleLaunchClick(e, app, actionBtn, setupStopped, setupRunning);
     }
 
     private _addSettingsBtn(card: HTMLElement, app: IApp) {
@@ -422,8 +465,8 @@ export class AppUI {
             else console.error('[AppUI] globalThis.openModuleSettings is undefined');
         });
         settingsBtn.addEventListener('mousedown', (e) => {
-             e.stopPropagation();
-             console.log('[AppUI] Settings button mousedown for:', app.id);
+            e.stopPropagation();
+            console.log('[AppUI] Settings button mousedown for:', app.id);
         });
         card.appendChild(settingsBtn);
     }
@@ -455,11 +498,12 @@ export class AppUI {
     private _handleModuleCardClick(e: MouseEvent, card: HTMLElement, category: string) {
         const target = e.target as HTMLElement;
         if (!target) return;
-        const isOnBackground = target === card ||
-                               target.classList.contains('model-icon-wrapper') ||
-                               target.classList.contains('model-card-title') ||
-                               target.classList.contains('model-card-desc') ||
-                               target.closest('.model-icon-wrapper');
+        const isOnBackground =
+            target === card ||
+            target.classList.contains('model-icon-wrapper') ||
+            target.classList.contains('model-card-title') ||
+            target.classList.contains('model-card-desc') ||
+            target.closest('.model-icon-wrapper');
 
         if (isOnBackground) {
             if (typeof globalThis.openAppSelection === 'function') {
@@ -470,7 +514,7 @@ export class AppUI {
 
     // --- Prompt Tab Switching (for chat/settings) ---
     public showPromptTab(tab: string, btn?: HTMLElement) {
-        document.querySelectorAll('.prompt-tab-content').forEach(t => {
+        document.querySelectorAll('.prompt-tab-content').forEach((t) => {
             (t as HTMLElement).style.display = 'none';
         });
 
@@ -478,7 +522,7 @@ export class AppUI {
         if (targetTab) targetTab.style.display = 'block';
 
         if (btn?.parentElement) {
-            btn.parentElement.querySelectorAll('button').forEach(b => {
+            btn.parentElement.querySelectorAll('button').forEach((b) => {
                 (b as HTMLElement).style.background = 'var(--surface)';
                 (b as HTMLElement).style.color = 'var(--text-secondary)';
             });
@@ -495,23 +539,25 @@ export class AppUI {
     }
 
     private _getAppDesc(app: IApp): string {
-         const desc = app.desc || '';
-         const key = app.descKey || `ui.launcher.app.${app.id}.desc`;
-         
-         if (globalThis.t) {
-             // Try to translate with explicit key or constructed key
-             // We pass 'desc' as fallback. If constructed key doesn't exist, it returns fallback.
-             const translated = globalThis.t(key, desc);
-             if (translated !== key) {
-                 return translated;
-             }
-         }
-         return desc;
+        const desc = app.desc || '';
+        const key = app.descKey || `ui.launcher.app.${app.id}.desc`;
+
+        if (globalThis.t) {
+            // Try to translate with explicit key or constructed key
+            // We pass 'desc' as fallback. If constructed key doesn't exist, it returns fallback.
+            const translated = globalThis.t(key, desc);
+            if (translated !== key) {
+                return translated;
+            }
+        }
+        return desc;
     }
 
     private _getAppDeleteBadgeHtml(isApi: boolean, isInstalled: boolean): string {
         if (isApi || !isInstalled) return '';
-        const deleteText = globalThis.t ? globalThis.t('ui.launcher.module.delete', 'DELETE') : 'DELETE';
+        const deleteText = globalThis.t
+            ? globalThis.t('ui.launcher.module.delete', 'DELETE')
+            : 'DELETE';
         return `
             <div class="app-delete-badge">
                 <div class="badge-icon"><span style="font-size: 1.1rem; line-height: 1;">🗑️</span></div>
@@ -520,12 +566,16 @@ export class AppUI {
     }
 
     private _getAppTypeBadgeHtml(isApi: boolean): string {
-        const typeIcon = isApi ? '<span style="font-size: 1.1rem;">☁️</span>' : '<span style="font-size: 1.1rem;">🏠</span>';
+        const typeIcon = isApi
+            ? '<span style="font-size: 1.1rem;">☁️</span>'
+            : '<span style="font-size: 1.1rem;">🏠</span>';
         let typeText;
         if (isApi) {
             typeText = globalThis.t ? globalThis.t('ui.launcher.module.type_api', 'API') : 'API';
         } else {
-            typeText = globalThis.t ? globalThis.t('ui.launcher.module.type_local', 'LOCAL') : 'LOCAL';
+            typeText = globalThis.t
+                ? globalThis.t('ui.launcher.module.type_local', 'LOCAL')
+                : 'LOCAL';
         }
 
         const typeClass = isApi ? 'api' : 'local';
@@ -538,41 +588,51 @@ export class AppUI {
 
     private _getAppStatusHtml(isApi: boolean, isInstalled: boolean): string {
         if (isApi || isInstalled) return '';
-        const txt = globalThis.t ? globalThis.t('ui.launcher.module.download', 'Download') : 'Download';
+        const txt = globalThis.t
+            ? globalThis.t('ui.launcher.module.download', 'Download')
+            : 'Download';
         return `<div class="app-status download-btn">${txt}</div>`;
     }
 
     private _setBtnStateRunning(actionBtn: HTMLElement) {
-         const setRunningText = () => {
-             actionBtn.textContent = globalThis.t ? globalThis.t('ui.launcher.status.running', 'Running') : 'Running';
-             actionBtn.classList.remove('stop-btn');
-         };
-         setRunningText();
+        const setRunningText = () => {
+            actionBtn.textContent = globalThis.t
+                ? globalThis.t('ui.launcher.status.running', 'Running')
+                : 'Running';
+            actionBtn.classList.remove('stop-btn');
+        };
+        setRunningText();
 
-         actionBtn.onmouseenter = () => {
-             if (actionBtn.dataset.running === 'true') {
-                 actionBtn.textContent = globalThis.t ? globalThis.t('ui.launcher.button.stop', 'Stop') : 'Stop';
-                 actionBtn.classList.add('stop-btn');
-             }
-         };
-         actionBtn.onmouseleave = () => {
-             if (actionBtn.dataset.running === 'true') {
-                 setRunningText();
-             }
-         };
+        actionBtn.onmouseenter = () => {
+            if (actionBtn.dataset.running === 'true') {
+                actionBtn.textContent = globalThis.t
+                    ? globalThis.t('ui.launcher.button.stop', 'Stop')
+                    : 'Stop';
+                actionBtn.classList.add('stop-btn');
+            }
+        };
+        actionBtn.onmouseleave = () => {
+            if (actionBtn.dataset.running === 'true') {
+                setRunningText();
+            }
+        };
     }
 
     private _setBtnStateStopped(actionBtn: HTMLElement) {
-         actionBtn.textContent = globalThis.t ? globalThis.t('ui.launcher.button.launch', 'Launch') : 'Launch';
-         actionBtn.classList.remove('stop-btn');
-         actionBtn.onmouseenter = null;
-         actionBtn.onmouseleave = null;
+        actionBtn.textContent = globalThis.t
+            ? globalThis.t('ui.launcher.button.launch', 'Launch')
+            : 'Launch';
+        actionBtn.classList.remove('stop-btn');
+        actionBtn.onmouseenter = null;
+        actionBtn.onmouseleave = null;
     }
 
     private async _checkModuleStatus(app: IApp, isApi: boolean): Promise<boolean> {
         if (!isApi && globalThis.__TAURI__?.core) {
             try {
-                const status = await globalThis.__TAURI__.core.invoke('get_module_status', { moduleId: app.id });
+                const status = await globalThis.__TAURI__.core.invoke('get_module_status', {
+                    moduleId: app.id,
+                });
                 return String(status) === 'running';
             } catch (err) {
                 console.warn('Status check failed:', err);
@@ -581,7 +641,13 @@ export class AppUI {
         return false;
     }
 
-    private async _handleLaunchClick(e: MouseEvent, app: IApp, actionBtn: HTMLElement, updateToStopped: () => void, updateToRunning: () => void) {
+    private async _handleLaunchClick(
+        e: MouseEvent,
+        app: IApp,
+        actionBtn: HTMLElement,
+        updateToStopped: () => void,
+        updateToRunning: () => void,
+    ) {
         e.stopImmediatePropagation();
         e.preventDefault();
         const currentlyRunning = actionBtn.dataset.running === 'true';
@@ -598,14 +664,24 @@ export class AppUI {
         if (app.type === 'api' || ['gpt', 'gemini'].includes(app.id)) {
             if (globalThis.aiBridge) globalThis.aiBridge.stopProvider();
         } else {
-             const moduleName = app.name || app.id;
-             if (globalThis.showToast) globalThis.showToast(globalThis.t ? globalThis.t('ui.launcher.module.stopped', `${moduleName} stopped`) : `${moduleName} stopped`, 'info');
+            const moduleName = app.name || app.id;
+            if (globalThis.showToast)
+                globalThis.showToast(
+                    globalThis.t
+                        ? globalThis.t('ui.launcher.module.stopped', `${moduleName} stopped`)
+                        : `${moduleName} stopped`,
+                    'info',
+                );
         }
         actionBtn.dataset.running = 'false';
         updateToStopped();
     }
 
-    private async _handleStartModule(app: IApp, updateToRunning: () => void, actionBtn: HTMLElement) {
+    private async _handleStartModule(
+        app: IApp,
+        updateToRunning: () => void,
+        actionBtn: HTMLElement,
+    ) {
         console.log('[AppUI] Launch app clicked:', app.id);
         if (app.type === 'api' || ['gpt', 'gemini'].includes(app.id)) {
             if (globalThis.aiBridge) {
@@ -615,13 +691,19 @@ export class AppUI {
                     updateToRunning();
                 }
             } else if (globalThis.showToast) {
-                 globalThis.showToast('AI Bridge not initialized', 'error');
+                globalThis.showToast('AI Bridge not initialized', 'error');
             }
         } else {
-             const moduleName = app.name || app.id;
-             if (globalThis.showToast) globalThis.showToast(globalThis.t ? globalThis.t('ui.launcher.module.launched', `${moduleName} launched`) : `${moduleName} launched`, 'success');
-             actionBtn.dataset.running = 'true';
-             updateToRunning();
+            const moduleName = app.name || app.id;
+            if (globalThis.showToast)
+                globalThis.showToast(
+                    globalThis.t
+                        ? globalThis.t('ui.launcher.module.launched', `${moduleName} launched`)
+                        : `${moduleName} launched`,
+                    'success',
+                );
+            actionBtn.dataset.running = 'true';
+            updateToRunning();
         }
     }
 
@@ -630,16 +712,19 @@ export class AppUI {
         if (!titleEl) return;
 
         const titles: Record<string, string> = {
-            'ai': 'AI Applications',
-            'services': 'Services Manager',
+            ai: 'AI Applications',
+            services: 'Services Manager',
         };
-        const key = category === 'ai' ? 'ui.launcher.modules.modal.ai_title' : 'ui.launcher.modules.modal.services_title';
+        const key =
+            category === 'ai'
+                ? 'ui.launcher.modules.modal.ai_title'
+                : 'ui.launcher.modules.modal.services_title';
         const defaultTitle = titles[category] || category;
 
         if (globalThis.t) {
-             titleEl.textContent = globalThis.t(key, defaultTitle);
+            titleEl.textContent = globalThis.t(key, defaultTitle);
         } else {
-             titleEl.textContent = defaultTitle;
+            titleEl.textContent = defaultTitle;
         }
     }
 
@@ -647,7 +732,9 @@ export class AppUI {
         listEl.innerHTML = '';
 
         if (!apps || apps.length === 0) {
-            listEl.innerHTML = DOMPurify.sanitize('<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted);">No apps found</div>');
+            listEl.innerHTML = DOMPurify.sanitize(
+                '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted);">No apps found</div>',
+            );
             return;
         }
 
@@ -660,34 +747,35 @@ export class AppUI {
 
     private _updateCardContent(card: HTMLElement, app: IApp) {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
-        if (iconWrapper) iconWrapper.innerHTML = DOMPurify.sanitize(`<div>${app.icon || '📦'}</div>`);
+        if (iconWrapper)
+            iconWrapper.innerHTML = DOMPurify.sanitize(`<div>${app.icon || '📦'}</div>`);
 
         const title = card.querySelector('.model-card-title');
         if (title) {
-             if (['flux', 'flux-platform', 'flux-localai'].includes(app.id)) {
-                 title.textContent = 'Flux Local AI';
-             } else {
-                 let titleText = app.name || '';
-                 if (globalThis.t && app.nameKey) {
-                     titleText = globalThis.t(app.nameKey, titleText);
-                 }
-                 title.textContent = titleText;
-             }
+            if (['flux', 'flux-platform', 'flux-localai'].includes(app.id)) {
+                title.textContent = 'Flux Local AI';
+            } else {
+                let titleText = app.name || '';
+                if (globalThis.t && app.nameKey) {
+                    titleText = globalThis.t(app.nameKey, titleText);
+                }
+                title.textContent = titleText;
+            }
         }
 
         const desc = card.querySelector('.model-card-desc');
         if (desc) {
-             let descText = app.desc || '';
-             if (globalThis.t && app.descKey) {
-                 descText = globalThis.t(app.descKey, descText);
-             }
-             desc.textContent = descText;
+            let descText = app.desc || '';
+            if (globalThis.t && app.descKey) {
+                descText = globalThis.t(app.descKey, descText);
+            }
+            desc.textContent = descText;
         }
     }
 
     private _refreshCardActions(card: HTMLElement, app: IApp, category: string) {
         // Remove existing actions
-        card.querySelectorAll('.module-action-badge').forEach(el => el.remove());
+        card.querySelectorAll('.module-action-badge').forEach((el) => el.remove());
 
         this._addSettingsBtn(card, app);
         this._addCloseBtn(card, category);

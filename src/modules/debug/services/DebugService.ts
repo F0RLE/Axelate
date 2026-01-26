@@ -13,7 +13,9 @@ export class DebugService {
         try {
             // Check for Tauri environment or Mock
             if (globalThis.__TAURI__) {
-                const logs = await globalThis.__TAURI__.core.invoke<ILogEntry[]>('get_logs', { since: this.lastTimestamp });
+                const logs = await globalThis.__TAURI__.core.invoke<ILogEntry[]>('get_logs', {
+                    since: this.lastTimestamp,
+                });
                 return this.processLogs(logs);
             } else {
                 // Fallback to fetch for dev/browser
@@ -53,19 +55,22 @@ export class DebugService {
         if (!Array.isArray(newLogs) || newLogs.length === 0) return [];
 
         // Filter out bot-communication errors and known noisy Gemini errors
-        const filteredLogs = newLogs.filter(log => {
+        const filteredLogs = newLogs.filter((log) => {
             const msg = (log.message || '').toUpperCase();
             const src = (log.source || '').toUpperCase();
 
             // 1. Check for specific bot/ai service sources
-            const isBotSource = src.includes('CHATSERVICE') || src.includes('AIBRIDGE') || src.includes('AI_SERVICE');
+            const isBotSource =
+                src.includes('CHATSERVICE') ||
+                src.includes('AIBRIDGE') ||
+                src.includes('AI_SERVICE');
 
             // 2. Check for common Gemini/AI error patterns and HTTP codes
-            const isAIError = 
-                msg.includes('GEMINI_ERROR') || 
-                msg.includes('ERROR 429') || 
-                msg.includes('ERROR 400') || 
-                msg.includes('ERROR 403') || 
+            const isAIError =
+                msg.includes('GEMINI_ERROR') ||
+                msg.includes('ERROR 429') ||
+                msg.includes('ERROR 400') ||
+                msg.includes('ERROR 403') ||
                 msg.includes('ERROR 500') ||
                 msg.includes('QUOTA') ||
                 msg.includes('PERMISSION_DENIED') ||

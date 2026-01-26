@@ -2,11 +2,11 @@
  * @module core/services/TemplateLoader
  * @description Centralized service for dynamic HTML template loading, caching, and secure injection.
  * Implements the Singleton pattern as defined in Flux Standards Section 16.1.
- * 
+ *
  * @example
  * ```typescript
  * import { templateLoader } from './TemplateLoader';
- * 
+ *
  * await templateLoader.loadAndInject('sidebar', 'sidebar-container');
  * ```
  */
@@ -41,7 +41,7 @@ class TemplateLoader {
 
     /**
      * Load a template file and cache it.
-     * 
+     *
      * @param path - The template path (relative to /templates/)
      * @returns The HTML content of the template or an empty string on failure
      * @sideeffect Performs network I/O to fetch template files
@@ -50,7 +50,7 @@ class TemplateLoader {
         if (this._cache.has(path)) {
             return this._cache.get(path)!;
         }
-        
+
         try {
             const response = await fetch(`/templates/${path}.html`);
             if (!response.ok) {
@@ -67,7 +67,7 @@ class TemplateLoader {
 
     /**
      * Inject template HTML into a container element.
-     * 
+     *
      * @param containerId - ID of the target element
      * @param html - HTML content to inject
      * @returns True if injection was successful
@@ -79,16 +79,47 @@ class TemplateLoader {
             // Section 4.4: Secure injection with permissive configuration for app logic
             container.innerHTML = DOMPurify.sanitize(html, {
                 USE_PROFILES: { html: true, svg: true },
-                ADD_TAGS: ['use', 'svg', 'path', 'symbol', 'circle', 'rect', 'title', 'desc', 'defs', 'linearGradient', 'stop'],
+                ADD_TAGS: [
+                    'use',
+                    'svg',
+                    'path',
+                    'symbol',
+                    'circle',
+                    'rect',
+                    'title',
+                    'desc',
+                    'defs',
+                    'linearGradient',
+                    'stop',
+                ],
                 ADD_ATTR: [
-                    'href', 'xlink:href', 'viewBox', 'd', 'fill', 'stroke', 
-                    'data-page', 'data-i18n', 'data-i18n-placeholder', 'data-i18n-params', 'data-i18n-title',
-                    'data-lang', 'data-monitor-id', 'aria-label', 'aria-hidden', 'aria-current', 'aria-expanded',
-                    'x1', 'y1', 'x2', 'y2', 'offset', 'stop-color'
+                    'href',
+                    'xlink:href',
+                    'viewBox',
+                    'd',
+                    'fill',
+                    'stroke',
+                    'data-page',
+                    'data-i18n',
+                    'data-i18n-placeholder',
+                    'data-i18n-params',
+                    'data-i18n-title',
+                    'data-lang',
+                    'data-monitor-id',
+                    'aria-label',
+                    'aria-hidden',
+                    'aria-current',
+                    'aria-expanded',
+                    'x1',
+                    'y1',
+                    'x2',
+                    'y2',
+                    'offset',
+                    'stop-color',
                 ],
                 ALLOW_DATA_ATTR: true,
                 SAFE_FOR_TEMPLATES: true,
-                KEEP_CONTENT: true
+                KEEP_CONTENT: true,
             });
             console.debug(`[TemplateLoader] Injected: ${containerId}`);
             return true;
@@ -98,7 +129,7 @@ class TemplateLoader {
 
     /**
      * Load and inject a template in one atomic step.
-     * 
+     *
      * @param templatePath - Path to the template file
      * @param containerId - ID of the target container
      * @returns True if both loading and injection succeeded
@@ -110,7 +141,7 @@ class TemplateLoader {
 
     /**
      * Append template HTML to a container (preserves existing content).
-     * 
+     *
      * @param containerId - ID of the target element
      * @param html - HTML content to append
      * @returns True if append was successful
@@ -123,7 +154,16 @@ class TemplateLoader {
                 USE_PROFILES: { html: true, svg: true },
                 ALLOW_DATA_ATTR: true,
                 ADD_TAGS: ['use', 'svg', 'path', 'symbol'],
-                ADD_ATTR: ['href', 'xlink:href', 'viewBox', 'd', 'fill', 'stroke', 'data-i18n', 'data-page']
+                ADD_ATTR: [
+                    'href',
+                    'xlink:href',
+                    'viewBox',
+                    'd',
+                    'fill',
+                    'stroke',
+                    'data-i18n',
+                    'data-page',
+                ],
             });
             container.insertAdjacentHTML('beforeend', sanitized);
             return true;
@@ -141,11 +181,11 @@ class TemplateLoader {
 
     /**
      * Preload multiple templates for immediate access.
-     * 
+     *
      * @param paths - List of template paths to preload
      */
     public async preloadTemplates(paths: string[]): Promise<void> {
-        await Promise.all(paths.map(path => this.loadTemplate(path)));
+        await Promise.all(paths.map((path) => this.loadTemplate(path)));
     }
 }
 

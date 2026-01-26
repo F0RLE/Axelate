@@ -19,7 +19,10 @@ export interface ITauriInstance {
         LogicalSize: new (_width: number, _height: number) => { width: number; height: number };
     };
     event: {
-        listen: <T>(_event: string, _handler: (_event: { payload: T }) => void) => Promise<() => void>;
+        listen: <T>(
+            _event: string,
+            _handler: (_event: { payload: T }) => void,
+        ) => Promise<() => void>;
     };
 }
 

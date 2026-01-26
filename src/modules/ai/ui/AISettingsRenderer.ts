@@ -2,7 +2,7 @@
  * @module ai/ui/AISettingsRenderer
  * @description Handles rendering of AI provider settings UI with secure DOM patterns.
  * Implements interactive model selection and API key management.
- * 
+ *
  * @example
  * ```typescript
  * import { aiSettingsRenderer } from './AISettingsRenderer';
@@ -31,11 +31,13 @@ const CACHE_KEYS = {
 } as const;
 
 const ICONS = {
-    VISIBLE: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
+    VISIBLE:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
     HIDDEN: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>',
     CHECK: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
     X: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
-    SPINNER: '<svg style="animation: spin 1s linear infinite; width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>'
+    SPINNER:
+        '<svg style="animation: spin 1s linear infinite; width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>',
 };
 
 // ============================================================================
@@ -68,7 +70,7 @@ class AISettingsRenderer {
     /**
      * Idempotent initialization of the service.
      * Required by Section 16.2 of Flux Standards.
-     * 
+     *
      * @param settingsService - Global settings infrastructure service
      */
     public init(settingsService: SettingsService): void {
@@ -84,7 +86,7 @@ class AISettingsRenderer {
 
     /**
      * Renders unified API and model settings for any AI provider.
-     * 
+     *
      * @param container - Target DOM element for ingestion
      * @param app - Catalog application record
      * @sideeffect Modifies the DOM by injecting sanitized HTML
@@ -99,20 +101,18 @@ class AISettingsRenderer {
         const providerData = app.api_provider_data || {};
         const models = providerData.models || {};
         const sortedModels = sortModelsByPower(models as Record<string, IAIModelData>);
-        
+
         const defaultModelId = sortedModels.length > 0 ? sortedModels[0][0] : '';
         const savedModel = localStorage.getItem(CACHE_KEYS.SELECTED_MODEL(appId)) || defaultModelId;
         const t = this._getTranslator();
 
-
-
-
-        const isCleanApp = ['flux', 'flux-platform', 'flux-localai'].includes(appId) || appId.includes('telegram');
+        const isCleanApp =
+            ['flux', 'flux-platform', 'flux-localai'].includes(appId) || appId.includes('telegram');
 
         let rawHtml = '';
 
         if (isCleanApp) {
-             rawHtml = `
+            rawHtml = `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
                 <div class="ai-content-panel">
                     <div class="settings-card-header-center">
@@ -122,7 +122,7 @@ class AISettingsRenderer {
                 </div>
             </div>`;
         } else {
-             rawHtml = `
+            rawHtml = `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
                 <!-- Unified API & Models Settings -->
                 <div class="ai-settings-content">
@@ -154,13 +154,17 @@ class AISettingsRenderer {
                         </div>
                     </section>
 
-                    ${(appId === 'gemini' || appId === 'claude' || appId === 'gpt') ? (() => {
-                        const savedLevel = localStorage.getItem(CACHE_KEYS.THINKING_LEVEL(appId));
-                        // Positive assertions to satisfy Section 35.1 and strict lints
-                        const isLow = savedLevel === 'low';
-                        const isHigh = savedLevel === 'high' || savedLevel === null; 
+                    ${
+                        appId === 'gemini' || appId === 'claude' || appId === 'gpt'
+                            ? (() => {
+                                  const savedLevel = localStorage.getItem(
+                                      CACHE_KEYS.THINKING_LEVEL(appId),
+                                  );
+                                  // Positive assertions to satisfy Section 35.1 and strict lints
+                                  const isLow = savedLevel === 'low';
+                                  const isHigh = savedLevel === 'high' || savedLevel === null;
 
-                        return `
+                                  return `
                         <section class="thinking-level-section" aria-labelledby="${appId}-thinking-title">
                             <div class="ai-content-panel">
                                 <div class="settings-card-header-center">
@@ -188,7 +192,9 @@ class AISettingsRenderer {
                             </div>
                         </section>
                         `;
-                    })() : ''}
+                              })()
+                            : ''
+                    }
 
                     <section id="${appId}-model-stats" class="ai-stats-section" aria-live="polite">
                         <div class="ai-content-panel">
@@ -210,13 +216,22 @@ class AISettingsRenderer {
     /**
      * Renders a discrete model selection card.
      */
-    private _renderModelCard(key: string, model: IAIModelData, isSelected: boolean, t: TranslateFunc): string {
-        const pricingHtml = (model.pricing || []).map(price => `
+    private _renderModelCard(
+        key: string,
+        model: IAIModelData,
+        isSelected: boolean,
+        t: TranslateFunc,
+    ): string {
+        const pricingHtml = (model.pricing || [])
+            .map(
+                (price) => `
             <div class="price-row">
                 <span>${price.tier}</span>
-                <span>${price.note || (price.in + ' / ' + price.out)}</span>
+                <span>${price.note || price.in + ' / ' + price.out}</span>
             </div>
-        `).join('');
+        `,
+            )
+            .join('');
 
         return `
             <div class="ai-model-card ${isSelected ? 'selected' : ''}" 
@@ -233,7 +248,7 @@ class AISettingsRenderer {
 
     /**
      * Renders comparative model statistics with star heuristics.
-     * 
+     *
      * @param appId - AI Provider ID
      * @param modelKey - Unique model identifier
      */
@@ -241,12 +256,14 @@ class AISettingsRenderer {
         const t = this._getTranslator();
         const modelData = getModelData(appId, modelKey);
         const stats = modelData?.stats;
-        
-        if (!stats) return `<div class="model-desc">${t('ui.settings.stats_unavailable', 'Stats unavailable')}</div>`;
+
+        if (!stats)
+            return `<div class="model-desc">${t('ui.settings.stats_unavailable', 'Stats unavailable')}</div>`;
 
         const thinkingLevel = localStorage.getItem(CACHE_KEYS.THINKING_LEVEL(appId)) || 'high';
-        
-        const adjustedLogic = thinkingLevel === 'high' ? Math.min(10, (stats.logic || 0) + 2) : (stats.logic || 0);
+
+        const adjustedLogic =
+            thinkingLevel === 'high' ? Math.min(10, (stats.logic || 0) + 2) : stats.logic || 0;
 
         return `
             <div class="ai-stats-grid">
@@ -272,21 +289,21 @@ class AISettingsRenderer {
     private _renderStars(count: number): string {
         let starsHtml = '';
         const maxStars = 5;
-        
+
         for (let i = 0; i < maxStars; i++) {
             const thresholdFull = (i + 1) * 2;
-            const thresholdHalf = (i * 2) + 1;
-            
+            const thresholdHalf = i * 2 + 1;
+
             let className = 'star-icon';
-            let color = 'rgba(255,255,255,0.1)'; 
-            
+            let color = 'rgba(255,255,255,0.1)';
+
             if (count >= thresholdFull) {
-                color = '#FFD700'; 
+                color = '#FFD700';
             } else if (count >= thresholdHalf) {
-                className += ' half'; 
-                color = 'transparent'; 
+                className += ' half';
+                color = 'transparent';
             }
-            
+
             const styleAttr = className.includes('half') ? '' : `style="color: ${color};"`;
             starsHtml += `<span class="${className}" ${styleAttr}>★</span>`;
         }
@@ -295,7 +312,7 @@ class AISettingsRenderer {
 
     /**
      * Binds interactive event handlers with cleanup tracking.
-     * 
+     *
      * @param container - UI Container
      * @param appId - Provider ID
      * @sideeffect Attaches DOM event listeners and subscribes to settings service
@@ -304,7 +321,7 @@ class AISettingsRenderer {
         if (!this._settingsService) return;
 
         const input = container.querySelector<HTMLInputElement>(`#${appId}-api-key-input`);
-        
+
         const savedKey = await this._settingsService.getSecureKey(appId);
         if (input && savedKey) input.value = savedKey;
 
@@ -318,21 +335,24 @@ class AISettingsRenderer {
         addListener(input, 'input', (event) => {
             this._settingsService?.saveSecureKey(appId, (event.target as HTMLInputElement).value);
         });
-        
+
         addListener(container.querySelector(`#${appId}-key-toggle-btn`), 'click', () => {
             this.toggleKeyVisibility(appId);
         });
-        
+
         addListener(container.querySelector(`#${appId}-key-check-btn`), 'click', () => {
             this.checkKey(appId);
         });
 
         const handleModelSelection = (event: Event) => {
-            const card = (event.target as Element).closest<HTMLElement>('.ai-model-card[data-model-key]');
+            const card = (event.target as Element).closest<HTMLElement>(
+                '.ai-model-card[data-model-key]',
+            );
             if (!card) return;
 
             const keyEvent = event as KeyboardEvent;
-            if (event.type === 'keydown' && keyEvent.key !== 'Enter' && keyEvent.key !== ' ') return;
+            if (event.type === 'keydown' && keyEvent.key !== 'Enter' && keyEvent.key !== ' ')
+                return;
 
             if (card.dataset.modelKey) {
                 event.preventDefault();
@@ -349,13 +369,15 @@ class AISettingsRenderer {
 
         const thinkingGrid = container.querySelector(`#${appId}-thinking-grid`);
         if (thinkingGrid) {
-             const buttons = Array.from(thinkingGrid.querySelectorAll<HTMLElement>('.thinking-option-card'));
-             
-             const updateThinking = (target: HTMLElement) => {
+            const buttons = Array.from(
+                thinkingGrid.querySelectorAll<HTMLElement>('.thinking-option-card'),
+            );
+
+            const updateThinking = (target: HTMLElement) => {
                 const val = target.dataset.value || 'high';
                 localStorage.setItem(CACHE_KEYS.THINKING_LEVEL(appId), val);
-                
-                buttons.forEach(b => {
+
+                buttons.forEach((b) => {
                     b.classList.remove('selected');
                     b.setAttribute('aria-checked', 'false');
                 });
@@ -366,18 +388,20 @@ class AISettingsRenderer {
                 if (savedModel) {
                     this.selectModel(appId, savedModel);
                 }
-             };
+            };
 
-             buttons.forEach(btn => {
-                 btn.addEventListener('click', (event) => updateThinking(event.currentTarget as HTMLElement));
-                 btn.addEventListener('keydown', (event) => {
-                     const keyEvent = event;
-                     if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+            buttons.forEach((btn) => {
+                btn.addEventListener('click', (event) =>
+                    updateThinking(event.currentTarget as HTMLElement),
+                );
+                btn.addEventListener('keydown', (event) => {
+                    const keyEvent = event;
+                    if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
                         event.preventDefault();
                         updateThinking(event.currentTarget as HTMLElement);
-                     }
-                 });
-             });
+                    }
+                });
+            });
         }
 
         const globalContext = globalThis as unknown as IAISettingsGlobal;
@@ -388,14 +412,14 @@ class AISettingsRenderer {
 
     /**
      * Toggles API key field visibility.
-     * 
+     *
      * @param appId - Unique provider identifier
      * @sideeffect Modifies input type and innerHTML
      */
     public toggleKeyVisibility(appId: string): void {
         const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
         const btn = document.getElementById(`${appId}-key-toggle-btn`);
-        
+
         if (input && btn) {
             const isPassword = input.type === 'password';
             input.type = isPassword ? 'text' : 'password';
@@ -405,7 +429,7 @@ class AISettingsRenderer {
 
     /**
      * Evaluates API key validity against provider infrastructure.
-     * 
+     *
      * @param appId - AI Provider ID
      * @sideeffect Updates button DOM state and displays toast notifications
      */
@@ -416,7 +440,7 @@ class AISettingsRenderer {
 
         const t = this._getTranslator();
         const key = input.value.trim();
-        
+
         if (!key) {
             this._showToast(t('ui.settings.key_invalid', 'Invalid Key'), 'error');
             return;
@@ -459,22 +483,28 @@ class AISettingsRenderer {
      */
     private async _validateKey(appId: string, key: string): Promise<boolean> {
         const providerData = getProviderData(appId);
-        
+
         if (appId === 'gemini') {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+            );
             return res.ok;
         }
-        
+
         const baseUrl = providerData?.baseUrl || 'https://api.openai.com/v1';
         const url = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
-        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${key}` } });
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
         return res.ok;
     }
 
     /**
      * Synchronizes button visual state with validation results.
      */
-    private _updateKeyButtonState(btn: HTMLElement, state: 'success' | 'error', icon: string): void {
+    private _updateKeyButtonState(
+        btn: HTMLElement,
+        state: 'success' | 'error',
+        icon: string,
+    ): void {
         const color = state === 'success' ? 'var(--success)' : 'var(--error)';
         btn.style.borderColor = color;
         btn.style.color = color;
@@ -483,7 +513,7 @@ class AISettingsRenderer {
 
     /**
      * Resolves and persists model selection transitions.
-     * 
+     *
      * @param appId - Provider ID
      * @param modelKey - Selected model ID
      * @sideeffect Updates local storage and refreshes stats DOM segments
@@ -492,7 +522,7 @@ class AISettingsRenderer {
         localStorage.setItem(CACHE_KEYS.SELECTED_MODEL(appId), modelKey);
 
         const grid = document.querySelector('.ai-models-grid');
-        grid?.querySelectorAll('.ai-model-card').forEach(card => {
+        grid?.querySelectorAll('.ai-model-card').forEach((card) => {
             const cardKey = (card as HTMLElement).dataset.modelKey;
             card.classList.toggle('selected', cardKey === modelKey);
         });
@@ -509,7 +539,7 @@ class AISettingsRenderer {
                 </div>
             `;
             statsArea.innerHTML = DOMPurify.sanitize(rawHtml);
-            
+
             const globalContext = globalThis as unknown as IAISettingsGlobal;
             if (typeof globalContext.applyTranslations === 'function') {
                 globalContext.applyTranslations();
@@ -522,7 +552,7 @@ class AISettingsRenderer {
      * MANDATORY cleanup method required by Section 4.3.
      */
     public destroy(): void {
-        this._unsubscribers.forEach(fn => fn());
+        this._unsubscribers.forEach((fn) => fn());
         this._unsubscribers.length = 0;
         this._initialized = false;
     }

@@ -19,7 +19,7 @@ export class EventHandler {
      */
     public init(): void {
         this._initGlobalDelegation();
-        
+
         this._initDownloadsPage();
         this._initAppModuleCards();
         this._initAppSelectionModal();
@@ -85,7 +85,9 @@ export class EventHandler {
             const debugTab = target.closest('.console-tab[data-view]') as HTMLElement;
             if (debugTab) {
                 const view = debugTab.dataset.view;
-                const win = globalThis as unknown as Window & { setLogView?: (v: string, b: HTMLElement) => void };
+                const win = globalThis as unknown as Window & {
+                    setLogView?: (v: string, b: HTMLElement) => void;
+                };
                 if (view) win.setLogView?.(view, debugTab);
             }
         });
@@ -96,7 +98,7 @@ export class EventHandler {
      */
     public destroy(): void {
         this._cleanupAbort.abort();
-        this._unsubscribers.forEach(fn => fn());
+        this._unsubscribers.forEach((fn) => fn());
         this._unsubscribers = [];
         console.debug('[EventHandler] Destroyed and listeners removed.');
     }
@@ -104,7 +106,11 @@ export class EventHandler {
     /**
      * Helper to add event listener with auto-cleanup.
      */
-    private _addListener(target: EventTarget | null, event: string, handler: EventListenerOrEventListenerObject): void {
+    private _addListener(
+        target: EventTarget | null,
+        event: string,
+        handler: EventListenerOrEventListenerObject,
+    ): void {
         if (target) {
             target.addEventListener(event, handler);
             this._unsubscribers.push(() => target.removeEventListener(event, handler));
@@ -135,7 +141,11 @@ export class EventHandler {
             const ev = e as MouseEvent;
             const target = ev.target;
             if (!(target instanceof HTMLElement)) return;
-            if (target.closest('.model-card-action, .module-action-badge, .download-module-btn, .stop-btn')) {
+            if (
+                target.closest(
+                    '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn',
+                )
+            ) {
                 return;
             }
             if (card.classList.contains('empty')) {
@@ -161,34 +171,62 @@ export class EventHandler {
     }
 
     private _initAppSelectionModal(): void {
-        this._addListener(document.getElementById('close-app-selection-btn'), 'click', () => this._core.appUI.closeAppSelection());
-        this._addListener(document.getElementById('close-app-selection-btn-alt'), 'click', () => this._core.appUI.closeAppSelection());
+        this._addListener(document.getElementById('close-app-selection-btn'), 'click', () =>
+            this._core.appUI.closeAppSelection(),
+        );
+        this._addListener(document.getElementById('close-app-selection-btn-alt'), 'click', () =>
+            this._core.appUI.closeAppSelection(),
+        );
     }
 
-
     private _initChatPage(): void {
-        const win = globalThis as unknown as Window & { clearChat?: () => void; pickChatFiles?: () => void; toggleVoiceInput?: () => void; sendChat?: () => void };
-        this._addListener(document.getElementById('clear-chat-btn'), 'click', () => win.clearChat?.());
-        this._addListener(document.getElementById('pick-chat-files-btn'), 'click', () => win.pickChatFiles?.());
-        this._addListener(document.getElementById('voice-input-btn'), 'click', () => win.toggleVoiceInput?.());
-        this._addListener(document.getElementById('send-chat-btn'), 'click', () => win.sendChat?.());
+        const win = globalThis as unknown as Window & {
+            clearChat?: () => void;
+            pickChatFiles?: () => void;
+            toggleVoiceInput?: () => void;
+            sendChat?: () => void;
+        };
+        this._addListener(document.getElementById('clear-chat-btn'), 'click', () =>
+            win.clearChat?.(),
+        );
+        this._addListener(document.getElementById('pick-chat-files-btn'), 'click', () =>
+            win.pickChatFiles?.(),
+        );
+        this._addListener(document.getElementById('voice-input-btn'), 'click', () =>
+            win.toggleVoiceInput?.(),
+        );
+        this._addListener(document.getElementById('send-chat-btn'), 'click', () =>
+            win.sendChat?.(),
+        );
     }
 
     private _initLanguageModal(): void {
-        const win = globalThis as unknown as Window & { selectLangInModal?: (l: string) => void; confirmLanguage?: () => void };
-        document.querySelectorAll<HTMLElement>('.lang-modal-btn[data-lang]').forEach(btn => {
+        const win = globalThis as unknown as Window & {
+            selectLangInModal?: (l: string) => void;
+            confirmLanguage?: () => void;
+        };
+        document.querySelectorAll<HTMLElement>('.lang-modal-btn[data-lang]').forEach((btn) => {
             this._addListener(btn, 'click', () => {
                 const lang = btn.dataset.lang;
                 if (lang) win.selectLangInModal?.(lang);
             });
         });
-        this._addListener(document.getElementById('confirm-lang-btn'), 'click', () => win.confirmLanguage?.());
+        this._addListener(document.getElementById('confirm-lang-btn'), 'click', () =>
+            win.confirmLanguage?.(),
+        );
     }
 
     private _initCloseConfirmModal(): void {
-        const win = globalThis as unknown as Window & { hideCloseConfirmModal?: () => void; confirmCloseFromModal?: () => void };
-        this._addListener(document.getElementById('cancel-close-btn'), 'click', () => win.hideCloseConfirmModal?.());
-        this._addListener(document.getElementById('confirm-close-btn'), 'click', () => win.confirmCloseFromModal?.());
+        const win = globalThis as unknown as Window & {
+            hideCloseConfirmModal?: () => void;
+            confirmCloseFromModal?: () => void;
+        };
+        this._addListener(document.getElementById('cancel-close-btn'), 'click', () =>
+            win.hideCloseConfirmModal?.(),
+        );
+        this._addListener(document.getElementById('confirm-close-btn'), 'click', () =>
+            win.confirmCloseFromModal?.(),
+        );
     }
 
     private _initDownloadSettingsModal(): void {
@@ -196,16 +234,25 @@ export class EventHandler {
         this._addListener(downloadSettingsOverlay, 'click', (e) => {
             if (e.target === downloadSettingsOverlay) this._core.downloadUI.closeSettings();
         });
-        this._addListener(document.getElementById('close-download-settings-btn'), 'click', () => this._core.downloadUI.closeSettings());
+        this._addListener(document.getElementById('close-download-settings-btn'), 'click', () =>
+            this._core.downloadUI.closeSettings(),
+        );
     }
 
     private _initModuleSettingsModal(): void {
-        this._addListener(document.getElementById('close-module-settings-btn'), 'click', () => this._core.settingsUI.close());
+        this._addListener(document.getElementById('close-module-settings-btn'), 'click', () =>
+            this._core.settingsUI.close(),
+        );
     }
 
     private _initDownloadSpeedSettings(): void {
-        const speedLimitToggle = document.getElementById('download-speed-limit-toggle') as HTMLInputElement;
-        if (speedLimitToggle) this._addListener(speedLimitToggle, 'change', () => this._core.downloadUI.saveSettings());
+        const speedLimitToggle = document.getElementById(
+            'download-speed-limit-toggle',
+        ) as HTMLInputElement;
+        if (speedLimitToggle)
+            this._addListener(speedLimitToggle, 'change', () =>
+                this._core.downloadUI.saveSettings(),
+            );
         const speedSlider = document.getElementById('download-speed-slider') as HTMLInputElement;
         if (speedSlider) {
             this._addListener(speedSlider, 'input', (e: Event) => {
@@ -215,7 +262,6 @@ export class EventHandler {
             });
         }
     }
-
 
     private _handleWindowControls(target: HTMLElement): boolean {
         if (target.closest('#minimize-btn')) {

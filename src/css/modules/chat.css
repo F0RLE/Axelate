@@ -309,7 +309,7 @@
     }
 }
 
-#chat-compose>div:last-child {
+#chat-compose > div:last-child {
     transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -383,7 +383,6 @@
 }
 
 @keyframes typingBounce {
-
     0%,
     80%,
     100% {
@@ -582,7 +581,6 @@
     color: var(--text-primary);
 }
 
-
 /* --- INPUT AREA --- */
 
 .chat-compose-wrapper {
@@ -600,7 +598,9 @@
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 0 0.5rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
 }
 
 .chat-input-bar:focus-within {
@@ -664,7 +664,6 @@
     width: 1.4em; /* Increased from 1.1em */
     height: 1.4em;
 }
-
 
 /* --- MARKDOWN STYLES --- */
 
@@ -783,19 +782,22 @@
 }
 
 /* Text Emphasis */
-.markdown-body strong, .markdown-body b {
+.markdown-body strong,
+.markdown-body b {
     font-weight: 700;
     color: var(--text-primary); /* Ensure high contrast */
     text-shadow: 0 0 1px rgba(255, 255, 255, 0.1); /* Subtle lift */
 }
 
-.markdown-body em, .markdown-body i {
+.markdown-body em,
+.markdown-body i {
     font-style: italic;
     color: var(--text-accent, #dcbdfb); /* Slight tint for italics */
 }
 
 /* Lists */
-.markdown-body ul, .markdown-body ol {
+.markdown-body ul,
+.markdown-body ol {
     margin: 0.8rem 0;
     padding-left: 1.5rem;
 }
@@ -816,7 +818,12 @@
 }
 
 /* Headings */
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
     margin-top: 1rem;
     margin-bottom: 0.5rem;
     font-weight: 600;
@@ -824,10 +831,22 @@
     line-height: 1.25;
 }
 
-.markdown-body h1 { font-size: 1.5em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
-.markdown-body h2 { font-size: 1.3em; border-bottom: 1px solid var(--border-color); padding-bottom: 0.3em; }
-.markdown-body h3 { font-size: 1.1em; }
-.markdown-body h4 { font-size: 1em; }
+.markdown-body h1 {
+    font-size: 1.5em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+}
+.markdown-body h2 {
+    font-size: 1.3em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+}
+.markdown-body h3 {
+    font-size: 1.1em;
+}
+.markdown-body h4 {
+    font-size: 1em;
+}
 
 /* Tables */
 .markdown-body table {
@@ -847,7 +866,8 @@
     background-color: rgba(0, 0, 0, 0.1);
 }
 
-.markdown-body th, .markdown-body td {
+.markdown-body th,
+.markdown-body td {
     padding: 6px 13px;
     border: 1px solid var(--border-color);
 }
@@ -869,7 +889,7 @@
     gap: 0.5rem;
 }
 
-.markdown-body input[type="checkbox"] {
+.markdown-body input[type='checkbox'] {
     appearance: none;
     -webkit-appearance: none;
     width: 1.1em;
@@ -883,12 +903,12 @@
     flex-shrink: 0;
 }
 
-.markdown-body input[type="checkbox"]:checked {
+.markdown-body input[type='checkbox']:checked {
     background-color: var(--success, #28a745);
     border-color: var(--success, #28a745);
 }
 
-.markdown-body input[type="checkbox"]:checked::after {
+.markdown-body input[type='checkbox']:checked::after {
     content: '';
     position: absolute;
     left: 3px;
@@ -912,8 +932,6 @@
 .markdown-body .footnotes ol {
     padding-left: 1.5rem;
 }
-
-
 
 /* Strikethrough */
 .markdown-body del {
@@ -941,17 +959,37 @@
     letter-spacing: 0.5px;
 }
 
-.markdown-alert-note { border-left-color: #0969da; }
-.markdown-alert-note .markdown-alert-title { color: #0969da; }
+.markdown-alert-note {
+    border-left-color: #0969da;
+}
+.markdown-alert-note .markdown-alert-title {
+    color: #0969da;
+}
 
-.markdown-alert-tip { border-left-color: #1a7f37; }
-.markdown-alert-tip .markdown-alert-title { color: #1a7f37; }
+.markdown-alert-tip {
+    border-left-color: #1a7f37;
+}
+.markdown-alert-tip .markdown-alert-title {
+    color: #1a7f37;
+}
 
-.markdown-alert-important { border-left-color: #8250df; }
-.markdown-alert-important .markdown-alert-title { color: #8250df; }
+.markdown-alert-important {
+    border-left-color: #8250df;
+}
+.markdown-alert-important .markdown-alert-title {
+    color: #8250df;
+}
 
-.markdown-alert-warning { border-left-color: #9a6700; }
-.markdown-alert-warning .markdown-alert-title { color: #9a6700; }
+.markdown-alert-warning {
+    border-left-color: #9a6700;
+}
+.markdown-alert-warning .markdown-alert-title {
+    color: #9a6700;
+}
 
-.markdown-alert-caution { border-left-color: #d1242f; }
-.markdown-alert-caution .markdown-alert-title { color: #d1242f; }
+.markdown-alert-caution {
+    border-left-color: #d1242f;
+}
+.markdown-alert-caution .markdown-alert-title {
+    color: #d1242f;
+}

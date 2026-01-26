@@ -92,7 +92,8 @@
 .resizable-card {
     position: relative;
     cursor: default;
-    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+    transition:
+        transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
         opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -152,12 +153,11 @@ body.resizing * {
     -ms-user-select: none !important;
 }
 
-
-.resizable-card[data-card-width="half"] {
+.resizable-card[data-card-width='half'] {
     grid-column: span 1;
 }
 
-.resizable-card[data-card-width="full"] {
+.resizable-card[data-card-width='full'] {
     grid-column: 1 / -1;
 }
 

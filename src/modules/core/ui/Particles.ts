@@ -10,8 +10,15 @@ interface IParticlesGlobal {
 export class Particles {
     private readonly _canvas: HTMLCanvasElement;
     private readonly _ctx: CanvasRenderingContext2D;
-    private _particles: Array<{ x: number, y: number, vx: number, vy: number, size: number, color: string }> = [];
-    private readonly _mouse: { x: number, y: number } = { x: -100, y: -100 };
+    private _particles: Array<{
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        color: string;
+    }> = [];
+    private readonly _mouse: { x: number; y: number } = { x: -100, y: -100 };
     private readonly _width: number = 0;
     private readonly _height: number = 0;
     private _isRunning: boolean = false;
@@ -70,7 +77,7 @@ export class Particles {
     private _init(): void {
         const density = 30000;
         const particleCount = Math.floor((this._width * this._height) / density);
-        
+
         for (let i = 0; i < particleCount; i++) {
             this._particles.push({
                 x: this._random() * this._width,
@@ -96,21 +103,29 @@ export class Particles {
     private _bindEvents(): void {
         const signal = this._cleanupAbort.signal;
 
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                this.stop();
-            } else {
-                this._checkReducedMotionAndStart();
-            }
-        }, { signal });
+        document.addEventListener(
+            'visibilitychange',
+            () => {
+                if (document.hidden) {
+                    this.stop();
+                } else {
+                    this._checkReducedMotionAndStart();
+                }
+            },
+            { signal },
+        );
 
         globalThis.addEventListener('blur', () => this.stop(), { signal });
         globalThis.addEventListener('focus', () => this._checkReducedMotionAndStart(), { signal });
 
-        globalThis.addEventListener('mousemove', (e) => {
-            this._mouse.x = e.clientX;
-            this._mouse.y = e.clientY;
-        }, { signal });
+        globalThis.addEventListener(
+            'mousemove',
+            (e) => {
+                this._mouse.x = e.clientX;
+                this._mouse.y = e.clientY;
+            },
+            { signal },
+        );
 
         // Reduced Motion Listener (Section 30.3)
         const motionQuery = globalThis.matchMedia('(prefers-reduced-motion: reduce)');
@@ -190,7 +205,7 @@ export class Particles {
             Object.entries(groups).forEach(([color, pts]) => {
                 this._ctx.fillStyle = color;
                 this._ctx.beginPath();
-                pts.forEach(p => {
+                pts.forEach((p) => {
                     this._ctx.moveTo(p.x + p.size, p.y);
                     this._ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
                 });

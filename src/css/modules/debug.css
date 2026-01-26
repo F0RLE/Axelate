@@ -75,11 +75,7 @@
 .modules-title-icon {
     width: 56px;
     height: 56px;
-    background: linear-gradient(
-        135deg,
-        rgba(138, 43, 226, 0.2),
-        rgba(138, 43, 226, 0.1)
-    );
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.2), rgba(138, 43, 226, 0.1));
     /* Purple tint like settings */
     border-radius: 16px;
     display: flex;
@@ -94,7 +90,7 @@
 }
 
 .modules-title {
-    font-family: "Monocraft", "Inter", sans-serif;
+    font-family: 'Monocraft', 'Inter', sans-serif;
     font-size: 2rem;
     font-weight: 700;
     color: var(--text-primary);
@@ -119,8 +115,6 @@
     backface-visibility: hidden;
 }
 
-
-
 /* Card Header (Internal) - Transparent floating overlay with scrolling protection */
 .console-card-header {
     display: flex !important;
@@ -137,7 +131,8 @@
     pointer-events: none;
 }
 
-.console-tabs-group, .console-actions {
+.console-tabs-group,
+.console-actions {
     pointer-events: auto; /* Enable interaction with buttons */
 }
 
@@ -153,7 +148,7 @@
     border-radius: 8px;
     padding: 0.5rem 1rem;
     color: var(--text-secondary);
-    font-family: "Monocraft", monospace;
+    font-family: 'Monocraft', monospace;
     font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -186,7 +181,7 @@
     border-radius: 8px;
     padding: 0.5rem 1rem;
     color: var(--text-secondary);
-    font-family: "Monocraft", monospace;
+    font-family: 'Monocraft', monospace;
     font-size: 0.85rem;
     cursor: pointer;
     display: flex;
@@ -212,7 +207,7 @@
     overflow-y: auto;
     padding: 1rem;
     padding-top: 4rem; /* Space for floating buttons */
-    font-family: "Monocraft", "Fira Code", monospace;
+    font-family: 'Monocraft', 'Fira Code', monospace;
     font-size: 0.85rem;
     line-height: 1.3;
     color: var(--text-primary);
@@ -316,7 +311,6 @@
     background: rgba(255, 255, 255, 0.2);
 }
 /* --- NEW DEBUG REDESIGN --- */
-
 
 .debug-sidebar {
     width: 200px;
@@ -432,7 +426,6 @@
     backdrop-filter: blur(10px);
 }
 
-
 /* --- REDESIGNED COMPONENTS --- */
 .debug-slider-group {
     display: grid;
@@ -477,7 +470,7 @@
 }
 
 /* Premium Sliders */
-input[type="range"].cyber-slider {
+input[type='range'].cyber-slider {
     appearance: none;
     -webkit-appearance: none;
     width: 100%;
@@ -487,7 +480,7 @@ input[type="range"].cyber-slider {
     outline: none;
 }
 
-input[type="range"].cyber-slider::-webkit-slider-thumb {
+input[type='range'].cyber-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 16px;
     height: 16px;
@@ -499,7 +492,7 @@ input[type="range"].cyber-slider::-webkit-slider-thumb {
     transition: all 0.2s ease;
 }
 
-input[type="range"].cyber-slider::-webkit-slider-thumb:hover {
+input[type='range'].cyber-slider::-webkit-slider-thumb:hover {
     transform: scale(1.2);
     background: var(--primary);
     box-shadow: 0 0 15px rgba(138, 43, 226, 0.8);
@@ -570,7 +563,6 @@ input[type="range"].cyber-slider::-webkit-slider-thumb:hover {
 }
 
 @keyframes debugBounce {
-
     0%,
     100% {
         transform: translateY(0);
@@ -586,7 +578,6 @@ input[type="range"].cyber-slider::-webkit-slider-thumb:hover {
 }
 
 @keyframes debugShake {
-
     0%,
     100% {
         transform: translateX(0);
@@ -620,13 +611,11 @@ input[type="range"].cyber-slider::-webkit-slider-thumb:hover {
     transform: scale(1.02);
 }
 
-
 .debug-progress-animated {
     animation: debugProgressPulse 2s ease-in-out infinite;
 }
 
 @keyframes debugProgressPulse {
-
     0%,
     100% {
         opacity: 1;

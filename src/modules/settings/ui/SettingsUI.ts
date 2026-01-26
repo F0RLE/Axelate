@@ -1,7 +1,7 @@
 /**
  * @module settings/ui/SettingsUI
  * @description Centralized UI management for the settings application, including dynamic module configuration and rendering.
- * 
+ *
  * @example
  * ```typescript
  * const settingsUI = new SettingsUI(settingsService, stateService);
@@ -42,18 +42,20 @@ export class SettingsUI {
     };
 
     private readonly ICONS = {
-        VISIBLE: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
+        VISIBLE:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
         HIDDEN: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>',
         CHECK: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
         X: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
-        SPINNER: '<svg style="animation: spin 1s linear infinite; width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>'
+        SPINNER:
+            '<svg style="animation: spin 1s linear infinite; width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>',
     };
 
     private readonly _generalRenderer: GeneralSettingsRenderer;
 
     constructor(
         private readonly _service: SettingsService,
-        private readonly _state: StateService
+        private readonly _state: StateService,
     ) {
         aiSettingsRenderer.init(_service);
         this._generalRenderer = new GeneralSettingsRenderer(_state);
@@ -69,13 +71,15 @@ export class SettingsUI {
         let attempts = 0;
         let container = document.getElementById('settings-grid');
         while (!container && attempts < 10) {
-            await new Promise(r => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 100));
             container = document.getElementById('settings-grid');
             attempts++;
         }
 
         if (!container) {
-            console.warn('[SettingsUI] Settings container not found after 1s. Templates might still be loading.');
+            console.warn(
+                '[SettingsUI] Settings container not found after 1s. Templates might still be loading.',
+            );
         }
 
         // 0. Subscribe to navigation events (Section 2.4)
@@ -90,12 +94,14 @@ export class SettingsUI {
         this._bindResizeEvents();
 
         // 4. Load GPU Info
-        this._loadGpuInfo().catch(e => console.error('[SettingsUI] GPU Info failed:', e));
+        this._loadGpuInfo().catch((e) => console.error('[SettingsUI] GPU Info failed:', e));
 
         const win = globalThis as unknown as ISettingsGlobal;
 
-        win.toggleNavItem = (id: string, en: boolean) => this._generalRenderer.toggleNavItem(id, en);
-        win.toggleMonitorItem = (id: string, en: boolean) => this._generalRenderer.toggleMonitorItem(id, en);
+        win.toggleNavItem = (id: string, en: boolean) =>
+            this._generalRenderer.toggleNavItem(id, en);
+        win.toggleMonitorItem = (id: string, en: boolean) =>
+            this._generalRenderer.toggleMonitorItem(id, en);
         win.setCardWidth = (btn: HTMLElement, w: string) => this.setCardWidth(btn, w);
         win.control = (a: 'start' | 'stop' | 'restart', s: string) => {
             if (a === 'start' || a === 'stop' || a === 'restart') {
@@ -103,11 +109,13 @@ export class SettingsUI {
             }
             return Promise.resolve(false);
         };
-        win.openModuleSettings = (app: IApp) => { this.openModuleSettings(app).catch(e => console.error(e)); };
-        
+        win.openModuleSettings = (app: IApp) => {
+            this.openModuleSettings(app).catch((e) => console.error(e));
+        };
+
         // Listen for language changes to refresh dynamic UI
         globalThis.addEventListener('lang:changed', () => {
-             this.refreshActiveModule();
+            this.refreshActiveModule();
         });
 
         this._loadCustomModels();
@@ -130,21 +138,25 @@ export class SettingsUI {
     public refreshActiveModule(): void {
         const win = globalThis as unknown as Window & { currentSettingsModule: IApp };
         const currentApp = win.currentSettingsModule;
-        
+
         // Re-render module settings if modal is open
         const modal = document.getElementById('module-settings-modal');
         const container = document.getElementById('module-config-modal-active');
-        
+
         if (modal && !modal.classList.contains('hidden') && container && currentApp) {
-             console.log('[SettingsUI] Refreshing active module settings:', currentApp.id);
-             
-             // Update Title
-             const title = document.getElementById('module-settings-title');
-             const suffix = globalThis.t ? globalThis.t('ui.settings.header_suffix', 'Settings') : 'Settings';
-             if (title) title.innerHTML = DOMPurify.sanitize(suffix);
-             
-             // Dynamic re-render
-             this._renderSpecializedModuleConfig(container, currentApp).catch(e => console.error(e));
+            console.log('[SettingsUI] Refreshing active module settings:', currentApp.id);
+
+            // Update Title
+            const title = document.getElementById('module-settings-title');
+            const suffix = globalThis.t
+                ? globalThis.t('ui.settings.header_suffix', 'Settings')
+                : 'Settings';
+            if (title) title.innerHTML = DOMPurify.sanitize(suffix);
+
+            // Dynamic re-render
+            this._renderSpecializedModuleConfig(container, currentApp).catch((e) =>
+                console.error(e),
+            );
         }
     }
 
@@ -157,7 +169,7 @@ export class SettingsUI {
      * MANDATORY cleanup method required by Section 4.3.
      */
     public destroy(): void {
-        this._unsubscribers.forEach(fn => fn());
+        this._unsubscribers.forEach((fn) => fn());
         this._unsubscribers.length = 0;
         console.log('[SettingsUI] Destroyed.');
     }
@@ -181,7 +193,9 @@ export class SettingsUI {
             `);
         } else {
             gpuInfoEl.className = 'gpu-info not-detected';
-            gpuInfoEl.innerHTML = DOMPurify.sanitize(`<div>${t('ui.launcher.web.gpu_not_found', 'GPU not found')}</div><div class="gpu-info-details">${t('ui.launcher.web.gpu_fallback_cpu', 'CPU will be used (slower)')}</div>`);
+            gpuInfoEl.innerHTML = DOMPurify.sanitize(
+                `<div>${t('ui.launcher.web.gpu_not_found', 'GPU not found')}</div><div class="gpu-info-details">${t('ui.launcher.web.gpu_fallback_cpu', 'CPU will be used (slower)')}</div>`,
+            );
         }
     }
 
@@ -195,7 +209,10 @@ export class SettingsUI {
         }
 
         // Clean settings for specific apps (User Request)
-        if (['flux', 'flux-platform', 'flux-localai'].includes(app.id) || app.id.includes('telegram')) {
+        if (
+            ['flux', 'flux-platform', 'flux-localai'].includes(app.id) ||
+            app.id.includes('telegram')
+        ) {
             this._renderEmptyState(container, app);
             return;
         }
@@ -247,13 +264,23 @@ export class SettingsUI {
      * Renders quality and capability stats for an AI model.
      */
     private _renderAIModelStats(appId: string, modelKey: string): string {
-        const win = globalThis as unknown as Window & { APP_DATA: { ai: IApp[] }; t: (k: string, d: string) => string };
+        const win = globalThis as unknown as Window & {
+            APP_DATA: { ai: IApp[] };
+            t: (k: string, d: string) => string;
+        };
         const catalog = win.APP_DATA?.ai || [];
         const app = catalog.find((a) => a.id === appId);
-        const providerData = app?.api_provider_data as { models?: Record<string, { stats: { speed: number; logic: number; creative: number } }> } | undefined;
+        const providerData = app?.api_provider_data as
+            | {
+                  models?: Record<
+                      string,
+                      { stats: { speed: number; logic: number; creative: number } }
+                  >;
+              }
+            | undefined;
         const models = providerData?.models || {};
         const stats = models[modelKey]?.stats;
-        
+
         if (!stats) return '<div class="model-desc">Stats unavailable</div>';
 
         const renderStars = (count: number) => {
@@ -305,7 +332,11 @@ export class SettingsUI {
         const btn = document.getElementById(`${appId}-key-check-btn`) as HTMLElement;
         if (!input || !btn) return;
 
-        const win = globalThis as unknown as Window & { t: (k: string, d: string) => string; showToast: (m: string, s: string) => void; APP_DATA: { ai: IApp[] } };
+        const win = globalThis as unknown as Window & {
+            t: (k: string, d: string) => string;
+            showToast: (m: string, s: string) => void;
+            APP_DATA: { ai: IApp[] };
+        };
         const t = win.t || ((_k: string, d: string) => d);
 
         const key = input.value.trim();
@@ -326,18 +357,20 @@ export class SettingsUI {
             const catalog = win.APP_DATA?.ai || [];
             const app = catalog.find((a) => a.id === appId);
             const provider = (app?.api_provider_data as { baseUrl?: string }) || {};
-            
+
             if (appId === 'gemini') {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+                const res = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+                );
                 ok = res.ok;
             } else {
                 let url = 'https://api.openai.com/v1/models';
                 if (provider.baseUrl) {
-                    url = provider.baseUrl.endsWith('/v1') 
-                        ? `${provider.baseUrl}/models` 
+                    url = provider.baseUrl.endsWith('/v1')
+                        ? `${provider.baseUrl}/models`
                         : `${provider.baseUrl}/v1/models`;
                 }
-                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${key}` } });
+                const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
                 ok = res.ok;
             }
 
@@ -376,17 +409,22 @@ export class SettingsUI {
 
         // Re-render only stats and update selection visually
         const grid = document.querySelector('.ai-models-grid');
-        grid?.querySelectorAll('.ai-model-card').forEach(card => {
+        grid?.querySelectorAll('.ai-model-card').forEach((card) => {
             const cardModelKey = (card as HTMLElement).dataset.modelKey;
             card.classList.toggle('selected', cardModelKey === modelKey);
         });
 
         const statsArea = document.getElementById(`${appId}-model-stats`);
         if (statsArea) {
-            const win = globalThis as unknown as Window & { t: (k: string, d: string) => string; applyTranslations?: () => void };
+            const win = globalThis as unknown as Window & {
+                t: (k: string, d: string) => string;
+                applyTranslations?: () => void;
+            };
             const t = win.t || ((_k: string, d: string) => d);
-            statsArea.innerHTML = DOMPurify.sanitize(`<h3 data-i18n="ui.settings.model_stats">${t('ui.settings.model_stats', 'Model Stats')}</h3>${this._renderAIModelStats(appId, modelKey)}`);
-            
+            statsArea.innerHTML = DOMPurify.sanitize(
+                `<h3 data-i18n="ui.settings.model_stats">${t('ui.settings.model_stats', 'Model Stats')}</h3>${this._renderAIModelStats(appId, modelKey)}`,
+            );
+
             // Apply translations to dynamically added content
             if (typeof win.applyTranslations === 'function') {
                 win.applyTranslations();
@@ -402,12 +440,25 @@ export class SettingsUI {
      * Prompts the user to add a custom AI model.
      */
     public addCustomModelToSettings(provider: 'openai' | 'gemini' | 'local') {
-        const win = globalThis as unknown as Window & { t: (k: string, d?: string, p?: Record<string, unknown>) => string; currentSettingsModule: IApp; showToast: (m: string, s: string) => void };
+        const win = globalThis as unknown as Window & {
+            t: (k: string, d?: string, p?: Record<string, unknown>) => string;
+            currentSettingsModule: IApp;
+            showToast: (m: string, s: string) => void;
+        };
         const t = win.t || ((k: string, d?: string) => d || k);
 
-        const modelId = prompt(t('ui.settings.custom_model.prompt_id', `Enter Model ID for ${provider} (e.g. gpt-4o):`, {provider}));
+        const modelId = prompt(
+            t(
+                'ui.settings.custom_model.prompt_id',
+                `Enter Model ID for ${provider} (e.g. gpt-4o):`,
+                { provider },
+            ),
+        );
         if (!modelId) return;
-        const modelName = prompt(t('ui.settings.custom_model.prompt_name', 'Enter Display Name:'), modelId);
+        const modelName = prompt(
+            t('ui.settings.custom_model.prompt_name', 'Enter Display Name:'),
+            modelId,
+        );
         if (!modelName) return;
 
         try {
@@ -416,19 +467,26 @@ export class SettingsUI {
             localStorage.setItem('chat_custom_models', JSON.stringify(customModels));
 
             // Custom models will be added to the provider's model list in future update
-            win.showToast(t('ui.settings.custom_model.toast_update', 'Custom model support is being updated'), 'info');
-            
+            win.showToast(
+                t('ui.settings.custom_model.toast_update', 'Custom model support is being updated'),
+                'info',
+            );
+
             // Re-render current modal content
             const container = document.getElementById('module-config-modal-active') as HTMLElement;
             if (container) {
                 const currentApp = win.currentSettingsModule;
                 if (currentApp) {
-                    this._renderUniversalApiSettings(container, currentApp).catch(e => console.error(e));
+                    this._renderUniversalApiSettings(container, currentApp).catch((e) =>
+                        console.error(e),
+                    );
                 }
             }
 
-            win.showToast(t('ui.settings.custom_model.toast_added', 'Custom model added'), 'success');
-
+            win.showToast(
+                t('ui.settings.custom_model.toast_added', 'Custom model added'),
+                'success',
+            );
         } catch (e) {
             console.error('[SettingsUI] Failed to add custom model', e);
         }
@@ -442,8 +500,10 @@ export class SettingsUI {
 
     private _loadCardWidths() {
         const widths = this._state.getCardWidths();
-        Object.keys(widths).forEach(id => {
-            const card = document.querySelector(`.resizable-card[data-card-id="${id}"]`) as HTMLElement;
+        Object.keys(widths).forEach((id) => {
+            const card = document.querySelector(
+                `.resizable-card[data-card-id="${id}"]`,
+            ) as HTMLElement;
             if (card) {
                 card.dataset.cardWidth = widths[id];
                 this._updateCardLayout(card, widths[id]);
@@ -461,14 +521,14 @@ export class SettingsUI {
 
         // Update active button state
         const buttons = card.querySelectorAll<HTMLElement>('.btn');
-        buttons.forEach(b => {
-             if (b === btn) {
-                 b.style.background = 'var(--primary)';
-                 b.style.color = 'white';
-             } else {
-                 b.style.background = 'var(--bg-light)';
-                 b.style.color = 'var(--text-secondary)';
-             }
+        buttons.forEach((b) => {
+            if (b === btn) {
+                b.style.background = 'var(--primary)';
+                b.style.color = 'white';
+            } else {
+                b.style.background = 'var(--bg-light)';
+                b.style.color = 'var(--text-secondary)';
+            }
         });
 
         this._updateCardLayout(card, width);
@@ -486,8 +546,10 @@ export class SettingsUI {
     }
 
     private _bindResizeEvents() {
-        document.querySelectorAll('.resize-handle').forEach(h => {
-            h.addEventListener('mousedown', (e) => this._startResize(e as MouseEvent, h as HTMLElement));
+        document.querySelectorAll('.resize-handle').forEach((h) => {
+            h.addEventListener('mousedown', (e) =>
+                this._startResize(e as MouseEvent, h as HTMLElement),
+            );
         });
 
         document.addEventListener('mousemove', (e) => this._handleResizeMove(e));
@@ -570,10 +632,15 @@ export class SettingsUI {
     private _bindEvents() {
         // Dropdown outside click
         document.addEventListener('click', (e) => {
-            document.querySelectorAll('.lang-dropdown-menu').forEach(dropdown => {
+            document.querySelectorAll('.lang-dropdown-menu').forEach((dropdown) => {
                 const page = dropdown.id.replace('lang-dropdown-menu-', '');
                 const btn = document.getElementById(`lang-dropdown-btn-${page}`);
-                if (dropdown && btn && !dropdown.contains(e.target as Node) && !btn.contains(e.target as Node)) {
+                if (
+                    dropdown &&
+                    btn &&
+                    !dropdown.contains(e.target as Node) &&
+                    !btn.contains(e.target as Node)
+                ) {
                     dropdown.classList.remove('show');
                 }
             });
@@ -594,7 +661,9 @@ export class SettingsUI {
         const win = globalThis as unknown as Window & { currentSettingsModule: IApp };
         win.currentSettingsModule = app;
 
-        const suffix = globalThis.t ? globalThis.t('ui.settings.header_suffix', 'Settings') : 'Settings';
+        const suffix = globalThis.t
+            ? globalThis.t('ui.settings.header_suffix', 'Settings')
+            : 'Settings';
         title.innerHTML = DOMPurify.sanitize(suffix);
 
         await this._renderSpecializedModuleConfig(container, app);
@@ -621,23 +690,30 @@ export class SettingsUI {
      * Shows a transient save confirmation message.
      */
     private _showSaveIndicator() {
-         let el = document.getElementById('save-indicator');
-         if (!el) {
-             el = document.createElement('div');
-             el.id = 'save-indicator';
-             el.className = 'save-indicator';
-             const msg = globalThis.t ? globalThis.t('ui.settings.saved_message', 'Settings Saved') : 'Settings Saved';
-             el.innerHTML = DOMPurify.sanitize(`<span>${msg}</span>`);
-             document.body.appendChild(el);
-         }
-         el.classList.add('show');
-         setTimeout(() => el?.classList.remove('show'), 2000);
+        let el = document.getElementById('save-indicator');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'save-indicator';
+            el.className = 'save-indicator';
+            const msg = globalThis.t
+                ? globalThis.t('ui.settings.saved_message', 'Settings Saved')
+                : 'Settings Saved';
+            el.innerHTML = DOMPurify.sanitize(`<span>${msg}</span>`);
+            document.body.appendChild(el);
+        }
+        el.classList.add('show');
+        setTimeout(() => el?.classList.remove('show'), 2000);
     }
 
     /**
      * Renders a single setting field based on its type.
      */
-    private _renderSettingField(form: HTMLElement, appId: string, key: string, field: IConfigField): void {
+    private _renderSettingField(
+        form: HTMLElement,
+        appId: string,
+        key: string,
+        field: IConfigField,
+    ): void {
         const row = document.createElement('div');
         row.className = 'form-row';
 
@@ -671,10 +747,13 @@ export class SettingsUI {
     /**
      * Creates a select dropdown field.
      */
-    private _createSelectField(options: string[], currentVal: string | number | boolean | null): HTMLElement {
+    private _createSelectField(
+        options: string[],
+        currentVal: string | number | boolean | null,
+    ): HTMLElement {
         const select = document.createElement('select');
         select.className = 'form-select';
-        options.forEach(opt => {
+        options.forEach((opt) => {
             const option = document.createElement('option');
             option.value = opt;
             option.textContent = opt;
@@ -733,13 +812,21 @@ export class SettingsUI {
 
         if (type === 'boolean') {
             const checkbox = input.querySelector('input[type="checkbox"]') as HTMLInputElement;
-            checkbox.onchange = () => { save(checkbox.checked).catch(e => console.error(e)); };
+            checkbox.onchange = () => {
+                save(checkbox.checked).catch((e) => console.error(e));
+            };
         } else if (type === 'select') {
-            (input as HTMLSelectElement).onchange = () => { save((input as HTMLSelectElement).value).catch(e => console.error(e)); };
+            (input as HTMLSelectElement).onchange = () => {
+                save((input as HTMLSelectElement).value).catch((e) => console.error(e));
+            };
         } else if (type === 'number') {
-            (input as HTMLInputElement).onchange = () => { save(Number((input as HTMLInputElement).value)).catch(e => console.error(e)); };
+            (input as HTMLInputElement).onchange = () => {
+                save(Number((input as HTMLInputElement).value)).catch((e) => console.error(e));
+            };
         } else {
-            (input as HTMLInputElement).onchange = () => { save((input as HTMLInputElement).value).catch(e => console.error(e)); };
+            (input as HTMLInputElement).onchange = () => {
+                save((input as HTMLInputElement).value).catch((e) => console.error(e));
+            };
         }
     }
 }

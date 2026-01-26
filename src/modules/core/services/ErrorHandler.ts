@@ -51,7 +51,10 @@ class ErrorHandler {
         // Catch uncaught errors
         globalThis.onerror = (message, source, lineno, colno, error) => {
             this.captureError(
-                error || new Error(typeof message === 'object' ? JSON.stringify(message) : String(message)),
+                error ||
+                    new Error(
+                        typeof message === 'object' ? JSON.stringify(message) : String(message),
+                    ),
                 'window.onerror',
                 { url: source, line: lineno, column: colno },
             );
@@ -60,7 +63,8 @@ class ErrorHandler {
 
         // Catch unhandled promise rejections
         globalThis.onunhandledrejection = (event) => {
-            const error = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
+            const error =
+                event.reason instanceof Error ? event.reason : new Error(String(event.reason));
             this.captureError(error, 'unhandledrejection');
         };
 
@@ -174,17 +178,11 @@ class ErrorHandler {
     /**
      * Wraps an async function with global error handling.
      */
-    public async wrapAsync<T>(
-        fn: () => Promise<T>,
-        context?: string,
-    ): Promise<T | undefined> {
+    public async wrapAsync<T>(fn: () => Promise<T>, context?: string): Promise<T | undefined> {
         try {
             return await fn();
         } catch (error) {
-            this.captureError(
-                error instanceof Error ? error : new Error(String(error)),
-                context,
-            );
+            this.captureError(error instanceof Error ? error : new Error(String(error)), context);
             return undefined;
         }
     }
@@ -199,7 +197,6 @@ class ErrorHandler {
         return (_event: T) => {
             try {
                 handler(_event);
-
             } catch (error) {
                 this.captureError(
                     error instanceof Error ? error : new Error(String(error)),

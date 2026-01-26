@@ -46,7 +46,9 @@ export class StateService {
      */
     public async loadState(): Promise<IUIState> {
         try {
-            const win = globalThis as unknown as Window & { __TAURI__?: { core: { invoke: <T>(c: string, a?: unknown) => Promise<T> } } };
+            const win = globalThis as unknown as Window & {
+                __TAURI__?: { core: { invoke: <T>(c: string, a?: unknown) => Promise<T> } };
+            };
             if (win.__TAURI__) {
                 const loaded = await win.__TAURI__.core.invoke<IUIState>('get_ui_state');
                 this._state = { ...DEFAULT_UI_STATE, ...loaded };
@@ -143,7 +145,9 @@ export class StateService {
         if (!this._isDirty) return;
 
         try {
-            const win = globalThis as unknown as Window & { __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } } };
+            const win = globalThis as unknown as Window & {
+                __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } };
+            };
             if (win.__TAURI__) {
                 await win.__TAURI__.core.invoke('save_ui_state', { state: this._state });
             } else {
@@ -159,18 +163,20 @@ export class StateService {
      * Forces an immediate save (e.g., on exit).
      */
     public saveImmediate(): void {
-         if (!this._isDirty) return;
-         try {
-            const win = globalThis as unknown as Window & { __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } } };
+        if (!this._isDirty) return;
+        try {
+            const win = globalThis as unknown as Window & {
+                __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } };
+            };
             if (win.__TAURI__) {
-                 void win.__TAURI__.core.invoke('save_ui_state', { state: this._state });
+                void win.__TAURI__.core.invoke('save_ui_state', { state: this._state });
             } else {
                 localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
             this._isDirty = false;
-         } catch(e) {
-             console.error('[StateService] Save immediate failed', e);
-         }
+        } catch (e) {
+            console.error('[StateService] Save immediate failed', e);
+        }
     }
 
     /**

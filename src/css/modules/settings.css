@@ -21,7 +21,6 @@
     min-height: 3rem;
 }
 
-
 .settings-wrapper {
     padding: 2rem 2rem 2rem 2rem;
     max-width: 1600px;
@@ -280,7 +279,9 @@
 .resizable-card {
     position: relative;
     cursor: default;
-    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-resize-handle {
@@ -339,13 +340,11 @@ body.resizing * {
     -ms-user-select: none !important;
 }
 
-
-
-.resizable-card[data-card-width="half"] {
+.resizable-card[data-card-width='half'] {
     grid-column: span 1;
 }
 
-.resizable-card[data-card-width="full"] {
+.resizable-card[data-card-width='full'] {
     grid-column: 1 / -1;
 }
 
@@ -412,7 +411,7 @@ body.resizing * {
     margin-bottom: 1.5rem;
 }
 
-.settings-card .card-title>div:first-child {
+.settings-card .card-title > div:first-child {
     width: 48px;
     height: 48px;
 }
@@ -422,7 +421,7 @@ body.resizing * {
     height: 24px;
 }
 
-.settings-card .card-title div[style*="font-size: 0.8rem"] {
+.settings-card .card-title div[style*='font-size: 0.8rem'] {
     opacity: 0.6;
 }
 
@@ -455,7 +454,12 @@ body.resizing * {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(var(--primary-raw), 0.2), rgba(var(--primary-alt-raw), 0.15), rgba(var(--accent-raw), 0.1));
+    background: linear-gradient(
+        135deg,
+        rgba(var(--primary-raw), 0.2),
+        rgba(var(--primary-alt-raw), 0.15),
+        rgba(var(--accent-raw), 0.1)
+    );
     opacity: 0;
     transition: opacity 0.3s ease;
     border-radius: 12px;
@@ -466,7 +470,11 @@ body.resizing * {
 }
 
 .monitor-toggle-btn.active {
-    background: linear-gradient(145deg, rgba(var(--primary-raw), 0.3), rgba(var(--primary-alt-raw), 0.2));
+    background: linear-gradient(
+        145deg,
+        rgba(var(--primary-raw), 0.3),
+        rgba(var(--primary-alt-raw), 0.2)
+    );
 }
 
 .monitor-toggle-btn.active::before {
@@ -535,7 +543,12 @@ body.resizing * {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(var(--primary-raw), 0.2), rgba(var(--primary-alt-raw), 0.15), rgba(var(--accent-raw), 0.1));
+    background: linear-gradient(
+        135deg,
+        rgba(var(--primary-raw), 0.2),
+        rgba(var(--primary-alt-raw), 0.15),
+        rgba(var(--accent-raw), 0.1)
+    );
     opacity: 0;
     transition: opacity 0.3s ease;
     border-radius: 12px;
@@ -551,7 +564,11 @@ body.resizing * {
 }
 
 .taskbar-toggle-item.active {
-    background: linear-gradient(145deg, rgba(var(--primary-raw), 0.3), rgba(var(--primary-alt-raw), 0.2));
+    background: linear-gradient(
+        145deg,
+        rgba(var(--primary-raw), 0.3),
+        rgba(var(--primary-alt-raw), 0.2)
+    );
 }
 
 .taskbar-toggle-item.active::before {
@@ -592,8 +609,6 @@ body.resizing * {
     opacity: 1;
 }
 
-
-
 @media (max-width: 600px) {
     #monitor-toggles {
         grid-template-columns: repeat(2, 1fr);
@@ -601,7 +616,6 @@ body.resizing * {
 }
 
 @media (max-width: 900px) {
-
     .taskbar-toggle-item .toggle-label,
     .monitor-toggle-btn .toggle-label {
         display: none;
@@ -615,7 +629,6 @@ body.resizing * {
 }
 
 @media (max-width: 700px) {
-
     .taskbar-toggle-item .toggle-icon,
     .monitor-toggle-btn .toggle-icon {
         width: 24px;
@@ -693,7 +706,9 @@ body.resizing * {
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.2);
     transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s;
+    transition:
+        width 0.6s,
+        height 0.6s;
 }
 
 .save-all-btn .btn:hover {
@@ -741,7 +756,6 @@ body.resizing * {
 }
 
 @keyframes saveIndicatorPulse {
-
     0%,
     100% {
         transform: scale(1) translateY(0);
@@ -956,7 +970,8 @@ body.resizing * {
     font-family: 'JetBrains Mono', monospace;
 }
 
-.ai-icon-btn, .ai-check-btn {
+.ai-icon-btn,
+.ai-check-btn {
     padding: 0 1rem;
     border-radius: 8px;
     border: 1px solid var(--border-color);
@@ -969,14 +984,15 @@ body.resizing * {
     justify-content: center;
 }
 
-.ai-icon-btn:hover, .ai-check-btn:hover {
+.ai-icon-btn:hover,
+.ai-check-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: var(--text-primary);
 }
 
 .ai-check-btn.success {
-    border-color: #4CAF50 !important;
-    color: #4CAF50 !important;
+    border-color: #4caf50 !important;
+    color: #4caf50 !important;
 }
 
 .ai-check-btn.error {
@@ -1104,27 +1120,32 @@ body.resizing * {
    AI SETTINGS & THINKING MODE
    ============================================ */
 
-.thinking-option-card, .ai-model-card {
+.thinking-option-card,
+.ai-model-card {
     transition: all 0.2s ease;
     border: 1px solid var(--border-color);
     background: transparent;
 }
 
-.thinking-option-card:hover, .ai-model-card:hover {
+.thinking-option-card:hover,
+.ai-model-card:hover {
     border-color: var(--primary-hover, #4a90e2);
 }
 
-.thinking-option-card.selected, .ai-model-card.selected {
+.thinking-option-card.selected,
+.ai-model-card.selected {
     background: rgba(138, 43, 226, 0.15) !important;
     border-color: var(--primary) !important;
     color: var(--text-primary) !important;
 }
 
-.thinking-option-card.selected *, .ai-model-card.selected * {
+.thinking-option-card.selected *,
+.ai-model-card.selected * {
     color: var(--text-primary) !important;
     opacity: 1 !important;
 }
 
-.thinking-option-card.selected .model-desc, .ai-model-card.selected .model-desc {
+.thinking-option-card.selected .model-desc,
+.ai-model-card.selected .model-desc {
     color: var(--text-secondary) !important;
 }

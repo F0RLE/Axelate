@@ -17,16 +17,17 @@
     -webkit-backdrop-filter: blur(20px) saturate(180%);
 
     /* Glossy gradient + extreme transparency */
-    background: linear-gradient(135deg,
-            rgba(255, 255, 255, 0.02) 0%,
-            rgba(255, 255, 255, 0.0) 50%,
-            rgba(0, 0, 0, 0.04) 100%);
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.02) 0%,
+        rgba(255, 255, 255, 0) 50%,
+        rgba(0, 0, 0, 0.04) 100%
+    );
 
     /* Depth and Edges */
     box-shadow:
         inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
-        /* Top highlight */
-        inset 0 -1px 0 0 rgba(255, 255, 255, 0.02);
+        /* Top highlight */ inset 0 -1px 0 0 rgba(255, 255, 255, 0.02);
     /* Bottom subtle rim */
 
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -46,7 +47,7 @@ body.snapping #app-header {
     height: 100%;
     align-self: stretch;
     -webkit-app-region: no-drag;
-    
+
     /* Adjustable Positioning */
     position: relative;
     transform: translate(var(--win-controls-x, 0px), var(--win-controls-y, 0px));
@@ -87,9 +88,11 @@ body.snapping #app-header {
 }
 
 .close-btn {
-    transition: background 0.2s var(--ease-smooth), color 0.2s var(--ease-smooth);
+    transition:
+        background 0.2s var(--ease-smooth),
+        color 0.2s var(--ease-smooth);
     /* Removed rounding as per user request */
-    border-radius: 0 !important; 
+    border-radius: 0 !important;
     overflow: hidden;
 }
 
@@ -178,8 +181,6 @@ body.maximized .close-btn {
 
 /* Removed specific body.snapping rule for lang-switcher as parent handles it */
 
-
-
 .lang-menu-items {
     display: flex;
     flex-direction: row;
@@ -191,7 +192,7 @@ body.maximized .close-btn {
     opacity: 0;
     visibility: hidden;
     transform: translateX(0);
-    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     /* Layout */
     position: absolute;
@@ -304,14 +305,14 @@ body.maximized .close-btn {
     height: 18px !important;
 }
 
-.lang-dropdown-btn[data-lang="en"] .flag-gb {
+.lang-dropdown-btn[data-lang='en'] .flag-gb {
     display: inline-block !important;
 }
 
-.lang-dropdown-btn[data-lang="ru"] .flag-ru {
+.lang-dropdown-btn[data-lang='ru'] .flag-ru {
     display: inline-block !important;
 }
 
-.lang-dropdown-btn[data-lang="zh"] .flag-cn {
+.lang-dropdown-btn[data-lang='zh'] .flag-cn {
     display: inline-block !important;
 }

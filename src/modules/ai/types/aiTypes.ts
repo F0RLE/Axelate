@@ -20,7 +20,7 @@ export type MessageHandler = (response: string, source: MessageSource) => void;
 /**
  * Discrete component of a multimodal message payload.
  */
-export type ChatContentPart = 
+export type ChatContentPart =
     | { type: 'text'; text: string }
     | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } }
     | { type: 'file'; data?: string; mime: string; name?: string };

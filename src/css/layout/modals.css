@@ -16,9 +16,9 @@ body.launcher-blur #main-area {
 body.launcher-blur button:not(.modal-btn),
 body.launcher-blur a:not(.modal-btn),
 body.launcher-blur [onclick]:not(.modal-btn):not(.modal-overlay),
-body.launcher-blur [role="button"]:not(.modal-btn),
-body.launcher-blur input[type="button"],
-body.launcher-blur input[type="submit"] {
+body.launcher-blur [role='button']:not(.modal-btn),
+body.launcher-blur input[type='button'],
+body.launcher-blur input[type='submit'] {
     pointer-events: none !important;
     cursor: not-allowed !important;
 }
@@ -71,7 +71,9 @@ body.launcher-blur .modal {
     z-index: 2000000 !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.8s;
+    transition:
+        opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.8s;
 }
 
 .modal-overlay.show {
@@ -79,7 +81,9 @@ body.launcher-blur .modal {
     opacity: 1;
     pointer-events: auto;
     z-index: 2000001 !important;
-    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s;
+    transition:
+        opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0s linear 0s;
 }
 
 .modal-overlay .modal {
@@ -152,9 +156,9 @@ body.launcher-blur .modal {
 }
 
 .window-control-btn,
-button[onclick*="minimize"],
-button[onclick*="maximize"],
-button[onclick*="close"],
+button[onclick*='minimize'],
+button[onclick*='maximize'],
+button[onclick*='close'],
 .close-btn {
     position: relative;
     z-index: 10002 !important;
@@ -163,8 +167,7 @@ button[onclick*="close"],
 
 /* Allow clicks through overlay to sidebar and controls */
 
-
-.modal-overlay.module-settings-overlay>* {
+.modal-overlay.module-settings-overlay > * {
     pointer-events: auto;
 }
 
@@ -203,7 +206,7 @@ button[onclick*="close"],
     position: relative;
     z-index: 10000;
     box-shadow: 0 12px 64px rgba(0, 0, 0, 0.7);
-    
+
     /* Animation state */
     opacity: 0;
     transform: scale(0.85) translateY(50px);
@@ -228,7 +231,6 @@ button[onclick*="close"],
     }
 }
 
-
 .module-settings-modal-title {
     display: flex;
     align-items: center;
@@ -244,7 +246,6 @@ button[onclick*="close"],
     font-weight: 700;
     color: var(--text-primary);
 }
-
 
 .module-settings-modal-content {
     flex: 1;

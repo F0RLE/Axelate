@@ -56,7 +56,7 @@ describe('ErrorHandler', () => {
             expect(callback).toHaveBeenCalledWith(
                 expect.objectContaining({
                     message: 'Test error',
-                })
+                }),
             );
 
             unsubscribe();
@@ -90,21 +90,15 @@ describe('ErrorHandler', () => {
 
     describe('wrapAsync', () => {
         it('should return result on success', async () => {
-            const result = await errorHandler.wrapAsync(
-                async () => 'success',
-                'test-context'
-            );
+            const result = await errorHandler.wrapAsync(async () => 'success', 'test-context');
 
             expect(result).toBe('success');
         });
 
         it('should capture error and return undefined on failure', async () => {
-            const result = await errorHandler.wrapAsync(
-                async () => {
-                    throw new Error('Async error');
-                },
-                'async-context'
-            );
+            const result = await errorHandler.wrapAsync(async () => {
+                throw new Error('Async error');
+            }, 'async-context');
 
             expect(result).toBeUndefined();
             expect(errorHandler.getErrorLog().length).toBe(1);

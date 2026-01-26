@@ -58,7 +58,7 @@ describe('ChatFileHandler', () => {
         it('should remove all files', () => {
             const file1 = new File(['a'], 'file1.txt', { type: 'text/plain' });
             handler.addFiles([file1]);
-            
+
             handler.clear();
 
             expect(handler.hasFiles()).toBe(false);

@@ -1,18 +1,18 @@
 ﻿/* --- SCROLLBAR --- */
-            ::-webkit-scrollbar {
-                width: 8px;
-                height: 8px;
-            }
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
 
-            ::-webkit-scrollbar-track {
-                background: transparent;
-            }
+::-webkit-scrollbar-track {
+    background: transparent;
+}
 
-            ::-webkit-scrollbar-thumb {
-                background: var(--surface);
-                border-radius: 4px;
-            }
+::-webkit-scrollbar-thumb {
+    background: var(--surface);
+    border-radius: 4px;
+}
 
-            ::-webkit-scrollbar-thumb:hover {
-                background: var(--bg-light);
-            }
+::-webkit-scrollbar-thumb:hover {
+    background: var(--bg-light);
+}

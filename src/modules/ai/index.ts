@@ -7,14 +7,14 @@
 export { AIBridge, aiBridge } from './AIBridge';
 
 // Core types
-export type { 
-    MessageSource, 
+export type {
+    MessageSource,
     MessageHandler,
     ChatContentPart,
     ChatContent,
-    IChatMessage, 
-    IChatRequest, 
-    IChatResponse, 
+    IChatMessage,
+    IChatRequest,
+    IChatResponse,
     IAIBridgeState,
     IAIProviderData,
     IAIModelData,
@@ -25,7 +25,7 @@ export type {
 export type { IAIProvider, IAIProviderConfig } from './providers/AIProvider';
 
 // Utility functions
-export { 
+export {
     getProviderFromCatalog,
     getProviderData,
     getModelsFromProvider,

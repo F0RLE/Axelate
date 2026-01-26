@@ -14,9 +14,11 @@ export class DebugUI {
         // Shim globals for backward compat if needed, or preferably we fix the calls.
         // Legacy debug.js exposed setDebugTab. We bind it here.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (globalThis as any).setDebugTab = (tabId: string, btn: HTMLElement) => this.setTab(tabId, btn);
+        (globalThis as any).setDebugTab = (tabId: string, btn: HTMLElement) =>
+            this.setTab(tabId, btn);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (globalThis as any).setLogView = (view: string, btn: HTMLElement) => this.setLogView(view, btn);
+        (globalThis as any).setLogView = (view: string, btn: HTMLElement) =>
+            this.setLogView(view, btn);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (globalThis as any).clearLogs = () => this.clearLogs();
     }
@@ -58,7 +60,10 @@ export class DebugUI {
         if (!draggable) return;
 
         let isDragging = false;
-        let startX = 0, startY = 0, initialX = 0, initialY = 0;
+        let startX = 0,
+            startY = 0,
+            initialX = 0,
+            initialY = 0;
 
         const handleMouseDown = (e: MouseEvent) => {
             isDragging = true;
@@ -79,8 +84,8 @@ export class DebugUI {
             e.preventDefault();
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
-            draggable.style.left = (initialX + dx) + 'px';
-            draggable.style.top = (initialY + dy) + 'px';
+            draggable.style.left = initialX + dx + 'px';
+            draggable.style.top = initialY + dy + 'px';
         };
 
         const handleMouseUp = () => {
@@ -92,7 +97,7 @@ export class DebugUI {
         draggable.addEventListener('mousedown', handleMouseDown);
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
-        
+
         this.unsubscribers.push(() => {
             draggable.removeEventListener('mousedown', handleMouseDown);
             document.removeEventListener('mousemove', handleMouseMove);
@@ -116,9 +121,13 @@ export class DebugUI {
         dropzone.addEventListener('drop', (e) => {
             e.preventDefault();
             dropzone.classList.remove('drag-over');
-            dropzone.textContent = globalThis.t ? globalThis.t('ui.debug.drag_drop.dragged', 'Item dragged!') : 'Item dragged!';
+            dropzone.textContent = globalThis.t
+                ? globalThis.t('ui.debug.drag_drop.dragged', 'Item dragged!')
+                : 'Item dragged!';
             setTimeout(() => {
-                dropzone.textContent = globalThis.t ? globalThis.t('ui.debug.drag_drop.drop_here', 'Drop here') : 'Drop here';
+                dropzone.textContent = globalThis.t
+                    ? globalThis.t('ui.debug.drag_drop.drop_here', 'Drop here')
+                    : 'Drop here';
             }, 2000);
         });
     }
@@ -126,18 +135,20 @@ export class DebugUI {
     private bindTabs(): void {
         // Tab logic is exposed via global setDebugTab for HTML onclick handlers
         // But we could also bind if using data attributes
-        document.querySelectorAll('.debug-tab').forEach(btn => {
-             btn.addEventListener('click', () => {
-                 // Extract ID 'debug-general-tab-btn' -> 'general' ???
-                 // Legacy used: onclick="setDebugTab('general', this)"
-                 // We keep the global shim for now.
-             });
+        document.querySelectorAll('.debug-tab').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                // Extract ID 'debug-general-tab-btn' -> 'general' ???
+                // Legacy used: onclick="setDebugTab('general', this)"
+                // We keep the global shim for now.
+            });
         });
     }
 
     private setTab(tabId: string, btn: HTMLElement): void {
-        document.querySelectorAll('.debug-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.debug-tab-content').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.debug-tab').forEach((t) => t.classList.remove('active'));
+        document
+            .querySelectorAll('.debug-tab-content')
+            .forEach((p) => p.classList.remove('active'));
         if (btn) btn.classList.add('active');
         const tabContent = document.getElementById(`debug-${tabId}-tab`);
         if (tabContent) {
@@ -157,11 +168,11 @@ export class DebugUI {
         this.currentLogView = view || 'general';
 
         // Update tab active states
-        document.querySelectorAll('.console-tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.console-tab').forEach((b) => b.classList.remove('active'));
         if (btn) btn.classList.add('active');
 
         // Show correct logs pane
-        document.querySelectorAll('.logs-pane').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.logs-pane').forEach((p) => p.classList.remove('active'));
         const pane = document.getElementById('logs-general'); // We only support general view for now per legacy
         if (pane) pane.classList.add('active');
 
@@ -175,7 +186,9 @@ export class DebugUI {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const win = globalThis as any;
         if (typeof win.showToast === 'function') {
-            const msg = globalThis.t ? globalThis.t('ui.debug.logs_cleared', 'Logs cleared') : 'Logs cleared';
+            const msg = globalThis.t
+                ? globalThis.t('ui.debug.logs_cleared', 'Logs cleared')
+                : 'Logs cleared';
             win.showToast(msg, 'success', 1500);
         }
     }
@@ -188,7 +201,7 @@ export class DebugUI {
             globalThis.clearInterval(this.pollInterval);
             this.pollInterval = null;
         }
-        this.unsubscribers.forEach(fn => fn());
+        this.unsubscribers.forEach((fn) => fn());
         this.unsubscribers = [];
     }
 
@@ -212,10 +225,13 @@ export class DebugUI {
         container.innerHTML = '';
         const fragment = document.createDocumentFragment();
 
-        logs.forEach(log => {
+        logs.forEach((log) => {
             const div = document.createElement('div');
             div.className = `log-entry level-${log.level}`;
-            const sNorm = (log.source || '').trim().replaceAll(/[^a-z0-9_]/gi, '').toUpperCase();
+            const sNorm = (log.source || '')
+                .trim()
+                .replaceAll(/[^a-z0-9_]/gi, '')
+                .toUpperCase();
             const prefix = sNorm === 'SYSTEM' ? '⚙️' : '📝';
             const time = new Date(log.timestamp * 1000).toLocaleTimeString();
 

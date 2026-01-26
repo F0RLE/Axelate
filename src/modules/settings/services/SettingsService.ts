@@ -38,7 +38,11 @@ export class SettingsService {
         }
     }
 
-    public async saveSetting(key: string, value: string | number | boolean, isJson = false): Promise<void> {
+    public async saveSetting(
+        key: string,
+        value: string | number | boolean,
+        isJson = false,
+    ): Promise<void> {
         // Update local cache immediately
         this.settings[key] = String(value);
 
@@ -53,7 +57,7 @@ export class SettingsService {
                         const res = await fetch(`${this.API_BASE}/settings`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ key, value, isJson })
+                            body: JSON.stringify({ key, value, isJson }),
                         });
                         if (res.ok) resolve();
                         else reject(new Error(await res.text()));
@@ -73,7 +77,10 @@ export class SettingsService {
         }
     }
 
-    public async controlService(action: 'start' | 'stop' | 'restart', service: string): Promise<boolean> {
+    public async controlService(
+        action: 'start' | 'stop' | 'restart',
+        service: string,
+    ): Promise<boolean> {
         try {
             if (globalThis.__TAURI__) {
                 await globalThis.__TAURI__.core.invoke('control_service', { action, service });
@@ -86,7 +93,7 @@ export class SettingsService {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ action: 'stop', service }),
                     });
-                    await new Promise(r => setTimeout(r, 1500));
+                    await new Promise((r) => setTimeout(r, 1500));
                     await fetch(`${this.API_BASE}/control`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -149,12 +156,12 @@ export class SettingsService {
             if (globalThis.__TAURI__) {
                 await globalThis.__TAURI__.core.invoke('save_secure_key', {
                     service: storageKey,
-                    key: key
+                    key: key,
                 });
             } else {
-                // In web mode, we might use localStorage but warn about it, 
-                // or preferably use a session-only approach. 
-                // For this compliance check, we maintain existing web behavior 
+                // In web mode, we might use localStorage but warn about it,
+                // or preferably use a session-only approach.
+                // For this compliance check, we maintain existing web behavior
                 // but REMOVE the fallback in the catch block for Tauri.
                 localStorage.setItem(storageKey, key);
             }
@@ -171,9 +178,12 @@ export class SettingsService {
         const storageKey = `${provider}_api_key`;
         try {
             if (globalThis.__TAURI__) {
-                const value = await globalThis.__TAURI__.core.invoke<string | null>('get_secure_key', {
-                    service: storageKey
-                });
+                const value = await globalThis.__TAURI__.core.invoke<string | null>(
+                    'get_secure_key',
+                    {
+                        service: storageKey,
+                    },
+                );
                 return value || '';
             } else {
                 return localStorage.getItem(storageKey) || '';

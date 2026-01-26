@@ -1,4 +1,3 @@
-
 export interface DownloadProgress {
     percent: number;
     downloaded: number;

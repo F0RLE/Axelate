@@ -35,7 +35,7 @@ describe('I18nService', () => {
         it('should replace params in translation', () => {
             // Manually set translations for testing
             (i18n as any)._translations = {
-                'greeting': 'Hello, {name}!',
+                greeting: 'Hello, {name}!',
             };
 
             expect(i18n.t('greeting', '', { name: 'World' })).toBe('Hello, World!');
@@ -43,7 +43,7 @@ describe('I18nService', () => {
 
         it('should replace multiple params', () => {
             (i18n as any)._translations = {
-                'message': '{action} {count} items',
+                message: '{action} {count} items',
             };
 
             expect(i18n.t('message', '', { action: 'Found', count: '5' })).toBe('Found 5 items');
@@ -51,10 +51,13 @@ describe('I18nService', () => {
     });
 
     const mockFetchResponse = (data: any, ok = true) => {
-        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-            ok,
-            json: () => Promise.resolve(data),
-        }));
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue({
+                ok,
+                json: () => Promise.resolve(data),
+            }),
+        );
     };
 
     describe('getSystemLanguage', () => {
@@ -82,9 +85,15 @@ describe('I18nService', () => {
 
     describe('loadTranslations', () => {
         it('should set currentLang after loading translations', async () => {
-            vi.stubGlobal('fetch', vi.fn()
-                .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ language: 'ru' }) })
-                .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+            vi.stubGlobal(
+                'fetch',
+                vi
+                    .fn()
+                    .mockResolvedValueOnce({
+                        ok: true,
+                        json: () => Promise.resolve({ language: 'ru' }),
+                    })
+                    .mockResolvedValue({ ok: true, json: () => Promise.resolve({}) }),
             );
 
             await i18n.init();

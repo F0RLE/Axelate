@@ -47,19 +47,22 @@ export class VoiceInputService {
 
         try {
             const win = globalThis as unknown as Record<string, unknown>;
-            const SpeechRecognitionConstructor = (win.webkitSpeechRecognition || win.SpeechRecognition) as new () => ISpeechRecognitionInstance;
+            const SpeechRecognitionConstructor = (win.webkitSpeechRecognition ||
+                win.SpeechRecognition) as new () => ISpeechRecognitionInstance;
             const recognition = new SpeechRecognitionConstructor();
             this._recognition = recognition;
 
             // Set language with BCP-47 mapping
             const currentLang = (win.currentLang as string) || 'en';
             const langMap: Record<string, string> = {
-                'en': 'en-US',
-                'ru': 'ru-RU',
-                'zh': 'zh-CN'
+                en: 'en-US',
+                ru: 'ru-RU',
+                zh: 'zh-CN',
             };
             recognition.lang = langMap[currentLang] || currentLang || navigator.language || 'en-US';
-            console.log(`[VoiceInputService] Target Recognition Lang: ${recognition.lang} (from: ${currentLang})`);
+            console.log(
+                `[VoiceInputService] Target Recognition Lang: ${recognition.lang} (from: ${currentLang})`,
+            );
             recognition.continuous = true;
             recognition.interimResults = true;
 
@@ -88,7 +91,6 @@ export class VoiceInputService {
 
             recognition.start();
             return true;
-
         } catch (e) {
             console.error('[VoiceInputService] Error starting recognition:', e);
             this.stop();
@@ -101,7 +103,7 @@ export class VoiceInputService {
      */
     public stop(): void {
         this._isRecording = false;
-        
+
         if (this._recognition) {
             try {
                 this._recognition.stop();

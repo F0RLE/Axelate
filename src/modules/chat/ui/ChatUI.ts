@@ -18,16 +18,17 @@ interface IGlobal {
 
 // Configure marked
 marked.use(markedAlert());
-marked.use(markedKatex({
-    throwOnError: false
-}));
+marked.use(
+    markedKatex({
+        throwOnError: false,
+    }),
+);
 // Syntax highlighting removed by user request
-
 
 marked.use(markedFootnote());
 marked.use({
     breaks: true,
-    gfm: true
+    gfm: true,
 });
 
 import { chatFileHandler } from '../services/ChatFileHandler';
@@ -47,10 +48,18 @@ export class ChatUI {
 
         // Configure marked renderer for code blocks
         const renderer = new marked.Renderer();
-        renderer.code = function({ text, lang, escaped }: { text: string; lang?: string; escaped?: boolean }): string {
-             const language = lang || 'text';
-             // Simple UUID-like for uniqueness if needed, but we rely on DOM traversal
-             return `
+        renderer.code = function ({
+            text,
+            lang,
+            escaped,
+        }: {
+            text: string;
+            lang?: string;
+            escaped?: boolean;
+        }): string {
+            const language = lang || 'text';
+            // Simple UUID-like for uniqueness if needed, but we rely on DOM traversal
+            return `
              <div class="code-block-wrapper">
                  <div class="code-block-header">
                      <span class="code-lang">${language}</span>
@@ -67,9 +76,9 @@ export class ChatUI {
              </div>
              `;
         };
-        
+
         marked.use({ renderer });
-        
+
         // Bind event listeners
         if (this._messagesContainer) {
             this._messagesContainer.addEventListener('click', this._handleMessageClick.bind(this));
@@ -94,7 +103,11 @@ export class ChatUI {
     /**
      * Appends a new message to the chat container.
      */
-    public appendMessage(role: IChatRole, content: string, opts: Record<string, unknown> = {}): void {
+    public appendMessage(
+        role: IChatRole,
+        content: string,
+        opts: Record<string, unknown> = {},
+    ): void {
         this._prepareContainer();
 
         const row = document.createElement('div');
@@ -116,10 +129,13 @@ export class ChatUI {
     /**
      * Creates a streaming message bubble and returns a handle to update it.
      */
-    public createStreamingMessage(role: IChatRole, opts: Record<string, unknown> = {}): {
-        textNode: HTMLElement,
-        update: (chunk: string) => void,
-        finalize: (fullContent: string, finalOpts?: Record<string, unknown>) => void
+    public createStreamingMessage(
+        role: IChatRole,
+        opts: Record<string, unknown> = {},
+    ): {
+        textNode: HTMLElement;
+        update: (chunk: string) => void;
+        finalize: (fullContent: string, finalOpts?: Record<string, unknown>) => void;
     } {
         this._prepareContainer();
 
@@ -146,15 +162,20 @@ export class ChatUI {
                 renderCounter++;
                 const now = Date.now();
 
-                // Adaptive rendering: 
+                // Adaptive rendering:
                 // 1. Render first 3 chunks immediately for perceived speed
                 // 2. Then render every 100ms or every 4 chunks to balance smoothness and performance
-                const shouldRender = renderCounter <= 3 || (now - lastRenderTime > 100) || (renderCounter % 4 === 0);
+                const shouldRender =
+                    renderCounter <= 3 || now - lastRenderTime > 100 || renderCounter % 4 === 0;
 
                 if (shouldRender) {
                     try {
                         // For very short text or first few chunks, skip full Markdown parse for speed
-                        if (accumulatedText.length < 50 && !accumulatedText.includes('`') && !accumulatedText.includes('\n')) {
+                        if (
+                            accumulatedText.length < 50 &&
+                            !accumulatedText.includes('`') &&
+                            !accumulatedText.includes('\n')
+                        ) {
                             textNode.textContent = accumulatedText;
                         } else {
                             const rawHtml = marked.parse(accumulatedText) as string;
@@ -180,12 +201,15 @@ export class ChatUI {
                     this._appendAttachments(bubble, finalOpts.attachments as IChatAttachment[]);
                 }
                 if (finalOpts.images) {
-                    this._appendImages(bubble, finalOpts.images as { mime: string; data_base64: string }[]);
+                    this._appendImages(
+                        bubble,
+                        finalOpts.images as { mime: string; data_base64: string }[],
+                    );
                 }
-                
+
                 this._appendMeta(bubble, finalOpts.tokens as number | undefined);
                 this._scrollToBottom();
-            }
+            },
         };
     }
 
@@ -199,13 +223,17 @@ export class ChatUI {
 
     private _scrollToBottom(sticky = false): void {
         if (!this._messagesContainer) return;
-        
+
         if (sticky) {
             const threshold = 150; // px
-            const isAtBottom = this._messagesContainer.scrollHeight - this._messagesContainer.scrollTop - this._messagesContainer.clientHeight < threshold;
+            const isAtBottom =
+                this._messagesContainer.scrollHeight -
+                    this._messagesContainer.scrollTop -
+                    this._messagesContainer.clientHeight <
+                threshold;
             if (!isAtBottom) return;
         }
-        
+
         this._messagesContainer.scrollTop = this._messagesContainer.scrollHeight;
     }
 
@@ -225,9 +253,9 @@ export class ChatUI {
         const textNode = document.createElement('div');
         textNode.className = 'markdown-body'; // Helper class for styling
         const g = globalThis as unknown as IGlobal;
-        
+
         let finalContent = content || '';
-        
+
         if (opts.i18nKey) {
             const i18nKey = typeof opts.i18nKey === 'string' ? opts.i18nKey : '';
             if (i18nKey) {
@@ -254,87 +282,90 @@ export class ChatUI {
             console.error('[ChatUI] Markdown render error:', e);
             textNode.textContent = finalContent;
         }
-        
+
         return textNode;
     }
 
     /**
- * Appends attachments to a message bubble.
- */
-private _appendAttachments(bubble: HTMLElement, attachments?: IChatAttachment[]): void {
-    if (!attachments || attachments.length === 0) return;
+     * Appends attachments to a message bubble.
+     */
+    private _appendAttachments(bubble: HTMLElement, attachments?: IChatAttachment[]): void {
+        if (!attachments || attachments.length === 0) return;
 
-    const attachContainer = document.createElement('div');
-    attachContainer.className = 'chat-message-attachments';
-    // Removed legacy inline styles to favor CSS class
+        const attachContainer = document.createElement('div');
+        attachContainer.className = 'chat-message-attachments';
+        // Removed legacy inline styles to favor CSS class
 
-    // Limit visible attachments in bubble
-    const maxVisible = 6;
-    const visibleAttachments = attachments.slice(0, maxVisible);
-    const hiddenCount = attachments.length - maxVisible;
+        // Limit visible attachments in bubble
+        const maxVisible = 6;
+        const visibleAttachments = attachments.slice(0, maxVisible);
+        const hiddenCount = attachments.length - maxVisible;
 
-    visibleAttachments.forEach((f) => {
-        const card = document.createElement('div');
-        
-        let isImage = f.type?.startsWith('image/');
-        const ext = f.name?.split('.').pop()?.toLowerCase() || '';
-        if (!isImage && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
-            isImage = true;
-        }
+        visibleAttachments.forEach((f) => {
+            const card = document.createElement('div');
 
-        card.className = 'chat-media-card' + (isImage ? ' is-image' : ' is-file');
-        
-        const hasData = !!f.data_base64;
-        const name = this._shortenFileName(f.name || 'file');
-        const fileTokens = f.tokens || 0;
+            let isImage = f.type?.startsWith('image/');
+            const ext = f.name?.split('.').pop()?.toLowerCase() || '';
+            if (!isImage && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+                isImage = true;
+            }
 
-        if (isImage && hasData) {
-            // Image Preview Mode
-            const mime = f.type || (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`);
-            card.innerHTML = `
+            card.className = 'chat-media-card' + (isImage ? ' is-image' : ' is-file');
+
+            const hasData = !!f.data_base64;
+            const name = this._shortenFileName(f.name || 'file');
+            const fileTokens = f.tokens || 0;
+
+            if (isImage && hasData) {
+                // Image Preview Mode
+                const mime = f.type || (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`);
+                card.innerHTML = `
                 <img src="data:${mime};base64,${f.data_base64}" alt="${DOMPurify.sanitize(name)}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px;">
                 ${fileTokens > 0 ? `<div class="media-badge">${fileTokens}</div>` : ''}
             `;
-        } else {
-            // Standard File Mode (Pill UI)
-            const iconSvg = getFileIcon(f.name);
-            card.innerHTML = `
+            } else {
+                // Standard File Mode (Pill UI)
+                const iconSvg = getFileIcon(f.name);
+                card.innerHTML = `
                 <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
                 <div class="media-info">
                     <div class="media-name">${DOMPurify.sanitize(name)}</div>
                     ${fileTokens > 0 ? `<div class="media-tokens">${fileTokens} tokens</div>` : ''}
                 </div>
             `;
+            }
+            attachContainer.appendChild(card);
+        });
+
+        if (hiddenCount > 0) {
+            const moreCard = document.createElement('div');
+            moreCard.className = 'chat-media-card more-card';
+            moreCard.innerHTML = `<span>+${hiddenCount}</span>`;
+            attachContainer.appendChild(moreCard);
         }
-        attachContainer.appendChild(card);
-    });
 
-    if (hiddenCount > 0) {
-        const moreCard = document.createElement('div');
-        moreCard.className = 'chat-media-card more-card';
-        moreCard.innerHTML = `<span>+${hiddenCount}</span>`;
-        attachContainer.appendChild(moreCard);
+        bubble.appendChild(attachContainer);
     }
 
-    bubble.appendChild(attachContainer);
-}
-
-/**
- * Shortens a file name for display.
- */
-private _shortenFileName(name: string): string {
-    if (name.length <= 25) return name;
-    const extIndex = name.lastIndexOf('.');
-    if (extIndex > 0) {
-        const ext = name.substring(extIndex);
-        return name.substring(0, 18) + '..' + ext;
+    /**
+     * Shortens a file name for display.
+     */
+    private _shortenFileName(name: string): string {
+        if (name.length <= 25) return name;
+        const extIndex = name.lastIndexOf('.');
+        if (extIndex > 0) {
+            const ext = name.substring(extIndex);
+            return name.substring(0, 18) + '..' + ext;
+        }
+        return name.substring(0, 20) + '..';
     }
-    return name.substring(0, 20) + '..';
-}
     /**
      * Appends images to a message bubble.
      */
-    private _appendImages(bubble: HTMLElement, images?: { mime: string; data_base64: string }[]): void {
+    private _appendImages(
+        bubble: HTMLElement,
+        images?: { mime: string; data_base64: string }[],
+    ): void {
         if (!images || images.length === 0) return;
 
         images.forEach((img) => {
@@ -346,7 +377,9 @@ private _shortenFileName(name: string): string {
                 el.className = 'chat-img';
                 el.src = `data:${mime};base64,${b64}`;
                 bubble.appendChild(el);
-            } catch { /* ignore image errors */ }
+            } catch {
+                /* ignore image errors */
+            }
         });
     }
 
@@ -392,59 +425,63 @@ private _shortenFileName(name: string): string {
         const hiddenCount = files.length - maxVisible;
 
         visibleFiles.forEach(async (f, idx) => {
-        const card = document.createElement('div');
-        const isImage = f.type.startsWith('image/');
-        card.className = 'chat-media-card' + (isImage ? ' is-image' : ' is-file');
+            const card = document.createElement('div');
+            const isImage = f.type.startsWith('image/');
+            card.className = 'chat-media-card' + (isImage ? ' is-image' : ' is-file');
 
-        let contentHtml = '';
-        let name = f.name || 'file';
+            let contentHtml = '';
+            let name = f.name || 'file';
 
-        // Relaxed limit for names in horizontal layout
-        if (name.length > 25) {
-             const extIndex = name.lastIndexOf('.');
-             if (extIndex > 0) {
-                 name = name.substring(0, 18) + '..' + name.substring(extIndex);
-             } else {
-                 name = name.substring(0, 20) + '..';
-             }
-        }
-
-        // Get single file token count
-        const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
-
-        if (isImage) {
-            const objectUrl = URL.createObjectURL(f);
-            contentHtml = `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" onload="URL.revokeObjectURL(this.src)">`;
-            if (fileTokens > 0) {
-                 contentHtml += `<div class="media-badge">${fileTokens}</div>`;
+            // Relaxed limit for names in horizontal layout
+            if (name.length > 25) {
+                const extIndex = name.lastIndexOf('.');
+                if (extIndex > 0) {
+                    name = name.substring(0, 18) + '..' + name.substring(extIndex);
+                } else {
+                    name = name.substring(0, 20) + '..';
+                }
             }
-        } else {
-            let iconSvg = '';
-            try { iconSvg = getFileIcon(f.name); } catch { iconSvg = '📄'; }
-            contentHtml = `
+
+            // Get single file token count
+            const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
+
+            if (isImage) {
+                const objectUrl = URL.createObjectURL(f);
+                contentHtml = `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" onload="URL.revokeObjectURL(this.src)">`;
+                if (fileTokens > 0) {
+                    contentHtml += `<div class="media-badge">${fileTokens}</div>`;
+                }
+            } else {
+                let iconSvg = '';
+                try {
+                    iconSvg = getFileIcon(f.name);
+                } catch {
+                    iconSvg = '📄';
+                }
+                contentHtml = `
                 <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
                 <div class="media-info">
                     <div class="media-name">${DOMPurify.sanitize(name)}</div>
                     ${fileTokens > 0 ? `<div class="media-tokens">${fileTokens} tokens</div>` : ''}
                 </div>
             `;
-        }
+            }
 
-        card.innerHTML = `
+            card.innerHTML = `
             ${contentHtml}
             <button type="button" class="media-remove" title="Remove attachment">×</button>
         `;
 
-        const btn = card.querySelector('.media-remove') as HTMLButtonElement;
-        if (btn) {
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                onRemove(idx);
-            };
-        }
+            const btn = card.querySelector('.media-remove') as HTMLButtonElement;
+            if (btn) {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    onRemove(idx);
+                };
+            }
 
-        this._attachmentsContainer!.appendChild(card);
-    });
+            this._attachmentsContainer!.appendChild(card);
+        });
 
         if (hiddenCount > 0) {
             const moreCard = document.createElement('div');
@@ -458,7 +495,7 @@ private _shortenFileName(name: string): string {
      * Shows a typing indicator in the UI.
      */
     public showTyping(id: string): void {
-         if (!this._messagesContainer) return;
+        if (!this._messagesContainer) return;
 
         const typingDiv = document.createElement('div');
         typingDiv.id = id;
@@ -480,11 +517,15 @@ private _shortenFileName(name: string): string {
         if (indicator) indicator.remove();
     }
 
-    public showToast(msg: string, type: 'success' | 'error' | 'warning' = 'success', duration = 2000): void {
+    public showToast(
+        msg: string,
+        type: 'success' | 'error' | 'warning' = 'success',
+        duration = 2000,
+    ): void {
         if (typeof globalThis.showToast === 'function') {
-             globalThis.showToast(msg, type, duration);
+            globalThis.showToast(msg, type, duration);
         } else {
-             console.debug(`[Toast] ${type}: ${msg}`);
+            console.debug(`[Toast] ${type}: ${msg}`);
         }
     }
 
@@ -494,15 +535,15 @@ private _shortenFileName(name: string): string {
     private async _handleCopyClick(e: MouseEvent): Promise<void> {
         const target = e.target as HTMLElement;
         const btn = target.closest('.code-copy-btn');
-        
+
         if (btn) {
             e.preventDefault();
             e.stopPropagation();
-            
+
             // Find the code block within the same wrapper
             const wrapper = btn.closest('.code-block-wrapper');
             const codeEl = wrapper?.querySelector('code');
-            
+
             if (codeEl?.textContent) {
                 const text = codeEl.textContent;
                 const g = globalThis as unknown as IGlobal;
@@ -512,14 +553,14 @@ private _shortenFileName(name: string): string {
                     // Note: Modern browsers and Tauri both support navigator.clipboard
                     if (g.__TAURI__?.core?.invoke) {
                         try {
-                             await g.__TAURI__.core.invoke('plugin:clipboard|write', { text });
+                            await g.__TAURI__.core.invoke('plugin:clipboard|write', { text });
                         } catch {
-                             await navigator.clipboard.writeText(text);
+                            await navigator.clipboard.writeText(text);
                         }
                     } else {
-                         await navigator.clipboard.writeText(text);
+                        await navigator.clipboard.writeText(text);
                     }
-                    
+
                     // Visual feedback
                     const originalHtml = btn.innerHTML;
                     btn.innerHTML = `
@@ -531,7 +572,6 @@ private _shortenFileName(name: string): string {
                     setTimeout(() => {
                         btn.innerHTML = originalHtml;
                     }, 2000);
-                    
                 } catch (err) {
                     console.error('[ChatUI] Copy failed:', err);
                     this.showToast('Failed to copy code', 'error');
@@ -539,7 +579,7 @@ private _shortenFileName(name: string): string {
             }
         }
     }
-    
+
     /**
      * Updates the token count display.
      */
@@ -569,14 +609,14 @@ private _shortenFileName(name: string): string {
     private async _handleMessageClick(e: MouseEvent): Promise<void> {
         const target = e.target as HTMLElement;
         const link = target.closest('a');
-        
+
         if (link?.href) {
             e.preventDefault();
             e.stopPropagation();
-            
+
             const url = link.href;
             const g = globalThis as unknown as IGlobal;
-            
+
             if (g.__TAURI__?.core?.invoke) {
                 try {
                     await g.__TAURI__.core.invoke('plugin:shell|open', { path: url });

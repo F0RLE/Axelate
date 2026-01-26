@@ -3,31 +3,31 @@
  * @description Central hub for AI communication infrastructure.
  * Manages provider lifecycle, message routing, and real-time streaming orchestration.
  * Implements the Singleton pattern for unified cross-module standard access.
- * 
+ *
  * @example
  * ```typescript
  * import { aiBridge } from './AIBridge';
- * 
+ *
  * await aiBridge.startProvider('gemini');
  * const response = await aiBridge.sendMessage('Hello!');
  * ```
  */
 
 import { listen } from '@tauri-apps/api/event';
-import type { 
-    MessageSource, 
-    MessageHandler, 
-    IChatRequest, 
-    IChatResponse, 
+import type {
+    MessageSource,
+    MessageHandler,
+    IChatRequest,
+    IChatResponse,
     IAIBridgeState,
     IChatMessage,
     ChatContentPart,
-    ChatContent
+    ChatContent,
 } from './types/aiTypes';
-import { 
+import {
     getApiModelIdWithFallback,
     mapProviderToBackend,
-    getMostPowerfulModel
+    getMostPowerfulModel,
 } from './utils/catalogHelpers';
 
 export type { MessageSource, MessageHandler, ChatContentPart, ChatContent } from './types/aiTypes';
@@ -89,7 +89,7 @@ export class AIBridge {
     /**
      * Configures underlying IPC channels for streaming response ingestion.
      * This method is idempotent and ensures only one set of listeners is active.
-     * 
+     *
      * @returns Promise resolving upon successful event subscription
      * @sideeffect Attaches IPC listeners to the Tauri host environment
      */
@@ -103,12 +103,14 @@ export class AIBridge {
             const unlistenChunk = await listen<string>('ai-chat-chunk', (event) => {
                 // Diagnostic logging for streaming validation
                 if (import.meta.env.DEV) {
-                    console.debug(`[AIBridge] Stream chunk received (${event.payload.length} chars)`);
+                    console.debug(
+                        `[AIBridge] Stream chunk received (${event.payload.length} chars)`,
+                    );
                 }
                 this._broadcastChunk(event.payload);
             });
             this._unlisteners.push(unlistenChunk);
-            
+
             this._initialized = true;
             console.log('[AIBridge] Infrastructure initialization complete (Streaming Active)');
         } catch (error: unknown) {
@@ -126,7 +128,7 @@ export class AIBridge {
 
     /**
      * Initiates a specific AI provider session.
-     * 
+     *
      * @param providerId - Unique provider identifier (e.g., 'gpt', 'gemini')
      * @returns Promise indicating success of the activation flow
      * @sideeffect Retrieves credentials and synchronizes model configuration
@@ -164,7 +166,6 @@ export class AIBridge {
 
             console.log(`[AIBridge] Context synchronized: ${providerName}, model: ${model}`);
             return true;
-
         } catch (error: unknown) {
             console.error('[AIBridge] Provider activation sequence failed:', error);
             const msg = error instanceof Error ? error.message : 'Unknown activation trap';
@@ -178,19 +179,22 @@ export class AIBridge {
      */
     private async _getApiKey(providerId: string): Promise<string> {
         const keyName = `${providerId}_api_key`;
-        
+
         // Prioritize Tauri secure storage for cross-module consistency
         if (this._context.__TAURI__?.core) {
             try {
-                const value = await this._context.__TAURI__.core.invoke<string | null>('get_secure_key', {
-                    service: keyName
-                });
+                const value = await this._context.__TAURI__.core.invoke<string | null>(
+                    'get_secure_key',
+                    {
+                        service: keyName,
+                    },
+                );
                 if (value) return value;
             } catch (error) {
                 console.warn(`[AIBridge] Secure storage retrieval failed for ${keyName}:`, error);
             }
         }
-        
+
         // Fallback to localStorage (used in web-only mode)
         return localStorage.getItem(keyName) || '';
     }
@@ -201,7 +205,7 @@ export class AIBridge {
     private _getDefaultModel(providerId: string): string {
         const catalogModel = getMostPowerfulModel(providerId);
         if (catalogModel) return catalogModel;
-        
+
         const staticFallbacks: Record<string, string> = {
             gpt: 'gpt-5-mini',
             gemini: 'gemini-3-flash',
@@ -210,10 +214,9 @@ export class AIBridge {
         return staticFallbacks[providerId] || '';
     }
 
-
     /**
      * Terminates the active provider session and purges volatile state buffers.
-     * 
+     *
      * @sideeffect Resets authentication tokens and history context
      */
     public stopProvider(): void {
@@ -227,7 +230,7 @@ export class AIBridge {
 
             const providerDisplay = providerId === 'gpt' ? 'OpenAI GPT' : 'Google Gemini';
             this._showInfoToast('ui.ai.provider_stopped', `${providerDisplay} session terminated`);
-            
+
             console.log('[AIBridge] Provider context purged via explicit termination');
         }
     }
@@ -250,7 +253,7 @@ export class AIBridge {
 
     /**
      * Routes a user prompt to the active provider and aggregates the resulting response.
-     * 
+     *
      * @param text - User input content
      * @param source - Source module identifier for message routing
      * @param attachments - Multimodal data payloads
@@ -258,9 +261,9 @@ export class AIBridge {
      * @sideeffect Mutates conversation history and broadcasts streaming segments
      */
     public async sendMessage(
-        text: string, 
-        source: MessageSource = 'chat', 
-        attachments: { name: string; type: string; dataBase64: string }[] = []
+        text: string,
+        source: MessageSource = 'chat',
+        attachments: { name: string; type: string; dataBase64: string }[] = [],
     ): Promise<string> {
         if (!this._activeProviderId) {
             return this._handleMissingProvider();
@@ -268,7 +271,7 @@ export class AIBridge {
 
         // Lazy key resolution ensures synchronization with external settings state
         await this._resolveEffectiveApiKey();
-        
+
         // Local provider doesn't strictly require an API Key, but we check for consistency or skip?
         // _getApiKey for local returns '' from localStorage usually.
         // We might want to skip the check if provider is local?
@@ -276,9 +279,13 @@ export class AIBridge {
         // Actually, _getApiKey falls back to ''.
         // If apiKey is empty, _handleMissingApiKey triggers?
         // We should allow empty key for 'local'.
-        
-        if (!this._apiKey && this._activeProviderId !== 'local' && this._activeProviderId !== 'flux-localai') {
-             return this._handleMissingApiKey();
+
+        if (
+            !this._apiKey &&
+            this._activeProviderId !== 'local' &&
+            this._activeProviderId !== 'flux-localai'
+        ) {
+            return this._handleMissingApiKey();
         }
 
         try {
@@ -287,7 +294,9 @@ export class AIBridge {
             // Per user request: Local AI logic is completely removed from backend.
             // We return a placeholder response here to satisfy the frontend call without executing logic.
             if (this._activeProviderId === 'local' || this._activeProviderId === 'flux-localai') {
-                const msg = this._context.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') || 'Local AI execution is disabled.';
+                const msg =
+                    this._context.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') ||
+                    'Local AI execution is disabled.';
                 this._chatHistory.push({ role: 'assistant', content: msg });
                 this._broadcastResponse(msg, source);
                 return msg;
@@ -299,7 +308,8 @@ export class AIBridge {
 
             return this._processBackendResponse(response, source);
         } catch (error: unknown) {
-            const errorMsg = error instanceof Error ? error.message : 'Unknown communication failure';
+            const errorMsg =
+                error instanceof Error ? error.message : 'Unknown communication failure';
             console.error('[AIBridge] Messaging pipeline failure:', error);
             return `Error: ${errorMsg}`;
         }
@@ -313,7 +323,9 @@ export class AIBridge {
             const currentKey = await this._getApiKey(this._activeProviderId);
             if (currentKey !== this._apiKey) {
                 this._apiKey = currentKey;
-                console.log(`[AIBridge] API key synchronized for provider: ${this._activeProviderId}`);
+                console.log(
+                    `[AIBridge] API key synchronized for provider: ${this._activeProviderId}`,
+                );
             }
         }
     }
@@ -322,12 +334,13 @@ export class AIBridge {
      * Handles scenarios where messaging is invoked without an authenticated key.
      */
     private _handleMissingApiKey(): string {
-        const fallback = 'API key provided for this provider is invalid or missing. Please check settings.';
+        const fallback =
+            'API key provided for this provider is invalid or missing. Please check settings.';
         const msg = this._context.t?.('ui.ai.no_api_key', fallback) || fallback;
-        
+
         // Log in bridge but provide a user-friendly response
         console.warn(`[AIBridge] Messaging aborted: ${msg} [Provider: ${this._activeProviderId}]`);
-        
+
         this._broadcastResponse(`Error: ${msg}`, 'system');
         this._showErrorToast('ui.ai.no_api_key', msg);
         return `Error: ${msg}`;
@@ -347,9 +360,9 @@ export class AIBridge {
      * Appends a message to the internal historical context for thread maintenance.
      */
     private _addMessageToHistory(
-        role: 'user' | 'assistant', 
-        text: string, 
-        attachments?: { name: string; type: string; dataBase64: string }[]
+        role: 'user' | 'assistant',
+        text: string,
+        attachments?: { name: string; type: string; dataBase64: string }[],
     ): void {
         if (role === 'user' && attachments && attachments.length > 0) {
             const parts = this._createMultimodalContent(text, attachments);
@@ -362,7 +375,9 @@ export class AIBridge {
     /**
      * Compiles a structured chat request object for the backend dispatcher.
      */
-    private _constructChatRequest(attachments: { name: string; type: string; dataBase64: string }[]): IChatRequest {
+    private _constructChatRequest(
+        attachments: { name: string; type: string; dataBase64: string }[],
+    ): IChatRequest {
         const id = this._activeProviderId!;
         const apiModelId = getApiModelIdWithFallback(id, this._model);
         const thinkingLevel = localStorage.getItem(`${id}_thinking_level`) || 'high';
@@ -370,10 +385,10 @@ export class AIBridge {
         return {
             provider: mapProviderToBackend(id),
             model: apiModelId,
-            messages: this._chatHistory.map(message => ({ 
-                role: message.role, 
+            messages: this._chatHistory.map((message) => ({
+                role: message.role,
                 content: message.content,
-                thought_signature: message.thought_signature 
+                thought_signature: message.thought_signature,
             })),
             api_key: this._apiKey,
             thinking_level: thinkingLevel as 'low' | 'high' | 'minimal',
@@ -392,7 +407,9 @@ export class AIBridge {
                 error: 'Architectural IPC mismatch: Tauri host not detected.',
             };
         }
-        return await this._context.__TAURI__.core.invoke<IChatResponse>('send_chat_message', { request });
+        return await this._context.__TAURI__.core.invoke<IChatResponse>('send_chat_message', {
+            request,
+        });
     }
 
     /**
@@ -405,10 +422,10 @@ export class AIBridge {
 
         if (response.ok && response.reply) {
             const responseText = response.reply.text;
-            const historyItem: IChatMessage = { 
-                role: 'assistant', 
+            const historyItem: IChatMessage = {
+                role: 'assistant',
                 content: responseText,
-                thought_signature: response.thought_signature
+                thought_signature: response.thought_signature,
             };
             this._chatHistory.push(historyItem);
             this._broadcastResponse(responseText, source);
@@ -425,7 +442,6 @@ export class AIBridge {
      * @deprecated Backend routing is now authoritative.
      */
     // private async _executeLocalInference... REMOVED
-
 
     /**
      * Registers a listener for finalized response broadcast.
@@ -466,7 +482,7 @@ export class AIBridge {
      */
     private _broadcastResponse(response: string, source: MessageSource): void {
         this._listeners.forEach((handlers) => {
-            handlers.forEach(handler => handler(response, source));
+            handlers.forEach((handler) => handler(response, source));
         });
     }
 
@@ -475,7 +491,7 @@ export class AIBridge {
      */
     private _broadcastChunk(chunk: string): void {
         this._chunkListeners.forEach((handlers) => {
-            handlers.forEach(handler => handler(chunk));
+            handlers.forEach((handler) => handler(chunk));
         });
     }
 
@@ -500,19 +516,19 @@ export class AIBridge {
      * Maps user input and multimodal data into structured content parts.
      */
     private _createMultimodalContent(
-        text: string, 
-        attachments: { name: string; type: string; dataBase64: string }[]
+        text: string,
+        attachments: { name: string; type: string; dataBase64: string }[],
     ): ChatContent {
         if (!attachments || attachments.length === 0) return text;
 
-        const parts: ChatContentPart[] = [{ type: 'text', text }]; 
-        attachments.forEach(attachment => {
+        const parts: ChatContentPart[] = [{ type: 'text', text }];
+        attachments.forEach((attachment) => {
             if (attachment.type.startsWith('image/')) {
                 parts.push({
                     type: 'image_url',
                     image_url: {
-                        url: `data:${attachment.type};base64,${attachment.dataBase64}`
-                    }
+                        url: `data:${attachment.type};base64,${attachment.dataBase64}`,
+                    },
                 });
             }
         });
@@ -527,7 +543,7 @@ export class AIBridge {
         if (Array.isArray(content)) {
             return content
                 .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
-                .map(p => p.text)
+                .map((p) => p.text)
                 .join('\n');
         }
         return '';
@@ -538,7 +554,7 @@ export class AIBridge {
      * @sideeffect Detaches from the Tauri event system
      */
     public destroy(): void {
-        this._unlisteners.forEach(fn => fn());
+        this._unlisteners.forEach((fn) => fn());
         this._unlisteners.length = 0;
         this._listeners.clear();
         this._chunkListeners.clear();
@@ -576,7 +592,8 @@ export const aiBridge = new AIBridge();
  * Note: We explicitly avoid top-level await here to prevent blocking the main UI thread during boot.
  */
 
-(async () => { // NOSONAR
+(async () => {
+    // NOSONAR
     try {
         await aiBridge.init();
     } catch (error: unknown) {

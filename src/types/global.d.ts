@@ -23,7 +23,10 @@ interface AIBridgeInterface {
     isActive: () => boolean;
     getActiveProvider: () => { id: string; name: string } | null;
     sendMessage: (_text: string, _source: 'chat' | 'service' | 'system') => Promise<string>;
-    onMessage: (_listenerId: string, _handler: (_response: string, _source: string) => void) => void;
+    onMessage: (
+        _listenerId: string,
+        _handler: (_response: string, _source: string) => void,
+    ) => void;
     removeListener: (_listenerId: string) => void;
     clearHistory: () => void;
 }
@@ -122,7 +125,12 @@ declare global {
     var launchApp: (_id: string) => Promise<void>;
 
     // --- Feedback & Notifications ---
-    var showToast: (_message: string, _type?: 'success' | 'error' | 'warning' | 'info', _duration?: number, _title?: string | null) => void;
+    var showToast: (
+        _message: string,
+        _type?: 'success' | 'error' | 'warning' | 'info',
+        _duration?: number,
+        _title?: string | null,
+    ) => void;
     var showActionFeedback: (_type?: string) => void;
     var showSkeletonLoaders: (_id: string, _count?: number) => void;
     var hideSkeletonLoaders: (_id: string, _count?: number) => void;
@@ -223,6 +231,3 @@ declare global {
         updateSpeedDisplay: typeof updateSpeedDisplay;
     }
 }
-
-
-

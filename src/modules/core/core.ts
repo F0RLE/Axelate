@@ -115,36 +115,38 @@ export class Core {
 
         // 2. Load UI State & Templates
         console.debug('[Core] Loading UI State & Templates...');
-        
+
         // Load critical templates early in parallel
         const templateLoadPromise = Promise.all([
             templateLoader.loadAndInject('components/sidebar', 'sidebar'),
-            templateLoader.loadAndInject('pages/settings', 'page-settings')
-        ]).catch(e => console.error('[Core] Template loading failed:', e));
+            templateLoader.loadAndInject('pages/settings', 'page-settings'),
+        ]).catch((e) => console.error('[Core] Template loading failed:', e));
 
         await Promise.all([this.state.loadState(), templateLoadPromise]);
-        
+
         const win = globalThis as unknown as Window & { uiState: StateService };
         win.uiState = this.state;
-        
+
         this.navigation.refreshFromUiState();
         console.debug('[Core] UI State Loaded.');
 
         // 3. Reveal UI and hide splash screen as soon as state is ready
         const revealUI = async () => {
             console.debug('[Core] Revealing UI...');
-            
+
             // 1. Show the window immediately (with a timeout safety)
             // This ensures the user sees the splash screen if this is a cold boot
             const showPromise = this.windowService.show();
-            const showTimeout = new Promise(r => setTimeout(r, 2000)); // 2s safety
-            
-            await Promise.race([showPromise, showTimeout]).catch(e => console.warn('[Core] Show window timed out or failed', e));
+            const showTimeout = new Promise((r) => setTimeout(r, 2000)); // 2s safety
+
+            await Promise.race([showPromise, showTimeout]).catch((e) =>
+                console.warn('[Core] Show window timed out or failed', e),
+            );
 
             // 2. Enforce minimum splash duration to allow animations to play
             // This fixes the "instant flash" issue on reloads
-            await new Promise(r => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
-            
+            await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
+
             // 3. Hide the splash screen
             this.windowUI.hideSplashScreen();
 
@@ -157,13 +159,13 @@ export class Core {
                 failsafe.cancel();
 
                 const elements = ['sidebar', 'app-header', 'main-area'];
-                elements.forEach(id => {
+                elements.forEach((id) => {
                     const el = document.getElementById(id);
                     if (el) el.classList.add('visible');
                 });
             }, Core._UI_REVEAL_DELAY_MS);
         };
-        
+
         // Don't await revealUI here to prevent it from blocking the rest of the init() sequence
         // (i.e. i18n, services, etc. should start initializing in parallel)
         revealUI();
@@ -186,10 +188,10 @@ export class Core {
             this.downloadUI.init();
             await this.settingsUI.init();
             this.monitoringUI.init();
-            
+
             // 6. Final UI Polish (Translations & Initial Page)
             this.i18nUI.applyTranslations();
-            
+
             // Only show debug UI in development
             if (import.meta.env.DEV) {
                 this.debugUI.init();
@@ -197,7 +199,7 @@ export class Core {
                 // Hide debug entry point in production
                 const debugEntry = document.querySelector('.debug-trigger') as HTMLElement;
                 if (debugEntry) debugEntry.style.display = 'none';
-                
+
                 // Also hide the debug panel container if it exists
                 const debugPanel = document.getElementById('debug-panel');
                 if (debugPanel) debugPanel.style.display = 'none';
@@ -261,7 +263,7 @@ export class Core {
 document.addEventListener('DOMContentLoaded', () => {
     const coreInstance = new Core();
     coreInstance.init().catch(console.error);
-    
+
     const win = globalThis as unknown as Window & { core: Core };
     win.core = coreInstance;
 });

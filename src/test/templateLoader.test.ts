@@ -25,7 +25,7 @@ describe('TemplateLoader', () => {
             });
 
             const result = await templateLoader.loadTemplate('pages/test');
-            
+
             expect(result).toBe(mockHtml);
             expect(fetch).toHaveBeenCalledWith('/templates/pages/test.html');
         });
@@ -47,11 +47,11 @@ describe('TemplateLoader', () => {
         it('should return empty string on fetch error', async () => {
             globalThis.fetch = vi.fn().mockResolvedValue({
                 ok: false,
-                status: 404
+                status: 404,
             });
 
             const result = await templateLoader.loadTemplate('pages/notfound');
-            
+
             expect(result).toBe('');
         });
     });
@@ -59,18 +59,18 @@ describe('TemplateLoader', () => {
     describe('injectTemplate', () => {
         it('should inject HTML into container', () => {
             document.body.innerHTML = '<div id="container"></div>';
-            
+
             const result = templateLoader.injectTemplate('container', '<span>Injected</span>');
-            
+
             expect(result).toBe(true);
             expect(document.getElementById('container')?.innerHTML).toBe('<span>Injected</span>');
         });
 
         it('should return false if container not found', () => {
             document.body.innerHTML = '';
-            
+
             const result = templateLoader.injectTemplate('nonexistent', '<span>Test</span>');
-            
+
             expect(result).toBe(false);
         });
     });
@@ -78,9 +78,9 @@ describe('TemplateLoader', () => {
     describe('appendTemplate', () => {
         it('should append HTML to container', () => {
             document.body.innerHTML = '<div id="container"><span>Existing</span></div>';
-            
+
             templateLoader.appendTemplate('container', '<span>Appended</span>');
-            
+
             const container = document.getElementById('container');
             expect(container?.children.length).toBe(2);
         });

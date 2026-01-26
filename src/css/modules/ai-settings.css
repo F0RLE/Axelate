@@ -20,9 +20,9 @@
 }
 
 /* Sections behave as transparent containers for specific layout needs */
-.ai-key-section, 
+.ai-key-section,
 .ai-models-section,
-.thinking-level-section, 
+.thinking-level-section,
 .ai-stats-section {
     background: transparent;
     border: none;
@@ -55,7 +55,7 @@
     font-size: 0.9rem;
 }
 
-.ai-key-section .ai-icon-btn, 
+.ai-key-section .ai-icon-btn,
 .ai-key-section .ai-check-btn {
     height: 38px;
 }
@@ -65,9 +65,12 @@
     font-size: 0.8rem;
 }
 
-
 .ai-module-config h3 {
-    font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+    font-family:
+        var(--font-body),
+        system-ui,
+        -apple-system,
+        sans-serif;
     font-weight: 700;
     font-size: 1.1rem; /* Enforce uniform size */
     margin: 0;
@@ -103,14 +106,17 @@
 
 .ai-models-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Increased min-width and ensured stretch */
+    grid-template-columns: repeat(
+        auto-fit,
+        minmax(280px, 1fr)
+    ); /* Increased min-width and ensured stretch */
     gap: 1.25rem;
     width: 100%;
 }
 
 .ai-model-card {
     background: var(--glass-surface-hover);
-    border: 1px solid var(--glass-border); 
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: 1rem;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -163,7 +169,6 @@
     opacity: 0.7;
 }
 
-
 .thinking-level-header {
     margin-bottom: 1rem;
 }
@@ -200,7 +205,6 @@
     align-items: center;
     justify-content: center;
 }
-
 
 .thinking-option-card:focus,
 .thinking-option-card:focus-visible,
@@ -247,7 +251,9 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: 2px;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease;
 }
 
 .ai-key-input-row:focus-within {
@@ -273,7 +279,8 @@
     outline: none;
 }
 
-.ai-icon-btn, .ai-check-btn {
+.ai-icon-btn,
+.ai-check-btn {
     height: 44px;
     background: transparent;
     border: none;
@@ -315,7 +322,8 @@
     color: white;
 }
 
-.ai-icon-btn:active, .ai-check-btn:active {
+.ai-icon-btn:active,
+.ai-check-btn:active {
     transform: scale(0.96);
 }
 
@@ -386,7 +394,7 @@
 }
 
 .star-icon.half {
-    background: linear-gradient(90deg, #FFD700 50%, rgba(255,255,255,0.1) 50%);
+    background: linear-gradient(90deg, #ffd700 50%, rgba(255, 255, 255, 0.1) 50%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -395,4 +403,3 @@
 .star-icon:hover {
     scale: 1.2;
 }
-

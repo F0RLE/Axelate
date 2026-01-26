@@ -30,8 +30,8 @@ export class WindowUI {
     private _isInGracePeriod = true;
 
     constructor(
-        private readonly _service: WindowService, 
-        private readonly _i18n: I18nService
+        private readonly _service: WindowService,
+        private readonly _i18n: I18nService,
     ) {}
 
     /**
@@ -44,12 +44,12 @@ export class WindowUI {
         this._cacheElements();
         this._bindGlobalEvents();
         this._suppressNativeTooltips();
-        
+
         // Fire and forget
         this._applySmallScreenProtection().catch((err: unknown) => {
             console.warn('[WindowUI] Failed to apply small screen protection:', err);
         });
-        
+
         // Initial check
         this._checkWidth();
         this._initSoundState();
@@ -76,7 +76,7 @@ export class WindowUI {
      */
     public destroy(): void {
         this._cleanupAbort.abort();
-        
+
         if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
         if (this._monitoringTimeout) clearTimeout(this._monitoringTimeout);
         if (this._splashTimeout) clearTimeout(this._splashTimeout);
@@ -91,34 +91,47 @@ export class WindowUI {
         const signal = this._cleanupAbort.signal;
 
         // 1. Context Menu Block (Section 23.4: Discouraged globally, restricted here for App feel)
-        document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        }, { capture: true, signal });
+        document.addEventListener(
+            'contextmenu',
+            (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            },
+            { capture: true, signal },
+        );
 
         // 2. Monitoring Pause on Blur/Hide
         const updateMonitoring = (): void => {
-             const shouldPause = !this._isInGracePeriod && (document.hidden || !document.hasFocus());
-             this._service.setMonitoringPaused(shouldPause);
+            const shouldPause = !this._isInGracePeriod && (document.hidden || !document.hasFocus());
+            this._service.setMonitoringPaused(shouldPause);
         };
         document.addEventListener('visibilitychange', updateMonitoring, { signal });
         globalThis.addEventListener('blur', updateMonitoring, { signal });
         globalThis.addEventListener('focus', updateMonitoring, { signal });
-        
+
         this._monitoringTimeout = setTimeout(updateMonitoring, 1000);
 
         // 3. Keydown Handlers
-        document.addEventListener('keydown', (e) => this._handleKeydown(e), { capture: true, signal });
+        document.addEventListener('keydown', (e) => this._handleKeydown(e), {
+            capture: true,
+            signal,
+        });
 
         // 4. Zoom (Ctrl+Wheel)
-        document.addEventListener('wheel', (e: Event) => {
-            const ev = e as WheelEvent;
-            if (ev.ctrlKey) {
-                ev.preventDefault();
-                const delta = ev.deltaY < 0 ? 0.1 : -0.1;
-                this._service.changeZoom(delta).catch(() => { /* ignore */ });
-            }
-        }, { passive: false, signal });
+        document.addEventListener(
+            'wheel',
+            (e: Event) => {
+                const ev = e as WheelEvent;
+                if (ev.ctrlKey) {
+                    ev.preventDefault();
+                    const delta = ev.deltaY < 0 ? 0.1 : -0.1;
+                    this._service.changeZoom(delta).catch(() => {
+                        /* ignore */
+                    });
+                }
+            },
+            { passive: false, signal },
+        );
 
         // 5. Selection Prevention
         this._bindSelectionPrevention(signal);
@@ -133,21 +146,28 @@ export class WindowUI {
     private _handleResize(): void {
         this._checkWidth(); // Immediate check
         if (this._resizeTimeout) {
-           clearTimeout(this._resizeTimeout);
+            clearTimeout(this._resizeTimeout);
         }
         this._resizeTimeout = setTimeout(() => {
             this._performResizeCheck();
         }, 200);
     }
-    
+
     /**
      * Performs a check on maximization state after resize.
      */
     private _performResizeCheck(): void {
-        this._service.isMaximized().then((isMaximized: boolean) => {
-            this.updateMaximizeIcon(isMaximized);
-            this._handleSmallScreenUnmaximize(isMaximized).catch(() => { /* ignore */ });
-        }).catch(() => { /* ignore */ });
+        this._service
+            .isMaximized()
+            .then((isMaximized: boolean) => {
+                this.updateMaximizeIcon(isMaximized);
+                this._handleSmallScreenUnmaximize(isMaximized).catch(() => {
+                    /* ignore */
+                });
+            })
+            .catch(() => {
+                /* ignore */
+            });
     }
 
     /**
@@ -156,9 +176,12 @@ export class WindowUI {
      */
     private _handleKeydown(e: KeyboardEvent): void {
         const g = globalThis as unknown as IWindowUIGlobal;
-        
+
         // Block DevTools
-        if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(e.key.toUpperCase()))) {
+        if (
+            e.key === 'F12' ||
+            (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key.toUpperCase()))
+        ) {
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -167,21 +190,23 @@ export class WindowUI {
         // F11 Toggle Maximize
         if (e.key === 'F11') {
             e.preventDefault();
-            this._service.toggleMaximize().catch(() => { /* ignore */ });
+            this._service.toggleMaximize().catch(() => {
+                /* ignore */
+            });
             return;
         }
 
         // Ctrl+R Refresh
-        if ((e.ctrlKey && ['r','R','к','К'].includes(e.key)) || e.key === 'F5') {
+        if ((e.ctrlKey && ['r', 'R', 'к', 'К'].includes(e.key)) || e.key === 'F5') {
             e.preventDefault();
             if (g.location) g.location.reload();
             return;
         }
 
         // Block browser shortcuts
-        if (e.ctrlKey && ['u','p','s','f','g'].includes(e.key.toLowerCase())) {
-             e.preventDefault();
-             e.stopPropagation();
+        if (e.ctrlKey && ['u', 'p', 's', 'f', 'g'].includes(e.key.toLowerCase())) {
+            e.preventDefault();
+            e.stopPropagation();
         }
     }
 
@@ -189,26 +214,35 @@ export class WindowUI {
      * Prevents text selection in UI elements except where allowed.
      */
     private _bindSelectionPrevention(signal: AbortSignal): void {
-        const allowedSelectors = 'input, textarea, .console-logs-area, [contenteditable], .chat-bubble, .selectable';
+        const allowedSelectors =
+            'input, textarea, .console-logs-area, [contenteditable], .chat-bubble, .selectable';
 
-        document.addEventListener('selectstart', (e: Event) => {
-            const target = e.target as HTMLElement;
-            if (target?.closest?.(allowedSelectors)) {
-                return;
-            }
-            e.preventDefault();
-        }, { signal });
+        document.addEventListener(
+            'selectstart',
+            (e: Event) => {
+                const target = e.target as HTMLElement;
+                if (target?.closest?.(allowedSelectors)) {
+                    return;
+                }
+                e.preventDefault();
+            },
+            { signal },
+        );
 
-        document.addEventListener('mousedown', (e: Event) => {
-             const ev = e as MouseEvent;
-             const target = ev.target as HTMLElement;
-             if (target?.closest?.(allowedSelectors)) {
-                return;
-             }
-             if (ev.detail > 1) {
-                ev.preventDefault(); // Prevent double-click select
-             }
-        }, { signal });
+        document.addEventListener(
+            'mousedown',
+            (e: Event) => {
+                const ev = e as MouseEvent;
+                const target = ev.target as HTMLElement;
+                if (target?.closest?.(allowedSelectors)) {
+                    return;
+                }
+                if (ev.detail > 1) {
+                    ev.preventDefault(); // Prevent double-click select
+                }
+            },
+            { signal },
+        );
     }
 
     /**
@@ -216,7 +250,7 @@ export class WindowUI {
      */
     private _suppressNativeTooltips(): void {
         const signal = this._cleanupAbort.signal;
-        
+
         const handler = (): void => {
             document.querySelectorAll('[title]').forEach((el) => {
                 const element = el as HTMLElement;
@@ -227,24 +261,28 @@ export class WindowUI {
                 }
             });
         };
-        
+
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', handler, { signal });
         } else {
             handler();
         }
 
-        document.addEventListener('mouseover', (e: Event) => {
-            let target = e.target as HTMLElement | null;
-            while(target && target !== document.body) {
-                if (target.title) {
-                    const title = target.title;
-                    target.dataset.title = title;
-                    target.removeAttribute('title');
+        document.addEventListener(
+            'mouseover',
+            (e: Event) => {
+                let target = e.target as HTMLElement | null;
+                while (target && target !== document.body) {
+                    if (target.title) {
+                        const title = target.title;
+                        target.dataset.title = title;
+                        target.removeAttribute('title');
+                    }
+                    target = target.parentElement;
                 }
-                target = target.parentElement;
-            }
-        }, { passive: true, signal });
+            },
+            { passive: true, signal },
+        );
     }
 
     /**
@@ -252,12 +290,12 @@ export class WindowUI {
      * @sideeffect Changes window zoom and maximization
      */
     private async _applySmallScreenProtection(): Promise<void> {
-         this._isSmallScreen = this._service.detectSmallScreen();
-         if (this._isSmallScreen) {
-             this._service.setZoom(0.7);
-             this._service.toggleMaximize().catch(() => {});
-             this._wasMaximizedOnSmallScreen = true;
-         }
+        this._isSmallScreen = this._service.detectSmallScreen();
+        if (this._isSmallScreen) {
+            this._service.setZoom(0.7);
+            this._service.toggleMaximize().catch(() => {});
+            this._wasMaximizedOnSmallScreen = true;
+        }
     }
 
     /**
@@ -314,14 +352,16 @@ export class WindowUI {
      * @sideeffect Modifies SoundService and DOM
      */
     public toggleSound(): void {
-        const win = globalThis as unknown as { core?: { soundService: { setEnabled: (e: boolean) => void; isEnabled: () => boolean } } };
+        const win = globalThis as unknown as {
+            core?: { soundService: { setEnabled: (e: boolean) => void; isEnabled: () => boolean } };
+        };
         const service = win.core?.soundService;
         if (!service) return;
 
         const newState = !service.isEnabled();
         service.setEnabled(newState);
         localStorage.setItem('launcher_sound_enabled', newState.toString());
-        
+
         this.updateSoundUI(newState);
     }
 
@@ -330,9 +370,11 @@ export class WindowUI {
      */
     private _initSoundState(): void {
         const saved = localStorage.getItem('launcher_sound_enabled');
-        const win = globalThis as unknown as { core?: { soundService: { setEnabled: (e: boolean) => void } } };
+        const win = globalThis as unknown as {
+            core?: { soundService: { setEnabled: (e: boolean) => void } };
+        };
         const isEnabled = saved === null ? true : saved === 'true';
-        
+
         win.core?.soundService.setEnabled(isEnabled);
         this.updateSoundUI(isEnabled);
     }
@@ -375,7 +417,10 @@ export class WindowUI {
                 this._modulesWarning.classList.remove('hidden');
                 this._modulesWarning.classList.add('flex-important');
             }
-            if (this._settingsWarning && !document.getElementById('page-settings')?.classList.contains('hidden')) {
+            if (
+                this._settingsWarning &&
+                !document.getElementById('page-settings')?.classList.contains('hidden')
+            ) {
                 this._settingsWarning.classList.remove('hidden');
                 this._settingsWarning.classList.add('flex-important');
             }
@@ -398,7 +443,7 @@ export class WindowUI {
     public hideSplashScreen(): void {
         if (this._splash) {
             this._splash.classList.add('fade-out');
-            
+
             if (this._splashTimeout) clearTimeout(this._splashTimeout);
             this._splashTimeout = setTimeout(() => {
                 if (this._splash) this._splash.classList.add('hidden');
@@ -409,7 +454,7 @@ export class WindowUI {
 
         ['sidebar', 'app-header', 'main-area'].forEach((id) => {
             const el = document.getElementById(id);
-            if(el) {
+            if (el) {
                 el.classList.add('visible');
             }
         });
@@ -429,7 +474,7 @@ export class WindowUI {
         try {
             const res = await fetch('/api/settings');
             if (res.ok) {
-                const data = await res.json() as { LANGUAGE?: string };
+                const data = (await res.json()) as { LANGUAGE?: string };
                 if (data.LANGUAGE) {
                     await this._i18n.loadTranslations(data.LANGUAGE);
                     localStorage.setItem('web_launcher_language', data.LANGUAGE);

@@ -80,22 +80,25 @@ export class GlobalBridge {
      */
     private _exposeCoreGlobals(): void {
         const win = globalThis as unknown as IGlobalBridgeProperties;
-        
+
         // Module management
-        win.downloadModule = (id: string, url: string): Promise<void> => this._core.moduleService.downloadModule(id, url);
+        win.downloadModule = (id: string, url: string): Promise<void> =>
+            this._core.moduleService.downloadModule(id, url);
         win.deleteModule = async (id: string): Promise<void> => {
             await this._core.moduleService.deleteModule(id);
         };
-        win.checkModuleInstalled = async (id: string): Promise<boolean> => this._core.moduleService.checkInstalled(id);
+        win.checkModuleInstalled = async (id: string): Promise<boolean> =>
+            this._core.moduleService.checkInstalled(id);
 
         // I18n and Localization
-        win.t = (key: string, def?: string, ...args: unknown[]): string => this._core.i18n.t(key, def, args[0] as Record<string, unknown>);
-        
+        win.t = (key: string, def?: string, ...args: unknown[]): string =>
+            this._core.i18n.t(key, def, args[0] as Record<string, unknown>);
+
         // Use a getter for currentLang to ensure it's always in sync with I18nService
         Object.defineProperty(win, 'currentLang', {
             get: () => this._core.i18n.getCurrentLang(),
             configurable: true,
-            enumerable: true
+            enumerable: true,
         });
 
         win.setLanguage = async (lang: string): Promise<void> => {
@@ -133,9 +136,10 @@ export class GlobalBridge {
         win.closeAppSelection = () => this._core.appUI.closeAppSelection();
 
         win.selectApp = async (category: string, app: IApp): Promise<void> => {
-
             this._core.appUI.updateModuleCard(category, app);
-            const uiState = win.uiState as { setSelectedModule: (c: string, d: unknown) => void } | undefined;
+            const uiState = win.uiState as
+                | { setSelectedModule: (c: string, d: unknown) => void }
+                | undefined;
             if (uiState?.setSelectedModule) {
                 uiState.setSelectedModule(category, {
                     id: app.id,
@@ -176,20 +180,26 @@ export class GlobalBridge {
         };
 
         // Module Control and Diagnostics
-        win.controlModule = (id: string, action: string): Promise<boolean> => this._core.moduleService.control(id, action);
-        win.updateDiagnostics = async (): Promise<void> => { await this._core.diagnostics.update(); };
+        win.controlModule = (id: string, action: string): Promise<boolean> =>
+            this._core.moduleService.control(id, action);
+        win.updateDiagnostics = async (): Promise<void> => {
+            await this._core.diagnostics.update();
+        };
         win.updateState = win.updateDiagnostics;
 
         // UI Feedback and Utilities
         win.showToast = (m: string, t?: string, d?: number, title?: string | null): void =>
             this._core.appUI.showToast(m, t, d, title ?? null);
         win.showActionFeedback = (t?: string): void => this._core.appUI.showActionFeedback(t);
-        win.showSkeletonLoaders = (id: string, c?: number): void => this._core.appUI.showSkeletonLoaders(id, c || 0);
-        win.hideSkeletonLoaders = (id: string, c?: number): void => this._core.appUI.hideSkeletonLoaders(id, c || 0);
+        win.showSkeletonLoaders = (id: string, c?: number): void =>
+            this._core.appUI.showSkeletonLoaders(id, c || 0);
+        win.hideSkeletonLoaders = (id: string, c?: number): void =>
+            this._core.appUI.hideSkeletonLoaders(id, c || 0);
         win.setButtonLoading = (b: HTMLButtonElement | null, l: boolean): void => {
             if (b) this._core.appUI.setButtonLoading(b, l);
         };
-        win.showPromptTab = (tab: string, btn?: HTMLElement): void => this._core.appUI.showPromptTab(tab, btn);
+        win.showPromptTab = (tab: string, btn?: HTMLElement): void =>
+            this._core.appUI.showPromptTab(tab, btn);
     }
 
     /**
@@ -200,15 +210,18 @@ export class GlobalBridge {
         const win = globalThis as unknown as IGlobalBridgeProperties;
         win.fluxAPI = {
             minimize: async () => {
-                if (this._core.tauriProvider.isTauri()) await this._core.tauriProvider.invoke('minimize_window');
+                if (this._core.tauriProvider.isTauri())
+                    await this._core.tauriProvider.invoke('minimize_window');
                 else this._core.logger.debug('[FluxAPI] minimize (no Tauri)');
             },
             toggleMaximize: async () => {
-                if (this._core.tauriProvider.isTauri()) await this._core.tauriProvider.invoke('toggle_maximize');
+                if (this._core.tauriProvider.isTauri())
+                    await this._core.tauriProvider.invoke('toggle_maximize');
                 else this._core.logger.debug('[FluxAPI] toggleMaximize (no Tauri)');
             },
             close: async () => {
-                if (this._core.tauriProvider.isTauri()) await this._core.tauriProvider.invoke('close_window');
+                if (this._core.tauriProvider.isTauri())
+                    await this._core.tauriProvider.invoke('close_window');
                 else this._core.logger.debug('[FluxAPI] close (no Tauri)');
             },
             secureStorage: {
@@ -216,7 +229,10 @@ export class GlobalBridge {
                     if (this._core.tauriProvider.isTauri()) {
                         await this._core.tauriProvider.invoke('save_secure_key', { service, key });
                     } else {
-                        console.warn('[FluxAPI] Secure storage not available in web mode. Key not persisted:', service);
+                        console.warn(
+                            '[FluxAPI] Secure storage not available in web mode. Key not persisted:',
+                            service,
+                        );
                         // Security: Do not persist keys in localStorage/sessionStorage
                     }
                 },
@@ -237,7 +253,7 @@ export class GlobalBridge {
      */
     private _setupFetchInterceptor(): void {
         const originalFetch = globalThis.fetch.bind(globalThis);
-        
+
         globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = input instanceof Request ? input.url : input.toString();
 
@@ -264,8 +280,9 @@ export class GlobalBridge {
         try {
             const bodyStr = typeof init?.body === 'string' ? init.body : '{}';
             const body = JSON.parse(bodyStr) as Record<string, unknown>;
-            const provider = (body.provider as string) || localStorage.getItem('selected_ai_provider') || 'gpt';
-            
+            const provider =
+                (body.provider as string) || localStorage.getItem('selected_ai_provider') || 'gpt';
+
             const model = (body.model as string) || this._resolveModel(provider);
 
             const res = await this._core.tauriProvider.invoke('send_chat_message', {
@@ -290,16 +307,19 @@ export class GlobalBridge {
         const savedKey = localStorage.getItem(`${provider}_selected_model`);
         const catalog = this._core.catalog.getCatalog();
         const appList = catalog.ai || [];
-        const providerApp = appList.find(a => a.id === provider);
-        
+        const providerApp = appList.find((a) => a.id === provider);
+
         // Define shape of provider data
-        interface ProviderData { 
-            models?: Record<string, { 
-                apiModels?: { text?: string };
-                stats?: { logic?: number; creative?: number };
-            }>;
+        interface ProviderData {
+            models?: Record<
+                string,
+                {
+                    apiModels?: { text?: string };
+                    stats?: { logic?: number; creative?: number };
+                }
+            >;
         }
-        
+
         const data = providerApp?.api_provider_data as unknown as ProviderData | undefined;
         const models = data?.models || {};
 
@@ -309,14 +329,17 @@ export class GlobalBridge {
         // 2. Default (most powerful)
         const sortedKeys = this._sortModelsByPower(models);
         const defaultKey = sortedKeys[0] || '';
-        
+
         return this._getApiId(defaultKey, models);
     }
 
     /**
      * Returns the API ID for a model key.
      */
-    private _getApiId(key: string, models: Record<string, { apiModels?: { text?: string } }>): string {
+    private _getApiId(
+        key: string,
+        models: Record<string, { apiModels?: { text?: string } }>,
+    ): string {
         const modelData = models[key];
         return modelData?.apiModels?.text || key;
     }
@@ -324,7 +347,9 @@ export class GlobalBridge {
     /**
      * Sorts models by power level.
      */
-    private _sortModelsByPower(models: Record<string, { stats?: { logic?: number; creative?: number } }>): string[] {
+    private _sortModelsByPower(
+        models: Record<string, { stats?: { logic?: number; creative?: number } }>,
+    ): string[] {
         return Object.keys(models).sort((a, b) => {
             const statsA = models[a]?.stats;
             const statsB = models[b]?.stats;

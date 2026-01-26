@@ -1,6 +1,7 @@
 ﻿@font-face {
     font-family: 'Monocraft';
-    src: url('/assets/fonts/Monocraft.otf') format('opentype'),
+    src:
+        url('/assets/fonts/Monocraft.otf') format('opentype'),
         url('/api/fonts/Monocraft.otf') format('opentype');
     font-weight: normal;
     font-style: normal;
@@ -9,7 +10,8 @@
 
 @font-face {
     font-family: 'Cubic11';
-    src: url('/assets/fonts/Cubic_11.ttf') format('truetype'),
+    src:
+        url('/assets/fonts/Cubic_11.ttf') format('truetype'),
         url('/api/fonts/Cubic_11.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
@@ -24,7 +26,7 @@
     --warning-raw: 255, 193, 7;
     --primary-alt-raw: 168, 85, 247;
     --accent-raw: 93, 220, 255;
-    
+
     /* Base Colors */
     --bg-dark: #111015;
     --bg-med: #1a1920;
@@ -40,23 +42,23 @@
     --danger-dark: #bd2130;
     --warning: #ffc107;
     --warning-dark: #e0a800;
-    
+
     /* Semantic Slugs */
     --text-primary: #e0e0e0;
     --text-secondary: #a0a0a0;
     --text-muted: #6c757d;
-    
+
     /* Glassmorphism & Alpha Tokens */
     --glass-surface: rgba(255, 255, 255, 0.03);
     --glass-surface-hover: rgba(255, 255, 255, 0.05);
     --glass-border: rgba(255, 255, 255, 0.08);
     --glass-border-light: rgba(255, 255, 255, 0.15);
-    
+
     /* Common UI Tokens */
     --card-bg: rgba(255, 255, 255, 0.03);
     --card-bg-hover: rgba(255, 255, 255, 0.06);
     --premium-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    --sidebar-bg: #0D1117;
+    --sidebar-bg: #0d1117;
     --sidebar-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.08);
 
     /* Radii */
@@ -78,11 +80,11 @@
     --sidebar-collapsed-width: 80px;
     --header-height: 60px;
     --content-padding-top: 90px;
-    
+
     /* Window Controls Positioning */
     --win-controls-x: 19px;
     --win-controls-y: -18px;
-    
+
     /* Animations */
     --transition-fast: 150ms;
     --transition-normal: 300ms;

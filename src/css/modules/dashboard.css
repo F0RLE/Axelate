@@ -87,13 +87,13 @@
 }
 
 .module-status.active {
-    background: #FFFFFF !important; /* Pure White */
+    background: #ffffff !important; /* Pure White */
     color: #000000 !important; /* Pure Black */
     font-weight: 800;
 }
 
 .badge-status.active {
-    background: #FFFFFF !important;
+    background: #ffffff !important;
     color: #000000 !important;
     font-weight: 800;
 }
@@ -217,7 +217,7 @@
     justify-content: center;
     width: 100%;
     height: 100%;
-    
+
     /* Static sizing (ignore zoom) */
     transform: scale(calc(1 / var(--app-zoom, 1)));
     transform-origin: center;
@@ -235,16 +235,18 @@
     background: rgba(255, 180, 0, 0.08);
     border: 1px solid rgba(255, 180, 0, 0.25);
     border-radius: 32px;
-    
+
     /* Strictly fixed pixels to prevent shape-shifting */
     width: 620px;
     height: 400px;
     box-sizing: border-box;
-    
+
     justify-content: center;
     pointer-events: auto;
     box-shadow: 0 0 100px rgba(0, 0, 0, 0.5);
-    transition: background 0.3s ease, border-color 0.3s ease;
+    transition:
+        background 0.3s ease,
+        border-color 0.3s ease;
 }
 
 .width-warning-inner .warning-icon {
@@ -464,8 +466,6 @@
     cursor: pointer; /* Ensure children maintain pointer */
 }
 
-
-
 .model-icon-wrapper {
     width: 80px;
     height: 80px;
@@ -543,8 +543,6 @@
     margin: 0;
 }
 
-
-
 .model-card-premium .model-card-action {
     position: absolute !important;
     bottom: 1rem !important;
@@ -605,14 +603,14 @@
 }
 
 .model-card-premium .model-card-action.active-module-btn:hover {
-    background: #00E676 !important; /* Pure Neon Green */
-    border-color: #00E676 !important;
+    background: #00e676 !important; /* Pure Neon Green */
+    border-color: #00e676 !important;
     color: #000000 !important; /* Black on Neon Green */
     transform: translateY(-2px);
 }
 
 .shortcut-key {
-    background: #FFFFFF;
+    background: #ffffff;
     padding: 2px 6px;
     border-radius: 4px;
     font-family: monospace;
@@ -622,16 +620,16 @@
 
 /* Stop button - red on hover */
 .model-card-premium .model-card-action.active-module-btn.stop-btn:hover {
-    background: #D32F2F !important; /* Deep Material Red */
-    border-color: #D32F2F !important;
-    color: #FFFFFF !important; /* White on Red - PASS 4.5:1 */
+    background: #d32f2f !important; /* Deep Material Red */
+    border-color: #d32f2f !important;
+    color: #ffffff !important; /* White on Red - PASS 4.5:1 */
 }
 
 /* Stop button - red on hover */
 .btn-stop-module:hover {
-    background: #B71C1C !important; /* Extremely dark red for contrast */
-    border-color: #B71C1C !important;
-    color: #FFFFFF !important;
+    background: #b71c1c !important; /* Extremely dark red for contrast */
+    border-color: #b71c1c !important;
+    color: #ffffff !important;
 }
 
 /* Specific Card Accents */
@@ -673,7 +671,9 @@
     justify-content: center;
     opacity: 1;
     visibility: visible;
-    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.8s;
+    transition:
+        opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.8s;
 }
 
 .modal-backdrop.hidden {
@@ -692,7 +692,7 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    
+
     /* Animation state - Slower 0.9s duration and more depth (0.85) */
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -720,14 +720,30 @@
     animation: cardIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 
-.modal-backdrop:not(.hidden) .app-card:nth-child(1) { animation-delay: 0.1s; }
-.modal-backdrop:not(.hidden) .app-card:nth-child(2) { animation-delay: 0.15s; }
-.modal-backdrop:not(.hidden) .app-card:nth-child(3) { animation-delay: 0.2s; }
-.modal-backdrop:not(.hidden) .app-card:nth-child(4) { animation-delay: 0.25s; }
-.modal-backdrop:not(.hidden) .app-card:nth-child(5) { animation-delay: 0.3s; }
-.modal-backdrop:not(.hidden) .app-card:nth-child(6) { animation-delay: 0.35s; }
-.modal-backdrop:not(.hidden) .app-card:nth-child(7) { animation-delay: 0.4s; }
-.modal-backdrop:not(.hidden) .app-card:nth-child(8) { animation-delay: 0.45s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(1) {
+    animation-delay: 0.1s;
+}
+.modal-backdrop:not(.hidden) .app-card:nth-child(2) {
+    animation-delay: 0.15s;
+}
+.modal-backdrop:not(.hidden) .app-card:nth-child(3) {
+    animation-delay: 0.2s;
+}
+.modal-backdrop:not(.hidden) .app-card:nth-child(4) {
+    animation-delay: 0.25s;
+}
+.modal-backdrop:not(.hidden) .app-card:nth-child(5) {
+    animation-delay: 0.3s;
+}
+.modal-backdrop:not(.hidden) .app-card:nth-child(6) {
+    animation-delay: 0.35s;
+}
+.modal-backdrop:not(.hidden) .app-card:nth-child(7) {
+    animation-delay: 0.4s;
+}
+.modal-backdrop:not(.hidden) .app-card:nth-child(8) {
+    animation-delay: 0.45s;
+}
 
 .premium-footer {
     padding: 1.5rem;
@@ -866,7 +882,7 @@
 }
 
 .app-status.installed {
-    background: #13D36E;
+    background: #13d36e;
     color: #000000 !important;
     font-weight: 700;
 }
@@ -918,7 +934,7 @@
     max-width: 28px;
     overflow: hidden;
 
-    color: #FFFFFF !important;
+    color: #ffffff !important;
     background: #444 !important; /* Solid dark grey */
     border: 1px solid #777 !important;
     z-index: 25;
@@ -927,8 +943,8 @@
 .card-action-corner.left:hover {
     max-width: 120px;
     gap: 8px;
-    background: #FFFFFF !important;
-    border-color: #FFFFFF !important;
+    background: #ffffff !important;
+    border-color: #ffffff !important;
     color: #000000 !important;
     box-shadow: none;
 }
@@ -946,7 +962,7 @@
     max-width: 28px;
     overflow: hidden;
 
-    color: #FFFFFF !important;
+    color: #ffffff !important;
     background: #444 !important;
     border: 1px solid #777 !important;
     z-index: 25;
@@ -956,9 +972,9 @@
     max-width: 120px;
     gap: 8px;
     /* Close specific colors (Red) - matches "Remove" intent */
-    background: #B71C1C !important;
-    border-color: #B71C1C !important;
-    color: #FFFFFF !important;
+    background: #b71c1c !important;
+    border-color: #b71c1c !important;
+    color: #ffffff !important;
     box-shadow: none;
 }
 
@@ -1138,7 +1154,7 @@
     border-color: rgba(255, 255, 255, 0.1) !important;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
     transform: translateY(-4px) !important;
-    color: #FFFFFF !important; /* Maximum contrast white on dark background */
+    color: #ffffff !important; /* Maximum contrast white on dark background */
     cursor: pointer;
 }
 
@@ -1341,8 +1357,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     opacity: 1;
 }
 
-
-
 /* --- Type Badge Overrides (API/Local) --- */
 .type-badge {
     position: absolute;
@@ -1398,12 +1412,12 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 /* Specific Colors & Hovers (FIX RED HOVER ISSUE) */
 .type-badge.type-local {
-    color: #13D36E !important;
+    color: #13d36e !important;
 }
 
 .type-badge.type-local:hover {
-    background: #00E676 !important;
-    border-color: #00E676 !important;
+    background: #00e676 !important;
+    border-color: #00e676 !important;
     color: #000000 !important;
     box-shadow: none !important;
 }
@@ -1413,8 +1427,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 }
 
 .type-badge.type-api:hover {
-    background: #4AA3FF !important;
-    border-color: #4AA3FF !important;
+    background: #4aa3ff !important;
+    border-color: #4aa3ff !important;
     color: #000000 !important;
     box-shadow: none !important;
 }
@@ -1429,9 +1443,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 /* App Status Button Overrides */
 
-
 .app-status.download-btn {
-    background: linear-gradient(135deg, #13D36E, #2ecc71);
+    background: linear-gradient(135deg, #13d36e, #2ecc71);
     color: #000; /* Black text on bright green for accessibility */
     font-weight: 700;
     border: none;
@@ -1555,7 +1568,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 /* --- MODULE ACTION BUTTONS (Settings / Close) --- */
 
-
 .app-card:hover .module-action-badge,
 .module-card.selected:hover .module-action-badge,
 .app-card.selected:hover .module-action-badge,
@@ -1668,11 +1680,9 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     color: #e0e0e0;
 }
 
-
 .module-action-badge.close .badge-text {
     color: #e74c3c;
 }
-
 
 .module-action-badge.close .badge-icon {
     color: rgba(255, 255, 255, 0.5); /* Less prominent by default */

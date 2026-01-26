@@ -28,11 +28,26 @@ jobs:
           cd src
           npm ci
 
+      - name: Strict Linting
+        run: |
+          cd src
+          npm run lint
+
+      - name: Check Formatting
+        run: |
+          cd src
+          npm run format:check
+
       - name: Type Check & Build
         run: |
           cd src
           npm run build
         # 'npm run build' runs 'tsc && vite build', so this enforces type safety
+
+      - name: Check Bundle Size
+        run: |
+          cd src
+          npm run check-size
 
       - name: Run Frontend Tests
         run: |

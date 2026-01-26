@@ -34,7 +34,10 @@ export class FailsafeService {
         if (!splash) return;
 
         const computedSplash = globalThis.getComputedStyle(splash);
-        const isSplashVisible = computedSplash.display !== 'none' && computedSplash.opacity !== '0' && computedSplash.visibility !== 'hidden';
+        const isSplashVisible =
+            computedSplash.display !== 'none' &&
+            computedSplash.opacity !== '0' &&
+            computedSplash.visibility !== 'hidden';
 
         if (isSplashVisible) {
             console.warn('[Failsafe] Splash screen timed out, forcing hide.');
@@ -48,7 +51,7 @@ export class FailsafeService {
 
                 // Show main UI if it's still hidden
                 const elements = ['sidebar', 'app-header', 'main-area'];
-                elements.forEach(id => {
+                elements.forEach((id) => {
                     const el = document.getElementById(id);
                     if (el) {
                         el.classList.add('visible');

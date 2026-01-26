@@ -35,7 +35,14 @@ export class ModuleService {
             console.log('[ModuleService] Progress Event:', payload);
 
             this._downloadState[payload.module_id] = {
-                status: payload.status as 'init' | 'pending' | 'connecting' | 'downloading' | 'extracting' | 'complete' | 'error',
+                status: payload.status as
+                    | 'init'
+                    | 'pending'
+                    | 'connecting'
+                    | 'downloading'
+                    | 'extracting'
+                    | 'complete'
+                    | 'error',
                 progress: payload.progress,
                 message: payload.message,
                 downloaded: payload.downloaded,
@@ -54,7 +61,6 @@ export class ModuleService {
         });
     }
 
-
     /**
      * Checks if a module is currently installed on the system.
      */
@@ -64,7 +70,6 @@ export class ModuleService {
 
         try {
             return await this._tauri.invoke<boolean>('check_module_installed', { moduleId });
-
         } catch (e) {
             console.error('[ModuleService] Check installed failed:', e);
             return false;
@@ -103,18 +108,18 @@ export class ModuleService {
      */
     public async deleteModule(moduleId: string): Promise<boolean> {
         if (!this._tauri.isTauri()) {
-             throw new Error('Delete available only in desktop app');
+            throw new Error('Delete available only in desktop app');
         }
 
         try {
-             await this._tauri.invoke('delete_module', { moduleId });
+            await this._tauri.invoke('delete_module', { moduleId });
 
-             this._deletedModules.add(moduleId);
-             delete this._downloadState[moduleId];
-             return true;
+            this._deletedModules.add(moduleId);
+            delete this._downloadState[moduleId];
+            return true;
         } catch (e) {
-             console.error('[ModuleService] Delete failed:', e);
-             return false;
+            console.error('[ModuleService] Delete failed:', e);
+            return false;
         }
     }
 

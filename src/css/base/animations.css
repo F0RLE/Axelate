@@ -98,10 +98,12 @@
 /* --- SKELETON LOADING CLASSES --- */
 
 .skeleton {
-    background: linear-gradient(90deg,
-            var(--bg-light) 25%,
-            var(--surface) 50%,
-            var(--bg-light) 75%);
+    background: linear-gradient(
+        90deg,
+        var(--bg-light) 25%,
+        var(--surface) 50%,
+        var(--bg-light) 75%
+    );
     background-size: 200px 100%;
     animation: skeletonLoading 1.5s ease-in-out infinite;
     border-radius: 4px;

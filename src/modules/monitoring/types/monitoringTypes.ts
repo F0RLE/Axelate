@@ -1,4 +1,3 @@
-
 export interface ICpuStats {
     percent: number;
     cores: number;

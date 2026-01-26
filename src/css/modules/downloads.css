@@ -24,7 +24,6 @@
     height: 20px;
 }
 
-
 .downloads-header {
     animation: downloadsHeaderSlideIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
@@ -47,7 +46,6 @@
 #page-downloads.active-download {
     justify-content: flex-start;
 }
-
 
 #downloads-body {
     flex: 0;
@@ -101,7 +99,6 @@
 }
 
 @keyframes downloadsIconPulse {
-
     0%,
     100% {
         box-shadow: 0 8px 24px rgba(var(--primary-raw), 0.3);
@@ -188,7 +185,7 @@
 }
 
 .downloads-card-main::after {
-    content: "";
+    content: '';
     position: absolute;
     inset: 0;
     background: radial-gradient(circle at right, rgba(var(--primary-raw), 0.1), transparent 70%);
@@ -320,7 +317,7 @@
     height: 100%;
     width: 0%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #6A4C93, #8A5CB8, #A66DD4, #8A5CB8, #6A4C93);
+    background: linear-gradient(90deg, #6a4c93, #8a5cb8, #a66dd4, #8a5cb8, #6a4c93);
     background-size: 300% 100%;
     animation: waveFlow 4s ease-in-out infinite;
     transform-origin: left center;
@@ -462,8 +459,6 @@
     border-color: rgba(var(--primary-raw), 0.5);
 }
 
-
-
 .download-speed-toggle {
     width: 40px;
     height: 22px;
@@ -574,6 +569,3 @@
     align-items: center;
     gap: 0.5rem;
 }
-
-
-

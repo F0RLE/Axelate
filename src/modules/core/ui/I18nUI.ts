@@ -22,16 +22,20 @@ export class I18nUI {
      * @sideeffect Adds global document listener
      */
     private _bindEvents(): void {
-        document.addEventListener('click', (e: Event) => {
-            const target = e.target as HTMLElement;
+        document.addEventListener(
+            'click',
+            (e: Event) => {
+                const target = e.target as HTMLElement;
 
-            // Top Bar Menu
-            const root = document.querySelector('.lang-switcher-root');
-            const menu = document.getElementById('lang-menu-items');
-            if (menu && menu.classList.contains('open') && root && !root.contains(target)) {
-                menu.classList.remove('open');
-            }
-        }, { signal: this._cleanupAbort.signal });
+                // Top Bar Menu
+                const root = document.querySelector('.lang-switcher-root');
+                const menu = document.getElementById('lang-menu-items');
+                if (menu && menu.classList.contains('open') && root && !root.contains(target)) {
+                    menu.classList.remove('open');
+                }
+            },
+            { signal: this._cleanupAbort.signal },
+        );
     }
 
     /**
@@ -60,7 +64,10 @@ export class I18nUI {
         document.querySelectorAll('[data-i18n]').forEach((el: Element) => {
             const element = el as HTMLElement;
 
-            if (element.classList.contains('lang-option') || element.classList.contains('lang-dropdown-btn')) {
+            if (
+                element.classList.contains('lang-option') ||
+                element.classList.contains('lang-dropdown-btn')
+            ) {
                 return;
             }
 
@@ -69,11 +76,13 @@ export class I18nUI {
 
             const paramsRaw = element.dataset.i18nParams;
             let params: Record<string, unknown> = {};
-            try { 
+            try {
                 if (paramsRaw) {
-                    params = JSON.parse(paramsRaw) as Record<string, unknown>; 
+                    params = JSON.parse(paramsRaw) as Record<string, unknown>;
                 }
-            } catch { /* ignore */ }
+            } catch {
+                /* ignore */
+            }
 
             const text = this._service.t(key, element.textContent || '', params);
             this._updateElementText(element, text);
@@ -109,9 +118,9 @@ export class I18nUI {
         const svg = element.querySelector('svg');
         if (svg) {
             let textNode: ChildNode | null = null;
-            element.childNodes.forEach(n => { 
+            element.childNodes.forEach((n) => {
                 if (n.nodeType === 3) {
-                    textNode = n; 
+                    textNode = n;
                 }
             });
 
@@ -159,7 +168,10 @@ export class I18nUI {
             const element = el as HTMLElement;
             const key = element.dataset.i18nAriaLabel;
             if (key) {
-                element.setAttribute('aria-label', this._service.t(key, element.getAttribute('aria-label') || ''));
+                element.setAttribute(
+                    'aria-label',
+                    this._service.t(key, element.getAttribute('aria-label') || ''),
+                );
             }
         });
     }
@@ -241,14 +253,14 @@ export class I18nUI {
         // Close menus
         const menu = document.getElementById('lang-menu-items');
         if (menu) menu.classList.remove('open');
-        
+
         const sidebarMenu = document.getElementById('sidebar-lang-menu');
         if (sidebarMenu) sidebarMenu.classList.remove('open');
 
         // Load translations and apply
         await this._service.loadTranslations(lang);
         this.applyTranslations();
-        
+
         // Notify other components if needed
         const g = globalThis as unknown as II18nGlobal;
         if (typeof g.dispatchEvent === 'function') {

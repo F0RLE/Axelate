@@ -11,7 +11,7 @@ export class SidebarUI {
 
     constructor(
         private readonly _state: StateService,
-        private readonly _soundService?: SoundService
+        private readonly _soundService?: SoundService,
     ) {}
 
     /**
@@ -28,7 +28,7 @@ export class SidebarUI {
             this._sidebar = document.getElementById('sidebar');
             if (!this._sidebar || this._sidebar.children.length === 0) {
                 this._sidebar = null; // Reset if empty container
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise((r) => setTimeout(r, 100));
                 attempts++;
             } else {
                 break;
@@ -42,7 +42,7 @@ export class SidebarUI {
 
         this._restoreState();
         this._initToggle();
-        
+
         // Ensure logos are mounted after template injection
         mountLogos();
     }
@@ -71,7 +71,7 @@ export class SidebarUI {
      */
     private _initToggle(): void {
         if (!this._sidebar) return;
-        
+
         const logoArea = this._sidebar.querySelector('.logo-area') as HTMLElement;
         if (logoArea) {
             // Section 23.2: Accessibility
@@ -98,7 +98,7 @@ export class SidebarUI {
                 // Update state
                 this._state.setSidebarWidth?.(targetWidth);
                 this._state.setSidebarCollapsed?.(this._isCollapsed);
-                
+
                 logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
 
                 // Play sound effect
@@ -114,12 +114,16 @@ export class SidebarUI {
             };
 
             logoArea.addEventListener('click', toggle, { signal: this._cleanupAbort.signal });
-            logoArea.addEventListener('keydown', (e: KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    toggle();
-                }
-            }, { signal: this._cleanupAbort.signal });
+            logoArea.addEventListener(
+                'keydown',
+                (e: KeyboardEvent) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggle();
+                    }
+                },
+                { signal: this._cleanupAbort.signal },
+            );
         }
     }
 

@@ -36,7 +36,6 @@ export class WindowService {
     private readonly _MIN_ZOOM = 0.5;
     private readonly _MAX_ZOOM = 2;
 
-
     constructor(private readonly _tauri: TauriProvider) {}
 
     /**
@@ -83,7 +82,7 @@ export class WindowService {
         if (this._tauri.isTauri()) {
             await this._tauri.invoke('maximize_window');
         } else {
-             console.log('[WindowService] toggleMaximize (mock)');
+            console.log('[WindowService] toggleMaximize (mock)');
         }
     }
 
@@ -91,7 +90,7 @@ export class WindowService {
      * Closes the application window or browser tab.
      */
     public async close(): Promise<void> {
-         if (this._tauri.isTauri()) {
+        if (this._tauri.isTauri()) {
             await this._tauri.invoke('close_window');
         } else {
             globalThis.close();
@@ -103,12 +102,12 @@ export class WindowService {
      */
     public async hideToTray(): Promise<void> {
         if (this._tauri.isTauri()) {
-             try {
+            try {
                 await this._tauri.invoke('hide_window');
-             } catch {
-                 // Fallback
-                 await this.minimize();
-             }
+            } catch {
+                // Fallback
+                await this.minimize();
+            }
         } else {
             console.log('[WindowService] hideToTray (mock)');
         }
@@ -132,14 +131,14 @@ export class WindowService {
                 try {
                     await this._tauri.invoke('set_focus');
                 } catch {
-                     // set_focus command not found - skipping focus step
+                    // set_focus command not found - skipping focus step
                 }
 
                 return; // Success
             } catch (e) {
                 console.warn(`[WindowService] show_window attempt ${i + 1} failed:`, e);
                 if (i < maxRetries - 1) {
-                    await new Promise(r => setTimeout(r, 300)); // Wait before retry
+                    await new Promise((r) => setTimeout(r, 300)); // Wait before retry
                 }
             }
         }
@@ -157,7 +156,10 @@ export class WindowService {
         if (this._tauri.isTauri()) {
             try {
                 await this._tauri.invoke('set_webview_zoom', { zoom: this._currentZoom });
-                document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toString());
+                document.documentElement.style.setProperty(
+                    '--app-zoom',
+                    this._currentZoom.toString(),
+                );
             } catch (e) {
                 console.error('[WindowService] Zoom error:', e);
             }
@@ -223,21 +225,23 @@ export class WindowService {
      * Resizes and centers the application window.
      */
     public async setSize(width: number, height: number): Promise<void> {
-         if (this._tauri.isTauri()) {
-             try {
+        if (this._tauri.isTauri()) {
+            try {
                 const win = globalThis as unknown as IWindowGlobal;
                 if (win.__TAURI__?.window) {
-                     const appWindow = win.__TAURI__.window.getCurrentWindow();
-                     const LogicalSize = win.__TAURI__.window.LogicalSize || (win.__TAURI__.dpi ? win.__TAURI__.dpi.LogicalSize : null);
-                     if (LogicalSize) {
-                         await appWindow.setSize(new LogicalSize(width, height));
-                         await appWindow.center();
-                     }
+                    const appWindow = win.__TAURI__.window.getCurrentWindow();
+                    const LogicalSize =
+                        win.__TAURI__.window.LogicalSize ||
+                        (win.__TAURI__.dpi ? win.__TAURI__.dpi.LogicalSize : null);
+                    if (LogicalSize) {
+                        await appWindow.setSize(new LogicalSize(width, height));
+                        await appWindow.center();
+                    }
                 }
-             } catch(e) {
-                 console.warn('[WindowService] setSize failed', e);
-             }
-         }
+            } catch (e) {
+                console.warn('[WindowService] setSize failed', e);
+            }
+        }
     }
 
     /**
@@ -245,12 +249,14 @@ export class WindowService {
      */
     public async isMaximized(): Promise<boolean> {
         if (this._tauri.isTauri()) {
-             try {
+            try {
                 const win = globalThis as unknown as IWindowGlobal;
                 if (win.__TAURI__?.window) {
-                     return await win.__TAURI__.window.getCurrentWindow().isMaximized();
+                    return await win.__TAURI__.window.getCurrentWindow().isMaximized();
                 }
-             } catch { return false; }
+            } catch {
+                return false;
+            }
         }
         return false;
     }

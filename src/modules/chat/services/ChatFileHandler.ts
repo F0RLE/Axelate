@@ -1,18 +1,23 @@
 /**
  * @module chat/services/ChatFileHandler
  * @description State manager for file attachments during a chat session.
- * 
+ *
  * @example
  * ```typescript
  * import { chatFileHandler } from './ChatFileHandler';
- * 
+ *
  * chatFileHandler.addFiles(fileList);
  * const { attachments, combinedText } = await chatFileHandler.processForSend('Base prompt');
  * ```
  */
 
 import type { IChatAttachment } from '../types/chatTypes';
-import { isTextFile, readFileAsText, readFileAsBase64, estimateTokenCount } from '../utils/chatUtils';
+import {
+    isTextFile,
+    readFileAsText,
+    readFileAsBase64,
+    estimateTokenCount,
+} from '../utils/chatUtils';
 import JSZip from 'jszip';
 
 // ============================================================================
@@ -22,9 +27,30 @@ import JSZip from 'jszip';
 const IGNORE_DIRS = ['node_modules/', '.git/', '.svn/', 'dist/', 'build/', '.next/', '.astro/'];
 const IGNORE_FILES = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lockb'];
 const TEXT_EXTS = new Set([
-    'js', 'ts', 'jsx', 'tsx', 'py', 'md', 'json', 'html', 'css', 'txt', 
-    'xml', 'yaml', 'yml', 'rs', 'go', 'java', 'c', 'cpp', 'h', 'sh', 
-    'sql', 'toml', 'env', 'config'
+    'js',
+    'ts',
+    'jsx',
+    'tsx',
+    'py',
+    'md',
+    'json',
+    'html',
+    'css',
+    'txt',
+    'xml',
+    'yaml',
+    'yml',
+    'rs',
+    'go',
+    'java',
+    'c',
+    'cpp',
+    'h',
+    'sh',
+    'sql',
+    'toml',
+    'env',
+    'config',
 ]);
 
 const MAX_ARCHIVE_SIZE = 10 * 1024 * 1024; // 10MB limit for the archive itself
@@ -70,7 +96,7 @@ export class ChatFileHandler {
 
     /**
      * Add files to the attachment list
-     * 
+     *
      * @param newFiles - File list to add
      * @sideeffect Updates internal state and triggers UI updates if listeners are present
      */
@@ -119,18 +145,23 @@ export class ChatFileHandler {
 
     /**
      * Process files into IChatAttachment format and build combined text for AI context.
-     * 
+     *
      * @param baseText - The initial message text to append file content to
      * @returns Object containing processed attachments and the final context string
      * @sideeffect Reads file contents and performs archive extraction
      */
-    public async processForSend(baseText: string): Promise<{ attachments: IChatAttachment[]; combinedText: string }> {
+    public async processForSend(
+        baseText: string,
+    ): Promise<{ attachments: IChatAttachment[]; combinedText: string }> {
         const attachments: IChatAttachment[] = [];
         let combinedText = baseText;
 
         for (const file of this._files) {
             const ext = file.name.split('.').pop()?.toLowerCase();
-            const isZip = ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+            const isZip =
+                ext === 'zip' ||
+                file.type === 'application/zip' ||
+                file.type === 'application/x-zip-compressed';
 
             if (isTextFile(file)) {
                 const content = await readFileAsText(file);
@@ -140,15 +171,15 @@ export class ChatFileHandler {
                     name: file.name,
                     type: file.type || 'text/plain',
                     size: file.size,
-                    data_base64: '', 
-                    tokens: fileTokens
+                    data_base64: '',
+                    tokens: fileTokens,
                 });
             } else if (isZip) {
                 const zipResult = await this._processZipFile(file);
                 combinedText += zipResult.text;
                 attachments.push({
                     ...zipResult.attachment,
-                    tokens: zipResult.tokens
+                    tokens: zipResult.tokens,
                 });
             } else {
                 const base64 = await readFileAsBase64(file);
@@ -158,7 +189,7 @@ export class ChatFileHandler {
                     type: file.type,
                     size: file.size,
                     data_base64: base64,
-                    tokens: fileTokens
+                    tokens: fileTokens,
                 });
             }
         }
@@ -171,29 +202,34 @@ export class ChatFileHandler {
     /**
      * Helper to process ZIP archives with token optimization.
      */
-    private async _processZipFile(file: File): Promise<{ text: string; attachment: IChatAttachment; tokens: number }> {
+    private async _processZipFile(
+        file: File,
+    ): Promise<{ text: string; attachment: IChatAttachment; tokens: number }> {
         if (file.size > MAX_ARCHIVE_SIZE) {
-            return this._createSkippedAttachment(file, `Size > ${MAX_ARCHIVE_SIZE / 1024 / 1024}MB`);
+            return this._createSkippedAttachment(
+                file,
+                `Size > ${MAX_ARCHIVE_SIZE / 1024 / 1024}MB`,
+            );
         }
 
         let textResult = `\n\n--- ARCHIVE: ${file.name} (Smart Unpacked) ---`;
-        
+
         try {
             const zipData = await file.arrayBuffer();
-            
-            // Security: JSZip.loadAsync parses the directory. 
+
+            // Security: JSZip.loadAsync parses the directory.
             // We have already validated file.size <= MAX_ARCHIVE_SIZE (10MB).
             // We further enforce MAX_TOTAL_UNCOMPRESSED_SIZE (100MB) during extraction below.
             const zip = await JSZip.loadAsync(zipData); // NOSONAR: S5042 - Size limits enforced
             const fileNames = Object.keys(zip.files).sort((a, b) => a.localeCompare(b));
-            
+
             // 1. Generate Project Structure Map
             textResult += this._generateStructureMap(zip, fileNames);
             textResult += '\n--- START EXTRACTED FILES ---\n';
 
             const extractionResult = await this._extractZipEntries(zip, fileNames);
             textResult += extractionResult;
-            
+
             textResult += `\n--- END ARCHIVE ${file.name} ---`;
 
             return {
@@ -202,11 +238,10 @@ export class ChatFileHandler {
                     name: file.name,
                     type: file.type || 'application/zip',
                     size: file.size,
-                    data_base64: '', 
+                    data_base64: '',
                 },
-                tokens: estimateTokenCount(textResult)
+                tokens: estimateTokenCount(textResult),
             };
-
         } catch (e) {
             console.error('[ChatFileHandler] Failed to optimize zip:', e);
             const base64 = await readFileAsBase64(file);
@@ -218,21 +253,24 @@ export class ChatFileHandler {
                     size: file.size,
                     data_base64: base64,
                 },
-                tokens: 0
+                tokens: 0,
             };
         }
     }
 
-    private _createSkippedAttachment(file: File, reason: string): { text: string; attachment: IChatAttachment; tokens: number } {
+    private _createSkippedAttachment(
+        file: File,
+        reason: string,
+    ): { text: string; attachment: IChatAttachment; tokens: number } {
         return {
             text: `\n[Archive skipped: ${file.name} (${reason})]`,
             attachment: {
                 name: file.name,
                 type: file.type || 'application/zip',
                 size: file.size,
-                data_base64: '', 
+                data_base64: '',
             },
-            tokens: 0
+            tokens: 0,
         };
     }
 
@@ -258,8 +296,8 @@ export class ChatFileHandler {
                 continue;
             }
 
-            const content = await zipEntry.async("string");
-            
+            const content = await zipEntry.async('string');
+
             // Security: Global Size Check (Compliant Solution for S5042)
             // We track totalExpandedSize against MAX_TOTAL_UNCOMPRESSED_SIZE (100MB)
             totalExpandedSize += content.length;
@@ -286,17 +324,26 @@ export class ChatFileHandler {
         return textResult;
     }
 
-    private _validateZipEntry(relPath: string, zipEntry: JSZip.JSZipObject): { skipped: boolean; message: string } {
+    private _validateZipEntry(
+        relPath: string,
+        zipEntry: JSZip.JSZipObject,
+    ): { skipped: boolean; message: string } {
         // Safety: Path Traversal Protection
         if (relPath.includes('..') || relPath.startsWith('/') || relPath.startsWith('\\')) {
-            return { skipped: true, message: `\n[Skipped: ${relPath} - Malformed or suspicious path]` };
+            return {
+                skipped: true,
+                message: `\n[Skipped: ${relPath} - Malformed or suspicious path]`,
+            };
         }
 
         // Safety: Check uncompressed size (Zip Bomb protection)
-        // @ts-ignore - access internal JSZip metadata for efficiency
+        // @ts-expect-error - access internal JSZip metadata for efficiency
         const metadata = zipEntry._data as { uncompressedSize?: number };
         if (metadata?.uncompressedSize && metadata.uncompressedSize > MAX_EXTRACTED_FILE_SIZE * 2) {
-             return { skipped: true, message: `\n[Skipped: ${relPath} - Uncompressed size too large]` };
+            return {
+                skipped: true,
+                message: `\n[Skipped: ${relPath} - Uncompressed size too large]`,
+            };
         }
 
         return { skipped: false, message: '' };
@@ -304,18 +351,18 @@ export class ChatFileHandler {
 
     /**
      * Estimates total tokens for current files + base text.
-     * 
+     *
      * @param baseText - The user message text
      * @returns Estimated token count based on Tiktoken approximation
      */
     public async getTotalTokenEstimate(baseText: string): Promise<number> {
         let total = 0;
         const { combinedText, attachments } = await this.calculateCombinedContext(baseText);
-        
+
         total += estimateTokenCount(combinedText);
 
         // Add 258 tokens per image
-        attachments.forEach(att => {
+        attachments.forEach((att) => {
             if (att.type.startsWith('image/')) {
                 total += 258;
             }
@@ -327,29 +374,44 @@ export class ChatFileHandler {
     /**
      * Internally calculate context without clearing state.
      * Useful for live token estimation and previews.
-     * 
+     *
      * @param baseText - The user message text
      * @returns Processed attachments and combined text snapshot
      */
-    public async calculateCombinedContext(baseText: string): Promise<{ combinedText: string, attachments: IChatAttachment[] }> {
+    public async calculateCombinedContext(
+        baseText: string,
+    ): Promise<{ combinedText: string; attachments: IChatAttachment[] }> {
         const tempFiles = [...this._files];
         const attachments: IChatAttachment[] = [];
         let combinedText = baseText;
 
         for (const file of tempFiles) {
             const ext = file.name.split('.').pop()?.toLowerCase();
-            const isZip = ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+            const isZip =
+                ext === 'zip' ||
+                file.type === 'application/zip' ||
+                file.type === 'application/x-zip-compressed';
 
             if (isTextFile(file)) {
                 const content = await readFileAsText(file);
                 combinedText += `\n\n--- ${file.name} ---\n${content}`;
-                attachments.push({ name: file.name, type: file.type, size: file.size, data_base64: '' });
+                attachments.push({
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    data_base64: '',
+                });
             } else if (isZip) {
                 const res = await this._processZipFile(file);
                 combinedText += res.text;
                 attachments.push(res.attachment);
             } else {
-                attachments.push({ name: file.name, type: file.type, size: file.size, data_base64: 'placeholder' });
+                attachments.push({
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    data_base64: 'placeholder',
+                });
             }
         }
         return { combinedText, attachments };
@@ -357,13 +419,16 @@ export class ChatFileHandler {
 
     /**
      * Estimates tokens for a single file.
-     * 
+     *
      * @param file - The file object to analyze
      * @returns Estimated token count
      */
     public async getFileTokenEstimate(file: File): Promise<number> {
         const ext = file.name.split('.').pop()?.toLowerCase();
-        const isZip = ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
+        const isZip =
+            ext === 'zip' ||
+            file.type === 'application/zip' ||
+            file.type === 'application/x-zip-compressed';
 
         if (file.type.startsWith('image/')) {
             return 258;
@@ -396,7 +461,7 @@ export class ChatFileHandler {
      */
     private _generateStructureMap(zip: JSZip, fileNames: string[]): string {
         let map = '\n\nStructure Map:\n';
-        fileNames.forEach(path => {
+        fileNames.forEach((path) => {
             const parts = path.split('/').filter(Boolean);
             const depth = parts.length - 1;
             const prefix = '  '.repeat(depth) + (zip.files[path].dir ? '📁 ' : '📄 ');
@@ -412,8 +477,8 @@ export class ChatFileHandler {
     private _shouldProcessEntry(relPath: string, isDir: boolean): boolean {
         if (isDir) return false;
 
-        const isIgnoredDir = IGNORE_DIRS.some(dir => relPath.includes(dir));
-        const isIgnoredFile = IGNORE_FILES.some(f => relPath.endsWith(f));
+        const isIgnoredDir = IGNORE_DIRS.some((dir) => relPath.includes(dir));
+        const isIgnoredFile = IGNORE_FILES.some((f) => relPath.endsWith(f));
         if (isIgnoredDir || isIgnoredFile) return false;
 
         const isMinified = relPath.includes('.min.') || relPath.endsWith('.map');

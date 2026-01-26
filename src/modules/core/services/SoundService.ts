@@ -41,13 +41,15 @@ export class SoundService {
      * Cleans up all event listeners and audio context.
      */
     public destroy(): void {
-        this._unsubscribers.forEach(fn => fn());
+        this._unsubscribers.forEach((fn) => fn());
         this._unsubscribers = [];
-        
+
         if (this._ctx && this._ctx.state !== 'closed') {
-            this._ctx.close().catch(e => console.error('[SoundService] Error closing context:', e));
+            this._ctx
+                .close()
+                .catch((e) => console.error('[SoundService] Error closing context:', e));
         }
-        
+
         console.debug('[SoundService] Destroyed.');
     }
 
@@ -68,10 +70,17 @@ export class SoundService {
     /**
      * Plays a single tone.
      */
-    private _playTone(freq: number, type: OscillatorType, duration: number, vol: number = 0.05): void {
+    private _playTone(
+        freq: number,
+        type: OscillatorType,
+        duration: number,
+        vol: number = 0.05,
+    ): void {
         if (!this._enabled || !this._ctx) return;
         if (this._ctx.state === 'suspended') {
-            this._ctx.resume().catch(() => { /* Ignore suspended resume failures */ });
+            this._ctx.resume().catch(() => {
+                /* Ignore suspended resume failures */
+            });
         }
 
         const osc = this._ctx.createOscillator();
@@ -110,7 +119,9 @@ export class SoundService {
     public playClick(): void {
         if (!this._enabled || !this._ctx) return;
         if (this._ctx.state === 'suspended') {
-            this._ctx.resume().catch(() => { /* Ignore */ });
+            this._ctx.resume().catch(() => {
+                /* Ignore */
+            });
         }
 
         const t = this._ctx.currentTime;
@@ -143,7 +154,9 @@ export class SoundService {
     public playToggle(state: boolean): void {
         if (!this._enabled || !this._ctx) return;
         if (this._ctx.state === 'suspended') {
-            this._ctx.resume().catch(() => { /* Ignore */ });
+            this._ctx.resume().catch(() => {
+                /* Ignore */
+            });
         }
 
         const osc = this._ctx.createOscillator();
@@ -176,7 +189,9 @@ export class SoundService {
     public playExpand(expanding: boolean): void {
         if (!this._enabled || !this._ctx) return;
         if (this._ctx.state === 'suspended') {
-            this._ctx.resume().catch(() => { /* Ignore */ });
+            this._ctx.resume().catch(() => {
+                /* Ignore */
+            });
         }
 
         const osc = this._ctx.createOscillator();
@@ -215,7 +230,9 @@ export class SoundService {
     private _bindListeners(): void {
         // 1. Mouse Over (Hover & Expansion)
         const handleMouseOver = (e: Event): void => {
-            const target = (e.target as Element).closest('button, .nav-btn, .toggle, .sidebar-toggle-btn, .taskbar-toggle-btn, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .model-card-action, .app-card, .model-card-premium, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn');
+            const target = (e.target as Element).closest(
+                'button, .nav-btn, .toggle, .sidebar-toggle-btn, .taskbar-toggle-btn, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .model-card-action, .app-card, .model-card-premium, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn',
+            );
 
             if (target) {
                 if (target !== this._lastHovered) {
@@ -242,7 +259,11 @@ export class SoundService {
 
         // 3. Mouse Down (Click)
         const handleMouseDown = (e: Event): void => {
-            if ((e.target as HTMLElement).closest('button, .nav-btn, .toggle, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .model-card-action, .app-card, .model-card-premium, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn')) {
+            if (
+                (e.target as HTMLElement).closest(
+                    'button, .nav-btn, .toggle, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .model-card-action, .app-card, .model-card-premium, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn',
+                )
+            ) {
                 this.playClick();
             }
         };
@@ -254,7 +275,7 @@ export class SoundService {
         this._unsubscribers.push(
             () => document.removeEventListener('mouseover', handleMouseOver),
             () => document.removeEventListener('mouseout', handleMouseOut),
-            () => document.removeEventListener('mousedown', handleMouseDown)
+            () => document.removeEventListener('mousedown', handleMouseDown),
         );
     }
 
@@ -262,24 +283,26 @@ export class SoundService {
      * Handles expansion sounds for UI components.
      */
     private _handleExpansionSounds(target: Element): void {
-         // 1. App Badges
-         const badge = target.closest('.app-type-badge, .app-delete-badge, .module-type-badge, .module-action-badge');
-         if (badge && badge !== this._currentBadge) {
-             this._currentBadge = badge;
-             this.playExpand(true);
-         } else if (!badge && this._currentBadge) {
-             this.playExpand(false);
-             this._currentBadge = null;
-         }
+        // 1. App Badges
+        const badge = target.closest(
+            '.app-type-badge, .app-delete-badge, .module-type-badge, .module-action-badge',
+        );
+        if (badge && badge !== this._currentBadge) {
+            this._currentBadge = badge;
+            this.playExpand(true);
+        } else if (!badge && this._currentBadge) {
+            this.playExpand(false);
+            this._currentBadge = null;
+        }
 
-         // 2. Action Corners
-         const corner = target.closest('.card-action-corner');
-         if (corner && corner !== this._currentActionCorner) {
-             this._currentActionCorner = corner;
-             this.playExpand(true);
-         } else if (!corner && this._currentActionCorner) {
-             this.playExpand(false);
-             this._currentActionCorner = null;
-         }
+        // 2. Action Corners
+        const corner = target.closest('.card-action-corner');
+        if (corner && corner !== this._currentActionCorner) {
+            this._currentActionCorner = corner;
+            this.playExpand(true);
+        } else if (!corner && this._currentActionCorner) {
+            this.playExpand(false);
+            this._currentActionCorner = null;
+        }
     }
 }

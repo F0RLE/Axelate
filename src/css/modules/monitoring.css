@@ -4,7 +4,7 @@
 
 /* System Monitor Card */
 .sysmon-card {
-    font-family: "Monocraft", "Inter", sans-serif;
+    font-family: 'Monocraft', 'Inter', sans-serif;
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 16px;
@@ -25,7 +25,9 @@
     overflow: hidden;
     opacity: 1;
     max-height: 80px;
-    transition: opacity 0.25s ease, max-height 0.25s ease;
+    transition:
+        opacity 0.25s ease,
+        max-height 0.25s ease;
 }
 
 .sysmon-stat.hiding {
@@ -74,7 +76,7 @@
 /* Hyper-specific override to force font size application */
 #sidebar #system-monitor .sysmon-stat .sysmon-header .sysmon-value {
     font-size: 0.75rem !important; /* Reduced further */
-    font-family: "Monocraft", monospace !important;
+    font-family: 'Monocraft', monospace !important;
 }
 
 #sidebar #system-monitor .sysmon-stat .sysmon-header .sysmon-label .sysmon-label-text {
@@ -84,7 +86,7 @@
 .sysmon-value {
     flex-shrink: 0;
     color: #ffffff;
-    font-family: "Monocraft", monospace;
+    font-family: 'Monocraft', monospace;
     font-size: 0.75rem !important; /* Fallback reduced */
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -184,11 +186,7 @@
 .gpu-info {
     margin-top: 1rem;
     padding: 1rem;
-    background: linear-gradient(
-        135deg,
-        var(--bg-light),
-        rgba(var(--primary-raw), 0.05)
-    );
+    background: linear-gradient(135deg, var(--bg-light), rgba(var(--primary-raw), 0.05));
     border-radius: 10px;
     font-size: 0.85rem;
     border: 1px solid rgba(138, 43, 226, 0.1);
@@ -197,11 +195,7 @@
 
 .gpu-info:hover {
     border-color: rgba(var(--primary-raw), 0.3);
-    background: linear-gradient(
-        135deg,
-        var(--bg-light),
-        rgba(var(--primary-raw), 0.1)
-    );
+    background: linear-gradient(135deg, var(--bg-light), rgba(var(--primary-raw), 0.1));
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(var(--primary-raw), 0.15);
 }

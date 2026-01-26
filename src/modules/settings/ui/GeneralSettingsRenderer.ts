@@ -37,9 +37,10 @@ export class GeneralSettingsRenderer {
 
         const hiddenItems = this._state.getHiddenNavItems();
 
-        const html = navItems.map(item => {
-            const labelKey = `ui.launcher.settings.toggle_${item.id}`;
-            return `
+        const html = navItems
+            .map((item) => {
+                const labelKey = `ui.launcher.settings.toggle_${item.id}`;
+                return `
                 <div class="taskbar-toggle-item ${hiddenItems.includes(item.id) ? '' : 'active'}"
                      data-page-id="${item.id}"
                      >
@@ -49,7 +50,8 @@ export class GeneralSettingsRenderer {
                     <span class="toggle-label" data-i18n="${labelKey}">${t(labelKey, item.label)}</span>
                 </div>
             `;
-        }).join('');
+            })
+            .join('');
 
         container.innerHTML = html;
 
@@ -73,7 +75,9 @@ export class GeneralSettingsRenderer {
      */
     public toggleNavItem(pageId: string, enabled: boolean) {
         const hiddenItems = this._state.getHiddenNavItems();
-        const navBtn = document.querySelector(`#sidebar .nav-btn[data-page="${pageId}"]`) as HTMLElement;
+        const navBtn = document.querySelector(
+            `#sidebar .nav-btn[data-page="${pageId}"]`,
+        ) as HTMLElement;
 
         if (enabled) {
             const idx = hiddenItems.indexOf(pageId);
@@ -107,7 +111,7 @@ export class GeneralSettingsRenderer {
      * Applies hidden state to navigation items on startup.
      */
     private _applyHiddenState(hidden: string[]) {
-        hidden.forEach(id => {
+        hidden.forEach((id) => {
             const btn = document.querySelector(`#sidebar .nav-btn[data-page="${id}"]`);
             if (btn) btn.classList.add('hidden');
         });
@@ -135,9 +139,10 @@ export class GeneralSettingsRenderer {
 
         const hiddenMonitors = this._state.getHiddenMonitors();
 
-        const html = monitorItems.map(item => {
-             const labelKey = `ui.launcher.settings.monitor_${item.id}`;
-             return `
+        const html = monitorItems
+            .map((item) => {
+                const labelKey = `ui.launcher.settings.monitor_${item.id}`;
+                return `
                 <button class="monitor-toggle-btn ${hiddenMonitors.includes(item.id) ? '' : 'active'}"
                         data-monitor-id="${item.id}"
                         >
@@ -147,7 +152,8 @@ export class GeneralSettingsRenderer {
                     <span class="toggle-label" data-i18n="${labelKey}">${t(labelKey, item.label)}</span>
                 </button>
             `;
-        }).join('');
+            })
+            .join('');
 
         container.innerHTML = html;
 
@@ -162,8 +168,10 @@ export class GeneralSettingsRenderer {
             }
         });
 
-         hiddenMonitors.forEach(id => {
-            const el = document.querySelector(`#system-monitor .sysmon-stat[data-monitor-id="${id}"]`);
+        hiddenMonitors.forEach((id) => {
+            const el = document.querySelector(
+                `#system-monitor .sysmon-stat[data-monitor-id="${id}"]`,
+            );
             if (el) el.classList.add('hidden');
         });
 
@@ -175,7 +183,9 @@ export class GeneralSettingsRenderer {
      */
     public toggleMonitorItem(id: string, enabled: boolean) {
         const hidden = this._state.getHiddenMonitors();
-        const el = document.querySelector(`#system-monitor .sysmon-stat[data-monitor-id="${id}"]`) as HTMLElement;
+        const el = document.querySelector(
+            `#system-monitor .sysmon-stat[data-monitor-id="${id}"]`,
+        ) as HTMLElement;
 
         if (enabled) {
             const idx = hidden.indexOf(id);
@@ -216,7 +226,7 @@ export class GeneralSettingsRenderer {
 
         const hiddenMonitors = this._state.getHiddenMonitors();
         const totalMonitors = ['cpu', 'gpu', 'ram', 'vram', 'disk', 'network'];
-        const allHidden = totalMonitors.every(id => hiddenMonitors.includes(id));
+        const allHidden = totalMonitors.every((id) => hiddenMonitors.includes(id));
 
         if (allHidden) {
             monitorPanel.style.opacity = '0';
@@ -248,8 +258,8 @@ export class GeneralSettingsRenderer {
         const aboveItems = ['cpu', 'gpu', 'ram', 'vram'];
         const belowItems = ['disk', 'network'];
 
-        const allAboveHidden = aboveItems.every(id => hiddenMonitors.includes(id));
-        const allBelowHidden = belowItems.every(id => hiddenMonitors.includes(id));
+        const allAboveHidden = aboveItems.every((id) => hiddenMonitors.includes(id));
+        const allBelowHidden = belowItems.every((id) => hiddenMonitors.includes(id));
 
         // Hide divider if either all above OR all below are hidden
         if (allAboveHidden || allBelowHidden) {
@@ -265,11 +275,13 @@ export class GeneralSettingsRenderer {
     private _observeToggleGrid(id: string) {
         const el = document.getElementById(id);
         if (!el) return;
-        const ro = new ResizeObserver(entries => {
+        const ro = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const w = entry.contentRect.width;
-                if (w < 450) el.classList.add('compact'); else el.classList.remove('compact');
-                if (w < 300) el.classList.add('super-compact'); else el.classList.remove('super-compact');
+                if (w < 450) el.classList.add('compact');
+                else el.classList.remove('compact');
+                if (w < 300) el.classList.add('super-compact');
+                else el.classList.remove('super-compact');
             }
         });
         ro.observe(el);

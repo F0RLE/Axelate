@@ -94,8 +94,10 @@ mod tests {
         use crate::utils::paths::{FILE_ENV, FILE_GEN_CONFIG};
 
         assert!(FILE_ENV.to_string_lossy().ends_with(".env"));
-        assert!(FILE_GEN_CONFIG
-            .to_string_lossy()
-            .ends_with("generation_config.json"));
+        assert!(
+            FILE_GEN_CONFIG
+                .to_string_lossy()
+                .ends_with("generation_config.json")
+        );
     }
 }

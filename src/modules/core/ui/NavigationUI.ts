@@ -1,7 +1,7 @@
 /**
  * @module core/ui/NavigationUI
  * @description Centralized UI management for page navigation and sidebar button state.
- * 
+ *
  * @example
  * ```typescript
  * const navUI = new NavigationUI(navigationService);
@@ -16,7 +16,7 @@ import { SoundService } from '../services/SoundService';
 export class NavigationUI {
     constructor(
         private readonly _service: NavigationService,
-        private readonly _sounds?: SoundService
+        private readonly _sounds?: SoundService,
     ) {}
 
     /**
@@ -36,18 +36,22 @@ export class NavigationUI {
 
     /**
      * Navigates to a specific page and updates UI state.
-     * 
+     *
      * @param pageId - Target page identifier
      * @param btn - Optional button element that triggered the navigation
      * @param silent - If true, prevents sound effects
      */
-    public async showPage(pageId: string, btn: HTMLElement | null = null, silent = false): Promise<void> {
+    public async showPage(
+        pageId: string,
+        btn: HTMLElement | null = null,
+        silent = false,
+    ): Promise<void> {
         console.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn });
         const previousPageId = this._service.getCurrentPage();
 
         // 1. Play Sound
         if (!silent && this._sounds) {
-             this._sounds.playToggle(true);
+            this._sounds.playToggle(true);
         }
 
         // 2. Hide all pages & Reset Sidebar
@@ -63,7 +67,7 @@ export class NavigationUI {
 
         // Emit navigation event
         eventBus.emit('page:change', { pageId, previousPageId });
-        
+
         // 3. Show target page
         const target = document.getElementById(pageId) ?? document.getElementById(`page-${pageId}`);
 

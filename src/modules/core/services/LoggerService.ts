@@ -2,11 +2,11 @@
  * @module core/services/LoggerService
  * @description Centralized logging service for capturing console output and sending it to the backend.
  * Implements the Singleton pattern as defined in Flux Standards.
- * 
+ *
  * @example
  * ```typescript
  * import { logger } from './LoggerService';
- * 
+ *
  * logger.info('System event occurred');
  * ```
  */
@@ -22,7 +22,7 @@ export class LoggerService {
     private readonly _originalConsoleWarn: (..._args: unknown[]) => void;
     private readonly _originalConsoleLog: (..._args: unknown[]) => void;
     private readonly _originalConsoleDebug: (..._args: unknown[]) => void;
-    
+
     // Flag to prevent recursive logging loops during interception
     private _isInternalLog = false;
     private _initialized = false;
@@ -41,7 +41,7 @@ export class LoggerService {
     /**
      * Idempotent initialization of the service.
      * Required by Section 16.2 of Flux Standards.
-     * 
+     *
      * @sideeffect Modifies globalThis.console and globalThis.onerror
      */
     public init(): void {
@@ -51,7 +51,7 @@ export class LoggerService {
         }
 
         this._setupInterceptors();
-        
+
         this._initialized = true;
     }
 
@@ -59,11 +59,11 @@ export class LoggerService {
         // Intercept window.onerror for uncaught JS errors
         globalThis.onerror = (message, source, lineno, colno, error) => {
             if (this._isInternalLog) return true; // Stop propagation to avoid recursion
-            
+
             const msgStr = this._safeStringify(message);
             const stack = error?.stack ? `\nStack: ${error.stack}` : '';
             const errMsg = `${msgStr} at ${source}:${lineno}:${colno}${stack}`;
-            
+
             this.log('ERROR', errMsg);
             return false; // Let default handler also run
         };
@@ -71,8 +71,11 @@ export class LoggerService {
         // Intercept unhandled promise rejections
         globalThis.onunhandledrejection = (event) => {
             if (this._isInternalLog) return;
-            
-            const reason = event.reason instanceof Error ? event.reason.message : this._safeStringify(event.reason);
+
+            const reason =
+                event.reason instanceof Error
+                    ? event.reason.message
+                    : this._safeStringify(event.reason);
             this.log('ERROR', `Unhandled Promise: ${reason}`);
         };
 
@@ -80,18 +83,18 @@ export class LoggerService {
         console.error = (...args: unknown[]) => {
             this._originalConsoleError(...args);
             if (this._isInternalLog) return;
-            const msg = args.map(a => this._safeStringify(a)).join(' ');
+            const msg = args.map((a) => this._safeStringify(a)).join(' ');
             this.log('ERROR', msg);
         };
 
         console.warn = (...args: unknown[]) => {
             this._originalConsoleWarn(...args);
             if (this._isInternalLog) return;
-            const msg = args.map(a => this._safeStringify(a)).join(' ');
+            const msg = args.map((a) => this._safeStringify(a)).join(' ');
             this.log('WARN', msg);
         };
-        
-        // We generally don't intercept log/debug to avoid noise, 
+
+        // We generally don't intercept log/debug to avoid noise,
         // but we could if needed. For now, we only shadow error/warn for telemetry.
     }
 
@@ -148,8 +151,13 @@ export class LoggerService {
                 return `[Function: ${obj.name || 'anonymous'}]`;
             }
 
-            if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean' ||
-                typeof obj === 'bigint' || typeof obj === 'symbol') {
+            if (
+                typeof obj === 'string' ||
+                typeof obj === 'number' ||
+                typeof obj === 'boolean' ||
+                typeof obj === 'bigint' ||
+                typeof obj === 'symbol'
+            ) {
                 return String(obj);
             }
 
@@ -161,7 +169,7 @@ export class LoggerService {
 
     /**
      * Main entry point for logging messages with levels.
-     * 
+     *
      * @param level - Log severity level
      * @param message - The message body to log
      */
@@ -182,8 +190,8 @@ export class LoggerService {
             if (level === 'ERROR' || this._buffer.length >= this._MAX_BUFFER) {
                 this._flush();
             } else {
-                 if (this._flushTimeout) clearTimeout(this._flushTimeout);
-                 this._flushTimeout = setTimeout(() => this._flush(), this._FLUSH_INTERVAL);
+                if (this._flushTimeout) clearTimeout(this._flushTimeout);
+                this._flushTimeout = setTimeout(() => this._flush(), this._FLUSH_INTERVAL);
             }
         } finally {
             this._isInternalLog = false;
@@ -216,7 +224,7 @@ export class LoggerService {
      */
     private _formatMessage(message: string, args: unknown[]): string {
         if (args.length === 0) return message;
-        return `${message} ${args.map(a => this._safeStringify(a)).join(' ')}`;
+        return `${message} ${args.map((a) => this._safeStringify(a)).join(' ')}`;
     }
 
     /**
@@ -224,19 +232,23 @@ export class LoggerService {
      */
     private async _flush(): Promise<void> {
         if (this._buffer.length === 0) return;
-        
+
         // Take snapshot and clear buffer immediately
         const logs = [...this._buffer];
         this._buffer = [];
 
         try {
             // Use Tauri invoke if available
-            const g = globalThis as unknown as { __TAURI__?: { core: { invoke: (cmd: string, args: unknown) => Promise<void> } } };
-            
+            const g = globalThis as unknown as {
+                __TAURI__?: { core: { invoke: (cmd: string, args: unknown) => Promise<void> } };
+            };
+
             if (g.__TAURI__?.core) {
-                await g.__TAURI__.core.invoke('log_batch', { logs: logs.map(l => ({ level: l.level, message: l.message })) });
+                await g.__TAURI__.core.invoke('log_batch', {
+                    logs: logs.map((l) => ({ level: l.level, message: l.message })),
+                });
             } else {
-                // Fallback for browser dev mode - just print to original console if needed, 
+                // Fallback for browser dev mode - just print to original console if needed,
                 // but we already did that via interceptors or direct calls.
                 // We'll skip the fetch() call as it assumes a specific HTTP backend which might not exist in Tauri context.
                 // If you have a specific HTTP endpoint, restore it here.

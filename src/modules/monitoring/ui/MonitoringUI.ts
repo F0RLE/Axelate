@@ -1,4 +1,4 @@
-    import { MonitoringService } from '../services/MonitoringService';
+import { MonitoringService } from '../services/MonitoringService';
 import { ISystemStats } from '../types/monitoringTypes';
 
 export class MonitoringUI {
@@ -45,14 +45,16 @@ export class MonitoringUI {
             if (titleEl) {
                 setTimeout(() => {
                     const badge = document.createElement('span');
-                    badge.textContent = globalThis.t ? globalThis.t('ui.monitoring.demo_data', ' (Demo Data)') : ' (Demo Data)';
+                    badge.textContent = globalThis.t
+                        ? globalThis.t('ui.monitoring.demo_data', ' (Demo Data)')
+                        : ' (Demo Data)';
                     badge.style.color = 'var(--warning)';
                     badge.style.fontSize = '0.8rem';
                     badge.style.marginLeft = '0.5rem';
                     badge.style.fontWeight = 'bold';
                     const titleText = titleEl.querySelector('[data-i18n]');
                     if (titleText && !titleText.textContent?.includes('Demo')) {
-                         titleText.appendChild(badge);
+                        titleText.appendChild(badge);
                     }
                 }, 500);
             }
@@ -95,7 +97,7 @@ export class MonitoringUI {
         if (networkProgressEl) {
             const netPercent = Math.min(100, (netPeak / 10) * 100);
             networkProgressEl.style.width = `${Math.max(0, netPercent)}%`;
-            
+
             if (netPeak >= 10) {
                 networkProgressEl.classList.add('sysmon-fill-gold');
                 this._setProgressColor(networkProgressEl, 100);
@@ -103,7 +105,7 @@ export class MonitoringUI {
                 networkProgressEl.classList.remove('sysmon-fill-gold');
                 this._setProgressColor(networkProgressEl, netPercent);
             }
-            
+
             networkProgressEl.classList.toggle('pulse', netPercent > 5);
         }
     }
@@ -119,12 +121,12 @@ export class MonitoringUI {
         const diskProgressEl = document.getElementById('disk-progress');
 
         if (diskUsageEl) {
-             // Smart conversion: if > 1024 MB/s, switch both to GB/s
-             const { val1, val2, unit } = this._formatSmartRate(readRate, writeRate);
-             this._setValueWithSecondary(diskUsageEl, `R:${val1} • W:${val2}`, ` ${unit}`);
-             const used = stats.disk?.used_gb || 0;
-             const total = stats.disk?.total_gb || 0;
-             diskUsageEl.title = `Space: ${used.toFixed(1)} / ${total.toFixed(1)} GB (Usage: ${diskPct.toFixed(1)}%)`;
+            // Smart conversion: if > 1024 MB/s, switch both to GB/s
+            const { val1, val2, unit } = this._formatSmartRate(readRate, writeRate);
+            this._setValueWithSecondary(diskUsageEl, `R:${val1} • W:${val2}`, ` ${unit}`);
+            const used = stats.disk?.used_gb || 0;
+            const total = stats.disk?.total_gb || 0;
+            diskUsageEl.title = `Space: ${used.toFixed(1)} / ${total.toFixed(1)} GB (Usage: ${diskPct.toFixed(1)}%)`;
         }
         if (diskProgressEl) {
             const activity = stats.disk?.activity_percent || 0;
@@ -161,7 +163,11 @@ export class MonitoringUI {
 
         if (ramPercentEl) {
             // Compact format: 1.2 / 16 GB (Used is white, total is gray)
-            this._setValueWithSecondary(ramPercentEl, ramUsed.toFixed(1), `/${ramTotal.toFixed(0)} GB`);
+            this._setValueWithSecondary(
+                ramPercentEl,
+                ramUsed.toFixed(1),
+                `/${ramTotal.toFixed(0)} GB`,
+            );
         }
         if (ramProgressEl) {
             ramProgressEl.style.width = `${Math.max(0, Math.min(100, ramPercent))}%`;
@@ -187,10 +193,10 @@ export class MonitoringUI {
 
         const vramEl = document.getElementById('gpu-memory');
         if (vramEl && stats.vram) {
-             const vramUsed = stats.vram.used_gb || 0;
-             const vramTotal = stats.vram.total_gb || 0;
-             // Compact format: 1.2 / 8 GB (Used is white, total is gray)
-             this._setValueWithSecondary(vramEl, vramUsed.toFixed(1), `/${vramTotal.toFixed(0)} GB`);
+            const vramUsed = stats.vram.used_gb || 0;
+            const vramTotal = stats.vram.total_gb || 0;
+            // Compact format: 1.2 / 8 GB (Used is white, total is gray)
+            this._setValueWithSecondary(vramEl, vramUsed.toFixed(1), `/${vramTotal.toFixed(0)} GB`);
         }
 
         const vramProgressEl = document.getElementById('vram-progress');
@@ -202,7 +208,14 @@ export class MonitoringUI {
     }
 
     private setLoadingState() {
-        ['cpu-percent', 'gpu-util', 'ram-percent', 'gpu-memory', 'disk-usage', 'network-status'].forEach(id => {
+        [
+            'cpu-percent',
+            'gpu-util',
+            'ram-percent',
+            'gpu-memory',
+            'disk-usage',
+            'network-status',
+        ].forEach((id) => {
             const el = document.getElementById(id);
             if (el) {
                 // Ensure nodes are initialized for stable textContent updates
@@ -216,7 +229,7 @@ export class MonitoringUI {
      */
     private _setValueWithSecondary(el: HTMLElement, primaryText: string, secondaryText: string) {
         if (!el) return;
-        
+
         // Locate or create primary node WITHOUT nuking existing content if possible
         let main = el.querySelector('.main-val') as HTMLElement;
         if (!main) {
@@ -228,7 +241,7 @@ export class MonitoringUI {
             main.className = 'main-val';
             el.appendChild(main);
         }
-        
+
         if (main.textContent !== primaryText) {
             main.textContent = primaryText;
         }
@@ -251,7 +264,7 @@ export class MonitoringUI {
 
     private _setProgressColor(el: HTMLElement, percent: number) {
         if (!el) return;
-        
+
         // Toggle only state classes, preserving 'sysmon-fill' or 'pulse'
         el.classList.toggle('high', percent >= 85);
         el.classList.toggle('medium', percent >= 70 && percent < 85);
@@ -272,7 +285,10 @@ export class MonitoringUI {
     /**
      * Formats two sibling rates with a unified unit (MB/s or GB/s) based on the peak value.
      */
-    private _formatSmartRate(bytes1: number, bytes2: number): { val1: string, val2: string, unit: string } {
+    private _formatSmartRate(
+        bytes1: number,
+        bytes2: number,
+    ): { val1: string; val2: string; unit: string } {
         const mb1 = bytes1 / (1024 * 1024);
         const mb2 = bytes2 / (1024 * 1024);
         const peakMB = Math.max(mb1, mb2);
@@ -281,14 +297,14 @@ export class MonitoringUI {
             return {
                 val1: (mb1 / 1024).toFixed(1),
                 val2: (mb2 / 1024).toFixed(1),
-                unit: 'GB/s'
+                unit: 'GB/s',
             };
         }
 
         return {
             val1: Math.round(mb1).toString(),
             val2: Math.round(mb2).toString(),
-            unit: 'MB/s'
+            unit: 'MB/s',
         };
     }
 }

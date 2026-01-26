@@ -27,19 +27,22 @@ export class MonitoringService {
 
         if (g.__TAURI__) {
             try {
-                this.unlistenFn = await g.__TAURI__.event.listen<ISystemStats>('system_stats', (event) => {
-                    if (event?.payload) {
-                        this.notifyListeners(event.payload);
-                    } else {
-                        console.warn('[MonitoringService] Received empty payload');
-                    }
-                });
+                this.unlistenFn = await g.__TAURI__.event.listen<ISystemStats>(
+                    'system_stats',
+                    (event) => {
+                        if (event?.payload) {
+                            this.notifyListeners(event.payload);
+                        } else {
+                            console.warn('[MonitoringService] Received empty payload');
+                        }
+                    },
+                );
                 console.log('[MonitoringService] Started listening to system_stats');
             } catch (e) {
                 console.error('[MonitoringService] Failed to listen to events:', e);
                 this.startFallback();
             }
-            
+
             // Optimization: Pause backend monitoring when window is hidden
             this._bindVisibilityHandler(g);
         } else {
@@ -52,8 +55,10 @@ export class MonitoringService {
      * Binds visibility change events to pause/resume backend monitoring.
      */
     private _bindVisibilityHandler(g: IMonitoringGlobal): void {
-        const win = g as unknown as Window & { __TAURI__?: { core: { invoke: (cmd: string, args?: unknown) => Promise<void> } } };
-        
+        const win = g as unknown as Window & {
+            __TAURI__?: { core: { invoke: (cmd: string, args?: unknown) => Promise<void> } };
+        };
+
         document.addEventListener('visibilitychange', () => {
             if (win.__TAURI__?.core) {
                 const isHidden = document.hidden;
@@ -99,11 +104,11 @@ export class MonitoringService {
     }
 
     public unsubscribe(callback: StatsCallback): void {
-        this.listeners = this.listeners.filter(cb => cb !== callback);
+        this.listeners = this.listeners.filter((cb) => cb !== callback);
     }
 
     private notifyListeners(stats: ISystemStats): void {
-        this.listeners.forEach(cb => {
+        this.listeners.forEach((cb) => {
             try {
                 cb(stats);
             } catch (err) {
@@ -120,11 +125,31 @@ export class MonitoringService {
             const mockStats: ISystemStats = {
                 cpu: { percent: this.random() * 30 + 10, cores: 8, name: 'Mock CPU' },
                 ram: { used_gb: 8, total_gb: 32, percent: 25, available_gb: 24 },
-                gpu: { usage: this.random() * 50, temp: 45, memory_used: 4, memory_total: 8, name: 'Mock GPU' },
+                gpu: {
+                    usage: this.random() * 50,
+                    temp: 45,
+                    memory_used: 4,
+                    memory_total: 8,
+                    name: 'Mock GPU',
+                },
                 vram: { percent: 50, used_gb: 4, total_gb: 8 },
-                disk: { used_gb: 500, total_gb: 1000, utilization: 50, read_rate: 1024, write_rate: 2048, activity_percent: 10 },
-                network: { upload_rate: this.random() * 5 * 1024 * 1024, download_rate: this.random() * 20 * 1024 * 1024, total_received: 0, total_sent: 0, utilization: 0, activity_percent: 5 },
-                pid: 1234
+                disk: {
+                    used_gb: 500,
+                    total_gb: 1000,
+                    utilization: 50,
+                    read_rate: 1024,
+                    write_rate: 2048,
+                    activity_percent: 10,
+                },
+                network: {
+                    upload_rate: this.random() * 5 * 1024 * 1024,
+                    download_rate: this.random() * 20 * 1024 * 1024,
+                    total_received: 0,
+                    total_sent: 0,
+                    utilization: 0,
+                    activity_percent: 5,
+                },
+                pid: 1234,
             };
             this.notifyListeners(mockStats);
         }, 1000);

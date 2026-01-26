@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config'
-import { fileURLToPath, URL } from 'node:url'
+import { defineConfig } from 'vitest/config';
+import { fileURLToPath, URL } from 'node:url';
 
 // Ensure we use the proper Vitest config typing if available,
 // otherwise Vite-only typing works for the 'test' key in Vite 7.
@@ -38,8 +38,7 @@ export default defineConfig({
     build: {
         // Tauri uses Chromium on Windows and WebKit on macOS and Linux
         // Modern targets for Tauri v2
-        target:
-            process.env.TAURI_PLATFORM === 'windows' ? 'chrome120' : 'safari15',
+        target: process.env.TAURI_PLATFORM === 'windows' ? 'chrome120' : 'safari15',
         // don't minify for debug builds
         minify: process.env.TAURI_DEBUG ? false : 'esbuild',
         // produce sourcemaps for debug builds
@@ -57,5 +56,23 @@ export default defineConfig({
         environment: 'jsdom',
         setupFiles: ['./test/setup.ts'],
         include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+        coverage: {
+            provider: 'v8',
+            thresholds: {
+                // Section 8.5: strict coverage requirements
+                'src/modules/**/services/*.ts': {
+                    lines: 80,
+                    functions: 80,
+                    branches: 80,
+                    statements: 80,
+                },
+                'src/modules/**/utils/*.ts': {
+                    lines: 100,
+                    functions: 100,
+                    branches: 100,
+                    statements: 100,
+                },
+            },
+        },
     },
-})
+});

@@ -9,4 +9,3 @@ export * from './services/ChatService';
 // Services
 export { ChatController } from './chat';
 export { chatFileHandler } from './services/ChatFileHandler';
-

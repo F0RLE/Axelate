@@ -5,13 +5,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default [
     {
-        ignores: [
-            '**/dist/**',
-            '**/node_modules/**',
-            '*.config.js',
-            '*.config.ts',
-            'test/**',
-        ],
+        ignores: ['**/dist/**', '**/node_modules/**', '*.config.js', '*.config.ts', 'test/**'],
     },
     js.configs.recommended,
     ...tseslint.configs.recommended,
@@ -69,10 +63,13 @@ export default [
         },
         rules: {
             // TypeScript-specific rules
-            '@typescript-eslint/no-unused-vars': ['warn', {
-                argsIgnorePattern: '^_',
-                varsIgnorePattern: '^_'
-            }],
+            '@typescript-eslint/no-unused-vars': [
+                'warn',
+                {
+                    argsIgnorePattern: '^_',
+                    varsIgnorePattern: '^_',
+                },
+            ],
             '@typescript-eslint/no-explicit-any': 'warn',
             '@typescript-eslint/explicit-function-return-type': 'off',
             '@typescript-eslint/no-non-null-assertion': 'off',
@@ -82,8 +79,8 @@ export default [
             'no-console': 'off', // We use console for debugging and Tauri feedback
             'prefer-const': 'error',
             'no-var': 'error',
-            'eqeqeq': ['error', 'always', { null: 'ignore' }],
-            'curly': ['error', 'multi-line'],
+            eqeqeq: ['error', 'always', { null: 'ignore' }],
+            curly: ['error', 'multi-line'],
         },
     },
     eslintConfigPrettier,

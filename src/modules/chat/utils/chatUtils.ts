@@ -8,17 +8,46 @@
  */
 export function isTextFile(file: File): boolean {
     const textTypes = [
-        'text/', 'application/json', 'application/javascript', 'application/x-javascript',
-        'application/xml', 'application/x-sh', 'application/x-python', 'application/typescript',
+        'text/',
+        'application/json',
+        'application/javascript',
+        'application/x-javascript',
+        'application/xml',
+        'application/x-sh',
+        'application/x-python',
+        'application/typescript',
     ];
     const textExts = [
-        '.txt', '.md', '.js', '.ts', '.py', '.html', '.css', '.json', '.xml', '.yaml', '.yml',
-        '.c', '.cpp', '.h', '.rs', '.go', '.java', '.cs', '.sh', '.bat', '.ps1', '.ini', '.cfg', '.conf', '.env',
+        '.txt',
+        '.md',
+        '.js',
+        '.ts',
+        '.py',
+        '.html',
+        '.css',
+        '.json',
+        '.xml',
+        '.yaml',
+        '.yml',
+        '.c',
+        '.cpp',
+        '.h',
+        '.rs',
+        '.go',
+        '.java',
+        '.cs',
+        '.sh',
+        '.bat',
+        '.ps1',
+        '.ini',
+        '.cfg',
+        '.conf',
+        '.env',
     ];
 
-    if (file.type && textTypes.some(t => file.type.startsWith(t))) return true;
+    if (file.type && textTypes.some((t) => file.type.startsWith(t))) return true;
     const name = (file.name || '').toLowerCase();
-    return textExts.some(ext => name.endsWith(ext));
+    return textExts.some((ext) => name.endsWith(ext));
 }
 
 /**
@@ -31,7 +60,6 @@ export async function readFileAsText(file: File): Promise<string> {
         return '';
     }
 }
-
 
 /**
  * Read a file as a Base64 string.
@@ -62,7 +90,11 @@ export function getFileIcon(filename: string): string {
     const ext = filename.split('.').pop()?.toLowerCase() || '';
 
     // Code
-    if (['js', 'ts', 'py', 'java', 'c', 'cpp', 'rs', 'go', 'html', 'css', 'json', 'xml'].includes(ext)) {
+    if (
+        ['js', 'ts', 'py', 'java', 'c', 'cpp', 'rs', 'go', 'html', 'css', 'json', 'xml'].includes(
+            ext,
+        )
+    ) {
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>';
     }
     // Image
@@ -71,7 +103,7 @@ export function getFileIcon(filename: string): string {
     }
     // Text / Doc
     if (['txt', 'md', 'doc', 'docx', 'pdf', 'rtf'].includes(ext)) {
-         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
     }
     // Archive
     if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'ace', 'iso', 'cab'].includes(ext)) {
@@ -84,7 +116,7 @@ export function getFileIcon(filename: string): string {
 
 /**
  * Estimates the number of tokens in a string using a multilingual heuristic.
- * 
+ *
  * - English/Latin: ~4 characters per token
  * - Cyrillic: ~2.5 characters per token
  * - CJK (Chinese, Japanese, Korean): ~1.5 tokens per character
@@ -93,7 +125,7 @@ export function estimateTokenCount(text: string): number {
     if (!text) return 0;
 
     let tokens = 0;
-    
+
     // 1. CJK characters
     const cjkMatch = text.match(/[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/g);
     if (cjkMatch) {
@@ -107,7 +139,10 @@ export function estimateTokenCount(text: string): number {
     }
 
     // 3. Latin and others
-    const otherText = text.replaceAll(/[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af\u0400-\u04FF]/g, '');
+    const otherText = text.replaceAll(
+        /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af\u0400-\u04FF]/g,
+        '',
+    );
     tokens += otherText.length / 4;
 
     return Math.max(1, Math.ceil(tokens));
