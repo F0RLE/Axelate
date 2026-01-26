@@ -10,6 +10,14 @@ export default [
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
+        files: ['scripts/**/*.js'],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+        },
+    },
+    {
         languageOptions: {
             globals: {
                 ...globals.browser,
