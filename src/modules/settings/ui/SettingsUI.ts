@@ -141,7 +141,7 @@ export class SettingsUI {
              // Update Title
              const title = document.getElementById('module-settings-title');
              const suffix = globalThis.t ? globalThis.t('ui.settings.header_suffix', 'Settings') : 'Settings';
-             if (title) title.innerHTML = DOMPurify.sanitize(`<div class="settings-card-header-center">${currentApp.name || currentApp.id} ${suffix}</div>`);
+             if (title) title.innerHTML = DOMPurify.sanitize(suffix);
              
              // Dynamic re-render
              this._renderSpecializedModuleConfig(container, currentApp).catch(e => console.error(e));
@@ -189,12 +189,14 @@ export class SettingsUI {
      * Renders a specialized module configuration UI (API, Local AI, or generic).
      */
     private async _renderSpecializedModuleConfig(container: HTMLElement, app: IApp) {
-        if (app.type === 'api' || app.id === 'gpt' || app.id === 'gemini') {
+        if (app.type === 'api' || app.id === 'gpt' || app.id === 'gemini' || app.id === 'claude') {
             await this._renderUniversalApiSettings(container, app);
             return;
         }
-        if (app.id === 'flux-localai') {
-            this._renderFluxSettings(container);
+
+        // Clean settings for specific apps (User Request)
+        if (['flux', 'flux-platform', 'flux-localai'].includes(app.id) || app.id.includes('telegram')) {
+            this._renderEmptyState(container, app);
             return;
         }
 
@@ -215,13 +217,22 @@ export class SettingsUI {
             });
             container.appendChild(form);
         } else {
-            container.innerHTML = DOMPurify.sanitize(`
-                <div class="module-settings-empty">
-                    <div class="empty-icon">ℹ️</div>
-                    <p>No configuration options available for <strong>${app.name || app.id}</strong>.</p>
-                </div>
-            `);
+            this._renderEmptyState(container, app);
         }
+    }
+
+    /**
+     * Renders a standardized empty state for modules with no settings.
+     * "There is nothing there" - Minimalist visual standard.
+     */
+    private _renderEmptyState(container: HTMLElement, _app: IApp) {
+        container.innerHTML = DOMPurify.sanitize(`
+            <div class="ai-module-config universal-api-theme" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px; width: 100%;">
+                <div style="text-align: center; color: var(--text-secondary); font-size: 1.2rem; opacity: 0.7;">
+                    This module is not ready yet.
+                </div>
+            </div>
+        `);
     }
 
     /**
@@ -230,75 +241,6 @@ export class SettingsUI {
     private async _renderUniversalApiSettings(container: HTMLElement, app: IApp): Promise<void> {
         // Delegate to dedicated AI Settings Renderer singleton (Section 16.1)
         await aiSettingsRenderer.render(container, app);
-    }
-
-    /**
-     * Renders the Flux Local AI specific configuration.
-     */
-    private _renderFluxSettings(container: HTMLElement) {
-        // Initialize default settings if missing
-        if (localStorage.getItem('local_use_gpu') === null) {
-            localStorage.setItem('local_use_gpu', 'true');
-            localStorage.setItem('local_gpu_layers', '100'); // Ensure full offload
-        }
-
-        const win = globalThis as unknown as Window & { t: (k: string, obj?: unknown, d?: string) => string; launchApp: (id: string) => void; showToast: (m: string, s: string) => void };
-        const t = win.t || ((k: string, _obj: unknown, d?: string) => d || k);
-
-        const useGpu = localStorage.getItem('local_use_gpu') !== 'false';
-        const contextSize = localStorage.getItem('local_context_size') || '8192';
-
-        container.innerHTML = DOMPurify.sanitize(`
-            <div class="ai-module-config local-theme">
-                 <div class="local-header-box" style="background: rgba(138, 43, 226, 0.05); border: 1px solid rgba(138, 43, 226, 0.2);">
-                    <div class="local-icon">🌌</div>
-                    <div class="local-title">Qwen 3 (8B)</div>
-                    <div class="local-subtitle">Local AI Module</div>
-                    <button class="ai-check-btn" style="margin-top: 1rem; width: auto; padding: 0.5rem 2rem;" id="open-local-chat-btn" data-i18n="ui.settings.flux.open_chat">${t('ui.settings.flux.open_chat', 'Open Chat')}</button>
-                 </div>
-
-                <div class="ai-key-section">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div>
-                            <div style="font-weight: 500;" data-i18n="ui.settings.flux.gpu_enable">${t('ui.settings.flux.gpu_enable', 'Enable GPU Acceleration')}</div>
-                            <div class="model-desc" data-i18n="ui.settings.flux.gpu_desc">${t('ui.settings.flux.gpu_desc', 'Use graphics card for faster responses')}</div>
-                        </div>
-                        <label class="switch">
-                            <input type="checkbox" id="local-gpu-toggle" ${useGpu ? 'checked' : ''}>
-                            <span class="slider round"></span>
-                        </label>
-                    </div>
-
-                    <div style="margin-top: 2rem;">
-                        <label style="display: block; margin-bottom: 0.5rem; opacity: 0.8;" data-i18n="ui.settings.flux.context_size">${t('ui.settings.flux.context_size', 'Context Size')}</label>
-                        <select id="local-context-select" class="form-select" style="width: 100%;">
-                            <option value="4096" ${contextSize === '4096' ? 'selected' : ''}>${t('ui.settings.flux.tokens', {count: 4096}, '4096 Tokens')}</option>
-                            <option value="8192" ${contextSize === '8192' ? 'selected' : ''}>${t('ui.settings.flux.tokens_rec', {count: 8192}, '8192 Tokens (Recommended)')}</option>
-                            <option value="32768" ${contextSize === '32768' ? 'selected' : ''}>${t('ui.settings.flux.tokens', {count: 32768}, '32768 Tokens')}</option>
-                        </select>
-                    </div>
-
-                    <button class="ai-check-btn" style="margin-top: 2rem; background: var(--bg-med);" id="save-local-settings-btn" data-i18n="ui.settings.flux.save_changes">${t('ui.launcher.web.save_success', 'Settings saved')}</button>
-                </div>
-            </div>
-        `);
-
-        container.querySelector('#open-local-chat-btn')?.addEventListener('click', () => win.launchApp('flux-localai'));
-
-        container.querySelector('#save-local-settings-btn')?.addEventListener('click', () => {
-            const msg = t('ui.settings.flux.save_toast', 'Settings saved. Restart module to apply.');
-            win.showToast(msg, 'success');
-        });
-
-        container.querySelector('#local-gpu-toggle')?.addEventListener('change', (e) => {
-            const checked = (e.target as HTMLInputElement).checked;
-            localStorage.setItem('local_use_gpu', checked ? 'true' : 'false');
-            localStorage.setItem('local_gpu_layers', checked ? '100' : '0');
-        });
-
-        container.querySelector('#local-context-select')?.addEventListener('change', (e) => {
-            localStorage.setItem('local_context_size', (e.target as HTMLSelectElement).value);
-        });
     }
 
     /**
@@ -653,7 +595,7 @@ export class SettingsUI {
         win.currentSettingsModule = app;
 
         const suffix = globalThis.t ? globalThis.t('ui.settings.header_suffix', 'Settings') : 'Settings';
-        title.innerHTML = DOMPurify.sanitize(`<div class="settings-card-header-center">${app.name || app.id} ${suffix}</div>`);
+        title.innerHTML = DOMPurify.sanitize(suffix);
 
         await this._renderSpecializedModuleConfig(container, app);
 

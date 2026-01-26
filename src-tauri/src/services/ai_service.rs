@@ -66,6 +66,7 @@ pub async fn send_chat_message(
             provider_type = "openai".to_string();
             base_url = "https://api.openai.com/v1".to_string();
         }
+
         _ => {}
     }
 
@@ -84,6 +85,7 @@ pub async fn send_chat_message(
     match provider_type.as_str() {
         "openai" => handle_openai(window, request, &base_url).await,
         "gemini" => handle_gemini(window, request).await,
+
         _ => Ok(ChatResponse {
             ok: false,
             reply: None,

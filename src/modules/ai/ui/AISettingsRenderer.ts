@@ -106,7 +106,23 @@ class AISettingsRenderer {
 
 
 
-        const rawHtml = `
+
+        const isCleanApp = ['flux', 'flux-platform', 'flux-localai'].includes(appId) || appId.includes('telegram');
+
+        let rawHtml = '';
+
+        if (isCleanApp) {
+             rawHtml = `
+            <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
+                <div class="ai-content-panel">
+                    <div class="settings-card-header-center">
+                        <h3 id="${appId}-title">${app.name || 'Module'} Settings</h3>
+                         <div class="model-desc" data-i18n="ui.settings.no_settings">No additional settings required for this module.</div>
+                    </div>
+                </div>
+            </div>`;
+        } else {
+             rawHtml = `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
                 <!-- Unified API & Models Settings -->
                 <div class="ai-settings-content">
@@ -185,6 +201,7 @@ class AISettingsRenderer {
                 </div>
             </div>
         `;
+        }
 
         container.innerHTML = DOMPurify.sanitize(rawHtml);
         await this._bindEvents(container, appId);

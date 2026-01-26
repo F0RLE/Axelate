@@ -31,6 +31,12 @@
     grid-column: 1 / -1; /* Wide design for all */
 }
 
+/* Eliminate gap at the very top of the settings content */
+.ai-module-config section:first-child,
+.ai-module-config .ai-content-panel:first-child {
+    margin-top: 0 !important;
+}
+
 /* Specific slim override for API Key section */
 .ai-key-section .ai-content-panel {
     padding: 0.75rem 1.5rem;

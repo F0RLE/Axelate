@@ -78,12 +78,12 @@ body.snapping #app-header {
 }
 
 .window-control-btn:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
-    color: var(--text-primary);
+    background: transparent !important;
+    color: var(--warning) !important;
 }
 
 .window-control-btn:active {
-    background: rgba(255, 255, 255, 0.12) !important;
+    background: rgba(var(--primary-raw), 0.1) !important;
 }
 
 .close-btn {
@@ -94,12 +94,13 @@ body.snapping #app-header {
 }
 
 .close-btn:hover {
-    background: #e81123 !important; /* Windows Standard Red */
-    color: #ffffff !important;
+    background: transparent !important;
+    color: var(--danger) !important;
 }
 
 .close-btn:active {
-    background: #f1707a !important;
+    background: rgba(var(--danger-raw), 0.1) !important;
+    color: var(--danger) !important;
 }
 
 /* When maximized, the close button hits the screen edge, so it should be square */

@@ -5,9 +5,10 @@ body.launcher-blur .top-controls,
 body.launcher-blur #sidebar,
 body.launcher-blur #app-header,
 body.launcher-blur #main-area {
-    filter: blur(10px);
-    -webkit-filter: blur(10px);
-    transition: filter 0.3s ease;
+    /* Blur removed per user request for clear UI */
+    filter: none !important;
+    -webkit-filter: none !important;
+    transition: none;
     pointer-events: none !important;
 }
 
@@ -63,24 +64,22 @@ body.launcher-blur .modal {
     visibility: hidden;
     opacity: 0;
     pointer-events: none;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.05);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 2000000 !important;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.4s ease, visibility 0s linear 0.4s;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.8s;
 }
 
 .modal-overlay.show {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     z-index: 2000001 !important;
-    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 0.4s ease, visibility 0s linear 0s;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s;
 }
 
 .modal-overlay .modal {
@@ -89,9 +88,9 @@ body.launcher-blur .modal {
 }
 
 .modal-overlay.module-settings-overlay {
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    background: rgba(20, 20, 25, 0.15) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(10, 10, 15, 0.05) !important;
     pointer-events: auto;
     display: flex;
     align-items: center;
@@ -109,9 +108,9 @@ body.launcher-blur .modal {
 }
 
 .modal-overlay.module-settings-overlay.show {
-    backdrop-filter: blur(40px) saturate(200%);
-    -webkit-backdrop-filter: blur(40px) saturate(200%);
-    background: rgba(20, 20, 25, 0.25) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(10, 10, 15, 0.08) !important;
 }
 
 /* Make overlay not block clicks on sidebar and controls */
@@ -176,13 +175,15 @@ button[onclick*="close"],
     padding: 2rem;
     max-width: 400px;
     width: 90%;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    animation: fadeIn 0.3s ease;
-    transform: scale(0.95) translateY(20px);
-    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+    position: relative;
+    opacity: 0;
+    transform: scale(0.85) translateY(40px);
+    transition: all 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .modal-overlay.show .modal {
+    opacity: 1;
     transform: scale(1) translateY(0);
 }
 
@@ -199,11 +200,19 @@ button[onclick*="close"],
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    /* Use global scaleIn */
-    animation: scaleIn 0.4s var(--ease-smooth);
     position: relative;
     z-index: 10000;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 12px 64px rgba(0, 0, 0, 0.7);
+    
+    /* Animation state */
+    opacity: 0;
+    transform: scale(0.85) translateY(50px);
+    transition: all 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-overlay.show .module-settings-modal {
+    opacity: 1;
+    transform: scale(1) translateY(0);
 }
 
 @media (max-width: 1600px) {

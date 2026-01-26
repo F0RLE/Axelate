@@ -37,11 +37,7 @@ export type IChunkHandler = (chunk: string) => void;
 // Constants
 // ============================================================================
 
-const LOCAL_AI_MODEL = 'qwen3-8b';
-const LOCAL_AI_URL = 'http://localhost:8080/v1/chat/completions';
-const DEFAULT_THREAD_COUNT = '4';
-const DEFAULT_CONTEXT_SIZE = '2048';
-const DEFAULT_GPU_LAYERS = '0';
+// (Local constants removed - delegated to backend)
 
 // ============================================================================
 // Types
@@ -209,10 +205,11 @@ export class AIBridge {
         const staticFallbacks: Record<string, string> = {
             gpt: 'gpt-5-mini',
             gemini: 'gemini-3-flash',
-            local: LOCAL_AI_MODEL,
+            local: 'qwen3-8b',
         };
         return staticFallbacks[providerId] || '';
     }
+
 
     /**
      * Terminates the active provider session and purges volatile state buffers.
@@ -272,17 +269,31 @@ export class AIBridge {
         // Lazy key resolution ensures synchronization with external settings state
         await this._resolveEffectiveApiKey();
         
-        if (!this._apiKey) {
-            return this._handleMissingApiKey();
+        // Local provider doesn't strictly require an API Key, but we check for consistency or skip?
+        // _getApiKey for local returns '' from localStorage usually.
+        // We might want to skip the check if provider is local?
+        // But for now, let's assume it passes if it returns something or if we relax the check.
+        // Actually, _getApiKey falls back to ''.
+        // If apiKey is empty, _handleMissingApiKey triggers?
+        // We should allow empty key for 'local'.
+        
+        if (!this._apiKey && this._activeProviderId !== 'local' && this._activeProviderId !== 'flux-localai') {
+             return this._handleMissingApiKey();
         }
 
         try {
             this._addMessageToHistory('user', text, attachments);
 
-            if (this._activeProviderId === 'local') {
-                return await this._executeLocalInference(text, source);
+            // Per user request: Local AI logic is completely removed from backend.
+            // We return a placeholder response here to satisfy the frontend call without executing logic.
+            if (this._activeProviderId === 'local' || this._activeProviderId === 'flux-localai') {
+                const msg = this._context.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') || 'Local AI execution is disabled.';
+                this._chatHistory.push({ role: 'assistant', content: msg });
+                this._broadcastResponse(msg, source);
+                return msg;
             }
 
+            // Unified backend routing for cloud providers (GPT/Gemini)
             const request = this._constructChatRequest(attachments);
             const response = await this._invokeBackendOperation(request);
 
@@ -411,47 +422,10 @@ export class AIBridge {
 
     /**
      * Performs direct network inference for local engine integration.
+     * @deprecated Backend routing is now authoritative.
      */
-    private async _executeLocalInference(_text: string, source: MessageSource): Promise<string> {
-        try {
-            const gpuLayers = Number.parseInt(localStorage.getItem('local_ai_gpu_layers') || DEFAULT_GPU_LAYERS, 10);
-            const threads = Number.parseInt(localStorage.getItem('local_ai_threads') || DEFAULT_THREAD_COUNT, 10);
-            const contextSize = Number.parseInt(localStorage.getItem('local_ai_context_size') || DEFAULT_CONTEXT_SIZE, 10);
+    // private async _executeLocalInference... REMOVED
 
-            const payload = {
-                model: LOCAL_AI_MODEL,
-                messages: this._chatHistory.map(message => ({ 
-                    role: message.role, 
-                    content: this._normalizeContentToString(message.content) 
-                })),
-                temperature: 0.7,
-                max_tokens: contextSize,
-                gpu_layers: gpuLayers,
-                threads: threads,
-            };
-
-            const res = await fetch(LOCAL_AI_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-
-            if (!res.ok) {
-                throw new Error(`Engine Signal Failure: ${res.status}`);
-            }
-
-            const data = await res.json();
-            const responseText = data.choices?.[0]?.message?.content || '(Empty payload)';
-
-            this._chatHistory.push({ role: 'assistant', content: responseText });
-            this._broadcastResponse(responseText, source);
-
-            return responseText;
-        } catch (error: unknown) {
-            console.error('[AIBridge] Local inference channel failure:', error);
-            return 'Local execution error. Please ensure the local service module is active.';
-        }
-    }
 
     /**
      * Registers a listener for finalized response broadcast.

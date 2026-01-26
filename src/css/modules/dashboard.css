@@ -35,8 +35,8 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 .module-card:hover {
@@ -659,31 +659,27 @@
 
 /* --- APP SELECTION MODAL --- */
 .modal-backdrop {
-    position: absolute; /* Changed from fixed to be relative to #main-area */
+    position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.05);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
     opacity: 1;
     visibility: visible;
-    transition:
-        opacity 0.3s ease,
-        visibility 0.3s ease,
-        backdrop-filter 0.3s ease;
+    transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.8s;
 }
 
 .modal-backdrop.hidden {
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
-    backdrop-filter: blur(0px); /* Animate blur out */
-    background: rgba(0, 0, 0, 0); /* Animate background out */
 }
 
 .app-modal {
@@ -696,13 +692,42 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-    transform: scale(1);
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    
+    /* Animation state - Slower 0.9s duration and more depth (0.85) */
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    transition: all 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .modal-backdrop.hidden .app-modal {
-    transform: scale(0.9);
+    opacity: 0;
+    transform: scale(0.85) translateY(50px);
 }
+
+/* Staggered entrance for cards inside the selector */
+@keyframes cardIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-backdrop:not(.hidden) .app-card {
+    animation: cardIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.modal-backdrop:not(.hidden) .app-card:nth-child(1) { animation-delay: 0.1s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(2) { animation-delay: 0.15s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(3) { animation-delay: 0.2s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(4) { animation-delay: 0.25s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(5) { animation-delay: 0.3s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(6) { animation-delay: 0.35s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(7) { animation-delay: 0.4s; }
+.modal-backdrop:not(.hidden) .app-card:nth-child(8) { animation-delay: 0.45s; }
 
 .premium-footer {
     padding: 1.5rem;
@@ -715,22 +740,26 @@
     font-size: 0.85rem;
 }
 .app-modal-header {
-    padding: 0.5rem 1.25rem;
+    padding: 0 1.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     justify-content: center;
     align-items: center;
-    position: static; /* Button is absolute to app-modal */
-    min-height: 40px;
+    position: relative;
+    height: 40px;
 }
 
 .app-modal-title {
-    font-size: 1.15rem; /* Slightly smaller for compactness */
+    font-size: 1.15rem;
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
     text-align: center;
     width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
 }
 
 .app-close-btn {
@@ -742,10 +771,8 @@
     color: var(--text-secondary);
     cursor: pointer;
     width: 48px;
-    height: 40px; /* Flush with header bottom border (0.5rem+0.5rem padding + ~24px title height) */
+    height: 40px;
     padding: 0;
-    border-top-right-radius: 20px; /* Match app-modal border-radius */
-    border-bottom-left-radius: 8px; /* Sharper corner */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -754,7 +781,7 @@
 }
 
 .app-close-btn:hover {
-    background: rgba(var(--danger-raw), 0.15) !important;
+    background: transparent !important;
     color: var(--danger) !important;
     box-shadow: none !important;
 }
