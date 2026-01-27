@@ -266,3 +266,8 @@ body.app-body {
 .no-overflow {
     overflow: hidden !important;
 }
+
+/* === APP ZOOM (Web Fallback) === */
+html {
+    zoom: var(--app-zoom, 1);
+}

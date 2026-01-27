@@ -17,9 +17,17 @@ export class TauriProvider {
         this._tauri = win.__TAURI__;
 
         if (this._tauri) {
-            console.log('[TauriProvider] Connected to Tauri Host');
+            console.log(
+                '%c TauriProvider %c Connected ',
+                'color: #10b981; font-weight: bold; padding: 2px 0;',
+                'color: #d1fae5; background: #064e3b; padding: 2px 6px; border-radius: 4px; font-size: 10px;',
+            );
         } else {
-            console.warn('[TauriProvider] Running in Browser Mode (Mocked)');
+            console.log(
+                '%c TauriProvider %c Web Mode ',
+                'color: #3b82f6; font-weight: bold; padding: 2px 0;',
+                'color: #dbeafe; background: #1e3a8a; padding: 2px 6px; border-radius: 4px; font-size: 10px;',
+            );
         }
     }
 
@@ -27,7 +35,9 @@ export class TauriProvider {
      * Check if running within a Tauri environment.
      */
     public isTauri(): boolean {
-        return !!this._tauri;
+        // Access dynamically to ensure we capture it even if injected late
+        const win = globalThis as unknown as ITauriGlobal;
+        return !!win.__TAURI__;
     }
 
     /**
@@ -37,14 +47,17 @@ export class TauriProvider {
         cmd: string,
         args: A = {} as A,
     ): Promise<T> {
-        if (this._tauri) {
+        const win = globalThis as unknown as ITauriGlobal;
+        const tauri = win.__TAURI__;
+
+        if (tauri) {
             console.debug(`[TauriProvider] Invoking: ${cmd}`, args);
             try {
-                // Support both Tauri v1 (direct invoke) and v2 (core.invoke)
+                // Support both Tauri v2 (core.invoke) and legacy
                 const invokeFn =
-                    this._tauri.core?.invoke ||
+                    tauri.core?.invoke ||
                     (
-                        this._tauri as unknown as {
+                        tauri as unknown as {
                             invoke: <T>(_cmd: string, _args: unknown) => Promise<T>;
                         }
                     ).invoke;
@@ -75,10 +88,13 @@ export class TauriProvider {
      * Listen for a Tauri event.
      */
     public async listen<T>(event: string, callback: (_payload: T) => void): Promise<() => void> {
-        if (this._tauri) {
+        const win = globalThis as unknown as ITauriGlobal;
+        const tauri = win.__TAURI__;
+        
+        if (tauri) {
             // Tauri v2 listen returns UnlistenFn (which is void or () => void)
             // and the callback receives Event<T> { payload: T, ... }
-            return await this._tauri.event.listen<T>(event, (e) => callback(e.payload));
+            return await tauri.event.listen<T>(event, (e) => callback(e.payload));
         } else {
             console.log(`[TauriProvider] Mock Listen: ${event}`);
             return () => {};

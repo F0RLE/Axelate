@@ -184,7 +184,7 @@ export class MonitoringUI {
         const gpuProgressEl = document.getElementById('gpu-progress');
 
         if (gpuUtilEl) {
-            gpuUtilEl.textContent = `${gpuUtil}%`;
+            gpuUtilEl.textContent = `${Math.round(gpuUtil)}%`;
         }
         if (gpuProgressEl) {
             gpuProgressEl.style.width = `${Math.max(0, Math.min(100, gpuUtil))}%`;

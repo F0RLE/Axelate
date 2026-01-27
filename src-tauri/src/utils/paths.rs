@@ -58,7 +58,9 @@ pub static RESOURCES_DIR: Lazy<PathBuf> = Lazy::new(|| {
         ];
 
         for path in &prod_candidates {
-            if path.exists() {
+            // Check for locales to ensure it's a valid resource directory
+            // (Prevents picking up empty target/debug/resources)
+            if path.join("locales").exists() {
                 return path.clone();
             }
         }

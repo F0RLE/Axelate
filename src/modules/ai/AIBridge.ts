@@ -13,7 +13,6 @@
  * ```
  */
 
-import { listen } from '@tauri-apps/api/event';
 import type {
     MessageSource,
     MessageHandler,
@@ -59,6 +58,9 @@ interface IGlobalContext {
         core: {
             invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
         };
+        event: {
+            listen: <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
+        };
     };
     randomizeChatGreeting?: () => void;
 }
@@ -83,7 +85,6 @@ export class AIBridge {
     constructor() {
         const globalContext = globalThis as unknown as IGlobalContext;
         globalContext.aiBridge = this;
-        console.log('[AIBridge] Service registered in execution context');
     }
 
     /**
@@ -100,22 +101,35 @@ export class AIBridge {
         }
 
         try {
-            const unlistenChunk = await listen<string>('ai-chat-chunk', (event) => {
-                // Diagnostic logging for streaming validation
-                if (import.meta.env.DEV) {
-                    console.debug(
-                        `[AIBridge] Stream chunk received (${event.payload.length} chars)`,
-                    );
-                }
-                this._broadcastChunk(event.payload);
-            });
-            this._unlisteners.push(unlistenChunk);
+            const ctx = globalThis as unknown as IGlobalContext;
+            if (ctx.__TAURI__?.event) {
+                 const unlistenChunk = await ctx.__TAURI__.event.listen<string>('ai-chat-chunk', (event) => {
+                    // Diagnostic logging for streaming validation
+                    if (import.meta.env.DEV) {
+                        console.debug(
+                            `[AIBridge] Stream chunk received (${event.payload.length} chars)`,
+                        );
+                    }
+                    this._broadcastChunk(event.payload);
+                });
+                this._unlisteners.push(unlistenChunk);
+                console.log(
+                    '%c AIBridge %c Streaming Active ',
+                    'color: #a855f7; font-weight: bold; padding: 2px 0;',
+                    'color: #f3e8ff; background: #581c87; padding: 2px 6px; border-radius: 4px; font-size: 10px;',
+                );
+            } else {
+                 console.log(
+                    '%c AIBridge %c Web Mode ',
+                    'color: #64748b; font-weight: bold; padding: 2px 0;',
+                    'color: #f1f5f9; background: #334155; padding: 2px 6px; border-radius: 4px; font-size: 10px;',
+                );
+            }
 
             this._initialized = true;
-            console.log('[AIBridge] Infrastructure initialization complete (Streaming Active)');
         } catch (error: unknown) {
             console.error('[AIBridge] Critical IPC initialization failure:', error);
-            throw error;
+            // Non-blocking error for web mode availability
         }
     }
 
@@ -586,17 +600,3 @@ export class AIBridge {
 // Singleton instantiation
 export const aiBridge = new AIBridge();
 
-/**
- * Perform non-blocking infrastructure boot.
- * Prevents splash screen timeout by executing initialization as a background task.
- * Note: We explicitly avoid top-level await here to prevent blocking the main UI thread during boot.
- */
-
-(async () => {
-    // NOSONAR
-    try {
-        await aiBridge.init();
-    } catch (error: unknown) {
-        console.error('[AIBridge] Background boot failure:', error);
-    }
-})();

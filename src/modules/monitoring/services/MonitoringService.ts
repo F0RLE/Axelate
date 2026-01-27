@@ -121,7 +121,18 @@ export class MonitoringService {
         if (this.pollingInterval) return;
 
         const g = globalThis as unknown as IMonitoringGlobal;
-        this.pollingInterval = g.setInterval(() => {
+        this.pollingInterval = g.setInterval(async () => {
+            try {
+                const res = await fetch('/api/stats');
+                if (res.ok) {
+                    const stats = await res.json();
+                    this.notifyListeners(stats);
+                    return;
+                }
+            } catch (e) {
+                console.warn('[MonitoringService] Poll failed', e);
+            }
+            // Fallback to mock ONLY if poll failed
             const mockStats: ISystemStats = {
                 cpu: { percent: this.random() * 30 + 10, cores: 8, name: 'Mock CPU' },
                 ram: { used_gb: 8, total_gb: 32, percent: 25, available_gb: 24 },

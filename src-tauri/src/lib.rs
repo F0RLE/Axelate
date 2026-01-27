@@ -198,6 +198,9 @@ pub fn run() {
                 )?;
             }
 
+            // Start HTTP Server
+            services::server::start_server(app.handle().clone());
+
             setup_system_tray(app)?;
             log::info!("✅ Setup complete");
             Ok(())

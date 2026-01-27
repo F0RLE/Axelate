@@ -3,7 +3,7 @@ use crate::models::modules::ConfigField;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ApiModelConfig {
@@ -96,27 +96,24 @@ pub struct AppConfig {
     pub api_providers: Vec<ApiProviderConfig>,
 }
 
-pub fn get_defaults_path(app: &AppHandle) -> Result<PathBuf, AppError> {
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        let prod_path = resource_dir
-            .join("resources")
-            .join("config")
-            .join("defaults.json");
-        if prod_path.exists() {
-            return Ok(prod_path);
+pub fn get_defaults_path(_app: &AppHandle) -> Result<PathBuf, AppError> {
+    let res_dir = &*crate::utils::paths::RESOURCES_DIR;
+
+    let candidates = [
+        res_dir.join("config").join("defaults.json"),
+        // Fallback: Check standard dev locations explicitly if RESOURCES_DIR failed us
+        PathBuf::from("src-tauri/resources/config/defaults.json"),
+        PathBuf::from("resources/config/defaults.json"),
+        PathBuf::from("../src-tauri/resources/config/defaults.json"),
+    ];
+
+    for path in &candidates {
+        if path.exists() {
+            return Ok(path.clone());
         }
     }
 
-    let dev_path_1 = PathBuf::from("src-tauri/resources/config/defaults.json");
-    if dev_path_1.exists() {
-        return Ok(dev_path_1);
-    }
-
-    let dev_path_2 = PathBuf::from("resources/config/defaults.json");
-    if dev_path_2.exists() {
-        return Ok(dev_path_2);
-    }
-
+    log::error!("Failed to locate defaults.json. Checked: {:?}", candidates);
     Err(AppError::Config(
         "Defaults not found in any expected location".to_string(),
     ))

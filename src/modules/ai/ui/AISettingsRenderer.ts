@@ -81,7 +81,7 @@ class AISettingsRenderer {
 
         this._settingsService = settingsService;
         this._initialized = true;
-        console.log('[AISettingsRenderer] Initialized');
+        console.debug('[AISettingsRenderer] Initialized');
     }
 
     /**
@@ -577,5 +577,6 @@ class AISettingsRenderer {
     }
 }
 
-// Export singleton instance as per Section 16.1
+// Singleton instantiation
 export const aiSettingsRenderer = new AISettingsRenderer();
+

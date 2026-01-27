@@ -18,7 +18,6 @@ import { IApp } from './types/coreTypes';
 import { EventHandler } from './boot/EventHandler';
 import { StateService } from './services/StateService';
 import { GlobalBridge } from './boot/GlobalBridge';
-import { failsafe } from './boot/failsafe';
 import { Particles } from './ui/Particles';
 import { MonitoringService } from '../monitoring/services/MonitoringService';
 import { MonitoringUI } from '../monitoring/ui/MonitoringUI';
@@ -26,7 +25,7 @@ import { DebugService } from '../debug/services/DebugService';
 import { DebugUI } from '../debug/ui/DebugUI';
 import { SettingsService } from '../settings/services/SettingsService';
 import { SettingsUI } from '../settings/ui/SettingsUI';
-import '../ai'; // Initialize AIBridge global singleton
+import { aiBridge } from '../ai/AIBridge';
 
 export class Core {
     // Services - Made public for EventHandler and GlobalBridge
@@ -63,7 +62,12 @@ export class Core {
     private static readonly _UI_REVEAL_DELAY_MS = 200;
 
     constructor() {
-        console.debug('[Core] Constructor started.');
+        console.log(
+            '%c FLUX PLATFORM %c v0.1.0 ',
+            'color: #06b6d4; font-family: "Segoe UI", sans-serif; font-size: 24px; font-weight: 900; text-shadow: 0 0 5px rgba(6,182,212,0.5); margin-bottom: 8px;',
+            'color: #cbd5e1; font-family: monospace; font-size: 10px; background: #334155; padding: 2px 6px; border-radius: 4px; vertical-align: middle;',
+        );
+        // console.debug('[Core] Constructor started.');
 
         // Initialize base services following Section 16 patterns
         this.tauriProvider = new TauriProvider();
@@ -108,6 +112,7 @@ export class Core {
      * Executes the core initialization sequence.
      */
     public async init(): Promise<void> {
+        console.groupCollapsed('%c[Core] Init Sequence', 'color: #94a3b8; font-weight: 500;');
         console.info('[Core] Init sequence started.');
 
         // 1. Initialize Global Bridge early
@@ -130,45 +135,13 @@ export class Core {
         this.navigation.refreshFromUiState();
         console.debug('[Core] UI State Loaded.');
 
-        // 3. Reveal UI and hide splash screen as soon as state is ready
-        const revealUI = async () => {
-            console.debug('[Core] Revealing UI...');
-
-            // 1. Show the window immediately (with a timeout safety)
-            // This ensures the user sees the splash screen if this is a cold boot
-            const showPromise = this.windowService.show();
-            const showTimeout = new Promise((r) => setTimeout(r, 2000)); // 2s safety
-
-            await Promise.race([showPromise, showTimeout]).catch((e) =>
-                console.warn('[Core] Show window timed out or failed', e),
-            );
-
-            // 2. Enforce minimum splash duration to allow animations to play
-            // This fixes the "instant flash" issue on reloads
-            await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
-
-            // 3. Hide the splash screen
-            this.windowUI.hideSplashScreen();
-
-            // 4. Transition to home page and reveal layout
-            setTimeout(() => {
-                const currentPage = this.navigation.getCurrentPage();
-                this.navigationUI.showPage(currentPage || 'home', null, true);
-
-                // Initialization confirmed, cancel failsafe
-                failsafe.cancel();
-
-                const elements = ['sidebar', 'app-header', 'main-area'];
-                elements.forEach((id) => {
-                    const el = document.getElementById(id);
-                    if (el) el.classList.add('visible');
-                });
-            }, Core._UI_REVEAL_DELAY_MS);
-        };
-
-        // Don't await revealUI here to prevent it from blocking the rest of the init() sequence
-        // (i.e. i18n, services, etc. should start initializing in parallel)
-        revealUI();
+        // 3. Show Window (keep splash visible)
+        console.debug('[Core] Showing window...');
+        const showPromise = this.windowService.show();
+        const showTimeout = new Promise((r) => setTimeout(r, 2000));
+        await Promise.race([showPromise, showTimeout]).catch((e) =>
+            console.warn('[Core] Show window timed out or failed', e),
+        );
 
         // 4. Init I18n
         try {
@@ -212,13 +185,39 @@ export class Core {
         globalThis.addEventListener('catalog-loaded', () => {
             this._restoreSelectedModules();
         });
-        this.catalog.loadCatalog();
+        
+        // Init AI Bridge (now manual)
+        await aiBridge.init();
+
+        // Await catalog to keep logs inside the group
+        await this.catalog.loadCatalog();
 
         // 7. Start Polling (Monitoring handles its own lifecycle)
         // this.diagnostics.startPolling(); // Disabled to prevent flickering conflict
 
         this._initGlobalShortcuts();
+
+        // 8. Hide Splash Screen (Only when fully ready)
+        console.debug('[Core] App Ready. Hiding splash...');
+        
+        // Enforce minimum splash duration to avoid flickering
+        await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
+
+        this.windowUI.hideSplashScreen();
+
+            setTimeout(() => {
+                const currentPage = this.navigation.getCurrentPage();
+                this.navigationUI.showPage(currentPage || 'home', null, true);
+
+                const elements = ['sidebar', 'app-header', 'main-area'];
+                elements.forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.add('visible');
+                });
+            }, Core._UI_REVEAL_DELAY_MS);
+
         console.info('[Core] Ready.');
+        console.groupEnd();
     }
 
     /**

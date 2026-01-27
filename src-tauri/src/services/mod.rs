@@ -7,6 +7,7 @@ pub mod logs;
 pub mod module_controller;
 pub mod module_lifecycle;
 pub mod secure_storage;
+pub mod server;
 pub mod settings;
 pub mod system_monitor;
 pub mod theme;

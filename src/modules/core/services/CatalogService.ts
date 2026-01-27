@@ -62,99 +62,107 @@ export class CatalogService {
      */
     public async loadCatalog(): Promise<void> {
         try {
+            let config: IAppConfig | null = null;
+            let installedModules: IModule[] = [];
+
+            // 1. Fetch Config & Installed Modules
             if (this._tauri.isTauri()) {
-                const config = await this._tauri.invoke<IAppConfig>('get_config');
+                config = await this._tauri.invoke<IAppConfig>('get_config');
+                installedModules = await this._tauri.invoke<IModule[]>('get_modules');
+            } else {
+                try {
+                    const res = await fetch('/api/config');
+                    if (res.ok) config = await res.json();
+                    
+                    const resModules = await fetch('/api/modules');
+                    if (resModules.ok) installedModules = await resModules.json();
+                } catch (e) {
+                    console.warn('[CatalogService] Web fetch failed', e);
+                }
+            }
 
-                console.debug('[CatalogService] Raw config:', config);
+            console.log('[CatalogService] Loaded config:', config);
 
-                if (config?.catalog) {
-                    // Update internal state
-                    this._appData.stars = config.catalog.stars;
-                    this._appData.ai = config.catalog.ai || [];
-                    this._appData.services = config.catalog.services || [];
+            if (config?.catalog) {
+                // Update internal state
+                this._appData.stars = config.catalog.stars;
+                this._appData.ai = config.catalog.ai || [];
+                this._appData.services = config.catalog.services || [];
 
-                    // Hydrate with installed schemas
-                    try {
-                        const installedModules = await this._tauri.invoke<IModule[]>('get_modules');
-                        const installedMap = new Map(installedModules.map((m) => [m.id, m]));
+                // Hydrate with schemas & providers (SHARED LOGIC)
+                const installedMap = new Map(installedModules.map((m) => [m.id, m]));
 
-                        const mergeSchema = (list: IApp[]) => {
-                            list.forEach((app) => {
-                                // Dynamic Config Schema Generation
-                                const providers = config.api_providers;
-                                if (providers && Array.isArray(providers)) {
-                                    const provider = providers.find((p) => p.id === app.id);
-                                    if (provider) {
-                                        app.config_schema = {
-                                            api_key: {
-                                                label: `${provider.name} API Key`,
-                                                field_type: 'text',
-                                                default: '',
-                                                required: true,
-                                            },
-                                        };
-                                        // Pass providers models to global state for SettingsUI
-                                        app.api_provider_data = provider as unknown as Record<
-                                            string,
-                                            unknown
-                                        >;
+                const mergeSchema = (list: IApp[]) => {
+                    list.forEach((app) => {
+                        // Dynamic Config Schema Generation
+                        const providers = config!.api_providers;
+                        if (providers && Array.isArray(providers)) {
+                            const provider = providers.find((p) => p.id === app.id);
+                            if (provider) {
+                                app.config_schema = {
+                                    api_key: {
+                                        label: `${provider.name} API Key`,
+                                        field_type: 'text',
+                                        default: '',
+                                        required: true,
+                                    },
+                                };
+                                // Pass providers models to global state for SettingsUI
+                                app.api_provider_data = provider as unknown as Record<
+                                    string,
+                                    unknown
+                                >;
 
-                                        if (
-                                            provider.baseUrl &&
-                                            provider.type === 'openai-compatible'
-                                        ) {
-                                            app.config_schema.endpoint = {
-                                                label: 'Endpoint URL',
-                                                field_type: 'text',
-                                                default: provider.baseUrl,
-                                                required: true,
-                                            };
-                                        }
-                                    }
-                                }
-
-                                // Legacy / Local Fallbacks
-                                if (app.id === 'localai' && !app.config_schema) {
-                                    app.config_schema = {
-                                        endpoint: {
-                                            label: 'LocalAI Endpoint',
-                                            field_type: 'text',
-                                            default: 'http://localhost:8080/v1',
-                                            required: true,
-                                        },
-                                        model: {
-                                            label: 'Model Name',
-                                            field_type: 'text',
-                                            default: 'phi-3',
-                                            required: true,
-                                        },
+                                if (
+                                    provider.baseUrl &&
+                                    provider.type === 'openai-compatible'
+                                ) {
+                                    app.config_schema.endpoint = {
+                                        label: 'Endpoint URL',
+                                        field_type: 'text',
+                                        default: provider.baseUrl,
+                                        required: true,
                                     };
                                 }
+                            }
+                        }
 
-                                if (installedMap.has(app.id)) {
-                                    app.installed = true;
-                                    const inst = installedMap.get(app.id);
-                                    if (inst?.config_schema) {
-                                        app.config_schema = inst.config_schema;
-                                    }
-                                }
-                            });
-                        };
+                        // Legacy / Local Fallbacks
+                        if (app.id === 'localai' && !app.config_schema) {
+                            app.config_schema = {
+                                endpoint: {
+                                    label: 'LocalAI Endpoint',
+                                    field_type: 'text',
+                                    default: 'http://localhost:8080/v1',
+                                    required: true,
+                                },
+                                model: {
+                                    label: 'Model Name',
+                                    field_type: 'text',
+                                    default: 'phi-3',
+                                    required: true,
+                                },
+                            };
+                        }
 
-                        mergeSchema(this._appData.ai);
-                        mergeSchema(this._appData.services);
-                    } catch (e) {
-                        console.warn('[CatalogService] Failed to hydrate modules:', e);
-                    }
+                        if (installedMap.has(app.id)) {
+                            app.installed = true;
+                            const inst = installedMap.get(app.id);
+                            if (inst?.config_schema) {
+                                app.config_schema = inst.config_schema;
+                            }
+                        }
+                    });
+                };
 
-                    this._syncToGlobal();
-                    this._updateLegacySettings(config.models);
+                mergeSchema(this._appData.ai);
+                mergeSchema(this._appData.services);
 
-                    console.log('[CatalogService] Catalog loaded:', this._appData);
-                    globalThis.dispatchEvent(new CustomEvent('catalog-loaded'));
-                }
-            } else {
-                console.log('[CatalogService] Mock Mode - skipping load');
+                this._syncToGlobal();
+                this._updateLegacySettings(config.models);
+
+                console.log('[CatalogService] Catalog initialized:', this._appData);
+                globalThis.dispatchEvent(new CustomEvent('catalog-loaded'));
             }
         } catch (e) {
             console.error('[CatalogService] Failed to load catalog:', e);
