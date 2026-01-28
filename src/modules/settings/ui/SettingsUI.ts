@@ -244,7 +244,7 @@ export class SettingsUI {
      */
     private _renderEmptyState(container: HTMLElement, _app: IApp) {
         container.innerHTML = DOMPurify.sanitize(`
-            <div class="ai-module-config universal-api-theme" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px; width: 100%;">
+            <div class="ai-module-config universal-api-theme" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 2rem 0;">
                 <div style="text-align: center; color: var(--text-secondary); font-size: 1.2rem; opacity: 0.7;">
                     This module is not ready yet.
                 </div>

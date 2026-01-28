@@ -688,7 +688,13 @@
     border-radius: 20px;
     width: 90%;
     max-width: 1000px;
-    max-height: 85vh;
+    
+    /* Constraint to stay below header with gap at bottom */
+    margin-top: var(--header-height);
+    max-height: calc(100vh - var(--header-height) - 4rem);
+    /* Ensure it doesn't touch bottom */
+    margin-bottom: 2rem; 
+
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);

@@ -76,6 +76,8 @@ declare global {
     var updateState: () => void;
     var checkFirstLaunch: () => Promise<void>;
     var setLogView: (_view: string, _btn: HTMLElement) => void;
+    var __APP_VERSION__: string;
+
 
     // --- AI Bridge & Models ---
     var aiBridge: AIBridgeInterface;

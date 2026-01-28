@@ -27,18 +27,16 @@
 
 ### 1.1 Hybrid Kernel Architecture
 
-Flux Platform is built as a **Hybrid Kernel** application.
+Flux Platform is built as a **Hybrid Kernel** application. 
+*Detailed structural rules are defined in [CODING_STANDARDS.md](CODING_STANDARDS.md).*
 
-* **Kernel (Rust)**: Handles I/O, encryption, thread management, and process spawning. It is completely isolated from the UI thread.
-* **Shell (Vite/TS)**: A stateless rendering layer. It contains **ZERO** business logic regarding file operations or security. It is purely a visualization state machine.
+* **Kernel (Rust)**: Responsible for direct I/O, encryption, and process management.
+* **Shell (TS)**: Stateless visualization layer. No direct file I/O allowed.
 
 ### 1.2 The "Pass-Through" IPC Pattern
 
-We strictly avoid heavy middleware. Frontend requests map 1:1 to Rust services (Controller Pattern).
-
-* **Frontend**: `TauriProvider.invoke('get_system_stats')`
-* **Bridge**: `commands::system::get_system_stats()`
-* **Service**: `services::system_monitor::get_current_snapshot()`
+Requests map directly to Rust services without heavy middleware.
+*Implementation patterns: see IPC section in [CODING_STANDARDS.md](CODING_STANDARDS.md).*
 
 ---
 
@@ -51,8 +49,8 @@ Sensitive data (API Keys, OAuth Tokens) is encrypted using a key derived from th
 **Algorithm:**
 
 1. **Entropy Source A**: `machine_uid::get()` (Motherboard Serial / BIOS UUID).
-2. **Entropy Source B**: Static Pepper `const PEPPER = "..."` (Compiled into binary).
-3. **Key Derivation Function (KDF)**: `SHA256(Source A + Source B)` → 32-byte Key.
+2. Entropy Source B**: Static Salt `const SALT = "FLUX_PLATFORM_SECURE_SALT_"` (Compiled into binary).
+3. **Key Derivation Function (KDF)**: `SHA256(Source A + SALT + Source A)` → 32-byte Key.
 4. **Encryption**: `AES-256-GCM` (Galois/Counter Mode).
     * **Nonce**: Random 96-bit per write.
     * **Tag**: 128-bit authentication tag appended to ciphertext.
@@ -80,11 +78,16 @@ All commands return `Promise<Result<T, AppError>>`.
 | | `start_module` | `{id: string}` | `void` | Spawns process via `ModuleController`. |
 | | `stop_module` | `{id: string}` | `void` | `taskkill /pid` or `SIGTERM`. |
 
-| **secure** | `save_key` | `{key: string, val: string}` | `void` | Encrypts and persists value. |
-| | `get_key` | `{key: string}` | `Option<String>` | Decrypts and returns value. |
+| **secure** | `save_secure_key` | `{service: string, key: string}` | `void` | Encrypts and persists value. |
+| | `get_secure_key` | `{service: string}` | `Option<string>` | Decrypts and returns value. |
 | **ai** | `send_chat_message` | `ChatRequest` | `ChatResponse` | See struct definitions below. |
 | **window** | `minimize_window` | `-` | `void` | Minimizes current window. |
+| | `maximize_window` | `-` | `void` | Maximizes current window. |
+| | `show_window` | `-` | `void` | Shows existing window. |
+| | `hide_window` | `-` | `void` | Hides window (keeps process). |
 | **theme** | `get_theme_colors` | `-` | `ThemeColors` | Returns system accent colors. |
+| **license** | `get_license_status` | `-` | `LicenseStatus` | Check activation state. |
+| | `activate_license` | `{key: string}` | `Result` | Validates and saves key. |
 
 ### 3.2 Event Stream (Backend → Frontend)
 
@@ -100,10 +103,17 @@ Subscribed via `EventBus.ts` (TS) or `app_handle.emit_all` (Rust).
 **ChatRequest** (`ai_service.rs`)
 ```typescript
 interface ChatRequest {
-  provider: 'openai' | 'gemini' | 'local';
+  provider: string; // 'openai' | 'gemini' | 'gpt' | 'deepseek' | ...
   model: string;
-  messages: { role: string; content: string }[];
+  messages: ChatMessage[];
   api_key?: string;
+  thinking_level?: 'low' | 'high' | 'minimal';
+}
+
+interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string | any[]; // Multimodal support
+  thought_signature?: string;
 }
 ```
 
@@ -113,8 +123,10 @@ interface SystemStats {
   cpu: { percent: number; cores: number; name: string };
   ram: { percent: number; used_gb: number; total_gb: number; available_gb: number };
   gpu?: { usage: number; memory_used: number; name: string };
-  disk: { read_rate: number; write_rate: number; utilization: number };
-  network: { download_rate: number; upload_rate: number };
+  vram?: { percent: number; used_gb: number; total_gb: number };
+  disk: { read_rate: number; write_rate: number; utilization: number; activity_percent: number };
+  network: { download_rate: number; upload_rate: number; activity_percent: number };
+  pid: number;
 }
 ```
 
@@ -148,8 +160,8 @@ Flux Platform/
 
 ### 5.1 AI Service (`ai_service.rs`)
 
-* **Providers**: OpenAI (Standard API), Google (Gemini), Local (Ollama-specific).
-* **Missing**: Anthropic (Claude) - *Not implemented*.
+* **Providers**: OpenAI, Google (Gemini), Anthropic (via OpenRouter/Proxy), DeepSeek, Llama.
+* **Thinking Engines**: Supports 'reasoning_effort' (OpenAI) and 'thinking' (Anthropic/DeepSeek) protocols.
 * **Note**: Frontend `AIBridge.ts` handles prompt construction and stream management.
 * **Security**: Keys are fetched from SecureStorage per-request.
 

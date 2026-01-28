@@ -63,11 +63,11 @@ export class Core {
 
     constructor() {
         console.log(
-            '%c FLUX PLATFORM %c v0.1.0 ',
+            `%c FLUX PLATFORM %c v${__APP_VERSION__} `,
             'color: #06b6d4; font-family: "Segoe UI", sans-serif; font-size: 24px; font-weight: 900; text-shadow: 0 0 5px rgba(6,182,212,0.5); margin-bottom: 8px;',
             'color: #cbd5e1; font-family: monospace; font-size: 10px; background: #334155; padding: 2px 6px; border-radius: 4px; vertical-align: middle;',
         );
-        // console.debug('[Core] Constructor started.');
+
 
         // Initialize base services following Section 16 patterns
         this.tauriProvider = new TauriProvider();

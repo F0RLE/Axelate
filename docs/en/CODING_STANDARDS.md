@@ -771,6 +771,19 @@ class EventBusImpl {
 export const eventBus = new EventBusImpl();
 ```
 
+**Implementation Pattern:**
+```typescript
+export class MyFeatureService {
+    private static instance: MyFeatureService;
+    private constructor() {}
+
+    public static getInstance() {
+        if (!this.instance) this.instance = new MyFeatureService();
+        return this.instance;
+    }
+}
+```
+
 **Singleton Services List:**
 | Service | Export | Purpose |
 |---------|--------|---------|
@@ -2053,7 +2066,1825 @@ const status = user.isActive ? 'Active' : 'Inactive';
 
 ---
 
-*Document updated: 2026-01-25*  
-*Version: 2.2.0*  
+## 37. Core Orchestrator Pattern
+
+The `Core` class serves as the central orchestrator for the entire frontend application.
+
+### 37.1. Purpose
+
+- **Single Entry Point:** All services are instantiated and initialized through `Core`
+- **Dependency Injection:** Services receive `Core` reference for cross-service communication
+- **Boot Sequence:** Deterministic initialization order ensures dependencies are ready
+
+### 37.2. Structure
+
+```typescript
+// src/modules/core/core.ts
+class Core {
+    // Services instantiated in constructor
+    public readonly tauriProvider: TauriProvider;
+    public readonly logger: LoggerService;
+    public readonly state: StateService;
+    public readonly i18n: I18nService;
+    public readonly eventBus: EventBus;
+    // ... more services
+
+    constructor() {
+        // 1. Instantiate services in dependency order
+        this.tauriProvider = new TauriProvider();
+        this.logger = new LoggerService();
+        this.state = new StateService(this);
+        // ...
+    }
+
+    async init(): Promise<void> {
+        // 2. Initialize in specific order
+        await this.state.loadState();
+        await this.i18n.init();
+        await this.templateLoader.init();
+        // ... UI initialization
+    }
+}
+
+// Register for debugging
+document.addEventListener('DOMContentLoaded', () => {
+    const coreInstance = new Core();
+    coreInstance.init().catch(console.error);
+    (globalThis as Window & { core: Core }).core = coreInstance;
+});
+```
+
+### 37.3. Service Access Pattern
+
+```typescript
+// ✅ Within a service that has Core reference
+class SomeService {
+    constructor(private readonly _core: Core) {}
+
+    doSomething(): void {
+        this._core.logger.info('[SomeService] Action');
+        this._core.state.set('key', value);
+        this._core.eventBus.emit('some:event', payload);
+    }
+}
+
+// ✅ Accessing from globalThis (for debugging/legacy)
+window.core.logger.info('Debug message');
+```
+
+### 37.4. Boot Sequence Rules
+
+1. **TauriProvider** — first (native bridge)
+2. **LoggerService** — second (logging infrastructure)
+3. **StateService** — load persisted state
+4. **I18nService** — translations
+5. **TemplateLoader** — HTML injection
+6. **UI Services** — after templates loaded
+7. **GlobalBridge** — expose APIs last
+
+---
+
+## 38. GlobalBridge Facade Pattern
+
+`GlobalBridge` decouples global API exposure from the Core orchestrator.
+
+### 38.1. Purpose
+
+- Expose core functionality to `globalThis` for legacy code and HTML `onclick` handlers
+- Group APIs by domain (Module, I18n, Window, Navigation)
+- Provide type-safe interface via `IGlobalBridgeProperties`
+
+### 38.2. Implementation
+
+```typescript
+// src/modules/core/boot/GlobalBridge.ts
+class GlobalBridge {
+    constructor(private readonly _core: Core) {}
+
+    init(): void {
+        this._exposeCoreGlobals();
+    }
+
+    private _exposeCoreGlobals(): void {
+        const win = globalThis as unknown as IGlobalBridgeProperties;
+
+        // Module Management
+        win.downloadModule = (id, url) => this._core.moduleService.download(id, url);
+        win.deleteModule = (id) => this._core.moduleService.delete(id);
+
+        // I18n
+        win.t = (key, def, ...args) => this._core.i18n.t(key, def, ...args);
+        win.setLanguage = (lang) => this._core.i18n.setLanguage(lang);
+
+        // Window Controls
+        win.minimizeWindow = () => this._core.windowService.minimize();
+        win.hideToTray = () => this._core.windowService.hideToTray();
+
+        // Navigation
+        win.showPage = (id, btn, isInit) => this._core.navigation.showPage(id, btn, isInit);
+
+        // Toast API
+        win.showToast = (msg, type, dur, title, id) => 
+            this._core.appUI.showToast(msg, type, dur, title, id);
+    }
+}
+```
+
+### 38.3. Naming Convention
+
+| Domain | Prefix | Example |
+|--------|--------|---------|
+| Module | `downloadModule`, `deleteModule` | `globalThis.downloadModule('gpt', url)` |
+| I18n | `t`, `setLanguage` | `globalThis.t('ui.button.save', 'Save')` |
+| Window | `minimizeWindow`, `hideToTray` | `globalThis.minimizeWindow()` |
+| Toast | `showToast` | `globalThis.showToast('Success', 'success')` |
+
+### 38.4. Usage in HTML
+
+```html
+<!-- ✅ Allowed for simple actions -->
+<button onclick="globalThis.showPage('settings')">Settings</button>
+<button onclick="globalThis.minimizeWindow()">−</button>
+
+<!-- ✅ With i18n -->
+<span data-i18n="ui.header.title">Flux Platform</span>
+```
+
+---
+
+## 39. HTML Template System
+
+Templates are loaded dynamically and injected securely using `TemplateLoader`.
+
+### 39.1. Directory Structure
+
+```
+src/templates/
+├── components/     # Reusable UI components
+│   ├── header.html
+│   └── sidebar.html
+├── modals/         # Modal dialogs
+│   └── all-modals.html
+└── pages/          # Full page templates
+    ├── home.html
+    ├── chat.html
+    ├── settings.html
+    └── downloads.html
+```
+
+### 39.2. Naming Convention
+
+| Path | Container ID |
+|------|--------------|
+| `pages/home.html` | `page-home` |
+| `pages/settings.html` | `page-settings` |
+| `components/sidebar.html` | `sidebar-container` |
+| `modals/all-modals.html` | `modal-container` |
+
+### 39.3. TemplateLoader API
+
+```typescript
+import { templateLoader } from './services/TemplateLoader';
+
+// Load and inject in one call
+await templateLoader.loadAndInject('pages/chat', 'page-chat');
+
+// Load only (for caching)
+const html = await templateLoader.loadTemplate('components/header');
+
+// Inject with custom sanitization
+templateLoader.injectTemplate('container-id', html);
+
+// Preload critical templates
+await templateLoader.preloadTemplates([
+    'components/sidebar',
+    'components/header',
+    'pages/home'
+]);
+
+// Clear cache (e.g., on language change)
+templateLoader.clearCache();
+```
+
+### 39.4. Security: DOMPurify Configuration
+
+```typescript
+// All templates are sanitized before injection
+container.innerHTML = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true, svg: true },
+    ADD_TAGS: ['use', 'svg', 'path', 'symbol', 'circle', 'rect'],
+    ADD_ATTR: [
+        'href', 'xlink:href', 'viewBox', 'd', 'fill', 'stroke',
+        'data-page', 'data-i18n', 'data-i18n-placeholder',
+        'aria-label', 'aria-hidden', 'aria-current'
+    ],
+    ALLOW_DATA_ATTR: true,
+    SAFE_FOR_TEMPLATES: true,
+});
+```
+
+---
+
+## 40. Hybrid State Persistence
+
+State is managed through a hybrid Backend + LocalStorage strategy.
+
+### 40.1. Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│                   Frontend                       │
+│  ┌─────────────────────────────────────────┐    │
+│  │            StateService                  │    │
+│  │  ┌─────────┐      ┌────────────────┐    │    │
+│  │  │ _state  │ ←──→ │ localStorage   │    │    │
+│  │  │ (RAM)   │      │ (Fallback)     │    │    │
+│  │  └────┬────┘      └────────────────┘    │    │
+│  └───────│──────────────────────────────────┘    │
+│          │ invoke('get_ui_state')                │
+│          │ invoke('save_ui_state')               │
+│          ▼                                       │
+├─────────────────────────────────────────────────┤
+│                   Backend (Rust)                 │
+│  ┌─────────────────────────────────────────┐    │
+│  │          ui_state.rs                     │    │
+│  │     Source of Truth (JSON file)          │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+### 40.2. State Interface
+
+```typescript
+interface IUIState {
+    sidebar_collapsed: boolean;
+    sidebar_width: number;
+    hidden_nav_items: string[];
+    hidden_monitors: string[];
+    card_widths: Record<string, string>;
+    download_limit_enabled: boolean;
+    download_max_speed: number;
+    selected_modules: Record<string, Partial<IApp>>;
+    last_page?: string;
+}
+```
+
+### 40.3. Usage Pattern
+
+```typescript
+// ✅ Read state
+const width = this._core.state.getSidebarWidth();
+const modules = this._core.state.getSelectedModules();
+
+// ✅ Write state (auto-debounced save)
+this._core.state.setSidebarWidth(320);
+this._core.state.setSelectedModule('api', { id: 'gpt', name: 'GPT-4' });
+
+// ✅ Generic get/set
+this._core.state.set('hidden_monitors', ['cpu', 'gpu']);
+const hidden = this._core.state.get('hidden_monitors');
+```
+
+### 40.4. Persistence Strategy
+
+| Event | Action |
+|-------|--------|
+| `state.set()` | Mark dirty, schedule debounced save (500ms) |
+| `beforeunload` | Immediate synchronous save |
+| `visibilitychange` (hidden) | Immediate async save |
+| App startup | Load from backend, fallback to localStorage |
+
+---
+
+## 41. Module Controller Pattern (MVC)
+
+Modules follow a Controller → Service + UI separation.
+
+### 41.1. Structure
+
+```
+modules/{module}/
+├── index.ts              # Public exports
+├── {module}.ts           # Controller (optional, for complex modules)
+├── services/
+│   └── {Module}Service.ts  # Business logic, backend calls
+├── ui/
+│   └── {Module}UI.ts       # DOM manipulation, rendering
+├── types/
+│   └── {module}Types.ts    # TypeScript interfaces
+└── utils/
+    └── {module}Utils.ts    # Helper functions
+```
+
+### 41.2. Controller Responsibilities
+
+```typescript
+// src/modules/chat/chat.ts
+class ChatController {
+    private readonly _service: ChatService;
+    private readonly _ui: ChatUI;
+
+    constructor() {
+        this._service = new ChatService();
+        this._ui = new ChatUI();
+        this._init();
+    }
+
+    private _init(): void {
+        this._bindEvents();
+        this._exposeGlobals();
+    }
+
+    private _bindEvents(): void {
+        // DOM event bindings
+        document.getElementById('chat-send')
+            ?.addEventListener('click', () => this.sendChat());
+    }
+
+    private _exposeGlobals(): void {
+        // Legacy support
+        (globalThis as unknown as Record<string, unknown>).sendChat = 
+            () => this.sendChat();
+    }
+
+    async sendChat(): Promise<void> {
+        const text = this._ui.getInputText();
+        const response = await this._service.send(text);
+        this._ui.renderResponse(response);
+    }
+}
+```
+
+### 41.3. Service vs UI Separation
+
+| Layer | Responsibility | Example |
+|-------|---------------|---------|
+| **Service** | Backend calls, business logic, data transforms | `ChatService.send()`, `ModuleService.download()` |
+| **UI** | DOM queries, rendering, animations | `ChatUI.renderMessage()`, `SettingsUI.showTab()` |
+| **Controller** | Coordination, event binding, state flow | `ChatController.sendChat()` |
+
+### 41.4. When to Use Controller
+
+- **With Controller:** Complex modules with multiple UI components and services (Chat, Settings)
+- **Without Controller:** Simple modules where Service + UI are sufficient (Debug, Monitoring)
+
+---
+
+## 42. AI Streaming Architecture
+
+Real-time AI responses use IPC streaming via Tauri events.
+
+### 42.1. Data Flow
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                        Frontend                             │
+│  ┌──────────────┐    ┌─────────────┐    ┌──────────────┐   │
+│  │  ChatUI      │◄───│  AIBridge   │◄───│ Tauri Event  │   │
+│  │  (render)    │    │  (buffer)   │    │ Listener     │   │
+│  └──────────────┘    └──────┬──────┘    └──────────────┘   │
+│                             │ invoke('send_chat_message')   │
+│                             ▼                               │
+├────────────────────────────────────────────────────────────┤
+│                        Backend (Rust)                       │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │                   ai_service.rs                      │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐     │   │
+│  │  │ OpenAI SSE │  │ Gemini SSE │  │ Local LLM  │     │   │
+│  │  │ Stream     │  │ Stream     │  │ Stream     │     │   │
+│  │  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘     │   │
+│  │        │               │               │             │   │
+│  │        └───────────────┴───────────────┘             │   │
+│  │                        │                             │   │
+│  │              window.emit("ai:thought:chunk")         │   │
+│  │              window.emit("ai:thought:done")          │   │
+│  └─────────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────────┘
+```
+
+### 42.2. Frontend: AIBridge
+
+```typescript
+// src/modules/ai/AIBridge.ts
+class AIBridge {
+    private _streamBuffer = '';
+    private _onChunk: ((chunk: string) => void) | null = null;
+
+    async init(): Promise<void> {
+        // Subscribe to streaming events
+        await globalThis.__TAURI__.event.listen<string>(
+            'ai:thought:chunk',
+            (event) => {
+                this._streamBuffer += event.payload;
+                this._onChunk?.(event.payload);
+            }
+        );
+
+        await globalThis.__TAURI__.event.listen<void>(
+            'ai:thought:done',
+            () => this._finalizeStream()
+        );
+    }
+
+    async sendMessage(
+        text: string,
+        source: MessageSource = 'chat',
+        attachments: Attachment[] = []
+    ): Promise<string> {
+        this._streamBuffer = '';
+
+        const request: IChatRequest = {
+            provider: this._activeProviderId,
+            model: this._selectedModel,
+            api_key: this._apiKey,
+            messages: this._history,
+            // ...
+        };
+
+        await globalThis.__TAURI__.core.invoke('send_chat_message', { request });
+        return this._streamBuffer;
+    }
+}
+```
+
+### 42.3. Backend: Rust Streaming
+
+```rust
+// src-tauri/src/services/ai_service.rs
+#[tauri::command]
+pub async fn send_chat_message(
+    window: tauri::Window,
+    request: ChatRequest,
+) -> Result<ChatResponse, String> {
+    let client = Client::new();
+    
+    // Stream response chunks
+    let mut stream = client.post(&url)
+        .json(&body)
+        .send()
+        .await?
+        .bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let text = parse_sse_chunk(&chunk?);
+        // Emit to frontend
+        window.emit("ai:thought:chunk", &text).ok();
+    }
+
+    window.emit("ai:thought:done", ()).ok();
+    Ok(ChatResponse { /* ... */ })
+}
+```
+
+### 42.4. Event Naming
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `ai:thought:chunk` | `string` | Incremental text chunk |
+| `ai:thought:done` | `void` | Stream completed |
+| `ai:thought:error` | `{ code: string, message: string }` | Stream error |
+
+---
+
+## 43. Window Lifecycle & System Tray
+
+Tauri window management with system tray integration.
+
+### 43.1. Window States
+
+```
+                    ┌──────────────┐
+                    │   Running    │
+                    │  (Visible)   │
+                    └──────┬───────┘
+                           │
+         ┌─────────────────┼─────────────────┐
+         │                 │                 │
+         ▼                 ▼                 ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│  Minimized   │  │   Hidden     │  │   Closed     │
+│ (Taskbar)    │  │ (Tray Only)  │  │ (WebView     │
+│              │  │ WebView Alive│  │  Destroyed)  │
+└──────────────┘  └──────────────┘  └──────────────┘
+         │                 │                 │
+         │                 │                 │
+         └─────────────────┴─────────────────┘
+                           │
+                           ▼
+                    ┌──────────────┐
+                    │  Tray Menu:  │
+                    │  "Открыть"   │──────► Recreate Window
+                    │  "Выход"     │──────► Full Exit
+                    └──────────────┘
+```
+
+### 43.2. Commands
+
+| Command | Effect | WebView Status |
+|---------|--------|----------------|
+| `minimize_window` | Hide to taskbar | Alive |
+| `hide_window` | Hide completely, keep alive | Alive |
+| `close_window` | Destroy WebView, stay in tray | Destroyed |
+| `show_window` | Restore from hidden/minimized | Alive |
+
+### 43.3. Frontend Usage
+
+```typescript
+// src/modules/core/services/WindowService.ts
+class WindowService {
+    async minimize(): Promise<void> {
+        await this._invoke('minimize_window');
+    }
+
+    async hideToTray(): Promise<void> {
+        await this._invoke('hide_window');
+        // Pause monitoring to save resources
+        await this._invoke('set_monitoring_paused', { paused: true });
+    }
+
+    async confirmClose(): Promise<void> {
+        // Save state before closing
+        this._core.state.saveImmediate();
+        await this._invoke('close_window');
+    }
+}
+```
+
+### 43.4. Backend: Tray Integration
+
+```rust
+// src-tauri/src/lib.rs
+fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let show_item = MenuItem::with_id(app, "show", "Открыть", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
+
+    TrayIconBuilder::new()
+        .menu(&Menu::with_items(app, &[&show_item, &quit_item])?)
+        .on_menu_event(|app, event| {
+            match event.id.as_ref() {
+                "show" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        window.show().ok();
+                        window.set_focus().ok();
+                    } else {
+                        // Recreate window if destroyed
+                        create_main_window(app);
+                    }
+                }
+                "quit" => {
+                    IS_QUITTING.store(true, Ordering::Relaxed);
+                    app.exit(0);
+                }
+                _ => {}
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
+```
+
+### 43.5. Global Shortcut
+
+- **Ctrl+Space:** Toggle window visibility
+- Only works if WebView is alive
+- If destroyed, shortcut is ignored (user must use tray)
+
+---
+
+## 44. Secure Storage Pattern
+
+API keys and secrets are stored using platform-native secure storage.
+
+### 44.1. Architecture
+
+```
+┌────────────────────────────────────────────────────────┐
+│                      Frontend                           │
+│  ┌────────────────────────────────────────────────┐    │
+│  │              fluxAPI.secureStorage              │    │
+│  │  save(service, key) → invoke('save_secure_key') │    │
+│  │  get(service) → invoke('get_secure_key')        │    │
+│  └─────────────────────────┬──────────────────────┘    │
+│                            │                            │
+├────────────────────────────┼────────────────────────────┤
+│                      Backend (Rust)                     │
+│  ┌─────────────────────────▼──────────────────────┐    │
+│  │            secure_storage.rs                    │    │
+│  │  ┌─────────────────────────────────────────┐   │    │
+│  │  │ Windows: Credential Manager              │   │    │
+│  │  │ macOS: Keychain                          │   │    │
+│  │  │ Linux: libsecret/kwallet                 │   │    │
+│  │  └─────────────────────────────────────────┘   │    │
+│  └────────────────────────────────────────────────┘    │
+└────────────────────────────────────────────────────────┘
+```
+
+### 44.2. Frontend API
+
+```typescript
+// Exposed via GlobalBridge
+interface SecureStorageAPI {
+    save: (service: string, key: string) => Promise<void>;
+    get: (service: string) => Promise<string | null>;
+}
+
+// Usage in AIBridge
+async function saveApiKey(providerId: string, key: string): Promise<void> {
+    await globalThis.fluxAPI.secureStorage.save(`flux_${providerId}`, key);
+}
+
+async function getApiKey(providerId: string): Promise<string | null> {
+    return globalThis.fluxAPI.secureStorage.get(`flux_${providerId}`);
+}
+```
+
+### 44.3. Service Naming Convention
+
+| Provider | Service Name | Purpose |
+|----------|--------------|---------|
+| OpenAI | `flux_openai` | GPT API key |
+| Google | `flux_gemini` | Gemini API key |
+| Anthropic | `flux_claude` | Claude API key |
+| Custom | `flux_{provider_id}` | Custom provider key |
+
+### 44.4. Security Rules
+
+- ❌ **NEVER** store API keys in `localStorage`
+- ❌ **NEVER** log API keys to console
+- ❌ **NEVER** include keys in error messages
+- ✅ Use `fluxAPI.secureStorage` for all credentials
+- ✅ Keys are encrypted at rest by OS
+- ✅ Access controlled by OS permissions
+
+### 44.5. Backend Commands
+
+```rust
+// src-tauri/src/commands/secure.rs
+#[tauri::command]
+pub async fn save_secure_key(service: String, key: String) -> Result<(), String> {
+    crate::services::secure_storage::set_password(&service, &key)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_secure_key(service: String) -> Result<Option<String>, String> {
+    crate::services::secure_storage::get_password(&service)
+        .map_err(|e| e.to_string())
+}
+```
+
+---
+
+## 45. Observer Pattern (Pub/Sub Services)
+
+Services that emit data over time implement the Observer pattern for loose coupling.
+
+### 45.1. Interface
+
+```typescript
+interface IObservable<T> {
+    subscribe(callback: (data: T) => void): void;
+    unsubscribe(callback: (data: T) => void): void;
+}
+```
+
+### 45.2. Implementation
+
+```typescript
+// src/modules/monitoring/services/MonitoringService.ts
+export class MonitoringService {
+    private listeners: StatsCallback[] = [];
+
+    public subscribe(callback: StatsCallback): void {
+        if (!this.listeners.includes(callback)) {
+            this.listeners.push(callback);
+        }
+    }
+
+    public unsubscribe(callback: StatsCallback): void {
+        this.listeners = this.listeners.filter((cb) => cb !== callback);
+    }
+
+    private notifyListeners(stats: ISystemStats): void {
+        this.listeners.forEach((cb) => {
+            try {
+                cb(stats);
+            } catch (err) {
+                console.error('[MonitoringService] Listener error:', err);
+            }
+        });
+    }
+}
+```
+
+### 45.3. Lifecycle Methods
+
+| Method | Purpose |
+|--------|---------|
+| `startMonitoring()` | Begin emitting data |
+| `stopMonitoring()` | Stop emission, cleanup listeners |
+| `destroy()` | Full cleanup, clear all subscribers |
+
+### 45.4. Usage
+
+```typescript
+const monitor = new MonitoringService();
+const handler = (stats: ISystemStats) => console.log(stats);
+
+monitor.subscribe(handler);
+await monitor.startMonitoring();
+
+// Later...
+monitor.unsubscribe(handler);
+monitor.destroy();
+```
+
+---
+
+## 46. Global Error Boundaries
+
+Centralized error capture prevents unhandled exceptions from crashing the app.
+
+### 46.1. Initialization
+
+```typescript
+// src/modules/core/services/ErrorHandler.ts
+class ErrorHandler {
+    public init(): void {
+        // Catch uncaught errors
+        globalThis.onerror = (message, source, lineno, colno, error) => {
+            this.captureError(error || new Error(String(message)), 'window.onerror');
+            return false;
+        };
+
+        // Catch unhandled promise rejections
+        globalThis.onunhandledrejection = (event) => {
+            const error = event.reason instanceof Error 
+                ? event.reason 
+                : new Error(String(event.reason));
+            this.captureError(error, 'unhandledrejection');
+        };
+    }
+}
+```
+
+### 46.2. Error Capture
+
+```typescript
+public captureError(error: Error, context?: string): void {
+    const errorInfo: IErrorInfo = {
+        message: error.message,
+        stack: error.stack,
+        context,
+        timestamp: Date.now(),
+    };
+
+    // Log with rotation
+    this._errorLog.push(errorInfo);
+    if (this._errorLog.length > this._maxLogSize) {
+        this._errorLog.shift();
+    }
+
+    // Emit for subscribers
+    eventBus.emit('error:global', { error, context });
+
+    // Show toast
+    this._showErrorToast(error.message);
+}
+```
+
+### 46.3. Safe Wrappers
+
+```typescript
+// Wrap async functions
+public async wrapAsync<T>(fn: () => Promise<T>, context?: string): Promise<T | undefined> {
+    try {
+        return await fn();
+    } catch (error) {
+        this.captureError(error instanceof Error ? error : new Error(String(error)), context);
+        return undefined;
+    }
+}
+
+// Wrap event handlers
+public safeHandler<T extends Event>(
+    handler: (event: T) => void,
+    context?: string
+): (event: T) => void {
+    return (event: T) => {
+        try {
+            handler(event);
+        } catch (error) {
+            this.captureError(error instanceof Error ? error : new Error(String(error)), context);
+        }
+    };
+}
+```
+
+### 46.4. Usage
+
+```typescript
+// Safe async call
+await errorHandler.wrapAsync(() => fetchData(), 'fetchData');
+
+// Safe event handler
+button.addEventListener('click', errorHandler.safeHandler(handleClick, 'buttonClick'));
+```
+
+---
+
+## 47. DOM Selector Constants
+
+Centralize DOM element selectors for consistency and testability.
+
+### 47.1. Pattern
+
+```typescript
+// src/modules/downloader/ui/DownloadUI.ts
+class DownloadUI {
+    private static readonly SELECTORS = {
+        PROGRESS_BAR: 'downloads-progress-bar',
+        PROGRESS_TEXT: 'downloads-progress-text',
+        SPEED_LABEL: 'downloads-speed',
+        STATUS_LABEL: 'downloads-status',
+        ETA_LABEL: 'downloads-eta',
+        EMPTY_TEXT: 'downloads-empty-text',
+        MAIN_CARD: 'module-downloads-card',
+        CONTAINER: 'downloads-container',
+    } as const;
+}
+```
+
+### 47.2. Element Factory
+
+```typescript
+private _getElements() {
+    const S = DownloadUI.SELECTORS;
+    return {
+        bar: document.getElementById(S.PROGRESS_BAR),
+        text: document.getElementById(S.PROGRESS_TEXT),
+        speedEl: document.getElementById(S.SPEED_LABEL),
+        statusEl: document.getElementById(S.STATUS_LABEL),
+        etaEl: document.getElementById(S.ETA_LABEL),
+        emptyText: document.getElementById(S.EMPTY_TEXT),
+        mainCard: document.getElementById(S.MAIN_CARD),
+        downloadsContainer: document.getElementById(S.CONTAINER),
+    };
+}
+```
+
+### 47.3. Benefits
+
+- **Testability:** Easy to mock or query in tests
+- **Refactoring:** Change ID in one place
+- **Type Safety:** `as const` gives literal types
+- **Documentation:** Self-documenting element purposes
+
+---
+
+## 48. Markdown Rendering Pipeline
+
+Rich text rendering with extensions and security.
+
+### 48.1. Configuration
+
+```typescript
+// src/modules/chat/ui/ChatUI.ts
+import { marked } from 'marked';
+import markedKatex from 'marked-katex-extension';
+import markedAlert from 'marked-alert';
+import markedFootnote from 'marked-footnote';
+
+// Configure extensions
+marked.use(markedAlert());
+marked.use(markedKatex({ throwOnError: false }));
+marked.use(markedFootnote());
+marked.use({
+    breaks: true,
+    gfm: true,
+});
+```
+
+### 48.2. Custom Renderers
+
+```typescript
+// Custom code block renderer
+marked.use({
+    renderer: {
+        code({ text, lang }) {
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
+            return `
+                <div class="code-block" data-language="${lang || 'text'}">
+                    <div class="code-header">
+                        <span class="code-lang">${lang || 'text'}</span>
+                        <button class="btn-copy">Copy</button>
+                    </div>
+                    <pre><code class="hljs">${escaped}</code></pre>
+                </div>
+            `;
+        },
+    },
+});
+```
+
+### 48.3. Security: Post-Render Sanitization
+
+```typescript
+const rendered = marked.parse(content);
+const sanitized = DOMPurify.sanitize(rendered, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ['target', 'rel', 'data-language'],
+});
+container.innerHTML = sanitized;
+```
+
+### 48.4. Streaming Updates
+
+```typescript
+createStreamingMessage() {
+    let buffer = '';
+    
+    return {
+        update(chunk: string) {
+            buffer += chunk;
+            // Parse incrementally
+            textNode.innerHTML = DOMPurify.sanitize(marked.parse(buffer));
+        },
+        finalize(fullContent: string) {
+            textNode.innerHTML = DOMPurify.sanitize(marked.parse(fullContent));
+        },
+    };
+}
+```
+
+---
+
+## 49. Toast Queue System
+
+Managed toast notifications with update and queue support.
+
+### 49.1. Structure
+
+```typescript
+// src/modules/core/ui/AppUI.ts
+type ToastElement = HTMLDivElement & {
+    _timeout?: ReturnType<typeof setTimeout>;
+};
+
+class AppUI {
+    private toastQueue: ToastElement[] = [];
+}
+```
+
+### 49.2. Show Toast
+
+```typescript
+showToast(
+    message: string,
+    type: string = 'info',
+    duration: number = 3000,
+    title: string | null = null,
+    id: string | null = null,
+) {
+    const container = this._ensureToastContainer();
+
+    // Update existing toast if ID matches
+    if (id) {
+        const existing = this.toastQueue.find((t) => t.id === id);
+        if (existing) {
+            this._updateExistingToast(existing, message, title, duration);
+            return;
+        }
+    }
+
+    // Create new toast
+    this._createToast(container, message, type, duration, title, id);
+}
+```
+
+### 49.3. Update Existing Toast
+
+```typescript
+private _updateExistingToast(
+    toast: ToastElement,
+    message: string,
+    title: string | null,
+    duration: number,
+) {
+    // Update content
+    const msgEl = toast.querySelector('.toast-message');
+    if (msgEl) msgEl.textContent = message;
+
+    const titleEl = toast.querySelector('.toast-title');
+    if (titleEl && title) titleEl.textContent = title;
+
+    // Reset timeout
+    if (toast._timeout) clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => this._removeToast(toast), duration);
+}
+```
+
+### 49.4. Container Lazy Creation
+
+```typescript
+private _ensureToastContainer(): HTMLElement {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+    return container;
+}
+```
+
+---
+
+## 50. Visibility-Based Resource Optimization
+
+Pause expensive operations when the window is hidden.
+
+### 50.1. Frontend Implementation
+
+```typescript
+// src/modules/monitoring/services/MonitoringService.ts
+private _bindVisibilityHandler(): void {
+    document.addEventListener('visibilitychange', () => {
+        const isHidden = document.hidden;
+        
+        // Notify backend to pause/resume
+        void globalThis.__TAURI__.core.invoke('set_monitoring_paused', { 
+            paused: isHidden 
+        });
+
+        if (import.meta.env.DEV) {
+            console.debug(`[MonitoringService] Backend paused: ${isHidden}`);
+        }
+    });
+}
+```
+
+### 50.2. Backend Implementation
+
+```rust
+// src-tauri/src/services/system_monitor.rs
+static MONITORING_PAUSED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_paused(paused: bool) {
+    MONITORING_PAUSED.store(paused, Ordering::Relaxed);
+    if paused {
+        // Free resources when paused
+        if let Ok(mut mon) = MONITOR.lock() {
+            mon.drop_resources();
+        }
+    }
+}
+```
+
+### 50.3. Resource Management
+
+```rust
+impl Monitor {
+    fn ensure_resources(&mut self) {
+        if self.sys.is_none() {
+            self.sys = Some(System::new_with_specifics(
+                RefreshKind::new()
+                    .with_cpu(CpuRefreshKind::everything())
+                    .with_memory(MemoryRefreshKind::everything())
+            ));
+        }
+    }
+
+    fn drop_resources(&mut self) {
+        self.sys = None;
+        self.networks = None;
+        self.disks = None;
+        self.nvml = None;
+    }
+}
+```
+
+### 50.4. Benefits
+
+- **CPU Savings:** No polling when app hidden
+- **Memory Savings:** Drop sysinfo handles
+- **Battery Life:** Reduced background activity
+- **Instant Resume:** Re-initialize on visibility restore
+
+---
+
+## 51. Backend System Monitor Loop (Rust)
+
+Continuous system metrics emission with graceful lifecycle.
+
+### 51.1. Global State
+
+```rust
+// src-tauri/src/services/system_monitor.rs
+use once_cell::sync::Lazy;
+use std::sync::{Mutex, atomic::{AtomicBool, Ordering}};
+
+static MONITOR: Lazy<Mutex<Monitor>> = Lazy::new(|| {
+    Mutex::new(Monitor {
+        sys: None,
+        networks: None,
+        disks: None,
+        nvml: None,
+        // ... cached values
+    })
+});
+
+static MONITORING_ACTIVE: AtomicBool = AtomicBool::new(false);
+static MONITORING_PAUSED: AtomicBool = AtomicBool::new(false);
+```
+
+### 51.2. Monitor Loop
+
+```rust
+pub fn start_monitoring(app: AppHandle, interval_ms: u64) {
+    if MONITORING_ACTIVE.swap(true, Ordering::Relaxed) {
+        return; // Already running
+    }
+
+    std::thread::spawn(move || {
+        while MONITORING_ACTIVE.load(Ordering::Relaxed) {
+            if !MONITORING_PAUSED.load(Ordering::Relaxed) {
+                let stats = get_stats();
+                let _ = app.emit("system_stats", &stats);
+            }
+            std::thread::sleep(Duration::from_millis(interval_ms));
+        }
+    });
+}
+```
+
+### 51.3. Graceful Shutdown
+
+```rust
+pub fn stop_monitoring() {
+    MONITORING_ACTIVE.store(false, Ordering::Relaxed);
+}
+```
+
+### 51.4. Stats Collection
+
+```rust
+pub fn get_stats() -> SystemStats {
+    let mut mon = MONITOR.lock().unwrap();
+    mon.ensure_resources();
+
+    SystemStats {
+        cpu: collect_cpu_stats(&mut mon),
+        ram: collect_ram_stats(&mut mon),
+        gpu: collect_gpu_stats(&mut mon),
+        disk: collect_disk_stats(&mut mon),
+        network: collect_network_stats(&mut mon),
+        pid: std::process::id(),
+    }
+}
+```
+
+---
+
+## 52. Module Controller Pattern (Rust)
+
+Unified command dispatcher for module lifecycle management.
+
+### 52.1. Action Enum
+
+```rust
+// src-tauri/src/services/module_controller.rs
+#[derive(Debug)]
+pub enum ModuleAction {
+    Start,
+    Stop,
+    Restart,
+    Install,
+    Uninstall,
+    Update,
+}
+
+impl FromStr for ModuleAction {
+    type Err = AppError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "start" => Ok(Self::Start),
+            "stop" => Ok(Self::Stop),
+            "restart" => Ok(Self::Restart),
+            "install" => Ok(Self::Install),
+            "uninstall" => Ok(Self::Uninstall),
+            "update" => Ok(Self::Update),
+            _ => Err(AppError::InvalidInput(format!("Unknown action: {}", s))),
+        }
+    }
+}
+```
+
+### 52.2. Control Dispatcher
+
+```rust
+pub fn control(
+    app: AppHandle,
+    module_id: &str,
+    action: ModuleAction,
+) -> Result<ControlResponse, AppError> {
+    match action {
+        ModuleAction::Start => start_module(module_id),
+        ModuleAction::Stop => stop_module(module_id),
+        ModuleAction::Restart => {
+            stop_module(module_id)?;
+            start_module(module_id)
+        }
+        ModuleAction::Install => downloader::install_module(&app, module_id),
+        ModuleAction::Uninstall => module_lifecycle::uninstall(module_id),
+        ModuleAction::Update => {
+            module_lifecycle::uninstall(module_id)?;
+            downloader::install_module(&app, module_id)
+        }
+    }
+}
+```
+
+### 52.3. Status Check
+
+```rust
+pub fn get_module_status(module_id: &str) -> String {
+    let mut sys = System::new();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+
+    for (pid, proc) in sys.processes() {
+        if proc.name().to_string_lossy().contains(module_id) {
+            return format!("running:{}", pid);
+        }
+    }
+    
+    "stopped".to_string()
+}
+```
+
+### 52.4. Frontend Usage
+
+```typescript
+// Start a module
+await invoke('control_module', { 
+    moduleId: 'sd', 
+    action: 'start' 
+});
+
+// Get status
+const status = await invoke<string>('get_module_status', { 
+    moduleId: 'sd' 
+});
+```
+
+---
+
+## 53. TauriProvider Abstraction Layer
+
+A unified abstraction for accessing Tauri APIs with fallback support.
+
+### 53.1. Core Structure
+
+```typescript
+// src/modules/core/services/TauriProvider.ts
+export class TauriProvider {
+    private readonly _tauri: ITauriInstance | undefined;
+
+    constructor() {
+        const win = globalThis as unknown as ITauriGlobal;
+        this._tauri = win.__TAURI__;
+    }
+
+    public isTauri(): boolean {
+        const win = globalThis as unknown as ITauriGlobal;
+        return !!win.__TAURI__;
+    }
+}
+```
+
+### 53.2. Unified Invoke
+
+```typescript
+public async invoke<T, A extends Record<string, unknown>>(
+    cmd: string,
+    args: A = {} as A,
+): Promise<T> {
+    const tauri = (globalThis as ITauriGlobal).__TAURI__;
+
+    if (tauri) {
+        // Support both Tauri v2 (core.invoke) and v1 (invoke)
+        const invokeFn = tauri.core?.invoke || tauri.invoke;
+        return await invokeFn(cmd, args) as T;
+    } else {
+        return this._mockInvoke(cmd, args);
+    }
+}
+```
+
+### 53.3. Event Listening
+
+```typescript
+public async listen<T>(
+    event: string, 
+    callback: (payload: T) => void
+): Promise<() => void> {
+    const tauri = (globalThis as ITauriGlobal).__TAURI__;
+    
+    if (tauri) {
+        return await tauri.event.listen<T>(event, (e) => callback(e.payload));
+    } else {
+        console.log(`[TauriProvider] Mock Listen: ${event}`);
+        return () => {};
+    }
+}
+```
+
+### 53.4. Benefits
+
+- **Environment Agnostic:** Same API for Tauri and web
+- **Version Compatibility:** Supports Tauri v1 and v2
+- **Centralized Logging:** Debug all IPC in one place
+- **Testability:** Easy to mock in unit tests
+
+---
+
+## 54. Mock Development Mode
+
+Development-time stubs for Tauri commands.
+
+### 54.1. Pattern
+
+```typescript
+// src/modules/core/services/TauriProvider.ts
+private async _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
+    if (!import.meta.env.DEV) {
+        console.warn('[TauriProvider] Mock invoked in production!');
+        return null as T;
+    }
+    console.log(`[Mock Invoke] ${cmd}`, args);
+
+    switch (cmd) {
+        case 'get_settings':
+            return { LANGUAGE: 'en', THEME: 'dark' } as T;
+        case 'get_translations':
+            return {} as T;
+        case 'get_modules':
+            return [] as T;
+        case 'get_system_stats':
+            return {
+                cpu: { percent: 15 },
+                ram: { percent: 40, used_gb: 8, total_gb: 32 },
+                gpu: { usage: 20 },
+            } as T;
+        default:
+            return null as T;
+    }
+}
+```
+
+### 54.2. Rules
+
+| Rule | Description |
+|------|-------------|
+| **DEV Only** | Guard with `import.meta.env.DEV` |
+| **Realistic Data** | Return plausible mock values |
+| **Log All Calls** | Console log for debugging |
+| **Type Safety** | Cast return to `T` |
+
+### 54.3. Usage
+
+```typescript
+// Works seamlessly in browser dev mode
+const settings = await tauri.invoke<ISettings>('get_settings');
+// Returns mock: { LANGUAGE: 'en', THEME: 'dark' }
+```
+
+---
+
+## 55. Navigation History Stack
+
+Browser-like navigation with back/forward support.
+
+### 55.1. Structure
+
+```typescript
+// src/modules/core/services/NavigationService.ts
+export class NavigationService {
+    private readonly _historyStack: string[] = [];
+    private _currentIndex: number = -1;
+    private static _instance: NavigationService;
+
+    private constructor() {
+        if (NavigationService._instance) {
+            console.warn('[NavigationService] Instance already exists!');
+        }
+        NavigationService._instance = this;
+    }
+
+    public static getInstance(): NavigationService {
+        if (!NavigationService._instance) {
+            NavigationService._instance = new NavigationService();
+        }
+        return NavigationService._instance;
+    }
+}
+```
+
+### 55.2. Navigate with Forward-History Truncation
+
+```typescript
+public navigate(pageId: string): void {
+    // Clear forward history when navigating to new page
+    if (this._currentIndex < this._historyStack.length - 1) {
+        this._historyStack.splice(this._currentIndex + 1);
+    }
+    this._historyStack.push(pageId);
+    this._currentIndex = this._historyStack.length - 1;
+}
+```
+
+### 55.3. Back/Forward Navigation
+
+```typescript
+public goBack(): void {
+    if (this._currentIndex > 0) {
+        this._currentIndex--;
+        // Trigger page change via event or direct call
+    }
+}
+
+public goForward(): void {
+    if (this._currentIndex < this._historyStack.length - 1) {
+        this._currentIndex++;
+    }
+}
+```
+
+### 55.4. State Restoration
+
+```typescript
+public refreshFromUiState(): void {
+    const lastPage = window.uiState?.getLastPage();
+    if (lastPage) {
+        this._historyStack.push(lastPage);
+        this._currentIndex = this._historyStack.length - 1;
+    }
+}
+```
+
+---
+
+## 56. Catalog Schema Hydration
+
+Dynamic configuration schema generation from backend data.
+
+### 56.1. Fetch and Merge Pattern
+
+```typescript
+// src/modules/core/services/CatalogService.ts
+public async loadCatalog(): Promise<void> {
+    const config = await this._tauri.invoke<IAppConfig>('get_config');
+    const installedModules = await this._tauri.invoke<IModule[]>('get_modules');
+
+    // O(1) lookup for installed status
+    const installedMap = new Map(installedModules.map((m) => [m.id, m]));
+
+    const mergeSchema = (list: IApp[]) => {
+        list.forEach((app) => {
+            // Dynamic schema from providers
+            const provider = config.api_providers?.find((p) => p.id === app.id);
+            if (provider) {
+                app.config_schema = {
+                    api_key: {
+                        label: `${provider.name} API Key`,
+                        field_type: 'text',
+                        required: true,
+                    },
+                };
+            }
+
+            // Mark installed
+            if (installedMap.has(app.id)) {
+                app.installed = true;
+            }
+        });
+    };
+
+    mergeSchema(this._appData.ai);
+    mergeSchema(this._appData.services);
+}
+```
+
+### 56.2. Global Synchronization
+
+```typescript
+private _syncToGlobal(): void {
+    const win = globalThis as ICatalogGlobal;
+    if (win.APP_DATA) {
+        win.APP_DATA.ai = this._appData.ai;
+        win.APP_DATA.services = this._appData.services;
+    }
+}
+```
+
+### 56.3. Event Broadcasting
+
+```typescript
+// Notify other modules that catalog is ready
+globalThis.dispatchEvent(new CustomEvent('catalog-loaded'));
+```
+
+---
+
+## 57. Parameterized Translation (I18n)
+
+Internationalization with parameter interpolation and fallback chain.
+
+### 57.1. Translation Function
+
+```typescript
+// src/modules/core/services/I18nService.ts
+public t(
+    key: string, 
+    defaultText: string = '', 
+    params: Record<string, unknown> = {}
+): string {
+    let text = this._translations[key] || defaultText || key;
+
+    // Parameter interpolation: {name} → value
+    for (const [k, v] of Object.entries(params)) {
+        text = text.replace(`{${k}}`, String(v));
+    }
+    return text;
+}
+```
+
+### 57.2. Fallback Chain
+
+```typescript
+public async loadTranslations(lang: string): Promise<void> {
+    let base: Record<string, string> = {};
+    let target: Record<string, string> = {};
+
+    // 1. Always load English as base
+    base = await this._fetchTranslations('en');
+
+    // 2. Load target language if different
+    if (lang !== 'en') {
+        target = await this._fetchTranslations(lang);
+    }
+
+    // 3. Merge: target overrides base
+    this._translations = { ...base, ...target };
+    this._currentLang = lang;
+    document.documentElement.lang = lang;
+}
+```
+
+### 57.3. Backend Sync
+
+```typescript
+private async _syncToBackend(lang: string): Promise<void> {
+    await this._tauri.invoke('save_setting', { 
+        key: 'LANGUAGE', 
+        value: lang 
+    });
+}
+```
+
+### 57.4. Usage
+
+```typescript
+// Simple translation
+i18n.t('ui.welcome', 'Welcome');
+
+// With parameters
+i18n.t('ui.greeting', 'Hello, {name}!', { name: 'User' });
+// → "Hello, User!"
+```
+
+---
+
+## 58. Console Interceptors
+
+Capture and redirect console output for centralized logging.
+
+### 58.1. Setup
+
+```typescript
+// src/modules/core/services/LoggerService.ts
+private _setupInterceptors(): void {
+    // Save original methods
+    const originalError = console.error;
+    const originalWarn = console.warn;
+
+    // Intercept console.error
+    console.error = (...args: unknown[]) => {
+        this.log('ERROR', this._formatMessage(args[0] as string, args.slice(1)));
+        originalError.apply(console, args);
+    };
+
+    // Intercept console.warn
+    console.warn = (...args: unknown[]) => {
+        this.log('WARN', this._formatMessage(args[0] as string, args.slice(1)));
+        originalWarn.apply(console, args);
+    };
+}
+```
+
+### 58.2. Global Error Hooks
+
+```typescript
+// Uncaught errors
+globalThis.onerror = (message, source, lineno, colno, error) => {
+    this.log('ERROR', `Uncaught: ${message} at ${source}:${lineno}:${colno}`);
+    return false; // Don't suppress default handling
+};
+
+// Unhandled promise rejections
+globalThis.onunhandledrejection = (event) => {
+    this.log('ERROR', `Unhandled rejection: ${event.reason}`);
+};
+```
+
+### 58.3. Sensitive Data Redaction
+
+```typescript
+private _redact(key: string, value: unknown): unknown {
+    const sensitiveKeys = ['password', 'api_key', 'token', 'secret'];
+    if (sensitiveKeys.some((k) => key.toLowerCase().includes(k))) {
+        return '[REDACTED]';
+    }
+    return value;
+}
+```
+
+### 58.4. On-Screen Debug Overlay
+
+```typescript
+private _logToScreen(level: string, message: string): void {
+    if (!import.meta.env.DEV) return;
+    
+    let overlay = document.getElementById('debug-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'debug-overlay';
+        overlay.className = 'debug-overlay';
+        document.body.appendChild(overlay);
+    }
+
+    const entry = document.createElement('div');
+    entry.className = `log-${level.toLowerCase()}`;
+    entry.textContent = `[${level}] ${message}`;
+    overlay.appendChild(entry);
+}
+```
+
+---
+
+## 59. Incremental Log Fetch & Filtering
+
+Efficient log retrieval with delta updates and noise filtering.
+
+### 59.1. Delta Fetch
+
+```typescript
+// src/modules/debug/services/DebugService.ts
+export class DebugService {
+    private logs: ILogEntry[] = [];
+    private lastTimestamp = 0;
+
+    public async fetchLogs(): Promise<ILogEntry[]> {
+        const logs = await invoke<ILogEntry[]>('get_logs', {
+            since: this.lastTimestamp,
+        });
+        return this.processLogs(logs);
+    }
+}
+```
+
+### 59.2. Pattern-Based Filtering
+
+```typescript
+private processLogs(newLogs: ILogEntry[]): ILogEntry[] {
+    const filteredLogs = newLogs.filter((log) => {
+        const msg = (log.message || '').toUpperCase();
+        const src = (log.source || '').toUpperCase();
+
+        // Skip AI service noise
+        const isBotSource = 
+            src.includes('CHATSERVICE') ||
+            src.includes('AIBRIDGE');
+
+        // Skip common HTTP errors
+        const isAIError =
+            msg.includes('ERROR 429') ||
+            msg.includes('ERROR 400') ||
+            msg.includes('QUOTA');
+
+        return !(isBotSource || isAIError);
+    });
+
+    this.logs.push(...filteredLogs);
+    this.lastTimestamp = newLogs.at(-1)?.timestamp ?? this.lastTimestamp;
+    return filteredLogs;
+}
+```
+
+### 59.3. Ring Buffer
+
+```typescript
+// Keep only last 1000 logs to prevent memory growth
+if (this.logs.length > 2000) {
+    this.logs = this.logs.slice(-1000);
+}
+```
+
+### 59.4. Safe JSON Parsing
+
+```typescript
+private safeJsonParse(text: string, defaultValue: unknown): unknown {
+    try {
+        return text ? JSON.parse(text) : defaultValue;
+    } catch {
+        return defaultValue;
+    }
+}
+```
+
+---
+
+## 60. Service-to-Bridge Delegation
+
+Thin service layer that delegates complex operations to global bridges.
+
+### 60.1. Pattern
+
+```typescript
+// src/modules/chat/services/ChatService.ts
+export class ChatService {
+    public async sendMessage(
+        text: string,
+        history: IChatMessage[],
+        attachments: IChatAttachment[],
+    ): Promise<IChatResponse> {
+        // Validate input
+        if (!text?.trim() && !attachments?.length) {
+            return { ok: false, error: 'Message is empty' };
+        }
+
+        // Check bridge availability
+        const aiBridge = (globalThis as any).aiBridge;
+        if (!aiBridge) {
+            return { ok: false, error: 'AI Bridge not initialized' };
+        }
+
+        // Check active provider
+        if (!aiBridge.isActive?.()) {
+            return { ok: false, error: 'No AI module running' };
+        }
+
+        // Delegate to bridge
+        try {
+            const response = await aiBridge.sendMessage(text, 'chat', attachments);
+            
+            // Handle error prefix
+            if (response.startsWith('Error: ')) {
+                return { ok: false, error: response.replace('Error: ', '') };
+            }
+            
+            return { ok: true, message: response };
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+    }
+}
+```
+
+### 60.2. Benefits
+
+- **Separation of Concerns:** Module logic vs AI internals
+- **Testability:** Easy to mock `aiBridge`
+- **Error Normalization:** Consistent `IChatResponse` format
+- **Guard Clauses:** Fail fast with clear error messages
+
+### 60.3. When to Use
+
+| Use Case | Approach |
+|----------|----------|
+| Simple IPC | Direct `TauriProvider.invoke()` |
+| Complex AI/streaming | Delegate to `AIBridge` |
+| Cross-module state | Access via `GlobalBridge` |
+
+---
+
+*Document updated: 2026-01-28*  
+*Version: 2.5.0*  
 *Maintainer: Flux Platform Team*  
-*Total Sections: 36 + 3 Appendices*
+*Total Sections: 60 + 3 Appendices*

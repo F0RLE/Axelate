@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath, URL } from 'node:url';
+import pkg from './package.json';
 
 // Ensure we use the proper Vitest config typing if available,
 // otherwise Vite-only typing works for the 'test' key in Vite 7.
@@ -9,6 +10,10 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
     // Use relative paths for Tauri release builds (tauri:// protocol)
     base: './',
+
+    define: {
+        __APP_VERSION__: JSON.stringify(pkg.version),
+    },
 
     // Vite options tailored for Tauri development
     // prevent vite from obscuring rust errors

@@ -99,8 +99,10 @@ body.launcher-blur .modal {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    /* Reset padding to allow pure centering */
+    padding-top: 0;
+    /* Optical bias: Push center upwards by adding bottom padding */
+    padding-bottom: 5rem;
     box-sizing: border-box;
 }
 
@@ -195,17 +197,19 @@ button[onclick*='close'],
     border: 1px solid var(--border-color);
     border-radius: 20px;
     padding: 0;
-    max-width: 100%;
-    width: 100%;
-    max-height: calc(100vh - 4rem);
-    min-width: 1000px;
-    min-height: 600px;
-    overflow: hidden;
+    max-width: 1000px;
+    width: 90%;
+    /* Ensure visual gap of at least 4rem on top/bottom */
+    max-height: calc(100vh - 8rem);
+    min-width: 600px;
+    min-height: 200px;
+    margin: 0 auto; /* Horizontal center only, let flex parent handle vertical */
     display: flex;
     flex-direction: column;
     position: relative;
     z-index: 10000;
     box-shadow: 0 12px 64px rgba(0, 0, 0, 0.7);
+    overflow: hidden;
 
     /* Animation state */
     opacity: 0;
@@ -227,8 +231,19 @@ button[onclick*='close'],
 @media (max-width: 1200px) {
     .module-settings-modal {
         min-width: 0;
-        min-height: 500px;
+        min-height: 200px;
     }
+}
+
+.module-settings-modal-header {
+    padding: 0 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    height: 40px;
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 .module-settings-modal-title {
@@ -248,6 +263,7 @@ button[onclick*='close'],
 }
 
 .module-settings-modal-content {
+    /* Flex grow to push footer down */
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;

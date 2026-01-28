@@ -43,7 +43,7 @@
 - [x] `src/modules/core/core.ts` (Audited 2026-01-25)
 - [x] `src/modules/core/boot/GlobalBridge.ts` (Legacy Bridge & Global Types) (Audited 2026-01-25)
 - [x] `src/modules/core/boot/EventHandler.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/boot/failsafe.ts` (Audited 2026-01-25)
+
 - [x] `src/modules/core/services/CatalogService.ts` (Audited 2026-01-25)
 - [x] `src/modules/core/services/DiagnosticsService.ts` (Audited 2026-01-25)
 - [x] `src/modules/core/services/ErrorHandler.ts` (Audited 2026-01-25)
