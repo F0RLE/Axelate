@@ -1,13 +1,13 @@
 [package]
-name = "flux-platform"
+name = "axelate"
 version = "0.1.4"
-description = "Flux Platform"
+description = "Axelate"
 authors = ["F0RLE"]
 edition = "2024"
 rust-version = "1.93.0"
 
 [lib]
-name = "flux_platform_lib"
+name = "axelate_lib"
 path = "src/lib.rs"
 
 [dependencies]

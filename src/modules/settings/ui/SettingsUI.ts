@@ -210,7 +210,7 @@ export class SettingsUI {
 
         // Clean settings for specific apps (User Request)
         if (
-            ['flux', 'flux-platform', 'flux-localai'].includes(app.id) ||
+            ['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id) ||
             app.id.includes('telegram')
         ) {
             this._renderEmptyState(container, app);

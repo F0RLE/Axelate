@@ -32,7 +32,7 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     // 3. Create the window
     let mut builder =
         tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
-            .title("Flux Platform (Beta)")
+            .title("Axelate (Beta)")
             .resizable(true)
             .fullscreen(false)
             .transparent(false)
@@ -84,12 +84,12 @@ pub fn run() {
     // Initialize logging
     crate::services::logs::init_global_logger().ok();
 
-    // Set WebView2 user data folder to AppData\Roaming\FluxData\Cache
+    // Set WebView2 user data folder to AppData\Roaming\AxelateData\Cache
     if let Ok(app_data) = std::env::var("APPDATA") {
         let mut path = std::path::PathBuf::from(app_data);
-        path.push("FluxData");
+        path.push("AxelateData");
         path.push("Cache");
-        path.push("com.flux.platform");
+        path.push("com.axelate.platform");
         if let Err(e) = std::fs::create_dir_all(&path) {
             log::error!("Failed to create custom data directory: {}", e);
         } else {
@@ -254,7 +254,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
 
     let _tray = TrayIconBuilder::new()
         .icon(icon)
-        .tooltip("Flux Platform")
+        .tooltip("Axelate")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| {

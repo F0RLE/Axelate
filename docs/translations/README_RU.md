@@ -1,15 +1,15 @@
 <div align="center">
   <br />
-  <img src="../../src-tauri/icons/icon.png" alt="Flux Platform Logo" width="160" height="160" />
+  <img src="../../src-tauri/icons/icon.png" alt="Axelate Logo" width="160" height="160" />
   <br />
 
-  <h1 style="border-bottom: none; margin-bottom: 0;">Flux Platform</h1>
+  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
   <p style="font-size: 1.1em; color: #888; font-style: italic;">Безопасная Среда для AI-Агентов Нового Поколения</p>
 
   <br />
 
   <!-- Primary Call to Action -->
-  <a href="https://github.com/flux-platform/core/releases">
+  <a href="https://github.com/Axelate/core/releases">
     <img src="https://img.shields.io/badge/Скачать_Платформу-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
   </a>
 
@@ -22,7 +22,7 @@
     &nbsp;
     <a href="README_CN.md"><img src="https://img.shields.io/badge/Chinese-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Chinese"/></a>
     &nbsp;
-    <a href="https://github.com/F0RLE/flux-platform/releases"><img src="https://img.shields.io/badge/v0.1.3-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
+    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.3-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Статус-Публичная_Бета-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
     &nbsp;
@@ -33,7 +33,7 @@
 </div>
 
 > [!IMPORTANT]
-> **Flux Platform сейчас находится в стадии Публичного Бета-тестирования (v0.1.3 / 0.1.x).**
+> **Axelate сейчас находится в стадии Публичного Бета-тестирования (v0.1.3 / 0.1.x).**
 >
 > Это предварительная версия программного обеспечения. Функционал может быть экспериментальным, а API могут измениться без уведомления. Стабильных релизов пока нет.
 
@@ -43,7 +43,7 @@
 
 ## ✨ Будущее Уже Здесь
 
-**Flux Platform** — это выделенное, аппаратно-защищенное пространство для ваших профессиональных AI-агентов.
+**Axelate** — это выделенное, аппаратно-защищенное пространство для ваших профессиональных AI-агентов.
 <br>Создано для тех, кто не готов жертвовать **приватностью**, **скоростью** или **контролем**.
 
 </div>
@@ -65,9 +65,9 @@
 <div align="center">
 
 <p>
-  <b>1. Скачайте</b> установщик со <a href="https://github.com/F0RLE/flux-platform/releases">Страницы Релизов</a>.
+  <b>1. Скачайте</b> установщик со <a href="https://github.com/F0RLE/Axelate/releases">Страницы Релизов</a>.
   <br>
-  <b>2. Запустите</b> `Flux Platform Setup.exe`.
+  <b>2. Запустите</b> `Axelate Setup.exe`.
   <br>
   <b>3. Инициализируйте</b> ваше защищенное хранилище и начните установку модулей.
 </p>
@@ -78,7 +78,7 @@
 
 <h2 align="center">👩‍💻 Для Разработчиков</h2>
 
-Flux построен на архитектуре "Pass-Through", дающей фронтенд-модулям прямой доступ к системным сервисам Rust.
+Axelate построен на архитектуре "Pass-Through", дающей фронтенд-модулям прямой доступ к системным сервисам Rust.
 
 <div align="center">
 
@@ -94,17 +94,17 @@ Flux построен на архитектуре "Pass-Through", дающей �
 
 <br>
 
-  <a href="https://github.com/flux-platform/core/issues"><img src="https://img.shields.io/badge/Сообщить_о_Баге-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/Сообщить_о_Баге-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
   &nbsp;
-  <a href="https://github.com/flux-platform/core/issues"><img src="https://img.shields.io/badge/Запросить_Фичу-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/Запросить_Фичу-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
   &nbsp;
   <a href="../../SECURITY.md"><img src="https://img.shields.io/badge/Политика_Безопасности-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
 
 <br>
 <br>
 
-<img src="https://img.shields.io/badge/Сделано_с_❤️_командой_Flux-31303a?style=flat-square" alt="Made with Love" />
+<img src="https://img.shields.io/badge/Сделано_с_❤️_командой_Axelate-31303a?style=flat-square" alt="Made with Love" />
 
-<sub>Copyright © 2026 Flux Platform. All Rights Reserved.</sub>
+<sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
 
 </div>

@@ -1,8 +1,8 @@
 <div align="center">
   <br />
-  <img src="src-tauri/icons/icon.png" alt="Flux Platform Logo" width="120" height="120" />
+  <img src="src-tauri/icons/icon.png" alt="Axelate Logo" width="120" height="120" />
   <br />
-  <h1 style="border-bottom: none; margin-bottom: 0;">Flux Platform</h1>
+  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
   <p style="font-size: 1.1em; color: #888; font-style: italic;">Contributor Covenant Code of Conduct</p>
   <br />
   <p>
@@ -37,14 +37,14 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be repor
 
 <div align="center">
   <br>
-  <a href="https://github.com/F0RLE/flux-platform/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
   &nbsp;
-  <a href="https://github.com/F0RLE/flux-platform/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
   &nbsp;
   <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
   <br>
   <br>
-  <img src="https://img.shields.io/badge/Made_with_❤️_by_Flux_Team-31303a?style=flat-square" alt="Made with Love" />
+  <img src="https://img.shields.io/badge/Made_with_❤️_by_Axelate_Team-31303a?style=flat-square" alt="Made with Love" />
   <br>
-  <sub>Copyright © 2026 Flux Platform. All Rights Reserved.</sub>
+  <sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
 </div>

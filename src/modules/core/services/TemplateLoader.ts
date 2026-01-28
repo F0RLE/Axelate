@@ -1,7 +1,7 @@
-/**
+    /**
  * @module core/services/TemplateLoader
  * @description Centralized service for dynamic HTML template loading, caching, and secure injection.
- * Implements the Singleton pattern as defined in Flux Standards Section 16.1.
+ * Implements the Singleton pattern as defined in Axelate Standards Section 16.1.
  *
  * @example
  * ```typescript
@@ -28,7 +28,7 @@ class TemplateLoader {
 
     /**
      * Idempotent initialization of the service.
-     * Required by Section 16.2 of Flux Standards.
+     * Required by Section 16.2 of Axelate Standards.
      */
     public init(): void {
         if (this._initialized) {

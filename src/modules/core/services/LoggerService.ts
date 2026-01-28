@@ -1,7 +1,7 @@
 /**
  * @module core/services/LoggerService
  * @description Centralized logging service for capturing console output and sending it to the backend.
- * Implements the Singleton pattern as defined in Flux Standards.
+ * Implements the Singleton pattern as defined in Axelate Standards.
  *
  * @example
  * ```typescript
@@ -40,7 +40,7 @@ export class LoggerService {
 
     /**
      * Idempotent initialization of the service.
-     * Required by Section 16.2 of Flux Standards.
+     * Required by Section 16.2 of Axelate Standards.
      *
      * @sideeffect Modifies globalThis.console and globalThis.onerror
      */

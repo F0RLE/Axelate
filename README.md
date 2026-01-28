@@ -1,15 +1,15 @@
 <div align="center">
   <br />
-  <img src="src-tauri/icons/icon.png" alt="Flux Platform Logo" width="160" height="160" />
+  <img src="src-tauri/icons/icon.png" alt="Axelate Logo" width="160" height="160" />
   <br />
 
-  <h1 style="border-bottom: none; margin-bottom: 0;">Flux Platform</h1>
+  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
   <p style="font-size: 1.1em; color: #888; font-style: italic;">The Secure Environment for Next-Generation AI Agents</p>
 
   <br />
 
   <!-- Primary Call to Action -->
-  <a href="https://github.com/flux-platform/core/releases">
+  <a href="https://github.com/F0RLE/Axelate/releases">
     <img src="https://img.shields.io/badge/Download_Platform-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
   </a>
 
@@ -25,7 +25,7 @@
     <a href="docs/en/architecture.md"><img src="https://img.shields.io/badge/Documentation-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
   </p>
   <p>
-    <a href="https://github.com/F0RLE/flux-platform/releases"><img src="https://img.shields.io/badge/v0.1.3-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
+    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.3-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Status-Public_Beta-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
   </p>
@@ -34,7 +34,7 @@
 </div>
 
 > [!IMPORTANT]
-> **Flux Platform is currently in Public Beta (v0.1.3 / 0.1.x).**
+> **Axelate is currently in Public Beta (v0.1.3 / 0.1.x).**
 >
 > This is pre-release software. Features may be experimental, and APIs are subject to change without notice. No stable release is currently available.
 
@@ -44,7 +44,7 @@
 
 ## ✨ Experience the Future
 
-**Flux Platform** is a dedicated, hardware-secured workspace for your professional AI agents.
+**Axelate** is a dedicated, hardware-secured workspace for your professional AI agents.
 <br>Built for those who refuse to compromise on **privacy**, **speed**, or **control**.
 
 </div>
@@ -66,9 +66,9 @@
 <div align="center">
 
 <p>
-  <b>1. Download</b> the installer from the <a href="https://github.com/F0RLE/flux-platform/releases">Releases Page</a>.
+  <b>1. Download</b> the installer from the <a href="https://github.com/F0RLE/Axelate/releases">Releases Page</a>.
   <br>
-  <b>2. Run</b> `Flux Platform Setup.exe`.
+  <b>2. Run</b> `Axelate Setup.exe`.
   <br>
   <b>3. Initialize</b> your secure vault and start installing modules.
 </p>
@@ -79,7 +79,7 @@
 
 <h2 align="center">👩‍💻 For Developers</h2>
 
-Flux is built on a "Pass-Through" architecture that gives frontend modules direct access to Rust system services.
+Axelate is built on a "Pass-Through" architecture that gives frontend modules direct access to Rust system services.
 
 <div align="center">
 
@@ -95,17 +95,17 @@ Flux is built on a "Pass-Through" architecture that gives frontend modules direc
 
 <br>
 
-  <a href="https://github.com/flux-platform/core/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
   &nbsp;
-  <a href="https://github.com/flux-platform/core/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
   &nbsp;
   <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
 
 <br>
 <br>
 
-<img src="https://img.shields.io/badge/Made_with_❤️_by_Flux_Team-31303a?style=flat-square" alt="Made with Love" />
+<img src="https://img.shields.io/badge/Made_with_❤️_by_Axelate_Team-31303a?style=flat-square" alt="Made with Love" />
 
-<sub>Copyright © 2026 Flux Platform. All Rights Reserved.</sub>
+<sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
 
 </div>

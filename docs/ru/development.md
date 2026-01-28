@@ -1,8 +1,8 @@
 <div align="center">
   <br />
-  <img src="../../src-tauri/icons/icon.png" alt="Flux Platform Logo" width="120" height="120" />
+  <img src="../../src-tauri/icons/icon.png" alt="Axelate Logo" width="120" height="120" />
   <br />
-  <h1 style="border-bottom: none; margin-bottom: 0;">Flux Platform</h1>
+  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
   <p style="font-size: 1.1em; color: #888; font-style: italic;">Начало работы</p>
   <br />
   <p>
@@ -21,7 +21,7 @@
 
 1.  **Клонирование репозитория**
     ```bash
-    git clone https://github.com/F0RLE/flux-platform.git
+    git clone https://github.com/F0RLE/Axelate.git
     ```
 
 2.  **Установка зависимостей**
@@ -58,5 +58,5 @@
 
 <div align="center">
   <br>
-  <sub>Copyright © 2026 Flux Platform. All Rights Reserved.</sub>
+  <sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
 </div>

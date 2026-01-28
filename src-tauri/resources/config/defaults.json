@@ -1,12 +1,12 @@
 {
   "catalog": {
     "ai": [
-      { "id": "flux-localai", "nameKey": "ui.launcher.app.flux_localai.name", "descKey": "ui.launcher.app.flux_localai.desc", "name": "Flux Platform", "desc": "Universal hub for pro-grade images and text.", "icon": "🌌", "type": "Local", "repoUrl": "https://github.com/F0RLE/flux_LocalAI_module" },
+      { "id": "axelate-localai", "nameKey": "ui.launcher.app.axelate_localai.name", "descKey": "ui.launcher.app.axelate_localai.desc", "name": "Axelate", "desc": "Universal hub for pro-grade images and text.", "icon": "🌌", "type": "Local", "repoUrl": "https://github.com/F0RLE/Axelate_LocalAI_module" },
       { "id": "gpt", "nameKey": "ui.launcher.app.gpt.name", "descKey": "ui.launcher.app.gpt.desc", "name": "GPT", "desc": "Smart assistant for chat, coding and images.", "icon": "🤖", "type": "API" },
       { "id": "gemini", "nameKey": "ui.launcher.app.gemini.name", "descKey": "ui.launcher.app.gemini.desc", "name": "Gemini", "desc": "Massive-context analysis and creative visuals.", "icon": "✨", "type": "API" }
     ],
     "services": [
-      { "id": "flux-telegram-bot", "nameKey": "ui.launcher.app.flux_telegram.name", "descKey": "ui.launcher.app.flux_telegram.desc", "name": "Flux Telegram Bot", "desc": "LLM rewriting, image gen, channel posting.", "icon": "🤖", "type": "Local", "repoUrl": "https://github.com/F0RLE/flux-telegram-bot-module" }
+      { "id": "axelate-telegram-bot", "nameKey": "ui.launcher.app.axelate_telegram.name", "descKey": "ui.launcher.app.axelate_telegram.desc", "name": "Axelate Telegram Bot", "desc": "LLM rewriting, image gen, channel posting.", "icon": "🤖", "type": "Local", "repoUrl": "https://github.com/F0RLE/Axelate-tg-bot-module" }
     ]
   },
   "models": {

@@ -118,7 +118,7 @@ async fn download_and_extract_internal(
     emit_progress(app, module_id, "connecting", "Connecting...", 0.0, 0, 0);
 
     let mut client_builder = reqwest::Client::builder()
-        .user_agent("FluxPlatform/1.0.0 (Tauri; Windows)")
+        .user_agent("Axelate/1.0.0 (Tauri; Windows)")
         .timeout(std::time::Duration::from_secs(600));
 
     // Inject License Key if available
@@ -133,7 +133,7 @@ async fn download_and_extract_internal(
             headers.insert(reqwest::header::AUTHORIZATION, auth_val);
         }
         if let Ok(lic_val) = reqwest::header::HeaderValue::from_str(&license.key) {
-            headers.insert("X-Flux-License", lic_val);
+            headers.insert("X-Axelate-License", lic_val);
         }
         client_builder = client_builder.default_headers(headers);
     }

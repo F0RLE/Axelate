@@ -1,9 +1,9 @@
 <div align="center">
   <br />
-  <img src="../../src-tauri/icons/icon.png" alt="Flux Platform Logo" width="120" height="120" />
+  <img src="../../src-tauri/icons/icon.png" alt="Axelate Logo" width="120" height="120" />
   <br />
-  <h1 style="border-bottom: none; margin-bottom: 0;">Flux Platform</h1>
-  <p style="font-size: 1.1em; color: #888; font-style: italic;">Architecture Specification</p>
+  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
+  <p style="font-size: 1.1em; color: #888; font-style: italic;">Спецификация архитектуры</p>
   <br />
   <p>
     <a href="../../README.md"><img src="https://img.shields.io/badge/Home-31303a?style=for-the-badge&logo=house&logoColor=white" height="30" alt="Home"/></a>
@@ -17,88 +17,87 @@
 
 ---
 
-## Version 0.1.x (Public Beta)
+## Версия 0.1.x (Public Beta)
 
-> **Proprietary Notice**<br>This document contains deep internal details of the Flux Platform architecture. Intended for Core Engineers. Unauthorized distribution is prohibited.
+> **Конфиденциальное уведомление**<br>Данный документ содержит глубокие внутренние детали архитектуры Axelate. Предназначен для ведущих инженеров. Несанкционированное распространение запрещено.
 
 ---
 
-## 1. Core Engineering Pillars
+## 1. Основные инженерные принципы
 
 ### 1.1 Гибридная архитектура ядра (Hybrid Kernel)
 
-Flux Platform построена как приложение с **гибридным ядром**.
+Axelate построена как приложение с **гибридным ядром**.
 *Подробные правила структуры определены в [CODING_STANDARDS.md](CODING_STANDARDS.md).*
 
 * **Kernel (Rust)**: Отвечает за прямой ввод-вывод (I/O), шифрование и управление процессами.
 * **Shell (TS)**: Слой визуализации без состояния. Прямой I/O запрещен.
 
-### 1.2 Паттерн "Pass-Through" IPC
+### 1.2 Паттерн "Свозной" IPC (Pass-Through)
 
 Запросы напрямую сопоставляются с сервисами Rust без тяжелого промежуточного ПО.
 *Паттерны реализации: см. раздел IPC в [CODING_STANDARDS.md](CODING_STANDARDS.md).*
 
 ---
 
-## 2. Low-Level Security Specification
+## 2. Низкоуровневая спецификация безопасности
 
-### 2.1 Hardware-Bound Encryption (HBE)
+### 2.1 Аппаратное шифрование (Hardware-Bound Encryption — HBE)
 
-Sensitive data (API Keys, OAuth Tokens) is encrypted using a key derived from the physical hardware.
+Чувствительные данные (API ключи, OAuth токены) шифруются с использованием ключа, производного от физического оборудования.
 
-**Algorithm:**
+**Алгоритм:**
 
-1. **Entropy Source A**: `machine_uid::get()` (Motherboard Serial / BIOS UUID).
-2. Entropy Source B**: Static Salt `const SALT = "FLUX_PLATFORM_SECURE_SALT_"` (Compiled into binary).
-3. **Key Derivation Function (KDF)**: `SHA256(Source A + SALT + Source A)` → 32-byte Key.
-4. **Encryption**: `AES-256-GCM` (Galois/Counter Mode).
-    * **Nonce**: Random 96-bit per write.
-    * **Tag**: 128-bit authentication tag appended to ciphertext.
+1. **Источник энтропии A**: `machine_uid::get()` (серийный номер материнской платы / UUID BIOS).
+2. **Источник энтропии B**: Статическая соль `const SALT = "AXELATE_PLATFORM_SECURE_SALT_"` (скомпилировано в бинарный файл).
+3. **Функция вывода ключа (KDF)**: `SHA256(Source A + SALT + Source A)` → 32-байтный ключ.
+4. **Шифрование**: `AES-256-GCM` (Galois/Counter Mode).
+    * **Nonce**: Случайный 96-битный на каждую запись.
+    * **Tag**: 128-битный тег аутентификации, добавляемый к шифртексту.
 
-**File Location:** `%APPDATA%/FluxData/User/Configs/secure.enc` (HBE-protected)
+**Расположение файла:** `%APPDATA%/AxelateData/User/Configs/secure.enc` (защищено HBE)
 
-### 2.2 Memory Hygiene
+### 2.2 Гигиена оперативной памяти
 
-* **Zero-Trace**: Decrypted keys exist in RAM *only* during the active HTTP request lifecycle and are dropped immediately via Rust's `Drop` trait.
-* **No Swap**: Secrets are never written to disk logs or temporary cache files.
+* **Zero-Trace (Нулевой след)**: Расшифрованные ключи существуют в RAM *только* во время активного жизненного цикла HTTP-запроса и немедленно удаляются через трейт `Drop` в Rust.
+* **No Swap (Без подкачки)**: Секреты никогда не записываются в логи диска или временные файлы кэша.
 
 ---
 
-## 3. IPC & Event Bus Schema
+## 3. Схема IPC и событийной шины (Event Bus)
 
-### 3.1 Command Registry (Frontend → Backend)
+### 3.1 Реестр команд (Frontend → Backend)
 
-All commands return `Promise<Result<T, AppError>>`.
+Все команды возвращают `Promise<Result<T, AppError>>`.
 
-| Namespace | Command | Payload | Return Type | Description |
+| Пространство имен | Команда | Данные (Payload) | Тип возврата | Описание |
 | :--- | :--- | :--- | :--- | :--- |
-| **system** | `get_system_stats` | `-` | `SystemStats` | Static hardware info (CPU Model, RAM Total). |
-| | `open_in_explorer` | `{path: string}` | `void` | ShellExecute wrapper. |
-| **modules** | `download_module` | `{id: string, url: string}` | `void` | Triggers event-driven download & extract. |
-| | `start_module` | `{id: string}` | `void` | Spawns process via `ModuleController`. |
-| | `stop_module` | `{id: string}` | `void` | `taskkill /pid` or `SIGTERM`. |
+| **system** | `get_system_stats` | `-` | `SystemStats` | Статическая информация об оборудовании (модель ЦП, всего ОЗУ). |
+| | `open_in_explorer` | `{path: string}` | `void` | Обертка ShellExecute. |
+| **modules** | `download_module` | `{id: string, url: string}` | `void` | Запускает управляемую событиями загрузку и извлечение. |
+| | `start_module` | `{id: string}` | `void` | Создает процесс через `ModuleController`. |
+| | `stop_module` | `{id: string}` | `void` | `taskkill /pid` или `SIGTERM`. |
+| **secure** | `save_secure_key` | `{service: string, key: string}` | `void` | Шифрует и сохраняет значение. |
+| | `get_secure_key` | `{service: string}` | `Option<string>` | Расшифровывает и возвращает значение. |
+| **ai** | `send_chat_message` | `ChatRequest` | `ChatResponse` | См. определения структур ниже. |
+| **window** | `minimize_window` | `-` | `void` | Сворачивает текущее окно. |
+| | `maximize_window` | `-` | `void` | Разворачивает текущее окно. |
+| | `show_window` | `-` | `void` | Показывает существующее окно. |
+| | `hide_window` | `-` | `void` | Скрывает окно (сохраняет процесс). |
+| **theme** | `get_theme_colors` | `-` | `ThemeColors` | Возвращает акцентные цвета системы. |
+| **license** | `get_license_status` | `-` | `LicenseStatus` | Проверка состояния активации. |
+| | `activate_license` | `{key: string}` | `Result` | Проверяет и сохраняет ключ. |
 
-| **secure** | `save_secure_key` | `{service: string, key: string}` | `void` | Encrypts and persists value. |
-| | `get_secure_key` | `{service: string}` | `Option<string>` | Decrypts and returns value. |
-| **ai** | `send_chat_message` | `ChatRequest` | `ChatResponse` | See struct definitions below. |
-| **window** | `minimize_window` | `-` | `void` | Minimizes current window. |
-| | `maximize_window` | `-` | `void` | Maximizes current window. |
-| | `show_window` | `-` | `void` | Shows existing window. |
-| | `hide_window` | `-` | `void` | Hides window (keeps process). |
-| **theme** | `get_theme_colors` | `-` | `ThemeColors` | Returns system accent colors. |
-| **license** | `get_license_status` | `-` | `LicenseStatus` | Check activation state. |
-| | `activate_license` | `{key: string}` | `Result` | Validates and saves key. |
+### 3.2 Поток событий (Backend → Frontend)
 
-### 3.2 Event Stream (Backend → Frontend)
+Подписка через `EventBus.ts` (TS) или `app_handle.emit_all` (Rust).
 
-Subscribed via `EventBus.ts` (TS) or `app_handle.emit_all` (Rust).
-
-| Topic | Frequency | Payload Structure (TS Interface) |
+| Тема | Частота | Структура данных (TS интерфейс) |
 | :--- | :--- | :--- |
-| `system_stats` | 1000ms | `interface SystemStats { cpu: { percent: number; ... }; ram: { used_gb: number; ... }; ... }` |
-| `download_progress`| Real-time | `interface DownloadProgress { module_id: string; status: string; progress: number; message: string; total: number; }` |
+| `system_stats` | 1000мс | `interface SystemStats { cpu: { percent: number; ... }; ram: { used_gb: number; ... }; ... }` |
+| `download_progress`| Реалтайм | `interface DownloadProgress { module_id: string; status: string; progress: number; message: string; total: number; }` |
 
-### 3.3 Data Models (Strict)
+### 3.3 Модели данных (Строгие)
 
 **ChatRequest** (`ai_service.rs`)
 ```typescript
@@ -112,7 +111,7 @@ interface ChatRequest {
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
-  content: string | any[]; // Multimodal support
+  content: string | any[]; // Поддержка мультимодальности
   thought_signature?: string;
 }
 ```
@@ -132,63 +131,64 @@ interface SystemStats {
 
 ---
 
-## 4. Project Source Structure
+## 4. Структура исходного кода проекта
 
 ```text
-Flux Platform/
-├── src-tauri/                 # Backend (Rust Kernel)
+Axelate/
+├── src-tauri/                 # Бэкенд (Ядро Rust)
 │   ├── src/
-│   │   ├── commands/          # IPC Command Registry
-│   │   ├── services/          # Core Business Logic
-│   │   └── main.rs            # Entry Point
-├── src/                       # Frontend (Vite + TS Shell)
-│   ├── modules/               # Feature Modules
-│   │   ├── ai/                # AI Bridge & Providers
-│   │   ├── chat/              # Chat Interface
-│   │   ├── core/              # Core Services (EventBus, Boot)
-│   │   ├── dashboard/         # Main UI Dashboard
-│   │   ├── debug/             # Debug Tools
-│   │   ├── downloader/        # Module Downloader UI
-│   │   ├── monitoring/        # System Monitoring UI
-│   │   └── settings/          # App Settings & Configs
-└── docs/                      # Documentation
+│   │   ├── commands/          # Регистрация команд IPC
+│   │   ├── services/          # Реализация бизнес-логики
+│   │   └── main.rs            # Точка входа
+├── src/                       # Фронтенд (Оболочка Vite + TS)
+│   ├── modules/               # Функциональные модули
+│   │   ├── ai/                # Мост ИИ и провайдеры
+│   │   ├── chat/              # Интерфейс чата
+│   │   ├── core/              # Основные сервисы (EventBus, Boot)
+│   │   ├── dashboard/         # Главная панель управления
+│   │   ├── debug/             # Инструменты отладки
+│   │   ├── downloader/        # Модуль загрузки
+│   │   ├── monitoring/        # Модуль системного мониторинга
+│   │   └── settings/          # Настройки приложения
+└── docs/                      # Документация
 ```
 
 ---
 
-## 5. Low-Level Rust Services (`src-tauri/src/services/`)
+## 5. Низкоуровневые сервисы Rust (`src-tauri/src/services/`)
 
 ### 5.1 AI Service (`ai_service.rs`)
 
-* **Providers**: OpenAI, Google (Gemini), Anthropic (via OpenRouter/Proxy), DeepSeek, Llama.
-* **Thinking Engines**: Supports 'reasoning_effort' (OpenAI) and 'thinking' (Anthropic/DeepSeek) protocols.
-* **Note**: Frontend `AIBridge.ts` handles prompt construction and stream management.
-* **Security**: Keys are fetched from SecureStorage per-request.
+* **Провайдеры**: OpenAI, Google (Gemini), Anthropic (через OpenRouter/Proxy), DeepSeek, Llama.
+* **Движки рассуждений (Thinking Engines)**: Поддержка протоколов 'reasoning_effort' (OpenAI) и 'thinking' (Anthropic/DeepSeek).
+* **Примечание**: Фронтенд-сервис `AIBridge.ts` управляет формированием промптов и обработкой потока.
+* **Безопасность**: Ключи извлекаются из SecureStorage для каждого запроса.
 
 ### 5.2 Secure Storage (`secure_storage.rs`)
 
-* **Engine**: AES-256-GCM.
-* **Binding**: Machine-bound via unique Hardware ID.
+* **Движок**: AES-256-GCM.
+* **Привязка**: К конкретному железу через уникальный Hardware ID.
 
-### 5.3 System Services
+### 5.3 Системные сервисы
 
-* **ModuleController**: manages isolated processes (`module_controller.rs`).
-* **Downloader**: Async-stream based downloader with hash verification (`downloader.rs`).
-* **SystemMonitor**: Real-time hardware polling (`system_monitor.rs`).
-* **License**: Offline/Online license state validation (`license/`).
+* **ModuleController**: управление изолированными процессами (`module_controller.rs`).
+* **Downloader**: Асинхронный загрузчик на основе потоков с верификацией хэша (`downloader.rs`).
+* **SystemMonitor**: Опрос состояния оборудования в реальном времени (`system_monitor.rs`).
+* **License**: Валидация состояния лицензии в оффлайн/онлайн режимах (`license/`).
 
 ---
 
 <div align="center">
   <br>
-  <a href="https://github.com/F0RLE/flux-platform/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Сообщить_об_ошибке-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Сообщить об ошибке" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Сообщить_об_ошибке-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Сообщить об ошибке" /></a>
   &nbsp;
-  <a href="https://github.com/F0RLE/flux-platform/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Предложить_функцию-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Предложить функцию" /></a>
   &nbsp;
-  <a href="../../SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
+  <a href="../../SECURITY.md"><img src="https://img.shields.io/badge/Политика_безопасности-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Политика безопасности" /></a>
   <br>
   <br>
-  <img src="https://img.shields.io/badge/Made_with_❤️_by_Flux_Team-31303a?style=flat-square" alt="Made with Love" />
+  <img src="https://img.shields.io/badge/Сделано_с_❤️_командой_Axelate-31303a?style=flat-square" alt="Сделано с любовью" />
   <br>
-  <sub>Copyright © 2026 Flux Platform. All Rights Reserved.</sub>
+  <sub>Copyright © 2026 Axelate. Все права защищены.</sub>
 </div>

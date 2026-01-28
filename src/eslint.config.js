@@ -23,7 +23,7 @@ export default [
                 ...globals.browser,
                 t: 'readonly',
                 showToast: 'readonly',
-                fluxAPI: 'readonly',
+                axelateAPI: 'readonly',
                 GPT_MODELS: 'writable',
                 GEMINI_MODELS: 'writable',
                 updateModuleSettings: 'writable',

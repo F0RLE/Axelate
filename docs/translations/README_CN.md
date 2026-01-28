@@ -1,16 +1,16 @@
 <div align="center">
   <br />
-  <img src="../../src-tauri/icons/icon.png" alt="Flux Platform Logo" width="160" height="160" />
+  <img src="../../src-tauri/icons/icon.png" alt="Axelate Logo" width="160" height="160" />
   <br />
 
-  <h1 style="border-bottom: none; margin-bottom: 0;">Flux Platform</h1>
+  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
   <p style="font-size: 1.1em; color: #888; font-style: italic;">下一代 AI 代理的安全环境</p>
 
   <br />
 
   <!-- Primary Call to Action -->
-  <a href="https://github.com/flux-platform/core/releases">
-    <img src="https://img.shields.io/badge/下载_Flux_Platform-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
+  <a href="https://github.com/Axelate/core/releases">
+    <img src="https://img.shields.io/badge/下载_Axelate_Platform-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
   </a>
 
   <br />
@@ -36,7 +36,7 @@
 
 ## ✨ 体验未来
 
-**Flux Platform** 是一个为您的专业 AI 代理打造的专用、硬件安全的工作空间。
+**Axelate** 是一个为您的专业 AI 代理打造的专用、硬件安全的工作空间。
 <br>专为那些拒绝在 **隐私**、**速度** 或 **控制权** 上妥协的人打造。
 
 </div>
@@ -58,9 +58,9 @@
 <div align="center">
 
 <p>
-  <b>1. 从</b> <a href="https://github.com/F0RLE/flux-platform/releases">发布页面</a> <b>下载</b> 安装程序。
+  <b>1. 从</b> <a href="https://github.com/F0RLE/Axelate/releases">发布页面</a> <b>下载</b> 安装程序。
   <br>
-  <b>2. 运行</b> `Flux Platform Setup.exe`。
+  <b>2. 运行</b> `Axelate Setup.exe`。
   <br>
   <b>3. 初始化</b> 您的安全保险库并开始安装模块。
 </p>
@@ -71,7 +71,7 @@
 
 <h2 align="center">👩‍💻 开发者中心</h2>
 
-Flux 基于 "Pass-Through" 架构构建，赋予前端模块直接访问 Rust 系统服务的权限。
+Axelate 基于 "Pass-Through" 架构构建，赋予前端模块直接访问 Rust 系统服务的权限。
 
 <div align="center">
 
@@ -87,13 +87,13 @@ Flux 基于 "Pass-Through" 架构构建，赋予前端模块直接访问 Rust �
 
 <br>
 
-  <a href="https://github.com/flux-platform/core/issues"><img src="https://img.shields.io/badge/报告_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/报告_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
   &nbsp;
-  <a href="https://github.com/flux-platform/core/issues"><img src="https://img.shields.io/badge/请求功能-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/请求功能-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
   &nbsp;
   <a href="../../SECURITY.md"><img src="https://img.shields.io/badge/安全策略-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
   <p>
-    <a href="https://github.com/F0RLE/flux-platform/releases"><img src="https://img.shields.io/badge/v0.1.1-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
+    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.1-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
     &nbsp;
     <img src="https://img.shields.io/badge/状态-公测版-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
     &nbsp;
@@ -103,13 +103,13 @@ Flux 基于 "Pass-Through" 架构构建，赋予前端模块直接访问 Rust �
 </div>
 
 > [!IMPORTANT]
-> **Flux Platform 目前处于公开测试阶段 (v0.1.1)。**
+> **Axelate 目前处于公开测试阶段 (v0.1.1)。**
 >
 > 这是正式发布前的软件版本。功能可能具有实验性，API 随时可能更改，恕不另行通知。目前尚无稳定版本。
 
 ---<br>
 <br>
 
-<img src="https://img.shields.io/badge/由_Flux_团队_❤️_制作-31303a?style=flat-square" alt="Made with Love" />
+<img src="https://img.shields.io/badge/由_Axelate_团队_❤️_制作-31303a?style=flat-square" alt="Made with Love" />
 
 </div>

@@ -1,7 +1,7 @@
 /**
  * @module core/index
  * @description Central export point for core platform services and utilities.
- * Complies with Section 19.3 (Public API export) of Flux Standards.
+ * Complies with Section 19.3 (Public API export) of Axelate Standards.
  */
 
 export { eventBus } from './services/EventBus';

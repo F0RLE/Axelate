@@ -1,7 +1,7 @@
 //! AI Service implementation for handling LLM provider communication.
 //!
 //! This module provides the backend logic for interacting with various AI API providers
-//! (OpenAI, Gemini, etc.) and managing their lifecycle within the Flux Platform.
+//! (OpenAI, Gemini, etc.) and managing their lifecycle within the Axelate.
 
 use futures_util::StreamExt;
 use reqwest::Client;

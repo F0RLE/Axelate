@@ -76,7 +76,7 @@ export class ChatFileHandler {
 
     /**
      * Idempotent initialization of the service.
-     * Required by Section 16.2 of Flux Standards.
+     * Required by Section 16.2 of Axelate Standards.
      */
     public init(): void {
         if (this._initialized) {

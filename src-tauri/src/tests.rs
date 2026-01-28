@@ -1,4 +1,4 @@
-//! Unit tests for Flux Platform backend
+//! Unit tests for Axelate backend
 //!
 //! Run with: cargo test
 
@@ -63,11 +63,11 @@ mod tests {
     fn test_appdata_root_initialized() {
         use crate::utils::paths::APPDATA_ROOT;
 
-        // Verify path ends with FluxData
+        // Verify path ends with AxelateData
         let path_str = APPDATA_ROOT.to_string_lossy();
         assert!(
-            path_str.ends_with("FluxData"),
-            "APPDATA_ROOT should end with FluxData"
+            path_str.ends_with("AxelateData"),
+            "APPDATA_ROOT should end with AxelateData"
         );
     }
 
@@ -77,7 +77,7 @@ mod tests {
         use crate::utils::paths::{CONFIG_DIR, LOG_DIR, SYSTEM_ROOT, USER_ROOT};
 
         // Verify USER_ROOT is under APPDATA_ROOT
-        assert!(USER_ROOT.to_string_lossy().contains("FluxData"));
+        assert!(USER_ROOT.to_string_lossy().contains("AxelateData"));
         assert!(USER_ROOT.to_string_lossy().contains("User"));
 
         // Verify CONFIG_DIR is under USER_ROOT

@@ -34,7 +34,7 @@ export class StateService {
     private _state: IUIState = { ...DEFAULT_UI_STATE };
     private _isDirty = false;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-    private readonly _STORAGE_KEY = 'flux_ui_state';
+    private readonly _STORAGE_KEY = 'axelate_ui_state';
 
     constructor(core: Core) {
         this._core = core;

@@ -55,7 +55,7 @@ interface IAISettingsGlobal {
 /**
  * @class AISettingsRenderer
  * @description Manages the lifecycle and rendering of AI-specific settings modules.
- * Implements the Singleton pattern as defined in Flux Standards Section 16.1.
+ * Implements the Singleton pattern as defined in Axelate Standards Section 16.1.
  */
 class AISettingsRenderer {
     private readonly _unsubscribers: (() => void)[] = [];
@@ -69,7 +69,7 @@ class AISettingsRenderer {
 
     /**
      * Idempotent initialization of the service.
-     * Required by Section 16.2 of Flux Standards.
+     * Required by Section 16.2 of Axelate Standards.
      *
      * @param settingsService - Global settings infrastructure service
      */
@@ -107,7 +107,7 @@ class AISettingsRenderer {
         const t = this._getTranslator();
 
         const isCleanApp =
-            ['flux', 'flux-platform', 'flux-localai'].includes(appId) || appId.includes('telegram');
+            ['axelate', 'axelate-platform', 'axelate-localai'].includes(appId) || appId.includes('telegram');
 
         let rawHtml = '';
 

@@ -1,14 +1,14 @@
 {
-    "name": "flux-platform-frontend",
+    "name": "axelate-frontend",
     "version": "0.1.4",
-    "description": "Flux Platform Frontend",
+    "description": "Axelate Frontend",
     "type": "module",
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
         "preview": "vite preview",
         "clean": "rmdir /s /q dist 2>nul & echo Cleaned",
-        "tauri:dev": "taskkill /F /IM \"Flux Platform.exe\" /T >nul 2>nul & cd .. && tauri dev --target x86_64-pc-windows-msvc",
+        "tauri:dev": "taskkill /F /IM \"Axelate.exe\" /T >nul 2>nul & cd .. && tauri dev --target x86_64-pc-windows-msvc",
         "tauri:build": "cd .. && tauri build",
         "release": "npm run build && cd .. && tauri build --release",
         "check-size": "node scripts/check-size.js",

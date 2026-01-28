@@ -1,6 +1,6 @@
 /**
  * @module core/ui/Particles
- * @description Background particles animation for the Flux Platform UI
+ * @description Background particles animation for the Axelate Platform UI
  */
 
 interface IParticlesGlobal {

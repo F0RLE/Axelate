@@ -5,34 +5,34 @@ use std::path::PathBuf;
 
 /// Root directory for application data.
 /// Defaults to:
-/// - Windows: `%APPDATA%/FluxData`
-/// - Linux: `$XDG_CONFIG_HOME/FluxData` or `~/.config/FluxData`
-/// - macOS: `~/Library/Application Support/FluxData`
+/// - Windows: `%APPDATA%/AxelateData`
+/// - Linux: `$XDG_CONFIG_HOME/AxelateData` or `~/.config/AxelateData`
+/// - macOS: `~/Library/Application Support/AxelateData`
 pub static APPDATA_ROOT: Lazy<PathBuf> = Lazy::new(|| {
     let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-    path.push("FluxData");
+    path.push("AxelateData");
     path
 });
 
-/// User-specific data root (`FluxData/User`)
+/// User-specific data root (`AxelateData/User`)
 pub static USER_ROOT: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("User"));
 
-/// Configuration directory for user settings (`FluxData/User/Configs`)
+/// Configuration directory for user settings (`AxelateData/User/Configs`)
 pub static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("Configs"));
 
-/// Directory for UI persistence state (`FluxData/User/UI`)
+/// Directory for UI persistence state (`AxelateData/User/UI`)
 pub static UI_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("UI"));
 
-/// System root for internal app data (`FluxData/System`)
+/// System root for internal app data (`AxelateData/System`)
 pub static SYSTEM_ROOT: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("System"));
 
-/// Log files directory (`FluxData/System/Logs`)
+/// Log files directory (`AxelateData/System/Logs`)
 pub static LOG_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Logs"));
 
-/// Temporary files directory (`FluxData/System/Temp`)
+/// Temporary files directory (`AxelateData/System/Temp`)
 pub static TEMP_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Temp"));
 
-/// Downloaded modules directory (`FluxData/System/Modules`)
+/// Downloaded modules directory (`AxelateData/System/Modules`)
 pub static MODULES_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Modules"));
 
 /// Path to application resources.
@@ -83,16 +83,16 @@ pub static RESOURCES_DIR: Lazy<PathBuf> = Lazy::new(|| {
     PathBuf::from("src-tauri").join("resources")
 });
 
-/// Application cache directory (`FluxData/Cache`)
+/// Application cache directory (`AxelateData/Cache`)
 pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("Cache"));
 
-/// Path to env file (`FluxData/User/Configs/.env`)
+/// Path to env file (`AxelateData/User/Configs/.env`)
 pub static FILE_ENV: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join(".env"));
 
-/// Path to generation config (`FluxData/User/Configs/generation_config.json`)
+/// Path to generation config (`AxelateData/User/Configs/generation_config.json`)
 pub static FILE_GEN_CONFIG: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join("generation_config.json"));
 
-/// Path to UI state file (`FluxData/User/UI/ui_state.json`)
+/// Path to UI state file (`AxelateData/User/UI/ui_state.json`)
 pub static FILE_UI_STATE: Lazy<PathBuf> = Lazy::new(|| UI_DIR.join("ui_state.json"));
 
 /// Maximum number of log files to keep

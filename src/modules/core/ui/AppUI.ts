@@ -219,7 +219,7 @@ export class AppUI {
     // --- Private Helper Methods ---
 
     private _getSortedApps(apps: IApp[]): IApp[] {
-        const priority = ['flux', 'gpt', 'gemini'];
+        const priority = ['axelate', 'gpt', 'gemini'];
         return [...apps].sort((a, b) => {
             const nameA = (a.name || '').toLowerCase();
             const nameB = (b.name || '').toLowerCase();
@@ -532,8 +532,8 @@ export class AppUI {
     }
     // --- New Private Helpers ---
     private _getAppName(app: IApp): string {
-        if (['flux', 'flux-platform', 'flux-localai'].includes(app.id)) {
-            return 'Flux Local AI';
+        if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
+            return 'Axelate Local AI';
         }
         return app.name || 'Unknown';
     }
@@ -752,8 +752,8 @@ export class AppUI {
 
         const title = card.querySelector('.model-card-title');
         if (title) {
-            if (['flux', 'flux-platform', 'flux-localai'].includes(app.id)) {
-                title.textContent = 'Flux Local AI';
+            if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
+                title.textContent = 'Axelate Local AI';
             } else {
                 let titleText = app.name || '';
                 if (globalThis.t && app.nameKey) {

@@ -1,10 +1,10 @@
-# CODING STANDARDS & REQUIREMENTS (FLUX PLATFORM ENGINEERING STANDARDS)
+# CODING STANDARDS & REQUIREMENTS (AXELATE ENGINEERING STANDARDS)
 
 **Document Version:** 2.1.0  
 **Last Updated:** 2026-01-24
 **Status:** MANDATORY
 
-This document establishes strict engineering standards for the Flux Platform project. Any code violating these principles will not be accepted for merge and requires immediate revision. We adhere to the **"Zero Broken Windows"** and **"Clean Code"** philosophy.
+This document establishes strict engineering standards for the Axelate project. Any code violating these principles will not be accepted for merge and requires immediate revision. We adhere to the **"Zero Broken Windows"** and **"Clean Code"** philosophy.
 
 ---
 
@@ -193,7 +193,7 @@ class ModuleUI {
 ### 4.4. Security
 
 - **XSS Prevention:** `innerHTML` for user content is prohibited. Use `DOMPurify.sanitize()` or `textContent`.
-- **No Sensitive Data:** No API keys, secrets on client. Use `fluxAPI.secureStorage`.
+- **No Sensitive Data:** No API keys, secrets on client. Use `axelateAPI.secureStorage`.
 - **CSP Compliance:** No inline scripts. All scripts through modules.
 
 ```typescript
@@ -2003,7 +2003,7 @@ if (type === 'xyz123') { }  // What is xyz123?
 
 ---
 
-## 36. Clean Code & Minimalism (The Zen of Flux)
+## 36. Clean Code & Minimalism (The Zen of Axelate)
 
 ### 36.1. The "No Dead Code" Policy (Zero Tolerance)
 
@@ -2207,7 +2207,7 @@ class GlobalBridge {
 <button onclick="globalThis.minimizeWindow()">−</button>
 
 <!-- ✅ With i18n -->
-<span data-i18n="ui.header.title">Flux Platform</span>
+<span data-i18n="ui.header.title">Axelate Platform</span>
 ```
 
 ---
@@ -2661,7 +2661,7 @@ API keys and secrets are stored using platform-native secure storage.
 ┌────────────────────────────────────────────────────────┐
 │                      Frontend                           │
 │  ┌────────────────────────────────────────────────┐    │
-│  │              fluxAPI.secureStorage              │    │
+│  │              axelateAPI.secureStorage              │    │
 │  │  save(service, key) → invoke('save_secure_key') │    │
 │  │  get(service) → invoke('get_secure_key')        │    │
 │  └─────────────────────────┬──────────────────────┘    │
@@ -2690,11 +2690,11 @@ interface SecureStorageAPI {
 
 // Usage in AIBridge
 async function saveApiKey(providerId: string, key: string): Promise<void> {
-    await globalThis.fluxAPI.secureStorage.save(`flux_${providerId}`, key);
+    await globalThis.axelateAPI.secureStorage.save(`flux_${providerId}`, key);
 }
 
 async function getApiKey(providerId: string): Promise<string | null> {
-    return globalThis.fluxAPI.secureStorage.get(`flux_${providerId}`);
+    return globalThis.axelateAPI.secureStorage.get(`flux_${providerId}`);
 }
 ```
 
@@ -2712,7 +2712,7 @@ async function getApiKey(providerId: string): Promise<string | null> {
 - ❌ **NEVER** store API keys in `localStorage`
 - ❌ **NEVER** log API keys to console
 - ❌ **NEVER** include keys in error messages
-- ✅ Use `fluxAPI.secureStorage` for all credentials
+- ✅ Use `axelateAPI.secureStorage` for all credentials
 - ✅ Keys are encrypted at rest by OS
 - ✅ Access controlled by OS permissions
 
@@ -3886,5 +3886,5 @@ export class ChatService {
 
 *Document updated: 2026-01-28*  
 *Version: 2.5.0*  
-*Maintainer: Flux Platform Team*  
+*Maintainer: Axelate Team*  
 *Total Sections: 60 + 3 Appendices*

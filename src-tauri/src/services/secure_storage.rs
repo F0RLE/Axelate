@@ -22,7 +22,7 @@ impl SecureStorage {
             std::env::var("APPDATA").map_err(|_| "Could not find APPDATA directory".to_string())?;
 
         let mut path = PathBuf::from(app_data);
-        path.push("FluxData");
+        path.push("AxelateData");
         path.push("User");
         path.push("Configs");
 
@@ -42,7 +42,7 @@ impl SecureStorage {
             machine_uid::get().map_err(|e| format!("Failed to get machine ID: {}", e))?;
 
         // "Pepper" to ensure the key isn't just the raw ID
-        let input = format!("FLUX_PLATFORM_SECURE_SALT_{}", machine_id);
+        let input = format!("AXELATE_PLATFORM_SECURE_SALT_{}", machine_id);
 
         // SHA-256 hash to get exactly 32 bytes
         let mut hasher = Sha256::new();
@@ -155,7 +155,7 @@ mod tests {
 
         // 2. Verify File Exists
         let mut expected_path = temp_path.clone();
-        expected_path.push("FluxData");
+        expected_path.push("AxelateData");
         expected_path.push("User");
         expected_path.push("Configs");
         expected_path.push("secure.enc");

@@ -120,15 +120,15 @@ fn show_error_dialog() -> bool {
 
     let (title, message) = match lang.as_str() {
         "ru" => (
-            "Ошибка окружения - Flux Platform",
+            "Ошибка окружения - Axelate",
             "Компонент WebView2 не обнаружен в вашей системе, и отсутствует подключение к интернету для его загрузки.\n\nПожалуйста, подключитесь к интернету и нажмите 'Повторить', чтобы лаунчер смог установить необходимые компоненты.",
         ),
         "zh" => (
-            "环境错误 - Flux Platform",
+            "环境错误 - Axelate",
             "您的系统中未发现 WebView2 运行时，且没有可用的互联网连接来下载它。\n\n请连接互联网并点击“重试”，以允许启动器安装必要的组件。",
         ),
         _ => (
-            "Environment Error - Flux Platform",
+            "Environment Error - Axelate",
             "WebView2 Runtime was not found on your system, and no internet connection is available to download it.\n\nPlease connect to the internet and click 'Retry' to allow the launcher to install the required components.",
         ),
     };

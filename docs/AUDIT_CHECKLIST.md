@@ -1,4 +1,4 @@
-# Audit Checklist: Flux Platform Engineering Standards v2.1.0 Compliance
+# Audit Checklist: Axelate Engineering Standards v2.1.0 Compliance
 
 **Legend:**
 - [x] **Verified**: Checked against standards.

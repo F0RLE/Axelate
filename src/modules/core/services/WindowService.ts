@@ -61,7 +61,7 @@ export class WindowService {
             }
         } else {
              // Web Fallback: Load from localStorage or default to 1
-             const saved = localStorage.getItem('flux_zoom');
+             const saved = localStorage.getItem('axelate_zoom');
              if (saved) {
                  this._currentZoom = Number.parseFloat(saved) || 1;
              }
@@ -178,7 +178,7 @@ export class WindowService {
             }
         } else {
             // Web Persistence
-            localStorage.setItem('flux_zoom', this._currentZoom.toString());
+            localStorage.setItem('axelate_zoom', this._currentZoom.toString());
         }
 
         // Always apply CSS

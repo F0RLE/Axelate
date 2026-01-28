@@ -39,7 +39,7 @@ interface IGlobalBridgeProperties {
     hideSkeletonLoaders?: (id: string, c?: number) => void;
     setButtonLoading?: (b: HTMLButtonElement | null, l: boolean) => void;
     showPromptTab?: (tab: string, btn?: HTMLElement) => void;
-    fluxAPI?: {
+    axelateAPI?: {
         minimize: () => Promise<void>;
         toggleMaximize: () => Promise<void>;
         close: () => Promise<void>;
@@ -70,7 +70,7 @@ export class GlobalBridge {
      */
     public init(): void {
         this._setupFetchInterceptor();
-        this._setupFluxAPI();
+        this._setupAxelateAPI();
         this._exposeCoreGlobals();
     }
 
@@ -172,7 +172,7 @@ export class GlobalBridge {
                     this._core.logger.error('[GlobalBridge] Launch module failed:', err);
                 }
             } else {
-                const apiModules = ['gpt', 'gemini', 'claude', 'mistral', 'flux-localai'];
+                const apiModules = ['gpt', 'gemini', 'claude', 'mistral', 'axelate-localai'];
                 if (apiModules.includes(id)) {
                     localStorage.setItem('selected_ai_provider', id);
                 }
@@ -203,26 +203,26 @@ export class GlobalBridge {
     }
 
     /**
-     * Setup the fluxAPI bridge for legacy module compatibility.
-     * @sideeffect Exposes fluxAPI on globalThis
+     * Setup the axelateAPI bridge for legacy module compatibility.
+     * @sideeffect Exposes axelateAPI on globalThis
      */
-    private _setupFluxAPI(): void {
+    private _setupAxelateAPI(): void {
         const win = globalThis as unknown as IGlobalBridgeProperties;
-        win.fluxAPI = {
+        win.axelateAPI = {
             minimize: async () => {
                 if (this._core.tauriProvider.isTauri())
                     await this._core.tauriProvider.invoke('minimize_window');
-                else this._core.logger.debug('[FluxAPI] minimize (no Tauri)');
+                else this._core.logger.debug('[AxelateAPI] minimize (no Tauri)');
             },
             toggleMaximize: async () => {
                 if (this._core.tauriProvider.isTauri())
                     await this._core.tauriProvider.invoke('toggle_maximize');
-                else this._core.logger.debug('[FluxAPI] toggleMaximize (no Tauri)');
+                else this._core.logger.debug('[AxelateAPI] toggleMaximize (no Tauri)');
             },
             close: async () => {
                 if (this._core.tauriProvider.isTauri())
                     await this._core.tauriProvider.invoke('close_window');
-                else this._core.logger.debug('[FluxAPI] close (no Tauri)');
+                else this._core.logger.debug('[AxelateAPI] close (no Tauri)');
             },
             secureStorage: {
                 save: async (service: string, key: string) => {
@@ -230,7 +230,7 @@ export class GlobalBridge {
                         await this._core.tauriProvider.invoke('save_secure_key', { service, key });
                     } else {
                         console.warn(
-                            '[FluxAPI] Secure storage not available in web mode. Key not persisted:',
+                            '[AxelateAPI] Secure storage not available in web mode. Key not persisted:',
                             service,
                         );
                         // Security: Do not persist keys in localStorage/sessionStorage

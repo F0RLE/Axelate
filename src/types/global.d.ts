@@ -8,8 +8,8 @@ interface SecureStorageAPI {
     save: (_key: string, _value: string) => Promise<void>;
 }
 
-/** FluxAPI interface */
-interface FluxAPIInterface {
+/** AxelateAPI interface */
+interface AxelateAPIInterface {
     secureStorage: SecureStorageAPI;
     minimize: () => Promise<void>;
     toggleMaximize: () => Promise<void>;
@@ -94,8 +94,8 @@ declare global {
     var toggleVoiceInput: () => void;
     var sendChat: () => void;
 
-    // --- FluxAPI & Tauri ---
-    var fluxAPI: FluxAPIInterface;
+    // --- AxelateAPI & Tauri ---
+    var axelateAPI: AxelateAPIInterface;
     var __TAURI__: {
         core: {
             invoke: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
@@ -184,7 +184,7 @@ declare global {
         saveGeminiKey: typeof saveGeminiKey;
         checkGPTKey: typeof checkGPTKey;
         checkGeminiKey: typeof checkGeminiKey;
-        fluxAPI: typeof fluxAPI;
+        axelateAPI: typeof axelateAPI;
         __TAURI__: typeof __TAURI__;
         APP_DATA: typeof APP_DATA;
         uiState: typeof uiState;

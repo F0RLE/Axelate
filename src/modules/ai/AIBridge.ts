@@ -49,7 +49,7 @@ interface IGlobalContext {
     aiBridge?: AIBridge;
     showToast?: (msg: string, type: 'success' | 'error' | 'info' | 'warning') => void;
     t?: (key: string, defaultVal?: string) => string;
-    fluxAPI?: {
+    axelateAPI?: {
         secureStorage?: {
             get: (key: string) => Promise<string | null>;
         };
@@ -297,7 +297,7 @@ export class AIBridge {
         if (
             !this._apiKey &&
             this._activeProviderId !== 'local' &&
-            this._activeProviderId !== 'flux-localai'
+            this._activeProviderId !== 'axelate-localai'
         ) {
             return this._handleMissingApiKey();
         }
@@ -307,7 +307,7 @@ export class AIBridge {
 
             // Per user request: Local AI logic is completely removed from backend.
             // We return a placeholder response here to satisfy the frontend call without executing logic.
-            if (this._activeProviderId === 'local' || this._activeProviderId === 'flux-localai') {
+            if (this._activeProviderId === 'local' || this._activeProviderId === 'axelate-localai') {
                 const msg =
                     this._context.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') ||
                     'Local AI execution is disabled.';
