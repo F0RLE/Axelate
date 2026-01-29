@@ -196,13 +196,10 @@ fn get_settings_path() -> std::path::PathBuf {
 
 fn load_settings_map() -> std::collections::HashMap<String, String> {
     let path = get_settings_path();
-    if path.exists() {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(map) =
-                serde_json::from_str::<std::collections::HashMap<String, String>>(&content)
-            {
-                return map;
-            }
+    if let Ok(content) = std::fs::read_to_string(path) {
+        if let Ok(map) = serde_json::from_str::<std::collections::HashMap<String, String>>(&content)
+        {
+            return map;
         }
     }
     // Return defaults if no file or parsing fails
