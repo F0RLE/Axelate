@@ -68,7 +68,6 @@ export class Core {
             'color: #cbd5e1; font-family: monospace; font-size: 10px; background: #334155; padding: 2px 6px; border-radius: 4px; vertical-align: middle;',
         );
 
-
         // Initialize base services following Section 16 patterns
         this.tauriProvider = new TauriProvider();
         this.logger = logger;
@@ -185,7 +184,7 @@ export class Core {
         globalThis.addEventListener('catalog-loaded', () => {
             this._restoreSelectedModules();
         });
-        
+
         // Init AI Bridge (now manual)
         await aiBridge.init();
 
@@ -199,22 +198,22 @@ export class Core {
 
         // 8. Hide Splash Screen (Only when fully ready)
         console.debug('[Core] App Ready. Hiding splash...');
-        
+
         // Enforce minimum splash duration to avoid flickering
         await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
 
         this.windowUI.hideSplashScreen();
 
-            setTimeout(() => {
-                const currentPage = this.navigation.getCurrentPage();
-                this.navigationUI.showPage(currentPage || 'home', null, true);
+        setTimeout(() => {
+            const currentPage = this.navigation.getCurrentPage();
+            this.navigationUI.showPage(currentPage || 'home', null, true);
 
-                const elements = ['sidebar', 'app-header', 'main-area'];
-                elements.forEach((id) => {
-                    const el = document.getElementById(id);
-                    if (el) el.classList.add('visible');
-                });
-            }, Core._UI_REVEAL_DELAY_MS);
+            const elements = ['sidebar', 'app-header', 'main-area'];
+            elements.forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('visible');
+            });
+        }, Core._UI_REVEAL_DELAY_MS);
 
         console.info('[Core] Ready.');
         console.groupEnd();

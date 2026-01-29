@@ -60,22 +60,26 @@ export class WindowService {
                 console.warn('[WindowService] Failed to get initial zoom (or timeout):', e);
             }
         } else {
-             // Web Fallback: Load from localStorage or default to 1
-             const saved = localStorage.getItem('axelate_zoom');
-             if (saved) {
-                 this._currentZoom = Number.parseFloat(saved) || 1;
-             }
-             document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
+            // Web Fallback: Load from localStorage or default to 1
+            const saved = localStorage.getItem('axelate_zoom');
+            if (saved) {
+                this._currentZoom = Number.parseFloat(saved) || 1;
+            }
+            document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
 
-             // Enable Ctrl + Scroll implementation for Web Browser
-             window.addEventListener('wheel', (e) => {
-                if (e.ctrlKey) {
-                    e.preventDefault();
-                    // Zoom Step 0.1
-                    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-                    this.changeZoom(delta);
-                }
-             }, { passive: false });
+            // Enable Ctrl + Scroll implementation for Web Browser
+            window.addEventListener(
+                'wheel',
+                (e) => {
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        // Zoom Step 0.1
+                        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                        this.changeZoom(delta);
+                    }
+                },
+                { passive: false },
+            );
         }
     }
 
@@ -182,10 +186,7 @@ export class WindowService {
         }
 
         // Always apply CSS
-        document.documentElement.style.setProperty(
-            '--app-zoom',
-            this._currentZoom.toFixed(3),
-        );
+        document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
 
         return this._currentZoom;
     }

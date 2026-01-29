@@ -686,7 +686,7 @@
     border-radius: 20px;
     width: 90%;
     max-width: 1000px;
-    
+
     /* Constraint for centered modal with 100px gaps from header and bottom - Normalized by Zoom */
     /* 100vh - header(60px) - 2x100px gaps = 260px total offset */
     max-height: calc((100vh / var(--app-zoom, 1)) - (260px / var(--app-zoom, 1)));

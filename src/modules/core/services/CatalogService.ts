@@ -73,7 +73,7 @@ export class CatalogService {
                 try {
                     const res = await fetch('/api/config');
                     if (res.ok) config = await res.json();
-                    
+
                     const resModules = await fetch('/api/modules');
                     if (resModules.ok) installedModules = await resModules.json();
                 } catch (e) {
@@ -113,10 +113,7 @@ export class CatalogService {
                                     unknown
                                 >;
 
-                                if (
-                                    provider.baseUrl &&
-                                    provider.type === 'openai-compatible'
-                                ) {
+                                if (provider.baseUrl && provider.type === 'openai-compatible') {
                                     app.config_schema.endpoint = {
                                         label: 'Endpoint URL',
                                         field_type: 'text',

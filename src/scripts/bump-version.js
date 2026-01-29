@@ -33,9 +33,9 @@ const files = [
 
 console.log(`Bumping version to ${newVersion}...`);
 
-files.forEach(file => {
+files.forEach((file) => {
     const filePath = path.resolve(__dirname, file.path);
-    
+
     if (!fs.existsSync(filePath)) {
         console.warn(`Warning: File not found: ${filePath}`);
         return;

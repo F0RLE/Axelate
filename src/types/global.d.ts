@@ -78,7 +78,6 @@ declare global {
     var setLogView: (_view: string, _btn: HTMLElement) => void;
     var __APP_VERSION__: string;
 
-
     // --- AI Bridge & Models ---
     var aiBridge: AIBridgeInterface;
     var GPT_MODELS: Record<string, unknown>;

@@ -1,4 +1,4 @@
-    /**
+/**
  * @module core/services/TemplateLoader
  * @description Centralized service for dynamic HTML template loading, caching, and secure injection.
  * Implements the Singleton pattern as defined in Axelate Standards Section 16.1.

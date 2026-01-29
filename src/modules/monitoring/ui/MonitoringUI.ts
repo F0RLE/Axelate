@@ -138,7 +138,12 @@ export class MonitoringUI {
 
     private readonly _activeTweens = new Map<HTMLElement, number>();
 
-    private _animateTooltip(el: HTMLElement, target: number, decimals: number = 0, suffix: string = '') {
+    private _animateTooltip(
+        el: HTMLElement,
+        target: number,
+        decimals: number = 0,
+        suffix: string = '',
+    ) {
         const start = Number.parseFloat(el.textContent?.replaceAll(/[^0-9.-]/g, '') || '0') || 0;
         if (start === target) return;
 
@@ -153,10 +158,10 @@ export class MonitoringUI {
         const animate = (currentTime: number) => {
             const elapsed = currentTime - startTime;
             const progress = Math.min(elapsed / duration, 1);
-            
+
             // Ease out cubic
             const ease = 1 - Math.pow(1 - progress, 3);
-            
+
             const current = start + (target - start) * ease;
             el.textContent = `${current.toFixed(decimals)}${suffix}`;
 
@@ -173,13 +178,18 @@ export class MonitoringUI {
     /**
      * Animates the main value of a monitoring element (CPU, RAM, etc.)
      */
-    private _animateMainValue(el: HTMLElement, targetVal: number, decimals: number = 0, suffix: string = '') {
+    private _animateMainValue(
+        el: HTMLElement,
+        targetVal: number,
+        decimals: number = 0,
+        suffix: string = '',
+    ) {
         if (!el) return;
 
         // Determine target node (either el itself or .main-val child)
         let targetNode = el.querySelector('.main-val') as HTMLElement;
-        
-        // If no .main-val but we have secondary structure needed (has children), create it? 
+
+        // If no .main-val but we have secondary structure needed (has children), create it?
         // Or assume straight textContent for simple elements like CPU/GPU.
         if (!targetNode && el.children.length === 0) {
             // Simple element (CPU % etc)
@@ -193,18 +203,18 @@ export class MonitoringUI {
 
         const startText = targetNode.textContent || '0';
         const startVal = Number.parseFloat(startText.replaceAll(/[^0-9.-]/g, ''));
-        
+
         // If parsing failed (e.g. "Waiting..."), jump to target or start from 0
         const start = Number.isNaN(startVal) ? 0 : startVal;
 
         if (Math.abs(start - targetVal) < 0.1) {
-             targetNode.textContent = `${targetVal.toFixed(decimals)}${suffix}`;
-             return;
+            targetNode.textContent = `${targetVal.toFixed(decimals)}${suffix}`;
+            return;
         }
 
         // Cancel previous animation on this node
         if (this._activeTweens.has(targetNode)) {
-             cancelAnimationFrame(this._activeTweens.get(targetNode)!);
+            cancelAnimationFrame(this._activeTweens.get(targetNode)!);
         }
 
         const duration = 600; // ms
@@ -257,7 +267,11 @@ export class MonitoringUI {
 
         if (ramPercentEl) {
             // Ensure structure exists first
-            this._setValueWithSecondary(ramPercentEl, ramUsed.toFixed(1), `/${ramTotal.toFixed(0)} GB`);
+            this._setValueWithSecondary(
+                ramPercentEl,
+                ramUsed.toFixed(1),
+                `/${ramTotal.toFixed(0)} GB`,
+            );
             // Then animate main val
             this._animateMainValue(ramPercentEl, ramUsed, 1);
         }
@@ -287,7 +301,7 @@ export class MonitoringUI {
         if (vramEl && stats.vram) {
             const vramUsed = stats.vram.used_gb || 0;
             const vramTotal = stats.vram.total_gb || 0;
-            
+
             // Ensure structure
             this._setValueWithSecondary(vramEl, vramUsed.toFixed(1), `/${vramTotal.toFixed(0)} GB`);
             this._animateMainValue(vramEl, vramUsed, 1);

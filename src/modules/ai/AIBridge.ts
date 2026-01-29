@@ -59,7 +59,10 @@ interface IGlobalContext {
             invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
         };
         event: {
-            listen: <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
+            listen: <T>(
+                event: string,
+                handler: (event: { payload: T }) => void,
+            ) => Promise<() => void>;
         };
     };
     randomizeChatGreeting?: () => void;
@@ -103,15 +106,18 @@ export class AIBridge {
         try {
             const ctx = globalThis as unknown as IGlobalContext;
             if (ctx.__TAURI__?.event) {
-                 const unlistenChunk = await ctx.__TAURI__.event.listen<string>('ai-chat-chunk', (event) => {
-                    // Diagnostic logging for streaming validation
-                    if (import.meta.env.DEV) {
-                        console.debug(
-                            `[AIBridge] Stream chunk received (${event.payload.length} chars)`,
-                        );
-                    }
-                    this._broadcastChunk(event.payload);
-                });
+                const unlistenChunk = await ctx.__TAURI__.event.listen<string>(
+                    'ai-chat-chunk',
+                    (event) => {
+                        // Diagnostic logging for streaming validation
+                        if (import.meta.env.DEV) {
+                            console.debug(
+                                `[AIBridge] Stream chunk received (${event.payload.length} chars)`,
+                            );
+                        }
+                        this._broadcastChunk(event.payload);
+                    },
+                );
                 this._unlisteners.push(unlistenChunk);
                 console.log(
                     '%c AIBridge %c Streaming Active ',
@@ -119,7 +125,7 @@ export class AIBridge {
                     'color: #f3e8ff; background: #581c87; padding: 2px 6px; border-radius: 4px; font-size: 10px;',
                 );
             } else {
-                 console.log(
+                console.log(
                     '%c AIBridge %c Web Mode ',
                     'color: #64748b; font-weight: bold; padding: 2px 0;',
                     'color: #f1f5f9; background: #334155; padding: 2px 6px; border-radius: 4px; font-size: 10px;',
@@ -307,7 +313,10 @@ export class AIBridge {
 
             // Per user request: Local AI logic is completely removed from backend.
             // We return a placeholder response here to satisfy the frontend call without executing logic.
-            if (this._activeProviderId === 'local' || this._activeProviderId === 'axelate-localai') {
+            if (
+                this._activeProviderId === 'local' ||
+                this._activeProviderId === 'axelate-localai'
+            ) {
                 const msg =
                     this._context.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') ||
                     'Local AI execution is disabled.';
@@ -599,4 +608,3 @@ export class AIBridge {
 
 // Singleton instantiation
 export const aiBridge = new AIBridge();
-

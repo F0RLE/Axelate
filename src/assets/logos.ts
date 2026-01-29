@@ -3,7 +3,13 @@ import iconSvgRaw from './icons/icon.svg?raw';
 /**
  * Process SVG string to ensure unique IDs and proper sizing
  */
-const getProcessedSvg = (svgContent: string, idPrefix: string, width?: string, height?: string, className?: string): string => {
+const getProcessedSvg = (
+    svgContent: string,
+    idPrefix: string,
+    width?: string,
+    height?: string,
+    className?: string,
+): string => {
     let svg = svgContent;
 
     // 1. Scope IDs to prevent collisions (gradients, masks, etc.)
@@ -37,8 +43,14 @@ export const mountLogos = (): void => {
     const splashContainer = document.querySelector<HTMLElement>('.splash-logo-container');
     if (splashContainer && !splashContainer.querySelector('svg')) {
         // Splash Logo: Use original dimensions/viewBox, add class, scope IDs
-        const splashSvg = getProcessedSvg(iconSvgRaw, 'splash', undefined, undefined, 'splash-logo-svg');
-        
+        const splashSvg = getProcessedSvg(
+            iconSvgRaw,
+            'splash',
+            undefined,
+            undefined,
+            'splash-logo-svg',
+        );
+
         splashContainer.innerHTML += `
             <div class="splash-glow"></div>
             ${splashSvg}
@@ -49,7 +61,7 @@ export const mountLogos = (): void => {
     if (sidebarLogo && !sidebarLogo.querySelector('svg')) {
         // Sidebar Logo: Force 100% dimensions, scope IDs
         const sidebarSvg = getProcessedSvg(iconSvgRaw, 'sidebar', '100%', '100%');
-        
+
         sidebarLogo.innerHTML = sidebarSvg;
     }
 };

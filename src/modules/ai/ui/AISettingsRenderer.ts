@@ -107,7 +107,8 @@ class AISettingsRenderer {
         const t = this._getTranslator();
 
         const isCleanApp =
-            ['axelate', 'axelate-platform', 'axelate-localai'].includes(appId) || appId.includes('telegram');
+            ['axelate', 'axelate-platform', 'axelate-localai'].includes(appId) ||
+            appId.includes('telegram');
 
         let rawHtml = '';
 
@@ -579,4 +580,3 @@ class AISettingsRenderer {
 
 // Singleton instantiation
 export const aiSettingsRenderer = new AISettingsRenderer();
-

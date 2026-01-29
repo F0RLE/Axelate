@@ -90,7 +90,7 @@ export class TauriProvider {
     public async listen<T>(event: string, callback: (_payload: T) => void): Promise<() => void> {
         const win = globalThis as unknown as ITauriGlobal;
         const tauri = win.__TAURI__;
-        
+
         if (tauri) {
             // Tauri v2 listen returns UnlistenFn (which is void or () => void)
             // and the callback receives Event<T> { payload: T, ... }
