@@ -132,6 +132,7 @@
     border-radius: 999px;
     transform: scale(1);
     box-shadow: 0 0 8px rgba(var(--primary-raw), 0.3);
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sysmon-fill.low {

@@ -195,8 +195,8 @@
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
+    width: 100% !important;
+    height: 100% !important;
     background: rgba(8, 8, 10, 0.96) !important;
     backdrop-filter: blur(35px) saturate(180%) !important;
     -webkit-backdrop-filter: blur(35px) saturate(180%) !important;
@@ -205,6 +205,7 @@
     justify-content: center;
     z-index: 999999 !important;
     animation: fadeInOverlay 0.4s ease;
+    zoom: calc(1 / var(--app-zoom, 1));
 }
 
 .width-warning.closing {
@@ -219,9 +220,8 @@
     height: 100%;
 
     /* Static sizing (ignore zoom) */
-    transform: scale(calc(1 / var(--app-zoom, 1)));
-    transform-origin: center;
-    will-change: transform;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
 }
 

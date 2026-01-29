@@ -116,14 +116,29 @@
     display: block;
     opacity: 0;
     visibility: hidden;
-    width: 44px;
-    height: 44px;
+    width: 54px;
+    height: 54px;
     margin: 0 auto;
     cursor: pointer;
     transition:
         opacity 0.3s var(--ease-smooth),
         transform 0.3s var(--ease-smooth);
-    transform: scale(0.8);
+    transform: scale(1);
+    animation: logoContainerFloat 4s ease-in-out infinite;
+    will-change: transform;
+}
+
+@keyframes logoContainerFloat {
+    0%,
+    100% {
+        transform: scale(1) translateY(0);
+        filter: drop-shadow(0 0 8px rgba(var(--primary-raw), 0.5));
+    }
+
+    50% {
+        transform: scale(1) translateY(-5px);
+        filter: drop-shadow(0 0 15px rgba(var(--primary-raw), 0.8));
+    }
 }
 
 /* Ensure it shows when collapsed - usually handled by #sidebar.collapsed rule further down or in JS toggling class on wrapper?
@@ -174,7 +189,9 @@
 
 .app-title {
     font-weight: 700;
-    font-size: 1.5rem;
+    font-size: 2.3rem;
+    animation: logoContainerFloat 4s ease-in-out infinite;
+    will-change: transform;
     background: linear-gradient(
         90deg,
         var(--primary),
