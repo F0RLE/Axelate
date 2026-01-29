@@ -89,7 +89,7 @@ pub fn run() {
         let mut path = std::path::PathBuf::from(app_data);
         path.push("AxelateData");
         path.push("Cache");
-        path.push("com.axelate.platform");
+        path.push("com.axelate");
         if let Err(e) = std::fs::create_dir_all(&path) {
             log::error!("Failed to create custom data directory: {}", e);
         } else {

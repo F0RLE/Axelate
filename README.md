@@ -10,7 +10,7 @@
 
   <!-- Primary Call to Action -->
   <a href="https://github.com/F0RLE/Axelate/releases">
-    <img src="https://img.shields.io/badge/Download_Platform-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
+    <img src="https://img.shields.io/badge/Download_Axelate-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
   </a>
 
   <br />

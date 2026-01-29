@@ -52,7 +52,7 @@ jobs:
               Copy-Item -Path $installer.FullName -Destination "release_artifact/"
           } else {
               # Fallback to raw exe
-              $exe = Get-ChildItem -Path "src-tauri/target/release" -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Flux*" } | Select-Object -First 1
+              $exe = Get-ChildItem -Path "src-tauri/target/release" -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Axelate*" } | Select-Object -First 1
               if ($exe) {
                    Write-Host "Found Raw EXE: $($exe.Name)"
                    Copy-Item -Path $exe.FullName -Destination "release_artifact/"

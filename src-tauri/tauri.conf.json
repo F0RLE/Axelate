@@ -3,7 +3,7 @@
     "productName": "Axelate",
     "mainBinaryName": "Axelate",
     "version": "0.1.4",
-    "identifier": "com.axelate.platform",
+    "identifier": "com.axelate",
     "build": {
         "beforeDevCommand": "npm run dev --prefix src",
         "devUrl": "http://localhost:1420",

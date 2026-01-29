@@ -218,10 +218,6 @@
     justify-content: center;
     width: 100%;
     height: 100%;
-
-    /* Static sizing (ignore zoom) */
-    width: 100%;
-    height: 100%;
     pointer-events: none;
 }
 
@@ -669,6 +665,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    /* Offset centering to account for top panel - Normalized by Zoom */
+    padding-top: calc(var(--header-height) / var(--app-zoom, 1));
     opacity: 1;
     visibility: visible;
     transition:
@@ -689,15 +687,14 @@
     width: 90%;
     max-width: 1000px;
     
-    /* Constraint to stay below header with gap at bottom */
-    margin-top: var(--header-height);
-    max-height: calc(100vh - var(--header-height) - 4rem);
-    /* Ensure it doesn't touch bottom */
-    margin-bottom: 2rem; 
+    /* Constraint for centered modal with 100px gaps from header and bottom - Normalized by Zoom */
+    /* 100vh - header(60px) - 2x100px gaps = 260px total offset */
+    max-height: calc((100vh / var(--app-zoom, 1)) - (260px / var(--app-zoom, 1)));
 
     display: flex;
     flex-direction: column;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
 
     /* Animation state - Slower 0.9s duration and more depth (0.85) */
     opacity: 1;
@@ -769,6 +766,7 @@
     align-items: center;
     position: relative;
     height: 40px;
+    flex-shrink: 0;
 }
 
 .app-modal-title {
@@ -826,6 +824,8 @@
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 1.5rem;
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 /* App Card Styles */
@@ -833,7 +833,7 @@
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 16px;
-    padding: 1.5rem;
+    padding: 1.5rem 1.5rem 2.5rem 1.5rem;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -842,6 +842,7 @@
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
+    min-height: 300px;
 }
 
 .app-card:hover {

@@ -1880,7 +1880,7 @@ if (type === 'xyz123') { }  // What is xyz123?
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FLUX PLATFORM QUICK REF                   │
+│                       AXELATE QUICK REF                      │
 ├─────────────────────────────────────────────────────────────┤
 │ NAMING                                                       │
 │   Classes:     PascalCase        (AppUI, EventBus)          │
@@ -2207,7 +2207,7 @@ class GlobalBridge {
 <button onclick="globalThis.minimizeWindow()">−</button>
 
 <!-- ✅ With i18n -->
-<span data-i18n="ui.header.title">Axelate Platform</span>
+<span data-i18n="ui.header.title">Axelate</span>
 ```
 
 ---
@@ -2690,11 +2690,11 @@ interface SecureStorageAPI {
 
 // Usage in AIBridge
 async function saveApiKey(providerId: string, key: string): Promise<void> {
-    await globalThis.axelateAPI.secureStorage.save(`flux_${providerId}`, key);
+    await globalThis.axelateAPI.secureStorage.save(`axelate_${providerId}`, key);
 }
 
 async function getApiKey(providerId: string): Promise<string | null> {
-    return globalThis.axelateAPI.secureStorage.get(`flux_${providerId}`);
+    return globalThis.axelateAPI.secureStorage.get(`axelate_${providerId}`);
 }
 ```
 
@@ -2702,10 +2702,10 @@ async function getApiKey(providerId: string): Promise<string | null> {
 
 | Provider | Service Name | Purpose |
 |----------|--------------|---------|
-| OpenAI | `flux_openai` | GPT API key |
-| Google | `flux_gemini` | Gemini API key |
-| Anthropic | `flux_claude` | Claude API key |
-| Custom | `flux_{provider_id}` | Custom provider key |
+| OpenAI | `axelate_openai` | GPT API key |
+| Google | `axelate_gemini` | Gemini API key |
+| Anthropic | `axelate_claude` | Claude API key |
+| Custom | `axelate_{provider_id}` | Custom provider key |
 
 ### 44.4. Security Rules
 

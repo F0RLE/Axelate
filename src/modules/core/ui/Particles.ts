@@ -1,6 +1,6 @@
 /**
  * @module core/ui/Particles
- * @description Background particles animation for the Axelate Platform UI
+ * @description Background particles animation for the Axelate UI
  */
 
 interface IParticlesGlobal {

@@ -1874,7 +1874,7 @@ if (type === 'xyz123') { }  // Что такое xyz123?
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FLUX PLATFORM QUICK REF                   │
+│                       AXELATE QUICK REF                      │
 ├─────────────────────────────────────────────────────────────┤
 │ NAMING (ИМЕНОВАНИЕ)                                          │
 │   Classes (Классы):     PascalCase        (AppUI, EventBus)          │
@@ -2198,7 +2198,7 @@ class GlobalBridge {
 <button onclick="globalThis.minimizeWindow()">−</button>
 
 <!-- ✅ With i18n -->
-<span data-i18n="ui.header.title">Axelate Platform</span>
+<span data-i18n="ui.header.title">Axelate</span>
 ```
 
 ---

@@ -49,7 +49,7 @@ Sensitive data (API Keys, OAuth Tokens) is encrypted using a key derived from th
 **Algorithm:**
 
 1. **Entropy Source A**: `machine_uid::get()` (Motherboard Serial / BIOS UUID).
-2. Entropy Source B**: Static Salt `const SALT = "AXELATE_PLATFORM_SECURE_SALT_"` (Compiled into binary).
+2. Entropy Source B**: Static Salt `const SALT = "AXELATE_SECURE_SALT_"` (Compiled into binary).
 3. **Key Derivation Function (KDF)**: `SHA256(Source A + SALT + Source A)` → 32-byte Key.
 4. **Encryption**: `AES-256-GCM` (Galois/Counter Mode).
     * **Nonce**: Random 96-bit per write.

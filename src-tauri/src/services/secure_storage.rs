@@ -42,7 +42,7 @@ impl SecureStorage {
             machine_uid::get().map_err(|e| format!("Failed to get machine ID: {}", e))?;
 
         // "Pepper" to ensure the key isn't just the raw ID
-        let input = format!("AXELATE_PLATFORM_SECURE_SALT_{}", machine_id);
+        let input = format!("AXELATE_SECURE_SALT_{}", machine_id);
 
         // SHA-256 hash to get exactly 32 bytes
         let mut hasher = Sha256::new();
