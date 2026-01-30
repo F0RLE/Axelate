@@ -17,9 +17,34 @@
 
 ---
 
-## 1. Prerequisites
+## What is Axelate?
 
-Before starting, ensure you have the following installed:
+**Axelate** is a secure desktop environment for next-generation AI agents. It provides:
+
+- 🛡️ **Hardware-Bound Security** — AES-256-GCM encryption tied to your motherboard
+- ⚡ **Native Performance** — Rust kernel + V8 shell, instant startup
+- 🧩 **Isolated Modules** — Run AI tools without cross-contamination
+
+---
+
+## Quick Install (Users)
+
+1. **Download** the installer from [Releases](https://github.com/F0RLE/Axelate/releases)
+2. **Run** `Axelate Setup.exe`
+3. **Launch** Axelate from Start Menu or Desktop
+
+### First Launch
+
+1. Go to **Settings** → **AI Providers**
+2. Select a provider (OpenAI GPT, Google Gemini)
+3. Enter your API key (stored securely via OS keychain)
+4. Click **Save**
+
+---
+
+## Developer Setup
+
+### Prerequisites
 
 | Tool | Required Version | Installation |
 | :--- | :--- | :--- |
@@ -28,42 +53,22 @@ Before starting, ensure you have the following installed:
 | **pnpm** | `9.x`+ | `npm install -g pnpm` |
 | **Visual Studio Build Tools** | 2022+ | Required for Windows Rust compilation |
 
----
-
-## 2. Installation
-
-### 2.1 Clone Repository
+### Installation
 
 ```bash
+# Clone repository
 git clone https://github.com/F0RLE/Axelate.git
 cd Axelate
-```
 
-### 2.2 Install Dependencies
-
-```bash
-# Root dependencies (Tauri CLI, Husky)
+# Install dependencies
 npm install
-
-# Frontend dependencies
 cd src && npm install
 ```
 
-### 2.3 Verify Rust Setup
+### Launch Dev Server
 
 ```bash
-rustc --version    # Should be 1.93.0+
-cargo --version
-```
-
----
-
-## 3. Development Workflow
-
-### 3.1 Launch Dev Server
-
-```bash
-# From src/ directory
+cd src
 npm run tauri:dev
 ```
 
@@ -72,27 +77,9 @@ This will:
 2. Launch Tauri application with hot-reload
 3. Open DevTools for frontend debugging
 
-### 3.2 Frontend-Only Development
-
-```bash
-cd src
-npm run dev    # Vite dev server only (no Tauri)
-```
-
-> **Note:** Some features require Tauri (IPC, secure storage). Use mock mode in `TauriProvider.ts`.
-
-### 3.3 Backend-Only Changes
-
-```bash
-cd src-tauri
-cargo check         # Quick syntax/type check
-cargo clippy        # Lint with warnings as errors
-cargo build         # Full debug build
-```
-
 ---
 
-## 4. Project Structure Overview
+## Project Structure
 
 ```
 Axelate/
@@ -102,8 +89,7 @@ Axelate/
 │   │   ├── ai/                # AI Bridge & providers
 │   │   ├── chat/              # Chat interface
 │   │   ├── settings/          # App settings
-│   │   ├── monitoring/        # System monitoring
-│   │   └── ...
+│   │   └── monitoring/        # System monitoring
 │   ├── css/                   # Stylesheets (design tokens)
 │   ├── templates/             # HTML templates
 │   └── test/                  # Vitest tests
@@ -119,99 +105,63 @@ Axelate/
 
 ---
 
-## 5. Debugging
+## Key Concepts
 
-### 5.1 Frontend (DevTools)
+| Concept | Description |
+|---------|-------------|
+| **Core** | Central orchestrator (`src/modules/core/core.ts`) managing all services |
+| **EventBus** | Type-safe pub/sub for inter-module communication |
+| **StateService** | Persistent UI state (backend-first, localStorage fallback) |
+| **AIBridge** | Singleton routing messages to AI providers (GPT/Gemini) |
+| **TauriProvider** | Abstraction layer for Tauri IPC with mock support |
 
+---
+
+## Development Commands
+
+| Command | Description |
+| :--- | :--- |
+| `npm run tauri:dev` | Start dev server with Tauri |
+| `npm run dev` | Vite only (no Tauri) |
+| `npm run test` | Run all tests |
+| `npm run lint` | ESLint check |
+| `npm run format` | Prettier format |
+| `npm run tauri:build` | Production build |
+| `npm run release` | Optimized release build |
+
+---
+
+## Debugging
+
+### Frontend (DevTools)
 - Press `F12` or `Ctrl+Shift+I` to open DevTools
 - Console logs use prefixes: `[ModuleName] Message`
-- Debug panel available in DEV mode (bottom-right trigger)
 
-### 5.2 Backend (Rust Logs)
-
+### Backend (Rust Logs)
 ```bash
-# Set log level
 RUST_LOG=debug npm run tauri:dev
 ```
-
-Log files location: `%APPDATA%/AxelateData/logs/`
-
-### 5.3 IPC Debugging
-
-All IPC calls are logged:
-```
-[TauriProvider] Invoking: command_name {...args}
-[TauriProvider] Invoke success: command_name
-```
+Log files: `%APPDATA%/AxelateData/logs/`
 
 ---
 
-## 6. Testing
-
-### 6.1 Run Frontend Tests
-
-```bash
-cd src
-npm run test              # Run all tests once
-npm run test:watch        # Watch mode
-npm run test:coverage     # With coverage report
-```
-
-### 6.2 Run Backend Tests
-
-```bash
-cd src-tauri
-cargo test
-```
-
-### 6.3 Linting & Formatting
-
-```bash
-cd src
-npm run lint              # ESLint check
-npm run lint:fix          # Auto-fix issues
-npm run format            # Prettier format
-npm run format:check      # Check formatting
-```
-
----
-
-## 7. Building for Production
-
-### 7.1 Development Build
-
-```bash
-npm run tauri:build
-```
-
-### 7.2 Release Build
-
-```bash
-cd src
-npm run release    # Optimized build
-```
-
-Output: `src-tauri/target/release/bundle/`
-
----
-
-## 8. Common Issues
+## Common Issues
 
 | Issue | Solution |
 | :--- | :--- |
 | `WebView2 not found` | Install [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) |
 | `cargo build` fails | Run `rustup update` and install Visual Studio Build Tools |
 | Port 1420 in use | Kill process or change port in `vite.config.ts` |
-| White screen on launch | Check DevTools console for errors |
+| White screen | Check DevTools console for errors |
 
 ---
 
-## 9. Useful Links
+## Useful Links
 
-- **Architecture**: [architecture.md](architecture.md) - Deep dive into core systems
-- **Coding Standards**: [CODING_STANDARDS.md](CODING_STANDARDS.md) - Mandatory patterns and quality rules
-- **Security Policy**: [SECURITY.md](../../SECURITY.md) - Reporting vulnerabilities
-- **Quickstart**: [QUICKSTART.md](QUICKSTART.md) - Fast onboarding guide
+- [Architecture Spec](architecture.md)
+- [Coding Standards](CODING_STANDARDS.md)
+- [Security Policy](../../SECURITY.md)
+- [Contributing](../../CONTRIBUTING.md)
 
 ---
 

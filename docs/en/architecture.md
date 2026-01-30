@@ -8,7 +8,9 @@
   <p>
     <a href="../../README.md"><img src="https://img.shields.io/badge/Home-31303a?style=for-the-badge&logo=house&logoColor=white" height="30" alt="Home"/></a>
     &nbsp;
-    <a href="architecture.md"><img src="https://img.shields.io/badge/Documentation-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
+    <a href="getting-started.md"><img src="https://img.shields.io/badge/Getting_Started-31303a?style=for-the-badge&logo=rocket&logoColor=white" height="30" alt="Getting Started"/></a>
+    &nbsp;
+    <a href="CODING_STANDARDS.md"><img src="https://img.shields.io/badge/Standards-31303a?style=for-the-badge&logo=eslint&logoColor=white" height="30" alt="Standards"/></a>
   </p>
   <br />
 </div>

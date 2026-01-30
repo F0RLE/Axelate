@@ -21,13 +21,8 @@
 
 ## Documentation
 - [ ] `docs/en/architecture.md`
-- [ ] `docs/en/development.md`
-- [ ] `docs/en/QUICKSTART.md`
-- [ ] `docs/ru/architecture.md`
-- [ ] `docs/ru/development.md`
-- [ ] `docs/ru/QUICKSTART.md`
-- [ ] `docs/translations/README_CN.md`
-- [ ] `docs/translations/README_RU.md`
+- [ ] `docs/en/getting-started.md`
+- [ ] `docs/en/CODING_STANDARDS.md`
 
 ## Frontend Source (`src/`)
 

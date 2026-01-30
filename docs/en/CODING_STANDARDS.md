@@ -1,10 +1,147 @@
 # CODING STANDARDS & REQUIREMENTS (AXELATE ENGINEERING STANDARDS)
 
-**Document Version:** 2.1.0  
-**Last Updated:** 2026-01-24
-**Status:** MANDATORY
+**Document Version:** 2.6.0  
+**Last Updated:** 2026-01-30  
+**Status:** MANDATORY  
+**Total Lines:** ~4250 | **Sections:** 61
+
+> [!IMPORTANT]
+> **⚠️ LARGE DOCUMENT WARNING**
+> 
+> This file contains **4000+ lines** and **60 sections**. If you are an AI assistant reading this document, **DO NOT STOP at 800 lines**. You must continue reading ALL sections to understand the complete engineering standards. Use the Quick Navigation below to jump to specific sections.
 
 This document establishes strict engineering standards for the Axelate project. Any code violating these principles will not be accepted for merge and requires immediate revision. We adhere to the **"Zero Broken Windows"** and **"Clean Code"** philosophy.
+
+---
+
+## 📑 Quick Navigation
+
+<details>
+<summary><b>🏗️ Foundation (1-3)</b></summary>
+
+- [1. De-AI Policy](#1-sanitization-and-de-ai-policy-zero-tolerance)
+- [2. Architecture Principles](#2-architecture-and-design-principles)
+- [3. Project Structure](#3-modular-project-structure)
+
+</details>
+
+<details>
+<summary><b>💻 Code (4-5)</b></summary>
+
+- [4. TypeScript / Frontend](#4-frontend-typescript--high-performance)
+- [5. Rust / Backend](#5-backend-rust--safety--concurrency)
+
+</details>
+
+<details>
+<summary><b>🎨 Styling (6, 29-30)</b></summary>
+
+- [6. CSS Architecture](#6-css-architecture)
+- [29. Responsive Design](#29-responsive-design)
+- [30. Animation Guidelines](#30-animation-guidelines)
+
+</details>
+
+<details>
+<summary><b>📝 Quality (7-10)</b></summary>
+
+- [7. Code Style & Docs](#7-code-style-and-documentation)
+- [8. Testing](#8-testing-standards)
+- [9. Tooling](#9-tooling--configuration)
+- [10. Git Workflow](#10-git--workflow)
+
+</details>
+
+<details>
+<summary><b>⚙️ Tauri & IPC (11, 31, 43)</b></summary>
+
+- [11. Tauri Integration](#11-tauri-integration)
+- [31. IPC Patterns](#31-tauri-ipc-patterns)
+- [43. Window Lifecycle](#43-window-lifecycle--system-tray)
+
+</details>
+
+<details>
+<summary><b>🌍 i18n & Errors (12-13, 46)</b></summary>
+
+- [12. i18n](#12-internationalization-i18n)
+- [13. Error Handling](#13-error-handling-patterns)
+- [46. Error Boundaries](#46-global-error-boundaries)
+
+</details>
+
+<details>
+<summary><b>⚡ Performance (14, 28, 32, 50)</b></summary>
+
+- [14. Performance](#14-performance-guidelines)
+- [28. Bundle Size](#28-bundle-size--performance-budget)
+- [32. Caching](#32-caching-strategies)
+- [50. Visibility Optimization](#50-visibility-based-resource-optimization)
+
+</details>
+
+<details>
+<summary><b>🔒 Security (15, 44, 61)</b></summary>
+
+- [15. Security Checklist](#15-security-checklist)
+- [44. Secure Storage](#44-secure-storage-pattern)
+- [61. Security Deep Dive](#61-security-deep-dive-critical)
+
+</details>
+
+<details>
+<summary><b>🏛️ Patterns (16-22, 37-42, 45, 47-49)</b></summary>
+
+- [16. Service Architecture](#16-service-architecture-patterns)
+- [17. Logging](#17-logging-standards)
+- [18. State Management](#18-state-management-patterns)
+- [37. Core Orchestrator](#37-core-orchestrator-pattern)
+- [38. GlobalBridge](#38-globalbridge-facade-pattern)
+- [39. HTML Templates](#39-html-template-system)
+- [40. Hybrid State](#40-hybrid-state-persistence)
+- [41. Module Controller](#41-module-controller-pattern-mvc)
+- [42. AI Streaming](#42-ai-streaming-architecture)
+- [45. Observer/Pub-Sub](#45-observer-pattern-pubsub-services)
+- [47. DOM Selectors](#47-dom-selector-constants)
+- [48. Markdown Pipeline](#48-markdown-rendering-pipeline)
+- [49. Toast Queue](#49-toast-queue-system)
+
+</details>
+
+<details>
+<summary><b>📚 Guidelines (19-27, 33-36)</b></summary>
+
+- [19. File Organization](#19-file--folder-organization)
+- [20. API Design](#20-api-design-guidelines)
+- [21. Type Definitions](#21-type-definition-patterns)
+- [22. Dependencies](#22-dependency-management)
+- [23. Accessibility](#23-accessibility-a11y)
+- [24. Code Review](#24-code-review-checklist)
+- [25. Deprecation](#25-deprecation-policy)
+- [26. Environment Config](#26-environment-configuration)
+- [27. Documentation](#27-documentation-requirements)
+- [33. Feature Flags](#33-feature-flags)
+- [34. Telemetry](#34-error-monitoring--telemetry)
+- [35. Anti-Patterns](#35-anti-patterns-what-not-to-do)
+- [36. Clean Code Zen](#36-clean-code--minimalism-the-zen-of-axelate)
+
+</details>
+
+<details>
+<summary><b>🔧 Advanced Patterns (51-60)</b></summary>
+
+- [51. System Monitor Loop](#51-backend-system-monitor-loop-rust)
+- [52. Module Controller (Rust)](#52-module-controller-pattern-rust)
+- [53. TauriProvider Abstraction](#53-tauriprovider-abstraction-layer)
+- [54. Mock Development Mode](#54-mock-development-mode)
+- [55. Navigation History](#55-navigation-history-stack)
+- [56. Catalog Hydration](#56-catalog-schema-hydration)
+- [57. I18n Params](#57-parameterized-translation-i18n)
+- [58. Console Interceptors](#58-console-interceptors)
+- [59. Log Filtering](#59-incremental-log-fetch--filtering)
+- [60. Service Delegation](#60-service-to-bridge-delegation)
+
+</details>
 
 ---
 
@@ -12,9 +149,17 @@ This document establishes strict engineering standards for the Axelate project. 
 
 **Our code must look like the result of highly skilled engineers, not LLMs.**
 
+> [!IMPORTANT]
+> AI tools (Gemini, ChatGPT, Claude) are **allowed for acceleration**, but:
+> 1. All AI-generated code MUST be reviewed and refactored
+> 2. Remove all AI "watermarks" and redundant comments
+> 3. Verify logic correctness — AI hallucinates (especially with APIs/libs)
+> 4. Final code must be indistinguishable from human-written
+
 ### 1.1. Prohibition of Generation Artifacts
 - Strictly prohibited comments like: `Generated by`, `AI suggestion`, `As an AI I think`, `Copilot fix`, `Here is the code`.
 - LLM "watermarks" in styling are prohibited (e.g., redundant comments of obvious things: `// Returns void`).
+- AI-generated variable names like `temp`, `data`, `result` must be replaced with meaningful names.
 
 ### 1.2. Professional Terminology
 - "Conversational" style in comments and documentation is prohibited.
@@ -23,7 +168,12 @@ This document establishes strict engineering standards for the Axelate project. 
 - ❌ *Bad:* `"Fixing the bug with user login"`
 - ✅ *Good:* `"Patched race condition in authentication flow during session rehydration"`
 
-### 1.3. Principle of "Meaningfulness"
+### 1.3. AI Hallucination Mitigation
+- **Always verify**: API signatures, library versions, function names
+- **Never trust**: Complex regex, crypto code, edge cases from AI
+- **Test everything**: AI code must have 100% test coverage for critical paths
+
+### 1.4. Principle of "Meaningfulness"
 - If code looks like boilerplate, it should be abstracted.
 - If a comment doesn't explain *why* an architectural decision was made (business context or platform constraint), it should be deleted.
 
@@ -244,6 +394,9 @@ loadData().catch(console.error);
 - **Manual Sync (for now):** When changing a Rust struct (e.g., `AppSettings`), immediately update the corresponding TypeScript interface (`IAppSettings`).
 - **No "Any" Bridges:** Do not type invoke results as `any`. Always create a matching interface.
 - **Validation:** Frontend should validate received data structure if trust is low (e.g., external plugins).
+
+> [!TIP]
+> **Future Automation:** Consider [tauri-specta](https://github.com/oscartbeaumont/tauri-specta) or [ts-rs](https://github.com/Aleph-Alpha/ts-rs) for automatic generation of TS types from Rust structs. This eliminates human error in manual sync.
 
 ---
 
@@ -553,7 +706,7 @@ function callback(_event: Event, data: Data): void {
     "printWidth": 100,
     "bracketSpacing": true,
     "arrowParens": "always",
-    "endOfLine": "crlf"
+    "endOfLine": "lf"
 }
 ```
 
@@ -1271,6 +1424,11 @@ private mapModelToApiId(providerId: string, uiModel: string): string {
 
 ## 28. Bundle Size & Performance Budget
 
+> [!NOTE]
+> These limits are aggressive but achievable for a Tauri app with pure Vanilla TS.
+> Since we don't use React/Vue/Angular, our baseline is near-zero.
+> Requires: Tree Shaking, lazy loading, dynamic imports for all modules.
+
 ### 28.1. Size Limits
 
 | Metric | Limit | Action on Exceed |
@@ -1466,6 +1624,9 @@ async fn delete_module(module_id: String) -> Result<(), String>
 ```
 
 ### 31.1.5. Type Synchronization Policy (CRITICAL)
+
+> [!CAUTION]
+> **Priority #1 Tech Debt:** Manual type sync is the biggest human error risk in this project. Implementing `tauri-specta` or `ts-rs` should be the first automation task.
 
 Since Tauri v2 does not yet fully enforce type safety across the bridge automatically in this project:
 
@@ -1906,133 +2067,9 @@ class AppManager {
 if (status === 3) { }  // What is 3?
 if (type === 'xyz123') { }  // What is xyz123?
 ```
-
 ---
 
-## Appendix A: Quick Reference Card
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       AXELATE QUICK REF                      │
-├─────────────────────────────────────────────────────────────┤
-│ NAMING                                                       │
-│   Classes:     PascalCase        (AppUI, EventBus)          │
-│   Functions:   camelCase         (showToast, handleClick)   │
-│   Constants:   SCREAMING_SNAKE   (MAX_RETRIES, GPT_MODELS)  │
-│   Private:     _prefix           (_ensureContainer)         │
-│   Boolean:     is/has/should     (isValid, hasAccess)       │
-│   Files:       PascalCase.ts     (EventBus.ts, AppUI.ts)    │
-│   CSS:         kebab-case        (toast-container)          │
-├─────────────────────────────────────────────────────────────┤
-│ COMMITS                                                      │
-│   feat(scope): add new feature                              │
-│   fix(scope): fix bug                                       │
-│   refactor(scope): restructure code                         │
-│   perf(scope): improve performance                          │
-│   docs(scope): update documentation                         │
-├─────────────────────────────────────────────────────────────┤
-│ LOGGING                                                      │
-│   console.debug('[Module] Debug info');                     │
-│   console.log('[Module] Info message');                     │
-│   console.warn('[Module] Warning');                         │
-│   console.error('[Module] Error:', err);                    │
-├─────────────────────────────────────────────────────────────┤
-│ CSS VARIABLES                                                │
-│   Colors:   --primary, --surface, --text-primary            │
-│   Spacing:  --spacing-sm, --spacing-md, --spacing-lg        │
-│   Radius:   --radius-sm, --radius-md, --radius-lg           │
-├─────────────────────────────────────────────────────────────┤
-│ ANIMATION                                                    │
-│   Micro:     100-200ms   ease-out                           │
-│   UI:        200-300ms   ease-in-out                        │
-│   Page:      300-500ms   cubic-bezier(0.4, 0, 0.2, 1)      │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Appendix B: EventBus Event Catalog
-
-### Navigation Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `page:change` | `{ pageId: string; previousPageId?: string }` | Page navigation |
-| `page:ready` | `{ pageId: string }` | Page fully loaded |
-
-### Module Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `module:download:start` | `{ moduleId: string; url: string }` | Download started |
-| `module:download:progress` | `{ moduleId: string; percent: number }` | Progress update |
-| `module:download:complete` | `{ moduleId: string }` | Download finished |
-| `module:download:error` | `{ moduleId: string; error: string }` | Download failed |
-| `module:status:change` | `{ moduleId: string; status: string }` | Status update |
-
-### Window Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `window:minimize` | `void` | Window minimized |
-| `window:maximize` | `void` | Window maximized |
-| `window:close` | `void` | Window closing |
-| `window:focus` | `void` | Window focused |
-| `window:blur` | `void` | Window lost focus |
-
-### I18n Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `i18n:language:change` | `{ lang: string; previousLang: string }` | Language changed |
-| `i18n:translations:loaded` | `{ lang: string }` | Translations loaded |
-
-### Error Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `error:global` | `{ error: Error; context?: string }` | Unhandled error |
-| `error:network` | `{ url: string; status: number; message: string }` | Network error |
-
-### App Selection Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `app:selection:open` | `{ category: string }` | Modal opened |
-| `app:selection:close` | `void` | Modal closed |
-| `app:selection:select` | `{ category: string; appId: string }` | App selected |
-
----
-
-## Appendix C: Severity Matrix
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                       ISSUE SEVERITY MATRIX                       │
-├──────────────┬───────────────┬───────────────┬───────────────────┤
-│   Severity   │   Response    │   Examples    │   Action          │
-├──────────────┼───────────────┼───────────────┼───────────────────┤
-│ P0 CRITICAL  │ < 1 hour      │ App crash     │ Hotfix + rollback │
-│              │               │ Data loss     │ All hands         │
-│              │               │ Security vuln │                   │
-├──────────────┼───────────────┼───────────────┼───────────────────┤
-│ P1 HIGH      │ < 4 hours     │ Core feature  │ Same-day fix      │
-│              │               │ broken        │ Priority review   │
-│              │               │ Memory leak   │                   │
-├──────────────┼───────────────┼───────────────┼───────────────────┤
-│ P2 MEDIUM    │ < 24 hours    │ Non-critical  │ Next sprint       │
-│              │               │ bug           │                   │
-│              │               │ Performance   │                   │
-├──────────────┼───────────────┼───────────────┼───────────────────┤
-│ P3 LOW       │ < 1 week      │ UI glitch     │ Backlog           │
-│              │               │ Minor UX      │                   │
-│              │               │ Edge case     │                   │
-└──────────────┴───────────────┴───────────────┴───────────────────┘
-```
-
----
-
-**Violation of any of these points is grounds for Pull Request rejection or rework requirement in the current session.**
+[↑ Back to Navigation](#-quick-navigation)
 
 ---
 
@@ -2041,6 +2078,15 @@ if (type === 'xyz123') { }  // What is xyz123?
 ### 36.1. The "No Dead Code" Policy (Zero Tolerance)
 
 **We do not store trash.** Code must be alive or deleted.
+
+> [!TIP]
+> **Git Prerequisite:** This policy requires developers to be comfortable with Git.
+> Before deleting code, ensure you know how to:
+> - `git log -p -- file.ts` — view file history
+> - `git show <commit>:file.ts` — view old version
+> - `git stash` / `git stash pop` — temporary storage
+> 
+> Git IS your backup. You don't need commented code "just in case".
 
 - **Prohibited:** Commented-out blocks of code (unless it's a specific example). Git is your history; you don't need to keep old chunks "just in case".
 - **Prohibited:** Unused interfaces, variables, or imports.
@@ -2096,6 +2142,14 @@ const status = user.isActive ? 'Active' : 'Inactive';
 - If you see a variable named `x` — rename it to `timeoutMs`.
 - If you see dead code — delete it.
 - **Small, constant improvements prevent technical debt accumulation.**
+
+> [!WARNING]
+> **Scope Limitation:** Boy Scout improvements MUST be limited to:
+> - Same file you're already modifying
+> - Max 10-15 lines of cleanup per PR
+> - Trivial changes only (typos, naming, dead code)
+> 
+> **Large refactors require a separate PR** to keep Code Review focused.
 
 ---
 
@@ -3946,7 +4000,306 @@ export class ChatService {
 
 ---
 
-*Document updated: 2026-01-28*  
-*Version: 2.5.0*  
+[↑ Back to Navigation](#-quick-navigation)
+
+---
+
+## 61. Security Deep Dive (CRITICAL)
+
+> [!CAUTION]
+> **Security violations are P0 CRITICAL issues.** Any security flaw leads to immediate PR rejection and mandatory code review.
+
+### 61.1. Hardware-Bound Encryption (HBE)
+
+All sensitive data MUST be encrypted using machine-specific keys.
+
+**Algorithm:**
+1. **Entropy Source A**: `machine_uid::get()` (Motherboard Serial / BIOS UUID)
+2. **Entropy Source B**: Static Salt (compiled into binary)
+3. **KDF**: `SHA256(Source A + SALT + Source A)` → 32-byte Key
+4. **Cipher**: `AES-256-GCM` (Authenticated Encryption)
+   - Nonce: Random 96-bit per write
+   - Tag: 128-bit authentication tag
+
+```rust
+// src-tauri/src/services/secure_storage.rs
+pub fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, AppError> {
+    let key = derive_machine_key()?;
+    let nonce = generate_random_nonce();
+    
+    let cipher = Aes256Gcm::new(&key);
+    let ciphertext = cipher.encrypt(&nonce, plaintext)
+        .map_err(|_| AppError::CryptoError("Encryption failed"))?;
+    
+    // Format: nonce || ciphertext (tag is appended by AES-GCM)
+    Ok([nonce.as_slice(), &ciphertext].concat())
+}
+```
+
+### 61.2. Memory Hygiene (Zero-Trace Policy)
+
+**Mandatory for secrets:**
+
+```rust
+// ✅ Use zeroize for sensitive data
+use zeroize::Zeroize;
+
+struct ApiKey(String);
+
+impl Drop for ApiKey {
+    fn drop(&mut self) {
+        self.0.zeroize(); // Overwrites memory with zeros
+    }
+}
+
+// ✅ Secrets exist only during request lifecycle
+async fn make_api_call(encrypted_key: &[u8]) -> Result<Response, AppError> {
+    let key = decrypt(encrypted_key)?; // Decrypted only here
+    let response = client.post(url).bearer_auth(&key).send().await?;
+    // key is dropped and zeroized after this scope
+    Ok(response)
+}
+```
+
+**Prohibited:**
+- ❌ Storing decrypted secrets in static/global variables
+- ❌ Logging API keys or tokens (even partially)
+- ❌ Writing secrets to temp files or swap
+
+### 61.3. IPC Security
+
+**Tauri Capability Allowlist:**
+
+```json
+// src-tauri/capabilities/default.json
+{
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "window:allow-minimize",
+    "window:allow-close",
+    // NEVER add: "shell:allow-execute", "fs:allow-write-all"
+  ]
+}
+```
+
+**Command Validation:**
+
+```rust
+#[tauri::command]
+pub fn save_secure_key(service: String, key: String) -> Result<(), AppError> {
+    // ✅ Validate service name (prevent injection)
+    if !service.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return Err(AppError::Validation("Invalid service name".into()));
+    }
+    
+    // ✅ Validate key length
+    if key.len() > 1024 {
+        return Err(AppError::Validation("Key too long".into()));
+    }
+    
+    secure_storage::save(&service, &key)
+}
+```
+
+### 61.4. Frontend Security
+
+**XSS Prevention Matrix:**
+
+| Method | User Content | Safe |
+|--------|--------------|------|
+| `textContent` | Any | ✅ Always |
+| `innerHTML` + DOMPurify | HTML | ✅ With config |
+| `innerHTML` | Any | ❌ NEVER |
+| `eval()` | Any | ❌ NEVER |
+| `new Function()` | Any | ❌ NEVER |
+
+```typescript
+// ✅ Safe HTML rendering
+import DOMPurify from 'dompurify';
+
+const config = {
+    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'code', 'pre'],
+    ALLOWED_ATTR: ['href', 'class'],
+    ALLOW_DATA_ATTR: false,
+};
+
+element.innerHTML = DOMPurify.sanitize(userHtml, config);
+```
+
+### 61.5. API Key Protection
+
+**Lifecycle:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    API KEY LIFECYCLE                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│   User Input ──► Frontend ──► Tauri IPC ──► Rust Backend    │
+│                     │                           │            │
+│                     ▼                           ▼            │
+│              NEVER store             HBE Encrypt + Save     │
+│              in localStorage         to secure.enc          │
+│                                                              │
+│   API Call: Decrypt ──► Use ──► Zeroize ──► Drop            │
+│             (in RAM)    (HTTP)   (memory)   (scope end)     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 61.6. Network Security
+
+```typescript
+// ✅ HTTPS only for external APIs
+const ALLOWED_SCHEMES = ['https:'];
+
+function validateUrl(url: string): boolean {
+    try {
+        const parsed = new URL(url);
+        return ALLOWED_SCHEMES.includes(parsed.protocol);
+    } catch {
+        return false;
+    }
+}
+
+// ✅ Timeout and abort for all network requests
+const controller = new AbortController();
+const timeout = setTimeout(() => controller.abort(), 30000);
+
+try {
+    const response = await fetch(url, { signal: controller.signal });
+} finally {
+    clearTimeout(timeout);
+}
+```
+
+### 61.7. Security Audit Checklist
+
+**Before every release:**
+
+- [ ] **Secrets:** No hardcoded API keys, tokens, passwords
+- [ ] **Logging:** No sensitive data in console.log/error
+- [ ] **Storage:** All secrets use HBE (secure_storage.rs)
+- [ ] **XSS:** All user content sanitized with DOMPurify
+- [ ] **IPC:** New commands added to capabilities allowlist
+- [ ] **Deps:** No known vulnerabilities (`npm audit`, `cargo audit`)
+- [ ] **Memory:** Secrets zeroized after use (Rust: `zeroize` crate)
+- [ ] **Network:** HTTPS-only, proper timeouts, no CORS wildcards
+
+---
+
+[↑ Back to Navigation](#-quick-navigation)
+
+---
+
+## Appendix A: Quick Reference Card
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       AXELATE QUICK REF                      │
+├─────────────────────────────────────────────────────────────┤
+│ NAMING                                                       │
+│   Classes:     PascalCase        (AppUI, EventBus)          │
+│   Functions:   camelCase         (showToast, handleClick)   │
+│   Constants:   SCREAMING_SNAKE   (MAX_RETRIES, GPT_MODELS)  │
+│   Private:     _prefix           (_ensureContainer)         │
+│   Boolean:     is/has/should     (isValid, hasAccess)       │
+│   Files:       PascalCase.ts     (EventBus.ts, AppUI.ts)    │
+│   CSS:         kebab-case        (toast-container)          │
+├─────────────────────────────────────────────────────────────┤
+│ COMMITS                                                      │
+│   feat(scope): add new feature                              │
+│   fix(scope): fix bug                                       │
+│   refactor(scope): restructure code                         │
+│   perf(scope): improve performance                          │
+│   docs(scope): update documentation                         │
+├─────────────────────────────────────────────────────────────┤
+│ LOGGING                                                      │
+│   console.debug('[Module] Debug info');                     │
+│   console.log('[Module] Info message');                     │
+│   console.warn('[Module] Warning');                         │
+│   console.error('[Module] Error:', err);                    │
+├─────────────────────────────────────────────────────────────┤
+│ CSS VARIABLES                                                │
+│   Colors:   --primary, --surface, --text-primary            │
+│   Spacing:  --spacing-sm, --spacing-md, --spacing-lg        │
+│   Radius:   --radius-sm, --radius-md, --radius-lg           │
+├─────────────────────────────────────────────────────────────┤
+│ ANIMATION                                                    │
+│   Micro:     100-200ms   ease-out                           │
+│   UI:        200-300ms   ease-in-out                        │
+│   Page:      300-500ms   cubic-bezier(0.4, 0, 0.2, 1)      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Appendix B: EventBus Event Catalog
+
+### Navigation Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `page:change` | `{ pageId: string; previousPageId?: string }` | Page navigation |
+| `page:ready` | `{ pageId: string }` | Page fully loaded |
+
+### Module Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `module:download:start` | `{ moduleId: string; url: string }` | Download started |
+| `module:download:progress` | `{ moduleId: string; percent: number }` | Progress update |
+| `module:download:complete` | `{ moduleId: string }` | Download finished |
+| `module:download:error` | `{ moduleId: string; error: string }` | Download failed |
+
+### Window Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `window:minimize` | `void` | Window minimized |
+| `window:maximize` | `void` | Window maximized |
+| `window:close` | `void` | Window closing |
+| `window:focus` | `void` | Window focused |
+
+### Error Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `error:global` | `{ error: Error; context?: string }` | Unhandled error |
+| `error:network` | `{ url: string; status: number }` | Network error |
+
+---
+
+## Appendix C: Severity Matrix
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                       ISSUE SEVERITY MATRIX                       │
+├──────────────┬───────────────┬───────────────┬───────────────────┤
+│   Severity   │   Response    │   Examples    │   Action          │
+├──────────────┼───────────────┼───────────────┼───────────────────┤
+│ P0 CRITICAL  │ < 1 hour      │ App crash     │ Hotfix + rollback │
+│              │               │ Security vuln │ All hands         │
+├──────────────┼───────────────┼───────────────┼───────────────────┤
+│ P1 HIGH      │ < 4 hours     │ Core feature  │ Same-day fix      │
+│              │               │ Memory leak   │ Priority review   │
+├──────────────┼───────────────┼───────────────┼───────────────────┤
+│ P2 MEDIUM    │ < 24 hours    │ Non-critical  │ Next sprint       │
+│              │               │ Performance   │                   │
+├──────────────┼───────────────┼───────────────┼───────────────────┤
+│ P3 LOW       │ < 1 week      │ UI glitch     │ Backlog           │
+│              │               │ Edge case     │                   │
+└──────────────┴───────────────┴───────────────┴───────────────────┘
+```
+
+---
+
+**Violation of any of these points is grounds for Pull Request rejection.**
+
+---
+
+*Document updated: 2026-01-30*  
+*Version: 2.6.0*  
 *Maintainer: Axelate Team*  
-*Total Sections: 60 + 3 Appendices*
+*Total Sections: 61 + 3 Appendices*
