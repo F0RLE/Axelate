@@ -54,6 +54,12 @@ jobs:
           cd src
           npm run test
 
+      - name: Security Audit (npm)
+        run: |
+          cd src
+          npm audit --audit-level=moderate
+        continue-on-error: true  # Don't fail CI, but report issues
+
   check-backend:
     name: Backend Strict Check
     runs-on: windows-latest
@@ -86,3 +92,10 @@ jobs:
         run: |
           cd src-tauri
           cargo test --verbose
+
+      - name: Security Audit (Rust)
+        run: |
+          cargo install cargo-audit --quiet
+          cd src-tauri
+          cargo audit
+        continue-on-error: true  # Don't fail CI, but report issues
