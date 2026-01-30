@@ -9,9 +9,7 @@ pub async fn download_module(
     repo_url: String,
     expected_hash: Option<String>,
 ) -> Result<(), AppError> {
-    downloader::download_module(app, module_id, repo_url, expected_hash)
-        .await
-        .map_err(|e| AppError::Internal(e))
+    downloader::download_module(app, module_id, repo_url, expected_hash).await
 }
 
 #[tauri::command]
@@ -21,7 +19,7 @@ pub fn check_module_installed(module_id: String) -> Result<bool, AppError> {
 
 #[tauri::command]
 pub fn get_module_path(module_id: String) -> Result<String, AppError> {
-    downloader::validate_module_id(&module_id).map_err(|e| AppError::Validation(e.to_string()))?;
+    downloader::validate_module_id(&module_id)?;
 
     Ok(downloader::get_module_path(&module_id)
         .to_string_lossy()
@@ -30,12 +28,12 @@ pub fn get_module_path(module_id: String) -> Result<String, AppError> {
 
 #[tauri::command]
 pub fn delete_module(module_id: String) -> Result<(), AppError> {
-    downloader::delete_module(&module_id).map_err(|e| AppError::Internal(e))
+    downloader::delete_module(&module_id)
 }
 
 #[tauri::command]
 pub async fn list_module_files(module_id: String) -> Result<Vec<String>, AppError> {
-    downloader::validate_module_id(&module_id).map_err(|e| AppError::Validation(e.to_string()))?;
+    downloader::validate_module_id(&module_id)?;
 
     let path = downloader::get_module_path(&module_id);
     if !path.exists() {

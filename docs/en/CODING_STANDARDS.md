@@ -92,6 +92,12 @@ src/
 - Circular dependencies between modules are prohibited.
 - Module's public API is exported through `index.ts`.
 
+### 3.3. Lightweight Module Pattern
+- **Definition:** Modules must be loosely coupled and decentralized.
+- **Independence:** A module should NOT strictly depend on another module's internal implementation. Use `Core` services or `EventBus` for dependencies.
+- **Lazy Loading:** Modules should support lazy initialization to keep startup time minimal.
+- **No Framework Lock-in:** Avoid binding business logic to specific UI frameworks (React/Vue). Keep logic in `services/` (Vanilla TS).
+
 ---
 
 ## 4. Frontend (TypeScript / High Performance)
@@ -233,6 +239,12 @@ async function loadData(): Promise<Data | null> {
 loadData().catch(console.error);
 ```
 
+### 4.6. Type Synchronization Policy
+- **Backend-First Truth:** The Rust Backend Struct is the Source of Truth.
+- **Manual Sync (for now):** When changing a Rust struct (e.g., `AppSettings`), immediately update the corresponding TypeScript interface (`IAppSettings`).
+- **No "Any" Bridges:** Do not type invoke results as `any`. Always create a matching interface.
+- **Validation:** Frontend should validate received data structure if trust is low (e.g., external plugins).
+
 ---
 
 ## 5. Backend (Rust / Safety & Concurrency)
@@ -260,6 +272,18 @@ loadData().catch(console.error);
 - Use Clippy as law: `cargo clippy -- -D warnings`
 - **Newtype Pattern:** Wrapper types instead of primitives (`struct UserId(String)`).
 - Documentation via `///` for public APIs.
+
+### 5.4. Error Handling Standard (Strict)
+- **Use `AppError`:** All internal Service methods MUST return `Result<T, AppError>`.
+- **No Strings:** Returning `Result<T, String>` is PROHIBITED in Services. String errors make handling impossible.
+- **Mapping:** Explicitly map external errors to `AppError` variants:
+  ```rust
+  // ❌ Bad
+  File::open(path).map_err(|e| e.to_string())?
+  
+  // ✅ Good
+  File::open(path).map_err(|e| AppError::Io(e))?
+  ```
 
 ---
 

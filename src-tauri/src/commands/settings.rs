@@ -18,6 +18,6 @@ pub async fn save_setting(key: String, value: String) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub fn get_system_language() -> String {
-    settings::get_language()
+pub fn get_system_language() -> Result<String, AppError> {
+    Ok(settings::get_language())
 }

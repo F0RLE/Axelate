@@ -15,9 +15,7 @@
 
 ---
 
----
-
-## Версия 0.1.x (Public Beta)
+## Версия 0.1.4 (Active Development)
 
 > **Конфиденциальное уведомление**<br>Данный документ содержит глубокие внутренние детали архитектуры Axelate. Предназначен для ведущих инженеров. Несанкционированное распространение запрещено.
 
@@ -180,7 +178,6 @@ Axelate/
 
 <div align="center">
   <br>
-  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Сообщить_об_ошибке-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Сообщить об ошибке" /></a>
   <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Сообщить_об_ошибке-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Сообщить об ошибке" /></a>
   &nbsp;
   <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Предложить_функцию-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Предложить функцию" /></a>

@@ -91,7 +91,7 @@ pub async fn control(
 ) -> Result<ControlResponse, AppError> {
     // Handle Uninstall directly
     if let ModuleAction::Uninstall = action {
-        downloader::delete_module(module_id).map_err(AppError::Internal)?;
+        downloader::delete_module(module_id)?;
         return Ok(ControlResponse {
             success: true,
             message: format!("Module {} uninstalled successfully", module_id),
@@ -100,7 +100,7 @@ pub async fn control(
     }
 
     // 0. Validate ID
-    downloader::validate_module_id(module_id).map_err(AppError::Validation)?;
+    downloader::validate_module_id(module_id)?;
 
     // 1. Resolve path
     let module_path = downloader::get_module_path(module_id);

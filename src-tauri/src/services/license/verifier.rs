@@ -1,5 +1,6 @@
 use super::storage;
 use super::types::{LicenseInfo, LicenseStatus};
+use crate::errors::AppError;
 
 pub fn verify() -> LicenseStatus {
     // TEMPORARY: Licensing disabled as per user request
@@ -23,13 +24,15 @@ pub fn verify_license_info(info: &LicenseInfo) -> LicenseStatus {
     }
 }
 
-pub fn activate(key: &str, email: Option<String>) -> Result<LicenseStatus, String> {
+pub fn activate(key: &str, email: Option<String>) -> Result<LicenseStatus, AppError> {
     let status = if key.starts_with("PRO-") {
         LicenseStatus::Pro
     } else if key.starts_with("ENT-") {
         LicenseStatus::Enterprise
     } else {
-        return Err("Invalid license key format".to_string());
+        return Err(AppError::Validation(
+            "Invalid license key format".to_string(),
+        ));
     };
 
     let info = LicenseInfo {
@@ -43,7 +46,7 @@ pub fn activate(key: &str, email: Option<String>) -> Result<LicenseStatus, Strin
     Ok(status)
 }
 
-pub fn deactivate() -> Result<(), String> {
+pub fn deactivate() -> Result<(), AppError> {
     storage::clear_license()
 }
 

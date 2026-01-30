@@ -1,3 +1,4 @@
+use crate::errors::AppError;
 use crate::utils::paths::{MODULES_DIR, TEMP_DIR};
 use futures_util::StreamExt;
 use std::fs;
@@ -19,21 +20,25 @@ pub struct DownloadProgress {
     pub total: u64,
 }
 
-pub fn validate_module_id(module_id: &str) -> Result<(), String> {
+pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
     if module_id.is_empty() {
-        return Err("Module ID cannot be empty".to_string());
+        return Err(AppError::Validation(
+            "Module ID cannot be empty".to_string(),
+        ));
     }
     if !module_id
         .chars()
         .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     {
-        return Err(
+        return Err(AppError::Validation(
             "Module ID contains invalid characters. Only alphanumeric, '-', and '_' are allowed."
                 .to_string(),
-        );
+        ));
     }
     if module_id.contains("..") {
-        return Err("Module ID cannot contain directory traversal patterns".to_string());
+        return Err(AppError::Validation(
+            "Module ID cannot contain directory traversal patterns".to_string(),
+        ));
     }
     Ok(())
 }
@@ -51,12 +56,12 @@ pub fn get_module_path(module_id: &str) -> PathBuf {
     MODULES_DIR.join(module_id)
 }
 
-pub fn delete_module(module_id: &str) -> Result<(), String> {
+pub fn delete_module(module_id: &str) -> Result<(), AppError> {
     validate_module_id(module_id)?;
 
     let module_path = MODULES_DIR.join(module_id);
     if module_path.exists() {
-        fs::remove_dir_all(&module_path).map_err(|e| format!("Failed to delete module: {}", e))?;
+        fs::remove_dir_all(&module_path).map_err(|e| AppError::Io(e))?;
         crate::services::logs::add_log(
             &format!("Module {} deleted", module_id),
             "Downloader",
@@ -64,7 +69,7 @@ pub fn delete_module(module_id: &str) -> Result<(), String> {
         );
         Ok(())
     } else {
-        Err("Module not found".to_string())
+        Err(AppError::NotFound("Module not found".to_string()))
     }
 }
 
@@ -73,7 +78,7 @@ pub async fn download_module(
     module_id: String,
     repo_url: String,
     expected_hash: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     validate_module_id(&module_id)?;
 
     // 1. Transform GitHub URL to ZIP URL if needed
@@ -91,9 +96,9 @@ pub async fn download_module(
         let _ = tokio::fs::remove_file(&zip_path).await;
     }
 
-    if let Err(e) = result {
-        emit_progress(&app, &module_id, "error", &e, 0.0, 0, 0);
-        return Err(e);
+    if let Err(e) = &result {
+        emit_progress(&app, &module_id, "error", &e.to_string(), 0.0, 0, 0);
+        return Err(result.unwrap_err());
     }
 
     emit_progress(&app, &module_id, "complete", "Success", 1.0, 0, 0);
@@ -114,7 +119,7 @@ async fn download_and_extract_internal(
     download_url: &str,
     zip_path: &std::path::Path,
     expected_hash: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     emit_progress(app, module_id, "connecting", "Connecting...", 0.0, 0, 0);
 
     let mut client_builder = reqwest::Client::builder()
@@ -140,7 +145,7 @@ async fn download_and_extract_internal(
 
     let client = client_builder
         .build()
-        .map_err(|e| format!("Client error: {}", e))?;
+        .map_err(|e| AppError::External(format!("Client error: {}", e)))?;
 
     let mut response;
 
@@ -155,7 +160,7 @@ async fn download_and_extract_internal(
             .get(&main_url)
             .send()
             .await
-            .map_err(|e| format!("Failed to connect: {}", e))?;
+            .map_err(|e| AppError::External(format!("Failed to connect: {}", e)))?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             log::info!("main branch not found, trying master: {}", master_url);
@@ -163,35 +168,36 @@ async fn download_and_extract_internal(
                 .get(&master_url)
                 .send()
                 .await
-                .map_err(|e| format!("Failed to connect: {}", e))?;
+                .map_err(|e| AppError::External(format!("Failed to connect: {}", e)))?;
         }
     } else {
         response = client
             .get(download_url)
             .send()
             .await
-            .map_err(|e| format!("Failed to connect: {}", e))?;
+            .map_err(|e| AppError::External(format!("Failed to connect: {}", e)))?;
     }
 
     if !response.status().is_success() {
-        return Err(format!("Download failed: {}", response.status()));
+        return Err(AppError::External(format!(
+            "Download failed: {}",
+            response.status()
+        )));
     }
 
     let total_size = response.content_length().unwrap_or(0);
     let mut downloaded: u64 = 0;
     let mut stream = response.bytes_stream();
 
-    fs::create_dir_all(&*TEMP_DIR).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&*TEMP_DIR)?;
 
     let mut file = tokio::fs::File::create(zip_path)
         .await
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+        .map_err(|e| AppError::Io(e))?;
 
     while let Some(item) = stream.next().await {
-        let chunk = item.map_err(|e| format!("Stream error: {}", e))?;
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| format!("Write error: {}", e))?;
+        let chunk = item.map_err(|e| AppError::External(format!("Stream error: {}", e)))?;
+        file.write_all(&chunk).await.map_err(|e| AppError::Io(e))?;
         downloaded += chunk.len() as u64;
 
         if total_size > 0 {
@@ -239,13 +245,14 @@ async fn download_and_extract_internal(
             Ok::<String, String>(hex::encode(hasher.finalize()))
         })
         .await
-        .map_err(|e| e.to_string())??;
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .map_err(|e| AppError::Internal(e))?;
 
         if computed_hash.to_lowercase() != expected_hash.to_lowercase() {
-            return Err(format!(
+            return Err(AppError::Validation(format!(
                 "Integrity check failed. Expected {}, got {}",
                 expected_hash, computed_hash
-            ));
+            )));
         }
 
         log::info!("Integrity verified for {}", module_id);
@@ -258,7 +265,7 @@ async fn download_and_extract_internal(
     if final_path.exists() {
         fs::remove_dir_all(&final_path).ok();
     }
-    fs::create_dir_all(&final_path).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&final_path).map_err(|e| AppError::Io(e))?;
 
     let app_handle = app.clone();
     let mid = module_id.to_string();
@@ -361,7 +368,8 @@ async fn download_and_extract_internal(
         Ok::<(), String>(())
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {}", e))??;
+    .map_err(|e| AppError::Internal(format!("Blocking task failed: {}", e)))?
+    .map_err(|e| AppError::Internal(format!("Extraction failed: {}", e)))?;
 
     Ok(())
 }
@@ -392,7 +400,7 @@ pub fn check_module_installed(module_id: String) -> bool {
     is_module_installed(&module_id)
 }
 
-pub fn list_module_files(_module_id: String) -> Result<Vec<String>, String> {
+pub fn list_module_files(_module_id: String) -> Result<Vec<String>, AppError> {
     // Basic stub or implementation
     Ok(vec![])
 }

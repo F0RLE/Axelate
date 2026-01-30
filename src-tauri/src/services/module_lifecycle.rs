@@ -1,15 +1,16 @@
+use crate::errors::AppError;
 use crate::models::modules::ConfigField;
 use std::collections::HashMap;
 
 pub const CURRENT_API_VERSION: &str = "1";
 
 pub trait ModuleLifecycle {
-    fn init(&mut self) -> Result<(), String> {
+    fn init(&mut self) -> Result<(), AppError> {
         Ok(())
     }
-    fn start(&mut self) -> Result<(), String>;
-    fn stop(&mut self) -> Result<(), String>;
-    fn dispose(&mut self) -> Result<(), String> {
+    fn start(&mut self) -> Result<(), AppError>;
+    fn stop(&mut self) -> Result<(), AppError>;
+    fn dispose(&mut self) -> Result<(), AppError> {
         self.stop()
     }
     fn health_check(&self) -> ModuleHealth {
@@ -51,11 +52,11 @@ pub struct LifecycleScripts {
     pub health: Option<String>,
 }
 
-pub fn load_manifest(module_dir: &std::path::Path) -> Result<ModuleManifest, String> {
+pub fn load_manifest(module_dir: &std::path::Path) -> Result<ModuleManifest, AppError> {
     let manifest_path = module_dir.join("module.json");
     if !manifest_path.exists() {
-        return Err("Manifest not found".to_string());
+        return Err(AppError::NotFound("Manifest not found".to_string()));
     }
-    let content = std::fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&content).map_err(|e| e.to_string())
+    let content = std::fs::read_to_string(&manifest_path).map_err(|e| AppError::Io(e))?;
+    serde_json::from_str(&content).map_err(|e| AppError::Serialization(e))
 }

@@ -9,7 +9,7 @@
   <br />
 
   <!-- Primary Call to Action -->
-  <a href="https://github.com/Axelate/core/releases">
+  <a href="https://github.com/F0RLE/Axelate/releases">
     <img src="https://img.shields.io/badge/下载_Axelate-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
   </a>
 
@@ -24,7 +24,7 @@
     &nbsp;
     <a href="../../docs/en/architecture.md"><img src="https://img.shields.io/badge/技术文档-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
     &nbsp;
-    <img src="https://img.shields.io/badge/v0.1.1-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/>
+    <img src="https://img.shields.io/badge/v0.1.4-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/>
   </p>
 
   <br />
@@ -87,13 +87,13 @@ Axelate 基于 "Pass-Through" 架构构建，赋予前端模块直接访问 Rust
 
 <br>
 
-  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/报告_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/报告_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
   &nbsp;
-  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/请求功能-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/请求功能-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
   &nbsp;
   <a href="../../SECURITY.md"><img src="https://img.shields.io/badge/安全策略-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
   <p>
-    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.1-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
+    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.4-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
     &nbsp;
     <img src="https://img.shields.io/badge/状态-公测版-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
     &nbsp;
@@ -103,7 +103,7 @@ Axelate 基于 "Pass-Through" 架构构建，赋予前端模块直接访问 Rust
 </div>
 
 > [!IMPORTANT]
-> **Axelate 目前处于公开测试阶段 (v0.1.1)。**
+> **Axelate 目前处于公开测试阶段 (v0.1.4)。**
 >
 > 这是正式发布前的软件版本。功能可能具有实验性，API 随时可能更改，恕不另行通知。目前尚无稳定版本。
 

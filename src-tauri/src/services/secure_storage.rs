@@ -16,10 +16,12 @@ pub struct SecureData {
 
 pub struct SecureStorage;
 
+use crate::errors::AppError;
+
 impl SecureStorage {
-    fn get_store_path() -> Result<PathBuf, String> {
-        let app_data =
-            std::env::var("APPDATA").map_err(|_| "Could not find APPDATA directory".to_string())?;
+    fn get_store_path() -> Result<PathBuf, AppError> {
+        let app_data = std::env::var("APPDATA")
+            .map_err(|_| AppError::Config("Could not find APPDATA directory".to_string()))?;
 
         let mut path = PathBuf::from(app_data);
         path.push("AxelateData");
@@ -27,8 +29,7 @@ impl SecureStorage {
         path.push("Configs");
 
         if !path.exists() {
-            fs::create_dir_all(&path)
-                .map_err(|e| format!("Failed to create config directory: {}", e))?;
+            fs::create_dir_all(&path).map_err(|e| AppError::Io(e))?;
         }
 
         path.push("secure.enc");
@@ -37,9 +38,9 @@ impl SecureStorage {
 
     /// Derives a 32-byte key from the machine UID and a static pepper.
     /// This binds the encryption to the current device.
-    fn get_encryption_key() -> Result<[u8; 32], String> {
-        let machine_id =
-            machine_uid::get().map_err(|e| format!("Failed to get machine ID: {}", e))?;
+    fn get_encryption_key() -> Result<[u8; 32], AppError> {
+        let machine_id = machine_uid::get()
+            .map_err(|e| AppError::External(format!("Failed to get machine ID: {}", e)))?;
 
         // "Pepper" to ensure the key isn't just the raw ID
         let input = format!("AXELATE_SECURE_SALT_{}", machine_id);
@@ -54,7 +55,7 @@ impl SecureStorage {
         Ok(key)
     }
 
-    pub fn save_key(service: String, value: String) -> Result<(), String> {
+    pub fn save_key(service: String, value: String) -> Result<(), AppError> {
         // 1. Load existing data
         let mut data = Self::load_data().unwrap_or(SecureData {
             keys: HashMap::new(),
@@ -64,8 +65,7 @@ impl SecureStorage {
         data.keys.insert(service, value);
 
         // 3. Serialize to JSON
-        let json_bytes =
-            serde_json::to_vec(&data).map_err(|e| format!("Serialization error: {}", e))?;
+        let json_bytes = serde_json::to_vec(&data).map_err(|e| AppError::Serialization(e))?;
 
         // 4. Encrypt
         let key_bytes = Self::get_encryption_key()?;
@@ -78,7 +78,7 @@ impl SecureStorage {
 
         let ciphertext = cipher
             .encrypt(nonce, json_bytes.as_ref())
-            .map_err(|e| format!("Encryption failure: {}", e))?;
+            .map_err(|e| AppError::External(format!("Encryption failure: {}", e)))?;
 
         // 5. Save [Nonce + Ciphertext]
         let mut final_payload = Vec::new();
@@ -86,17 +86,17 @@ impl SecureStorage {
         final_payload.extend_from_slice(&ciphertext);
 
         let path = Self::get_store_path()?;
-        fs::write(&path, final_payload).map_err(|e| format!("File write error: {}", e))?;
+        fs::write(&path, final_payload).map_err(|e| AppError::Io(e))?;
 
         Ok(())
     }
 
-    pub fn get_key(service: String) -> Result<Option<String>, String> {
+    pub fn get_key(service: String) -> Result<Option<String>, AppError> {
         let data = Self::load_data()?;
         Ok(data.keys.get(&service).cloned())
     }
 
-    fn load_data() -> Result<SecureData, String> {
+    fn load_data() -> Result<SecureData, AppError> {
         let path = Self::get_store_path()?;
         if !path.exists() {
             return Ok(SecureData {
@@ -104,10 +104,12 @@ impl SecureStorage {
             });
         }
 
-        let file_content = fs::read(&path).map_err(|e| format!("File read error: {}", e))?;
+        let file_content = fs::read(&path).map_err(|e| AppError::Io(e))?;
 
         if file_content.len() < 12 {
-            return Err("File corrupted (too short)".to_string());
+            return Err(AppError::Validation(
+                "File corrupted (too short)".to_string(),
+            ));
         }
 
         // Split Nonce and Ciphertext
@@ -119,10 +121,10 @@ impl SecureStorage {
 
         let plaintext = cipher
             .decrypt(nonce, ciphertext)
-            .map_err(|_| "Decryption failed (wrong machine or corrupted data)".to_string())?;
+            .map_err(|_| AppError::External("Decryption failed".to_string()))?;
 
-        let data: SecureData = serde_json::from_slice(&plaintext)
-            .map_err(|e| format!("JSON deserialization error: {}", e))?;
+        let data: SecureData =
+            serde_json::from_slice(&plaintext).map_err(|e| AppError::Serialization(e))?;
 
         Ok(data)
     }

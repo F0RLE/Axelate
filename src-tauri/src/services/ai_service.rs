@@ -55,7 +55,7 @@ struct ApiProviderConfig {
 pub async fn send_chat_message(
     window: tauri::Window,
     request: ChatRequest,
-) -> Result<ChatResponse, String> {
+) -> Result<ChatResponse, crate::errors::AppError> {
     // 1. Resolve provider configuration and endpoint base URL.
     let mut base_url = "https://api.openai.com/v1".to_string();
     let mut provider_type = "openai".to_string();
@@ -71,20 +71,26 @@ pub async fn send_chat_message(
     }
 
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
-    if providers_path.exists()
-        && let Ok(content) = std::fs::read_to_string(&providers_path)
-        && let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&content)
-        && let Some(p) = providers.iter().find(|p| p.id == request.provider)
-    {
-        provider_type = p.provider_type.clone();
-        if let Some(url) = &p.base_url {
-            base_url = url.clone();
+    if providers_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(&providers_path) {
+            if let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&content) {
+                if let Some(p) = providers.iter().find(|p| p.id == request.provider) {
+                    provider_type = p.provider_type.clone();
+                    if let Some(url) = &p.base_url {
+                        base_url = url.clone();
+                    }
+                }
+            }
         }
     }
 
     match provider_type.as_str() {
-        "openai" => handle_openai(window, request, &base_url).await,
-        "gemini" => handle_gemini(window, request).await,
+        "openai" => handle_openai(window, request, &base_url)
+            .await
+            .map_err(|e| crate::errors::AppError::Internal(e)),
+        "gemini" => handle_gemini(window, request)
+            .await
+            .map_err(|e| crate::errors::AppError::Internal(e)),
 
         _ => Ok(ChatResponse {
             ok: false,

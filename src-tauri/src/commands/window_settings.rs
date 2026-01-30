@@ -5,8 +5,8 @@ use crate::services::window_settings::{self, WindowSettings};
 use tauri::Manager;
 
 #[tauri::command]
-pub fn get_window_settings() -> WindowSettings {
-    window_settings::load_window_settings()
+pub fn get_window_settings() -> Result<WindowSettings, AppError> {
+    Ok(window_settings::load_window_settings())
 }
 
 #[tauri::command]
@@ -44,14 +44,16 @@ pub fn set_webview_zoom(app: tauri::AppHandle, zoom: f64) -> Result<(), AppError
 
 /// Get current WebView zoom level
 #[tauri::command]
-pub fn get_webview_zoom(app: tauri::AppHandle) -> f64 {
+pub fn get_webview_zoom(app: tauri::AppHandle) -> Result<f64, AppError> {
     // Load from saved settings
     let settings = window_settings::load_window_settings();
 
     // Apply saved zoom on get (in case it wasn't applied)
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_zoom(settings.zoom_level);
+        window
+            .set_zoom(settings.zoom_level)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
     }
 
-    settings.zoom_level
+    Ok(settings.zoom_level)
 }

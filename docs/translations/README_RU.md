@@ -9,7 +9,7 @@
   <br />
 
   <!-- Primary Call to Action -->
-  <a href="https://github.com/Axelate/core/releases">
+  <a href="https://github.com/F0RLE/Axelate/releases">
     <img src="https://img.shields.io/badge/Скачать_Платформу-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
   </a>
 
@@ -22,7 +22,7 @@
     &nbsp;
     <a href="README_CN.md"><img src="https://img.shields.io/badge/Chinese-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Chinese"/></a>
     &nbsp;
-    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.3-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
+    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.4-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Статус-Публичная_Бета-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
     &nbsp;
@@ -33,7 +33,7 @@
 </div>
 
 > [!IMPORTANT]
-> **Axelate сейчас находится в стадии Публичного Бета-тестирования (v0.1.3 / 0.1.x).**
+> **Axelate сейчас находится в стадии Публичного Бета-тестирования (v0.1.4).**
 >
 > Это предварительная версия программного обеспечения. Функционал может быть экспериментальным, а API могут измениться без уведомления. Стабильных релизов пока нет.
 
@@ -94,9 +94,9 @@ Axelate построен на архитектуре "Pass-Through", дающе�
 
 <br>
 
-  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/Сообщить_о_Баге-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Сообщить_о_Баге-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
   &nbsp;
-  <a href="https://github.com/Axelate/core/issues"><img src="https://img.shields.io/badge/Запросить_Фичу-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Запросить_Фичу-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
   &nbsp;
   <a href="../../SECURITY.md"><img src="https://img.shields.io/badge/Политика_Безопасности-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
 
