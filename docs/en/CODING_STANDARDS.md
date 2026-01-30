@@ -1441,6 +1441,15 @@ async fn get_module_status(module_id: String) -> Result<ModuleStatus, String>
 async fn delete_module(module_id: String) -> Result<(), String>
 ```
 
+### 31.1.5. Type Synchronization Policy (CRITICAL)
+
+Since Tauri v2 does not yet fully enforce type safety across the bridge automatically in this project:
+
+1.  **Single Source of Truth:** The **Rust Struct** is the source of truth.
+2.  **Manual Sync:** Any change to a Rust struct marked with `#[derive(Serialize, Deserialize)]` MUST be immediately reflected in the corresponding TypeScript interface.
+3.  **Validation:** PRs affecting IPC must include a screenshot or statement verifying that frontend types match backend structs.
+4.  **Future:** We aim to integrate `tauri-specta` or `ts-rs` to automate this. Until then, vigilance is mandatory.
+
 **Naming Convention:** `verb_noun` (snake_case)
 - `get_*` — read operations
 - `set_*` — write operations
@@ -2427,6 +2436,35 @@ class ChatController {
 
 - **With Controller:** Complex modules with multiple UI components and services (Chat, Settings)
 - **Without Controller:** Simple modules where Service + UI are sufficient (Debug, Monitoring)
+
+### 41.5. Lightweight Module Pattern (Simplified)
+
+For simple features that do not require complex state management or backend orchestration, you may merge Logic and UI into a single class or use a functional approach to avoid boilerplate.
+
+**Criteria for Use:**
+- No dedicated backend service required (or uses shared Global services).
+- No complex internal state machine.
+- Single UI view/component.
+
+```typescript
+// modules/clock/ClockModule.ts
+export class ClockModule {
+    private _el: HTMLElement | null = null;
+    
+    constructor(private readonly _core: Core) {}
+    
+    init(): void {
+        this._el = document.getElementById('clock-widget');
+        this._startTicker();
+    }
+    
+    private _startTicker(): void {
+        setInterval(() => {
+             if(this._el) this._el.textContent = new Date().toLocaleTimeString();
+        }, 1000);
+    }
+}
+```
 
 ---
 

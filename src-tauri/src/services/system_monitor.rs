@@ -1,12 +1,14 @@
 use once_cell::sync::Lazy;
 
 use nvml_wrapper::Nvml;
+use serde::Deserialize;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::time::Instant;
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
 use tauri::{AppHandle, Emitter};
+use wmi::{COMLibrary, WMIConnection};
 
 use crate::models::{
     CpuStats, DiskStats, GpuStats, NetworkStats, RamStats, SystemStats, VramStats,
@@ -28,6 +30,16 @@ struct Monitor {
     cached_up_rate: f64,
 
     nvml: Option<Nvml>,
+    wmi_con: Option<WMIConnection>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename = "Win32_VideoController")]
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+struct Win32_VideoController {
+    Name: String,
+    AdapterRAM: Option<u64>,
 }
 
 static MONITOR: Lazy<Mutex<Monitor>> = Lazy::new(|| {
@@ -45,6 +57,7 @@ static MONITOR: Lazy<Mutex<Monitor>> = Lazy::new(|| {
         cached_down_rate: 0.0,
         cached_up_rate: 0.0,
 
+        wmi_con: None,
         nvml: None,
     })
 });
@@ -68,6 +81,12 @@ impl Monitor {
         if self.nvml.is_none() {
             self.nvml = Nvml::init().ok();
         }
+        if self.wmi_con.is_none() {
+            let com_lib = COMLibrary::new().ok();
+            if let Some(lib) = com_lib {
+                self.wmi_con = WMIConnection::new(lib).ok();
+            }
+        }
     }
 
     fn drop_resources(&mut self) {
@@ -76,6 +95,7 @@ impl Monitor {
         self.networks = None;
         self.disks = None;
         self.nvml = None;
+        self.wmi_con = None;
     }
 }
 
@@ -242,6 +262,32 @@ pub fn get_stats() -> SystemStats {
             used_gb: bytes_to_gb(used_vram),
             total_gb: bytes_to_gb(total_vram),
         });
+    } else if let Some(wmi) = &monitor.wmi_con {
+        // Fallback to WMI if NVML failed
+        let results: Result<Vec<Win32_VideoController>, _> = wmi.query();
+        if let Ok(controllers) = results {
+            // Find best dedicated GPU (highest VRAM)
+            if let Some(best_gpu) = controllers.iter().max_by_key(|c| c.AdapterRAM.unwrap_or(0)) {
+                let vram_bytes = best_gpu.AdapterRAM.unwrap_or(0);
+
+                // Ony report if name is valid (sometimes WMI returns Basic Display Adapter)
+                if !best_gpu.Name.contains("Microsoft Remote Display Adapter") {
+                    gpu_stats = Some(GpuStats {
+                        usage: 0,       // Not available via standard WMI
+                        memory_used: 0, // Not available
+                        memory_total: vram_bytes,
+                        temp: 0, // Not available
+                        name: best_gpu.Name.clone(),
+                    });
+
+                    vram_stats = Some(VramStats {
+                        percent: 0.0,
+                        used_gb: 0.0,
+                        total_gb: bytes_to_gb(vram_bytes as f64),
+                    });
+                }
+            }
+        }
     }
 
     let total_disk_speed_mb = (read_rate + write_rate) / (1024.0 * 1024.0);

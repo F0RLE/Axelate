@@ -194,6 +194,7 @@ fn get_settings_path() -> std::path::PathBuf {
     crate::utils::paths::CONFIG_DIR.join("user_settings.json")
 }
 
+#[allow(clippy::collapsible_if)]
 fn load_settings_map() -> std::collections::HashMap<String, String> {
     let path = get_settings_path();
     if let Ok(content) = std::fs::read_to_string(path) {

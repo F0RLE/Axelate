@@ -1,3 +1,4 @@
+use crate::errors::AppError;
 use crate::services::downloader;
 use tauri::AppHandle;
 
@@ -7,18 +8,20 @@ pub async fn download_module(
     module_id: String,
     repo_url: String,
     expected_hash: Option<String>,
-) -> Result<(), String> {
-    downloader::download_module(app, module_id, repo_url, expected_hash).await
+) -> Result<(), AppError> {
+    downloader::download_module(app, module_id, repo_url, expected_hash)
+        .await
+        .map_err(|e| AppError::Internal(e))
 }
 
 #[tauri::command]
-pub fn check_module_installed(module_id: String) -> bool {
-    downloader::is_module_installed(&module_id)
+pub fn check_module_installed(module_id: String) -> Result<bool, AppError> {
+    Ok(downloader::is_module_installed(&module_id))
 }
 
 #[tauri::command]
-pub fn get_module_path(module_id: String) -> Result<String, String> {
-    downloader::validate_module_id(&module_id).map_err(|e| e.to_string())?;
+pub fn get_module_path(module_id: String) -> Result<String, AppError> {
+    downloader::validate_module_id(&module_id).map_err(|e| AppError::Validation(e.to_string()))?;
 
     Ok(downloader::get_module_path(&module_id)
         .to_string_lossy()
@@ -26,21 +29,22 @@ pub fn get_module_path(module_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn delete_module(module_id: String) -> Result<(), String> {
-    downloader::delete_module(&module_id)
+pub fn delete_module(module_id: String) -> Result<(), AppError> {
+    downloader::delete_module(&module_id).map_err(|e| AppError::Internal(e))
 }
 
 #[tauri::command]
-pub async fn list_module_files(module_id: String) -> Result<Vec<String>, String> {
-    downloader::validate_module_id(&module_id).map_err(|e| e.to_string())?;
+pub async fn list_module_files(module_id: String) -> Result<Vec<String>, AppError> {
+    downloader::validate_module_id(&module_id).map_err(|e| AppError::Validation(e.to_string()))?;
 
     let path = downloader::get_module_path(&module_id);
     if !path.exists() {
-        return Err("Module directory does not exist".to_string());
+        return Err(AppError::NotFound(
+            "Module directory does not exist".to_string(),
+        ));
     }
 
-    let entries =
-        std::fs::read_dir(path).map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries = std::fs::read_dir(path).map_err(|e| AppError::Io(e))?;
 
     let mut files = Vec::new();
     for entry in entries.flatten() {

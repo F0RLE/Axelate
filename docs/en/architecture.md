@@ -17,7 +17,7 @@
 
 ---
 
-## Version 0.1.x (Public Beta)
+## Version 0.1.4 (Active Development)
 
 > **Proprietary Notice**<br>This document contains deep internal details of the Axelate architecture. Intended for Core Engineers. Unauthorized distribution is prohibited.
 

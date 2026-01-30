@@ -9,15 +9,15 @@
 ---
 
 ## Root Configuration
-- [x] `.editorconfig` (Verified)
+- [ ] `.editorconfig`
 - [ ] `.gitattributes`
-- [x] `.gitignore` (Verified)
-- [x] `CODE_OF_CONDUCT.md` (Verified)
-- [x] `CONTRIBUTING.md` (Verified)
-- [x] `LICENSE` (Verified)
-- [x] `README.md` (Verified)
-- [x] `SECURITY.md` (Verified)
-- [x] `package.json` (Verified)
+- [ ] `.gitignore`
+- [ ] `CODE_OF_CONDUCT.md`
+- [ ] `CONTRIBUTING.md`
+- [ ] `LICENSE`
+- [ ] `README.md`
+- [ ] `SECURITY.md`
+- [ ] `package.json`
 
 ## Documentation
 - [ ] `docs/en/architecture.md`
@@ -30,84 +30,84 @@
 ## Frontend Source (`src/`)
 
 ### Config & Entry
-- [x] `src/.prettierrc` (Audited 2026-01-25)
-- [x] `src/eslint.config.js` (Audited 2026-01-25)
-- [x] `src/vite.config.ts` (Audited 2026-01-25)
-- [x] `src/tsconfig.json` (Audited 2026-01-25)
-- [x] `src/package.json` (Audited 2026-01-25)
-- [x] `src/index.html` (Audited 2026-01-25)
-- [x] `src/vite-env.d.ts` (Audited 2026-01-25)
-- [x] `src/types/global.d.ts` (Audited 2026-01-25)
+- [ ] `src/.prettierrc`
+- [ ] `src/eslint.config.js`
+- [ ] `src/vite.config.ts`
+- [ ] `src/tsconfig.json`
+- [ ] `src/package.json`
+- [ ] `src/index.html`
+- [ ] `src/vite-env.d.ts`
+- [ ] `src/types/global.d.ts`
 
 ### Modules: Core
-- [x] `src/modules/core/core.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/boot/GlobalBridge.ts` (Legacy Bridge & Global Types) (Audited 2026-01-25)
-- [x] `src/modules/core/boot/EventHandler.ts` (Audited 2026-01-25)
-
-- [x] `src/modules/core/services/CatalogService.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/DiagnosticsService.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/ErrorHandler.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/EventBus.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/I18nService.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/LoggerService.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/ModuleService.ts` (Refactored 2026-01-25)
-- [x] `src/modules/core/services/NavigationService.ts` (Refactored 2026-01-25)
-- [x] `src/modules/core/services/SoundService.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/StateService.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/TauriProvider.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/WindowService.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/ui/AppUI.ts` (Refactored 2026-01-25)
-- [x] `src/modules/core/ui/I18nUI.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/ui/NavigationUI.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/ui/Particles.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/ui/SidebarUI.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/ui/WindowUI.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/services/TemplateLoader.ts` (Audited 2026-01-25)
-- [x] `src/modules/core/types/coreTypes.ts` (Audited 2026-01-25)
+- [ ] `src/modules/core/index.ts`
+- [ ] `src/modules/core/core.ts`
+- [ ] `src/modules/core/boot/GlobalBridge.ts` (Legacy Bridge & Global Types)
+- [ ] `src/modules/core/boot/EventHandler.ts`
+- [ ] `src/modules/core/services/CatalogService.ts`
+- [ ] `src/modules/core/services/DiagnosticsService.ts`
+- [ ] `src/modules/core/services/ErrorHandler.ts`
+- [ ] `src/modules/core/services/EventBus.ts`
+- [ ] `src/modules/core/services/I18nService.ts`
+- [ ] `src/modules/core/services/LoggerService.ts`
+- [ ] `src/modules/core/services/ModuleService.ts`
+- [ ] `src/modules/core/services/NavigationService.ts`
+- [ ] `src/modules/core/services/SoundService.ts`
+- [ ] `src/modules/core/services/StateService.ts`
+- [ ] `src/modules/core/services/TauriProvider.ts`
+- [ ] `src/modules/core/services/WindowService.ts`
+- [ ] `src/modules/core/ui/AppUI.ts`
+- [ ] `src/modules/core/ui/I18nUI.ts`
+- [ ] `src/modules/core/ui/NavigationUI.ts`
+- [ ] `src/modules/core/ui/Particles.ts`
+- [ ] `src/modules/core/ui/SidebarUI.ts`
+- [ ] `src/modules/core/ui/WindowUI.ts`
+- [ ] `src/modules/core/services/TemplateLoader.ts`
+- [ ] `src/modules/core/types/coreTypes.ts`
 
 ### Modules: Chat
-- [x] `src/modules/chat/index.ts` (Audited 2026-01-25)
-- [x] `src/modules/chat/chat.ts` (ChatController) (Audited 2026-01-25)
-- [x] `src/modules/chat/ui/ChatUI.ts` (Refactored 2026-01-25)
-- [x] `src/modules/chat/services/ChatFileHandler.ts` (Audited 2026-01-25)
-- [x] `src/modules/chat/services/ChatService.ts` (Audited 2026-01-25)
-- [x] `src/modules/chat/services/VoiceInputService.ts` (Audited 2026-01-25)
-- [x] `src/modules/chat/utils/chatUtils.ts` (Audited 2026-01-25)
-- [x] `src/modules/chat/types/chatTypes.ts` (Audited 2026-01-25)
+- [ ] `src/modules/chat/index.ts`
+- [ ] `src/modules/chat/chat.ts` (ChatController)
+- [ ] `src/modules/chat/ui/ChatUI.ts`
+- [ ] `src/modules/chat/services/ChatFileHandler.ts`
+- [ ] `src/modules/chat/services/ChatService.ts`
+- [ ] `src/modules/chat/services/VoiceInputService.ts`
+- [ ] `src/modules/chat/utils/chatUtils.ts`
+- [ ] `src/modules/chat/types/chatTypes.ts`
 
 ### Modules: AI
-- [x] `src/modules/ai/index.ts` (Audited 2026-01-25)
-- [x] `src/modules/ai/AIBridge.ts` (Audited 2026-01-25)
-- [x] `src/modules/ai/providers/AIProvider.ts` (Audited 2026-01-25)
-- [x] `src/modules/ai/ui/AISettingsRenderer.ts` (Audited 2026-01-25)
-- [x] `src/modules/ai/utils/catalogHelpers.ts` (Audited 2026-01-25)
-- [x] `src/modules/ai/types/aiTypes.ts` (Audited 2026-01-25)
+- [ ] `src/modules/ai/index.ts`
+- [ ] `src/modules/ai/AIBridge.ts`
+- [ ] `src/modules/ai/providers/AIProvider.ts`
+- [ ] `src/modules/ai/ui/AISettingsRenderer.ts`
+- [ ] `src/modules/ai/utils/catalogHelpers.ts`
+- [ ] `src/modules/ai/types/aiTypes.ts`
 
 ### Modules: Downloader
-- [x] `src/modules/downloader/index.ts` (Audited 2026-01-25)
-- [x] `src/modules/downloader/ui/DownloadUI.ts` (Refactored 2026-01-25)
-- [x] `src/modules/downloader/types/downloaderTypes.ts` (Audited 2026-01-25)
+- [ ] `src/modules/downloader/index.ts`
+- [ ] `src/modules/downloader/ui/DownloadUI.ts`
+- [ ] `src/modules/downloader/types/downloaderTypes.ts`
 
 ### Modules: Monitoring
-- [x] `src/modules/monitoring/index.ts` (Audited 2026-01-25)
-- [x] `src/modules/monitoring/ui/MonitoringUI.ts` (Audited 2026-01-25)
-- [x] `src/modules/monitoring/services/MonitoringService.ts` (Audited 2026-01-25)
-- [x] `src/modules/monitoring/types/monitoringTypes.ts` (Audited 2026-01-25)
+- [ ] `src/modules/monitoring/index.ts`
+- [ ] `src/modules/monitoring/ui/MonitoringUI.ts`
+- [ ] `src/modules/monitoring/services/MonitoringService.ts`
+- [ ] `src/modules/monitoring/types/monitoringTypes.ts`
 
 ### Modules: Settings
-- [x] `src/modules/settings/index.ts` (Audited 2026-01-25)
-- [x] `src/modules/settings/ui/SettingsUI.ts` (Refactored 2026-01-25)
-- [x] `src/modules/settings/ui/GeneralSettingsRenderer.ts` (Audited 2026-01-25)
-- [x] `src/modules/settings/services/SettingsService.ts` (Audited 2026-01-25)
+- [ ] `src/modules/settings/index.ts`
+- [ ] `src/modules/settings/ui/SettingsUI.ts`
+- [ ] `src/modules/settings/ui/GeneralSettingsRenderer.ts`
+- [ ] `src/modules/settings/services/SettingsService.ts`
 
 ### Modules: Dashboard
-- [x] `src/modules/dashboard/index.ts` (Audited 2026-01-25)
-- [x] `src/modules/dashboard/ui/DashboardUI.ts` (Refactored 2026-01-25)
+- [ ] `src/modules/dashboard/index.ts`
+- [ ] `src/modules/dashboard/ui/DashboardUI.ts`
 
 ### Modules: Debug
-- [x] `src/modules/debug/index.ts` (Audited 2026-01-25)
-- [x] `src/modules/debug/ui/DebugUI.ts` (Audited 2026-01-25)
-- [x] `src/modules/debug/services/DebugService.ts` (Audited 2026-01-25)
+- [ ] `src/modules/debug/index.ts`
+- [ ] `src/modules/debug/ui/DebugUI.ts`
+- [ ] `src/modules/debug/services/DebugService.ts`
 
 ### Styles (CSS)
 - [ ] `src/css/main.css`
@@ -166,7 +166,7 @@
 
 ---
 
-## 3. Backend Source (`src-tauri/`)
+## Backend Source (`src-tauri/`)
 
 ### Configuration
 - [ ] `src-tauri/tauri.conf.json`
@@ -179,22 +179,22 @@
 - [ ] `src-tauri/resources/locales/ru.json`
 
 ### Rust Core
-- [ ] `src-tauri/src/main.rs`
-- [ ] `src-tauri/src/lib.rs`
+- [x] `src-tauri/src/main.rs` (Audited 2026-01-30)
+- [x] `src-tauri/src/lib.rs` (Audited 2026-01-30)
 - [ ] `src-tauri/src/errors.rs`
 - [ ] `src-tauri/src/tests.rs`
 
 ### Rust Commands
-- [ ] `src-tauri/src/commands/mod.rs`
-- [ ] `src-tauri/src/commands/config.rs`
-- [ ] `src-tauri/src/commands/downloader.rs`
+- [x] `src-tauri/src/commands/mod.rs` (Audited 2026-01-30)
+- [x] `src-tauri/src/commands/config.rs` (Audited 2026-01-30)
+- [x] `src-tauri/src/commands/downloader.rs` (Refactored 2026-01-30)
 - [ ] `src-tauri/src/commands/health.rs`
 - [ ] `src-tauri/src/commands/license.rs`
 - [ ] `src-tauri/src/commands/logs.rs`
 - [ ] `src-tauri/src/commands/modules.rs`
 - [ ] `src-tauri/src/commands/secure.rs`
 - [ ] `src-tauri/src/commands/settings.rs`
-- [ ] `src-tauri/src/commands/system.rs`
+- [x] `src-tauri/src/commands/system.rs` (Refactored 2026-01-30)
 - [ ] `src-tauri/src/commands/theme.rs`
 - [ ] `src-tauri/src/commands/translations.rs`
 - [ ] `src-tauri/src/commands/ui_state.rs`
@@ -217,6 +217,7 @@
 - [ ] `src-tauri/src/services/translations.rs`
 - [ ] `src-tauri/src/services/ui_state.rs`
 - [ ] `src-tauri/src/services/window_settings.rs`
+- [ ] `src-tauri/src/services/server.rs`
 - [ ] `src-tauri/src/services/license/mod.rs`
 - [ ] `src-tauri/src/services/license/storage.rs`
 - [ ] `src-tauri/src/services/license/types.rs`
@@ -233,7 +234,7 @@
 
 ### Rust Utils
 - [ ] `src-tauri/src/utils/mod.rs`
-- [x] `src-tauri/src/utils/paths.rs` (Refactored 2026-01-25)
+- [ ] `src-tauri/src/utils/paths.rs`
 - [ ] `src-tauri/src/utils/process.rs`
 - [ ] `src-tauri/src/utils/setup.rs`
 - [ ] `src-tauri/src/utils/windows.rs`
@@ -241,4 +242,4 @@
 ---
 
 ## Audit Status
-**Completion**: 0/150 files. (Core Services & UI, AI, Chat, Settings, Rust backend optimization, OS Utilities)
+**Completion**: 5/150 files.
