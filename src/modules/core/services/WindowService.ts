@@ -177,6 +177,8 @@ export class WindowService {
         if (this._tauri.isTauri()) {
             try {
                 await this._tauri.invoke('set_webview_zoom', { zoom: this._currentZoom });
+                // Also save to settings file
+                await this._tauri.invoke('save_zoom_level', { zoom: this._currentZoom });
             } catch (e) {
                 console.error('[WindowService] Zoom error:', e);
             }

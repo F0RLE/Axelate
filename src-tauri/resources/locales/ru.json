@@ -176,6 +176,7 @@
   "ui.launcher.web.chat_error_prefix": "Ошибка: ",
   "ui.gemini.error.auth": "Ошибка 403: Неверный API ключ Gemini. (модель: {model})",
   "ui.gemini.error.quota": "Ошибка 429: Превышен лимит запросов. Мы пробуем повторить запрос, пожалуйста, подождите или попробуйте позже.",
+  "ui.gemini.status.retry": "Лимит запросов. Повтор через {seconds}с...",
   "ui.gemini.error.unavailable": "Ошибка 503: Сервис Gemini временно недоступен. Попробуйте позже. (модель: {model})",
   "ui.launcher.module.files_short": "Файлы",
   "ui.launcher.module.files_logged": "Список файлов выведен в консоль",

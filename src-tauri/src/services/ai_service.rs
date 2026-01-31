@@ -71,16 +71,14 @@ pub async fn send_chat_message(
     }
 
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
-    if providers_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&providers_path)
-            && let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&content)
-        {
-            if let Some(p) = providers.iter().find(|p| p.id == request.provider) {
-                provider_type = p.provider_type.clone();
-                if let Some(url) = &p.base_url {
-                    base_url = url.clone();
-                }
-            }
+    if providers_path.exists()
+        && let Ok(content) = std::fs::read_to_string(&providers_path)
+        && let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&content)
+        && let Some(p) = providers.iter().find(|p| p.id == request.provider)
+    {
+        provider_type = p.provider_type.clone();
+        if let Some(url) = &p.base_url {
+            base_url = url.clone();
         }
     }
 
@@ -197,7 +195,7 @@ async fn handle_openai(
 
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
                     && let Some(choices) = json["choices"].as_array()
-                    && let Some(choice) = choices.get(0)
+                    && let Some(choice) = choices.first()
                 {
                     let delta = &choice["delta"];
 
@@ -254,7 +252,8 @@ async fn handle_gemini(
             };
 
             // Aggregate message parts into Gemini-specific contents body.
-            let parts_array = match &msg.content {
+            // Aggregate message parts into Gemini-specific contents body.
+            let mut parts_array: Vec<serde_json::Value> = match &msg.content {
                 serde_json::Value::String(text) => vec![serde_json::json!({ "text": text })],
                 serde_json::Value::Array(items) => items
                     .iter()
@@ -284,6 +283,17 @@ async fn handle_gemini(
                     .collect(),
                 _ => vec![serde_json::json!({ "text": "" })],
             };
+
+            // Inject thought_signature if present (Gemini 3 Requirement)
+            if let Some(sig) = &msg.thought_signature
+                && let Some(first_part) = parts_array.get_mut(0)
+                && let Some(obj) = first_part.as_object_mut()
+            {
+                obj.insert(
+                    "thoughtSignature".to_string(),
+                    serde_json::Value::String(sig.clone()),
+                );
+            }
 
             serde_json::json!({
                 "role": role,

@@ -10,6 +10,10 @@ rust-version = "1.93.0"
 name = "axelate_lib"
 path = "src/lib.rs"
 
+[[bin]]
+name = "Axelate"
+path = "src/main.rs"
+
 [dependencies]
 tauri = { version = "2.9.5", features = ["image-ico", "image-png", "tray-icon"] }
 tauri-plugin-shell = "2.3.4"

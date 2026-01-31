@@ -44,7 +44,8 @@
             "nsis"
         ],
         "resources": [
-            "resources/config/**/*",
+            "resources/config",
+            "resources/locales",
             "resources/api_providers.json"
         ],
         "icon": [

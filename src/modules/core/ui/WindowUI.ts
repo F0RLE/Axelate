@@ -125,9 +125,15 @@ export class WindowUI {
                 if (ev.ctrlKey) {
                     ev.preventDefault();
                     const delta = ev.deltaY < 0 ? 0.1 : -0.1;
-                    this._service.changeZoom(delta).catch(() => {
-                        /* ignore */
-                    });
+                    this._service
+                        .changeZoom(delta)
+                        .then(() => {
+                            // Ensure style recalculation happens before checking
+                            setTimeout(() => this._checkWidth(), 50);
+                        })
+                        .catch(() => {
+                            /* ignore */
+                        });
                 }
             },
             { passive: false, signal },
@@ -403,16 +409,21 @@ export class WindowUI {
      */
     private _checkWidth(): void {
         const g = globalThis as unknown as IWindowUIGlobal;
-        const width = g.innerWidth;
-        const height = globalThis.innerHeight;
-        const aspectRatio = width / (height || 1);
+        // Get current zoom factor (default 1)
+        const computedStyle = getComputedStyle(document.documentElement) as any;
+        const zoom = parseFloat(computedStyle.zoom) || 1;
 
-        // Dynamic threshold based on aspect ratio
+        // Calculate effective space available to the layout
+        const width = g.innerWidth / zoom;
+        const height = globalThis.innerHeight / zoom;
+
         // Landscape/Square (AR > 0.8): 950px (Supports half-screen on 1920 monitors)
         // Portrait (AR <= 0.8): 650px (Supports 9:16 monitors)
-        const MIN_WIDTH = aspectRatio > 0.8 ? 950 : 650;
+        // REVISED: Extremely permissive thresholds. Only warn if we can't fit Sidebar + 1 Card (~600px).
+        const MIN_WIDTH = 700;
+        const MIN_HEIGHT = 500;
 
-        if (width < MIN_WIDTH) {
+        if (width < MIN_WIDTH || height < MIN_HEIGHT) {
             if (this._modulesWarning) {
                 this._modulesWarning.classList.remove('hidden');
                 this._modulesWarning.classList.add('flex-important');

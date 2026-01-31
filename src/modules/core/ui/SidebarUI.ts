@@ -42,6 +42,7 @@ export class SidebarUI {
 
         this._restoreState();
         this._initToggle();
+        this._initAdaptiveMonitoring();
 
         // Ensure logos are mounted after template injection
         mountLogos();
@@ -54,6 +55,10 @@ export class SidebarUI {
         this._cleanupAbort.abort();
         if (this._snappingTimeout) {
             clearTimeout(this._snappingTimeout);
+        }
+        if (this._resizeObserver) {
+            this._resizeObserver.disconnect();
+            this._resizeObserver = null;
         }
     }
 
@@ -142,5 +147,68 @@ export class SidebarUI {
 
         document.documentElement.style.setProperty('--sidebar-width', width + 'px');
         this._sidebar.style.width = width + 'px';
+    }
+
+    private _resizeObserver: ResizeObserver | null = null;
+    private _minMonitorHeight = 0;
+
+    /**
+     * Initializes adaptive monitoring visibility.
+     * Hides system monitor if there isn't enough vertical space.
+     */
+    private _initAdaptiveMonitoring(): void {
+        if (!this._sidebar) return;
+
+        const monitor = this._sidebar.querySelector('#system-monitor') as HTMLElement;
+        const logo = this._sidebar.querySelector('.logo-area') as HTMLElement;
+        const menu = this._sidebar.querySelector('.main-menu') as HTMLElement;
+        const bottom = this._sidebar.querySelector('.bottom-menu') as HTMLElement;
+
+        if (!monitor || !logo || !menu || !bottom) return;
+
+        // Capture initial height of monitor to know when to bring it back
+        this._minMonitorHeight = monitor.offsetHeight || 300; // Fallback to approx pixels
+
+        this._resizeObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.target === this._sidebar) {
+                    this._checkMonitorVisibility();
+                }
+            }
+        });
+
+        this._resizeObserver.observe(this._sidebar);
+    }
+
+    private _checkMonitorVisibility(): void {
+        if (!this._sidebar) return;
+
+        const monitor = this._sidebar.querySelector('#system-monitor') as HTMLElement;
+        const logo = this._sidebar.querySelector('.logo-area') as HTMLElement;
+        const menu = this._sidebar.querySelector('.main-menu') as HTMLElement;
+        const bottom = this._sidebar.querySelector('.bottom-menu') as HTMLElement;
+
+        if (!monitor || !logo || !menu || !bottom) return;
+
+        const sidebarHeight = this._sidebar.clientHeight;
+
+        // Calculate used space by other static elements
+        const logoH = logo.offsetHeight;
+        const menuH = menu.offsetHeight;
+        const bottomH = bottom.offsetHeight;
+
+        // Add some breathing room (margins/padding)
+        const buffer = 40;
+
+        const requiredSpace = logoH + menuH + bottomH + this._minMonitorHeight + buffer;
+
+        if (sidebarHeight < requiredSpace) {
+            monitor.classList.add('adaptive-hidden');
+            // Remove inline display if it exists from previous logic
+            monitor.style.display = '';
+        } else {
+            monitor.classList.remove('adaptive-hidden');
+            monitor.style.display = '';
+        }
     }
 }

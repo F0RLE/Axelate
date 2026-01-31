@@ -55,6 +55,8 @@ export default defineConfig({
         minify: process.env.TAURI_DEBUG ? false : 'esbuild',
         // produce sourcemaps for debug builds
         sourcemap: !!process.env.TAURI_DEBUG,
+        // Increase chunk size warning limit for desktop app
+        chunkSizeWarningLimit: 1000,
 
         // Multi-page app configuration
         rollupOptions: {

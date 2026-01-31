@@ -29,7 +29,7 @@ impl SecureStorage {
         path.push("Configs");
 
         if !path.exists() {
-            fs::create_dir_all(&path).map_err(|e| AppError::Io(e))?;
+            fs::create_dir_all(&path).map_err(AppError::Io)?;
         }
 
         path.push("secure.enc");
@@ -65,7 +65,7 @@ impl SecureStorage {
         data.keys.insert(service, value);
 
         // 3. Serialize to JSON
-        let json_bytes = serde_json::to_vec(&data).map_err(|e| AppError::Serialization(e))?;
+        let json_bytes = serde_json::to_vec(&data).map_err(AppError::Serialization)?;
 
         // 4. Encrypt
         let key_bytes = Self::get_encryption_key()?;
@@ -86,7 +86,7 @@ impl SecureStorage {
         final_payload.extend_from_slice(&ciphertext);
 
         let path = Self::get_store_path()?;
-        fs::write(&path, final_payload).map_err(|e| AppError::Io(e))?;
+        fs::write(&path, final_payload).map_err(AppError::Io)?;
 
         Ok(())
     }
@@ -104,7 +104,7 @@ impl SecureStorage {
             });
         }
 
-        let file_content = fs::read(&path).map_err(|e| AppError::Io(e))?;
+        let file_content = fs::read(&path).map_err(AppError::Io)?;
 
         if file_content.len() < 12 {
             return Err(AppError::Validation(
@@ -124,7 +124,7 @@ impl SecureStorage {
             .map_err(|_| AppError::External("Decryption failed".to_string()))?;
 
         let data: SecureData =
-            serde_json::from_slice(&plaintext).map_err(|e| AppError::Serialization(e))?;
+            serde_json::from_slice(&plaintext).map_err(AppError::Serialization)?;
 
         Ok(data)
     }

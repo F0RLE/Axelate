@@ -120,14 +120,24 @@ pub fn get_defaults_path(_app: &AppHandle) -> Result<PathBuf, AppError> {
 }
 
 pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
-    let defaults_path = get_defaults_path(app)?;
-
-    let content = std::fs::read_to_string(&defaults_path).map_err(|e| {
-        AppError::Config(format!(
-            "Failed to read defaults at {:?}: {}",
-            defaults_path, e
-        ))
-    })?;
+    // 1. Load Defaults (Disk -> Embedded Fallback)
+    let content = match get_defaults_path(app) {
+        Ok(path) => match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!(
+                    "Failed to read defaults from disk ({:?}), using embedded override: {}",
+                    path,
+                    e
+                );
+                include_str!("../../resources/config/defaults.json").to_string()
+            }
+        },
+        Err(_) => {
+            log::warn!("Defaults not found on disk, using embedded override.");
+            include_str!("../../resources/config/defaults.json").to_string()
+        }
+    };
 
     let mut config: AppConfig = serde_json::from_str(&content)
         .map_err(|e| AppError::Config(format!("Failed to parse config: {}", e)))?;
@@ -140,13 +150,20 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
         });
     }
 
-    // Load api_providers.json and inject details
+    // 2. Load API Providers (Disk -> Embedded Fallback)
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
 
-    if providers_path.exists()
-        && let Ok(providers_content) = std::fs::read_to_string(&providers_path)
-        && let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&providers_content)
-    {
+    let providers_content = if providers_path.exists() {
+        std::fs::read_to_string(&providers_path).unwrap_or_else(|_| {
+            log::warn!("Failed to read api_providers.json from disk, using embedded.");
+            include_str!("../../resources/api_providers.json").to_string()
+        })
+    } else {
+        log::info!("api_providers.json not found on disk, using embedded.");
+        include_str!("../../resources/api_providers.json").to_string()
+    };
+
+    if let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&providers_content) {
         config.api_providers = providers.clone();
 
         for provider in providers {

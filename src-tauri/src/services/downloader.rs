@@ -61,7 +61,7 @@ pub fn delete_module(module_id: &str) -> Result<(), AppError> {
 
     let module_path = MODULES_DIR.join(module_id);
     if module_path.exists() {
-        fs::remove_dir_all(&module_path).map_err(|e| AppError::Io(e))?;
+        fs::remove_dir_all(&module_path).map_err(AppError::Io)?;
         crate::services::logs::add_log(
             &format!("Module {} deleted", module_id),
             "Downloader",
@@ -193,11 +193,11 @@ async fn download_and_extract_internal(
 
     let mut file = tokio::fs::File::create(zip_path)
         .await
-        .map_err(|e| AppError::Io(e))?;
+        .map_err(AppError::Io)?;
 
     while let Some(item) = stream.next().await {
         let chunk = item.map_err(|e| AppError::External(format!("Stream error: {}", e)))?;
-        file.write_all(&chunk).await.map_err(|e| AppError::Io(e))?;
+        file.write_all(&chunk).await.map_err(AppError::Io)?;
         downloaded += chunk.len() as u64;
 
         if total_size > 0 {
@@ -246,7 +246,7 @@ async fn download_and_extract_internal(
         })
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?
-        .map_err(|e| AppError::Internal(e))?;
+        .map_err(AppError::Internal)?;
 
         if computed_hash.to_lowercase() != expected_hash.to_lowercase() {
             return Err(AppError::Validation(format!(
@@ -265,7 +265,7 @@ async fn download_and_extract_internal(
     if final_path.exists() {
         fs::remove_dir_all(&final_path).ok();
     }
-    fs::create_dir_all(&final_path).map_err(|e| AppError::Io(e))?;
+    fs::create_dir_all(&final_path).map_err(AppError::Io)?;
 
     let app_handle = app.clone();
     let mid = module_id.to_string();

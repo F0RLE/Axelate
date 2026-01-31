@@ -1,8 +1,6 @@
 ﻿@font-face {
     font-family: 'Monocraft';
-    src:
-        url('/assets/fonts/Monocraft.otf') format('opentype'),
-        url('/api/fonts/Monocraft.otf') format('opentype');
+    src: url('../../assets/fonts/Monocraft.otf') format('opentype');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -10,9 +8,7 @@
 
 @font-face {
     font-family: 'Cubic11';
-    src:
-        url('/assets/fonts/Cubic_11.ttf') format('truetype'),
-        url('/api/fonts/Cubic_11.ttf') format('truetype');
+    src: url('../../assets/fonts/Cubic_11.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
     font-display: swap;

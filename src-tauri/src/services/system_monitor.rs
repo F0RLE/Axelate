@@ -258,33 +258,33 @@ pub fn get_stats() -> SystemStats {
         // 9.2 Fallback to WMI (Local Scope for Thread Safety)
         // Instantiate COM/WMI locally to avoid Send/Sync issues with static storage
         let com_lib = COMLibrary::new().ok();
-        if let Some(lib) = com_lib {
-            if let Ok(wmi) = WMIConnection::new(lib) {
-                let results: Result<Vec<Win32_VideoController>, _> = wmi.query();
-                if let Ok(controllers) = results {
-                    // Find best dedicated GPU (highest VRAM)
-                    // Filter out basic/remote adapters
-                    if let Some(best_gpu) = controllers
-                        .iter()
-                        .filter(|c| !c.Name.contains("Microsoft Remote Display Adapter"))
-                        .max_by_key(|c| c.AdapterRAM.unwrap_or(0))
-                    {
-                        let vram_bytes = best_gpu.AdapterRAM.unwrap_or(0);
+        if let Some(lib) = com_lib
+            && let Ok(wmi) = WMIConnection::new(lib)
+        {
+            let results: Result<Vec<Win32_VideoController>, _> = wmi.query();
+            if let Ok(controllers) = results {
+                // Find best dedicated GPU (highest VRAM)
+                // Filter out basic/remote adapters
+                if let Some(best_gpu) = controllers
+                    .iter()
+                    .filter(|c| !c.Name.contains("Microsoft Remote Display Adapter"))
+                    .max_by_key(|c| c.AdapterRAM.unwrap_or(0))
+                {
+                    let vram_bytes = best_gpu.AdapterRAM.unwrap_or(0);
 
-                        gpu_stats = Some(GpuStats {
-                            usage: 0,       // Not available via standard WMI
-                            memory_used: 0, // Not available
-                            memory_total: vram_bytes,
-                            temp: 0, // Not available
-                            name: best_gpu.Name.clone(),
-                        });
+                    gpu_stats = Some(GpuStats {
+                        usage: 0,       // Not available via standard WMI
+                        memory_used: 0, // Not available
+                        memory_total: vram_bytes,
+                        temp: 0, // Not available
+                        name: best_gpu.Name.clone(),
+                    });
 
-                        vram_stats = Some(VramStats {
-                            percent: 0.0,
-                            used_gb: 0.0,
-                            total_gb: bytes_to_gb(vram_bytes as f64),
-                        });
-                    }
+                    vram_stats = Some(VramStats {
+                        percent: 0.0,
+                        used_gb: 0.0,
+                        total_gb: bytes_to_gb(vram_bytes as f64),
+                    });
                 }
             }
         }

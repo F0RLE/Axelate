@@ -112,7 +112,6 @@ body.launcher-blur .modal {
     transform: scale(1) translateY(0);
 }
 
-
 .module-settings-content {
     /* Flex grow to push footer down */
     flex: 1;

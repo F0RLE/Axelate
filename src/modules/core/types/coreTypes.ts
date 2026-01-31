@@ -39,6 +39,7 @@ export interface IApp {
     type?: 'api' | 'local';
     installed?: boolean;
     repo_url?: string;
+    repoUrl?: string; // Fallback for camelCase JSON
     config_schema?: Record<string, IConfigField>;
     api_provider_data?: Record<string, unknown>; // Dynamic provider metadata for rich UI
 }

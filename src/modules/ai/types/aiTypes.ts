@@ -52,7 +52,7 @@ export interface IChatRequest {
     messages: { role: string; content: ChatContent; thought_signature?: string }[];
     api_key: string | null;
     thinking_level?: 'low' | 'high' | 'minimal';
-    attachments?: { name: string; type: string; dataBase64: string }[];
+    attachments?: { name: string; type: string; data_base64: string }[];
 }
 
 /**

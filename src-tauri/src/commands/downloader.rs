@@ -42,7 +42,7 @@ pub async fn list_module_files(module_id: String) -> Result<Vec<String>, AppErro
         ));
     }
 
-    let entries = std::fs::read_dir(path).map_err(|e| AppError::Io(e))?;
+    let entries = std::fs::read_dir(path).map_err(AppError::Io)?;
 
     let mut files = Vec::new();
     for entry in entries.flatten() {

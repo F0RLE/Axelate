@@ -18,7 +18,7 @@
     user-select: none;
     overflow-y: auto;
     overflow-x: hidden;
-    -webkit-app-region: drag;
+    -webkit-app-region: no-drag;
     transition:
         width 0.3s var(--ease-smooth),
         filter 0.3s ease;

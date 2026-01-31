@@ -8,6 +8,9 @@ interface ITauri {
     core: {
         invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
     };
+    event: {
+        listen: <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
+    };
 }
 
 interface IGlobal {
@@ -83,6 +86,51 @@ export class ChatUI {
         if (this._messagesContainer) {
             this._messagesContainer.addEventListener('click', this._handleMessageClick.bind(this));
             this._messagesContainer.addEventListener('click', this._handleCopyClick.bind(this));
+        }
+
+        // Bind AI events
+        this._bindAiEvents();
+    }
+
+    private async _bindAiEvents(): Promise<void> {
+        const g = globalThis as unknown as IGlobal;
+        if (g.__TAURI__?.event) {
+            await g.__TAURI__.event.listen<{ code: string; wait_seconds: number }>(
+                'ai:status:retry',
+                (e) => {
+                    const { code, wait_seconds } = e.payload;
+                    if (code === 'GEMINI_QUOTA_RETRY') {
+                        // Show toast or update UI
+                        const msg = g.t(
+                            'ui.gemini.status.retry',
+                            'Rate limited. Retrying in {seconds}s...',
+                            {
+                                seconds: wait_seconds,
+                            },
+                        );
+                        this.showToast(msg, 'warning', 3000);
+
+                        // Optional: Update typing indicator if active
+                        const typing = document.querySelector(
+                            '.chat-message.assistant.typing .typing-dots',
+                        );
+                        if (typing) {
+                            const label = document.createElement('div');
+                            label.className = 'typing-status';
+                            label.textContent = msg;
+                            label.style.fontSize = '0.8em';
+                            label.style.opacity = '0.8';
+                            label.style.marginTop = '4px';
+
+                            // Remove old status if exists
+                            const old = typing.parentElement?.querySelector('.typing-status');
+                            if (old) old.remove();
+
+                            typing.parentElement?.appendChild(label);
+                        }
+                    }
+                },
+            );
         }
     }
 

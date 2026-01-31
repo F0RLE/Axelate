@@ -283,7 +283,7 @@ export class AIBridge {
     public async sendMessage(
         text: string,
         source: MessageSource = 'chat',
-        attachments: { name: string; type: string; dataBase64: string }[] = [],
+        attachments: { name: string; type: string; data_base64: string }[] = [],
     ): Promise<string> {
         if (!this._activeProviderId) {
             return this._handleMissingProvider();
@@ -385,7 +385,7 @@ export class AIBridge {
     private _addMessageToHistory(
         role: 'user' | 'assistant',
         text: string,
-        attachments?: { name: string; type: string; dataBase64: string }[],
+        attachments?: { name: string; type: string; data_base64: string }[],
     ): void {
         if (role === 'user' && attachments && attachments.length > 0) {
             const parts = this._createMultimodalContent(text, attachments);
@@ -399,7 +399,7 @@ export class AIBridge {
      * Compiles a structured chat request object for the backend dispatcher.
      */
     private _constructChatRequest(
-        attachments: { name: string; type: string; dataBase64: string }[],
+        attachments: { name: string; type: string; data_base64: string }[],
     ): IChatRequest {
         const id = this._activeProviderId!;
         const apiModelId = getApiModelIdWithFallback(id, this._model);
@@ -540,7 +540,7 @@ export class AIBridge {
      */
     private _createMultimodalContent(
         text: string,
-        attachments: { name: string; type: string; dataBase64: string }[],
+        attachments: { name: string; type: string; data_base64: string }[],
     ): ChatContent {
         if (!attachments || attachments.length === 0) return text;
 
@@ -550,7 +550,7 @@ export class AIBridge {
                 parts.push({
                     type: 'image_url',
                     image_url: {
-                        url: `data:${attachment.type};base64,${attachment.dataBase64}`,
+                        url: `data:${attachment.type};base64,${attachment.data_base64}`,
                     },
                 });
             }

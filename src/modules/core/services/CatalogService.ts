@@ -38,6 +38,88 @@ interface ICatalogGlobal {
     dispatchEvent: (event: Event) => boolean;
 }
 
+const FALLBACK_CONFIG: IAppConfig = {
+    catalog: {
+        ai: [
+            {
+                id: 'axelate-localai',
+                nameKey: 'ui.launcher.app.axelate_localai.name',
+                descKey: 'ui.launcher.app.axelate_localai.desc',
+                name: 'Axelate',
+                desc: 'Universal hub for pro-grade images and text.',
+                icon: '🌌',
+                type: 'local',
+                repoUrl: 'https://github.com/F0RLE/Axelate_LocalAI_module',
+            },
+            {
+                id: 'gpt',
+                nameKey: 'ui.launcher.app.gpt.name',
+                descKey: 'ui.launcher.app.gpt.desc',
+                name: 'GPT',
+                desc: 'Smart assistant for chat, coding and images.',
+                icon: '🤖',
+                type: 'api',
+            },
+            {
+                id: 'gemini',
+                nameKey: 'ui.launcher.app.gemini.name',
+                descKey: 'ui.launcher.app.gemini.desc',
+                name: 'Gemini',
+                desc: 'Massive-context analysis and creative visuals.',
+                icon: '✨',
+                type: 'api',
+            },
+            {
+                id: 'claude',
+                nameKey: 'ui.launcher.app.claude.name',
+                descKey: 'ui.launcher.app.claude.desc',
+                name: 'Claude',
+                desc: 'Advanced AI for analysis and creativity.',
+                icon: '✱',
+                type: 'api',
+            },
+            {
+                id: 'llama',
+                nameKey: 'ui.launcher.app.llama.name',
+                descKey: 'ui.launcher.app.llama.desc',
+                name: 'Llama',
+                desc: 'Powerful open models.',
+                icon: '🦙',
+                type: 'api',
+            },
+            {
+                id: 'deepseek',
+                nameKey: 'ui.launcher.app.deepseek.name',
+                descKey: 'ui.launcher.app.deepseek.desc',
+                name: 'DeepSeek',
+                desc: 'Specialized models for coding.',
+                icon: '🧠',
+                type: 'api',
+            },
+        ],
+        services: [
+            {
+                id: 'axelate-telegram-bot',
+                nameKey: 'ui.launcher.app.axelate_telegram.name',
+                descKey: 'ui.launcher.app.axelate_telegram.desc',
+                name: 'Axelate Telegram Bot',
+                desc: 'LLM rewriting, image gen, channel posting.',
+                icon: '🤖',
+                type: 'local',
+                repoUrl: 'https://github.com/F0RLE/Axelate-tg-bot-module',
+            },
+        ],
+    },
+    api_providers: [
+        { id: 'gpt', name: 'GPT', type: 'api', baseUrl: 'https://api.openai.com/v1' },
+        { id: 'gemini', name: 'Gemini', type: 'api' },
+        { id: 'claude', name: 'Claude', type: 'api' },
+        { id: 'llama', name: 'Llama', type: 'api' },
+        { id: 'deepseek', name: 'DeepSeek', type: 'api' },
+    ],
+    models: {},
+};
+
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
 
@@ -61,26 +143,35 @@ export class CatalogService {
      * Asynchronously loads the application catalog from the Tauri backend.
      */
     public async loadCatalog(): Promise<void> {
-        try {
-            let config: IAppConfig | null = null;
-            let installedModules: IModule[] = [];
+        let config: IAppConfig | null = null;
+        let installedModules: IModule[] = [];
 
-            // 1. Fetch Config & Installed Modules
+        // 1. Fetch Config (Robust Failsafe)
+        try {
             if (this._tauri.isTauri()) {
                 config = await this._tauri.invoke<IAppConfig>('get_config');
+            } else {
+                const res = await fetch('/api/config');
+                if (res.ok) config = await res.json();
+            }
+        } catch (e) {
+            console.warn('[CatalogService] Backend config failed, using fallback:', e);
+            config = FALLBACK_CONFIG;
+        }
+
+        // 2. Fetch Modules (Independent)
+        try {
+            if (this._tauri.isTauri()) {
                 installedModules = await this._tauri.invoke<IModule[]>('get_modules');
             } else {
-                try {
-                    const res = await fetch('/api/config');
-                    if (res.ok) config = await res.json();
-
-                    const resModules = await fetch('/api/modules');
-                    if (resModules.ok) installedModules = await resModules.json();
-                } catch (e) {
-                    console.warn('[CatalogService] Web fetch failed', e);
-                }
+                const res = await fetch('/api/modules');
+                if (res.ok) installedModules = await res.json();
             }
+        } catch (e) {
+            console.warn('[CatalogService] Module list failed:', e);
+        }
 
+        try {
             console.log('[CatalogService] Loaded config:', config);
 
             if (config?.catalog) {
@@ -95,7 +186,7 @@ export class CatalogService {
                 const mergeSchema = (list: IApp[]) => {
                     list.forEach((app) => {
                         // Dynamic Config Schema Generation
-                        const providers = config!.api_providers;
+                        const providers = config?.api_providers;
                         if (providers && Array.isArray(providers)) {
                             const provider = providers.find((p) => p.id === app.id);
                             if (provider) {
@@ -140,6 +231,16 @@ export class CatalogService {
                                     required: true,
                                 },
                             };
+                        }
+
+                        // Force installed status for API providers (Virtual Modules)
+                        // This fixes "No apps found" if the local folder check fails in Release
+                        if (
+                            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
+                            app.type === 'api' ||
+                            config?.api_providers?.some((p) => p.id === app.id)
+                        ) {
+                            app.installed = true;
                         }
 
                         if (installedMap.has(app.id)) {

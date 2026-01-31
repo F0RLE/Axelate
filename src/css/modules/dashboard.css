@@ -407,6 +407,13 @@
     margin-bottom: 1rem;
 }
 
+/* Hide header on small heights to prioritize cards */
+@media (max-height: 950px) {
+    .models-header {
+        display: none !important;
+    }
+}
+
 .models-subtitle {
     font-size: 1.1rem;
     color: var(--text-secondary);
@@ -658,17 +665,17 @@
     left: var(--sidebar-width, 280px); /* Start AFTER sidebar */
     right: 0;
     bottom: 0;
-    
+
     /* Standard transparent overlay style (matches .modal-overlay) */
     background: rgba(0, 0, 0, 0.05);
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    
+
     z-index: 800; /* Below header (900) so window controls are clickable */
     display: flex;
     align-items: center;
     justify-content: center;
-    
+
     /* Reliable Animation */
     opacity: 1;
     pointer-events: auto; /* Block clicks to content behind */
@@ -687,7 +694,7 @@
     background: rgba(26, 25, 32, 0.85); /* Semi-transparent bg-med */
     backdrop-filter: blur(16px) saturate(120%);
     -webkit-backdrop-filter: blur(16px) saturate(120%);
-    
+
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     width: 90%;
@@ -1739,7 +1746,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     padding: 2rem;
     color: var(--text-muted);
 }
-
 
 .zoom-plus-icon {
     font-size: 1.2rem;

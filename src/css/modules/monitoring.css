@@ -15,7 +15,22 @@
     overflow: hidden;
     max-width: 100%;
     -webkit-app-region: no-drag;
-    transition: all 0.3s ease;
+    transition:
+        opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.5s ease;
+    max-height: 800px; /* Sufficient max-height for animation */
+}
+
+.sysmon-card.adaptive-hidden {
+    opacity: 0;
+    max-height: 0;
+    padding: 0;
+    margin: 0;
+    border-color: transparent;
+    pointer-events: none;
 }
 
 .sysmon-stat {
