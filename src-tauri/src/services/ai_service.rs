@@ -72,13 +72,13 @@ pub async fn send_chat_message(
 
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
     if providers_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&providers_path) {
-            if let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&content) {
-                if let Some(p) = providers.iter().find(|p| p.id == request.provider) {
-                    provider_type = p.provider_type.clone();
-                    if let Some(url) = &p.base_url {
-                        base_url = url.clone();
-                    }
+        if let Ok(content) = std::fs::read_to_string(&providers_path)
+            && let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&content)
+        {
+            if let Some(p) = providers.iter().find(|p| p.id == request.provider) {
+                provider_type = p.provider_type.clone();
+                if let Some(url) = &p.base_url {
+                    base_url = url.clone();
                 }
             }
         }
@@ -87,10 +87,8 @@ pub async fn send_chat_message(
     match provider_type.as_str() {
         "openai" => handle_openai(window, request, &base_url)
             .await
-            .map_err(|e| crate::errors::AppError::Internal(e)),
-        "gemini" => handle_gemini(window, request)
-            .await
-            .map_err(|e| crate::errors::AppError::Internal(e)),
+            .map_err(crate::errors::AppError::Internal),
+        "gemini" => handle_gemini(window, request).await,
 
         _ => Ok(ChatResponse {
             ok: false,
@@ -197,8 +195,11 @@ async fn handle_openai(
                     break;
                 }
 
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                    let delta = &json["choices"][0]["delta"];
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                    && let Some(choices) = json["choices"].as_array()
+                    && let Some(choice) = choices.get(0)
+                {
+                    let delta = &choice["delta"];
 
                     // Direct extraction of reasoning tokens (GPT-5.2 / DeepSeek-V4 protocol)
                     if let Some(reasoning) = delta["reasoning_content"]
@@ -230,12 +231,17 @@ async fn handle_openai(
     })
 }
 
-async fn handle_gemini(window: tauri::Window, req: ChatRequest) -> Result<ChatResponse, String> {
-    let api_key = req.api_key.ok_or("No API key provided for Gemini")?;
+async fn handle_gemini(
+    window: tauri::Window,
+    req: ChatRequest,
+) -> Result<ChatResponse, crate::errors::AppError> {
+    let api_key = req.api_key.ok_or(crate::errors::AppError::Config(
+        "No API key provided for Gemini".to_string(),
+    ))?;
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
 
     let contents: Vec<serde_json::Value> = req
         .messages
@@ -311,89 +317,140 @@ async fn handle_gemini(window: tauri::Window, req: ChatRequest) -> Result<ChatRe
         req.model, api_key
     );
 
-    let res = client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+    let max_retries = 3;
+    let mut retry_count = 0;
 
-    if !res.status().is_success() {
-        let status = res.status();
-        let error_msg = if status == reqwest::StatusCode::FORBIDDEN
-            || status == reqwest::StatusCode::UNAUTHORIZED
-        {
-            "GEMINI_ERROR_AUTH".to_string()
-        } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            "GEMINI_ERROR_QUOTA".to_string()
-        } else {
-            res.text().await.unwrap_or_default()
-        };
+    loop {
+        let res_result = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await;
 
-        return Ok(ChatResponse {
-            ok: false,
-            reply: None,
-            error: Some(error_msg),
-            model: Some(req.model),
-            thought_signature: None,
-        });
-    }
+        match res_result {
+            Ok(res) => {
+                if !res.status().is_success() {
+                    let status = res.status();
 
-    let mut stream = res.bytes_stream();
-    let mut full_content = String::new();
-    let mut thought_signature: Option<String> = None;
-    let mut buffer = String::new();
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                        if retry_count < max_retries {
+                            let wait_time =
+                                std::time::Duration::from_secs(2u64.pow(retry_count + 1)); // 2s, 4s, 8s
 
-    while let Some(item) = stream.next().await {
-        let chunk = item.map_err(|e| e.to_string())?;
-        let chunk_str = String::from_utf8_lossy(&chunk);
-        buffer.push_str(&chunk_str);
+                            // Send structured event for frontend localization
+                            let payload = serde_json::json!({
+                                "code": "GEMINI_QUOTA_RETRY",
+                                "wait_seconds": wait_time.as_secs()
+                            });
+                            let _ = window.emit("ai:status:retry", payload.to_string());
 
-        while let Some(pos) = buffer.find('\n') {
-            let line = buffer[..pos].trim().to_string();
-            buffer.drain(..=pos);
-
-            if line.starts_with("data: ") {
-                let data = line.trim_start_matches("data: ");
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
-                    && let Some(parts) = json["candidates"][0]["content"]["parts"].as_array()
-                {
-                    for part in parts {
-                        // Extract integrated reasoning trace (handles string or boolean flag per 2026 specs)
-                        let is_thought = part["thought"].as_bool().unwrap_or(false);
-                        if is_thought {
-                            if let Some(th) = part["text"].as_str() {
-                                let _ = window.emit("ai:thought:chunk", th);
-                            }
-                        } else if let Some(th) = part["thought"].as_str() {
-                            let _ = window.emit("ai:thought:chunk", th);
-                        } else if let Some(t) = part["text"].as_str() {
-                            // Extract primary text response
-                            full_content.push_str(t);
-                            let _ = window.emit("ai:chat:chunk", t);
+                            tokio::time::sleep(wait_time).await;
+                            retry_count += 1;
+                            continue;
                         }
 
-                        // Retrieve thought signature for session verification
-                        if let Some(sig) = part.get("thoughtSignature").and_then(|s| s.as_str()) {
-                            thought_signature = Some(sig.to_string());
+                        return Ok(ChatResponse {
+                            ok: false,
+                            reply: None,
+                            error: Some("ui.gemini.error.quota".to_string()),
+                            model: Some(req.model.clone()),
+                            thought_signature: None,
+                        });
+                    }
+
+                    let error_msg = if status == reqwest::StatusCode::FORBIDDEN
+                        || status == reqwest::StatusCode::UNAUTHORIZED
+                    {
+                        "ui.gemini.error.auth".to_string()
+                    } else if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
+                        "ui.gemini.error.unavailable".to_string()
+                    } else {
+                        res.text()
+                            .await
+                            .unwrap_or_else(|_| "Unknown error".to_string())
+                    };
+
+                    return Ok(ChatResponse {
+                        ok: false,
+                        reply: None,
+                        error: Some(error_msg),
+                        model: Some(req.model),
+                        thought_signature: None,
+                    });
+                }
+
+                // Success - process stream
+                let mut stream = res.bytes_stream();
+                let mut full_content = String::new();
+                let mut thought_signature: Option<String> = None;
+                let mut buffer = String::new();
+
+                while let Some(item) = stream.next().await {
+                    let chunk =
+                        item.map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+                    let chunk_str = String::from_utf8_lossy(&chunk);
+                    buffer.push_str(&chunk_str);
+
+                    while let Some(pos) = buffer.find('\n') {
+                        let line = buffer[..pos].trim().to_string();
+                        buffer.drain(..=pos);
+
+                        if line.starts_with("data: ") {
+                            let data = line.trim_start_matches("data: ");
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                                && let Some(parts) =
+                                    json["candidates"][0]["content"]["parts"].as_array()
+                            {
+                                for part in parts {
+                                    // Extract integrated reasoning trace (handles string or boolean flag per 2026 specs)
+                                    let is_thought = part["thought"].as_bool().unwrap_or(false);
+                                    if is_thought {
+                                        if let Some(th) = part["text"].as_str() {
+                                            let _ = window.emit("ai:thought:chunk", th);
+                                        }
+                                    } else if let Some(th) = part["thought"].as_str() {
+                                        let _ = window.emit("ai:thought:chunk", th);
+                                    } else if let Some(t) = part["text"].as_str() {
+                                        // Extract primary text response
+                                        full_content.push_str(t);
+                                        let _ = window.emit("ai:chat:chunk", t);
+                                    }
+
+                                    // Retrieve thought signature for session verification
+                                    if let Some(sig) =
+                                        part.get("thoughtSignature").and_then(|s| s.as_str())
+                                    {
+                                        thought_signature = Some(sig.to_string());
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+
+                return Ok(ChatResponse {
+                    ok: true,
+                    reply: Some(ChatReply {
+                        text: full_content,
+                        role: "model".to_string(),
+                    }),
+                    error: None,
+                    model: Some(req.model),
+                    thought_signature,
+                });
+            }
+            Err(e) => {
+                return Ok(ChatResponse {
+                    ok: false,
+                    reply: None,
+                    error: Some(format!("Request failed: {}", e)),
+                    model: Some(req.model),
+                    thought_signature: None,
+                });
             }
         }
     }
-
-    Ok(ChatResponse {
-        ok: true,
-        reply: Some(ChatReply {
-            text: full_content,
-            role: "model".to_string(),
-        }),
-        error: None,
-        model: Some(req.model),
-        thought_signature,
-    })
 }
 
 fn parse_data_uri(uri: &str) -> Option<(String, String)> {
