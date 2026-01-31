@@ -193,4 +193,35 @@ export class SettingsService {
             return '';
         }
     }
+
+    /**
+     * Validate API Key using Backend Command.
+     */
+    public async validateApiKey(provider: string, key: string): Promise<boolean> {
+        try {
+            if (globalThis.__TAURI__) {
+                // Now using the secure Backend command
+                return await globalThis.__TAURI__.core.invoke<boolean>('validate_api_key', {
+                    provider,
+                    key,
+                });
+            } else {
+                // Mock validation for web
+                return key.length > 5;
+            }
+        } catch (e) {
+            console.error('[SettingsService] API Key validation failed:', e);
+            return false;
+        }
+    }
+
+    public async addCustomModel(provider: string, id: string, name: string): Promise<void> {
+        // Implementation for custom models storage
+        // Currently using localStorage as per audit finding, but encapsulated in Service
+        const key = `custom_models_${provider}`;
+        const existing = localStorage.getItem(key);
+        let models = existing ? JSON.parse(existing) : [];
+        models.push({ id, name });
+        localStorage.setItem(key, JSON.stringify(models));
+    }
 }

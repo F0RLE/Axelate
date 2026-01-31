@@ -439,7 +439,7 @@
     background: var(--card-bg);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
-    padding: 1.5rem 1.5rem 4rem 1.5rem;
+    padding: 1.5rem 1.5rem 2rem 1.5rem; /* Standard padding */
     display: flex;
     transition: all 0.3s ease;
     flex-direction: column;
@@ -447,12 +447,11 @@
     text-align: center;
     cursor: pointer;
     position: relative;
-    overflow: hidden;
-    height: 100%;
-    min-height: 240px;
+    overflow: visible !important; /* Force visible overflow */
+    height: auto !important; /* Allow growth */
+    min-height: 280px; /* Base height */
     justify-content: flex-start;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateZ(0);
 }
 
 .model-card-premium:hover {
@@ -547,12 +546,10 @@
 }
 
 .model-card-premium .model-card-action {
-    position: absolute !important;
-    bottom: 1rem !important;
-    left: 0 !important;
-    right: 0 !important;
+    /* Removed absolute positioning to allow dynamic flow */
+    margin-top: auto; /* Pushes button to bottom */
+    margin-bottom: 0.5rem;
     width: max-content;
-    margin: 0 auto;
     padding: 0.6rem 2rem;
     border-radius: 12px;
     background: rgba(138, 43, 226, 0.1);
@@ -563,18 +560,17 @@
     opacity: 0;
     pointer-events: none;
     cursor: pointer;
-    z-index: 20 !important;
+    z-index: 5;
     white-space: nowrap;
-    /* Ensure consistent height even if text changes */
     min-width: 120px;
     display: inline-flex;
     justify-content: center;
     align-items: center;
+    transform: translateY(0);
 }
 
 .model-card-premium:hover .model-card-action {
     opacity: 1 !important;
-    /* background: var(--primary) !important; Removed to allow button specific style */
     color: white !important;
     pointer-events: auto !important;
     transform: translateY(-5px);
@@ -595,21 +591,64 @@
 .model-card-premium.selected .model-card-desc {
     font-size: 1rem;
     line-height: 1.5;
+    margin-bottom: 1.5rem; /* Add space before button */
 }
 
 .model-card-premium .model-card-action.active-module-btn {
-    /* Hidden by default, appears on hover via .model-card-premium:hover rule */
     background: rgba(138, 43, 226, 0.1);
     color: #ffffff;
     border: 1px solid rgba(138, 43, 226, 0.4);
-    min-width: 140px; /* Slightly wider for status text */
+    min-width: 140px;
+}
+
+
+
+/* Active Module State - Always show action if selected */
+/* Active Module State - Action shows on hover (default behavior) */
+/* .model-card-premium.selected .model-card-action {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+} */
+
+/* Hide action button when card is empty, BUT NOT download buttons */
+.model-card-premium.empty .model-card-action:not(.download-module-btn) {
+    display: none !important;
+}
+
+/* --- Download Button Specific Styling --- */
+
+/* Download button visible - NO card dimension changes */
+
+/* The download button - same layout as launch button */
+.model-card-premium .model-card-action.download-module-btn {
+    /* Make visible - same as launch button */
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: inline-flex !important;
+    
+    /* Styling */
+    padding: 0.6rem 2rem !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    
+    background: var(--primary) !important;
+    color: white !important;
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.35);
+}
+
+.model-card-premium .model-card-action.download-module-btn:hover {
+    background: var(--primary-hover) !important;
+    transform: translateY(-3px) !important;
+    box-shadow: 0 6px 20px rgba(138, 43, 226, 0.5);
 }
 
 .model-card-premium .model-card-action.active-module-btn:hover {
-    background: #00e676 !important; /* Pure Neon Green */
-    border-color: #00e676 !important;
-    color: #000000 !important; /* Black on Neon Green */
+    background: var(--primary) !important;
+    border-color: var(--primary) !important;
+    color: #ffffff !important;
     transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.4);
 }
 
 .shortcut-key {
@@ -617,7 +656,7 @@
     padding: 2px 6px;
     border-radius: 4px;
     font-family: monospace;
-    color: #000000 !important; /* Black on white */
+    color: #000000 !important;
     font-weight: 700;
 }
 
@@ -853,7 +892,7 @@
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
-    overflow: hidden;
+    /* overflow: hidden; Removed to prevent clipping */
     min-height: 300px;
 }
 
@@ -904,6 +943,35 @@
     background: #13d36e;
     color: #000000 !important;
     font-weight: 700;
+}
+
+.app-status.download-btn {
+    background: var(--primary);
+    color: white !important;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.app-status.download-btn:hover {
+    background: var(--primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.3);
+}
+
+.app-status.download-btn.downloading {
+    opacity: 0.7;
+    pointer-events: none;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 0.4; }
+    100% { opacity: 0.7; }
 }
 
 /* --- Card Corner Actions (Settings and Reset) --- */
@@ -1462,31 +1530,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 /* App Status Button Overrides */
 
-.app-status.download-btn {
-    background: linear-gradient(135deg, #13d36e, #2ecc71);
-    color: #000; /* Black text on bright green for accessibility */
-    font-weight: 700;
-    border: none;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.app-status.download-btn:hover {
-    background: linear-gradient(135deg, #2ecc71, #58d68d);
-    transform: scale(1.02);
-    box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4);
-}
-
-.app-status.download-btn.downloading {
-    background: linear-gradient(
-        90deg,
-        #2ecc71 var(--progress, 0%),
-        rgba(46, 204, 113, 0.3) var(--progress, 0%)
-    );
-    cursor: wait;
-}
+/* Consolidated App Status Button Overrides removed from here to reduce duplication */
 
 .app-status.stop-btn {
     background: linear-gradient(135deg, #e74c3c, #c0392b) !important;

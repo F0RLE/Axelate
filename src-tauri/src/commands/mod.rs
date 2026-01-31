@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod config;
 pub mod downloader;
 pub mod health;
@@ -13,6 +14,7 @@ pub mod ui_state;
 pub mod window;
 pub mod window_settings; // Added
 
+pub use ai::*;
 pub use downloader::*;
 pub use health::*;
 pub use license::*;

@@ -18,6 +18,7 @@ export class ChatController {
 
     constructor() {
         this._service = new ChatService();
+        // Initialized without arguments
         this._ui = new ChatUI();
         this._init();
     }

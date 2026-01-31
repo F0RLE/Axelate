@@ -50,9 +50,8 @@ struct ApiProviderConfig {
 
 /// Dispatches a chat request to the appropriate AI provider (OpenAI or Gemini).
 ///
-/// This command implements streaming behavior via Tauri events.
-#[tauri::command]
-pub async fn send_chat_message(
+/// This function implements streaming behavior via Tauri events.
+pub async fn process_chat_request(
     window: tauri::Window,
     request: ChatRequest,
 ) -> Result<ChatResponse, crate::errors::AppError> {
@@ -95,6 +94,48 @@ pub async fn send_chat_message(
             model: Some(request.model),
             thought_signature: None,
         }),
+    }
+}
+
+/// Validates an API key against the specified provider.
+pub async fn validate_api_key(
+    provider: String,
+    key: String,
+) -> Result<bool, crate::errors::AppError> {
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+
+    match provider.as_str() {
+        "openai" | "gpt" => {
+            // Check models endpoint
+            let res = client
+                .get("https://api.openai.com/v1/models")
+                .header("Authorization", format!("Bearer {}", key))
+                .send()
+                .await
+                .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+            Ok(res.status().is_success())
+        }
+        "gemini" => {
+            // Check models endpoint for Gemini
+            let url = format!(
+                "https://generativelanguage.googleapis.com/v1beta/models?key={}",
+                key
+            );
+            let res = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+            Ok(res.status().is_success())
+        }
+        _ => {
+            // Unknown provider, assume false or implement generic check
+            // For now, return false to be safe
+            Ok(false)
+        }
     }
 }
 

@@ -147,7 +147,8 @@ pub fn run() {
             ui_state::save_ui_state,
             secure::save_secure_key,
             secure::get_secure_key,
-            services::ai_service::send_chat_message,
+            ai::send_chat_message,
+            ai::validate_api_key,
         ])
         .setup(|app| {
             crate::utils::paths::init_filesystem().ok();

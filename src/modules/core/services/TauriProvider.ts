@@ -101,6 +101,35 @@ export class TauriProvider {
         }
     }
 
+    /**
+     * Write text to clipboard
+     */
+    public async writeToClipboard(text: string): Promise<void> {
+        if (this._tauri) {
+            // Using tauri-plugin-clipboard-manager.
+            // v2 way: invoke('plugin:clipboard-manager|write_text', { text })
+            // OR if using the JS API wrapper, we'd use that.
+            // Assuming direct invoke for now to avoid massive dep changes,
+            // matching the pattern used in the codebase ("plugin:clipboard-manager|write_text" is standard for v2)
+            await this.invoke('plugin:clipboard-manager|write_text', { text });
+        } else {
+            console.log('[Mock Clipboard] Write:', text);
+        }
+    }
+
+    /**
+     * Open URL in default browser
+     */
+    public async openUrl(url: string): Promise<void> {
+        if (this._tauri) {
+            // Using tauri-plugin-shell
+            await this.invoke('plugin:shell|open', { path: url });
+        } else {
+            console.log('[Mock Shell] Open URL:', url);
+            window.open(url, '_blank');
+        }
+    }
+
     // --- Mock Implementation ---
     private async _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
         if (!import.meta.env.DEV) {
@@ -127,6 +156,8 @@ export class TauriProvider {
                 return 'stopped' as unknown as T;
             case 'control_module':
                 return { success: true, message: 'Mock Success' } as unknown as T;
+            case 'validate_api_key':
+                return true as unknown as T; // Mock validation success
             default:
                 return null as unknown as T;
         }

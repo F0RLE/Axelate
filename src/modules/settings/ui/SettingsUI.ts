@@ -332,7 +332,6 @@ export class SettingsUI {
         const win = globalThis as unknown as Window & {
             t: (k: string, d: string) => string;
             showToast: (m: string, s: string) => void;
-            APP_DATA: { ai: IApp[] };
         };
         const t = win.t || ((_k: string, d: string) => d);
 
@@ -349,27 +348,9 @@ export class SettingsUI {
         btn.style.pointerEvents = 'none';
 
         try {
-            let ok = false;
-            // Get provider data for endpoint
-            const catalog = win.APP_DATA?.ai || [];
-            const app = catalog.find((a) => a.id === appId);
-            const provider = (app?.api_provider_data as { baseUrl?: string }) || {};
-
-            if (appId === 'gemini') {
-                const res = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
-                );
-                ok = res.ok;
-            } else {
-                let url = 'https://api.openai.com/v1/models';
-                if (provider.baseUrl) {
-                    url = provider.baseUrl.endsWith('/v1')
-                        ? `${provider.baseUrl}/models`
-                        : `${provider.baseUrl}/v1/models`;
-                }
-                const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
-                ok = res.ok;
-            }
+            // Use Service to validate key (Backend secure check)
+            const provider = appId === 'gemini' ? 'gemini' : 'openai'; // Simple mapping for now
+            const ok = await this._service.validateApiKey(provider, key);
 
             if (ok) {
                 btn.style.borderColor = 'var(--success)';
@@ -436,7 +417,7 @@ export class SettingsUI {
     /**
      * Prompts the user to add a custom AI model.
      */
-    public addCustomModelToSettings(provider: 'openai' | 'gemini' | 'local') {
+    public async addCustomModelToSettings(provider: 'openai' | 'gemini' | 'local') {
         const win = globalThis as unknown as Window & {
             t: (k: string, d?: string, p?: Record<string, unknown>) => string;
             currentSettingsModule: IApp;
@@ -459,9 +440,7 @@ export class SettingsUI {
         if (!modelName) return;
 
         try {
-            const customModels = JSON.parse(localStorage.getItem('chat_custom_models') || '[]');
-            customModels.push({ provider, id: modelId, name: modelName });
-            localStorage.setItem('chat_custom_models', JSON.stringify(customModels));
+            await this._service.addCustomModel(provider, modelId, modelName);
 
             // Custom models will be added to the provider's model list in future update
             win.showToast(

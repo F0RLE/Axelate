@@ -371,8 +371,15 @@ export class AppUI {
     }
 
     private _configureActionBtn(card: HTMLElement, app: IApp) {
-        const actionBtn = card.querySelector('.model-card-action') as HTMLElement;
-        if (!actionBtn) return;
+        let actionBtn = card.querySelector('.model-card-action') as HTMLElement;
+
+        if (!actionBtn) {
+            actionBtn = document.createElement('div');
+            actionBtn.className = 'model-card-action';
+            actionBtn.id = card.id === 'ai-module-card' ? 'ai-module-add-btn' : 'services-module-add-btn';
+            actionBtn.setAttribute('data-i18n', 'ui.launcher.button.launch');
+            card.appendChild(actionBtn);
+        }
 
         const isApi = app.type === 'api' || ['gpt', 'gemini'].includes(app.id);
         const isInstalled = app.installed !== false;
@@ -385,6 +392,12 @@ export class AppUI {
     }
 
     private _setupDownloadActionBtn(actionBtn: HTMLElement, app: IApp) {
+        const card = actionBtn.closest('.model-card-premium') as HTMLElement;
+        if (card) {
+            card.classList.add('has-download');
+            card.classList.remove('has-launch');
+        }
+        
         actionBtn.style.display = 'block';
         actionBtn.textContent = globalThis.t
             ? globalThis.t('ui.launcher.module.download', 'Download')
@@ -427,6 +440,12 @@ export class AppUI {
     }
 
     private _setupLaunchActionBtn(actionBtn: HTMLElement, app: IApp) {
+        const card = actionBtn.closest('.model-card-premium') as HTMLElement;
+        if (card) {
+            card.classList.add('has-launch');
+            card.classList.remove('has-download');
+        }
+        
         actionBtn.style.display = 'block';
         actionBtn.classList.add('active-module-btn');
         actionBtn.classList.remove('download-module-btn');

@@ -103,7 +103,7 @@
   "ui.launcher.web.close_confirm_message": "Вы уверены, что хотите закрыть приложение?",
   "ui.launcher.web.models_title": "Функции Моделей",
   "ui.launcher.models_subtitle": "Выберите возможность ИИ для начала генерации",
-  "ui.launcher.open": "Запустить",
+  "ui.launcher.open": "Открыть",
   "ui.launcher.button.launch": "Запустить",
   "ui.launcher.models.ai_desc": "Интегрированная ИИ-платформа для высококачественной генерации текста, изображений и кода.",
   "ui.launcher.models.services": "Боты и Сервисы",
