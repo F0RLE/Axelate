@@ -410,8 +410,10 @@ export class WindowUI {
     private _checkWidth(): void {
         const g = globalThis as unknown as IWindowUIGlobal;
         // Get current zoom factor (default 1)
-        const computedStyle = getComputedStyle(document.documentElement) as any;
-        const zoom = parseFloat(computedStyle.zoom) || 1;
+        const computedStyle = getComputedStyle(document.documentElement) as CSSStyleDeclaration & {
+            zoom?: string;
+        };
+        const zoom = Number.parseFloat(computedStyle.zoom || '1') || 1;
 
         // Calculate effective space available to the layout
         const width = g.innerWidth / zoom;

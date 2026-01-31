@@ -1,41 +1,56 @@
 $ErrorActionPreference = "Stop"
+$OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $Root = (Resolve-Path "$PSScriptRoot/../..").Path
 
-Write-Host "Project Root: $Root" -ForegroundColor Gray
+function Write-Header {
+    param([string]$Message)
+    Write-Host "`n=== $Message ===" -ForegroundColor Cyan
+}
 
-Write-Host "Updating Frontend dependencies (npm)..." -ForegroundColor Cyan
-Set-Location "$Root/src"
-npm update
-if ($?) { Write-Host "Frontend updated." -ForegroundColor Green }
+function Write-Step {
+    param([string]$Message)
+    Write-Host "--> $Message" -ForegroundColor Yellow
+}
 
-Write-Host "`nUpdating Backend dependencies (cargo)..." -ForegroundColor Cyan
-Set-Location "$Root/src-tauri"
-cargo update
-if ($?) { Write-Host "Backend updated." -ForegroundColor Green }
+function Write-Success {
+    param([string]$Message)
+    Write-Host "[OK] $Message" -ForegroundColor Green
+}
 
-Write-Host "`nVerifying stability..." -ForegroundColor Cyan
-Set-Location $Root
+function Write-ErrorMsg {
+    param($Message)
+    Write-Host "[!!] $Message" -ForegroundColor Red
+}
 
-function wait_exit {
-    Write-Host "`nPress Enter to close..." -ForegroundColor Gray
+function Exit-Error {
+    param($Message)
+    Write-ErrorMsg $Message
+    Write-Host "`nPress Enter to exit..." -ForegroundColor Gray
     $null = Read-Host
     exit 1
 }
 
-# 1. Run Typescript & Lint checks
-Write-Host "  - Running Lint & Format checks..."
-npm run lint
-if (!$?) { Write-Error "Linting failed after update!"; wait_exit }
+Write-Header "Project Root: $Root"
 
-# 2. Run Tests
-Write-Host "  - Running Frontend Tests..."
-npm test
-if (!$?) { Write-Error "Tests failed after update!"; wait_exit }
+Write-Step "Updating Frontend dependencies (npm)..."
+Set-Location "$Root/src"
+npm update
+if ($?) { Write-Success "Frontend updated." }
 
-# 3. Check Backend Build
-Write-Host "  - Checking Backend compilation..."
+Write-Step "Updating Backend dependencies (cargo)..."
 Set-Location "$Root/src-tauri"
-cargo check
-if (!$?) { Write-Error "Backend check failed after update!"; wait_exit }
+cargo update
+if ($?) { Write-Success "Backend updated." }
 
-Write-Host "`nAll dependencies updated and verified successfully!" -ForegroundColor Green
+Write-Host "`nVerifying stability..." -ForegroundColor Cyan
+
+# Delegate to standardized verification script
+$VerifyScript = "$PSScriptRoot\verify-all.ps1"
+powershell -ExecutionPolicy Bypass -File $VerifyScript
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "`n[OK] All dependencies updated and verified successfully!" -ForegroundColor Green
+}
+else {
+    Exit-Error "Verification failed after update!"
+}
