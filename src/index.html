@@ -640,6 +640,43 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Module Settings Modal (inside main for proper positioning) -->
+            <div
+                id="module-settings-modal"
+                class="modal-backdrop hidden"
+            >
+                <div class="app-modal">
+                    <div class="app-modal-header">
+                        <h2
+                            id="module-settings-title"
+                            class="app-modal-title"
+                            data-i18n="ui.launcher.module.settings_title"
+                        >
+                            Module Settings
+                        </h2>
+                        <button
+                            id="close-module-settings-btn"
+                            class="app-close-btn"
+                        >
+                            <svg class="icon">
+                                <use href="#icon-close"></use>
+                            </svg>
+                        </button>
+                    </div>
+                    <div
+                        id="module-settings-content"
+                        class="module-settings-content"
+                    >
+                        <!-- Dynamic settings will be injected here -->
+                        <div id="module-config-modal-active" class="module-config-modal-active">
+                            <div class="module-settings-empty">
+                                <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <div id="lang-modal" class="modal-overlay hidden">
@@ -824,43 +861,7 @@
             </div>
         </div>
 
-        <!-- Module Settings Modal -->
-        <div
-            id="module-settings-modal"
-            class="modal-overlay module-settings-overlay hidden"
-        >
-            <div class="module-settings-modal">
-                <div class="module-settings-modal-header">
-                    <h2
-                        id="module-settings-title"
-                        class="module-settings-modal-title"
-                        data-i18n="ui.launcher.module.settings_title"
-                    >
-                        Module Settings
-                    </h2>
-                    <button
-                        id="close-module-settings-btn"
-                        class="app-close-btn"
-                    >
-                        <svg class="icon">
-                            <use href="#icon-close"></use>
-                        </svg>
-                    </button>
-                </div>
-                <div
-                    id="module-settings-content"
-                    class="module-settings-modal-content"
-                >
-                    <!-- Dynamic settings will be injected here -->
-                    <div id="module-config-modal-active" class="module-config-modal-active">
-                        <div class="module-settings-empty">
-                            <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
-                        </div>
-                    </div>
-                </div>
-                <!-- Footer removed for auto-save behavior -->
-            </div>
-        </div>
+
 
 
         <script type="module" src="./modules/core/core.ts"></script>

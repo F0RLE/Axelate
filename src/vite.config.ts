@@ -23,7 +23,7 @@ export default defineConfig({
     server: {
         port: 1420,
         strictPort: true,
-        host: true, // Listen on all local IPs (0.0.0.0)
+        host: true, // Required for Tauri
         watch: {
             // tell vite to ignore watching `src-tauri`
             ignored: ['**/src-tauri/**'],

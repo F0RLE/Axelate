@@ -1,4 +1,4 @@
-import iconSvgRaw from './icons/icon.svg?raw';
+import iconSvgRaw from '../../src-tauri/icons/icon.svg?raw';
 
 /**
  * Process SVG string to ensure unique IDs and proper sizing

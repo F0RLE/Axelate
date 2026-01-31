@@ -32,7 +32,7 @@ pub fn start_server(app: AppHandle) {
         let app = Router::new()
             .route("/health", get(health_handler))
             .route("/api/stats", get(stats_handler))
-            .route("/api/module/:id/control", post(control_module_handler))
+            .route("/api/module/{id}/control", post(control_module_handler))
             // Web Interface Support
             .route("/api/translations", get(translations_handler))
             .route("/api/gpu_info", get(gpu_info_handler))
@@ -49,7 +49,7 @@ pub fn start_server(app: AppHandle) {
 
         // Bind to 127.0.0.1 for local access only initially (safer & less firewall issues)
         let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-        log::info!("[Server] 🌍 HTTP Server listening on http://{}", addr);
+        log::debug!("[Server] HTTP Server listening on http://{}", addr);
 
         // SAFETY: Binding to a port might fail if occupied, but inside tokio::spawn
         // we can't easily propagate errors up. We log and exit the thread.

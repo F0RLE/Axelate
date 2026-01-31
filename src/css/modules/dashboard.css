@@ -653,58 +653,63 @@
 
 /* --- APP SELECTION MODAL --- */
 .modal-backdrop {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    position: fixed; /* Fixed to viewport */
+    top: var(--header-height, 60px); /* Start BELOW header */
+    left: var(--sidebar-width, 280px); /* Start AFTER sidebar */
+    right: 0;
+    bottom: 0;
+    
+    /* Standard transparent overlay style (matches .modal-overlay) */
     background: rgba(0, 0, 0, 0.05);
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
-    z-index: 1000;
+    
+    z-index: 800; /* Below header (900) so window controls are clickable */
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Offset centering to account for top panel - Normalized by Zoom */
-    padding-top: calc(var(--header-height) / var(--app-zoom, 1));
+    
+    /* Reliable Animation */
     opacity: 1;
-    visibility: visible;
-    transition:
-        opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
-        visibility 0.8s;
+    pointer-events: auto; /* Block clicks to content behind */
+    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal-backdrop.hidden {
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
+    display: flex !important; /* Force layout for transition */
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .app-modal {
-    background: #1a1a1c;
+    /* Glassmorphism: Semi-transparent background with blur */
+    background: rgba(26, 25, 32, 0.85); /* Semi-transparent bg-med */
+    backdrop-filter: blur(16px) saturate(120%);
+    -webkit-backdrop-filter: blur(16px) saturate(120%);
+    
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
     width: 90%;
     max-width: 1000px;
-
-    /* Constraint for centered modal with 100px gaps from header and bottom - Normalized by Zoom */
-    /* 100vh - header(60px) - 2x100px gaps = 260px total offset */
-    max-height: calc((100vh / var(--app-zoom, 1)) - (260px / var(--app-zoom, 1)));
+    /* Adjusted height constraint */
+    max-height: calc((100vh / var(--app-zoom, 1)) - (200px / var(--app-zoom, 1)));
 
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
     overflow: hidden;
 
-    /* Animation state - Slower 0.9s duration and more depth (0.85) */
+    /* Animation State */
     opacity: 1;
     transform: scale(1) translateY(0);
-    transition: all 0.9s cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Animate ALL properties (width, height, etc) for smooth resizing */
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Entry/Exit State - Consolidated */
 .modal-backdrop.hidden .app-modal {
     opacity: 0;
-    transform: scale(0.85) translateY(50px);
+    transform: scale(0.95) translateY(10px);
 }
 
 /* Staggered entrance for cards inside the selector */
@@ -1721,30 +1726,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 }
 
 /* --- MODULE SETTINGS MODAL --- */
-
-.module-settings-overlay {
-    /* Positions within the content area (next to sidebar, below header) */
-    position: fixed;
-    border-top-left-radius: 20px;
-    left: var(--sidebar-width, 280px);
-    width: calc(100% - var(--sidebar-width, 280px));
-    top: var(--header-height, 60px);
-    height: calc(100vh - var(--header-height, 60px));
-    z-index: 900;
-    /* Below global modals (1000) but above content */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.module-settings-modal-inner {
-    max-width: 900px;
-    width: 90%;
-    height: 80vh;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
-}
+/* Note: Now uses modal-backdrop and app-modal classes from modals.css */
 
 .module-settings-content {
     padding: 1.5rem;
@@ -1757,6 +1739,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     padding: 2rem;
     color: var(--text-muted);
 }
+
 
 .zoom-plus-icon {
     font-size: 1.2rem;

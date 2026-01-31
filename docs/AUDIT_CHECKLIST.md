@@ -1,3 +1,5 @@
+✅ **Ответка:** Полное дерево проекта сгенерировано на основе актуального списка файлов и добавлено в документ.
+
 # Audit Checklist: Axelate Engineering Standards v2.1.0 Compliance
 
 **Legend:**
@@ -5,6 +7,275 @@
 - [ ] **Pending**: Needs review.
 - [!] **Issues Found**: Known issues pending fix.
 - [-] **Skipped**: External, binary, or auto-generated files.
+
+---
+
+## Project Structure (Comprehensive)
+
+```text
+Axelate/
+├── .editorconfig
+├── CHANGELOG.md
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── package-lock.json
+├── package.json
+├── README.md
+├── SECURITY.md
+├── docs/
+│   ├── en/
+│   │   ├── architecture.md
+│   │   ├── CODING_STANDARDS.md
+│   │   └── getting-started.md
+│   └── AUDIT_CHECKLIST.md
+├── src/
+│   ├── assets/
+│   │   ├── fonts/
+│   │   │   ├── Cubic_11.ttf
+│   │   │   └── Monocraft.otf
+│   │   ├── icons.ts
+│   │   └── logos.ts
+│   ├── css/
+│   │   ├── base/
+│   │   │   ├── animations.css
+│   │   │   ├── reset.css
+│   │   │   ├── scrollbar.css
+│   │   │   └── variables.css
+│   │   ├── components/
+│   │   │   ├── buttons.css
+│   │   │   ├── cards.css
+│   │   │   ├── forms.css
+│   │   │   ├── icons.css
+│   │   │   └── status.css
+│   │   ├── layout/
+│   │   │   ├── controls.css
+│   │   │   ├── main-area.css
+│   │   │   ├── modals.css
+│   │   │   ├── sidebar.css
+│   │   │   ├── splash.css
+│   │   │   └── toasts.css
+│   │   ├── modules/
+│   │   │   ├── ai-settings.css
+│   │   │   ├── chat.css
+│   │   │   ├── dashboard.css
+│   │   │   ├── debug.css
+│   │   │   ├── downloads.css
+│   │   │   ├── monitoring.css
+│   │   │   └── settings.css
+│   │   └── main.css
+│   ├── modules/
+│   │   ├── ai/
+│   │   │   ├── providers/
+│   │   │   │   └── AIProvider.ts
+│   │   │   ├── types/
+│   │   │   │   └── aiTypes.ts
+│   │   │   ├── ui/
+│   │   │   │   └── AISettingsRenderer.ts
+│   │   │   ├── utils/
+│   │   │   │   └── catalogHelpers.ts
+│   │   │   ├── AIBridge.ts
+│   │   │   └── index.ts
+│   │   ├── chat/
+│   │   │   ├── services/
+│   │   │   │   ├── ChatFileHandler.ts
+│   │   │   │   ├── ChatService.ts
+│   │   │   │   └── VoiceInputService.ts
+│   │   │   ├── types/
+│   │   │   │   └── chatTypes.ts
+│   │   │   ├── ui/
+│   │   │   │   └── ChatUI.ts
+│   │   │   ├── utils/
+│   │   │   │   └── chatUtils.ts
+│   │   │   ├── chat.ts
+│   │   │   └── index.ts
+│   │   ├── core/
+│   │   │   ├── boot/
+│   │   │   │   ├── EventHandler.ts
+│   │   │   │   └── GlobalBridge.ts
+│   │   │   ├── services/
+│   │   │   │   ├── CatalogService.ts
+│   │   │   │   ├── DiagnosticsService.ts
+│   │   │   │   ├── ErrorHandler.ts
+│   │   │   │   ├── EventBus.ts
+│   │   │   │   ├── I18nService.ts
+│   │   │   │   ├── LoggerService.ts
+│   │   │   │   ├── ModuleService.ts
+│   │   │   │   ├── NavigationService.ts
+│   │   │   │   ├── SoundService.ts
+│   │   │   │   ├── StateService.ts
+│   │   │   │   ├── TauriProvider.ts
+│   │   │   │   ├── TemplateLoader.ts
+│   │   │   │   └── WindowService.ts
+│   │   │   ├── types/
+│   │   │   │   └── coreTypes.ts
+│   │   │   ├── ui/
+│   │   │   │   ├── AppUI.ts
+│   │   │   │   ├── I18nUI.ts
+│   │   │   │   ├── NavigationUI.ts
+│   │   │   │   ├── Particles.ts
+│   │   │   │   ├── SidebarUI.ts
+│   │   │   │   └── WindowUI.ts
+│   │   │   ├── core.ts
+│   │   │   └── index.ts
+│   │   ├── dashboard/
+│   │   │   ├── ui/
+│   │   │   │   └── DashboardUI.ts
+│   │   │   └── index.ts
+│   │   ├── debug/
+│   │   │   ├── services/
+│   │   │   │   └── DebugService.ts
+│   │   │   ├── ui/
+│   │   │   │   └── DebugUI.ts
+│   │   │   └── index.ts
+│   │   ├── downloader/
+│   │   │   ├── types/
+│   │   │   │   └── downloaderTypes.ts
+│   │   │   ├── ui/
+│   │   │   │   └── DownloadUI.ts
+│   │   │   └── index.ts
+│   │   ├── monitoring/
+│   │   │   ├── services/
+│   │   │   │   └── MonitoringService.ts
+│   │   │   ├── types/
+│   │   │   │   └── monitoringTypes.ts
+│   │   │   ├── ui/
+│   │   │   │   └── MonitoringUI.ts
+│   │   │   └── index.ts
+│   │   └── settings/
+│   │       ├── services/
+│   │       │   └── SettingsService.ts
+│   │       ├── ui/
+│   │       │   ├── GeneralSettingsRenderer.ts
+│   │       │   └── SettingsUI.ts
+│   │       └── index.ts
+│   ├── scripts/
+│   │   ├── bump-version.js
+│   │   └── check-size.js
+│   ├── templates/
+│   │   ├── components/
+│   │   │   ├── header.html
+│   │   │   └── sidebar.html
+│   │   ├── modals/
+│   │   │   └── all-modals.html
+│   │   └── pages/
+│   │       ├── chat.html
+│   │       ├── debug.html
+│   │       ├── downloads.html
+│   │       ├── home.html
+│   │       ├── modules.html
+│   │       └── settings.html
+│   ├── test/
+│   │   ├── AIBridge.test.ts
+│   │   ├── ChatFileHandler.test.ts
+│   │   ├── ErrorHandler.test.ts
+│   │   ├── EventBus.test.ts
+│   │   ├── I18nService.test.ts
+│   │   ├── ModuleService.test.ts
+│   │   ├── NavigationService.test.ts
+│   │   ├── setup.test.ts
+│   │   ├── setup.ts
+│   │   ├── StateService.test.ts
+│   │   ├── TauriProvider.test.ts
+│   │   ├── templateLoader.test.ts
+│   │   └── VoiceInputService.test.ts
+│   ├── types/
+│   │   └── global.d.ts
+│   ├── .prettierrc
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── npm
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── vite-env.d.ts
+│   └── vite.config.ts
+└── src-tauri/
+    ├── capabilities/
+    │   └── default.json
+    ├── gen/
+    │   └── schemas/
+    │       ├── acl-manifests.json
+    │       ├── capabilities.json
+    │       ├── desktop-schema.json
+    │       └── windows-schema.json
+    ├── icons/
+    │   ├── icon.ico
+    │   ├── icon.png
+    │   └── icon.svg
+    ├── resources/
+    │   ├── config/
+    │   │   └── defaults.json
+    │   ├── locales/
+    │   │   ├── en.json
+    │   │   ├── ru.json
+    │   │   └── zh.json
+    │   ├── modules/
+    │   ├── tools/
+    │   └── api_providers.json
+    ├── src/
+    │   ├── commands/
+    │   │   ├── config.rs
+    │   │   ├── downloader.rs
+    │   │   ├── health.rs
+    │   │   ├── license.rs
+    │   │   ├── logs.rs
+    │   │   ├── mod.rs
+    │   │   ├── modules.rs
+    │   │   ├── secure.rs
+    │   │   ├── settings.rs
+    │   │   ├── system.rs
+    │   │   ├── theme.rs
+    │   │   ├── translations.rs
+    │   │   ├── ui_state.rs
+    │   │   ├── window.rs
+    │   │   └── window_settings.rs
+    │   ├── models/
+    │   │   ├── license.rs
+    │   │   ├── mod.rs
+    │   │   ├── module.rs
+    │   │   ├── modules.rs
+    │   │   ├── settings.rs
+    │   │   ├── system.rs
+    │   │   └── ui_state.rs
+    │   ├── services/
+    │   │   ├── license/
+    │   │   │   ├── mod.rs
+    │   │   │   ├── storage.rs
+    │   │   │   ├── types.rs
+    │   │   │   └── verifier.rs
+    │   │   ├── ai_service.rs
+    │   │   ├── config_service.rs
+    │   │   ├── downloader.rs
+    │   │   ├── health.rs
+    │   │   ├── logs.rs
+    │   │   ├── mod.rs
+    │   │   ├── module_controller.rs
+    │   │   ├── module_lifecycle.rs
+    │   │   ├── secure_storage.rs
+    │   │   ├── server.rs
+    │   │   ├── settings.rs
+    │   │   ├── system_monitor.rs
+    │   │   ├── theme.rs
+    │   │   ├── translations.rs
+    │   │   ├── ui_state.rs
+    │   │   └── window_settings.rs
+    │   ├── utils/
+    │   │   ├── memory.rs
+    │   │   ├── mod.rs
+    │   │   ├── paths.rs
+    │   │   ├── process.rs
+    │   │   ├── setup.rs
+    │   │   └── windows.rs
+    │   ├── errors.rs
+    │   ├── lib.rs
+    │   ├── main.rs
+    │   └── tests.rs
+    ├── Cargo.lock
+    ├── Cargo.toml
+    ├── rustfmt.toml
+    └── tauri.conf.json
+```
 
 ---
 
@@ -155,11 +426,8 @@
 ### Assets
 - [ ] `src/assets/icons.ts`
 - [ ] `src/assets/logos.ts`
-- [ ] `src/assets/fonts/Cubic_11.ttf`
-- [ ] `src/assets/fonts/Monocraft.otf`
-- [ ] `src/assets/icons/icon.ico`
-- [ ] `src/assets/icons/icon.png`
-- [ ] `src/assets/icons/icon.svg`
+- [-] `src/assets/fonts/Cubic_11.ttf`
+- [-] `src/assets/fonts/Monocraft.otf`
 
 ---
 
@@ -168,7 +436,6 @@
 ### Configuration
 - [ ] `src-tauri/tauri.conf.json`
 - [ ] `src-tauri/Cargo.toml`
-- [ ] `src-tauri/build.rs`
 - [ ] `src-tauri/capabilities/default.json`
 - [ ] `src-tauri/resources/api_providers.json`
 - [ ] `src-tauri/resources/config/defaults.json`
@@ -193,10 +460,10 @@
 - [ ] `src-tauri/src/commands/settings.rs`
 - [x] `src-tauri/src/commands/system.rs` (Refactored 2026-01-30)
 - [x] `src-tauri/src/commands/theme.rs` (Refactored 2026-01-30)
-- [x] `src-tauri/src/commands/translations.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/commands/ui_state.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/commands/window.rs` (Refactored 2026-01-30)
-- [x] `src-tauri/src/commands/window_settings.rs` (Refactored 2026-01-30)
+- [x] `src-tauri/src/commands/translations.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/commands/ui_state.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/commands/window.rs" (Refactored 2026-01-30)
+- [x] `src-tauri/src/commands/window_settings.rs" (Refactored 2026-01-30)
 
 ### Rust Services
 - [ ] `src-tauri/src/services/mod.rs`
@@ -204,21 +471,21 @@
 - [ ] `src-tauri/src/services/config_service.rs`
 - [x] `src-tauri/src/services/downloader.rs` (Refactored 2026-01-30)
 - [x] `src-tauri/src/services/health.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/logs.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/module_controller.rs` (Refactored 2026-01-30)
-- [x] `src-tauri/src/services/module_lifecycle.rs` (Refactored 2026-01-30)
-- [x] `src-tauri/src/services/secure_storage.rs` (Refactored 2026-01-30)
-- [x] `src-tauri/src/services/settings.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/system_monitor.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/theme.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/translations.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/ui_state.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/window_settings.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/server.rs` (Verified 2026-01-30)
-- [x] `src-tauri/src/services/license/mod.rs` (Audited 2026-01-30)
-- [x] `src-tauri/src/services/license/storage.rs` (Refactored 2026-01-30)
-- [x] `src-tauri/src/services/license/types.rs` (Audited 2026-01-30)
-- [x] `src-tauri/src/services/license/verifier.rs` (Refactored 2026-01-30)
+- [x] `src-tauri/src/services/logs.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/module_controller.rs" (Refactored 2026-01-30)
+- [x] `src-tauri/src/services/module_lifecycle.rs" (Refactored 2026-01-30)
+- [x] `src-tauri/src/services/secure_storage.rs" (Refactored 2026-01-30)
+- [x] `src-tauri/src/services/settings.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/system_monitor.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/theme.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/translations.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/ui_state.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/window_settings.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/server.rs" (Verified 2026-01-30)
+- [x] `src-tauri/src/services/license/mod.rs" (Audited 2026-01-30)
+- [x] `src-tauri/src/services/license/storage.rs" (Refactored 2026-01-30)
+- [x] `src-tauri/src/services/license/types.rs" (Audited 2026-01-30)
+- [x] `src-tauri/src/services/license/verifier.rs" (Refactored 2026-01-30)
 
 ### Rust Models
 - [ ] `src-tauri/src/models/mod.rs`

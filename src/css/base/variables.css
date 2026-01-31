@@ -82,8 +82,8 @@
     --content-padding-top: 90px;
 
     /* Window Controls Positioning */
-    --win-controls-x: 19px;
-    --win-controls-y: -18px;
+    --win-controls-x: -2px;
+    --win-controls-y: 2px;
 
     /* Animations */
     --transition-fast: 150ms;

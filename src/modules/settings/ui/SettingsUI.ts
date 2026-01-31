@@ -124,11 +124,8 @@ export class SettingsUI {
     public static close(): void {
         const modal = document.getElementById('module-settings-modal') as HTMLElement;
         if (modal) {
-            modal.classList.remove('show');
-            setTimeout(() => {
-                modal.style.display = 'none';
-                modal.classList.add('hidden');
-            }, 300);
+            // modal-backdrop uses hidden class with CSS transition
+            modal.classList.add('hidden');
         }
     }
 
@@ -668,9 +665,8 @@ export class SettingsUI {
 
         await this._renderSpecializedModuleConfig(container, app);
 
+        // modal-backdrop: just remove hidden class, CSS handles animation
         modal.classList.remove('hidden');
-        modal.style.display = 'flex';
-        setTimeout(() => modal.classList.add('show'), 10);
 
         // Close logic
         const closeBtn = document.getElementById('close-module-settings-btn');
