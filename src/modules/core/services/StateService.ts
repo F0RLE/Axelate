@@ -18,6 +18,7 @@ export interface IUIState {
     last_page?: string;
     zoom_level: number;
     selected_ai_models: Record<string, string>;
+    resolution_zoom: Record<string, number>;
 }
 
 const DEFAULT_UI_STATE: IUIState = {
@@ -31,6 +32,7 @@ const DEFAULT_UI_STATE: IUIState = {
     selected_modules: {},
     zoom_level: 1,
     selected_ai_models: {},
+    resolution_zoom: {},
 };
 
 export class StateService {
@@ -320,9 +322,42 @@ export class StateService {
     }
 
     /**
+     * Returns the current zoom level.
+     */
+    public getZoomLevel(): number {
+        return this._state.zoom_level;
+    }
+
+    /**
+     * Sets the zoom level.
+     */
+    public setZoomLevel(zoom: number): void {
+        this.set('zoom_level', zoom);
+    }
+
+    /**
      * Sets the last visited page ID.
      */
     public setLastPage(page: string): void {
         this.set('last_page', page);
+    }
+
+    /**
+     * Returns the zoom level for a specific resolution key (e.g., "1920x1080").
+     */
+    public getResolutionZoom(resKey: string): number | undefined {
+        return this._state.resolution_zoom?.[resKey];
+    }
+
+    /**
+     * Sets the zoom level for a specific resolution key.
+     */
+    public setResolutionZoom(resKey: string, zoom: number): void {
+        if (!this._state.resolution_zoom) {
+            this._state.resolution_zoom = {};
+        }
+        this._state.resolution_zoom[resKey] = zoom;
+        this._isDirty = true;
+        this._debouncedSave();
     }
 }

@@ -14,16 +14,23 @@ interface INavigationGlobal {
     navigate: (pageId: string) => void;
 }
 
+import { StateService } from './StateService';
+
 export class NavigationService {
     private readonly _historyStack: string[] = [];
     private _currentIndex: number = -1;
     private static _instance: NavigationService;
+    private _stateService: StateService | null = null;
 
     private constructor() {
         if (NavigationService._instance) {
             console.warn('[NavigationService] Instance already exists!');
         }
         NavigationService._instance = this;
+    }
+
+    public setStateService(stateService: StateService): void {
+        this._stateService = stateService;
     }
 
     /**
@@ -66,6 +73,10 @@ export class NavigationService {
         }
         this._historyStack.push(pageId);
         this._currentIndex = this._historyStack.length - 1;
+
+        if (this._stateService) {
+            this._stateService.setLastPage(pageId);
+        }
     }
 
     /**

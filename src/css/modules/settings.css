@@ -167,7 +167,7 @@
 
 @media (max-width: 1024px) {
     .settings-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
     }
 
     .settings-nav {

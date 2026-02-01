@@ -56,6 +56,7 @@ $env:PATH = "$env:USERPROFILE\.cargo\bin;" + $env:PATH
 
 # Build using npm script (runs tauri from src/node_modules)
 Write-Step "Building release executable..."
+Get-Process "Axelate" -ErrorAction SilentlyContinue | Stop-Process -Force
 Set-Location $SrcDir
 npm run tauri:build
 

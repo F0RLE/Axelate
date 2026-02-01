@@ -16,6 +16,8 @@ interface IWindowGlobal {
                 setSize: (size: unknown) => Promise<void>;
                 center: () => Promise<void>;
                 isMaximized: () => Promise<boolean>;
+                innerSize: () => Promise<{ width: number; height: number }>;
+                outerPosition: () => Promise<{ x: number; y: number }>;
             };
             LogicalSize: new (w: number, h: number) => unknown;
         };
@@ -35,6 +37,7 @@ export class WindowService {
     private _currentZoom: number = 1;
     private readonly _MIN_ZOOM = 0.5;
     private readonly _MAX_ZOOM = 2;
+    private _saveWindowTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(private readonly _tauri: TauriProvider) {}
 
@@ -51,27 +54,25 @@ export class WindowService {
 
         if (this._tauri.isTauri()) {
             try {
-                // Get initial zoom with timeout (Increased to 2.5s)
-                const zoomPromise = this._tauri.invoke<number>('get_webview_zoom');
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout getting zoom')), 2500),
-                );
-
-                const zoom: unknown = await Promise.race([zoomPromise, timeoutPromise]);
-
-                if (typeof zoom === 'number') {
-                    this._currentZoom = zoom;
-                } else {
-                    this._currentZoom = fallbackZoom;
-                }
+                this._currentZoom = await this._getInitialZoomWithFallback(fallbackZoom);
             } catch (e) {
                 console.warn(
                     '[WindowService] Failed to get initial zoom (or timeout), using fallback:',
                     e,
                 );
-                this._currentZoom = fallbackZoom;
+                this._currentZoom = this._getFallbackZoom(fallbackZoom);
             }
-            document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
+            if (this._tauri.isTauri()) {
+                document.documentElement.style.setProperty('--app-zoom', '1');
+            } else {
+                document.documentElement.style.setProperty(
+                    '--app-zoom',
+                    this._currentZoom.toFixed(3),
+                );
+            }
+
+            // Initialize persistence listeners
+            this._initWindowListeners();
         } else {
             // Web Fallback: Load from localStorage or default to 1
             this._currentZoom = fallbackZoom;
@@ -178,6 +179,25 @@ export class WindowService {
 
     // --- Zoom ---
 
+    private _stateService: {
+        setZoomLevel: (z: number) => void;
+        getZoomLevel: () => number;
+        getResolutionZoom: (k: string) => number | undefined;
+        setResolutionZoom: (k: string, z: number) => void;
+    } | null = null;
+
+    /**
+     * Injects the StateService dependency.
+     */
+    public setStateService(stateService: {
+        setZoomLevel: (z: number) => void;
+        getZoomLevel: () => number;
+        getResolutionZoom: (k: string) => number | undefined;
+        setResolutionZoom: (k: string, z: number) => void;
+    }): void {
+        this._stateService = stateService;
+    }
+
     /**
      * Sets the webview zoom level.
      */
@@ -189,18 +209,29 @@ export class WindowService {
 
         if (this._tauri.isTauri()) {
             try {
-                await this._tauri.invoke('set_webview_zoom', { zoom: this._currentZoom });
-                // Also save to settings file
-                await this._tauri.invoke('save_zoom_level', { zoom: this._currentZoom });
+                // Pass resolution key to backend so it knows WHERE to save
+                const resKey = this._getResolutionKey();
+                await this._tauri.invoke('set_webview_zoom', {
+                    zoom: this._currentZoom,
+                    resKey: resKey,
+                });
             } catch (e) {
                 console.error('[WindowService] Zoom error:', e);
             }
-        } else {
-            // Web Persistence - covered by top-level save
         }
 
-        // Always apply CSS
-        document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
+        // Apply CSS Variable (for Web fallback UI scaling)
+        if (this._tauri.isTauri()) {
+            document.documentElement.style.setProperty('--app-zoom', '1');
+        } else {
+            document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
+        }
+
+        // Sync with StateService (DI) for frontend reactivity
+        if (this._stateService) {
+            this._stateService.setZoomLevel(this._currentZoom);
+            this._stateService.setResolutionZoom(this._getResolutionKey(), this._currentZoom);
+        }
 
         return this._currentZoom;
     }
@@ -305,5 +336,121 @@ export class WindowService {
         console.log('[WindowService] toggleMonitorPanel:', visible);
         const event = new CustomEvent('monitor:toggle', { detail: { visible } });
         globalThis.dispatchEvent(event);
+    }
+
+    // --- Persistence ---
+
+    /**
+     * Initializes listeners for window resize and move events to persist state.
+     */
+    private _initWindowListeners(): void {
+        // DOM Resize event covers window resizing and maximizing
+        window.addEventListener('resize', () => this._scheduleSaveWindowState());
+
+        // Tauri move event (if supported) covers window dragging
+        void this._tauri.listen('tauri://move', () => this._scheduleSaveWindowState());
+    }
+
+    /**
+     * Schedules a debounced save of the window state.
+     */
+    private _scheduleSaveWindowState(): void {
+        if (this._saveWindowTimer) {
+            clearTimeout(this._saveWindowTimer);
+        }
+        this._saveWindowTimer = setTimeout(() => {
+            void this._saveWindowState();
+        }, 1000);
+    }
+
+    /**
+     * Persists the current window state (size, position, maximized) to the backend.
+     */
+    private async _saveWindowState(): Promise<void> {
+        if (!this._tauri.isTauri()) return;
+
+        try {
+            const win = globalThis as unknown as IWindowGlobal;
+            if (win.__TAURI__?.window) {
+                const appWindow = win.__TAURI__.window.getCurrentWindow();
+                const isMaximized = await appWindow.isMaximized();
+
+                // Save maximized state
+                await this._tauri.invoke('save_maximized_state', { maximized: isMaximized });
+
+                // Only save specific dimensions if NOT maximized
+                // (Restoring a maximized window with maximized=true is enough,
+                // we don't want to overwrite the "restore" size with the screen size)
+                if (!isMaximized) {
+                    const size = await appWindow.innerSize();
+                    const pos = await appWindow.outerPosition();
+
+                    await this._tauri.invoke('save_window_size', {
+                        width: size.width,
+                        height: size.height,
+                    });
+
+                    await this._tauri.invoke('save_window_position', {
+                        x: pos.x,
+                        y: pos.y,
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('[WindowService] Failed to save window state:', e);
+        }
+    }
+
+    /**
+     * Helper to retrieve initial zoom with timeout and state service priority.
+     */
+    private async _getInitialZoomWithFallback(fallback: number): Promise<number> {
+        const resKey = this._getResolutionKey();
+        const screenHeight = window.screen.height || 600;
+
+        // Backend-driven logic: Ask Rust "what is the zoom for this monitor?"
+        // Rust will calculate it if it doesn't exist.
+        if (this._tauri.isTauri()) {
+            try {
+                const zoom = await this._tauri.invoke<number>('get_resolution_zoom', {
+                    resKey: resKey,
+                    screenHeight: screenHeight,
+                });
+                if (typeof zoom === 'number' && zoom > 0) return zoom;
+            } catch (e) {
+                console.error('[WindowService] Initial zoom error:', e);
+            }
+        }
+
+        // Final fallback
+        return fallback;
+    }
+
+    /**
+     * Helper to get fallback zoom when init fails.
+     */
+    private _getFallbackZoom(fallback: number): number {
+        if (this._stateService) {
+            const resKey = this._getResolutionKey();
+            const resZoom = this._stateService.getResolutionZoom(resKey);
+            if (resZoom && resZoom > 0) return resZoom;
+
+            const screenHeight = window.screen.height || 600;
+            return Math.max(this._MIN_ZOOM, Math.min(this._MAX_ZOOM, screenHeight / 600));
+        }
+        return fallback;
+    }
+
+    /**
+     * Returns a key representing the current screen resolution (e.g., "1920x1080").
+     */
+    private _getResolutionKey(): string {
+        try {
+            const w = window.screen.width;
+            const h = window.screen.height;
+            return `${w}x${h}`;
+        } catch {
+            return 'unknown';
+        }
     }
 }

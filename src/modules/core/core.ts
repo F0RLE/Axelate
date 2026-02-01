@@ -83,6 +83,12 @@ export class Core {
         this.diagnostics = new DiagnosticsService(this.tauriProvider, this.i18n);
         this.soundService = new SoundService();
         this.state = new StateService(this);
+
+        // Inject StateService into WindowService (Dependency Injection) to ensure zoom sync
+        // works immediately, avoiding startup race conditions.
+        this.windowService.setStateService(this.state);
+        this.navigation.setStateService(this.state);
+
         this.monitoringService = new MonitoringService();
         this.debugService = new DebugService();
         this.settingsService = new SettingsService();
@@ -132,6 +138,11 @@ export class Core {
         win.uiState = this.state;
 
         this.navigation.refreshFromUiState();
+
+        // Render page immediately (behind splash screen) to avoid pop-in delay
+        const currentPage = this.navigation.getCurrentPage();
+        this.navigationUI.showPage(currentPage || 'home', null, true);
+
         console.debug('[Core] UI State Loaded.');
 
         // 3. Show Window (keep splash visible)
@@ -205,9 +216,6 @@ export class Core {
         this.windowUI.hideSplashScreen();
 
         setTimeout(() => {
-            const currentPage = this.navigation.getCurrentPage();
-            this.navigationUI.showPage(currentPage || 'home', null, true);
-
             const elements = ['sidebar', 'app-header', 'main-area'];
             elements.forEach((id) => {
                 const el = document.getElementById(id);

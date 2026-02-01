@@ -15,6 +15,8 @@ export interface ITauriInstance {
             isMaximized: () => Promise<boolean>;
             setSize: (_size: { width: number; height: number }) => Promise<void>;
             center: () => Promise<void>;
+            innerSize: () => Promise<{ width: number; height: number }>;
+            outerPosition: () => Promise<{ x: number; y: number }>;
         };
         LogicalSize: new (_width: number, _height: number) => { width: number; height: number };
     };

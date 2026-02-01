@@ -36,6 +36,10 @@ pub struct UIState {
     pub zoom_level: f64,
     /// Selected AI Models (AppID -> ModelKey)
     pub selected_ai_models: std::collections::HashMap<String, String>,
+    /// Last visited page ID
+    pub last_page: Option<String>,
+    /// Per-resolution zoom levels ("WxH" -> value)
+    pub resolution_zoom: std::collections::HashMap<String, f64>,
 }
 
 impl Default for UIState {
@@ -51,6 +55,8 @@ impl Default for UIState {
             selected_modules: std::collections::HashMap::new(),
             zoom_level: 1.0,
             selected_ai_models: std::collections::HashMap::new(),
+            last_page: None,
+            resolution_zoom: std::collections::HashMap::new(),
         }
     }
 }

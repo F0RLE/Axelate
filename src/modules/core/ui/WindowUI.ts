@@ -298,7 +298,6 @@ export class WindowUI {
     private async _applySmallScreenProtection(): Promise<void> {
         this._isSmallScreen = this._service.detectSmallScreen();
         if (this._isSmallScreen) {
-            this._service.setZoom(0.7);
             this._service.toggleMaximize().catch(() => {});
             this._wasMaximizedOnSmallScreen = true;
         }

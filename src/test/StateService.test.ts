@@ -214,6 +214,15 @@ describe('StateService', () => {
         });
     });
 
+    describe('zoom level', () => {
+        it('should get/set zoom level', () => {
+            expect(stateService.getZoomLevel()).toBe(1);
+
+            stateService.setZoomLevel(1.5);
+            expect(stateService.getZoomLevel()).toBe(1.5);
+        });
+    });
+
     describe('saveAsync', () => {
         it('should save state to backend when dirty', async () => {
             mockInvoke.mockResolvedValueOnce(undefined);

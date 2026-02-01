@@ -62,6 +62,7 @@ if (-not (Test-Path "$SrcDir\node_modules")) {
 
 # 3. Start Tauri (Vite is started automatically by beforeDevCommand)
 Write-Step "Launching Tauri (Vite will start automatically)..."
+Get-Process "Axelate" -ErrorAction SilentlyContinue | Stop-Process -Force
 Set-Location $TauriDir
 # Specify stable-msvc explicitly to avoid ambiguity
 rustup run stable-msvc cargo tauri dev

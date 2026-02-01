@@ -10,7 +10,13 @@ pub fn get_ui_state() -> Result<UIState, AppError> {
     }
 
     let content = fs::read_to_string(&*FILE_UI_STATE).map_err(AppError::Io)?;
-    serde_json::from_str(&content).map_err(AppError::Serialization)
+    match serde_json::from_str(&content) {
+        Ok(state) => Ok(state),
+        Err(e) => {
+            log::warn!("Failed to parse UI state, resetting to defaults: {}", e);
+            Ok(UIState::default())
+        }
+    }
 }
 
 /// Save UI state to file

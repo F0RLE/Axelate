@@ -49,15 +49,11 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     match builder.build() {
         Ok(window) => {
             // 4. Apply zoom and maximized state
-            let _ = window.with_webview(move |webview| {
-                #[cfg(target_os = "windows")]
-                unsafe {
-                    // Load zoom from UI State (new location)
-                    let ui_settings = crate::services::ui_state::get_ui_state().unwrap_or_default();
-                    let controller = webview.controller();
-                    let _ = controller.SetZoomFactor(ui_settings.zoom_level);
-                }
-            });
+            // Apply zoom factor based on saved UI State
+            let ui_settings = crate::services::ui_state::get_ui_state().unwrap_or_default();
+            if (ui_settings.zoom_level - 1.0).abs() > f64::EPSILON {
+                let _ = window.set_zoom(ui_settings.zoom_level);
+            }
 
             if settings.maximized {
                 let _ = window.maximize();
@@ -105,12 +101,25 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Check if window exists (might be destroyed for optimization)
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
+
+                #[cfg(target_os = "windows")]
+                {
+                    // Force window to top to steal focus from the new instance
+                    let _ = window.set_always_on_top(true);
+                    std::thread::sleep(std::time::Duration::from_millis(100)); // Minimal delay to ensure OS registers layer change
+                    let _ = window.set_always_on_top(false);
+                    let _ = window.set_focus();
+                }
+
                 crate::services::system_monitor::set_paused(false);
             } else {
+                // If window doesn't exist (frontend destroyed), create it
+                // This matches the behavior of clicking "Open" in the tray menu
                 create_main_window(app);
             }
             log::info!("Single instance lock: Second instance launch attempt detected.");
@@ -156,6 +165,7 @@ pub fn run() {
             window_settings::save_zoom_level,
             window_settings::set_webview_zoom,
             window_settings::get_webview_zoom,
+            window_settings::get_resolution_zoom,
             ui_state::get_ui_state,
             ui_state::save_ui_state,
             secure::save_secure_key,
