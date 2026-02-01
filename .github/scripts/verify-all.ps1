@@ -55,6 +55,7 @@ Write-Header "Starting Full Project Verification (Axelate)"
 
 # 1. Backend Verification
 Write-Step "Backend (Rust) Verification"
+Exec "cargo" @("fmt", "--", "--check") $TAURI_DIR
 Exec "cargo" @("clippy", "--", "-D", "warnings") $TAURI_DIR
 Exec "cargo" @("test") $TAURI_DIR
 Write-Success "Backend checks passed"

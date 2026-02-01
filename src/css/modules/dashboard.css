@@ -601,8 +601,6 @@
     min-width: 140px;
 }
 
-
-
 /* Active Module State - Always show action if selected */
 /* Active Module State - Action shows on hover (default behavior) */
 /* .model-card-premium.selected .model-card-action {
@@ -625,12 +623,12 @@
     opacity: 1 !important;
     pointer-events: auto !important;
     display: inline-flex !important;
-    
+
     /* Styling */
     padding: 0.6rem 2rem !important;
     font-size: 0.95rem !important;
     font-weight: 600 !important;
-    
+
     background: var(--primary) !important;
     color: white !important;
     border: none !important;
@@ -969,9 +967,15 @@
 }
 
 @keyframes pulse {
-    0% { opacity: 0.7; }
-    50% { opacity: 0.4; }
-    100% { opacity: 0.7; }
+    0% {
+        opacity: 0.7;
+    }
+    50% {
+        opacity: 0.4;
+    }
+    100% {
+        opacity: 0.7;
+    }
 }
 
 /* --- Card Corner Actions (Settings and Reset) --- */

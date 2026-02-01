@@ -308,74 +308,74 @@ Axelate/
 - [ ] `src/types/global.d.ts`
 
 ### Modules: Core
-- [ ] `src/modules/core/index.ts`
-- [ ] `src/modules/core/core.ts`
-- [ ] `src/modules/core/boot/GlobalBridge.ts` (Legacy Bridge & Global Types)
-- [ ] `src/modules/core/boot/EventHandler.ts`
-- [ ] `src/modules/core/services/CatalogService.ts`
-- [ ] `src/modules/core/services/DiagnosticsService.ts`
-- [ ] `src/modules/core/services/ErrorHandler.ts`
-- [ ] `src/modules/core/services/EventBus.ts`
-- [ ] `src/modules/core/services/I18nService.ts`
-- [ ] `src/modules/core/services/LoggerService.ts`
-- [ ] `src/modules/core/services/ModuleService.ts`
-- [ ] `src/modules/core/services/NavigationService.ts`
-- [ ] `src/modules/core/services/SoundService.ts`
-- [ ] `src/modules/core/services/StateService.ts`
-- [ ] `src/modules/core/services/TauriProvider.ts`
-- [ ] `src/modules/core/services/WindowService.ts`
+- [x] `src/modules/core/index.ts`
+- [x] `src/modules/core/core.ts`
+- [x] `src/modules/core/boot/GlobalBridge.ts` (Legacy Bridge & Global Types)
+- [x] `src/modules/core/boot/EventHandler.ts`
+- [x] `src/modules/core/services/CatalogService.ts`
+- [x] `src/modules/core/services/DiagnosticsService.ts`
+- [x] `src/modules/core/services/ErrorHandler.ts`
+- [x] `src/modules/core/services/EventBus.ts`
+- [x] `src/modules/core/services/I18nService.ts`
+- [x] `src/modules/core/services/LoggerService.ts`
+- [x] `src/modules/core/services/ModuleService.ts`
+- [x] `src/modules/core/services/NavigationService.ts`
+- [x] `src/modules/core/services/SoundService.ts`
+- [x] `src/modules/core/services/StateService.ts`
+- [x] `src/modules/core/services/TauriProvider.ts`
+- [x] `src/modules/core/services/WindowService.ts`
 - [ ] `src/modules/core/ui/AppUI.ts`
 - [ ] `src/modules/core/ui/I18nUI.ts`
 - [ ] `src/modules/core/ui/NavigationUI.ts`
 - [ ] `src/modules/core/ui/Particles.ts`
 - [ ] `src/modules/core/ui/SidebarUI.ts`
 - [ ] `src/modules/core/ui/WindowUI.ts`
-- [ ] `src/modules/core/services/TemplateLoader.ts`
-- [ ] `src/modules/core/types/coreTypes.ts`
+- [x] `src/modules/core/services/TemplateLoader.ts`
+- [x] `src/modules/core/types/coreTypes.ts`
 
 ### Modules: Chat
-- [ ] `src/modules/chat/index.ts`
-- [ ] `src/modules/chat/chat.ts` (ChatController)
-- [ ] `src/modules/chat/ui/ChatUI.ts`
-- [ ] `src/modules/chat/services/ChatFileHandler.ts`
-- [ ] `src/modules/chat/services/ChatService.ts`
-- [ ] `src/modules/chat/services/VoiceInputService.ts`
-- [ ] `src/modules/chat/utils/chatUtils.ts`
-- [ ] `src/modules/chat/types/chatTypes.ts`
+- [x] `src/modules/chat/index.ts`
+- [x] `src/modules/chat/chat.ts` (ChatController)
+- [x] `src/modules/chat/ui/ChatUI.ts`
+- [x] `src/modules/chat/services/ChatFileHandler.ts`
+- [x] `src/modules/chat/services/ChatService.ts`
+- [x] `src/modules/chat/services/VoiceInputService.ts`
+- [x] `src/modules/chat/utils/chatUtils.ts`
+- [x] `src/modules/chat/types/chatTypes.ts`
 
 ### Modules: AI
-- [ ] `src/modules/ai/index.ts`
-- [ ] `src/modules/ai/AIBridge.ts`
-- [ ] `src/modules/ai/providers/AIProvider.ts`
-- [ ] `src/modules/ai/ui/AISettingsRenderer.ts`
-- [ ] `src/modules/ai/utils/catalogHelpers.ts`
-- [ ] `src/modules/ai/types/aiTypes.ts`
+- [x] `src/modules/ai/index.ts`
+- [x] `src/modules/ai/AIBridge.ts`
+- [x] `src/modules/ai/providers/AIProvider.ts`
+- [x] `src/modules/ai/ui/AISettingsRenderer.ts`
+- [x] `src/modules/ai/utils/catalogHelpers.ts`
+- [x] `src/modules/ai/types/aiTypes.ts`
 
 ### Modules: Downloader
-- [ ] `src/modules/downloader/index.ts`
-- [ ] `src/modules/downloader/ui/DownloadUI.ts`
-- [ ] `src/modules/downloader/types/downloaderTypes.ts`
+- [x] `src/modules/downloader/index.ts`
+- [x] `src/modules/downloader/ui/DownloadUI.ts`
+- [x] `src/modules/downloader/types/downloaderTypes.ts`
 
 ### Modules: Monitoring
-- [ ] `src/modules/monitoring/index.ts`
-- [ ] `src/modules/monitoring/ui/MonitoringUI.ts`
-- [ ] `src/modules/monitoring/services/MonitoringService.ts`
-- [ ] `src/modules/monitoring/types/monitoringTypes.ts`
+- [x] `src/modules/monitoring/index.ts`
+- [x] `src/modules/monitoring/ui/MonitoringUI.ts`
+- [x] `src/modules/monitoring/services/MonitoringService.ts`
+- [x] `src/modules/monitoring/types/monitoringTypes.ts`
 
 ### Modules: Settings
-- [ ] `src/modules/settings/index.ts`
-- [ ] `src/modules/settings/ui/SettingsUI.ts`
-- [ ] `src/modules/settings/ui/GeneralSettingsRenderer.ts`
-- [ ] `src/modules/settings/services/SettingsService.ts`
+- [x] `src/modules/settings/index.ts`
+- [x] `src/modules/settings/ui/SettingsUI.ts`
+- [x] `src/modules/settings/ui/GeneralSettingsRenderer.ts`
+- [x] `src/modules/settings/services/SettingsService.ts`
 
 ### Modules: Dashboard
-- [ ] `src/modules/dashboard/index.ts`
-- [ ] `src/modules/dashboard/ui/DashboardUI.ts`
+- [x] `src/modules/dashboard/index.ts`
+- [x] `src/modules/dashboard/ui/DashboardUI.ts`
 
 ### Modules: Debug
-- [ ] `src/modules/debug/index.ts`
-- [ ] `src/modules/debug/ui/DebugUI.ts`
-- [ ] `src/modules/debug/services/DebugService.ts`
+- [x] `src/modules/debug/index.ts`
+- [x] `src/modules/debug/ui/DebugUI.ts`
+- [x] `src/modules/debug/services/DebugService.ts`
 
 ### Styles (CSS)
 - [ ] `src/css/main.css`

@@ -52,8 +52,10 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
             let _ = window.with_webview(move |webview| {
                 #[cfg(target_os = "windows")]
                 unsafe {
+                    // Load zoom from UI State (new location)
+                    let ui_settings = crate::services::ui_state::get_ui_state().unwrap_or_default();
                     let controller = webview.controller();
-                    let _ = controller.SetZoomFactor(settings.zoom_level);
+                    let _ = controller.SetZoomFactor(ui_settings.zoom_level);
                 }
             });
 
@@ -102,6 +104,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+                crate::services::system_monitor::set_paused(false);
+            } else {
+                create_main_window(app);
+            }
+            log::info!("Single instance lock: Second instance launch attempt detected.");
+        }))
         .invoke_handler(tauri::generate_handler![
             health::get_health,
             config::get_config,

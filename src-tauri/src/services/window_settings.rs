@@ -15,7 +15,6 @@ pub struct WindowSettings {
     pub x: Option<i32>,
     pub y: Option<i32>,
     pub maximized: bool,
-    pub zoom_level: f64,
 }
 
 impl Default for WindowSettings {
@@ -26,7 +25,6 @@ impl Default for WindowSettings {
             x: None,
             y: None,
             maximized: false,
-            zoom_level: 1.0,
         }
     }
 }
@@ -81,11 +79,5 @@ pub fn update_window_position(x: i32, y: i32) -> Result<(), AppError> {
 pub fn update_maximized_state(maximized: bool) -> Result<(), AppError> {
     let mut settings = load_window_settings();
     settings.maximized = maximized;
-    save_window_settings(&settings)
-}
-
-pub fn update_zoom_level(zoom: f64) -> Result<(), AppError> {
-    let mut settings = load_window_settings();
-    settings.zoom_level = zoom;
     save_window_settings(&settings)
 }

@@ -40,9 +40,7 @@ Write-Header "Axelate Release Build"
 $ProjectRoot = Resolve-Path "$PSScriptRoot\..\.."
 $SrcDir = "$ProjectRoot\src"
 $TauriDir = "$ProjectRoot\src-tauri"
-$BuildDir = "$ProjectRoot\build"
-$TargetExe = "$TauriDir\target\x86_64-pc-windows-msvc\release\Axelate.exe"
-$OutputExe = "$BuildDir\Axelate.exe"
+$TargetExe = "$TauriDir\target\release\Axelate.exe"
 
 # 1. Run Verification Protocol
 Write-Step "Running Verification Protocol..."
@@ -64,16 +62,11 @@ npm run tauri:build
 if ($LASTEXITCODE -ne 0) {
     Exit-Error "Build failed"
 }
-
-# Copy to build folder
 if (Test-Path $TargetExe) {
-    New-Item -ItemType Directory -Path $BuildDir -Force | Out-Null
-    Copy-Item $TargetExe $OutputExe -Force
-
-    $Size = "{0:N2} MB" -f ((Get-Item $OutputExe).Length / 1MB)
+    $TargetDir = Split-Path $TargetExe
     Write-Host "`n[OK] Build Success!" -ForegroundColor Green
-    Write-Host "     Output: $OutputExe" -ForegroundColor White
-    Write-Host "     Size:   $Size" -ForegroundColor White
+    Write-Host "     Location: $TargetDir" -ForegroundColor White
+    Invoke-Item $TargetDir
 }
 else {
     Exit-Error "Executable not found at $TargetExe"

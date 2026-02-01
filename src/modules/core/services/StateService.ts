@@ -16,6 +16,8 @@ export interface IUIState {
     download_max_speed: number;
     selected_modules: Record<string, Partial<IApp>>;
     last_page?: string;
+    zoom_level: number;
+    selected_ai_models: Record<string, string>;
 }
 
 const DEFAULT_UI_STATE: IUIState = {
@@ -27,6 +29,8 @@ const DEFAULT_UI_STATE: IUIState = {
     download_limit_enabled: false,
     download_max_speed: 50,
     selected_modules: {},
+    zoom_level: 1,
+    selected_ai_models: {},
 };
 
 export class StateService {
@@ -124,6 +128,23 @@ export class StateService {
             this._isDirty = true;
             this._debouncedSave();
         }
+    }
+
+    /**
+     * Returns the selected AI model for a specific app ID.
+     */
+    public getSelectedAIModel(appId: string): string | undefined {
+        return this._state.selected_ai_models?.[appId];
+    }
+
+    /**
+     * Sets the selected AI model for a specific app ID.
+     */
+    public setSelectedAIModel(appId: string, modelKey: string): void {
+        if (!this._state.selected_ai_models) this._state.selected_ai_models = {};
+        this._state.selected_ai_models[appId] = modelKey;
+        this._isDirty = true;
+        this._debouncedSave();
     }
 
     /**

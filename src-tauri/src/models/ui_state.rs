@@ -32,6 +32,10 @@ pub struct UIState {
     pub download_max_speed: u32,
     /// Selected modules by category
     pub selected_modules: std::collections::HashMap<String, SelectedModule>,
+    /// Global Zoom Level
+    pub zoom_level: f64,
+    /// Selected AI Models (AppID -> ModelKey)
+    pub selected_ai_models: std::collections::HashMap<String, String>,
 }
 
 impl Default for UIState {
@@ -45,6 +49,8 @@ impl Default for UIState {
             download_limit_enabled: false,
             download_max_speed: 50,
             selected_modules: std::collections::HashMap::new(),
+            zoom_level: 1.0,
+            selected_ai_models: std::collections::HashMap::new(),
         }
     }
 }

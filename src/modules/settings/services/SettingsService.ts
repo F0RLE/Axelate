@@ -220,7 +220,7 @@ export class SettingsService {
         // Currently using localStorage as per audit finding, but encapsulated in Service
         const key = `custom_models_${provider}`;
         const existing = localStorage.getItem(key);
-        let models = existing ? JSON.parse(existing) : [];
+        const models = existing ? JSON.parse(existing) : [];
         models.push({ id, name });
         localStorage.setItem(key, JSON.stringify(models));
     }

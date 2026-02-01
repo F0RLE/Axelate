@@ -15,6 +15,7 @@ import DOMPurify from 'dompurify';
 
 import { IApp } from '../../core/types/coreTypes';
 import { SettingsService } from '../../settings/services/SettingsService';
+import { StateService } from '../../core/services/StateService';
 import type { IAIModelData } from '../types/aiTypes';
 import { sortModelsByPower, getProviderData, getModelData } from '../utils/catalogHelpers';
 
@@ -61,6 +62,7 @@ class AISettingsRenderer {
     private readonly _unsubscribers: (() => void)[] = [];
     private _initialized = false;
     private _settingsService: SettingsService | null = null;
+    private _stateService: StateService | null = null;
 
     constructor() {
         // Registration on globalThis for access from HTML/legacy code (Section 16.3)
@@ -72,14 +74,16 @@ class AISettingsRenderer {
      * Required by Section 16.2 of Axelate Standards.
      *
      * @param settingsService - Global settings infrastructure service
+     * @param stateService - UI state persistence service
      */
-    public init(settingsService: SettingsService): void {
+    public init(settingsService: SettingsService, stateService: StateService): void {
         if (this._initialized) {
             console.warn('[AISettingsRenderer] Already initialized');
             return;
         }
 
         this._settingsService = settingsService;
+        this._stateService = stateService;
         this._initialized = true;
         console.debug('[AISettingsRenderer] Initialized');
     }
@@ -103,7 +107,7 @@ class AISettingsRenderer {
         const sortedModels = sortModelsByPower(models as Record<string, IAIModelData>);
 
         const defaultModelId = sortedModels.length > 0 ? sortedModels[0][0] : '';
-        const savedModel = localStorage.getItem(CACHE_KEYS.SELECTED_MODEL(appId)) || defaultModelId;
+        const savedModel = this._stateService?.getSelectedAIModel(appId) || defaultModelId;
         const t = this._getTranslator();
 
         const isCleanApp =
@@ -385,7 +389,9 @@ class AISettingsRenderer {
                 target.classList.add('selected');
                 target.setAttribute('aria-checked', 'true');
 
-                const savedModel = localStorage.getItem(CACHE_KEYS.SELECTED_MODEL(appId)) || '';
+                target.setAttribute('aria-checked', 'true');
+
+                const savedModel = this._stateService?.getSelectedAIModel(appId) || '';
                 if (savedModel) {
                     this.selectModel(appId, savedModel);
                 }
@@ -520,7 +526,7 @@ class AISettingsRenderer {
      * @sideeffect Updates local storage and refreshes stats DOM segments
      */
     public selectModel(appId: string, modelKey: string): void {
-        localStorage.setItem(CACHE_KEYS.SELECTED_MODEL(appId), modelKey);
+        this._stateService?.setSelectedAIModel(appId, modelKey);
 
         const grid = document.querySelector('.ai-models-grid');
         grid?.querySelectorAll('.ai-model-card').forEach((card) => {

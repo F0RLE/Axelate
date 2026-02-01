@@ -52,6 +52,7 @@ hex = "0.4.3"
 wmi = "0.13"
 axum = { version = "0.8.8", features = ["macros", "ws"] }
 tower-http = { version = "0.6.8", features = ["fs", "cors", "trace"] }
+tauri-plugin-single-instance = "2.3.7"
 
 [profile.release]
 codegen-units = 1

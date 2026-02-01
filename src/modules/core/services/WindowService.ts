@@ -42,29 +42,36 @@ export class WindowService {
      * Initializes the window service by retrieving the current zoom level from the host.
      */
     public async init(): Promise<void> {
+        // Load fallback from localStorage
+        const saved = localStorage.getItem('axelate_zoom');
+        let fallbackZoom = 1;
+        if (saved) {
+            fallbackZoom = Number.parseFloat(saved) || 1;
+        }
+
         if (this._tauri.isTauri()) {
             try {
-                // Get initial zoom with timeout
+                // Get initial zoom with timeout (Increased to 2.5s)
                 const zoomPromise = this._tauri.invoke<number>('get_webview_zoom');
                 const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout getting zoom')), 1000),
+                    setTimeout(() => reject(new Error('Timeout getting zoom')), 2500),
                 );
 
                 const zoom: unknown = await Promise.race([zoomPromise, timeoutPromise]);
 
                 if (typeof zoom === 'number') {
                     this._currentZoom = zoom;
-                    document.documentElement.style.setProperty('--app-zoom', zoom.toFixed(3));
+                } else {
+                    this._currentZoom = fallbackZoom;
                 }
             } catch (e) {
-                console.warn('[WindowService] Failed to get initial zoom (or timeout):', e);
+                console.warn('[WindowService] Failed to get initial zoom (or timeout), using fallback:', e);
+                this._currentZoom = fallbackZoom;
             }
+            document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
         } else {
             // Web Fallback: Load from localStorage or default to 1
-            const saved = localStorage.getItem('axelate_zoom');
-            if (saved) {
-                this._currentZoom = Number.parseFloat(saved) || 1;
-            }
+            this._currentZoom = fallbackZoom;
             document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
 
             // Enable Ctrl + Scroll implementation for Web Browser
@@ -174,6 +181,9 @@ export class WindowService {
     public async setZoom(zoom: number): Promise<number> {
         this._currentZoom = Math.max(this._MIN_ZOOM, Math.min(this._MAX_ZOOM, zoom));
 
+        // Always save to localStorage as backup
+        localStorage.setItem('axelate_zoom', this._currentZoom.toString());
+
         if (this._tauri.isTauri()) {
             try {
                 await this._tauri.invoke('set_webview_zoom', { zoom: this._currentZoom });
@@ -183,8 +193,7 @@ export class WindowService {
                 console.error('[WindowService] Zoom error:', e);
             }
         } else {
-            // Web Persistence
-            localStorage.setItem('axelate_zoom', this._currentZoom.toString());
+            // Web Persistence - covered by top-level save
         }
 
         // Always apply CSS

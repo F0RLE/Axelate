@@ -57,7 +57,7 @@ export class SettingsUI {
         private readonly _service: SettingsService,
         private readonly _state: StateService,
     ) {
-        aiSettingsRenderer.init(_service);
+        aiSettingsRenderer.init(_service, _state);
         this._generalRenderer = new GeneralSettingsRenderer(_state);
     }
 
@@ -383,7 +383,7 @@ export class SettingsUI {
      * Selects an AI model and re-renders stats.
      */
     public selectAIModel(appId: string, modelKey: string) {
-        localStorage.setItem(`${appId}_selected_model`, modelKey);
+        this._state.setSelectedAIModel(appId, modelKey);
 
         // Re-render only stats and update selection visually
         const grid = document.querySelector('.ai-models-grid');
