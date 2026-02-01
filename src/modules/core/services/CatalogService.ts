@@ -185,56 +185,16 @@ export class CatalogService {
 
                 const mergeSchema = (list: IApp[]) => {
                     list.forEach((app) => {
-                        // Dynamic Config Schema Generation
                         const providers = config?.api_providers;
                         if (providers && Array.isArray(providers)) {
+                            // Only hydrate API metadata for settings UI if needed
                             const provider = providers.find((p) => p.id === app.id);
                             if (provider) {
-                                app.config_schema = {
-                                    api_key: {
-                                        label: `${provider.name} API Key`,
-                                        field_type: 'text',
-                                        default: '',
-                                        required: true,
-                                    },
-                                };
-                                // Pass providers models to global state for SettingsUI
-                                app.api_provider_data = provider as unknown as Record<
-                                    string,
-                                    unknown
-                                >;
-
-                                if (provider.baseUrl && provider.type === 'openai-compatible') {
-                                    app.config_schema.endpoint = {
-                                        label: 'Endpoint URL',
-                                        field_type: 'text',
-                                        default: provider.baseUrl,
-                                        required: true,
-                                    };
-                                }
+                                app.apiProviderData = provider as unknown as Record<string, unknown>;
                             }
                         }
 
-                        // Legacy / Local Fallbacks
-                        if (app.id === 'localai' && !app.config_schema) {
-                            app.config_schema = {
-                                endpoint: {
-                                    label: 'LocalAI Endpoint',
-                                    field_type: 'text',
-                                    default: 'http://localhost:8080/v1',
-                                    required: true,
-                                },
-                                model: {
-                                    label: 'Model Name',
-                                    field_type: 'text',
-                                    default: 'phi-3',
-                                    required: true,
-                                },
-                            };
-                        }
-
                         // Force installed status for API providers (Virtual Modules)
-                        // This fixes "No apps found" if the local folder check fails in Release
                         if (
                             ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
                             app.type === 'api' ||
@@ -246,8 +206,9 @@ export class CatalogService {
                         if (installedMap.has(app.id)) {
                             app.installed = true;
                             const inst = installedMap.get(app.id);
-                            if (inst?.config_schema) {
-                                app.config_schema = inst.config_schema;
+                            if (inst?.configSchema) {
+                                // Prefer backend config schema if available
+                                app.configSchema = inst.configSchema;
                             }
                         }
                     });

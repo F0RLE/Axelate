@@ -15,6 +15,18 @@ interface ToastElement extends HTMLElement {
 
 export class AppUI {
     private toastQueue: ToastElement[] = [];
+    private _currentCategory: string | null = null;
+    private _currentApps: IApp[] = [];
+
+    constructor() {
+        globalThis.addEventListener('language-changed', () => {
+            const modal = document.getElementById('app-selection-modal');
+            if (this._currentCategory && modal && !modal.classList.contains('hidden')) {
+                console.log('[AppUI] Refreshing app selection modal for language change');
+                this.openAppSelection(this._currentCategory, this._currentApps);
+            }
+        });
+    }
 
     // --- Toast System ---
     public showToast(
@@ -178,6 +190,9 @@ export class AppUI {
 
         if (!modal || !listEl) return;
 
+        this._currentCategory = category;
+        this._currentApps = apps;
+
         this._updateAppModalTitle(category);
         this._populateAppList(listEl, apps, category);
 
@@ -324,8 +339,8 @@ export class AppUI {
         btn.style.pointerEvents = 'none';
 
         try {
-            if (app.repo_url && globalThis.downloadModule) {
-                await globalThis.downloadModule(app.id, app.repo_url);
+            if (app.repoUrl && globalThis.downloadModule) {
+                await globalThis.downloadModule(app.id, app.repoUrl);
                 app.installed = true;
                 const allApps = globalThis.APP_DATA?.[category] || [];
                 this.openAppSelection(category, allApps); // Refresh
@@ -378,7 +393,7 @@ export class AppUI {
             actionBtn.className = 'model-card-action';
             actionBtn.id =
                 card.id === 'ai-module-card' ? 'ai-module-add-btn' : 'services-module-add-btn';
-            actionBtn.setAttribute('data-i18n', 'ui.launcher.button.launch');
+            actionBtn.dataset.i18n = 'ui.launcher.button.launch';
             card.appendChild(actionBtn);
         }
 
@@ -416,8 +431,8 @@ export class AppUI {
             actionBtn.style.pointerEvents = 'none';
 
             try {
-                if (globalThis.downloadModule && app.repo_url) {
-                    await globalThis.downloadModule(app.id, app.repo_url);
+                if (globalThis.downloadModule && app.repoUrl) {
+                    await globalThis.downloadModule(app.id, app.repoUrl);
                     if (globalThis.showToast) globalThis.showToast('Module downloaded!', 'success');
                     app.installed = true;
                     this._configureActionBtn(

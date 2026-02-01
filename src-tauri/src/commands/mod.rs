@@ -27,3 +27,5 @@ pub use translations::*;
 pub use ui_state::*;
 pub use window::*;
 pub use window_settings::*; // Added
+pub mod bootstrap;
+pub use bootstrap::*;

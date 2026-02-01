@@ -14,15 +14,18 @@ pub struct ControlResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Module {
     pub id: String,
     pub name: String,
     pub version: String,
     pub status: String,
     pub config_schema: Option<std::collections::HashMap<String, ConfigField>>,
+    pub is_deletable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigField {
     #[serde(rename = "type")]
     pub field_type: String,

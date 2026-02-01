@@ -1,9 +1,11 @@
+pub mod config;
 pub mod license;
 pub mod modules;
 pub mod settings;
 pub mod system;
 pub mod ui_state;
 
+pub use config::*;
 pub use license::*;
 pub use modules::*;
 pub use settings::*;

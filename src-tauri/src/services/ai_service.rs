@@ -39,14 +39,7 @@ pub struct ChatReply {
     pub role: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
-struct ApiProviderConfig {
-    id: String,
-    #[serde(rename = "type")]
-    provider_type: String, // "openai", "gemini"
-    #[serde(rename = "baseUrl")]
-    base_url: Option<String>,
-}
+use crate::models::config::ApiProviderConfig;
 
 /// Dispatches a chat request to the appropriate AI provider (OpenAI or Gemini).
 ///

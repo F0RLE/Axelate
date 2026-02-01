@@ -19,6 +19,7 @@ export interface IUIState {
     zoom_level: number;
     selected_ai_models: Record<string, string>;
     resolution_zoom: Record<string, number>;
+    sound_enabled: boolean;
 }
 
 const DEFAULT_UI_STATE: IUIState = {
@@ -33,6 +34,7 @@ const DEFAULT_UI_STATE: IUIState = {
     zoom_level: 1,
     selected_ai_models: {},
     resolution_zoom: {},
+    sound_enabled: true,
 };
 
 export class StateService {
@@ -57,21 +59,28 @@ export class StateService {
             };
             if (win.__TAURI__) {
                 const loaded = await win.__TAURI__.core.invoke<IUIState>('get_ui_state');
-                this._state = { ...DEFAULT_UI_STATE, ...loaded };
+                this.setState(loaded);
                 console.log('[StateService] Loaded from backend');
             } else {
                 const stored = localStorage.getItem(this._STORAGE_KEY);
                 if (stored) {
-                    this._state = { ...DEFAULT_UI_STATE, ...JSON.parse(stored) };
+                    this.setState(JSON.parse(stored));
                     console.log('[StateService] Loaded from localStorage');
                 }
             }
         } catch (e) {
             console.warn('[StateService] Failed to load, using defaults:', e);
-            this._state = { ...DEFAULT_UI_STATE };
+            // Defaults already set
         }
 
         return this._state;
+    }
+
+    /**
+     * Sets the UI state manually (e.g. from bootstrap data).
+     */
+    public setState(state: Partial<IUIState>): void {
+        this._state = { ...this._state, ...state };
     }
 
     /**
@@ -359,5 +368,19 @@ export class StateService {
         this._state.resolution_zoom[resKey] = zoom;
         this._isDirty = true;
         this._debouncedSave();
+    }
+
+    /**
+     * Returns whether sound effects are enabled.
+     */
+    public getSoundEnabled(): boolean {
+        return this._state.sound_enabled;
+    }
+
+    /**
+     * Sets whether sound effects are enabled.
+     */
+    public setSoundEnabled(enabled: boolean): void {
+        this.set('sound_enabled', enabled);
     }
 }

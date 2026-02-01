@@ -77,6 +77,7 @@ pub fn get_all_modules() -> Vec<Module> {
                     version,
                     status: get_module_status(&id),
                     config_schema,
+                    is_deletable: true,
                 });
             }
         }

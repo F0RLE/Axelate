@@ -5,6 +5,8 @@
 
 import { WindowService } from '../services/WindowService';
 import { I18nService } from '../services/I18nService';
+import { StateService } from '../services/StateService';
+import { SoundService } from '../services/SoundService';
 
 interface IWindowUIGlobal {
     location?: Location;
@@ -32,6 +34,8 @@ export class WindowUI {
     constructor(
         private readonly _service: WindowService,
         private readonly _i18n: I18nService,
+        private readonly _state: StateService,
+        private readonly _sound: SoundService,
     ) {}
 
     /**
@@ -151,29 +155,31 @@ export class WindowUI {
      */
     private _handleResize(): void {
         this._checkWidth(); // Immediate check
+        this._service.checkResolutionChange(); // Detect resolution/monitor changes
+
         if (this._resizeTimeout) {
             clearTimeout(this._resizeTimeout);
         }
         this._resizeTimeout = setTimeout(() => {
-            this._performResizeCheck();
+            void this._performResizeCheck();
         }, 200);
     }
 
     /**
-     * Performs a check on maximization state after resize.
+     * Performs a check on maximization state and window policy after resize.
      */
-    private _performResizeCheck(): void {
-        this._service
-            .isMaximized()
-            .then((isMaximized: boolean) => {
-                this.updateMaximizeIcon(isMaximized);
-                this._handleSmallScreenUnmaximize(isMaximized).catch(() => {
-                    /* ignore */
-                });
-            })
-            .catch(() => {
-                /* ignore */
-            });
+    private async _performResizeCheck(): Promise<void> {
+        try {
+            const [isMaximized, policy] = await Promise.all([
+                this._service.isMaximized(),
+                this._service.checkPolicy(),
+            ]);
+
+            this.updateMaximizeIcon(isMaximized);
+            this._handlePolicyAdjustments(policy, isMaximized);
+        } catch (e) {
+            console.warn('[WindowUI] Resize check failed:', e);
+        }
     }
 
     /**
@@ -293,14 +299,23 @@ export class WindowUI {
 
     /**
      * Detects and applies adjustments for small screens (zoom, maximization).
-     * @sideeffect Changes window zoom and maximization
      */
     private async _applySmallScreenProtection(): Promise<void> {
-        this._isSmallScreen = this._service.detectSmallScreen();
+        const policy = await this._service.checkPolicy();
+        this._isSmallScreen = policy.isSmallScreen;
+
         if (this._isSmallScreen) {
             this._service.toggleMaximize().catch(() => {});
             this._wasMaximizedOnSmallScreen = true;
         }
+    }
+
+    /**
+     * Applies policies from the backend (warnings, auto-maximize).
+     */
+    private _handlePolicyAdjustments(policy: { isSmallScreen: boolean }, isMaximized: boolean): void {
+        this._isSmallScreen = policy.isSmallScreen;
+        void this._handleSmallScreenUnmaximize(isMaximized);
     }
 
     /**
@@ -357,15 +372,9 @@ export class WindowUI {
      * @sideeffect Modifies SoundService and DOM
      */
     public toggleSound(): void {
-        const win = globalThis as unknown as {
-            core?: { soundService: { setEnabled: (e: boolean) => void; isEnabled: () => boolean } };
-        };
-        const service = win.core?.soundService;
-        if (!service) return;
-
-        const newState = !service.isEnabled();
-        service.setEnabled(newState);
-        localStorage.setItem('launcher_sound_enabled', newState.toString());
+        const newState = !this._sound.isEnabled();
+        this._sound.setEnabled(newState);
+        this._state.setSoundEnabled(newState);
 
         this.updateSoundUI(newState);
     }
@@ -374,13 +383,8 @@ export class WindowUI {
      * Initializes the sound state from persistence.
      */
     private _initSoundState(): void {
-        const saved = localStorage.getItem('launcher_sound_enabled');
-        const win = globalThis as unknown as {
-            core?: { soundService: { setEnabled: (e: boolean) => void } };
-        };
-        const isEnabled = saved === null ? true : saved === 'true';
-
-        win.core?.soundService.setEnabled(isEnabled);
+        const isEnabled = this._state.getSoundEnabled();
+        this._sound.setEnabled(isEnabled);
         this.updateSoundUI(isEnabled);
     }
 
@@ -408,6 +412,8 @@ export class WindowUI {
      */
     private _checkWidth(): void {
         const g = globalThis as unknown as IWindowUIGlobal;
+        const config = this._service.getConfig();
+
         // Get current zoom factor (default 1)
         const computedStyle = getComputedStyle(document.documentElement) as CSSStyleDeclaration & {
             zoom?: string;
@@ -418,13 +424,11 @@ export class WindowUI {
         const width = g.innerWidth / zoom;
         const height = globalThis.innerHeight / zoom;
 
-        // Landscape/Square (AR > 0.8): 950px (Supports half-screen on 1920 monitors)
-        // Portrait (AR <= 0.8): 650px (Supports 9:16 monitors)
-        // REVISED: Extremely permissive thresholds. Only warn if we can't fit Sidebar + 1 Card (~600px).
-        const MIN_WIDTH = 700;
-        const MIN_HEIGHT = 500;
+        // Use backend thresholds if available, otherwise safe defaults
+        const minWidth = config?.thresholds.warningWidth || 700;
+        const minHeight = config?.thresholds.warningHeight || 500;
 
-        if (width < MIN_WIDTH || height < MIN_HEIGHT) {
+        if (width < minWidth || height < minHeight) {
             if (this._modulesWarning) {
                 this._modulesWarning.classList.remove('hidden');
                 this._modulesWarning.classList.add('flex-important');
@@ -472,33 +476,4 @@ export class WindowUI {
         });
     }
 
-    /**
-     * Checks if this is the first launch and initializes language.
-     * @sideeffect Modifies localStorage and loads translations
-     */
-    public async checkFirstLaunch(): Promise<void> {
-        const savedLang = localStorage.getItem('web_launcher_language');
-        if (savedLang) {
-            await this._i18n.loadTranslations(savedLang);
-            return;
-        }
-
-        try {
-            const res = await fetch('/api/settings');
-            if (res.ok) {
-                const data = (await res.json()) as { LANGUAGE?: string };
-                if (data.LANGUAGE) {
-                    await this._i18n.loadTranslations(data.LANGUAGE);
-                    localStorage.setItem('web_launcher_language', data.LANGUAGE);
-                    return;
-                }
-            }
-        } catch (e: unknown) {
-            console.error('[WindowUI] Failed to load from backend:', e);
-        }
-
-        const systemLang = await this._i18n.getSystemLanguage();
-        await this._i18n.loadTranslations(systemLang);
-        localStorage.setItem('web_launcher_language', systemLang);
-    }
 }

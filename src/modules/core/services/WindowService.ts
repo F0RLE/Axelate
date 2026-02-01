@@ -27,24 +27,49 @@ interface IWindowGlobal {
     };
 }
 
+export interface IWindowBreakpoints {
+    compact: number;
+    medium: number;
+    large: number;
+}
+
+export interface IWindowThresholds {
+    warningWidth: number;
+    warningHeight: number;
+    smallScreenWidth: number;
+    smallScreenHeight: number;
+}
+
+export interface IWindowConfig {
+    breakpoints: IWindowBreakpoints;
+    thresholds: IWindowThresholds;
+}
+
+export interface IWindowPolicy {
+    isSmallScreen: boolean;
+    showWarning: boolean;
+}
+
 export class WindowService {
-    private readonly _widthBreakpoints = {
+    private _widthBreakpoints = {
         compact: 600,
         medium: 900,
         large: 1200,
     };
     private readonly _defaultScale = 1;
-    private _currentZoom: number = 1;
+    private _currentZoom = 1;
+    private _lastResolutionKey = '';
     private readonly _MIN_ZOOM = 0.5;
-    private readonly _MAX_ZOOM = 2;
+    private readonly _MAX_ZOOM = 3;
     private _saveWindowTimer: ReturnType<typeof setTimeout> | null = null;
+    private _config: IWindowConfig | null = null;
 
     constructor(private readonly _tauri: TauriProvider) {}
 
     /**
      * Initializes the window service by retrieving the current zoom level from the host.
      */
-    public async init(): Promise<void> {
+    public async init(initialConfig?: IWindowConfig, initialZoom?: number): Promise<void> {
         // Load fallback from localStorage
         const saved = localStorage.getItem('axelate_zoom');
         let fallbackZoom = 1;
@@ -54,22 +79,31 @@ export class WindowService {
 
         if (this._tauri.isTauri()) {
             try {
-                this._currentZoom = await this._getInitialZoomWithFallback(fallbackZoom);
+                // Use pre-loaded config or fetch it
+                this._config = initialConfig || (await this._tauri.invoke<IWindowConfig>('get_window_config'));
+                
+                // Update breakpoints from backend
+                if (this._config) {
+                    this._widthBreakpoints = {
+                        compact: this._config.breakpoints.compact,
+                        medium: this._config.breakpoints.medium,
+                        large: this._config.breakpoints.large,
+                    };
+                }
+                
+                console.log('[WindowService] Loaded config:', this._config);
+
+                // Use pre-loaded initialZoom or determine it
+                const zoom = initialZoom ?? (await this._getInitialZoomWithFallback(fallbackZoom));
+                await this.setZoom(zoom);
             } catch (e) {
                 console.warn(
-                    '[WindowService] Failed to get initial zoom (or timeout), using fallback:',
+                    '[WindowService] Failed to get initial window data, using fallback:',
                     e,
                 );
-                this._currentZoom = this._getFallbackZoom(fallbackZoom);
+                await this.setZoom(fallbackZoom);
             }
-            if (this._tauri.isTauri()) {
-                document.documentElement.style.setProperty('--app-zoom', '1');
-            } else {
-                document.documentElement.style.setProperty(
-                    '--app-zoom',
-                    this._currentZoom.toFixed(3),
-                );
-            }
+            document.documentElement.style.setProperty('--app-zoom', '1');
 
             // Initialize persistence listeners
             this._initWindowListeners();
@@ -209,11 +243,8 @@ export class WindowService {
 
         if (this._tauri.isTauri()) {
             try {
-                // Pass resolution key to backend so it knows WHERE to save
-                const resKey = this._getResolutionKey();
                 await this._tauri.invoke('set_webview_zoom', {
                     zoom: this._currentZoom,
-                    resKey: resKey,
                 });
             } catch (e) {
                 console.error('[WindowService] Zoom error:', e);
@@ -230,7 +261,7 @@ export class WindowService {
         // Sync with StateService (DI) for frontend reactivity
         if (this._stateService) {
             this._stateService.setZoomLevel(this._currentZoom);
-            this._stateService.setResolutionZoom(this._getResolutionKey(), this._currentZoom);
+            this._stateService.setResolutionZoom(`${window.screen.width}x${window.screen.height}`, this._currentZoom);
         }
 
         return this._currentZoom;
@@ -273,20 +304,52 @@ export class WindowService {
     /**
      * Determines if the current screen resolution is below a given threshold.
      */
-    public detectSmallScreen(minWidth: number = 1400, minHeight: number = 900): boolean {
-        const win = globalThis as unknown as IWindowGlobal;
-        win.updateMonitorPanelVisibility = (v: boolean) => this._toggleMonitorPanel(v);
-        win.updateSpeedDisplay?.(0, 0);
-        const screenWidth = globalThis.screen.availWidth || globalThis.screen.width;
-        const screenHeight = globalThis.screen.availHeight || globalThis.screen.height;
-
-        // Lenient check for portrait screens: if height is large, allow smaller width
-        const isPortrait = screenHeight > screenWidth;
-        if (isPortrait && screenHeight >= 1000) {
-            return screenWidth < 700; // Only protect very narrow portrait screens
+    /**
+     * Determines the window policy (isSmallScreen, showWarning) based on current state.
+     * The logic is entirely handled by the backend.
+     */
+    public async checkPolicy(): Promise<IWindowPolicy> {
+        // Check if resolution changed (monitor switch)
+        const currentRes = `${window.screen.width}x${window.screen.height}`;
+        if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
+            console.log(
+                `[WindowService] Resolution changed: ${this._lastResolutionKey} -> ${currentRes}`,
+            );
+            this._lastResolutionKey = currentRes;
+            void this._handleResolutionChange();
         }
 
-        return screenWidth < minWidth || screenHeight < minHeight;
+        if (!this._tauri.isTauri()) {
+            return { isSmallScreen: false, showWarning: false };
+        }
+
+        try {
+            return await this._tauri.invoke<IWindowPolicy>('get_window_policy');
+        } catch (e) {
+            console.error('[WindowService] Failed to fetch window policy:', e);
+            return { isSmallScreen: false, showWarning: false };
+        }
+    }
+
+    /**
+     * Checks if the resolution has changed and handles it if so.
+     * Synchronous check for immediate detection during resize/move.
+     */
+    public checkResolutionChange(): void {
+        const currentRes = `${window.screen.width}x${window.screen.height}`;
+        if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
+            const oldRes = this._lastResolutionKey;
+            this._lastResolutionKey = currentRes;
+            console.log(`[WindowService] Resolution changed: ${oldRes} -> ${currentRes}`);
+            void this._handleResolutionChange();
+        }
+    }
+
+    /**
+     * Returns the window configuration (breakpoints, thresholds).
+     */
+    public getConfig(): IWindowConfig | null {
+        return this._config;
     }
 
     /**
@@ -405,52 +468,38 @@ export class WindowService {
      * Helper to retrieve initial zoom with timeout and state service priority.
      */
     private async _getInitialZoomWithFallback(fallback: number): Promise<number> {
-        const resKey = this._getResolutionKey();
-        const screenHeight = window.screen.height || 600;
+        if (!this._tauri.isTauri()) return fallback;
 
-        // Backend-driven logic: Ask Rust "what is the zoom for this monitor?"
-        // Rust will calculate it if it doesn't exist.
-        if (this._tauri.isTauri()) {
-            try {
-                const zoom = await this._tauri.invoke<number>('get_resolution_zoom', {
-                    resKey: resKey,
-                    screenHeight: screenHeight,
-                });
-                if (typeof zoom === 'number' && zoom > 0) return zoom;
-            } catch (e) {
-                console.error('[WindowService] Initial zoom error:', e);
-            }
-        }
-
-        // Final fallback
-        return fallback;
-    }
-
-    /**
-     * Helper to get fallback zoom when init fails.
-     */
-    private _getFallbackZoom(fallback: number): number {
-        if (this._stateService) {
-            const resKey = this._getResolutionKey();
-            const resZoom = this._stateService.getResolutionZoom(resKey);
-            if (resZoom && resZoom > 0) return resZoom;
-
-            const screenHeight = window.screen.height || 600;
-            return Math.max(this._MIN_ZOOM, Math.min(this._MAX_ZOOM, screenHeight / 600));
-        }
-        return fallback;
-    }
-
-    /**
-     * Returns a key representing the current screen resolution (e.g., "1920x1080").
-     */
-    private _getResolutionKey(): string {
         try {
-            const w = window.screen.width;
-            const h = window.screen.height;
-            return `${w}x${h}`;
-        } catch {
-            return 'unknown';
+            // Backend is the Source of Truth: It calculates and persists the zoom
+            const zoom = await this._tauri.invoke<number>('get_resolution_zoom');
+
+            if (typeof zoom === 'number' && zoom > 0) {
+                return zoom;
+            }
+        } catch (e) {
+            console.error('[WindowService] Failed to fetch backend zoom:', e);
+        }
+
+        return fallback;
+    }
+
+    /**
+     * Fetches and applies the zoom level for the current resolution.
+     * Used when the window moves between monitors.
+     */
+    private async _handleResolutionChange(): Promise<void> {
+        if (!this._tauri.isTauri()) return;
+
+        try {
+            const zoom = await this._tauri.invoke<number>('get_resolution_zoom');
+
+            if (typeof zoom === 'number' && zoom > 0 && zoom !== this._currentZoom) {
+                console.log(`[WindowService] Applying zoom for new resolution: ${zoom}`);
+                await this.setZoom(zoom);
+            }
+        } catch (e) {
+            console.error('[WindowService] Resolution change zoom fetch failed:', e);
         }
     }
 }

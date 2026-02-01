@@ -15,14 +15,14 @@ export class I18nService {
     /**
      * Initializes the i18n service by detecting system language and loading translations.
      */
-    public async init(): Promise<void> {
+    public async init(initialLang?: string): Promise<void> {
         if (this._initialized) {
             console.warn('[I18n] Already initialized');
             return;
         }
 
         // Always trust the backend/system language as the source of truth
-        const lang = await this.getSystemLanguage();
+        const lang = initialLang || (await this.getSystemLanguage());
         await this.loadTranslations(lang);
         this._initialized = true;
     }
@@ -91,31 +91,32 @@ export class I18nService {
     public async loadTranslations(lang: string): Promise<void> {
         console.log(`[I18n] Loading ${lang}...`);
 
-        let base: Record<string, string> = {};
-        let target: Record<string, string> = {};
-
-        // Load English Base
         try {
-            base = await this._fetchTranslations('en');
-        } catch (e) {
-            console.error('[I18n] Failed to load base English', e);
-        }
+            // Backend now handles merging base (en) with target lang
+            const translations = await this._fetchTranslations(lang);
+            this._translations = translations;
+            this._currentLang = lang;
+            document.documentElement.lang = lang;
 
-        // Load Target if different
-        if (lang !== 'en') {
-            try {
-                target = await this._fetchTranslations(lang);
-            } catch (e) {
-                console.warn(`[I18n] Failed to load ${lang}`, e);
+            // Persist only to backend
+            this._syncToBackend(lang).catch((e) => console.error(e));
+
+            // Notify UI of language change
+            globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
+            console.log(`[I18n] Language changed to ${lang}, event dispatched`);
+        } catch (e) {
+            console.error(`[I18n] Failed to load translations for ${lang}`, e);
+            // Fallback to empty or keep existing?
+            // If failed, we might want to try 'en' explicitly if we haven't already
+            if (lang !== 'en') {
+                try { 
+                    this._translations = await this._fetchTranslations('en');
+                    this._currentLang = 'en';
+                } catch (err) {
+                    console.error('[I18n] Critical: Failed to load fallback English', err);
+                }
             }
         }
-
-        this._translations = { ...base, ...target };
-        this._currentLang = lang;
-        document.documentElement.lang = lang;
-
-        // Persist only to backend
-        this._syncToBackend(lang).catch((e) => console.error(e));
     }
 
     /**

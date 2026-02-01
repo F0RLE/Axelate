@@ -3,6 +3,9 @@
  * @description Centralized type definitions for the Core module
  */
 
+import { IUIState } from '../services/StateService';
+import { IWindowConfig } from '../services/WindowService';
+
 /**
  * Interface for the Tauri host instance.
  */
@@ -40,10 +43,9 @@ export interface IApp {
     icon?: string;
     type?: 'api' | 'local';
     installed?: boolean;
-    repo_url?: string;
-    repoUrl?: string; // Fallback for camelCase JSON
-    config_schema?: Record<string, IConfigField>;
-    api_provider_data?: Record<string, unknown>; // Dynamic provider metadata for rich UI
+    repoUrl?: string;
+    configSchema?: Record<string, IConfigField>;
+    apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI
 }
 
 /**
@@ -58,7 +60,7 @@ export interface INavigationEvent {
  * Configuration field definition for a module or app.
  */
 export interface IConfigField {
-    field_type: string;
+    fieldType: string;
     label: string;
     default?: unknown;
     required: boolean;
@@ -73,7 +75,8 @@ export interface IModule {
     name: string;
     version: string;
     status: string;
-    config_schema?: Record<string, IConfigField>;
+    configSchema?: Record<string, IConfigField>;
+    isDeletable: boolean;
 }
 
 // Window interface is defined in vite-env.d.ts
@@ -98,4 +101,15 @@ export interface IModuleDownloadState {
     downloaded?: number;
     total?: number;
     error?: unknown;
+}
+
+/**
+ * Unified application bootstrap data from backend.
+ */
+export interface IBootstrapData {
+    uiState: IUIState;
+    windowConfig: IWindowConfig;
+    systemLanguage: string;
+    modules: IModule[];
+    initialZoom: number;
 }

@@ -1,5 +1,6 @@
 use crate::errors::AppError;
-use crate::services::config_service::{self, AppConfig};
+use crate::models::config::AppConfig;
+use crate::services::config_service;
 use crate::services::downloader;
 use tauri::AppHandle;
 

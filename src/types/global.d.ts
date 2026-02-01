@@ -74,7 +74,6 @@ declare global {
     var controlModule: (_id: string, _action: string) => Promise<boolean>;
     var updateDiagnostics: () => Promise<void>;
     var updateState: () => void;
-    var checkFirstLaunch: () => Promise<void>;
     var setLogView: (_view: string, _btn: HTMLElement) => void;
     var __APP_VERSION__: string;
 
@@ -218,7 +217,6 @@ declare global {
         applyTranslations: typeof applyTranslations;
         initEmojiFlags: typeof initEmojiFlags;
         updateLangButtons: typeof updateLangButtons;
-        checkFirstLaunch: typeof checkFirstLaunch;
         setLogView: typeof setLogView;
         clearChat: typeof clearChat;
         pickChatFiles: typeof pickChatFiles;

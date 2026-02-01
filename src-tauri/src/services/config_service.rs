@@ -1,100 +1,9 @@
 use crate::errors::AppError;
+use crate::models::config::*;
 use crate::models::modules::ConfigField;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tauri::AppHandle;
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ApiModelConfig {
-    pub text: Option<String>,
-    pub image: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ModelPricing {
-    pub tier: String,
-    #[serde(rename = "in")]
-    pub price_in: Option<String>,
-    #[serde(rename = "out")]
-    pub price_out: Option<String>,
-    pub note: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ModelStats {
-    pub speed: u8,
-    pub logic: u8,
-    pub creative: u8,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AiModel {
-    #[serde(rename = "descKey")]
-    pub desc_key: String,
-    pub name: String,
-    pub desc: String,
-    pub pricing: Vec<ModelPricing>,
-    pub stats: ModelStats,
-    #[serde(rename = "apiModels")]
-    pub api_models: Option<ApiModelConfig>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ModuleItem {
-    pub id: String,
-    #[serde(rename = "nameKey")]
-    pub name_key: String,
-    #[serde(rename = "descKey")]
-    pub desc_key: String,
-    pub name: String,
-    pub desc: String,
-    pub icon: String,
-    #[serde(rename = "type")]
-    pub type_name: String, // 'type' is reserved
-    #[serde(rename = "repoUrl")]
-    pub repo_url: Option<String>,
-    #[serde(skip_deserializing, default)]
-    pub installed: bool,
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
-    pub config_schema: Option<std::collections::HashMap<String, ConfigField>>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConfigModels {
-    pub gpt: HashMap<String, AiModel>,
-    pub gemini: HashMap<String, AiModel>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ConfigCatalog {
-    pub ai: Vec<ModuleItem>,
-    pub services: Vec<ModuleItem>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ApiProviderConfig {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    #[serde(rename = "descKey")]
-    pub desc_key: Option<String>,
-    pub icon: Option<String>,
-    pub stats: Option<ModelStats>,
-    #[serde(rename = "type")]
-    pub provider_type: String,
-    #[serde(rename = "baseUrl")]
-    pub base_url: Option<String>,
-    pub models: Option<HashMap<String, AiModel>>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AppConfig {
-    pub catalog: ConfigCatalog,
-    pub models: Option<ConfigModels>,
-    #[serde(default)]
-    pub api_providers: Vec<ApiProviderConfig>,
-}
 
 pub fn get_defaults_path(_app: &AppHandle) -> Result<PathBuf, AppError> {
     let res_dir = &*crate::utils::paths::RESOURCES_DIR;
@@ -169,6 +78,36 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
         for provider in providers {
             // Update catalog if not present
             if !config.catalog.ai.iter().any(|m| m.id == provider.id) {
+                let mut config_schema = HashMap::new();
+
+                // 1. API Key Field (Common to all providers)
+                config_schema.insert(
+                    "apiKey".to_string(),
+                    ConfigField {
+                        field_type: "text".to_string(),
+                        label: format!("{} API Key", provider.name),
+                        default: Some(serde_json::Value::String("".to_string())),
+                        required: true,
+                        options: None,
+                    },
+                );
+
+                // 2. Endpoint for OpenAI Compatible
+                if let Some(base_url) = &provider.base_url
+                    && provider.provider_type == "openai-compatible"
+                {
+                    config_schema.insert(
+                        "endpoint".to_string(),
+                        ConfigField {
+                            field_type: "text".to_string(),
+                            label: "Endpoint URL".to_string(),
+                            default: Some(serde_json::Value::String(base_url.clone())),
+                            required: true,
+                            options: None,
+                        },
+                    );
+                }
+
                 let virtual_module = ModuleItem {
                     id: provider.id.clone(),
                     name_key: format!("ui.module.{}", provider.id),
@@ -185,7 +124,7 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
                     type_name: "api".to_string(),
                     repo_url: None,
                     installed: true,
-                    config_schema: None,
+                    config_schema: Some(config_schema),
                 };
                 config.catalog.ai.push(virtual_module);
             }
@@ -200,6 +139,36 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
                     models_map.gemini.extend(provider_models);
                 }
             }
+        }
+    }
+
+    // 3. Legacy LocalAI Fallback
+    for module in &mut config.catalog.ai {
+        if module.id == "localai" && module.config_schema.is_none() {
+            let mut schema = HashMap::new();
+            schema.insert(
+                "endpoint".to_string(),
+                ConfigField {
+                    field_type: "text".to_string(),
+                    label: "LocalAI Endpoint".to_string(),
+                    default: Some(serde_json::Value::String(
+                        "http://localhost:8080/v1".to_string(),
+                    )),
+                    required: true,
+                    options: None,
+                },
+            );
+            schema.insert(
+                "model".to_string(),
+                ConfigField {
+                    field_type: "text".to_string(),
+                    label: "Model Name".to_string(),
+                    default: Some(serde_json::Value::String("phi-3".to_string())),
+                    required: true,
+                    options: None,
+                },
+            );
+            module.config_schema = Some(schema);
         }
     }
 

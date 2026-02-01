@@ -603,10 +603,6 @@
 
 /* Active Module State - Always show action if selected */
 /* Active Module State - Action shows on hover (default behavior) */
-/* .model-card-premium.selected .model-card-action {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-} */
 
 /* Hide action button when card is empty, BUT NOT download buttons */
 .model-card-premium.empty .model-card-action:not(.download-module-btn) {

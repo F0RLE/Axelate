@@ -23,7 +23,6 @@ interface IGlobalBridgeProperties {
     hideToTray?: () => Promise<void>;
     confirmClose?: () => Promise<void>;
     hideSplashScreen?: () => void;
-    checkFirstLaunch?: () => Promise<void>;
     changeLanguage?: (lang: string) => Promise<void>;
     showPage?: (id: string, btn?: HTMLElement | null, isInitial?: boolean) => void;
     openAppSelection?: (category: string) => void;
@@ -31,7 +30,6 @@ interface IGlobalBridgeProperties {
     selectApp?: (category: string, app: IApp) => Promise<void>;
     launchApp?: (id: string) => Promise<void>;
     controlModule?: (id: string, action: string) => Promise<boolean>;
-    updateDiagnostics?: () => Promise<void>;
     updateState?: () => Promise<void>;
     showToast?: (m: string, t?: string, d?: number, title?: string | null) => void;
     showActionFeedback?: (t?: string) => void;
@@ -118,7 +116,6 @@ export class GlobalBridge {
         win.hideToTray = (): Promise<void> => this._core.windowService.hideToTray();
         win.confirmClose = (): Promise<void> => this._core.windowService.close();
         win.hideSplashScreen = (): void => this._core.windowUI.hideSplashScreen();
-        win.checkFirstLaunch = (): Promise<void> => this._core.windowUI.checkFirstLaunch();
         win.changeLanguage = async (lang: string): Promise<void> => {
             await this._core.i18nUI.setLanguage(lang);
         };
@@ -179,13 +176,12 @@ export class GlobalBridge {
             }
         };
 
-        // Module Control and Diagnostics
+        // Module Control and State Updates
         win.controlModule = (id: string, action: string): Promise<boolean> =>
             this._core.moduleService.control(id, action);
-        win.updateDiagnostics = async (): Promise<void> => {
-            await this._core.diagnostics.update();
+        win.updateState = async (): Promise<void> => {
+            // No-op for now, or could trigger state refresh if needed
         };
-        win.updateState = win.updateDiagnostics;
 
         // UI Feedback and Utilities
         win.showToast = (m: string, t?: string, d?: number, title?: string | null): void =>
@@ -320,7 +316,7 @@ export class GlobalBridge {
             >;
         }
 
-        const data = providerApp?.api_provider_data as unknown as ProviderData | undefined;
+        const data = providerApp?.apiProviderData as unknown as ProviderData | undefined;
         const models = data?.models || {};
 
         // 1. Saved model

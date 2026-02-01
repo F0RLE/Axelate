@@ -49,10 +49,24 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     match builder.build() {
         Ok(window) => {
             // 4. Apply zoom and maximized state
-            // Apply zoom factor based on saved UI State
             let ui_settings = crate::services::ui_state::get_ui_state().unwrap_or_default();
-            if (ui_settings.zoom_level - 1.0).abs() > f64::EPSILON {
-                let _ = window.set_zoom(ui_settings.zoom_level);
+            let mut zoom = ui_settings.zoom_level;
+
+            // Try to detect monitor resolution and apply specific zoom early
+            if let Ok(Some(monitor)) = window.primary_monitor() {
+                let size = monitor.size();
+                let res_key = format!("{}x{}", size.width, size.height);
+                if let Some(&res_zoom) = ui_settings.resolution_zoom.get(&res_key) {
+                    zoom = res_zoom;
+                    log::debug!("Applying saved resolution zoom: {} for {}", zoom, res_key);
+                } else {
+                    zoom = crate::services::window_settings::calculate_adaptive_zoom(size.height);
+                    log::debug!("Applying default resolution zoom: {} for {}", zoom, res_key);
+                }
+            }
+
+            if (zoom - 1.0).abs() > f64::EPSILON {
+                let _ = window.set_zoom(zoom);
             }
 
             if settings.maximized {
@@ -166,8 +180,11 @@ pub fn run() {
             window_settings::set_webview_zoom,
             window_settings::get_webview_zoom,
             window_settings::get_resolution_zoom,
+            window_settings::get_window_config,
+            window_settings::get_window_policy,
             ui_state::get_ui_state,
             ui_state::save_ui_state,
+            bootstrap::get_app_bootstrap_data,
             secure::save_secure_key,
             secure::get_secure_key,
             ai::send_chat_message,

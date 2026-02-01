@@ -10,7 +10,6 @@ import { NavigationUI } from './ui/NavigationUI';
 import { SidebarUI } from './ui/SidebarUI';
 import { AppUI } from './ui/AppUI';
 import { DownloadUI } from '../downloader/ui/DownloadUI';
-import { DiagnosticsService } from './services/DiagnosticsService';
 import { SoundService } from './services/SoundService';
 import { logger, LoggerService } from './services/LoggerService';
 import { templateLoader } from './services/TemplateLoader';
@@ -36,7 +35,6 @@ export class Core {
     public readonly moduleService: ModuleService;
     public readonly catalog: CatalogService;
     public readonly navigation: NavigationService;
-    public readonly diagnostics: DiagnosticsService;
     public readonly soundService: SoundService;
     public readonly state: StateService;
     public readonly particles: Particles;
@@ -80,7 +78,7 @@ export class Core {
         this.moduleService = new ModuleService(this.tauriProvider);
         this.catalog = new CatalogService(this.tauriProvider);
         this.navigation = NavigationService.getInstance();
-        this.diagnostics = new DiagnosticsService(this.tauriProvider, this.i18n);
+        this.navigation = NavigationService.getInstance();
         this.soundService = new SoundService();
         this.state = new StateService(this);
 
@@ -96,7 +94,7 @@ export class Core {
         // 3. Init UI Handlers
         this.appUI = new AppUI();
         this.i18nUI = new I18nUI(this.i18n);
-        this.windowUI = new WindowUI(this.windowService, this.i18n);
+        this.windowUI = new WindowUI(this.windowService, this.i18n, this.state, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.state, this.soundService);
         this.downloadUI = new DownloadUI();
@@ -123,7 +121,18 @@ export class Core {
         // 1. Initialize Global Bridge early
         this._globalBridge.init();
 
-        // 2. Load UI State & Templates
+        // 2. Fetch Bootstrap Data (Unified request for performance)
+        let bootstrapData: import('./types/coreTypes').IBootstrapData | null = null;
+        try {
+            if (this.tauriProvider.isTauri()) {
+                bootstrapData = await this.tauriProvider.invoke<import('./types/coreTypes').IBootstrapData>('get_app_bootstrap_data');
+                console.debug('[Core] Bootstrap success:', bootstrapData);
+            }
+        } catch (e) {
+            console.warn('[Core] Bootstrap failed, falling back to sequential loading:', e);
+        }
+
+        // 3. Load UI State & Templates
         console.debug('[Core] Loading UI State & Templates...');
 
         // Load critical templates early in parallel
@@ -132,7 +141,12 @@ export class Core {
             templateLoader.loadAndInject('pages/settings', 'page-settings'),
         ]).catch((e) => console.error('[Core] Template loading failed:', e));
 
-        await Promise.all([this.state.loadState(), templateLoadPromise]);
+        if (bootstrapData) {
+            this.state.setState(bootstrapData.uiState);
+            await templateLoadPromise;
+        } else {
+            await Promise.all([this.state.loadState(), templateLoadPromise]);
+        }
 
         const win = globalThis as unknown as Window & { uiState: StateService };
         win.uiState = this.state;
@@ -145,7 +159,7 @@ export class Core {
 
         console.debug('[Core] UI State Loaded.');
 
-        // 3. Show Window (keep splash visible)
+        // 4. Show Window (keep splash visible)
         console.debug('[Core] Showing window...');
         const showPromise = this.windowService.show();
         const showTimeout = new Promise((r) => setTimeout(r, 2000));
@@ -153,17 +167,17 @@ export class Core {
             console.warn('[Core] Show window timed out or failed', e),
         );
 
-        // 4. Init I18n
+        // 5. Init I18n
         try {
-            await this.i18n.init();
+            await this.i18n.init(bootstrapData?.systemLanguage);
             this.i18nUI.applyTranslations();
         } catch (e) {
             console.error('[Core] I18n init failed:', e);
         }
 
-        // 5. Init Services
+        // 6. Init Services
         try {
-            await this.windowService.init();
+            await this.windowService.init(bootstrapData?.windowConfig, bootstrapData?.initialZoom);
             await this.moduleService.init();
             this.windowUI.init();
             await this.sidebarUI.init();
