@@ -65,7 +65,10 @@ export class WindowService {
                     this._currentZoom = fallbackZoom;
                 }
             } catch (e) {
-                console.warn('[WindowService] Failed to get initial zoom (or timeout), using fallback:', e);
+                console.warn(
+                    '[WindowService] Failed to get initial zoom (or timeout), using fallback:',
+                    e,
+                );
                 this._currentZoom = fallbackZoom;
             }
             document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
