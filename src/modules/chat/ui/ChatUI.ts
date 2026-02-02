@@ -43,6 +43,7 @@ export class ChatUI {
     private readonly _messagesContainer: HTMLElement | null;
     private readonly _chatContainer: HTMLElement | null;
     private readonly _attachmentsContainer: HTMLElement | null;
+    private readonly _typingTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
     constructor() {
         this._messagesContainer = document.getElementById('chat-messages');
@@ -87,9 +88,14 @@ export class ChatUI {
             this._messagesContainer.addEventListener('click', this._handleMessageClick.bind(this));
             this._messagesContainer.addEventListener('click', this._handleCopyClick.bind(this));
         }
+    }
 
+    /**
+     * Initializes the ChatUI component.
+     */
+    public async init(): Promise<void> {
         // Bind AI events
-        this._bindAiEvents();
+        await this._bindAiEvents();
     }
 
     private async _bindAiEvents(): Promise<void> {
@@ -545,6 +551,9 @@ export class ChatUI {
     public showTyping(id: string): void {
         if (!this._messagesContainer) return;
 
+        // Clear existing if any (unlikely with unique IDs but for safety)
+        this.removeTyping(id);
+
         const typingDiv = document.createElement('div');
         typingDiv.id = id;
         typingDiv.className = 'chat-message assistant typing';
@@ -555,12 +564,25 @@ export class ChatUI {
             `;
         this._messagesContainer.appendChild(typingDiv);
         this._messagesContainer.scrollTop = this._messagesContainer.scrollHeight;
+
+        // Safety auto-cleanup after 60 seconds
+        const timeout = globalThis.setTimeout(() => {
+            console.warn(`[ChatUI] Typing indicator ${id} timed out and was auto-removed`);
+            this.removeTyping(id);
+        }, 60000);
+        this._typingTimeouts.set(id, timeout);
     }
 
     /**
      * Removes a typing indicator from the UI.
      */
     public removeTyping(id: string): void {
+        // Clear safety timeout
+        if (this._typingTimeouts.has(id)) {
+            clearTimeout(this._typingTimeouts.get(id));
+            this._typingTimeouts.delete(id);
+        }
+
         const indicator = document.getElementById(id);
         if (indicator) indicator.remove();
     }

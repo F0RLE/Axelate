@@ -8,7 +8,7 @@ import { ChatUI } from './ui/ChatUI';
 import { IChatMessage, IChatResponse } from './types/chatTypes';
 import { voiceInputService } from './services/VoiceInputService';
 import { chatFileHandler } from './services/ChatFileHandler'; /* Import Singleton */
-import { estimateTokenCount } from './utils/chatUtils';
+import { getTokenCount } from './utils/chatUtils';
 
 export class ChatController {
     private readonly _service: ChatService;
@@ -28,6 +28,7 @@ export class ChatController {
      */
     private _init(): void {
         console.log('[Chat] Initializing TS Controller...');
+        this._ui.init().catch(err => console.error('[Chat] UI init failed:', err));
         this._bindEvents();
         this._exposeGlobals();
 
@@ -54,6 +55,34 @@ export class ChatController {
             setTimeout(() => this._randomizeGreeting(), 500);
             setTimeout(() => this._randomizeGreeting(), 1500);
             setTimeout(() => this._randomizeGreeting(), 3000);
+        }
+
+        // Load Persistence History
+        this._loadHistory();
+    }
+
+    /**
+     * Loads chat history from the backend bridge.
+     */
+    private async _loadHistory(): Promise<void> {
+        const win = globalThis as unknown as Record<string, unknown>;
+        const aiBridge = win.aiBridge as { getHistory: () => Promise<IChatMessage[]> };
+        
+        if (aiBridge && typeof aiBridge.getHistory === 'function') {
+            const history = await aiBridge.getHistory();
+            if (history && history.length > 0) {
+                console.log(`[ChatController] Restoring ${history.length} messages from persistence`);
+                this._chatHistory = history;
+                
+                // Redraw UI
+                history.forEach(msg => {
+                    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+                    this._ui.appendMessage(msg.role as 'user' | 'assistant', content, {
+                         tokens: 0, // We could count them but it's historical
+                         skipAnimation: true 
+                    });
+                });
+            }
         }
     }
 
@@ -98,7 +127,6 @@ export class ChatController {
                 }
             });
             chatInput.addEventListener('input', () => {
-                this._updateTokenCount();
                 this._autoResizeInput();
             });
             this._autoResizeInput();
@@ -154,71 +182,98 @@ export class ChatController {
         if (!this._validateInput(text)) return;
         if (!this._checkAIActive(input)) return;
 
-        if (input) {
-            input.value = '';
-            this._autoResizeInput();
-        }
-
+        const uiElements = this._lockUI(input);
+        const typingId = 'typing-' + Date.now();
         const listenerId = 'chat-stream-' + Date.now();
-        // Defined as structural type to avoid heavy UI dependency import
-        interface IStreamingHandle {
-            update: (chunk: string) => void;
-            finalize: (text: string, stats?: Record<string, unknown>) => void;
-        }
-        let streamingHandle: IStreamingHandle | null = null;
 
         try {
-            // Calculate tokens BEFORE processing
             const tokenCount = await chatFileHandler.getTotalTokenEstimate(text);
-
             const { attachments, combinedText } = await chatFileHandler.processForSend(text);
-            this._ui.updateTokenCount(0);
 
+            this._ui.updateTokenCount(0);
             this._ui.appendMessage('user', text, { attachments: attachments, tokens: tokenCount });
             this._chatHistory.push({ role: 'user', content: combinedText });
 
-            const typingId = 'typing-' + Date.now();
             this._ui.showTyping(typingId);
 
-            // Set up real-time streaming listener
-            const win = globalThis as unknown as Record<string, unknown>;
-            // Cast to specific interface to allow property access
-            const aiBridge = win.aiBridge as {
-                onChunk: (id: string, cb: (c: string) => void) => void;
-                removeChunkListener: (id: string) => void;
-            };
+            let streamingHandle: {
+                update: (chunk: string) => void;
+                finalize: (text: string, stats?: Record<string, unknown>) => void;
+            } | null = null;
 
-            aiBridge.onChunk(listenerId, (chunk: string) => {
+            this._setupStreamingListener(listenerId, (chunk) => {
                 if (!streamingHandle) {
                     this._ui.removeTyping(typingId);
                     streamingHandle = this._ui.createStreamingMessage('assistant');
                 }
-                if (streamingHandle) {
-                    streamingHandle.update(chunk);
-                }
+                streamingHandle.update(chunk);
             });
 
             const historyHead = this._chatHistory.slice(-40);
-            const response = await this._service.sendMessage(
-                combinedText,
-                historyHead,
-                attachments,
-            );
+            const response = await this._service.sendMessage(combinedText, historyHead, attachments);
 
-            // Cleanup listener
-            aiBridge.removeChunkListener(listenerId);
+            this._cleanupStreamingListener(listenerId);
             this._ui.removeTyping(typingId);
 
-            this._handleChatResponse(response, streamingHandle);
+            await this._handleChatResponse(response, streamingHandle);
         } catch (e: unknown) {
-            const win = globalThis as unknown as Record<string, unknown>;
-            if (win.aiBridge)
-                (win.aiBridge as { removeChunkListener: (id: string) => void }).removeChunkListener(
-                    listenerId,
-                );
+            this._cleanupStreamingListener(listenerId);
+            this._ui.removeTyping(typingId);
+            this._handleError(e instanceof Error ? e.message : 'Unknown error');
+        } finally {
+            this._unlockUI(uiElements);
+        }
+    }
 
-            const errorMsg = e instanceof Error ? e.message : 'Unknown error';
-            this._handleError(errorMsg);
+    private _lockUI(input: HTMLTextAreaElement | null) {
+        const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement;
+        const voiceBtn = document.getElementById('chat-voice-btn') as HTMLButtonElement;
+        const attachBtn = document.getElementById('chat-attach-btn') as HTMLButtonElement;
+
+        if (input) {
+            input.value = '';
+            input.disabled = true;
+            this._autoResizeInput();
+        }
+        if (sendBtn) sendBtn.disabled = true;
+        if (voiceBtn) voiceBtn.disabled = true;
+        if (attachBtn) attachBtn.disabled = true;
+
+        return { input, sendBtn, voiceBtn, attachBtn };
+    }
+
+    private _unlockUI(els: {
+        input: HTMLTextAreaElement | null;
+        sendBtn: HTMLButtonElement | null;
+        voiceBtn: HTMLButtonElement | null;
+        attachBtn: HTMLButtonElement | null;
+    }) {
+        if (els.input) {
+            els.input.disabled = false;
+            els.input.focus();
+        }
+        if (els.sendBtn) els.sendBtn.disabled = false;
+        if (els.voiceBtn) els.voiceBtn.disabled = false;
+        if (els.attachBtn) els.attachBtn.disabled = false;
+    }
+
+    private _setupStreamingListener(id: string, onChunk: (chunk: string) => void) {
+        const win = globalThis as unknown as Record<string, unknown>;
+        const aiBridge = win.aiBridge as {
+            onChunk: (id: string, cb: (c: string) => void) => void;
+        };
+        if (aiBridge) {
+            aiBridge.onChunk(id, onChunk);
+        }
+    }
+
+    private _cleanupStreamingListener(id: string) {
+        const win = globalThis as unknown as Record<string, unknown>;
+        const aiBridge = win.aiBridge as {
+            removeChunkListener: (id: string) => void;
+        };
+        if (aiBridge) {
+            aiBridge.removeChunkListener(id);
         }
     }
 
@@ -267,18 +322,18 @@ export class ChatController {
     /**
      * Handles AI response and updates UI.
      */
-    private _handleChatResponse(
+    private async _handleChatResponse(
         response: IChatResponse,
         streamingHandle?: {
             update: (chunk: string) => void;
             finalize: (text: string, stats?: Record<string, unknown>) => void;
         } | null,
-    ): void {
+    ): Promise<void> {
         if (response.ok) {
             const replyText = response.message || response.reply?.text || '';
 
             if (replyText) {
-                const tokens = estimateTokenCount(replyText);
+                const tokens = await getTokenCount(replyText);
 
                 if (streamingHandle) {
                     streamingHandle.finalize(replyText, { tokens });

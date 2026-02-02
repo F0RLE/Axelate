@@ -622,7 +622,10 @@ export class AppUI {
     }
 
     private _getAppStatusHtml(isApi: boolean, isInstalled: boolean): string {
-        if (isApi || isInstalled) return '';
+        if (isApi || isInstalled) {
+            // User requested to remove the 'ACTIVE' label to keep these cards cleaner
+            return '';
+        }
         const txt = globalThis.t
             ? globalThis.t('ui.launcher.module.download', 'Download')
             : 'Download';
@@ -696,7 +699,9 @@ export class AppUI {
 
     private _handleStopModule(app: IApp, updateToStopped: () => void, actionBtn: HTMLElement) {
         console.log('[AppUI] Stop app clicked:', app.id);
-        if (app.type === 'api' || ['gpt', 'gemini'].includes(app.id)) {
+        const isAiModule = actionBtn.id.includes('ai-') || ['gpt', 'gemini'].includes(app.id) || app.type === 'api';
+        
+        if (isAiModule) {
             if (globalThis.aiBridge) globalThis.aiBridge.stopProvider();
         } else {
             const moduleName = app.name || app.id;
@@ -718,7 +723,9 @@ export class AppUI {
         actionBtn: HTMLElement,
     ) {
         console.log('[AppUI] Launch app clicked:', app.id);
-        if (app.type === 'api' || ['gpt', 'gemini'].includes(app.id)) {
+        const isAiModule = actionBtn.id.includes('ai-') || ['gpt', 'gemini'].includes(app.id) || app.type === 'api';
+
+        if (isAiModule) {
             if (globalThis.aiBridge) {
                 const success = await globalThis.aiBridge.startProvider(app.id);
                 if (success) {

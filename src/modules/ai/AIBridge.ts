@@ -24,7 +24,7 @@ import type {
     ChatContent,
 } from './types/aiTypes';
 import {
-    getApiModelIdWithFallback,
+    getApiModelId,
     mapProviderToBackend,
     getMostPowerfulModel,
 } from './utils/catalogHelpers';
@@ -80,7 +80,7 @@ export class AIBridge {
     private readonly _unlisteners: (() => void)[] = [];
     private readonly _listeners: Map<string, MessageHandler[]> = new Map();
     private readonly _chunkListeners: Map<string, IChunkHandler[]> = new Map();
-    private _chatHistory: IChatMessage[] = [];
+    private readonly _sessionId: string;
 
     /**
      * Initializes the bridge singleton and registers it within the global execution context.
@@ -88,6 +88,14 @@ export class AIBridge {
     constructor() {
         const globalContext = globalThis as unknown as IGlobalContext;
         globalContext.aiBridge = this;
+
+        // Initialize Session ID
+        let sid = localStorage.getItem('ai_session_id');
+        if (!sid) {
+            sid = crypto.randomUUID();
+            localStorage.setItem('ai_session_id', sid);
+        }
+        this._sessionId = sid;
     }
 
     /**
@@ -162,17 +170,18 @@ export class AIBridge {
 
         try {
             const apiKey = await this._getApiKey(providerId);
+            const isLocal = providerId === 'local' || providerId === 'axelate-localai';
 
-            if (!apiKey) {
+            if (!apiKey && !isLocal) {
                 this._showErrorToast('ui.ai.no_api_key', 'API key configuration missing');
                 return false;
             }
 
-            const modelKey = `${providerId}_selected_model`;
+            const modelKey = `ai_${providerId}_selected_model`;
             const model = localStorage.getItem(modelKey) || this._getDefaultModel(providerId);
 
             this._activeProviderId = providerId;
-            this._apiKey = apiKey;
+            this._apiKey = apiKey || ''; // Ensure it's never null if started
             this._model = model;
 
             // Save for persistence across restarts
@@ -181,7 +190,11 @@ export class AIBridge {
 
             const providerName = mapProviderToBackend(providerId);
 
-            const providerDisplay = providerId === 'gpt' ? 'OpenAI GPT' : 'Google Gemini';
+            let providerDisplay = providerId;
+            if (providerId === 'gpt') providerDisplay = 'OpenAI GPT';
+            else if (providerId === 'gemini') providerDisplay = 'Google Gemini';
+            else if (providerId === 'axelate-localai') providerDisplay = 'Axelate Local AI';
+            
             this._showSuccessToast('ui.ai.provider_started', `${providerDisplay} session active`);
 
             console.log(`[AIBridge] Context synchronized: ${providerName}, model: ${model}`);
@@ -246,10 +259,15 @@ export class AIBridge {
             this._activeProviderId = null;
             this._apiKey = null;
             this._model = '';
-            this._chatHistory = [];
+            this._activeProviderId = null;
+            this._apiKey = null;
+            this._model = '';
 
             const providerDisplay = providerId === 'gpt' ? 'OpenAI GPT' : 'Google Gemini';
             this._showInfoToast('ui.ai.provider_stopped', `${providerDisplay} session terminated`);
+
+            this._listeners.clear();
+            this._chunkListeners.clear();
 
             console.log('[AIBridge] Provider context purged via explicit termination');
         }
@@ -259,7 +277,14 @@ export class AIBridge {
      * Verifies if the service is currently prepared for message processing.
      */
     public isActive(): boolean {
-        return this._activeProviderId !== null && this._apiKey !== null;
+        if (!this._activeProviderId) return false;
+        
+        // Local modules don't strictly require an API key in the bridge state
+        if (this._activeProviderId === 'local' || this._activeProviderId === 'axelate-localai') {
+            return true;
+        }
+
+        return this._apiKey !== null && this._apiKey !== '';
     }
 
     /**
@@ -309,8 +334,6 @@ export class AIBridge {
         }
 
         try {
-            this._addMessageToHistory('user', text, attachments);
-
             // Per user request: Local AI logic is completely removed from backend.
             // We return a placeholder response here to satisfy the frontend call without executing logic.
             if (
@@ -320,13 +343,16 @@ export class AIBridge {
                 const msg =
                     this._context.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') ||
                     'Local AI execution is disabled.';
-                this._chatHistory.push({ role: 'assistant', content: msg });
                 this._broadcastResponse(msg, source);
                 return msg;
             }
 
             // Unified backend routing for cloud providers (GPT/Gemini)
-            const request = this._constructChatRequest(attachments);
+            const newMessage: IChatMessage = {
+                 role: 'user',
+                 content: this._createMultimodalContent(text, attachments)
+            };
+            const request = this._constructChatRequest(newMessage, attachments);
             const response = await this._invokeBackendOperation(request);
 
             return this._processBackendResponse(response, source);
@@ -379,40 +405,27 @@ export class AIBridge {
         return msg;
     }
 
-    /**
-     * Appends a message to the internal historical context for thread maintenance.
-     */
-    private _addMessageToHistory(
-        role: 'user' | 'assistant',
-        text: string,
-        attachments?: { name: string; type: string; data_base64: string }[],
-    ): void {
-        if (role === 'user' && attachments && attachments.length > 0) {
-            const parts = this._createMultimodalContent(text, attachments);
-            this._chatHistory.push({ role, content: parts });
-        } else {
-            this._chatHistory.push({ role, content: text });
-        }
-    }
 
     /**
      * Compiles a structured chat request object for the backend dispatcher.
      */
     private _constructChatRequest(
+        message: IChatMessage,
         attachments: { name: string; type: string; data_base64: string }[],
     ): IChatRequest {
         const id = this._activeProviderId!;
-        const apiModelId = getApiModelIdWithFallback(id, this._model);
-        const thinkingLevel = localStorage.getItem(`${id}_thinking_level`) || 'high';
+        const modelId = getApiModelId(id, this._model);
+        const thinkingLevel = localStorage.getItem(`ai_${id}_thinking_level`) || 'high';
 
         return {
             provider: mapProviderToBackend(id),
-            model: apiModelId,
-            messages: this._chatHistory.map((message) => ({
+            model: modelId,
+            messages: [{
                 role: message.role,
                 content: message.content,
                 thought_signature: message.thought_signature,
-            })),
+            }],
+            session_id: this._sessionId,
             api_key: this._apiKey,
             thinking_level: thinkingLevel as 'low' | 'high' | 'minimal',
             attachments,
@@ -430,9 +443,17 @@ export class AIBridge {
                 error: 'Architectural IPC mismatch: Tauri host not detected.',
             };
         }
-        return await this._context.__TAURI__.core.invoke<IChatResponse>('send_chat_message', {
+
+        // Add a safety timeout to prevent infinite UI wait
+        const timeoutPromise = new Promise<IChatResponse>((_, reject) => {
+            setTimeout(() => reject(new Error('AI Bridge request timed out after 90s')), 90000);
+        });
+
+        const invokePromise = this._context.__TAURI__.core.invoke<IChatResponse>('send_chat_message', {
             request,
         });
+
+        return await Promise.race([invokePromise, timeoutPromise]);
     }
 
     /**
@@ -445,12 +466,6 @@ export class AIBridge {
 
         if (response.ok && response.reply) {
             const responseText = response.reply.text;
-            const historyItem: IChatMessage = {
-                role: 'assistant',
-                content: responseText,
-                thought_signature: response.thought_signature,
-            };
-            this._chatHistory.push(historyItem);
             this._broadcastResponse(responseText, source);
             return responseText;
         }
@@ -513,16 +528,24 @@ export class AIBridge {
      * Dispatches streaming segments to all active chunk observers.
      */
     private _broadcastChunk(chunk: string): void {
+        if (this._chunkListeners.size === 0) return;
+        
         this._chunkListeners.forEach((handlers) => {
             handlers.forEach((handler) => handler(chunk));
         });
     }
 
-    /**
-     * Flushes the conversation buffer.
-     */
-    public clearHistory(): void {
-        this._chatHistory = [];
+    public async getHistory(): Promise<IChatMessage[]> {
+        if (this._context.__TAURI__?.core) {
+            try {
+                return await this._context.__TAURI__.core.invoke('get_chat_history', {
+                    session_id: this._sessionId,
+                });
+            } catch (e) {
+                console.error('[AIBridge] Failed to load history:', e);
+            }
+        }
+        return [];
     }
 
     /**

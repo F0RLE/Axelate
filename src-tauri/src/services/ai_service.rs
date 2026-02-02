@@ -15,13 +15,14 @@ pub struct ChatMessage {
     pub thought_signature: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ChatRequest {
     pub provider: String, // "openai", "gemini", "local"
     pub model: String,
     pub messages: Vec<ChatMessage>,
     pub api_key: Option<String>,
     pub thinking_level: Option<String>, // "low", "high", "minimal"
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -40,6 +41,44 @@ pub struct ChatReply {
 }
 
 use crate::models::config::ApiProviderConfig;
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSession {
+    pub history: Vec<ChatMessage>,
+    pub last_updated: u64, // Unix timestamp
+}
+
+pub static SESSIONS: Lazy<Mutex<HashMap<String, ChatSession>>> =
+    Lazy::new(|| Mutex::new(load_sessions().unwrap_or_default()));
+
+fn load_sessions() -> Result<HashMap<String, ChatSession>, crate::errors::AppError> {
+    let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
+    if !path.exists() {
+        return Ok(HashMap::new());
+    }
+
+    let content = std::fs::read_to_string(path)?;
+    let sessions: HashMap<String, ChatSession> = serde_json::from_str(&content).map_err(|e| {
+        crate::errors::AppError::Internal(format!("Failed to parse chat history: {}", e))
+    })?;
+
+    // Optional: Filter out very old sessions (e.g. older than 30 days)
+    Ok(sessions)
+}
+
+fn save_sessions() -> Result<(), crate::errors::AppError> {
+    if let Ok(sessions) = SESSIONS.lock() {
+        let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
+        let content = serde_json::to_string_pretty(&*sessions).map_err(|e| {
+            crate::errors::AppError::Internal(format!("Failed to serialize chat history: {}", e))
+        })?;
+        std::fs::write(path, content)?;
+    }
+    Ok(())
+}
 
 /// Dispatches a chat request to the appropriate AI provider (OpenAI or Gemini).
 ///
@@ -48,6 +87,37 @@ pub async fn process_chat_request(
     window: tauri::Window,
     request: ChatRequest,
 ) -> Result<ChatResponse, crate::errors::AppError> {
+    // 0. Handle Session State
+    let mut working_messages = request.messages.clone();
+
+    if let Some(sid) = &request.session_id {
+        if let Ok(mut sessions) = SESSIONS.lock() {
+            let session = sessions.entry(sid.clone()).or_insert(ChatSession {
+                history: Vec::new(),
+                last_updated: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            });
+
+            // Append new user messages
+            session.history.extend(request.messages.clone());
+            session.last_updated = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            working_messages = session.history.clone();
+            save_sessions().ok();
+        }
+    }
+
+    // Create a request with full history for the provider
+    let effective_request = ChatRequest {
+        messages: working_messages,
+        ..request.clone()
+    };
+
     // 1. Resolve provider configuration and endpoint base URL.
     let mut base_url = "https://api.openai.com/v1".to_string();
     let mut provider_type = "openai".to_string();
@@ -62,6 +132,7 @@ pub async fn process_chat_request(
         _ => {}
     }
 
+    let mut effective_model = request.model.clone();
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
     if providers_path.exists()
         && let Ok(content) = std::fs::read_to_string(&providers_path)
@@ -72,13 +143,60 @@ pub async fn process_chat_request(
         if let Some(url) = &p.base_url {
             base_url = url.clone();
         }
+
+        // 1. Resolve Aliases (e.g., "gpt-5.1-thinking" -> "gpt-5.2-pro")
+        // This handles legacy keys saved in user state
+        if let Some(target) = p.model_aliases.get(&request.model) {
+            log::info!("Resolved model alias: {} -> {}", request.model, target);
+            effective_model = target.clone();
+        }
+
+        // 2. Resolve API Model ID (e.g., "gpt-5.2-pro" -> "gpt-5.2-2025-12-11")
+        // This decouples UI keys from volatile API IDs
+        if let Some(models) = &p.models
+            && let Some(model_def) = models.get(&effective_model)
+            && let Some(api_config) = &model_def.api_models
+            && let Some(text_model) = &api_config.text
+        {
+            log::info!(
+                "Resolved API model ID: {} -> {}",
+                effective_model,
+                text_model
+            );
+            effective_model = text_model.clone();
+        } else {
+            // 3. Resolve Custom Models (e.g. Fine-tunes)
+            // If not found in standard catalog, check user's custom models
+            let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
+            if custom_path.exists()
+                && let Ok(content) = std::fs::read_to_string(&custom_path)
+                && let Ok(custom_config) = serde_json::from_str::<
+                    crate::models::custom_models::CustomModelConfig,
+                >(&content)
+                && let Some(custom) = custom_config
+                    .models
+                    .iter()
+                    .find(|m| m.id == effective_model && m.provider_id == request.provider)
+            {
+                log::info!(
+                    "Resolved Custom Model: {} -> {}",
+                    effective_model,
+                    custom.base_model_id
+                );
+                effective_model = custom.base_model_id.clone();
+            }
+        }
     }
 
-    match provider_type.as_str() {
-        "openai" => handle_openai(window, request, &base_url)
+    // Update the request with the resolved model ID
+    let mut final_request = effective_request;
+    final_request.model = effective_model;
+
+    let response = match provider_type.as_str() {
+        "openai" => handle_openai(window, final_request, &base_url)
             .await
             .map_err(crate::errors::AppError::Internal),
-        "gemini" => handle_gemini(window, request).await,
+        "gemini" => handle_gemini(window, final_request).await,
 
         _ => Ok(ChatResponse {
             ok: false,
@@ -87,7 +205,30 @@ pub async fn process_chat_request(
             model: Some(request.model),
             thought_signature: None,
         }),
+    };
+
+    // Post-process: Save assistant reply to session
+    if let Ok(res) = &response
+        && res.ok
+        && let Some(reply) = &res.reply
+        && let Some(sid) = &request.session_id
+    {
+        if let Ok(mut sessions) = SESSIONS.lock() {
+            if let Some(session) = sessions.get_mut(sid) {
+                session.history.push(ChatMessage {
+                    role: reply.role.clone(),
+                    content: serde_json::Value::String(reply.text.clone()),
+                    thought_signature: res.thought_signature.clone(),
+                });
+                session.last_updated = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+            }
+        }
     }
+
+    response
 }
 
 /// Validates an API key against the specified provider.
@@ -513,4 +654,16 @@ fn parse_data_uri(uri: &str) -> Option<(String, String)> {
     let mime = mime_part.split(';').next()?.to_string();
 
     Some((mime, data.to_string()))
+}
+
+pub fn count_tokens(text: String, model: Option<String>) -> Result<usize, String> {
+    use tiktoken_rs::{cl100k_base, get_bpe_from_model};
+
+    let bpe = if let Some(m) = model {
+        get_bpe_from_model(&m).unwrap_or_else(|_| cl100k_base().unwrap())
+    } else {
+        cl100k_base().unwrap()
+    };
+
+    Ok(bpe.encode_with_special_tokens(&text).len())
 }

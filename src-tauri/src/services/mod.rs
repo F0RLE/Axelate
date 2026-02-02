@@ -1,6 +1,8 @@
 pub mod ai_service;
 pub mod config_service;
+pub mod custom_model_service;
 pub mod downloader;
+pub mod file_service;
 pub mod health;
 pub mod license;
 pub mod logs;

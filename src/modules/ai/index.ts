@@ -31,7 +31,6 @@ export {
     getModelsFromProvider,
     getModelData,
     getApiModelId,
-    getApiModelIdWithFallback,
     sortModelsByPower,
     getMostPowerfulModel,
     getSelectedModel,

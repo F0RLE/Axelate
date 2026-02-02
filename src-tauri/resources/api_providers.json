@@ -42,6 +42,10 @@
         "stats": { "speed": 10, "logic": 5, "creative": 5 },
         "apiModels": { "text": "gpt-5-mini-2025-08-07" }
       }
+    },
+    "modelAliases": {
+      "gpt-5.1-thinking": "gpt-5.2-pro",
+      "gpt-4-turbo": "gpt-5.2-standard"
     }
   },
   {
@@ -120,6 +124,10 @@
         "stats": { "speed": 10, "logic": 9, "creative": 8 },
         "apiModels": { "text": "gemini-3-flash-preview" }
       }
+    },
+    "modelAliases": {
+      "gemini-1.5-pro": "gemini-3-pro",
+      "gemini-1.5-flash": "gemini-3-flash"
     }
   },
   {

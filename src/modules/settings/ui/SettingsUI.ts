@@ -216,7 +216,7 @@ export class SettingsUI {
 
         // Default Schema-based rendering
         container.innerHTML = '';
-        if (app.config_schema && Object.keys(app.config_schema).length > 0) {
+        if (app.configSchema && Object.keys(app.configSchema).length > 0) {
             const form = document.createElement('div');
             form.className = 'module-settings-form';
 
@@ -226,7 +226,7 @@ export class SettingsUI {
             header.textContent = app.name || app.id;
             form.appendChild(header);
 
-            Object.entries(app.config_schema).forEach(([key, field]) => {
+            Object.entries(app.configSchema).forEach(([key, field]) => {
                 this._renderSettingField(form, app.id, key, field);
             });
             container.appendChild(form);
@@ -266,8 +266,8 @@ export class SettingsUI {
             t: (k: string, d: string) => string;
         };
         const catalog = win.APP_DATA?.ai || [];
-        const app = catalog.find((a) => a.id === appId);
-        const providerData = app?.api_provider_data as
+        const app = (catalog as any).find((a: any) => a.id === appId);
+        const providerData = app?.apiProviderData as
             | {
                   models?: Record<
                       string,
@@ -702,12 +702,12 @@ export class SettingsUI {
 
         let input: HTMLElement;
 
-        if (field.field_type === 'select' && field.options) {
+        if (field.fieldType === 'select' && field.options) {
             input = this._createSelectField(field.options, initialValue);
-        } else if (field.field_type === 'boolean') {
+        } else if (field.fieldType === 'boolean') {
             const isTrue = String(initialValue) === 'true';
             input = this._createToggleField(isTrue);
-        } else if (field.field_type === 'number') {
+        } else if (field.fieldType === 'number') {
             input = this._createNumberField(Number(initialValue));
         } else {
             input = this._createTextField(String(initialValue));
@@ -716,7 +716,7 @@ export class SettingsUI {
         row.appendChild(input);
         form.appendChild(row);
 
-        this._attachAutoSave(input, field.field_type, settingKey);
+        this._attachAutoSave(input, field.fieldType, settingKey);
     }
 
     /**

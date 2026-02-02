@@ -8,7 +8,7 @@ use std::time::Duration;
 use std::time::Instant;
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
 use tauri::{AppHandle, Emitter};
-use wmi::{COMLibrary, WMIConnection};
+use wmi::WMIConnection;
 
 use crate::models::{
     CpuStats, DiskStats, GpuStats, NetworkStats, RamStats, SystemStats, VramStats,
@@ -257,10 +257,7 @@ pub fn get_stats() -> SystemStats {
     } else {
         // 9.2 Fallback to WMI (Local Scope for Thread Safety)
         // Instantiate COM/WMI locally to avoid Send/Sync issues with static storage
-        let com_lib = COMLibrary::new().ok();
-        if let Some(lib) = com_lib
-            && let Ok(wmi) = WMIConnection::new(lib)
-        {
+        if let Ok(wmi) = WMIConnection::new() {
             let results: Result<Vec<Win32_VideoController>, _> = wmi.query();
             if let Ok(controllers) = results {
                 // Find best dedicated GPU (highest VRAM)

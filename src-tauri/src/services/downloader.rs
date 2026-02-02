@@ -73,6 +73,53 @@ pub fn delete_module(module_id: &str) -> Result<(), AppError> {
     }
 }
 
+use once_cell::sync::Lazy;
+use std::sync::{Arc, Mutex};
+
+/// Global downloader service instance
+pub static DOWNLOADER: Lazy<DownloaderService> = Lazy::new(|| DownloaderService::new());
+
+pub struct DownloaderService {
+    settings: Arc<Mutex<DownloaderSettings>>,
+}
+
+#[derive(Clone, Copy)]
+struct DownloaderSettings {
+    limit_enabled: bool,
+    max_speed_bytes: u64, // Bytes per second
+}
+
+impl DownloaderService {
+    pub fn new() -> Self {
+        Self {
+            settings: Arc::new(Mutex::new(DownloaderSettings {
+                limit_enabled: false,
+                max_speed_bytes: 5 * 1024 * 1024, // Default 5MB/s
+            })),
+        }
+    }
+
+    pub fn set_limit(&self, enabled: bool, max_speed_mb: u64) {
+        if let Ok(mut settings) = self.settings.lock() {
+            settings.limit_enabled = enabled;
+            settings.max_speed_bytes = max_speed_mb * 1024 * 1024;
+            log::info!(
+                "Download limit set: enabled={}, speed={}MB/s",
+                enabled,
+                max_speed_mb
+            );
+        }
+    }
+
+    pub fn get_settings(&self) -> (bool, u64) {
+        if let Ok(settings) = self.settings.lock() {
+            (settings.limit_enabled, settings.max_speed_bytes)
+        } else {
+            (false, 0)
+        }
+    }
+}
+
 pub async fn download_module(
     app: AppHandle,
     module_id: String,
@@ -195,12 +242,37 @@ async fn download_and_extract_internal(
         .await
         .map_err(AppError::Io)?;
 
-    while let Some(item) = stream.next().await {
-        let chunk = item.map_err(|e| AppError::External(format!("Stream error: {}", e)))?;
-        file.write_all(&chunk).await.map_err(AppError::Io)?;
-        downloaded += chunk.len() as u64;
+    let mut last_log_time = std::time::Instant::now();
 
-        if total_size > 0 {
+    while let Some(item) = stream.next().await {
+        let chunk_start = std::time::Instant::now();
+        let chunk = item.map_err(|e| AppError::External(format!("Stream error: {}", e)))?;
+        let chunk_len = chunk.len();
+
+        file.write_all(&chunk).await.map_err(AppError::Io)?;
+        downloaded += chunk_len as u64;
+
+        // Rate Limiting Logic
+        let (limit_enabled, max_speed_bytes) = DOWNLOADER.get_settings();
+        if limit_enabled && max_speed_bytes > 0 {
+            // Calculate how long this chunk *should* take
+            // time_s = bytes / (bytes/s)
+            // time_us = bytes * 1_000_000 / (bytes/s)
+            let ideal_duration_micros = (chunk_len as u128 * 1_000_000) / max_speed_bytes as u128;
+            let elapsed_micros = chunk_start.elapsed().as_micros();
+
+            if ideal_duration_micros > elapsed_micros {
+                let sleep_micros = ideal_duration_micros - elapsed_micros;
+                if sleep_micros > 1000 {
+                    // Only sleep if meaningful (>1ms)
+                    tokio::time::sleep(tokio::time::Duration::from_micros(sleep_micros as u64))
+                        .await;
+                }
+            }
+        }
+
+        if total_size > 0 && last_log_time.elapsed().as_millis() > 100 {
+            last_log_time = std::time::Instant::now();
             let progress = downloaded as f32 / total_size as f32;
             emit_progress(
                 app,

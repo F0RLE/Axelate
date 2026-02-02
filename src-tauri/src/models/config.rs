@@ -83,6 +83,8 @@ pub struct ApiProviderConfig {
     pub provider_type: String,
     pub base_url: Option<String>,
     pub models: Option<HashMap<String, AiModel>>,
+    #[serde(default)]
+    pub model_aliases: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

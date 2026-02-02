@@ -216,12 +216,57 @@ export class SettingsService {
     }
 
     public async addCustomModel(provider: string, id: string, name: string): Promise<void> {
-        // Implementation for custom models storage
-        // Currently using localStorage as per audit finding, but encapsulated in Service
-        const key = `custom_models_${provider}`;
-        const existing = localStorage.getItem(key);
-        const models = existing ? JSON.parse(existing) : [];
-        models.push({ id, name });
-        localStorage.setItem(key, JSON.stringify(models));
+        if (globalThis.__TAURI__) {
+            try {
+                // Determine base model ID (assumed to be the ID itself for now, or passed as arg)
+                // For simplified UI, we assume id IS the base model or mapped string.
+                // But the backend expects 'base_model_id'.
+                // If the UI input for 'id' is "ft:gpt-3.5:my-org::12345", that IS the base_model_id.
+                // The 'id' for display might be the same?
+                // The frontend UI usually asks for "Model ID" (API string) and "Display Name".
+                // backend add_custom_model(provider_id, id, name, base_model_id)
+                // In this simplified interface, we'll treat UI ID as both unique ID and base API ID
+                await globalThis.__TAURI__.core.invoke('add_custom_model', {
+                    providerId: provider,
+                    id: id,
+                    name: name,
+                    baseModelId: id
+                });
+            } catch(e) {
+                console.error('[SettingsService] Failed to add custom model:', e);
+                throw e;
+            }
+        } else {
+             // Web Fallback
+            const key = `custom_models_${provider}`;
+            const existing = localStorage.getItem(key);
+            const models = existing ? JSON.parse(existing) : [];
+            models.push({ id, name });
+            localStorage.setItem(key, JSON.stringify(models));
+        }
+    }
+
+    public async getCustomModels(): Promise<any[]> {
+        if (globalThis.__TAURI__) {
+             try {
+                return await globalThis.__TAURI__.core.invoke('get_custom_models');
+             } catch(e) {
+                 console.error('[SettingsService] Failed to get custom models:', e);
+                 return [];
+             }
+        } else {
+            // Web fallback (aggregate all providers? or just return empty for compliance)
+            // returning all local keys
+            let all: any[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key?.startsWith('custom_models_')) {
+                    const provider = key.replace('custom_models_', '');
+                    const models = JSON.parse(localStorage.getItem(key) || '[]');
+                    all = all.concat(models.map((m: any) => ({...m, provider_id: provider})));
+                }
+            }
+            return all;
+        }
     }
 }

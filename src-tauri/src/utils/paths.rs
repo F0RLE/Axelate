@@ -115,6 +115,12 @@ pub static FILE_GEN_CONFIG: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join("genera
 /// Path to UI state file (`AxelateData/User/UI/ui_state.json`)
 pub static FILE_UI_STATE: Lazy<PathBuf> = Lazy::new(|| UI_DIR.join("ui_state.json"));
 
+/// Directory for Chat history (`AxelateData/User/Chat`)
+pub static CHAT_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("Chat"));
+
+/// Path to chat history file (`AxelateData/User/Chat/history.json`)
+pub static FILE_CHAT_HISTORY: Lazy<PathBuf> = Lazy::new(|| CHAT_DIR.join("history.json"));
+
 /// Maximum number of log files to keep
 const MAX_LOG_FILES: usize = 5;
 
@@ -132,6 +138,7 @@ pub fn init_filesystem() -> Result<(), AppError> {
         &*TEMP_DIR,
         &*MODULES_DIR,
         &*CACHE_DIR,
+        &*CHAT_DIR,
     ];
 
     for dir in dirs {

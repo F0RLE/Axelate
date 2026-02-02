@@ -154,6 +154,7 @@ pub fn run() {
             downloader::get_module_path,
             downloader::delete_module,
             downloader::list_module_files,
+            downloader::set_download_settings,
             system::get_system_stats,
             system::get_gpu_info,
             system::set_monitoring_paused,
@@ -189,6 +190,13 @@ pub fn run() {
             secure::get_secure_key,
             ai::send_chat_message,
             ai::validate_api_key,
+            ai::clear_chat_history,
+            ai::get_chat_history,
+            ai::count_tokens,
+            services::custom_model_service::get_custom_models,
+            services::custom_model_service::add_custom_model,
+            services::custom_model_service::remove_custom_model,
+            services::file_service::process_file_content,
         ])
         .setup(|app| {
             crate::utils::paths::init_filesystem().ok();

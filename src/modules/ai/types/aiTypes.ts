@@ -53,6 +53,7 @@ export interface IChatRequest {
     api_key: string | null;
     thinking_level?: 'low' | 'high' | 'minimal';
     attachments?: { name: string; type: string; data_base64: string }[];
+    session_id?: string;
 }
 
 /**
@@ -141,7 +142,7 @@ export interface IAICatalogApp {
     id: string;
     name?: string;
     type?: 'api' | 'local';
-    api_provider_data?: IAIProviderData;
+    apiProviderData?: IAIProviderData;
 }
 
 /**

@@ -609,32 +609,35 @@
     display: none !important;
 }
 
-/* --- Download Button Specific Styling --- */
-
-/* Download button visible - NO card dimension changes */
-
-/* The download button - same layout as launch button */
+/* The download button - focused on size and performance */
 .model-card-premium .model-card-action.download-module-btn {
-    /* Make visible - same as launch button */
+    /* Make visible */
     opacity: 1 !important;
     pointer-events: auto !important;
     display: inline-flex !important;
 
-    /* Styling */
-    padding: 0.6rem 2rem !important;
-    font-size: 0.95rem !important;
-    font-weight: 600 !important;
-
+    /* Design Update: Significant Size Increase */
+    padding: 1rem 4rem !important;    /* Much larger padding for a prominent look */
+    font-size: 1.15rem !important;      /* Larger font size */
+    font-weight: 700 !important;
+    border-radius: 14px !important;    /* Slightly more rounded for premium feel */
+    min-width: 220px !important;       /* Ensure it's wide enough even with short text */
+    
     background: var(--primary) !important;
     color: white !important;
     border: none !important;
-    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.35);
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3);
+    
+    /* Clean, performant transitions */
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), 
+                background-color 0.2s ease, 
+                box-shadow 0.2s ease !important;
 }
 
 .model-card-premium .model-card-action.download-module-btn:hover {
     background: var(--primary-hover) !important;
-    transform: translateY(-3px) !important;
-    box-shadow: 0 6px 20px rgba(138, 43, 226, 0.5);
+    transform: translateY(-3px) scale(1.02) !important;
+    box-shadow: 0 8px 20px rgba(138, 43, 226, 0.4);
 }
 
 .model-card-premium .model-card-action.active-module-btn:hover {
@@ -732,8 +735,8 @@
     border-radius: 20px;
     width: 90%;
     max-width: 1000px;
-    /* Adjusted height constraint */
-    max-height: calc((100vh / var(--app-zoom, 1)) - (200px / var(--app-zoom, 1)));
+    /* Increased height constraint to prevent squeezing */
+    max-height: calc((100vh / var(--app-zoom, 1)) - (120px / var(--app-zoom, 1)));
 
     display: flex;
     flex-direction: column;
@@ -742,8 +745,8 @@
     /* Animation State */
     opacity: 1;
     transform: scale(1) translateY(0);
-    /* Animate ALL properties (width, height, etc) for smooth resizing */
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Stable transition - avoiding 'all' to prevent unwanted jumping */
+    transition: opacity 0.3s ease, transform 0.3s var(--ease-bounce);
 }
 
 /* Entry/Exit State - Consolidated */
@@ -752,20 +755,21 @@
     transform: scale(0.95) translateY(10px);
 }
 
-/* Staggered entrance for cards inside the selector */
 @keyframes cardIn {
-    from {
+    0% {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translate3d(0, 30px, 0) scale(0.97);
     }
-    to {
+    100% {
         opacity: 1;
-        transform: translateY(0);
+        transform: translate3d(0, 0, 0) scale(1);
     }
 }
 
 .modal-backdrop:not(.hidden) .app-card {
-    animation: cardIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    animation: cardIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
 }
 
 .modal-backdrop:not(.hidden) .app-card:nth-child(1) {
@@ -802,6 +806,20 @@
     align-items: center;
     color: #bbb; /* Increased contrast from #999 */
     font-size: 0.85rem;
+}
+
+/* Force remove any legacy flare artifacts (horizontal strips/rims) */
+.app-modal::before,
+.app-modal::after,
+.app-modal-inner::before,
+.app-modal-inner::after,
+.app-grid::before,
+.app-grid::after {
+    display: none !important;
+    content: none !important;
+    opacity: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
 }
 .app-modal-header {
     padding: 0 1.5rem;
@@ -874,54 +892,91 @@
 }
 
 /* App Card Styles */
-.app-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 16px;
-    padding: 1.5rem 1.5rem 2.5rem 1.5rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    position: relative;
-    /* overflow: hidden; Removed to prevent clipping */
-    min-height: 300px;
+/* High specificity to ensure ALL cards have the exact same height for grid uniformity */
+#app-grid .app-card, 
+.app-grid .app-card {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-radius: 16px !important;
+    padding: 1.5rem 1.25rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: center !important;
+    
+    /* Maximum tight height to eliminate voids while keeping grid alignment */
+    height: 380px !important;
+    min-height: 380px !important;
+    flex-shrink: 0 !important;
+    position: relative !important;
+    
+    /* Premium Hover Transition */
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
+                box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.4s ease !important;
+    will-change: transform, box-shadow;
 }
 
 .app-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    transform: translateY(-12px) translateZ(0);
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45) !important;
+    z-index: 20;
+    /* Outline/Border changes removed per user request to focus on the 'float' */
 }
 
 .app-icon-wrapper {
-    width: 80px;
-    height: 80px;
-    border-radius: 18px;
+    width: 70px; /* Slightly smaller for density */
+    height: 70px;
+    border-radius: 16px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 1rem;
-    margin-top: 1.5rem; /* Space for top-right badge */
-    font-size: 2.2rem; /* For emoji placeholders */
+    margin-bottom: 1rem !important;
+    margin-top: 0 !important;
+    font-size: 2rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
 }
 
 .app-card-title {
-    font-size: 1.3rem;
+    font-size: 1.15rem; /* Slightly smaller title */
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0px !important;
+    min-height: 2.5rem !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .app-card-desc {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: var(--text-secondary);
     line-height: 1.4;
-    margin-bottom: 1rem;
+    margin-top: 0.75rem !important;
+    margin-bottom: 0px !important;
     cursor: pointer;
+    
+    /* Fixed height to eliminate "Visual Noise" and anchor the bottom line */
+    height: 90px !important;
+    min-height: 90px !important;
+    display: flex !important;
+    align-items: flex-start !important; 
+    justify-content: center !important;
+    padding: 0.25rem 0.5rem !important;
+    
+    overflow-y: auto !important;
+    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none !important; /* IE/Edge */
+    text-align: center;
+}
+
+/* Hide scrollbar for Chrome/Safari */
+.app-card-desc::-webkit-scrollbar {
+    display: none !important;
 }
 
 .app-status {
@@ -940,20 +995,46 @@
 }
 
 .app-status.download-btn {
-    background: var(--primary);
+    padding: 0.8rem 2.8rem !important;
+    font-size: 1.05rem !important;
+    border-radius: 12px !important;
+    min-width: 180px !important;
+    
+    background: var(--primary) !important;
     color: white !important;
-    font-weight: 600;
+    font-weight: 700 !important;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0.2, 1);
     border: none;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.3);
+    
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
+    flex-shrink: 0 !important;
+    z-index: 10 !important;
+}
+
+.app-status.active-label {
+    margin-top: auto !important;
+    margin-bottom: 0.5rem !important;
+    padding: 0.6rem 2.2rem !important;
+    font-size: 0.95rem !important;
+    border-radius: 10px !important;
+    background: rgba(138, 43, 226, 0.15) !important;
+    border: 1px solid rgba(138, 43, 226, 0.3) !important;
+    color: var(--primary-light, #dcbdfb) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.5px;
+    cursor: default;
+    flex-shrink: 0;
 }
 
 .app-status.download-btn:hover {
-    background: var(--primary-hover);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(138, 43, 226, 0.3);
+    background: var(--primary-hover) !important;
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 16px rgba(138, 43, 226, 0.4);
 }
 
 .app-status.download-btn.downloading {

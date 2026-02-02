@@ -73,6 +73,7 @@ export class StateService {
             // Defaults already set
         }
 
+        this._syncDownloadSettingsToBackend();
         return this._state;
     }
 
@@ -321,6 +322,19 @@ export class StateService {
         this._state.download_max_speed = maxSpeed;
         this._isDirty = true;
         this._debouncedSave();
+        this._syncDownloadSettingsToBackend();
+    }
+
+    private _syncDownloadSettingsToBackend(): void {
+        const win = globalThis as unknown as Window & {
+            __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } };
+        };
+        if (win.__TAURI__) {
+            win.__TAURI__.core.invoke('set_download_settings', {
+                enabled: this._state.download_limit_enabled,
+                max_speed: this._state.download_max_speed,
+            }).catch((e) => console.error('[StateService] Failed to sync download settings:', e));
+        }
     }
 
     /**
@@ -339,9 +353,11 @@ export class StateService {
 
     /**
      * Sets the zoom level.
+     * Note: Does not trigger save as WindowService handles persistence via backend command.
      */
     public setZoomLevel(zoom: number): void {
-        this.set('zoom_level', zoom);
+        this._state.zoom_level = zoom;
+        // Optimization: Do NOT mark dirty. WindowService calls set_webview_zoom which saves state.
     }
 
     /**
@@ -360,14 +376,14 @@ export class StateService {
 
     /**
      * Sets the zoom level for a specific resolution key.
+     * Note: Does not trigger save as WindowService handles persistence via backend command.
      */
     public setResolutionZoom(resKey: string, zoom: number): void {
         if (!this._state.resolution_zoom) {
             this._state.resolution_zoom = {};
         }
         this._state.resolution_zoom[resKey] = zoom;
-        this._isDirty = true;
-        this._debouncedSave();
+        // Optimization: Do NOT mark dirty.
     }
 
     /**

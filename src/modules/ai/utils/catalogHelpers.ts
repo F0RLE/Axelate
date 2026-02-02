@@ -50,7 +50,7 @@ export function getProviderFromCatalog(providerId: string): IAICatalogApp | null
  */
 export function getProviderData(providerId: string): IAIProviderData | null {
     const provider = getProviderFromCatalog(providerId);
-    return provider?.api_provider_data || null;
+    return provider?.apiProviderData || null;
 }
 
 // ============================================================================
@@ -167,32 +167,3 @@ export function mapProviderToBackend(providerId: string): string {
     return legacyMap[providerId] || providerId;
 }
 
-// ============================================================================
-// Legacy Fallback Mappings
-// ============================================================================
-
-const LEGACY_MODEL_MAPPINGS: Record<string, Record<string, string>> = {
-    gpt: {
-        'gpt-5.2-pro': 'gpt-5.2-2025-12-11',
-        'gpt-5.1-thinking': 'o3-pro',
-        'gpt-5-mini': 'gpt-5-mini-2025-08-07',
-    },
-    gemini: {
-        'gemini-3-pro': 'gemini-3-pro-preview',
-        'gemini-3-flash': 'gemini-3-flash-preview',
-    },
-};
-
-/**
- * Resolves the API identifier with support for deprecated record mappings.
- *
- * @param providerId - Provider identifier
- * @param uiModelKey - UI-friendly model key
- * @returns Authenticated API model ID
- */
-export function getApiModelIdWithFallback(providerId: string, uiModelKey: string): string {
-    const dynamicId = getApiModelId(providerId, uiModelKey);
-    if (dynamicId !== uiModelKey) return dynamicId;
-
-    return LEGACY_MODEL_MAPPINGS[providerId]?.[uiModelKey] || uiModelKey;
-}

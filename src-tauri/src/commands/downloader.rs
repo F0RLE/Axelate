@@ -55,3 +55,8 @@ pub async fn list_module_files(module_id: String) -> Result<Vec<String>, AppErro
 
     Ok(files)
 }
+
+#[tauri::command]
+pub fn set_download_settings(enabled: bool, max_speed: u64) {
+    downloader::DOWNLOADER.set_limit(enabled, max_speed);
+}

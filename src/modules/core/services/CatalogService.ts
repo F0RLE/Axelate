@@ -24,7 +24,7 @@ interface IApiProvider {
 interface IAppConfig {
     catalog?: ICatalogData;
     models?: Record<string, unknown>;
-    api_providers?: IApiProvider[];
+    apiProviders?: IApiProvider[];
 }
 
 declare global {
@@ -110,7 +110,7 @@ const FALLBACK_CONFIG: IAppConfig = {
             },
         ],
     },
-    api_providers: [
+    apiProviders: [
         { id: 'gpt', name: 'GPT', type: 'api', baseUrl: 'https://api.openai.com/v1' },
         { id: 'gemini', name: 'Gemini', type: 'api' },
         { id: 'claude', name: 'Claude', type: 'api' },
@@ -185,7 +185,7 @@ export class CatalogService {
 
                 const mergeSchema = (list: IApp[]) => {
                     list.forEach((app) => {
-                        const providers = config?.api_providers;
+                        const providers = config?.apiProviders;
                         if (providers && Array.isArray(providers)) {
                             // Only hydrate API metadata for settings UI if needed
                             const provider = providers.find((p) => p.id === app.id);
@@ -198,7 +198,7 @@ export class CatalogService {
                         if (
                             ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
                             app.type === 'api' ||
-                            config?.api_providers?.some((p) => p.id === app.id)
+                            config?.apiProviders?.some((p) => p.id === app.id)
                         ) {
                             app.installed = true;
                         }
