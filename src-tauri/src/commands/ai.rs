@@ -25,10 +25,10 @@ pub fn clear_chat_history(session_id: String) -> Result<(), AppError> {
 
 #[tauri::command]
 pub fn get_chat_history(session_id: String) -> Result<Vec<ai_service::ChatMessage>, AppError> {
-    if let Ok(sessions) = ai_service::SESSIONS.lock() {
-        if let Some(session) = sessions.get(&session_id) {
-            return Ok(session.history.clone());
-        }
+    if let Ok(sessions) = ai_service::SESSIONS.lock()
+        && let Some(session) = sessions.get(&session_id)
+    {
+        return Ok(session.history.clone());
     }
     Ok(Vec::new())
 }

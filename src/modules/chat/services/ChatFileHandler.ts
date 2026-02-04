@@ -186,8 +186,7 @@ export class ChatFileHandler {
                     content: `\n\n${result.content}`,
                     attachment: {
                         name: file.name,
-                        type:
-                            file.type || (result.is_archive ? 'application/zip' : 'text/plain'),
+                        type: file.type || (result.is_archive ? 'application/zip' : 'text/plain'),
                         size: file.size,
                         data_base64: '',
                         tokens: 0,
@@ -251,15 +250,14 @@ export class ChatFileHandler {
         return { error: `\n[Skipped: ${file.name} - Not supported in Web Mode]` };
     }
 
-    
     // Removed private ZIP methods (_processZipFile, _extractZipEntries, _validateZipEntry, etc.)
-    
+
     public async getTotalTokenEstimate(baseText: string): Promise<number> {
         // Simple approximation logic
         let total = await getTokenCount(baseText);
-        for(const file of this._files) {
-             if (file.type.startsWith('image/')) total += 258;
-             // For text files, we rely on backend processing usually.
+        for (const file of this._files) {
+            if (file.type.startsWith('image/')) total += 258;
+            // For text files, we rely on backend processing usually.
         }
         return total;
     }
@@ -270,24 +268,26 @@ export class ChatFileHandler {
     ): Promise<{ combinedText: string; attachments: IChatAttachment[] }> {
         // Without processing, we can't show "Smart Unpacked".
         // Just show list.
-         const attachments: IChatAttachment[] = this._files.map(f => ({
-             name: f.name,
-             type: f.type,
-             size: f.size,
-             data_base64: ''
-         }));
-         return { combinedText: baseText + "\n[Files attached]", attachments };
+        const attachments: IChatAttachment[] = this._files.map((f) => ({
+            name: f.name,
+            type: f.type,
+            size: f.size,
+            data_base64: '',
+        }));
+        return { combinedText: baseText + '\n[Files attached]', attachments };
     }
 
     public async getFileTokenEstimate(file: File): Promise<number> {
-         if (file.type.startsWith('image/')) return 258;
-         if (isTextFile(file)) {
-             try {
-                 const t = await readFileAsText(file);
-                 return await getTokenCount(t);
-             } catch { return 0; }
-         }
-         return 0; 
+        if (file.type.startsWith('image/')) return 258;
+        if (isTextFile(file)) {
+            try {
+                const t = await readFileAsText(file);
+                return await getTokenCount(t);
+            } catch {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     /**

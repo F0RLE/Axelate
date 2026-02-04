@@ -330,10 +330,12 @@ export class StateService {
             __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } };
         };
         if (win.__TAURI__) {
-            win.__TAURI__.core.invoke('set_download_settings', {
-                enabled: this._state.download_limit_enabled,
-                max_speed: this._state.download_max_speed,
-            }).catch((e) => console.error('[StateService] Failed to sync download settings:', e));
+            win.__TAURI__.core
+                .invoke('set_download_settings', {
+                    enabled: this._state.download_limit_enabled,
+                    max_speed: this._state.download_max_speed,
+                })
+                .catch((e) => console.error('[StateService] Failed to sync download settings:', e));
         }
     }
 

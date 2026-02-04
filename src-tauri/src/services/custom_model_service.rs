@@ -8,12 +8,11 @@ fn get_config_path() -> std::path::PathBuf {
 
 fn load_config() -> CustomModelConfig {
     let path = get_config_path();
-    if path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            if let Ok(config) = serde_json::from_str::<CustomModelConfig>(&content) {
-                return config;
-            }
-        }
+    if path.exists()
+        && let Ok(content) = std::fs::read_to_string(&path)
+        && let Ok(config) = serde_json::from_str::<CustomModelConfig>(&content)
+    {
+        return config;
     }
     CustomModelConfig::default()
 }

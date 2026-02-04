@@ -90,26 +90,26 @@ pub async fn process_chat_request(
     // 0. Handle Session State
     let mut working_messages = request.messages.clone();
 
-    if let Some(sid) = &request.session_id {
-        if let Ok(mut sessions) = SESSIONS.lock() {
-            let session = sessions.entry(sid.clone()).or_insert(ChatSession {
-                history: Vec::new(),
-                last_updated: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-            });
-
-            // Append new user messages
-            session.history.extend(request.messages.clone());
-            session.last_updated = std::time::SystemTime::now()
+    if let Some(sid) = &request.session_id
+        && let Ok(mut sessions) = SESSIONS.lock()
+    {
+        let session = sessions.entry(sid.clone()).or_insert(ChatSession {
+            history: Vec::new(),
+            last_updated: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_secs();
+                .as_secs(),
+        });
 
-            working_messages = session.history.clone();
-            save_sessions().ok();
-        }
+        // Append new user messages
+        session.history.extend(request.messages.clone());
+        session.last_updated = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        working_messages = session.history.clone();
+        save_sessions().ok();
     }
 
     // Create a request with full history for the provider
@@ -212,20 +212,18 @@ pub async fn process_chat_request(
         && res.ok
         && let Some(reply) = &res.reply
         && let Some(sid) = &request.session_id
+        && let Ok(mut sessions) = SESSIONS.lock()
+        && let Some(session) = sessions.get_mut(sid)
     {
-        if let Ok(mut sessions) = SESSIONS.lock() {
-            if let Some(session) = sessions.get_mut(sid) {
-                session.history.push(ChatMessage {
-                    role: reply.role.clone(),
-                    content: serde_json::Value::String(reply.text.clone()),
-                    thought_signature: res.thought_signature.clone(),
-                });
-                session.last_updated = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
-            }
-        }
+        session.history.push(ChatMessage {
+            role: reply.role.clone(),
+            content: serde_json::Value::String(reply.text.clone()),
+            thought_signature: res.thought_signature.clone(),
+        });
+        session.last_updated = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
     }
 
     response

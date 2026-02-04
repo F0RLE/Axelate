@@ -109,7 +109,7 @@ export class I18nService {
             // Fallback to empty or keep existing?
             // If failed, we might want to try 'en' explicitly if we haven't already
             if (lang !== 'en') {
-                try { 
+                try {
                     this._translations = await this._fetchTranslations('en');
                     this._currentLang = 'en';
                 } catch (err) {

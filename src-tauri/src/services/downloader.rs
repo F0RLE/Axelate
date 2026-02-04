@@ -77,7 +77,7 @@ use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 
 /// Global downloader service instance
-pub static DOWNLOADER: Lazy<DownloaderService> = Lazy::new(|| DownloaderService::new());
+pub static DOWNLOADER: Lazy<DownloaderService> = Lazy::new(DownloaderService::new);
 
 pub struct DownloaderService {
     settings: Arc<Mutex<DownloaderSettings>>,
@@ -87,6 +87,12 @@ pub struct DownloaderService {
 struct DownloaderSettings {
     limit_enabled: bool,
     max_speed_bytes: u64, // Bytes per second
+}
+
+impl Default for DownloaderService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DownloaderService {
@@ -288,46 +294,53 @@ async fn download_and_extract_internal(
 
     // Hash Verification
     if let Some(expected_hash) = expected_hash {
-        emit_progress(
-            app,
-            module_id,
-            "verifying",
-            "Verifying Integrity...",
-            1.0,
-            0,
-            0,
-        );
+        if !expected_hash.trim().is_empty() {
+            emit_progress(
+                app,
+                module_id,
+                "verifying",
+                "Verifying Integrity...",
+                1.0,
+                0,
+                0,
+            );
 
-        let path_clone = zip_path.to_path_buf();
-        let computed_hash = tokio::task::spawn_blocking(move || {
-            use sha2::{Digest, Sha256};
-            use std::io::Read;
+            let path_clone = zip_path.to_path_buf();
+            let computed_hash = tokio::task::spawn_blocking(move || {
+                use sha2::{Digest, Sha256};
+                use std::io::Read;
 
-            let mut file = std::fs::File::open(&path_clone).map_err(|e| e.to_string())?;
-            let mut hasher = Sha256::new();
-            let mut buffer = [0; 8192];
+                let mut file = std::fs::File::open(&path_clone).map_err(|e| e.to_string())?;
+                let mut hasher = Sha256::new();
+                let mut buffer = [0; 8192];
 
-            loop {
-                let count = file.read(&mut buffer).map_err(|e| e.to_string())?;
-                if count == 0 {
-                    break;
+                loop {
+                    let count = file.read(&mut buffer).map_err(|e| e.to_string())?;
+                    if count == 0 {
+                        break;
+                    }
+                    hasher.update(&buffer[..count]);
                 }
-                hasher.update(&buffer[..count]);
+                Ok::<String, String>(hex::encode(hasher.finalize()))
+            })
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .map_err(AppError::Internal)?;
+
+            if computed_hash.to_lowercase() != expected_hash.to_lowercase() {
+                return Err(AppError::Validation(format!(
+                    "Integrity check failed. Expected {}, got {}",
+                    expected_hash, computed_hash
+                )));
             }
-            Ok::<String, String>(hex::encode(hasher.finalize()))
-        })
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .map_err(AppError::Internal)?;
 
-        if computed_hash.to_lowercase() != expected_hash.to_lowercase() {
-            return Err(AppError::Validation(format!(
-                "Integrity check failed. Expected {}, got {}",
-                expected_hash, computed_hash
-            )));
+            log::info!("Integrity verified for {}", module_id);
+        } else {
+            log::warn!(
+                "Skipping integrity check for {} because expected_hash is empty",
+                module_id
+            );
         }
-
-        log::info!("Integrity verified for {}", module_id);
     }
 
     // 2. Extract

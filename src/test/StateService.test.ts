@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Deep mock of Tauri API
-const mockInvoke = vi.fn();
+const mockInvoke = vi.fn().mockResolvedValue(undefined);
 
 const tauriMock = {
     core: { invoke: mockInvoke },

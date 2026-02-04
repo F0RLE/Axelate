@@ -23,11 +23,7 @@ import type {
     ChatContentPart,
     ChatContent,
 } from './types/aiTypes';
-import {
-    getApiModelId,
-    mapProviderToBackend,
-    getMostPowerfulModel,
-} from './utils/catalogHelpers';
+import { getApiModelId, mapProviderToBackend, getMostPowerfulModel } from './utils/catalogHelpers';
 
 export type { MessageSource, MessageHandler, ChatContentPart, ChatContent } from './types/aiTypes';
 export type IChunkHandler = (chunk: string) => void;
@@ -194,7 +190,7 @@ export class AIBridge {
             if (providerId === 'gpt') providerDisplay = 'OpenAI GPT';
             else if (providerId === 'gemini') providerDisplay = 'Google Gemini';
             else if (providerId === 'axelate-localai') providerDisplay = 'Axelate Local AI';
-            
+
             this._showSuccessToast('ui.ai.provider_started', `${providerDisplay} session active`);
 
             console.log(`[AIBridge] Context synchronized: ${providerName}, model: ${model}`);
@@ -278,7 +274,7 @@ export class AIBridge {
      */
     public isActive(): boolean {
         if (!this._activeProviderId) return false;
-        
+
         // Local modules don't strictly require an API key in the bridge state
         if (this._activeProviderId === 'local' || this._activeProviderId === 'axelate-localai') {
             return true;
@@ -349,8 +345,8 @@ export class AIBridge {
 
             // Unified backend routing for cloud providers (GPT/Gemini)
             const newMessage: IChatMessage = {
-                 role: 'user',
-                 content: this._createMultimodalContent(text, attachments)
+                role: 'user',
+                content: this._createMultimodalContent(text, attachments),
             };
             const request = this._constructChatRequest(newMessage, attachments);
             const response = await this._invokeBackendOperation(request);
@@ -405,7 +401,6 @@ export class AIBridge {
         return msg;
     }
 
-
     /**
      * Compiles a structured chat request object for the backend dispatcher.
      */
@@ -420,11 +415,13 @@ export class AIBridge {
         return {
             provider: mapProviderToBackend(id),
             model: modelId,
-            messages: [{
-                role: message.role,
-                content: message.content,
-                thought_signature: message.thought_signature,
-            }],
+            messages: [
+                {
+                    role: message.role,
+                    content: message.content,
+                    thought_signature: message.thought_signature,
+                },
+            ],
             session_id: this._sessionId,
             api_key: this._apiKey,
             thinking_level: thinkingLevel as 'low' | 'high' | 'minimal',
@@ -449,9 +446,12 @@ export class AIBridge {
             setTimeout(() => reject(new Error('AI Bridge request timed out after 90s')), 90000);
         });
 
-        const invokePromise = this._context.__TAURI__.core.invoke<IChatResponse>('send_chat_message', {
-            request,
-        });
+        const invokePromise = this._context.__TAURI__.core.invoke<IChatResponse>(
+            'send_chat_message',
+            {
+                request,
+            },
+        );
 
         return await Promise.race([invokePromise, timeoutPromise]);
     }
@@ -529,7 +529,7 @@ export class AIBridge {
      */
     private _broadcastChunk(chunk: string): void {
         if (this._chunkListeners.size === 0) return;
-        
+
         this._chunkListeners.forEach((handlers) => {
             handlers.forEach((handler) => handler(chunk));
         });

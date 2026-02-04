@@ -266,7 +266,7 @@ export class SettingsUI {
             t: (k: string, d: string) => string;
         };
         const catalog = win.APP_DATA?.ai || [];
-        const app = (catalog as any).find((a: any) => a.id === appId);
+        const app = catalog.find((a) => a.id === appId);
         const providerData = app?.apiProviderData as
             | {
                   models?: Record<

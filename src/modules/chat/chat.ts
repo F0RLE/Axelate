@@ -28,7 +28,7 @@ export class ChatController {
      */
     private _init(): void {
         console.log('[Chat] Initializing TS Controller...');
-        this._ui.init().catch(err => console.error('[Chat] UI init failed:', err));
+        this._ui.init().catch((err) => console.error('[Chat] UI init failed:', err));
         this._bindEvents();
         this._exposeGlobals();
 
@@ -67,19 +67,22 @@ export class ChatController {
     private async _loadHistory(): Promise<void> {
         const win = globalThis as unknown as Record<string, unknown>;
         const aiBridge = win.aiBridge as { getHistory: () => Promise<IChatMessage[]> };
-        
+
         if (aiBridge && typeof aiBridge.getHistory === 'function') {
             const history = await aiBridge.getHistory();
             if (history && history.length > 0) {
-                console.log(`[ChatController] Restoring ${history.length} messages from persistence`);
+                console.log(
+                    `[ChatController] Restoring ${history.length} messages from persistence`,
+                );
                 this._chatHistory = history;
-                
+
                 // Redraw UI
-                history.forEach(msg => {
-                    const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+                history.forEach((msg) => {
+                    const content =
+                        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
                     this._ui.appendMessage(msg.role as 'user' | 'assistant', content, {
-                         tokens: 0, // We could count them but it's historical
-                         skipAnimation: true 
+                        tokens: 0, // We could count them but it's historical
+                        skipAnimation: true,
                     });
                 });
             }
@@ -210,7 +213,11 @@ export class ChatController {
             });
 
             const historyHead = this._chatHistory.slice(-40);
-            const response = await this._service.sendMessage(combinedText, historyHead, attachments);
+            const response = await this._service.sendMessage(
+                combinedText,
+                historyHead,
+                attachments,
+            );
 
             this._cleanupStreamingListener(listenerId);
             this._ui.removeTyping(typingId);

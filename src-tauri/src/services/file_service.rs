@@ -97,11 +97,7 @@ fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
         let depth = path.split('/').filter(|s| !s.is_empty()).count();
         let indent = "  ".repeat(if depth > 0 { depth - 1 } else { 0 });
         let icon = if is_dir { "📁 " } else { "📄 " };
-        let name_part = path
-            .split('/')
-            .filter(|s| !s.is_empty())
-            .last()
-            .unwrap_or(path);
+        let name_part = path.split('/').rfind(|s| !s.is_empty()).unwrap_or(path);
 
         combined_text.push_str(&format!("{}{}{}\n", indent, icon, name_part));
     }
@@ -151,7 +147,7 @@ fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
         }
 
         if let Ok(content) = String::from_utf8(buffer) {
-            let ext = file_name.split('.').last().unwrap_or("");
+            let ext = file_name.split('.').next_back().unwrap_or("");
             combined_text.push_str(&format!(
                 "\n\nFile: {}\n```{}\n{}\n```",
                 file_name, ext, content
@@ -186,7 +182,7 @@ fn should_ignore(path: &str) -> bool {
     }
     // Check extensions logic (whitelist approach usually better for code, but here we used blacklist mixed)
     // Actually ChatFileHandler used TEXT_EXTS whitelist.
-    let ext = path.split('.').last().unwrap_or("").to_lowercase();
+    let ext = path.split('.').next_back().unwrap_or("").to_lowercase();
     if !TEXT_EXTS.contains(&ext.as_str()) {
         return true;
     }
@@ -195,6 +191,6 @@ fn should_ignore(path: &str) -> bool {
 }
 
 fn is_text_extension(path: &str) -> bool {
-    let ext = path.split('.').last().unwrap_or("").to_lowercase();
+    let ext = path.split('.').next_back().unwrap_or("").to_lowercase();
     TEXT_EXTS.contains(&ext.as_str())
 }

@@ -583,6 +583,15 @@
     margin-top: 1rem;
 }
 
+/* Disable hover effects on selected card icon */
+.model-card-premium.selected:hover .model-icon-wrapper {
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.model-card-premium.selected:hover svg {
+    color: var(--text-primary) !important;
+}
+
 .model-card-premium.selected .model-card-title {
     font-size: 1.4rem;
     margin-bottom: 0.8rem;
@@ -617,21 +626,22 @@
     display: inline-flex !important;
 
     /* Design Update: Significant Size Increase */
-    padding: 1rem 4rem !important;    /* Much larger padding for a prominent look */
-    font-size: 1.15rem !important;      /* Larger font size */
+    padding: 1rem 4rem !important; /* Much larger padding for a prominent look */
+    font-size: 1.15rem !important; /* Larger font size */
     font-weight: 700 !important;
-    border-radius: 14px !important;    /* Slightly more rounded for premium feel */
-    min-width: 220px !important;       /* Ensure it's wide enough even with short text */
-    
+    border-radius: 14px !important; /* Slightly more rounded for premium feel */
+    min-width: 220px !important; /* Ensure it's wide enough even with short text */
+
     background: var(--primary) !important;
     color: white !important;
     border: none !important;
     box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3);
-    
+
     /* Clean, performant transitions */
-    transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), 
-                background-color 0.2s ease, 
-                box-shadow 0.2s ease !important;
+    transition:
+        transform 0.2s cubic-bezier(0.2, 0, 0.2, 1),
+        background-color 0.2s ease,
+        box-shadow 0.2s ease !important;
 }
 
 .model-card-premium .model-card-action.download-module-btn:hover {
@@ -746,7 +756,9 @@
     opacity: 1;
     transform: scale(1) translateY(0);
     /* Stable transition - avoiding 'all' to prevent unwanted jumping */
-    transition: opacity 0.3s ease, transform 0.3s var(--ease-bounce);
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s var(--ease-bounce);
 }
 
 /* Entry/Exit State - Consolidated */
@@ -893,7 +905,7 @@
 
 /* App Card Styles */
 /* High specificity to ensure ALL cards have the exact same height for grid uniformity */
-#app-grid .app-card, 
+#app-grid .app-card,
 .app-grid .app-card {
     background: rgba(255, 255, 255, 0.03) !important;
     border: 1px solid rgba(255, 255, 255, 0.05) !important;
@@ -904,25 +916,81 @@
     align-items: center !important;
     justify-content: flex-start !important;
     text-align: center !important;
-    
+
     /* Maximum tight height to eliminate voids while keeping grid alignment */
-    height: 380px !important;
-    min-height: 380px !important;
+    height: 320px !important;
+    min-height: 320px !important;
     flex-shrink: 0 !important;
     position: relative !important;
-    
+    overflow: hidden !important; /* Ensure overlay stays within card corners */
+
     /* Premium Hover Transition */
-    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), 
-                box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-                background-color 0.4s ease !important;
+    transition:
+        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        background-color 0.4s ease !important;
     will-change: transform, box-shadow;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
+
+.app-card:hover .app-icon-wrapper,
+.app-card:hover .app-card-title,
+.app-card:hover .app-card-desc,
+.app-card:hover .app-delete-badge,
+.app-card:hover .module-type-badge {
+    /* Kept fully visible per user preference */
+    opacity: 1 !important;
+    filter: none !important;
+    transition: opacity 0.4s ease;
+}
+
+/* Don't fade content for API or already installed modules (no overlay needed) */
+.app-card.is-api:hover .app-icon-wrapper,
+.app-card.is-api:hover .app-card-title,
+.app-card.is-api:hover .app-card-desc,
+.app-card.is-installed:hover .app-icon-wrapper,
+.app-card.is-installed:hover .app-card-title,
+.app-card.is-installed:hover .app-card-desc {
+    opacity: 1 !important;
 }
 
 .app-card:hover {
     transform: translateY(-12px) translateZ(0);
-    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.45) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
     z-index: 20;
-    /* Outline/Border changes removed per user request to focus on the 'float' */
+}
+
+/* High specificity for cards in grid */
+#app-grid .app-card:hover,
+.app-grid .app-card:hover {
+    transform: translateY(-12px) translateZ(0) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    z-index: 20;
+}
+
+/* Cards in modal - Force Smooth Animation */
+/* Cards in modal - Force Smooth Animation */
+#app-modal-list .app-card {
+    position: relative;
+    /* Explicitly define properties for better interpolation */
+    transition:
+        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    will-change: transform;
+    /* Explicit start state matching hover structure */
+    transform: translateY(0) translateZ(0);
+    cursor: pointer;
+    backface-visibility: hidden; /* Prevent flickering */
+}
+
+#app-modal-list .app-card:hover {
+    transition:
+        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    transform: translateY(-12px) translateZ(0) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    z-index: 20;
 }
 
 .app-icon-wrapper {
@@ -959,15 +1027,15 @@
     margin-top: 0.75rem !important;
     margin-bottom: 0px !important;
     cursor: pointer;
-    
+
     /* Fixed height to eliminate "Visual Noise" and anchor the bottom line */
     height: 90px !important;
     min-height: 90px !important;
     display: flex !important;
-    align-items: flex-start !important; 
+    align-items: flex-start !important;
     justify-content: center !important;
     padding: 0.25rem 0.5rem !important;
-    
+
     overflow-y: auto !important;
     scrollbar-width: none !important; /* Firefox */
     -ms-overflow-style: none !important; /* IE/Edge */
@@ -999,7 +1067,7 @@
     font-size: 1.05rem !important;
     border-radius: 12px !important;
     min-width: 180px !important;
-    
+
     background: var(--primary) !important;
     color: white !important;
     font-weight: 700 !important;
@@ -1009,7 +1077,7 @@
     position: relative;
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(138, 43, 226, 0.3);
-    
+
     margin-top: auto !important;
     margin-bottom: 0 !important;
     flex-shrink: 0 !important;
@@ -1041,6 +1109,73 @@
     opacity: 0.7;
     pointer-events: none;
     animation: pulse 1.5s infinite;
+}
+
+/* Centered Download Redesign */
+.app-card-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 40;
+    transition:
+        opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        backdrop-filter 0.4s ease;
+    border-radius: 16px;
+}
+
+.app-card:not(.selected):hover .app-card-overlay {
+    opacity: 1;
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* Hide overlay completely on selected cards */
+.app-card.selected .app-card-overlay {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+.app-card-overlay .download-btn.centered {
+    margin: 0 !important;
+    padding: 0.75rem 2.2rem !important; /* Smaller, better proportions */
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    border-radius: 30px !important; /* Pill shape */
+
+    background: var(--primary) !important;
+    color: white !important;
+
+    transform: translateY(15px) scale(0.9);
+    transition:
+        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.3s ease,
+        box-shadow 0.3s ease !important;
+
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.app-card:hover .app-card-overlay .download-btn.centered {
+    transform: translateY(0) scale(1);
+}
+
+.app-card-overlay .download-btn.centered:hover {
+    transform: scale(1.05) translateY(-2px) !important;
+    background: var(--primary-hover) !important;
+    box-shadow: 0 8px 25px rgba(138, 43, 226, 0.5) !important;
 }
 
 @keyframes pulse {
@@ -1318,12 +1453,12 @@
 
 /* --- Selected Module Card Style (has a module chosen) --- */
 .model-card-premium.selected:hover {
-    background: #111015 !important; /* Solid dark background for contrast compliance */
-    border-color: rgba(255, 255, 255, 0.1) !important;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
+    /* Keep movement, remove other visual changes */
+    background: var(--card-bg) !important;
+    border-color: var(--glass-border) !important;
     transform: translateY(-4px) !important;
-    color: #ffffff !important; /* Maximum contrast white on dark background */
-    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    cursor: default;
 }
 
 /* --- Empty Module Card Style (no module chosen yet) --- */
@@ -1451,7 +1586,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     min-height: 16px;
 }
 
-/* Delete Button in App Cards - Badge Style (Matches module-type-badge) */
+/* Delete Button in App Cards - Badge Style */
 .app-delete-badge {
     position: absolute;
     top: 10px;
@@ -1486,10 +1621,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 }
 
 .app-delete-badge:hover {
-    padding: 0 12px 0 4px;
-    gap: 8px;
-    min-width: 100px;
-    background: rgba(231, 76, 60, 0.15);
+    background: rgba(231, 76, 60, 0.2);
 }
 
 .app-delete-badge .badge-icon {
@@ -1500,6 +1632,11 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.3s ease;
+}
+
+.app-delete-badge:hover .badge-icon {
+    transform: scale(1.1);
 }
 
 .app-delete-badge .badge-text {
@@ -1519,6 +1656,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 .app-delete-badge:hover .badge-text {
     opacity: 1;
     max-width: 100px;
+    padding-right: 10px;
 }
 
 .app-card:hover .app-type-badge {
@@ -1641,8 +1779,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     background: rgba(30, 30, 35, 0.6);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    /* border: 1px solid rgba(255, 255, 255, 0.1); Removed per user request */
-    border-radius: 16px; /* Pill shape */
+    border-radius: 16px;
 
     cursor: default;
     overflow: hidden;
@@ -1656,12 +1793,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     opacity: 1;
 }
 
-.module-type-badge:hover {
-    padding: 0 12px 0 4px; /* Space for text */
-    gap: 8px;
-    min-width: 90px; /* Expand */
-}
-
 .module-type-badge .badge-icon {
     font-size: 1.2rem;
     line-height: 1;
@@ -1670,10 +1801,15 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.3s ease;
+    order: 1; /* Move icon to right */
+}
+
+.module-type-badge:hover .badge-icon {
+    transform: scale(1.1);
 }
 
 .module-type-badge .badge-text {
-    /* font-family: 'Segoe UI', system-ui, sans-serif; User requested launcher font */
     font-family: inherit;
     font-size: 0.75rem;
     font-weight: 700;
@@ -1682,67 +1818,38 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     white-space: nowrap;
 
     opacity: 0;
-    /* transform: translateX(10px); Removed simple transform for smoother flex expansion */
     max-width: 0;
     transition: all 0.3s ease;
 }
 
 .module-type-badge:hover .badge-text {
     opacity: 1;
-    max-width: 100px; /* Reveal text */
+    max-width: 100px;
+    padding-left: 10px;
 }
 
 /* Variants */
-/* Border colors removed per request, so base class handles layout */
-.module-type-badge.local:hover {
-    background: rgba(46, 204, 113, 0.15);
-}
-
 .module-type-badge.local .badge-text {
     color: #27ae60;
 }
 
-.module-type-badge.api:hover {
-    background: rgba(52, 152, 219, 0.15);
+.module-type-badge.local:hover {
+    background: rgba(46, 204, 113, 0.2);
 }
 
 .module-type-badge.api .badge-text {
     color: #3498db;
 }
 
+.module-type-badge.api:hover {
+    background: rgba(52, 152, 219, 0.2);
+}
+
 /* --- MODULE ACTION BUTTONS (Settings / Close) --- */
-
-.app-card:hover .module-action-badge,
-.module-card.selected:hover .module-action-badge,
-.app-card.selected:hover .module-action-badge,
-.model-card-premium.selected:hover .module-action-badge {
-    opacity: 1;
-}
-
-.module-action-badge:hover {
-    padding: 0 12px 0 4px;
-    gap: 8px;
-    min-width: 90px;
-}
-
-/* Close action specific hover - RED like Delete */
-.module-action-badge.close:hover {
-    background: rgba(231, 76, 60, 0.15); /* Red tint */
-}
-.module-action-badge.close:hover .badge-text,
-.module-action-badge.close:hover .badge-icon {
-    color: #e74c3c !important;
-}
-.module-action-badge.close:hover svg {
-    stroke: #e74c3c !important;
-}
-
-/* Settings action specific hover - Default/Greenish? keeping default for now or making neutral */
 .module-action-badge {
     position: absolute;
     top: 10px;
-    z-index: 1000 !important;
-    pointer-events: auto !important;
+    z-index: 20;
 
     display: flex;
     align-items: center;
@@ -1759,6 +1866,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     border-radius: 16px;
 
     cursor: pointer;
+    pointer-events: auto;
     overflow: hidden;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -1766,16 +1874,15 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     opacity: 0;
 }
 
+/* Show on card hover */
+.app-card:hover .module-action-badge,
+.app-card.selected:hover .module-action-badge,
 .model-card-premium:hover .module-action-badge,
-.model-card-premium.selected:hover .module-action-badge,
-.app-card:hover .module-action-badge {
+.model-card-premium.selected:hover .module-action-badge {
     opacity: 1;
 }
 
-.module-action-badge.settings:hover {
-    background: rgba(255, 255, 255, 0.15);
-}
-
+/* Icon styles - same as app-delete-badge */
 .module-action-badge .badge-icon {
     font-size: 1.2rem;
     line-height: 1;
@@ -1791,6 +1898,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     transform: scale(1.1);
 }
 
+/* Text styles - same as app-delete-badge */
 .module-action-badge .badge-text {
     font-family: inherit;
     font-size: 0.75rem;
@@ -1807,6 +1915,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 .module-action-badge:hover .badge-text {
     opacity: 1;
     max-width: 100px;
+    padding-right: 10px;
 }
 
 /* Positions */
@@ -1818,42 +1927,52 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     right: 10px;
 }
 
-/* Variants */
+/* Right badges: icon on right, text expands left */
+.module-action-badge.right .badge-icon {
+    order: 1;
+}
 
+.module-action-badge.right:hover .badge-text {
+    padding-left: 10px;
+    padding-right: 0;
+}
+
+/* Settings variant */
 .module-action-badge.settings .badge-text {
     color: #e0e0e0;
 }
 
+.module-action-badge.settings:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Close variant - like app-delete-badge */
 .module-action-badge.close .badge-text {
     color: #e74c3c;
 }
 
 .module-action-badge.close .badge-icon {
-    color: rgba(255, 255, 255, 0.5); /* Less prominent by default */
+    color: rgba(255, 255, 255, 0.7);
 }
+
+.module-action-badge.close:hover {
+    background: rgba(231, 76, 60, 0.2);
+}
+
 .module-action-badge.close:hover .badge-icon {
     color: #e74c3c;
 }
-/* Force SVG to inherit specifically */
-.module-action-badge.close:hover .badge-icon svg {
-    stroke: #e74c3c;
+
+.module-action-badge.close .badge-icon svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
     transition: stroke 0.3s ease;
 }
 
-.module-action-badge.close .badge-icon svg {
-    width: 24px;
-    height: 24px;
-}
-
-.model-card-premium svg,
-.app-card svg,
-.module-icon svg,
-.card-action-corner svg,
+/* Pointer events */
+.module-action-badge > *,
 .module-action-badge svg {
-    pointer-events: none;
-}
-
-.module-action-badge > * {
     pointer-events: none;
 }
 

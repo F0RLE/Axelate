@@ -69,50 +69,64 @@ export class ModuleService {
         if (this._deletedModules.has(moduleId)) return false;
 
         try {
-            return await this._tauri.invoke<boolean>('check_module_installed', { moduleId });
-        } catch (e) {
-            console.error('[ModuleService] Check installed failed:', e);
+            return await this._tauri.invoke<boolean>('check_module_installed', {
+                moduleId: moduleId,
+            });
+        } catch (err) {
+            console.error('Check installed error:', err);
             return false;
         }
     }
 
     /**
-     * Triggers the download and installation of a module.
-     *
+     * Downloads a module from a repository URL
      * @param moduleId - The ID of the module to download
-     * @param repoUrl - The URL of the repository
-     * @throws Error if not in Tauri environment
+     * @param repoUrl - The URL of the repository (or archive)
+     * @param expectedHash - Optional SHA256 hash to verify
      */
-    public async downloadModule(moduleId: string, repoUrl: string): Promise<void> {
+    public async downloadModule(
+        moduleId: string,
+        repoUrl: string,
+        expectedHash?: string,
+    ): Promise<void> {
+        console.log(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
+        if (expectedHash) console.log(`[ModuleService] Expected hash: ${expectedHash}`);
+
         if (!this._tauri.isTauri()) {
             throw new Error('Download available only in desktop app');
         }
 
         try {
             this._deletedModules.delete(moduleId);
-            // We only trigger the command. Progress is handled by initEventListeners()
-            await this._tauri.invoke('download_module', { moduleId, repo_url: repoUrl });
-        } catch (e) {
-            const errorMessage = e instanceof Error ? e.message : String(e);
+            // Sanitize expectedHash: pass null if empty string or undefined to ensure rust gets None
+            const hashToPass = expectedHash && expectedHash.trim() !== '' ? expectedHash : null;
+
+            await this._tauri.invoke('download_module', {
+                moduleId: moduleId,
+                repoUrl: repoUrl,
+                expectedHash: hashToPass,
+            });
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            console.error(`[ModuleService] Download error for ${moduleId}:`, errorMessage);
             this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
             this._broadcastState(moduleId);
-            throw e;
+            throw err;
         }
     }
 
     /**
-     * Permanently deletes a module and its associated files.
-     *
+     * Deletes a module from the local disk
      * @param moduleId - The ID of the module to delete
-     * @returns True if deletion started successfully
      */
     public async deleteModule(moduleId: string): Promise<boolean> {
+        console.log(`[ModuleService] Deleting module: ${moduleId}`);
         if (!this._tauri.isTauri()) {
             throw new Error('Delete available only in desktop app');
         }
 
         try {
-            await this._tauri.invoke('delete_module', { moduleId });
+            await this._tauri.invoke('delete_module', { moduleId: moduleId });
 
             this._deletedModules.add(moduleId);
             delete this._downloadState[moduleId];

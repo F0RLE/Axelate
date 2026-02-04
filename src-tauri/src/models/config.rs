@@ -51,6 +51,7 @@ pub struct ModuleItem {
     #[serde(rename = "type")]
     pub type_name: String, // 'type' is reserved
     pub repo_url: Option<String>,
+    pub expected_hash: Option<String>,
     #[serde(skip_deserializing, default)]
     pub installed: bool,
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]

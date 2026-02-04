@@ -93,7 +93,8 @@ describe('ModuleService', () => {
 
             expect(mockTauriProvider.invoke).toHaveBeenCalledWith('download_module', {
                 moduleId: 'test-module',
-                repo_url: 'https://repo.com/module',
+                repoUrl: 'https://repo.com/module',
+                expectedHash: null,
             });
         });
 

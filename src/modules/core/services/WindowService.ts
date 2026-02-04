@@ -80,8 +80,9 @@ export class WindowService {
         if (this._tauri.isTauri()) {
             try {
                 // Use pre-loaded config or fetch it
-                this._config = initialConfig || (await this._tauri.invoke<IWindowConfig>('get_window_config'));
-                
+                this._config =
+                    initialConfig || (await this._tauri.invoke<IWindowConfig>('get_window_config'));
+
                 // Update breakpoints from backend
                 if (this._config) {
                     this._widthBreakpoints = {
@@ -90,7 +91,7 @@ export class WindowService {
                         large: this._config.breakpoints.large,
                     };
                 }
-                
+
                 console.log('[WindowService] Loaded config:', this._config);
 
                 // Use pre-loaded initialZoom or determine it
@@ -261,7 +262,10 @@ export class WindowService {
         // Sync with StateService (DI) for frontend reactivity
         if (this._stateService) {
             this._stateService.setZoomLevel(this._currentZoom);
-            this._stateService.setResolutionZoom(`${window.screen.width}x${window.screen.height}`, this._currentZoom);
+            this._stateService.setResolutionZoom(
+                `${window.screen.width}x${window.screen.height}`,
+                this._currentZoom,
+            );
         }
 
         return this._currentZoom;

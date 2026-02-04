@@ -125,7 +125,10 @@ export class Core {
         let bootstrapData: import('./types/coreTypes').IBootstrapData | null = null;
         try {
             if (this.tauriProvider.isTauri()) {
-                bootstrapData = await this.tauriProvider.invoke<import('./types/coreTypes').IBootstrapData>('get_app_bootstrap_data');
+                bootstrapData =
+                    await this.tauriProvider.invoke<import('./types/coreTypes').IBootstrapData>(
+                        'get_app_bootstrap_data',
+                    );
                 console.debug('[Core] Bootstrap success:', bootstrapData);
             }
         } catch (e) {
@@ -143,9 +146,29 @@ export class Core {
 
         if (bootstrapData) {
             this.state.setState(bootstrapData.uiState);
+
+            // Apply zoom and I18n immediately if bootstrap data available
+            try {
+                await this.windowService.init(
+                    bootstrapData.windowConfig,
+                    bootstrapData.initialZoom,
+                );
+                this.windowUI.init();
+                await this.i18n.init(bootstrapData.systemLanguage);
+                this.i18nUI.applyTranslations();
+            } catch (e) {
+                console.warn('[Core] Quick init failed, following standard flow:', e);
+            }
+
             await templateLoadPromise;
         } else {
             await Promise.all([this.state.loadState(), templateLoadPromise]);
+
+            // Fallback init if bootstrap failed
+            await this.windowService.init();
+            this.windowUI.init();
+            await this.i18n.init();
+            this.i18nUI.applyTranslations();
         }
 
         const win = globalThis as unknown as Window & { uiState: StateService };
@@ -167,19 +190,9 @@ export class Core {
             console.warn('[Core] Show window timed out or failed', e),
         );
 
-        // 5. Init I18n
+        // 5. Init Remaining Services
         try {
-            await this.i18n.init(bootstrapData?.systemLanguage);
-            this.i18nUI.applyTranslations();
-        } catch (e) {
-            console.error('[Core] I18n init failed:', e);
-        }
-
-        // 6. Init Services
-        try {
-            await this.windowService.init(bootstrapData?.windowConfig, bootstrapData?.initialZoom);
             await this.moduleService.init();
-            this.windowUI.init();
             await this.sidebarUI.init();
             this.navigationUI.init();
             this.downloadUI.init();

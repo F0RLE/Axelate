@@ -7,7 +7,7 @@ import type { Core } from '../core';
 import type { IApp } from '../types/coreTypes';
 
 interface IGlobalBridgeProperties {
-    downloadModule?: (id: string, url: string) => Promise<void>;
+    downloadModule?: (id: string, url: string, hash?: string) => Promise<void>;
     deleteModule?: (id: string) => Promise<void>;
     checkModuleInstalled?: (id: string) => Promise<boolean>;
     t?: (key: string, def?: string, ...args: unknown[]) => string;
@@ -80,8 +80,8 @@ export class GlobalBridge {
         const win = globalThis as unknown as IGlobalBridgeProperties;
 
         // Module management
-        win.downloadModule = (id: string, url: string): Promise<void> =>
-            this._core.moduleService.downloadModule(id, url);
+        win.downloadModule = (id: string, url: string, hash?: string): Promise<void> =>
+            this._core.moduleService.downloadModule(id, url, hash);
         win.deleteModule = async (id: string): Promise<void> => {
             await this._core.moduleService.deleteModule(id);
         };
@@ -158,7 +158,7 @@ export class GlobalBridge {
                     const result = await this._core.tauriProvider.invoke<{
                         action: string;
                         provider?: string;
-                    }>('launch_module', { moduleId: id });
+                    }>('launch_module', { module_id: id });
 
                     if (result.action === 'navigate' && result.provider) {
                         localStorage.setItem('selected_ai_provider', result.provider);

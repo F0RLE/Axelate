@@ -54,7 +54,8 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
 
             // Try to detect monitor resolution and apply specific zoom early
             if let Ok(Some(monitor)) = window.primary_monitor() {
-                let size = monitor.size();
+                let scale_factor = monitor.scale_factor();
+                let size = monitor.size().to_logical::<u32>(scale_factor);
                 let res_key = format!("{}x{}", size.width, size.height);
                 if let Some(&res_zoom) = ui_settings.resolution_zoom.get(&res_key) {
                     zoom = res_zoom;

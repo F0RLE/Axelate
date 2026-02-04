@@ -166,4 +166,3 @@ export function mapProviderToBackend(providerId: string): string {
 
     return legacyMap[providerId] || providerId;
 }
-

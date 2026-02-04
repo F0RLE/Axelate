@@ -50,6 +50,7 @@ const FALLBACK_CONFIG: IAppConfig = {
                 icon: '🌌',
                 type: 'local',
                 repoUrl: 'https://github.com/F0RLE/Axelate_LocalAI_module',
+                expectedHash: '',
             },
             {
                 id: 'gpt',
@@ -107,6 +108,7 @@ const FALLBACK_CONFIG: IAppConfig = {
                 icon: '🤖',
                 type: 'local',
                 repoUrl: 'https://github.com/F0RLE/Axelate-tg-bot-module',
+                expectedHash: '',
             },
         ],
     },
@@ -185,21 +187,28 @@ export class CatalogService {
 
                 const mergeSchema = (list: IApp[]) => {
                     list.forEach((app) => {
+                        // Normalize type to lowercase for consistent checking
+                        if (app.type) app.type = app.type.toLowerCase() as 'api' | 'local';
+
                         const providers = config?.apiProviders;
                         if (providers && Array.isArray(providers)) {
                             // Only hydrate API metadata for settings UI if needed
                             const provider = providers.find((p) => p.id === app.id);
                             if (provider) {
-                                app.apiProviderData = provider as unknown as Record<string, unknown>;
+                                app.apiProviderData = provider as unknown as Record<
+                                    string,
+                                    unknown
+                                >;
                             }
                         }
 
-                        // Force installed status for API providers (Virtual Modules)
-                        if (
-                            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
+                        const isApi =
                             app.type === 'api' ||
-                            config?.apiProviders?.some((p) => p.id === app.id)
-                        ) {
+                            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
+                            config?.apiProviders?.some((p) => p.id === app.id);
+
+                        // Force installed status for API providers (Virtual Modules)
+                        if (isApi) {
                             app.installed = true;
                         }
 

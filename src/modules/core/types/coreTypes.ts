@@ -44,6 +44,7 @@ export interface IApp {
     type?: 'api' | 'local';
     installed?: boolean;
     repoUrl?: string;
+    expectedHash?: string;
     configSchema?: Record<string, IConfigField>;
     apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI
 }

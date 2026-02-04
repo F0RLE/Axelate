@@ -137,7 +137,7 @@ declare global {
     var setButtonLoading: (_btn: HTMLButtonElement | null, _loading: boolean) => void;
 
     // --- Module & Download Management ---
-    var downloadModule: (_id: string, _url: string) => Promise<void>;
+    var downloadModule: (_id: string, _url: string, _hash?: string) => Promise<void>;
     var deleteModule: (_id: string) => Promise<void>;
     var checkModuleInstalled: (_id: string) => Promise<boolean>;
     var openModuleSettings: (_app: IApp) => void;

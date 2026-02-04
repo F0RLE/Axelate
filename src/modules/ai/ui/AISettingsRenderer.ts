@@ -102,7 +102,7 @@ class AISettingsRenderer {
         }
 
         const appId = app.id;
-        const providerData = (app.apiProviderData as any) || {};
+        const providerData = (app.apiProviderData as Record<string, unknown>) || {};
         const models = providerData.models || {};
         const sortedModels = sortModelsByPower(models as Record<string, IAIModelData>);
 

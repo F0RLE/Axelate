@@ -15,6 +15,13 @@ export interface IGpuInfo {
     memory?: number;
 }
 
+export interface ICustomModel {
+    id: string;
+    name: string;
+    provider_id?: string;
+    base_model_id?: string;
+}
+
 export class SettingsService {
     private settings: ISettings = {} as ISettings;
     private saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -230,14 +237,14 @@ export class SettingsService {
                     providerId: provider,
                     id: id,
                     name: name,
-                    baseModelId: id
+                    baseModelId: id,
                 });
-            } catch(e) {
+            } catch (e) {
                 console.error('[SettingsService] Failed to add custom model:', e);
                 throw e;
             }
         } else {
-             // Web Fallback
+            // Web Fallback
             const key = `custom_models_${provider}`;
             const existing = localStorage.getItem(key);
             const models = existing ? JSON.parse(existing) : [];
@@ -246,24 +253,26 @@ export class SettingsService {
         }
     }
 
-    public async getCustomModels(): Promise<any[]> {
+    public async getCustomModels(): Promise<ICustomModel[]> {
         if (globalThis.__TAURI__) {
-             try {
+            try {
                 return await globalThis.__TAURI__.core.invoke('get_custom_models');
-             } catch(e) {
-                 console.error('[SettingsService] Failed to get custom models:', e);
-                 return [];
-             }
+            } catch (e) {
+                console.error('[SettingsService] Failed to get custom models:', e);
+                return [];
+            }
         } else {
             // Web fallback (aggregate all providers? or just return empty for compliance)
             // returning all local keys
-            let all: any[] = [];
+            let all: ICustomModel[] = [];
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
                 if (key?.startsWith('custom_models_')) {
                     const provider = key.replace('custom_models_', '');
                     const models = JSON.parse(localStorage.getItem(key) || '[]');
-                    all = all.concat(models.map((m: any) => ({...m, provider_id: provider})));
+                    all = all.concat(
+                        models.map((m: ICustomModel) => ({ ...m, provider_id: provider })),
+                    );
                 }
             }
             return all;

@@ -1,5 +1,6 @@
 import { IApp } from '../types/coreTypes';
 import DOMPurify from 'dompurify';
+import { eventBus } from '../services/EventBus';
 
 /**
  * @class AppUI
@@ -24,6 +25,13 @@ export class AppUI {
             if (this._currentCategory && modal && !modal.classList.contains('hidden')) {
                 console.log('[AppUI] Refreshing app selection modal for language change');
                 this.openAppSelection(this._currentCategory, this._currentApps);
+            }
+        });
+
+        // Close modal when navigating away from modules page
+        eventBus.on('page:change', ({ pageId }: { pageId: string }) => {
+            if (pageId !== 'modules' && pageId !== 'page-modules') {
+                this.closeAppSelection();
             }
         });
     }
@@ -252,9 +260,17 @@ export class AppUI {
         const card = document.createElement('div');
         card.className = 'app-card';
 
-        const isApi = app.type === 'api' || ['gpt', 'gemini'].includes(app.id);
+        const isApi =
+            app.type?.toLowerCase() === 'api' ||
+            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
         const isInstalled = isApi ? true : app.installed === true;
 
+        card.classList.toggle('is-api', isApi);
+        card.classList.toggle('is-installed', isInstalled);
+
+        const downloadText = globalThis.t
+            ? globalThis.t('ui.launcher.module.download', 'Download')
+            : 'Download';
         card.innerHTML = DOMPurify.sanitize(`
             ${this._getAppDeleteBadgeHtml(isApi, isInstalled)}
             ${this._getAppTypeBadgeHtml(isApi)}
@@ -262,6 +278,17 @@ export class AppUI {
             <div class="app-card-title">${this._getAppName(app)}</div>
             <div class="app-card-desc">${this._getAppDesc(app)}</div>
             ${this._getAppStatusHtml(isApi, isInstalled)}
+            ${
+                !isInstalled && !isApi
+                    ? `
+                <div class="app-card-overlay">
+                    <div class="app-status download-btn centered">
+                        ${downloadText}
+                    </div>
+                </div>
+            `
+                    : ''
+            }
         `);
 
         card.onclick = (e) => this._handleAppCardClick(e, app, category);
@@ -278,31 +305,33 @@ export class AppUI {
         }
 
         const downloadBtn = target.closest('.download-btn');
-        const isApi = app.type === 'api' || ['gpt', 'gemini'].includes(app.id);
-        if (downloadBtn && !isApi && !app.installed) {
+        const overlay = target.closest('.app-card-overlay');
+        const isApi =
+            app.type?.toLowerCase() === 'api' ||
+            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
+
+        if (!isApi && !app.installed && (downloadBtn || overlay)) {
             e.stopPropagation();
-            await this._handleDownloadModule(app, category, downloadBtn as HTMLElement);
+            const btnToAnimate =
+                (downloadBtn as HTMLElement) ||
+                (overlay?.querySelector('.download-btn') as HTMLElement);
+            await this._handleDownloadModule(app, category, btnToAnimate);
             return;
         }
 
         if (!isApi && !app.installed) {
-            if (globalThis.showToast) {
-                globalThis.showToast(
-                    globalThis.t
-                        ? globalThis.t(
-                              'ui.launcher.web.download_first',
-                              'Download the module first',
-                          )
-                        : 'Download the module first',
-                    'info',
-                );
-            }
+            // Fallback: any click on a non-installed local card should trigger download now
+            e.stopPropagation();
+            const overlayInCard = (e.currentTarget as HTMLElement).querySelector(
+                '.download-btn',
+            ) as HTMLElement;
+            await this._handleDownloadModule(app, category, overlayInCard);
             return;
         }
 
         if (typeof globalThis.selectApp === 'function') {
             globalThis.selectApp?.(category, app);
-            this.closeAppSelection();
+            // Keep modal open - user can close manually if needed
         }
     }
 
@@ -333,26 +362,44 @@ export class AppUI {
         }
     }
 
-    private async _handleDownloadModule(app: IApp, category: string, btn: HTMLElement) {
+    private async _handleDownloadModule(app: IApp, category: string, btn: HTMLElement | null) {
         console.log('Download module clicked:', app.id);
-        btn.classList.add('downloading');
-        btn.style.pointerEvents = 'none';
+        if (btn) {
+            btn.classList.add('downloading');
+            btn.style.pointerEvents = 'none';
+        }
 
         try {
             if (app.repoUrl && globalThis.downloadModule) {
-                await globalThis.downloadModule(app.id, app.repoUrl);
-                app.installed = true;
+                await globalThis.downloadModule(app.id, app.repoUrl, app.expectedHash);
+
+                // Refresh modal to show immediate state change if possible
                 const allApps = globalThis.APP_DATA?.[category] || [];
-                this.openAppSelection(category, allApps); // Refresh
+                // Small delay to let backend start emitting events
+                setTimeout(() => this.openAppSelection(category, allApps), 100);
             } else {
-                this.showToast('Download not available', 'warning');
+                this.showToast(
+                    globalThis.t
+                        ? globalThis.t(
+                              'ui.launcher.web.download_unavailable',
+                              'Download not available',
+                          )
+                        : 'Download not available',
+                    'warning',
+                );
             }
         } catch (err) {
             console.error('Download error:', err);
-            this.showToast('Download failed', 'error');
-        } finally {
-            btn.classList.remove('downloading');
-            btn.style.pointerEvents = 'auto';
+            if (btn) {
+                btn.classList.remove('downloading');
+                btn.style.pointerEvents = 'auto';
+            }
+            this.showToast(
+                globalThis.t
+                    ? globalThis.t('ui.launcher.web.download_error', 'Download failed')
+                    : 'Download failed',
+                'error',
+            );
         }
     }
 
@@ -363,7 +410,10 @@ export class AppUI {
         const actionBtn = card.querySelector('.model-card-action') as HTMLElement;
         if (actionBtn?.dataset?.running !== 'true') return;
 
-        if (['gpt', 'gemini'].includes(previousModuleId)) {
+        const isApi =
+            app.type?.toLowerCase() === 'api' ||
+            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
+        if (isApi) {
             if (globalThis.aiBridge) globalThis.aiBridge.stopProvider();
         } else if (globalThis.showToast) {
             const prevName = card.dataset.currentModuleName || previousModuleId;
@@ -397,7 +447,9 @@ export class AppUI {
             card.appendChild(actionBtn);
         }
 
-        const isApi = app.type === 'api' || ['gpt', 'gemini'].includes(app.id);
+        const isApi =
+            app.type?.toLowerCase() === 'api' ||
+            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
         const isInstalled = app.installed !== false;
 
         if (!isApi && !isInstalled) {
@@ -421,38 +473,64 @@ export class AppUI {
         actionBtn.classList.remove('active-module-btn');
         actionBtn.classList.add('download-module-btn');
         actionBtn.removeAttribute('onclick'); // Clear inline handlers
-        actionBtn.onclick = async (e) => {
-            e.stopImmediatePropagation();
-            e.preventDefault();
-            console.log('Download module clicked (card):', app.id);
-            actionBtn.textContent = globalThis.t
-                ? globalThis.t('ui.launcher.module.downloading', 'Downloading...')
-                : 'Downloading...';
-            actionBtn.style.pointerEvents = 'none';
 
-            try {
-                if (globalThis.downloadModule && app.repoUrl) {
-                    await globalThis.downloadModule(app.id, app.repoUrl);
-                    if (globalThis.showToast) globalThis.showToast('Module downloaded!', 'success');
-                    app.installed = true;
-                    this._configureActionBtn(
-                        (actionBtn.closest('.model-card-premium') as HTMLElement) ||
-                            (actionBtn.parentElement?.parentElement as HTMLElement),
-                        app,
-                    ); // Refresh btn
-                } else if (globalThis.showToast) {
-                    globalThis.showToast('Download not available', 'warning');
+        // Use extracted method to reduce complexity
+        actionBtn.onclick = (e) => this._handleDownloadClick(e, actionBtn, app);
+    }
+
+    private async _handleDownloadClick(e: MouseEvent, actionBtn: HTMLElement, app: IApp) {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        console.log('Download module clicked (card):', app.id);
+
+        actionBtn.textContent = globalThis.t
+            ? globalThis.t('ui.launcher.module.downloading', 'Downloading...')
+            : 'Downloading...';
+        actionBtn.style.pointerEvents = 'none';
+
+        try {
+            if (globalThis.downloadModule && app.repoUrl) {
+                await globalThis.downloadModule(app.id, app.repoUrl, app.expectedHash);
+                if (globalThis.showToast) globalThis.showToast('Module downloaded!', 'success');
+
+                // Force update app object state
+                app.installed = true;
+
+                // Update the card immediately without full reload
+                const card =
+                    (actionBtn.closest('.model-card-premium') as HTMLElement) ||
+                    (actionBtn.closest('.app-card') as HTMLElement);
+
+                if (card) {
+                    card.classList.remove('has-download');
+                    card.classList.add('has-launch', 'is-installed'); // Consolidated class add
+
+                    // Find overlay and remove/hide it
+                    const overlay = card.querySelector('.app-card-overlay');
+                    if (overlay) overlay.remove();
+
+                    // Re-configure button
+                    this._configureActionBtn(card, app);
+
+                    // Also update type badge if present
+                    const typeBadge = card.querySelector('.module-type-badge');
+                    if (typeBadge) {
+                        typeBadge.classList.remove('not-installed');
+                        typeBadge.classList.add('installed');
+                    }
                 }
-            } catch (err) {
-                console.error('Download error:', err);
-                if (globalThis.showToast) globalThis.showToast('Download failed', 'error');
+            } else if (globalThis.showToast) {
+                globalThis.showToast('Download not available', 'warning');
             }
+        } catch (err) {
+            console.error('Download error:', err);
+            if (globalThis.showToast) globalThis.showToast('Download failed', 'error');
             actionBtn.style.pointerEvents = 'auto';
             if (!app.installed)
                 actionBtn.textContent = globalThis.t
                     ? globalThis.t('ui.launcher.module.download', 'Download')
                     : 'Download';
-        };
+        }
     }
 
     private _setupLaunchActionBtn(actionBtn: HTMLElement, app: IApp) {
@@ -466,7 +544,9 @@ export class AppUI {
         actionBtn.classList.add('active-module-btn');
         actionBtn.classList.remove('download-module-btn');
 
-        const isApi = app.type === 'api' || ['gpt', 'gemini'].includes(app.id);
+        const isApi =
+            app.type?.toLowerCase() === 'api' ||
+            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
 
         const setupRunning = () => this._setBtnStateRunning(actionBtn);
         const setupStopped = () => this._setBtnStateStopped(actionBtn);
@@ -621,15 +701,9 @@ export class AppUI {
             </div>`;
     }
 
-    private _getAppStatusHtml(isApi: boolean, isInstalled: boolean): string {
-        if (isApi || isInstalled) {
-            // User requested to remove the 'ACTIVE' label to keep these cards cleaner
-            return '';
-        }
-        const txt = globalThis.t
-            ? globalThis.t('ui.launcher.module.download', 'Download')
-            : 'Download';
-        return `<div class="app-status download-btn">${txt}</div>`;
+    private _getAppStatusHtml(_isApi: boolean, _isInstalled: boolean): string {
+        // Download button is now moved to the centered hover overlay in _createAppCard
+        return '';
     }
 
     private _setBtnStateRunning(actionBtn: HTMLElement) {
@@ -699,8 +773,11 @@ export class AppUI {
 
     private _handleStopModule(app: IApp, updateToStopped: () => void, actionBtn: HTMLElement) {
         console.log('[AppUI] Stop app clicked:', app.id);
-        const isAiModule = actionBtn.id.includes('ai-') || ['gpt', 'gemini'].includes(app.id) || app.type === 'api';
-        
+        const isAiModule =
+            actionBtn.id.includes('ai-') ||
+            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
+            app.type?.toLowerCase() === 'api';
+
         if (isAiModule) {
             if (globalThis.aiBridge) globalThis.aiBridge.stopProvider();
         } else {
@@ -723,7 +800,10 @@ export class AppUI {
         actionBtn: HTMLElement,
     ) {
         console.log('[AppUI] Launch app clicked:', app.id);
-        const isAiModule = actionBtn.id.includes('ai-') || ['gpt', 'gemini'].includes(app.id) || app.type === 'api';
+        const isAiModule =
+            actionBtn.id.includes('ai-') ||
+            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
+            app.type?.toLowerCase() === 'api';
 
         if (isAiModule) {
             if (globalThis.aiBridge) {

@@ -123,6 +123,7 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
                     icon: provider.icon.clone().unwrap_or_else(|| "cloud".to_string()),
                     type_name: "api".to_string(),
                     repo_url: None,
+                    expected_hash: None,
                     installed: true,
                     config_schema: Some(config_schema),
                 };

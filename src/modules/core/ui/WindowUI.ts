@@ -313,7 +313,10 @@ export class WindowUI {
     /**
      * Applies policies from the backend (warnings, auto-maximize).
      */
-    private _handlePolicyAdjustments(policy: { isSmallScreen: boolean }, isMaximized: boolean): void {
+    private _handlePolicyAdjustments(
+        policy: { isSmallScreen: boolean },
+        isMaximized: boolean,
+    ): void {
         this._isSmallScreen = policy.isSmallScreen;
         void this._handleSmallScreenUnmaximize(isMaximized);
     }
@@ -475,5 +478,4 @@ export class WindowUI {
             }
         });
     }
-
 }
