@@ -754,17 +754,24 @@
 
     /* Animation State */
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: scale(1) translateY(0) translateZ(0);
     /* Stable transition - avoiding 'all' to prevent unwanted jumping */
     transition:
         opacity 0.3s ease,
-        transform 0.3s var(--ease-bounce);
+        transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+        backdrop-filter 0.3s ease,
+        -webkit-backdrop-filter 0.3s ease;
+    
+    will-change: transform, opacity, backdrop-filter;
+    backface-visibility: hidden;
 }
 
 /* Entry/Exit State - Consolidated */
 .modal-backdrop.hidden .app-modal {
     opacity: 0;
     transform: scale(0.95) translateY(10px);
+    backdrop-filter: blur(0px) saturate(100%);
+    -webkit-backdrop-filter: blur(0px) saturate(100%);
 }
 
 @keyframes cardIn {
@@ -779,7 +786,8 @@
 }
 
 .modal-backdrop:not(.hidden) .app-card {
-    animation: cardIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    /* Use 'backwards' to hide element during delay (apply 0% style) but release after completion for hover */
+    animation: cardIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
     will-change: transform, opacity;
     backface-visibility: hidden;
 }
@@ -973,10 +981,9 @@
 /* Cards in modal - Force Smooth Animation */
 #app-modal-list .app-card {
     position: relative;
-    /* Explicitly define properties for better interpolation */
-    transition:
-        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    /* Snappy but smooth 'Axelate' style transition */
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    padding: 3rem 1.25rem 1.5rem !important; /* Extra top padding to clear badges */
     will-change: transform;
     /* Explicit start state matching hover structure */
     transform: translateY(0) translateZ(0);
@@ -985,12 +992,21 @@
 }
 
 #app-modal-list .app-card:hover {
-    transition:
-        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    transform: translateY(-12px) translateZ(0) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-6px) translateZ(0) !important;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
     z-index: 20;
+}
+
+/* Define missing keyframes for card entrance */
+@keyframes cardIn {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .app-icon-wrapper {
@@ -1031,14 +1047,13 @@
     /* Fixed height to eliminate "Visual Noise" and anchor the bottom line */
     height: 90px !important;
     min-height: 90px !important;
-    display: flex !important;
-    align-items: flex-start !important;
-    justify-content: center !important;
-    padding: 0.25rem 0.5rem !important;
-
-    overflow-y: auto !important;
-    scrollbar-width: none !important; /* Firefox */
-    -ms-overflow-style: none !important; /* IE/Edge */
+    /* Truncate text instead of scroll */
+    overflow: hidden !important;
+    text-overflow: ellipsis;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 4; /* Fits ~90px at 1.4 line-height */
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
     text-align: center;
 }
 
@@ -1616,8 +1631,10 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     opacity: 0;
 }
 
-.app-card:hover .app-delete-badge {
+.app-card:hover .app-delete-badge,
+#app-modal-list .app-card:hover .app-delete-badge {
     opacity: 1;
+    transition-delay: 0.05s; /* Slight delay for smoother feel */
 }
 
 .app-delete-badge:hover {

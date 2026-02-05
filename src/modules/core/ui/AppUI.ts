@@ -292,6 +292,23 @@ export class AppUI {
         `);
 
         card.onclick = (e) => this._handleAppCardClick(e, app, category);
+
+        // Self-Correction: Async check for installation status to handle race conditions
+        if (!isInstalled && !isApi) {
+            const win = globalThis as any; // Access extended global
+            if (win.checkModuleInstalled) {
+                win.checkModuleInstalled(app.id)
+                    .then((actuallyInstalled: boolean) => {
+                        if (actuallyInstalled) {
+                            console.log(`[AppUI] Correcting installation status for ${app.id}`);
+                            app.installed = true;
+                            this._markCardAsInstalled(card, app);
+                        }
+                    })
+                    .catch((err: unknown) => console.warn('[AppUI] Install check failed:', err));
+            }
+        }
+
         return card;
     }
 
@@ -331,7 +348,7 @@ export class AppUI {
 
         if (typeof globalThis.selectApp === 'function') {
             globalThis.selectApp?.(category, app);
-            // Keep modal open - user can close manually if needed
+            this.closeAppSelection();
         }
     }
 
@@ -435,6 +452,37 @@ export class AppUI {
         }
     }
 
+    /**
+     * Helper to update card UI when app is installed
+     */
+    private _markCardAsInstalled(card: HTMLElement, app: IApp) {
+        card.classList.remove('has-download');
+        card.classList.add('has-launch', 'is-installed');
+
+        // Find overlay and remove/hide it
+        const overlay = card.querySelector('.app-card-overlay');
+        if (overlay) overlay.remove();
+
+        // Re-configure button to launch/settings
+        this._configureActionBtn(card, app);
+
+        // Update type badge
+        const typeBadge = card.querySelector('.module-type-badge');
+        if (typeBadge) {
+            typeBadge.classList.remove('not-installed');
+            typeBadge.classList.add('installed');
+        }
+
+        // Verify and inject delete badge if missing
+        if (!card.querySelector('.app-delete-badge')) {
+           const isApi = app.type === 'api' || ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
+           const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
+           if (badgeHtml) {
+               card.insertAdjacentHTML('afterbegin', badgeHtml);
+           }
+        }
+    }
+
     private _configureActionBtn(card: HTMLElement, app: IApp) {
         let actionBtn = card.querySelector('.model-card-action') as HTMLElement;
 
@@ -455,7 +503,8 @@ export class AppUI {
         if (!isApi && !isInstalled) {
             this._setupDownloadActionBtn(actionBtn, app);
         } else {
-            this._setupLaunchActionBtn(actionBtn, app);
+            // User requested to remove Launch button entirely (selection is done via card click)
+            actionBtn.style.display = 'none';
         }
     }
 
@@ -502,22 +551,7 @@ export class AppUI {
                     (actionBtn.closest('.app-card') as HTMLElement);
 
                 if (card) {
-                    card.classList.remove('has-download');
-                    card.classList.add('has-launch', 'is-installed'); // Consolidated class add
-
-                    // Find overlay and remove/hide it
-                    const overlay = card.querySelector('.app-card-overlay');
-                    if (overlay) overlay.remove();
-
-                    // Re-configure button
-                    this._configureActionBtn(card, app);
-
-                    // Also update type badge if present
-                    const typeBadge = card.querySelector('.module-type-badge');
-                    if (typeBadge) {
-                        typeBadge.classList.remove('not-installed');
-                        typeBadge.classList.add('installed');
-                    }
+                    this._markCardAsInstalled(card, app);
                 }
             } else if (globalThis.showToast) {
                 globalThis.showToast('Download not available', 'warning');

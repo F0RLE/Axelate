@@ -183,7 +183,8 @@ export class CatalogService {
                 this._appData.services = config.catalog.services || [];
 
                 // Hydrate with schemas & providers (SHARED LOGIC)
-                const installedMap = new Map(installedModules.map((m) => [m.id, m]));
+                // Fix: specific case-insensitive mapping to ensure 'Axelate-LocalAI' matches 'axelate-localai'
+                const installedMap = new Map(installedModules.map((m) => [m.id.toLowerCase(), m]));
 
                 const mergeSchema = (list: IApp[]) => {
                     list.forEach((app) => {
@@ -212,9 +213,10 @@ export class CatalogService {
                             app.installed = true;
                         }
 
-                        if (installedMap.has(app.id)) {
+                        // Check case-insensitively
+                        if (installedMap.has(app.id.toLowerCase())) {
                             app.installed = true;
-                            const inst = installedMap.get(app.id);
+                            const inst = installedMap.get(app.id.toLowerCase());
                             if (inst?.configSchema) {
                                 // Prefer backend config schema if available
                                 app.configSchema = inst.configSchema;
