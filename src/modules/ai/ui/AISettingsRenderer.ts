@@ -2,13 +2,6 @@
  * @module ai/ui/AISettingsRenderer
  * @description Handles rendering of AI provider settings UI with secure DOM patterns.
  * Implements interactive model selection and API key management.
- *
- * @example
- * ```typescript
- * import { aiSettingsRenderer } from './AISettingsRenderer';
- * aiSettingsRenderer.init(settingsService);
- * await aiSettingsRenderer.render(container, app);
- * ```
  */
 
 import DOMPurify from 'dompurify';

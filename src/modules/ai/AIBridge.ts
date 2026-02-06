@@ -3,14 +3,6 @@
  * @description Central hub for AI communication infrastructure.
  * Manages provider lifecycle, message routing, and real-time streaming orchestration.
  * Implements the Singleton pattern for unified cross-module standard access.
- *
- * @example
- * ```typescript
- * import { aiBridge } from './AIBridge';
- *
- * await aiBridge.startProvider('gemini');
- * const response = await aiBridge.sendMessage('Hello!');
- * ```
  */
 
 import type {
@@ -28,41 +20,6 @@ import { getApiModelId, mapProviderToBackend, getMostPowerfulModel } from './uti
 export type { MessageSource, MessageHandler, ChatContentPart, ChatContent } from './types/aiTypes';
 export type IChunkHandler = (chunk: string) => void;
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-// (Local constants removed - delegated to backend)
-
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Global application interface for architectural service resolution.
- */
-interface IGlobalContext {
-    aiBridge?: AIBridge;
-    showToast?: (msg: string, type: 'success' | 'error' | 'info' | 'warning') => void;
-    t?: (key: string, defaultVal?: string) => string;
-    axelateAPI?: {
-        secureStorage?: {
-            get: (key: string) => Promise<string | null>;
-        };
-    };
-    __TAURI__?: {
-        core: {
-            invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-        };
-        event: {
-            listen: <T>(
-                event: string,
-                handler: (event: { payload: T }) => void,
-            ) => Promise<() => void>;
-        };
-    };
-    randomizeChatGreeting?: () => void;
-}
 
 /**
  * @class AIBridge
@@ -76,22 +33,13 @@ export class AIBridge {
     private readonly _unlisteners: (() => void)[] = [];
     private readonly _listeners: Map<string, MessageHandler[]> = new Map();
     private readonly _chunkListeners: Map<string, IChunkHandler[]> = new Map();
-    private readonly _sessionId: string;
+    private _sessionId: string = '';
 
     /**
      * Initializes the bridge singleton and registers it within the global execution context.
      */
     constructor() {
-        const globalContext = globalThis as unknown as IGlobalContext;
-        globalContext.aiBridge = this;
-
-        // Initialize Session ID
-        let sid = localStorage.getItem('ai_session_id');
-        if (!sid) {
-            sid = crypto.randomUUID();
-            localStorage.setItem('ai_session_id', sid);
-        }
-        this._sessionId = sid;
+        globalThis.aiBridge = this;
     }
 
     /**
@@ -107,12 +55,19 @@ export class AIBridge {
             return;
         }
 
+        // Initialize Session ID using Secure Storage if available (Architectural compliance)
+        let sid = await this._getSecureVal('ai_session_id');
+        if (!sid) {
+            sid = crypto.randomUUID();
+            await this._saveSecureVal('ai_session_id', sid);
+        }
+        this._sessionId = sid;
+
         try {
-            const ctx = globalThis as unknown as IGlobalContext;
-            if (ctx.__TAURI__?.event) {
-                const unlistenChunk = await ctx.__TAURI__.event.listen<string>(
+            if (globalThis.__TAURI__?.event) {
+                const unlistenChunk = await globalThis.__TAURI__.event.listen<string>(
                     'ai-chat-chunk',
-                    (event) => {
+                    (event: { payload: string }) => {
                         // Diagnostic logging for streaming validation
                         if (import.meta.env.DEV) {
                             console.debug(
@@ -143,12 +98,6 @@ export class AIBridge {
         }
     }
 
-    /**
-     * Internal access to the global execution context.
-     */
-    private get _context(): IGlobalContext {
-        return globalThis as unknown as IGlobalContext;
-    }
 
     /**
      * Initiates a specific AI provider session.
@@ -174,15 +123,15 @@ export class AIBridge {
             }
 
             const modelKey = `ai_${providerId}_selected_model`;
-            const model = localStorage.getItem(modelKey) || this._getDefaultModel(providerId);
+            const model = (await this._getSecureVal(modelKey)) || this._getDefaultModel(providerId);
 
             this._activeProviderId = providerId;
-            this._apiKey = apiKey || ''; // Ensure it's never null if started
+            this._apiKey = apiKey || '';
             this._model = model;
 
-            // Save for persistence across restarts
-            localStorage.setItem(modelKey, model);
-            localStorage.setItem('last_active_provider', providerId);
+            // Persistence via backend settings (Section 42)
+            await this._saveSecureVal(modelKey, model);
+            await this._saveSecureVal('last_active_provider', providerId);
 
             const providerName = mapProviderToBackend(providerId);
 
@@ -210,22 +159,37 @@ export class AIBridge {
         const keyName = `${providerId}_api_key`;
 
         // Prioritize Tauri secure storage for cross-module consistency
-        if (this._context.__TAURI__?.core) {
+        // Fallback to localStorage if Secure Storage is not yet available
+        return (await this._getSecureVal(keyName)) || '';
+    }
+
+    private async _getSecureVal(key: string): Promise<string | null> {
+        if (globalThis.__TAURI__?.core) {
             try {
-                const value = await this._context.__TAURI__.core.invoke<string | null>(
-                    'get_secure_key',
-                    {
-                        service: keyName,
-                    },
-                );
-                if (value) return value;
-            } catch (error) {
-                console.warn(`[AIBridge] Secure storage retrieval failed for ${keyName}:`, error);
+                const val = await globalThis.__TAURI__.core.invoke<string | null>('get_secure_key', {
+                    service: key,
+                });
+                if (val !== null) return val;
+            } catch (e) {
+                console.error(`[AIBridge] Secure get failed for ${key}:`, e);
             }
         }
+        return localStorage.getItem(key);
+    }
 
-        // Fallback to localStorage (used in web-only mode)
-        return localStorage.getItem(keyName) || '';
+    private async _saveSecureVal(key: string, value: string): Promise<void> {
+        if (globalThis.__TAURI__?.core) {
+            try {
+                await globalThis.__TAURI__.core.invoke('save_secure_key', {
+                    service: key,
+                    key: value,
+                });
+                return;
+            } catch (e) {
+                console.error(`[AIBridge] Secure save failed for ${key}:`, e);
+            }
+        }
+        localStorage.setItem(key, value);
     }
 
     /**
@@ -337,7 +301,7 @@ export class AIBridge {
                 this._activeProviderId === 'axelate-localai'
             ) {
                 const msg =
-                    this._context.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') ||
+                    globalThis.t?.('ui.ai.local_disabled', 'Local AI execution is disabled.') ||
                     'Local AI execution is disabled.';
                 this._broadcastResponse(msg, source);
                 return msg;
@@ -381,7 +345,7 @@ export class AIBridge {
     private _handleMissingApiKey(): string {
         const fallback =
             'API key provided for this provider is invalid or missing. Please check settings.';
-        const msg = this._context.t?.('ui.ai.no_api_key', fallback) || fallback;
+        const msg = globalThis.t?.('ui.ai.no_api_key', fallback) || fallback;
 
         // Log in bridge but provide a user-friendly response
         console.warn(`[AIBridge] Messaging aborted: ${msg} [Provider: ${this._activeProviderId}]`);
@@ -396,7 +360,7 @@ export class AIBridge {
      */
     private _handleMissingProvider(): string {
         const fallback = 'No active AI engine found. Please initialize a module.';
-        const msg = this._context.t?.('ui.ai.no_provider', fallback) || fallback;
+        const msg = globalThis.t?.('ui.ai.no_provider', fallback) || fallback;
         this._broadcastResponse(msg, 'system');
         return msg;
     }
@@ -410,7 +374,7 @@ export class AIBridge {
     ): IChatRequest {
         const id = this._activeProviderId!;
         const modelId = getApiModelId(id, this._model);
-        const thinkingLevel = localStorage.getItem(`ai_${id}_thinking_level`) || 'high';
+        const thinkingLevel = localStorage.getItem(`ai_${id}_thinking_level`) || 'high'; // Non-critical UI preference ok in local
 
         return {
             provider: mapProviderToBackend(id),
@@ -433,7 +397,7 @@ export class AIBridge {
      * Executes an IPC command targeting the Tauri host's secure AI service.
      */
     private async _invokeBackendOperation(request: IChatRequest): Promise<IChatResponse> {
-        if (!this._context.__TAURI__?.core) {
+        if (!globalThis.__TAURI__?.core) {
             console.warn('[AIBridge] IPC host unavailable; operation aborted');
             return {
                 ok: false,
@@ -446,7 +410,7 @@ export class AIBridge {
             setTimeout(() => reject(new Error('AI Bridge request timed out after 90s')), 90000);
         });
 
-        const invokePromise = this._context.__TAURI__.core.invoke<IChatResponse>(
+        const invokePromise = globalThis.__TAURI__.core.invoke<IChatResponse>(
             'send_chat_message',
             {
                 request,
@@ -460,8 +424,8 @@ export class AIBridge {
      * Evaluates backend results and updates application state.
      */
     private _processBackendResponse(response: IChatResponse, source: MessageSource): string {
-        if (typeof this._context.randomizeChatGreeting === 'function') {
-            this._context.randomizeChatGreeting();
+        if (typeof globalThis.randomizeChatGreeting === 'function') {
+            globalThis.randomizeChatGreeting();
         }
 
         if (response.ok && response.reply) {
@@ -536,9 +500,9 @@ export class AIBridge {
     }
 
     public async getHistory(): Promise<IChatMessage[]> {
-        if (this._context.__TAURI__?.core) {
+        if (globalThis.__TAURI__?.core) {
             try {
-                return await this._context.__TAURI__.core.invoke('get_chat_history', {
+                return await globalThis.__TAURI__.core.invoke('get_chat_history', {
                     session_id: this._sessionId,
                 });
             } catch (e) {
@@ -611,21 +575,21 @@ export class AIBridge {
     // --- Toast Helper Utilities (Architectural Consistency) ---
 
     private _showToast(msg: string, type: 'success' | 'error' | 'info' | 'warning'): void {
-        if (typeof this._context.showToast === 'function') {
-            this._context.showToast(msg, type);
+        if (typeof globalThis.showToast === 'function') {
+            globalThis.showToast(msg, type);
         }
     }
 
     private _showErrorToast(key: string, fallback: string): void {
-        this._showToast(this._context.t?.(key, fallback) || fallback, 'error');
+        this._showToast(globalThis.t?.(key, fallback) || fallback, 'error');
     }
 
     private _showSuccessToast(key: string, fallback: string): void {
-        this._showToast(this._context.t?.(key, fallback) || fallback, 'success');
+        this._showToast(globalThis.t?.(key, fallback) || fallback, 'success');
     }
 
     private _showInfoToast(key: string, fallback: string): void {
-        this._showToast(this._context.t?.(key, fallback) || fallback, 'info');
+        this._showToast(globalThis.t?.(key, fallback) || fallback, 'info');
     }
 }
 

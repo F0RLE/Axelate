@@ -12,7 +12,10 @@ mod tests {
         let settings = AppSettings::default();
 
         assert_eq!(settings.theme, "dark");
-        assert_eq!(settings.language, "ru");
+        assert_eq!(
+            settings.language,
+            crate::utils::windows::detect_system_language()
+        );
         assert!(settings.use_gpu);
         assert!(!settings.debug_mode);
     }

@@ -16,19 +16,26 @@ interface AxelateAPIInterface {
     close: () => Promise<void>;
 }
 
-/** AI Bridge interface */
 interface AIBridgeInterface {
+    init: () => Promise<void>;
     startProvider: (_providerId: string) => Promise<boolean>;
     stopProvider: () => void;
     isActive: () => boolean;
     getActiveProvider: () => { id: string; name: string } | null;
-    sendMessage: (_text: string, _source: 'chat' | 'service' | 'system') => Promise<string>;
+    sendMessage: (
+        _text: string,
+        _source?: 'chat' | 'service' | 'system',
+        _attachments?: { name: string; type: string; data_base64: string }[],
+    ) => Promise<string>;
     onMessage: (
         _listenerId: string,
         _handler: (_response: string, _source: string) => void,
     ) => void;
     removeListener: (_listenerId: string) => void;
-    clearHistory: () => void;
+    onChunk: (_listenerId: string, _handler: (_chunk: string) => void) => void;
+    removeChunkListener: (_listenerId: string) => void;
+    getHistory: () => Promise<any[]>;
+    destroy: () => void;
 }
 
 /** UI State Management interface */
@@ -69,6 +76,8 @@ declare global {
         debug: (_msg: string, ..._args: unknown[]) => void;
         getLogs: () => ILogEntry[];
     };
+    var catalogService: any;
+    var randomizeChatGreeting: () => void;
     var core: unknown;
     var control: (_action: string, _service: string) => Promise<boolean>;
     var controlModule: (_id: string, _action: string) => Promise<boolean>;
@@ -113,7 +122,7 @@ declare global {
             LogicalSize: new (_width: number, _height: number) => { width: number; height: number };
         };
     };
-    var APP_DATA: Record<string, IApp[]>;
+    var APP_DATA: any; // Defined as ICatalogData in services
 
     // --- UI State & Navigation ---
     var uiState: UIStateInterface;
@@ -228,5 +237,7 @@ declare global {
         confirmCloseFromModal: typeof confirmCloseFromModal;
         saveDownloadSettings: typeof saveDownloadSettings;
         updateSpeedDisplay: typeof updateSpeedDisplay;
+        catalogService: typeof catalogService;
+        randomizeChatGreeting: typeof randomizeChatGreeting;
     }
 }

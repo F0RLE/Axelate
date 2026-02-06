@@ -21,11 +21,15 @@ import { AIBridge } from '../modules/ai/AIBridge';
 describe('AIBridge', () => {
     let aiBridge: AIBridge;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         vi.clearAllMocks();
         (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
         localStorage.clear();
         aiBridge = new AIBridge();
+        
+        // Mock session ID for init
+        mockInvoke.mockResolvedValueOnce('test-session-123');
+        await aiBridge.init();
     });
 
     afterEach(() => {
@@ -55,7 +59,10 @@ describe('AIBridge', () => {
 
     describe('startProvider', () => {
         it('should activate provider with valid API key', async () => {
-            mockInvoke.mockResolvedValueOnce('sk-test-key-12345');
+            mockInvoke.mockImplementation(async (cmd, args) => {
+                if (cmd === 'get_secure_key' && args.service === 'gemini_api_key') return 'sk-test-key-12345';
+                return null;
+            });
 
             const result = await aiBridge.startProvider('gemini');
 
@@ -65,7 +72,7 @@ describe('AIBridge', () => {
         });
 
         it('should fail if API key is missing', async () => {
-            mockInvoke.mockResolvedValueOnce(null);
+            mockInvoke.mockResolvedValue(null);
 
             const result = await aiBridge.startProvider('gpt');
 
@@ -83,7 +90,7 @@ describe('AIBridge', () => {
         });
 
         it('should fallback to localStorage when backend returns null', async () => {
-            mockInvoke.mockResolvedValueOnce(null);
+            mockInvoke.mockResolvedValue(null);
             localStorage.setItem('gemini_api_key', 'local-key-123');
 
             const result = await aiBridge.startProvider('gemini');
@@ -94,7 +101,7 @@ describe('AIBridge', () => {
 
     describe('stopProvider', () => {
         it('should deactivate the provider', async () => {
-            mockInvoke.mockResolvedValueOnce('sk-test-key');
+            mockInvoke.mockResolvedValue('sk-test-key');
             await aiBridge.startProvider('gemini');
 
             aiBridge.stopProvider();
@@ -104,7 +111,7 @@ describe('AIBridge', () => {
         });
 
         it('should clear state on stop', async () => {
-            mockInvoke.mockResolvedValueOnce('sk-test-key');
+            mockInvoke.mockResolvedValue('sk-test-key');
             await aiBridge.startProvider('gemini');
 
             aiBridge.stopProvider();
@@ -122,10 +129,11 @@ describe('AIBridge', () => {
         });
 
         it('should invoke backend when provider is active', async () => {
-            mockInvoke
-                .mockResolvedValueOnce('sk-test-key') // getApiKey for startProvider
-                .mockResolvedValueOnce('sk-test-key') // getApiKey for sendMessage
-                .mockResolvedValueOnce({ text: 'Hello back!' }); // send_chat_message
+            mockInvoke.mockImplementation(async (cmd) => {
+                if (cmd === 'get_secure_key') return 'sk-test-key';
+                if (cmd === 'send_chat_message') return { ok: true, reply: { text: 'Hello back!' } };
+                return null;
+            });
 
             await aiBridge.startProvider('gemini');
             await aiBridge.sendMessage('Hello');
@@ -141,7 +149,7 @@ describe('AIBridge', () => {
 
     describe('getState', () => {
         it('should return current bridge state', async () => {
-            mockInvoke.mockResolvedValueOnce('sk-test-key');
+            mockInvoke.mockResolvedValue('sk-test-key');
             await aiBridge.startProvider('gemini');
 
             const state = aiBridge.getState();
@@ -157,7 +165,7 @@ describe('AIBridge', () => {
         });
 
         it('should return true when provider is active', async () => {
-            mockInvoke.mockResolvedValueOnce('sk-test-key');
+            mockInvoke.mockResolvedValue('sk-test-key');
             await aiBridge.startProvider('gemini');
 
             expect(aiBridge.isActive()).toBe(true);
@@ -166,7 +174,7 @@ describe('AIBridge', () => {
 
     describe('getActiveProvider', () => {
         it('should return provider details when active', async () => {
-            mockInvoke.mockResolvedValueOnce('sk-test-key');
+            mockInvoke.mockResolvedValue('sk-test-key');
             await aiBridge.startProvider('gemini');
 
             const provider = aiBridge.getActiveProvider();

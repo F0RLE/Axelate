@@ -31,12 +31,6 @@ declare global {
     var catalogService: CatalogService;
 }
 
-interface ICatalogGlobal {
-    catalogService?: CatalogService;
-    APP_DATA?: Record<string, IApp[]>;
-    updateModuleSettings?: (m: Record<string, unknown>) => void;
-    dispatchEvent: (event: Event) => boolean;
-}
 
 const FALLBACK_CONFIG: IAppConfig = {
     catalog: {
@@ -126,18 +120,16 @@ export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
 
     constructor(private readonly _tauri: TauriProvider) {
-        const win = globalThis as unknown as ICatalogGlobal;
-
-        if (win.catalogService) {
+        if (globalThis.catalogService) {
             console.warn('[CatalogService] Singleton instance already exists.');
         }
-        win.catalogService = this;
+        globalThis.catalogService = this;
 
-        // Sync with global APP_DATA
-        if (win.APP_DATA) {
-            Object.assign(this._appData, win.APP_DATA);
+        // Sync with global APP_DATA (Architectural compliance Section 51)
+        if (globalThis.APP_DATA) {
+            Object.assign(this._appData, globalThis.APP_DATA);
         } else {
-            win.APP_DATA = this._appData as unknown as Record<string, IApp[]>;
+            globalThis.APP_DATA = this._appData as any;
         }
     }
 
@@ -205,7 +197,6 @@ export class CatalogService {
 
                         const isApi =
                             app.type === 'api' ||
-                            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
                             config?.apiProviders?.some((p) => p.id === app.id);
 
                         // Force installed status for API providers (Virtual Modules)
@@ -250,8 +241,7 @@ export class CatalogService {
      * Synchronizes internal state to global state.
      */
     private _syncToGlobal(): void {
-        const win = globalThis as unknown as ICatalogGlobal;
-        const globalAppData = win.APP_DATA;
+        const globalAppData = globalThis.APP_DATA;
         if (globalAppData) {
             if (this._appData.ai) {
                 globalAppData.ai = this._appData.ai;
@@ -259,8 +249,7 @@ export class CatalogService {
             if (this._appData.services) {
                 globalAppData.services = this._appData.services;
             }
-            // Cast because global definition might be simpler than runtime object
-            (globalAppData as unknown as ICatalogData).stars = this._appData.stars;
+            (globalAppData as any).stars = this._appData.stars;
         }
     }
 
@@ -268,10 +257,9 @@ export class CatalogService {
      * Updates legacy module settings from config.
      */
     private _updateLegacySettings(models: unknown): void {
-        const win = globalThis as unknown as ICatalogGlobal;
-        if (win.updateModuleSettings && models) {
+        if (globalThis.updateModuleSettings && models) {
             try {
-                win.updateModuleSettings(models as Record<string, unknown>);
+                globalThis.updateModuleSettings(models as Record<string, unknown>);
             } catch {
                 console.warn('[CatalogService] Warning updating module settings');
             }

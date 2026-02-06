@@ -28,8 +28,8 @@ export class LoggerService {
     private _initialized = false;
 
     constructor() {
-        // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>).logger = this;
+        // Registration on globalThis for access from HTML/legacy code (Section 31)
+        globalThis.logger = this;
 
         // Capture original methods before overriding
         this._originalConsoleError = console.error.bind(console);

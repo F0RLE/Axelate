@@ -15,6 +15,11 @@ interface ToastElement extends HTMLElement {
 // Note: Window interface extensions are defined in core.ts
 
 export class AppUI {
+    private readonly _purifyConfig = {
+        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'code', 'pre', 'div', 'span', 'svg', 'line'],
+        ALLOWED_ATTR: ['href', 'class', 'style', 'viewBox', 'width', 'height', 'stroke', 'stroke-width', 'fill', 'stroke-linecap', 'stroke-linejoin', 'x1', 'y1', 'x2', 'y2'],
+        ALLOW_DATA_ATTR: true,
+    };
     private toastQueue: ToastElement[] = [];
     private _currentCategory: string | null = null;
     private _currentApps: IApp[] = [];
@@ -37,6 +42,14 @@ export class AppUI {
     }
 
     // --- Toast System ---
+    /**
+     * Shows a toast notification.
+     * @param {string} message - The message to display.
+     * @param {string} [type='info'] - The toast type (success, error, warning, info).
+     * @param {number} [duration=3000] - Duration in milliseconds.
+     * @param {string|null} [title=null] - Optional toast title.
+     * @param {string|null} [id=null] - Optional unique ID to prevent duplicates.
+     */
     public showToast(
         message: string,
         type: string = 'info',
@@ -77,10 +90,13 @@ export class AppUI {
     ) {
         const contentEl = toast.querySelector('.toast-content');
         if (contentEl) {
-            contentEl.innerHTML = DOMPurify.sanitize(`
+            contentEl.innerHTML = DOMPurify.sanitize(
+                `
                 ${title ? `<div class="toast-title">${title}</div>` : ''}
                 <div class="toast-message">${message}</div>
-            `);
+            `,
+                this._purifyConfig,
+            );
         }
 
         // Reset timer
@@ -109,12 +125,15 @@ export class AppUI {
         toast.className = `toast ${type}`;
         if (id) toast.id = `toast-${id}`;
 
-        toast.innerHTML = DOMPurify.sanitize(`
+        toast.innerHTML = DOMPurify.sanitize(
+            `
             <div class="toast-content">
                 ${title ? `<div class="toast-title">${title}</div>` : ''}
                 <div class="toast-message">${message}</div>
             </div>
-        `);
+        `,
+            this._purifyConfig,
+        );
 
         container.appendChild(toast);
         this.toastQueue.push(toast);
@@ -129,13 +148,17 @@ export class AppUI {
     }
 
     // --- Action Feedback ---
+    /**
+     * Shows a brief visual feedback for an action.
+     * @param {string} [type='success'] - The feedback type.
+     */
     public showActionFeedback(type: string = 'success') {
         let feedback = document.getElementById('action-feedback');
         if (!feedback) {
             feedback = document.createElement('div');
             feedback.className = 'action-feedback';
             feedback.id = 'action-feedback';
-            feedback.innerHTML = DOMPurify.sanitize('<div class="action-feedback-icon"></div>');
+            feedback.innerHTML = DOMPurify.sanitize('<div class="action-feedback-icon"></div>', this._purifyConfig);
             document.body.appendChild(feedback);
         }
 
@@ -154,6 +177,11 @@ export class AppUI {
     }
 
     // --- Skeletons ---
+    /**
+     * Displays skeleton loaders for a container.
+     * @param {string} containerId - The ID of the container.
+     * @param {number} [count=3] - Number of skeletons to show.
+     */
     public showSkeletonLoaders(containerId: string, count: number = 3) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -181,6 +209,11 @@ export class AppUI {
     }
 
     // --- Button State ---
+    /**
+     * Toggles the loading state of a button.
+     * @param {HTMLButtonElement | null} button - The button to modify.
+     * @param {boolean} [loading=true] - Whether it should be in loading state.
+     */
     public setButtonLoading(button: HTMLButtonElement | null, loading: boolean = true) {
         if (!button) return;
         if (loading) {
@@ -192,6 +225,11 @@ export class AppUI {
         }
     }
     // --- App Selection Modal ---
+    /**
+     * Opens the app selection modal for a specific category.
+     * @param {string} category - 'ai' or 'services'.
+     * @param {IApp[]} apps - List of apps to display.
+     */
     public openAppSelection(category: string, apps: IApp[]) {
         const modal = document.getElementById('app-selection-modal');
         const listEl = document.getElementById('app-modal-list');
@@ -219,6 +257,11 @@ export class AppUI {
         }
     }
 
+    /**
+     * Updates a specific module card on the dashboard.
+     * @param {string} category - The module category.
+     * @param {IApp} app - The app data.
+     */
     public updateModuleCard(category: string, app: IApp) {
         const selector =
             category === 'ai' ? '.model-card-premium.ai' : '.model-card-premium.services';
@@ -271,7 +314,8 @@ export class AppUI {
         const downloadText = globalThis.t
             ? globalThis.t('ui.launcher.module.download', 'Download')
             : 'Download';
-        card.innerHTML = DOMPurify.sanitize(`
+        card.innerHTML = DOMPurify.sanitize(
+            `
             ${this._getAppDeleteBadgeHtml(isApi, isInstalled)}
             ${this._getAppTypeBadgeHtml(isApi)}
             <div class="app-icon-wrapper">${app.icon || '❓'}</div>
@@ -289,7 +333,9 @@ export class AppUI {
             `
                     : ''
             }
-        `);
+        `,
+            this._purifyConfig,
+        );
 
         card.onclick = (e) => this._handleAppCardClick(e, app, category);
 
@@ -353,7 +399,7 @@ export class AppUI {
     }
 
     private async _handleDeleteModule(app: IApp, category: string) {
-        console.log('Remove module clicked:', app.id);
+        console.log('[AppUI] Remove module clicked:', app.id);
         try {
             if (globalThis.__TAURI__?.core) {
                 await globalThis.__TAURI__.core.invoke('delete_module', { moduleId: app.id });
@@ -369,7 +415,7 @@ export class AppUI {
                 this.showToast('Delete not available', 'warning');
             }
         } catch (err) {
-            console.error('Delete error:', err);
+            console.error('[AppUI] Delete error:', err);
             this.showToast(
                 globalThis.t
                     ? globalThis.t('ui.launcher.web.delete_model_error', 'Delete error')
@@ -380,7 +426,7 @@ export class AppUI {
     }
 
     private async _handleDownloadModule(app: IApp, category: string, btn: HTMLElement | null) {
-        console.log('Download module clicked:', app.id);
+        console.log('[AppUI] Download module clicked:', app.id);
         if (btn) {
             btn.classList.add('downloading');
             btn.style.pointerEvents = 'none';
@@ -406,7 +452,7 @@ export class AppUI {
                 );
             }
         } catch (err) {
-            console.error('Download error:', err);
+            console.error('[AppUI] Download error:', err);
             if (btn) {
                 btn.classList.remove('downloading');
                 btn.style.pointerEvents = 'auto';
@@ -441,7 +487,7 @@ export class AppUI {
                 'info',
             );
         }
-        console.log('Stopped previous module:', previousModuleId);
+        console.log('[AppUI] Stopped previous module:', previousModuleId);
     }
 
     private _updateCardAttributes(card: HTMLElement, app: IApp) {
@@ -622,10 +668,13 @@ export class AppUI {
     private _addSettingsBtn(card: HTMLElement, app: IApp) {
         const settingsBtn = document.createElement('div');
         settingsBtn.className = 'module-action-badge left settings';
-        settingsBtn.innerHTML = DOMPurify.sanitize(`
+        settingsBtn.innerHTML = DOMPurify.sanitize(
+            `
             <div class="badge-icon"><span style="font-size: 1.1rem;">⚙️</span></div>
             <div class="badge-text" data-i18n="ui.launcher.module.settings_short">${globalThis.t ? globalThis.t('ui.launcher.module.settings_short', 'Settings') : 'Settings'}</div>
-        `);
+        `,
+            this._purifyConfig,
+        );
         settingsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             e.stopImmediatePropagation();
@@ -643,7 +692,8 @@ export class AppUI {
     private _addCloseBtn(card: HTMLElement, category: string) {
         const closeBtn = document.createElement('div');
         closeBtn.className = 'module-action-badge right close';
-        closeBtn.innerHTML = DOMPurify.sanitize(`
+        closeBtn.innerHTML = DOMPurify.sanitize(
+            `
              <div class="badge-icon">
                 <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="display: block;">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -651,7 +701,9 @@ export class AppUI {
                 </svg>
              </div>
              <div class="badge-text" data-i18n="ui.launcher.module.remove_short">${globalThis.t ? globalThis.t('ui.launcher.module.remove_short', 'Close') : 'Close'}</div>
-        `);
+        `,
+            this._purifyConfig,
+        );
         closeBtn.onclick = (e) => {
             e.stopImmediatePropagation();
             card.innerHTML = card.dataset.originalHtml || '';
@@ -801,7 +853,7 @@ export class AppUI {
                 });
                 return String(status) === 'running';
             } catch (err) {
-                console.warn('Status check failed:', err);
+                console.warn('[AppUI] Status check failed:', err);
             }
         }
         return false;
@@ -910,6 +962,7 @@ export class AppUI {
         if (!apps || apps.length === 0) {
             listEl.innerHTML = DOMPurify.sanitize(
                 '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted);">No apps found</div>',
+                this._purifyConfig,
             );
             return;
         }
@@ -924,7 +977,7 @@ export class AppUI {
     private _updateCardContent(card: HTMLElement, app: IApp) {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
         if (iconWrapper)
-            iconWrapper.innerHTML = DOMPurify.sanitize(`<div>${app.icon || '📦'}</div>`);
+            iconWrapper.innerHTML = DOMPurify.sanitize(`<div>${app.icon || '📦'}</div>`, this._purifyConfig);
 
         const title = card.querySelector('.model-card-title');
         if (title) {
