@@ -1,4 +1,5 @@
-import { IApp } from '../types/coreTypes';
+import type { IApp } from '../types/coreTypes';
+import type { TGlobalWin } from '../types/global_bridge_types';
 import DOMPurify from 'dompurify';
 import { eventBus } from '../services/EventBus';
 
@@ -219,8 +220,9 @@ export class AppUI {
         const container = document.getElementById(containerId);
         if (!container) return;
 
-        if (typeof globalThis.showSkeletonLoaders === 'function') {
-            globalThis.showSkeletonLoaders(containerId, count);
+        const win = globalThis as TGlobalWin;
+        if (typeof win['showSkeletonLoaders'] === 'function') {
+            (win['showSkeletonLoaders'] as (id: string, count: number) => void)(containerId, count);
             return;
         }
 
@@ -344,9 +346,11 @@ export class AppUI {
         card.classList.toggle('is-api', isApi);
         card.classList.toggle('is-installed', isInstalled);
 
-        const downloadText = globalThis.t
-            ? globalThis.t('ui.launcher.module.download', 'Download')
-            : 'Download';
+        const g = globalThis as TGlobalWin;
+        const downloadText =
+            typeof g['t'] === 'function'
+                ? g['t']('ui.launcher.module.download', 'Download')
+                : 'Download';
         card.innerHTML = DOMPurify.sanitize(
             `
             ${this._getAppDeleteBadgeHtml(isApi, isInstalled)}
@@ -374,9 +378,9 @@ export class AppUI {
 
         // Self-Correction: Async check for installation status to handle race conditions
         if (!isInstalled && !isApi) {
-            if (globalThis.checkModuleInstalled) {
-                globalThis
-                    .checkModuleInstalled(app.id)
+            const win = globalThis as TGlobalWin;
+            if (typeof win['checkModuleInstalled'] === 'function') {
+                (win['checkModuleInstalled'] as (id: string) => Promise<boolean>)(app.id)
                     .then((actuallyInstalled: boolean) => {
                         if (actuallyInstalled) {
                             console.log(`[AppUI] Correcting installation status for ${app.id}`);
@@ -425,33 +429,36 @@ export class AppUI {
             return;
         }
 
-        if (typeof globalThis.selectApp === 'function') {
-            globalThis.selectApp?.(category, app);
+        const win = globalThis as TGlobalWin;
+        if (typeof win['selectApp'] === 'function') {
+            (win['selectApp'] as (cat: string, app: IApp) => void)(category, app);
             this.closeAppSelection();
         }
     }
 
     private async _handleDeleteModule(app: IApp, category: string) {
         console.log('[AppUI] Remove module clicked:', app.id);
+        const win = globalThis as TGlobalWin;
         try {
-            if (globalThis.__TAURI__?.core) {
-                await globalThis.__TAURI__.core.invoke('delete_module', { moduleId: app.id });
+            if (win['__TAURI__']?.core) {
+                await win['__TAURI__'].core.invoke('delete_module', { moduleId: app.id });
                 app.installed = false;
-                const allApps = globalThis.getCatalogCategory(category);
+                const allApps = (win['getCatalogCategory'] as (cat: string) => IApp[])(category);
                 this.openAppSelection(category, allApps);
-            } else if (typeof globalThis.deleteModule === 'function') {
-                await globalThis.deleteModule(app.id);
+            } else if (typeof win['deleteModule'] === 'function') {
+                await (win['deleteModule'] as (id: string) => Promise<void>)(app.id);
                 app.installed = false;
-                const allApps = globalThis.getCatalogCategory(category);
+                const allApps = (win['getCatalogCategory'] as (cat: string) => IApp[])(category);
                 this.openAppSelection(category, allApps);
             } else {
                 this.showToast('Delete not available', 'warning');
             }
         } catch (err) {
             console.error('[AppUI] Delete error:', err);
+            const g = globalThis as TGlobalWin;
             this.showToast(
-                globalThis.t
-                    ? globalThis.t('ui.launcher.web.delete_model_error', 'Delete error')
+                typeof g['t'] === 'function'
+                    ? g['t']('ui.launcher.web.delete_model_error', 'Delete error')
                     : 'Delete error',
                 'error',
             );
@@ -466,20 +473,19 @@ export class AppUI {
         }
 
         try {
-            if (app.repoUrl && globalThis.downloadModule) {
-                await globalThis.downloadModule(app.id, app.repoUrl, app.expectedHash);
+            const win = globalThis as TGlobalWin;
+            if (app.repoUrl && typeof win['downloadModule'] === 'function') {
+                await win['downloadModule'](app.id, app.repoUrl, app.expectedHash);
 
                 // Refresh modal to show immediate state change if possible
-                const allApps = globalThis.getCatalogCategory(category);
+                const allApps = (win['getCatalogCategory'] as (cat: string) => IApp[])(category);
                 // Small delay to let backend start emitting events
                 setTimeout(() => this.openAppSelection(category, allApps), 100);
             } else {
+                const g = globalThis as TGlobalWin;
                 this.showToast(
-                    globalThis.t
-                        ? globalThis.t(
-                              'ui.launcher.web.download_unavailable',
-                              'Download not available',
-                          )
+                    typeof g['t'] === 'function'
+                        ? g['t']('ui.launcher.web.download_unavailable', 'Download not available')
                         : 'Download not available',
                     'warning',
                 );
@@ -490,9 +496,10 @@ export class AppUI {
                 btn.classList.remove('downloading');
                 btn.style.pointerEvents = 'auto';
             }
+            const win = globalThis as TGlobalWin;
             this.showToast(
-                globalThis.t
-                    ? globalThis.t('ui.launcher.web.download_error', 'Download failed')
+                typeof win['t'] === 'function'
+                    ? win['t']('ui.launcher.web.download_error', 'Download failed')
                     : 'Download failed',
                 'error',
             );
@@ -500,22 +507,24 @@ export class AppUI {
     }
 
     private _stopPreviousModule(card: HTMLElement, app: IApp) {
-        const previousModuleId = card.dataset.currentModule;
+        const previousModuleId = card.dataset['currentModule'];
         if (!previousModuleId || previousModuleId === app.id) return;
 
         const actionBtn = card.querySelector('.model-card-action') as HTMLElement;
-        if (actionBtn?.dataset?.running !== 'true') return;
+        if (actionBtn?.dataset?.['running'] !== 'true') return;
 
         const isApi =
             app.type?.toLowerCase() === 'api' ||
             ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
+
+        const win = globalThis as TGlobalWin;
         if (isApi) {
-            if (globalThis.aiBridge) globalThis.aiBridge.stopProvider();
-        } else if (globalThis.showToast) {
-            const prevName = card.dataset.currentModuleName || previousModuleId;
-            globalThis.showToast(
-                globalThis.t
-                    ? globalThis.t('ui.launcher.module.stopped', `${prevName} stopped`)
+            if (win['aiBridge']) win['aiBridge'].stopProvider();
+        } else if (win['showToast']) {
+            const prevName = card.dataset['currentModuleName'] || previousModuleId;
+            win['showToast'](
+                typeof win['t'] === 'function'
+                    ? win['t']('ui.launcher.module.stopped', `${prevName} stopped`)
                     : `${prevName} stopped`,
                 'info',
             );
@@ -524,10 +533,10 @@ export class AppUI {
     }
 
     private _updateCardAttributes(card: HTMLElement, app: IApp) {
-        card.dataset.currentModule = app.id;
-        card.dataset.currentModuleName = app.name || app.id;
-        if (!card.dataset.originalHtml) {
-            card.dataset.originalHtml = card.innerHTML;
+        card.dataset['currentModule'] = app.id;
+        card.dataset['currentModuleName'] = app.name || app.id;
+        if (!card.dataset['originalHtml']) {
+            card.dataset['originalHtml'] = card.innerHTML;
         }
     }
 
@@ -572,7 +581,7 @@ export class AppUI {
             actionBtn.className = 'model-card-action';
             actionBtn.id =
                 card.id === 'ai-module-card' ? 'ai-module-add-btn' : 'services-module-add-btn';
-            actionBtn.dataset.i18n = 'ui.launcher.button.launch';
+            actionBtn.dataset['i18n'] = 'ui.launcher.button.launch';
             card.appendChild(actionBtn);
         }
 
@@ -597,9 +606,11 @@ export class AppUI {
         }
 
         actionBtn.style.display = 'block';
-        actionBtn.textContent = globalThis.t
-            ? globalThis.t('ui.launcher.module.download', 'Download')
-            : 'Download';
+        const g = globalThis as TGlobalWin;
+        actionBtn.textContent =
+            typeof g['t'] === 'function'
+                ? g['t']('ui.launcher.module.download', 'Download')
+                : 'Download';
         actionBtn.classList.remove('active-module-btn');
         actionBtn.classList.add('download-module-btn');
         actionBtn.removeAttribute('onclick'); // Clear inline handlers
@@ -616,8 +627,9 @@ export class AppUI {
         this._setDownloadLoading(actionBtn);
 
         try {
-            if (globalThis.downloadModule && app.repoUrl) {
-                await globalThis.downloadModule(app.id, app.repoUrl, app.expectedHash);
+            const win = globalThis as TGlobalWin;
+            if (typeof win['downloadModule'] === 'function' && app.repoUrl) {
+                await win['downloadModule'](app.id, app.repoUrl, app.expectedHash);
                 this._onDownloadSuccess(actionBtn, app);
             } else {
                 this._notifyDownloadUnavailable();
@@ -628,21 +640,26 @@ export class AppUI {
     }
 
     private _setDownloadLoading(btn: HTMLElement) {
-        btn.textContent = globalThis.t
-            ? globalThis.t('ui.launcher.module.downloading', 'Downloading...')
-            : 'Downloading...';
+        const win = globalThis as TGlobalWin;
+        btn.textContent =
+            typeof win['t'] === 'function'
+                ? win['t']('ui.launcher.module.downloading', 'Downloading...')
+                : 'Downloading...';
         btn.style.pointerEvents = 'none';
     }
 
     private _setDownloadReady(btn: HTMLElement) {
+        const win = globalThis as TGlobalWin;
         btn.style.pointerEvents = 'auto';
-        btn.textContent = globalThis.t
-            ? globalThis.t('ui.launcher.module.download', 'Download')
-            : 'Download';
+        btn.textContent =
+            typeof win['t'] === 'function'
+                ? win['t']('ui.launcher.module.download', 'Download')
+                : 'Download';
     }
 
     private _onDownloadSuccess(actionBtn: HTMLElement, app: IApp) {
-        if (globalThis.showToast) globalThis.showToast('Module downloaded!', 'success');
+        const win = globalThis as TGlobalWin;
+        if (win['showToast']) win['showToast']('Module downloaded!', 'success');
         app.installed = true;
 
         const card =
@@ -656,23 +673,26 @@ export class AppUI {
 
     private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown) {
         console.error('Download error:', err);
-        if (globalThis.showToast) globalThis.showToast('Download failed', 'error');
+        const win = globalThis as TGlobalWin;
+        if (win['showToast']) win['showToast']('Download failed', 'error');
         this._setDownloadReady(actionBtn);
     }
 
     private _notifyDownloadUnavailable() {
-        if (globalThis.showToast) {
-            globalThis.showToast('Download not available', 'warning');
+        const win = globalThis as TGlobalWin;
+        if (win['showToast']) {
+            win['showToast']('Download not available', 'warning');
         }
     }
 
     private _addSettingsBtn(card: HTMLElement, app: IApp) {
         const settingsBtn = document.createElement('div');
         settingsBtn.className = 'module-action-badge left settings';
+        const win = globalThis as TGlobalWin;
         settingsBtn.innerHTML = DOMPurify.sanitize(
             `
             <div class="badge-icon"><span style="font-size: 1.1rem;">⚙️</span></div>
-            <div class="badge-text" data-i18n="ui.launcher.module.settings_short">${globalThis.t ? globalThis.t('ui.launcher.module.settings_short', 'Settings') : 'Settings'}</div>
+            <div class="badge-text" data-i18n="ui.launcher.module.settings_short">${typeof win['t'] === 'function' ? win['t']('ui.launcher.module.settings_short', 'Settings') : 'Settings'}</div>
         `,
             this._purifyConfig,
         );
@@ -680,7 +700,8 @@ export class AppUI {
             e.stopPropagation();
             e.stopImmediatePropagation();
             console.log('[AppUI] Settings button clicked (event) for:', app.id);
-            if (globalThis.openModuleSettings) globalThis.openModuleSettings(app);
+            const win = globalThis as TGlobalWin;
+            if (typeof win['openModuleSettings'] === 'function') win['openModuleSettings'](app);
             else console.error('[AppUI] globalThis.openModuleSettings is undefined');
         });
         settingsBtn.addEventListener('mousedown', (e) => {
@@ -693,6 +714,7 @@ export class AppUI {
     private _addCloseBtn(card: HTMLElement, category: string) {
         const closeBtn = document.createElement('div');
         closeBtn.className = 'module-action-badge right close';
+        const win = globalThis as TGlobalWin;
         closeBtn.innerHTML = DOMPurify.sanitize(
             `
              <div class="badge-icon">
@@ -701,17 +723,18 @@ export class AppUI {
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
              </div>
-             <div class="badge-text" data-i18n="ui.launcher.module.remove_short">${globalThis.t ? globalThis.t('ui.launcher.module.remove_short', 'Close') : 'Close'}</div>
+             <div class="badge-text" data-i18n="ui.launcher.module.remove_short">${typeof win['t'] === 'function' ? win['t']('ui.launcher.module.remove_short', 'Close') : 'Close'}</div>
         `,
             this._purifyConfig,
         );
         closeBtn.onclick = (e) => {
             e.stopImmediatePropagation();
-            card.innerHTML = card.dataset.originalHtml || '';
+            card.innerHTML = card.dataset['originalHtml'] || '';
             card.classList.remove('selected');
             card.classList.add('empty');
-            if (globalThis.uiState) {
-                globalThis.uiState.removeSelectedModule?.(category);
+            const win = globalThis as TGlobalWin;
+            if (win['uiState']) {
+                win['uiState'].removeSelectedModule?.(category);
             }
         };
         card.appendChild(closeBtn);
@@ -728,8 +751,9 @@ export class AppUI {
             target.closest('.model-icon-wrapper');
 
         if (isOnBackground) {
-            if (typeof globalThis.openAppSelection === 'function') {
-                globalThis.openAppSelection(category);
+            const win = globalThis as TGlobalWin;
+            if (typeof win['openAppSelection'] === 'function') {
+                (win['openAppSelection'] as (cat: string) => void)(category);
             }
         }
     }
@@ -764,10 +788,11 @@ export class AppUI {
         const desc = app.desc || '';
         const key = app.descKey || `ui.launcher.app.${app.id}.desc`;
 
-        if (globalThis.t) {
+        const win = globalThis as TGlobalWin;
+        if (typeof win['t'] === 'function') {
             // Try to translate with explicit key or constructed key
             // We pass 'desc' as fallback. If constructed key doesn't exist, it returns fallback.
-            const translated = globalThis.t(key, desc);
+            const translated = win['t'](key, desc);
             if (translated !== key) {
                 return translated;
             }
@@ -777,9 +802,11 @@ export class AppUI {
 
     private _getAppDeleteBadgeHtml(isApi: boolean, isInstalled: boolean): string {
         if (isApi || !isInstalled) return '';
-        const deleteText = globalThis.t
-            ? globalThis.t('ui.launcher.module.delete', 'DELETE')
-            : 'DELETE';
+        const win = globalThis as TGlobalWin;
+        const deleteText =
+            typeof win['t'] === 'function'
+                ? win['t']('ui.launcher.module.delete', 'DELETE')
+                : 'DELETE';
         return `
             <div class="app-delete-badge">
                 <div class="badge-icon"><span style="font-size: 1.1rem; line-height: 1;">🗑️</span></div>
@@ -792,12 +819,17 @@ export class AppUI {
             ? '<span style="font-size: 1.1rem;">☁️</span>'
             : '<span style="font-size: 1.1rem;">🏠</span>';
         let typeText;
+        const win = globalThis as TGlobalWin;
         if (isApi) {
-            typeText = globalThis.t ? globalThis.t('ui.launcher.module.type_api', 'API') : 'API';
+            typeText =
+                typeof win['t'] === 'function'
+                    ? win['t']('ui.launcher.module.type_api', 'API')
+                    : 'API';
         } else {
-            typeText = globalThis.t
-                ? globalThis.t('ui.launcher.module.type_local', 'LOCAL')
-                : 'LOCAL';
+            typeText =
+                typeof win['t'] === 'function'
+                    ? win['t']('ui.launcher.module.type_local', 'LOCAL')
+                    : 'LOCAL';
         }
 
         const typeClass = isApi ? 'api' : 'local';
@@ -827,8 +859,9 @@ export class AppUI {
                 : 'ui.launcher.modules.modal.services_title';
         const defaultTitle = titles[category] || category;
 
-        if (globalThis.t) {
-            titleEl.textContent = globalThis.t(key, defaultTitle);
+        const win = globalThis as TGlobalWin;
+        if (typeof win['t'] === 'function') {
+            titleEl.textContent = win['t'](key, defaultTitle);
         } else {
             titleEl.textContent = defaultTitle;
         }
@@ -866,8 +899,9 @@ export class AppUI {
                 title.textContent = 'Axelate Local AI';
             } else {
                 let titleText = app.name || '';
-                if (globalThis.t && app.nameKey) {
-                    titleText = globalThis.t(app.nameKey, titleText);
+                const win = globalThis as TGlobalWin;
+                if (typeof win['t'] === 'function' && app.nameKey) {
+                    titleText = win['t'](app.nameKey, titleText);
                 }
                 title.textContent = titleText;
             }
@@ -876,8 +910,9 @@ export class AppUI {
         const desc = card.querySelector('.model-card-desc');
         if (desc) {
             let descText = app.desc || '';
-            if (globalThis.t && app.descKey) {
-                descText = globalThis.t(app.descKey, descText);
+            const win = globalThis as TGlobalWin;
+            if (typeof win['t'] === 'function' && app.descKey) {
+                descText = win['t'](app.descKey, descText);
             }
             desc.textContent = descText;
         }

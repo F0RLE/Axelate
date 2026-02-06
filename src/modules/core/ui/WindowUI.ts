@@ -4,14 +4,11 @@
  */
 
 import { WindowService } from '../services/WindowService';
+import type { TGlobalWin } from '../types/global_bridge_types';
 import { StateService } from '../services/StateService';
 import { SoundService } from '../services/SoundService';
 
-interface IWindowUIGlobal {
-    location?: Location;
-    screen?: Screen;
-    innerWidth: number;
-}
+// IWindowUIGlobal removed
 
 export class WindowUI {
     private _initialized = false;
@@ -185,8 +182,6 @@ export class WindowUI {
      * @sideeffect Intercepts keyboard events and blocks window shortcuts
      */
     private _handleKeydown(e: KeyboardEvent): void {
-        const g = globalThis as unknown as IWindowUIGlobal;
-
         // Block DevTools
         if (
             e.key === 'F12' ||
@@ -209,7 +204,8 @@ export class WindowUI {
         // Ctrl+R Refresh
         if ((e.ctrlKey && ['r', 'R', 'к', 'К'].includes(e.key)) || e.key === 'F5') {
             e.preventDefault();
-            if (g.location) g.location.reload();
+            const win = globalThis as TGlobalWin;
+            if (win['location']) (win['location'] as Location).reload();
             return;
         }
 
@@ -266,7 +262,7 @@ export class WindowUI {
                 const element = el as HTMLElement;
                 const title = element.title;
                 if (title) {
-                    element.dataset.title = title;
+                    element.dataset['title'] = title;
                     element.removeAttribute('title');
                 }
             });
@@ -285,7 +281,7 @@ export class WindowUI {
                 while (target && target !== document.body) {
                     if (target.title) {
                         const title = target.title;
-                        target.dataset.title = title;
+                        target.dataset['title'] = title;
                         target.removeAttribute('title');
                     }
                     target = target.parentElement;
@@ -327,10 +323,12 @@ export class WindowUI {
         if (!this._isSmallScreen) return;
 
         if (this._wasMaximizedOnSmallScreen && !isMaximized) {
-            const g = globalThis as unknown as IWindowUIGlobal;
-            if (g.screen) {
-                const width = Math.floor((g.screen.availWidth || g.screen.width) * 0.85);
-                const height = Math.floor((g.screen.availHeight || g.screen.height) * 0.85);
+            const win = globalThis as TGlobalWin;
+            if (win['screen']) {
+                const width = Math.floor((win['screen'].availWidth || win['screen'].width) * 0.85);
+                const height = Math.floor(
+                    (win['screen'].availHeight || win['screen'].height) * 0.85,
+                );
 
                 await this._service.setSize(width, height);
                 this._wasMaximizedOnSmallScreen = false;
@@ -412,7 +410,6 @@ export class WindowUI {
      * @sideeffect Shows/hides warning overlays in the DOM
      */
     private _checkWidth(): void {
-        const g = globalThis as unknown as IWindowUIGlobal;
         const config = this._service.getConfig();
 
         // Get current zoom factor (default 1)
@@ -422,8 +419,9 @@ export class WindowUI {
         const zoom = Number.parseFloat(computedStyle.zoom || '1') || 1;
 
         // Calculate effective space available to the layout
-        const width = g.innerWidth / zoom;
-        const height = globalThis.innerHeight / zoom;
+        const win = globalThis as TGlobalWin;
+        const width = win['innerWidth'] / zoom;
+        const height = win['innerHeight'] / zoom;
 
         // Use backend thresholds if available, otherwise safe defaults
         const minWidth = config?.thresholds.warningWidth || 700;

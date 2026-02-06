@@ -4,6 +4,7 @@
  */
 
 import { eventBus } from './EventBus';
+import type { TGlobalWin } from '../types/global_bridge_types';
 
 /**
  * Detailed error information.
@@ -21,9 +22,7 @@ export interface IErrorInfo {
 type ErrorCallback = (_error: IErrorInfo) => void;
 
 // Local type definition for global extending
-interface IErrorHandlerGlobal {
-    errorHandler?: ErrorHandler;
-}
+// IErrorHandlerGlobal removed
 
 class ErrorHandler {
     private _initialized = false;
@@ -41,22 +40,27 @@ class ErrorHandler {
             return;
         }
 
-        const win = globalThis as unknown as IErrorHandlerGlobal;
-        if (win.errorHandler) {
+        const win = globalThis as TGlobalWin;
+        if (win['errorHandler']) {
             console.warn('[ErrorHandler] Another instance already initialized. Using existing.');
             return;
         }
-        win.errorHandler = this;
+        (win as TGlobalWin)['errorHandler'] = this;
 
         // Catch uncaught errors
         globalThis.onerror = (message, source, lineno, colno, error) => {
+            const extra: { url?: string; line?: number; column?: number } = {};
+            if (source) extra.url = source;
+            if (lineno) extra.line = lineno;
+            if (colno) extra.column = colno;
+
             this.captureError(
                 error ||
                     new Error(
                         typeof message === 'object' ? JSON.stringify(message) : String(message),
                     ),
                 'window.onerror',
-                { url: source, line: lineno, column: colno },
+                extra,
             );
             return false; // Don't prevent default handling
         };
@@ -82,13 +86,14 @@ class ErrorHandler {
     ): void {
         const errorInfo: IErrorInfo = {
             message: error.message,
-            stack: error.stack,
-            context,
             timestamp: Date.now(),
-            url: extra?.url,
-            line: extra?.line,
-            column: extra?.column,
         };
+
+        if (error.stack) errorInfo.stack = error.stack;
+        if (context) errorInfo.context = context;
+        if (extra?.url) errorInfo.url = extra.url;
+        if (extra?.line) errorInfo.line = extra.line;
+        if (extra?.column) errorInfo.column = extra.column;
 
         // Add to log (with size limit)
         this._errorLog.push(errorInfo);
@@ -104,7 +109,9 @@ class ErrorHandler {
         );
 
         // Emit event for other components
-        eventBus.emit('error:global', { error, context });
+        const eventPayload: { error: Error; context?: string } = { error };
+        if (context) eventPayload.context = context;
+        eventBus.emit('error:global', eventPayload);
 
         // Notify callbacks
         this._callbacks.forEach((cb) => {

@@ -3,8 +3,8 @@
  * @description Centralized type definitions for the Core module
  */
 
-import { IUIState } from '../services/StateService';
-import { IWindowConfig } from '../services/WindowService';
+import type { IUIState } from '../services/StateService';
+import type { IWindowConfig } from '../services/WindowService';
 
 /**
  * Interface for the Tauri host instance.

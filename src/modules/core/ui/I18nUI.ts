@@ -71,10 +71,10 @@ export class I18nUI {
                 return;
             }
 
-            const key = element.dataset.i18n;
+            const key = element.dataset['i18n'];
             if (!key) return;
 
-            const paramsRaw = element.dataset.i18nParams;
+            const paramsRaw = element.dataset['i18nParams'];
             let params: Record<string, unknown> = {};
             try {
                 if (paramsRaw) {
@@ -140,7 +140,7 @@ export class I18nUI {
     private _translatePlaceholders(): void {
         document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
             const element = el as HTMLInputElement;
-            const key = element.dataset.i18nPlaceholder;
+            const key = element.dataset['i18nPlaceholder'];
             if (key) {
                 element.placeholder = this._service.t(key, element.placeholder);
             }
@@ -153,7 +153,7 @@ export class I18nUI {
     private _translateTitles(): void {
         document.querySelectorAll('[data-i18n-title]').forEach((el) => {
             const element = el as HTMLElement;
-            const key = element.dataset.i18nTitle;
+            const key = element.dataset['i18nTitle'];
             if (key) {
                 element.title = this._service.t(key, element.title);
             }
@@ -166,7 +166,7 @@ export class I18nUI {
     private _translateAriaLabels(): void {
         document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
             const element = el as HTMLElement;
-            const key = element.dataset.i18nAriaLabel;
+            const key = element.dataset['i18nAriaLabel'];
             if (key) {
                 element.setAttribute(
                     'aria-label',
@@ -217,7 +217,7 @@ export class I18nUI {
     private _updateMenuOptions(lang: string): void {
         document.querySelectorAll('.lang-menu-items .lang-btn').forEach((btn) => {
             const element = btn as HTMLElement;
-            const btnLang = element.dataset.lang;
+            const btnLang = element.dataset['lang'];
             element.style.display = btnLang === lang ? 'none' : 'flex';
         });
     }

@@ -44,7 +44,7 @@ export class EventHandler {
             // 1. Navigation Logic [data-page]
             const navBtn = target.closest('[data-page]') as HTMLElement;
             if (navBtn) {
-                const pageId = navBtn.dataset.page;
+                const pageId = navBtn.dataset['page'];
                 if (pageId) {
                     e.preventDefault();
                     console.debug('[EventHandler] Navigating to:', pageId);
@@ -64,7 +64,7 @@ export class EventHandler {
             // 3. Language Selection [data-lang]
             const langBtn = target.closest('.lang-btn[data-lang]') as HTMLElement;
             if (langBtn) {
-                const lang = langBtn.dataset.lang;
+                const lang = langBtn.dataset['lang'];
                 if (lang) {
                     e.preventDefault();
                     console.debug('[EventHandler] Switching language to:', lang);
@@ -84,11 +84,14 @@ export class EventHandler {
 
             const debugTab = target.closest('.console-tab[data-view]') as HTMLElement;
             if (debugTab) {
-                const view = debugTab.dataset.view;
-                const win = globalThis as unknown as Window & {
-                    setLogView?: (v: string, b: HTMLElement) => void;
-                };
-                if (view) win.setLogView?.(view, debugTab);
+                const view = debugTab.dataset['view'];
+                const win = globalThis as unknown as Record<string, unknown>;
+                const setLogView = win['setLogView'] as
+                    | ((v: string, b: HTMLElement) => void)
+                    | undefined;
+                if (view && typeof setLogView === 'function') {
+                    setLogView(view, debugTab);
+                }
             }
         });
     }
@@ -180,53 +183,54 @@ export class EventHandler {
     }
 
     private _initChatPage(): void {
-        const win = globalThis as unknown as Window & {
-            clearChat?: () => void;
-            pickChatFiles?: () => void;
-            toggleVoiceInput?: () => void;
-            sendChat?: () => void;
-        };
-        this._addListener(document.getElementById('clear-chat-btn'), 'click', () =>
-            win.clearChat?.(),
-        );
-        this._addListener(document.getElementById('pick-chat-files-btn'), 'click', () =>
-            win.pickChatFiles?.(),
-        );
-        this._addListener(document.getElementById('voice-input-btn'), 'click', () =>
-            win.toggleVoiceInput?.(),
-        );
-        this._addListener(document.getElementById('send-chat-btn'), 'click', () =>
-            win.sendChat?.(),
-        );
+        const win = globalThis as unknown as Record<string, unknown>;
+        this._addListener(document.getElementById('clear-chat-btn'), 'click', () => {
+            const clearChat = win['clearChat'] as (() => void) | undefined;
+            if (typeof clearChat === 'function') clearChat();
+        });
+        this._addListener(document.getElementById('pick-chat-files-btn'), 'click', () => {
+            const pickChatFiles = win['pickChatFiles'] as (() => void) | undefined;
+            if (typeof pickChatFiles === 'function') pickChatFiles();
+        });
+        this._addListener(document.getElementById('voice-input-btn'), 'click', () => {
+            const toggleVoiceInput = win['toggleVoiceInput'] as (() => void) | undefined;
+            if (typeof toggleVoiceInput === 'function') toggleVoiceInput();
+        });
+        this._addListener(document.getElementById('send-chat-btn'), 'click', () => {
+            const sendChat = win['sendChat'] as (() => void) | undefined;
+            if (typeof sendChat === 'function') sendChat();
+        });
     }
 
     private _initLanguageModal(): void {
-        const win = globalThis as unknown as Window & {
-            selectLangInModal?: (l: string) => void;
-            confirmLanguage?: () => void;
-        };
+        const win = globalThis as unknown as Record<string, unknown>;
+        const selectLangInModal = win['selectLangInModal'] as ((l: string) => void) | undefined;
+        const confirmLanguage = win['confirmLanguage'] as (() => void) | undefined;
+
         document.querySelectorAll<HTMLElement>('.lang-modal-btn[data-lang]').forEach((btn) => {
             this._addListener(btn, 'click', () => {
-                const lang = btn.dataset.lang;
-                if (lang) win.selectLangInModal?.(lang);
+                const lang = btn.dataset['lang'];
+                if (lang && typeof selectLangInModal === 'function') {
+                    selectLangInModal(lang);
+                }
             });
         });
-        this._addListener(document.getElementById('confirm-lang-btn'), 'click', () =>
-            win.confirmLanguage?.(),
-        );
+        this._addListener(document.getElementById('confirm-lang-btn'), 'click', () => {
+            if (typeof confirmLanguage === 'function') confirmLanguage();
+        });
     }
 
     private _initCloseConfirmModal(): void {
-        const win = globalThis as unknown as Window & {
-            hideCloseConfirmModal?: () => void;
-            confirmCloseFromModal?: () => void;
-        };
-        this._addListener(document.getElementById('cancel-close-btn'), 'click', () =>
-            win.hideCloseConfirmModal?.(),
-        );
-        this._addListener(document.getElementById('confirm-close-btn'), 'click', () =>
-            win.confirmCloseFromModal?.(),
-        );
+        const win = globalThis as unknown as Record<string, unknown>;
+        const hideCloseConfirmModal = win['hideCloseConfirmModal'] as (() => void) | undefined;
+        const confirmCloseFromModal = win['confirmCloseFromModal'] as (() => void) | undefined;
+
+        this._addListener(document.getElementById('cancel-close-btn'), 'click', () => {
+            if (typeof hideCloseConfirmModal === 'function') hideCloseConfirmModal();
+        });
+        this._addListener(document.getElementById('confirm-close-btn'), 'click', () => {
+            if (typeof confirmCloseFromModal === 'function') confirmCloseFromModal();
+        });
     }
 
     private _initDownloadSettingsModal(): void {

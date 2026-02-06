@@ -4,7 +4,7 @@
  */
 
 import { TauriProvider } from './TauriProvider';
-import { IApp, IModule } from '../types/coreTypes';
+import type { IApp, IModule } from '../types/coreTypes';
 
 // Redundant ICatalogData removed (Inherited from global.d.ts)
 
@@ -114,20 +114,21 @@ export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
 
     constructor(private readonly _tauri: TauriProvider) {
-        if (globalThis.catalogService) {
+        const win = globalThis as unknown as Record<string, unknown>;
+        if (win['catalogService']) {
             console.warn('[CatalogService] Singleton instance collision detected.');
         }
-        globalThis.catalogService = this as unknown as Window['catalogService'];
+        win['catalogService'] = this;
 
         // Sync with global APP_DATA (Architectural compliance Section 51)
-        if (globalThis.APP_DATA) {
-            Object.assign(this._appData, globalThis.APP_DATA);
+        if (win['APP_DATA']) {
+            Object.assign(this._appData, win['APP_DATA']);
         } else {
-            globalThis.APP_DATA = this._appData;
+            win['APP_DATA'] = this._appData;
         }
 
         // Expose category resolver for AppUI type safety
-        globalThis.getCatalogCategory = (cat: string): IApp[] => {
+        win['getCatalogCategory'] = (cat: string): IApp[] => {
             if (cat === 'ai') return this._appData.ai;
             if (cat === 'services') return this._appData.services;
             return [];
@@ -171,7 +172,7 @@ export class CatalogService {
 
             if (config?.catalog) {
                 // Update internal state
-                this._appData.stars = config.catalog.stars;
+                this._appData.stars = config.catalog.stars ?? [];
                 this._appData.ai = config.catalog.ai || [];
                 this._appData.services = config.catalog.services || [];
 
@@ -224,7 +225,11 @@ export class CatalogService {
                 this._updateLegacySettings(config.models);
 
                 console.log('[CatalogService] Catalog initialized:', this._appData);
-                globalThis.dispatchEvent(new CustomEvent('catalog-loaded'));
+                const win = globalThis as unknown as Record<string, unknown>;
+                const dispatch = win['dispatchEvent'] as ((e: Event) => boolean) | undefined;
+                if (typeof dispatch === 'function') {
+                    dispatch(new CustomEvent('catalog-loaded'));
+                }
             }
         } catch (e) {
             console.error('[CatalogService] Failed to load catalog:', e);
@@ -250,7 +255,9 @@ export class CatalogService {
             if (this._appData.services) {
                 globalAppData.services = this._appData.services;
             }
-            globalAppData.stars = this._appData.stars;
+            if (this._appData.stars) {
+                globalAppData.stars = this._appData.stars;
+            }
         }
     }
 
@@ -258,9 +265,13 @@ export class CatalogService {
      * Updates legacy module settings from config.
      */
     private _updateLegacySettings(models: unknown): void {
-        if (globalThis.updateModuleSettings && models) {
+        const win = globalThis as unknown as Record<string, unknown>;
+        const updateFn = win['updateModuleSettings'] as
+            | ((m: Record<string, unknown>) => void)
+            | undefined;
+        if (typeof updateFn === 'function' && models) {
             try {
-                globalThis.updateModuleSettings(models as Record<string, unknown>);
+                updateFn(models as Record<string, unknown>);
             } catch {
                 console.warn('[CatalogService] Warning updating module settings');
             }

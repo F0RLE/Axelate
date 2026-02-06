@@ -47,13 +47,13 @@ export class VoiceInputService {
 
         try {
             const win = globalThis as unknown as Record<string, unknown>;
-            const SpeechRecognitionConstructor = (win.webkitSpeechRecognition ||
-                win.SpeechRecognition) as new () => ISpeechRecognitionInstance;
+            const SpeechRecognitionConstructor = (win['webkitSpeechRecognition'] ||
+                win['SpeechRecognition']) as new () => ISpeechRecognitionInstance;
             const recognition = new SpeechRecognitionConstructor();
             this._recognition = recognition;
 
             // Set language with BCP-47 mapping
-            const currentLang = (win.currentLang as string) || 'en';
+            const currentLang = (win['currentLang'] as string) || 'en';
             const langMap: Record<string, string> = {
                 en: 'en-US',
                 ru: 'ru-RU',

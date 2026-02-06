@@ -13,7 +13,7 @@ import { DownloadUI } from '../downloader/ui/DownloadUI';
 import { SoundService } from './services/SoundService';
 import { logger, LoggerService } from './services/LoggerService';
 import { templateLoader } from './services/TemplateLoader';
-import { IApp } from './types/coreTypes';
+import type { IApp } from './types/coreTypes';
 import { EventHandler } from './boot/EventHandler';
 import { StateService } from './services/StateService';
 import { GlobalBridge } from './boot/GlobalBridge';

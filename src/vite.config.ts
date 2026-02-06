@@ -68,11 +68,11 @@ export default defineConfig({
     build: {
         // Tauri uses Chromium on Windows and WebKit on macOS and Linux
         // Modern targets for Tauri v2
-        target: process.env.TAURI_PLATFORM === 'windows' ? 'chrome120' : 'safari15',
+        target: process.env['TAURI_PLATFORM'] === 'windows' ? 'chrome120' : 'safari15',
         // don't minify for debug builds
-        minify: process.env.TAURI_DEBUG ? false : 'esbuild',
+        minify: process.env['TAURI_DEBUG'] ? false : 'esbuild',
         // produce sourcemaps for debug builds
-        sourcemap: !!process.env.TAURI_DEBUG,
+        sourcemap: !!process.env['TAURI_DEBUG'],
         // Increase chunk size warning limit for desktop app
         chunkSizeWarningLimit: 1000,
 

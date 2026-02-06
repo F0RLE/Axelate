@@ -4,6 +4,7 @@
  */
 
 import { StateService } from '../../core/services/StateService';
+import type { TGlobalWin } from '../../core/types/global_bridge_types';
 
 export class GeneralSettingsRenderer {
     constructor(private readonly _state: StateService) {}
@@ -21,11 +22,11 @@ export class GeneralSettingsRenderer {
      */
     private _initTaskbarToggles() {
         const container = document.getElementById('taskbar-toggles');
-        if (!container || container.dataset.initialized === 'true') return;
-        container.dataset.initialized = 'true';
+        if (!container || container.dataset['initialized'] === 'true') return;
+        container.dataset['initialized'] = 'true';
 
-        const win = globalThis as unknown as Window & { t: (k: string, d: string) => string };
-        const t = win.t || ((_k: string, d: string) => d);
+        const win = globalThis as TGlobalWin;
+        const t = typeof win['t'] === 'function' ? win['t'] : (_k: string, d: string) => d;
 
         const navItems = [
             { id: 'home', label: 'Home', icon: '#icon-home' },
@@ -58,7 +59,7 @@ export class GeneralSettingsRenderer {
         container.addEventListener('click', (e) => {
             const item = (e.target as Element).closest('.taskbar-toggle-item') as HTMLElement;
             if (item) {
-                const pageId = item.dataset.pageId;
+                const pageId = item.dataset['pageId'];
                 if (pageId) {
                     item.classList.toggle('active');
                     this.toggleNavItem(pageId, item.classList.contains('active'));
@@ -125,11 +126,11 @@ export class GeneralSettingsRenderer {
      */
     private _initMonitorToggles() {
         const container = document.getElementById('monitor-toggles');
-        if (!container || container.dataset.initialized === 'true') return;
-        container.dataset.initialized = 'true';
+        if (!container || container.dataset['initialized'] === 'true') return;
+        container.dataset['initialized'] = 'true';
 
-        const win = globalThis as unknown as Window & { t: (k: string, d: string) => string };
-        const t = win.t || ((_k: string, d: string) => d);
+        const win = globalThis as TGlobalWin;
+        const t = typeof win['t'] === 'function' ? win['t'] : (_k: string, d: string) => d;
 
         const monitorItems = [
             { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
@@ -163,7 +164,7 @@ export class GeneralSettingsRenderer {
         container.addEventListener('click', (e) => {
             const btn = (e.target as Element).closest('.monitor-toggle-btn') as HTMLElement;
             if (btn) {
-                const mid = btn.dataset.monitorId;
+                const mid = btn.dataset['monitorId'];
                 if (mid) {
                     btn.classList.toggle('active');
                     this.toggleMonitorItem(mid, btn.classList.contains('active'));

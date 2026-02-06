@@ -23,7 +23,7 @@ class TemplateLoader {
 
     constructor() {
         // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>).templateLoader = this;
+        (globalThis as unknown as Record<string, unknown>)['templateLoader'] = this;
     }
 
     /**

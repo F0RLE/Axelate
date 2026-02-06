@@ -12,6 +12,7 @@
  */
 
 import type { IChatAttachment } from '../types/chatTypes';
+import type { TGlobalWin } from '../../core/types/global_bridge_types';
 import {
     isTextFile,
     readFileAsText,
@@ -46,7 +47,7 @@ export class ChatFileHandler {
 
     constructor() {
         // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>).chatFileHandler = this;
+        (globalThis as unknown as Record<string, unknown>)['chatFileHandler'] = this;
     }
 
     /**
@@ -153,7 +154,8 @@ export class ChatFileHandler {
      * Internal router for file processing based on environment.
      */
     private async _processSingleFile(file: File): Promise<IFileProcessResult> {
-        if (globalThis.__TAURI__) {
+        const win = globalThis as TGlobalWin;
+        if (win['__TAURI__']) {
             return this._processWithBackend(file);
         }
         return this._processWithWebFallback(file);

@@ -4,13 +4,11 @@
  */
 
 import { TauriProvider } from './TauriProvider';
-import { IModuleDownloadState } from '../types/coreTypes';
+import type { IModuleDownloadState } from '../types/coreTypes';
+import type { TGlobalWin } from '../types/global_bridge_types';
 
 // Local types for global access
-interface IModuleGlobal {
-    moduleDownloadState: Record<string, IModuleDownloadState>;
-    dispatchEvent: (event: Event) => boolean;
-}
+// IModuleGlobal removed
 
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
@@ -177,11 +175,11 @@ export class ModuleService {
      * Broadcasts download state to global scope for legacy UI compatibility.
      */
     private _broadcastState(moduleId: string) {
-        const win = globalThis as unknown as IModuleGlobal;
-        if (!win.moduleDownloadState) win.moduleDownloadState = {};
+        const win = globalThis as TGlobalWin;
+        if (!win['moduleDownloadState']) win['moduleDownloadState'] = {};
         const state = this._downloadState[moduleId];
         if (state) {
-            win.moduleDownloadState[moduleId] = state;
+            win['moduleDownloadState'][moduleId] = state;
         }
     }
 }

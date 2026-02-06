@@ -14,7 +14,7 @@ import { eventBus } from '@/modules/core/services/EventBus';
 import { aiSettingsRenderer } from '@/modules/ai/ui/AISettingsRenderer';
 import { SettingsService } from '../services/SettingsService';
 import { StateService } from '../../core/services/StateService';
-import { IApp, IConfigField } from '../../core/types/coreTypes';
+import type { IApp, IConfigField } from '../../core/types/coreTypes';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
 
 type SettingValue = string | number | boolean | null;
@@ -100,18 +100,18 @@ export class SettingsUI {
 
         const win = globalThis as unknown as ISettingsGlobal;
 
-        win.toggleNavItem = (id: string, en: boolean) =>
+        win['toggleNavItem'] = (id: string, en: boolean) =>
             this._generalRenderer.toggleNavItem(id, en);
-        win.toggleMonitorItem = (id: string, en: boolean) =>
+        win['toggleMonitorItem'] = (id: string, en: boolean) =>
             this._generalRenderer.toggleMonitorItem(id, en);
-        win.setCardWidth = (btn: HTMLElement, w: string) => this.setCardWidth(btn, w);
-        win.control = (a: 'start' | 'stop' | 'restart', s: string) => {
+        win['setCardWidth'] = (btn: HTMLElement, w: string) => this.setCardWidth(btn, w);
+        win['control'] = (a: 'start' | 'stop' | 'restart', s: string) => {
             if (a === 'start' || a === 'stop' || a === 'restart') {
                 return this._service.controlService(a, s);
             }
             return Promise.resolve(false);
         };
-        win.openModuleSettings = (app: IApp) => {
+        win['openModuleSettings'] = (app: IApp) => {
             this.openModuleSettings(app).catch((e) => console.error(e));
         };
 
@@ -135,8 +135,8 @@ export class SettingsUI {
      * Re-renders the currently open settings module (e.g. on language change).
      */
     public refreshActiveModule(): void {
-        const win = globalThis as unknown as Window & { currentSettingsModule: IApp };
-        const currentApp = win.currentSettingsModule;
+        const win = globalThis as unknown as Record<string, unknown>;
+        const currentApp = win['currentSettingsModule'] as IApp | undefined;
 
         // Re-render module settings if modal is open
         const modal = document.getElementById('module-settings-modal');
@@ -147,8 +147,11 @@ export class SettingsUI {
 
             // Update Title
             const title = document.getElementById('module-settings-title');
-            const suffix = globalThis.t
-                ? globalThis.t('ui.settings.header_suffix', 'Settings')
+            const suffix = globalThis['t']
+                ? (globalThis['t'] as (k: string, d: string) => string)(
+                      'ui.settings.header_suffix',
+                      'Settings',
+                  )
                 : 'Settings';
             if (title) title.innerHTML = DOMPurify.sanitize(suffix);
 
@@ -390,24 +393,23 @@ export class SettingsUI {
         // Re-render only stats and update selection visually
         const grid = document.querySelector('.ai-models-grid');
         grid?.querySelectorAll('.ai-model-card').forEach((card) => {
-            const cardModelKey = (card as HTMLElement).dataset.modelKey;
+            const cardModelKey = (card as HTMLElement).dataset['modelKey'];
             card.classList.toggle('selected', cardModelKey === modelKey);
         });
 
         const statsArea = document.getElementById(`${appId}-model-stats`);
         if (statsArea) {
-            const win = globalThis as unknown as Window & {
-                t: (k: string, d: string) => string;
-                applyTranslations?: () => void;
-            };
-            const t = win.t || ((_k: string, d: string) => d);
+            const win = globalThis as unknown as Record<string, unknown>;
+            const t = win['t'] as ((k: string, d: string) => string) | undefined;
+            const applyTranslations = win['applyTranslations'] as (() => void) | undefined;
+
             statsArea.innerHTML = DOMPurify.sanitize(
-                `<h3 data-i18n="ui.settings.model_stats">${t('ui.settings.model_stats', 'Model Stats')}</h3>${this._renderAIModelStats(appId, modelKey)}`,
+                `<h3 data-i18n="ui.settings.model_stats">${t ? t('ui.settings.model_stats', 'Model Stats') : 'Model Stats'}</h3>${this._renderAIModelStats(appId, modelKey)}`,
             );
 
             // Apply translations to dynamically added content
-            if (typeof win.applyTranslations === 'function') {
-                win.applyTranslations();
+            if (typeof applyTranslations === 'function') {
+                applyTranslations();
             }
         }
     }
@@ -420,51 +422,64 @@ export class SettingsUI {
      * Prompts the user to add a custom AI model.
      */
     public async addCustomModelToSettings(provider: 'openai' | 'gemini' | 'local') {
-        const win = globalThis as unknown as Window & {
-            t: (k: string, d?: string, p?: Record<string, unknown>) => string;
-            currentSettingsModule: IApp;
-            showToast: (m: string, s: string) => void;
-        };
-        const t = win.t || ((k: string, d?: string) => d || k);
+        const win = globalThis as unknown as Record<string, unknown>;
+        const t = win['t'] as
+            | ((k: string, d?: string, p?: Record<string, unknown>) => string)
+            | undefined;
+        const currentApp = win['currentSettingsModule'] as IApp | undefined;
+        const showToast = win['showToast'] as ((m: string, s: string) => void) | undefined;
 
-        const modelId = prompt(
-            t(
-                'ui.settings.custom_model.prompt_id',
-                `Enter Model ID for ${provider} (e.g. gpt-4o):`,
-                { provider },
-            ),
-        );
+        const promptMsg = t
+            ? t(
+                  'ui.settings.custom_model.prompt_id',
+                  `Enter Model ID for ${provider} (e.g. gpt-4o):`,
+                  {
+                      provider,
+                  },
+              )
+            : `Enter Model ID for ${provider} (e.g. gpt-4o):`;
+
+        const modelId = prompt(promptMsg);
         if (!modelId) return;
-        const modelName = prompt(
-            t('ui.settings.custom_model.prompt_name', 'Enter Display Name:'),
-            modelId,
-        );
+
+        const promptNameMsg = t
+            ? t('ui.settings.custom_model.prompt_name', 'Enter Display Name:')
+            : 'Enter Display Name:';
+        const modelName = prompt(promptNameMsg, modelId);
         if (!modelName) return;
 
         try {
             await this._service.addCustomModel(provider, modelId, modelName);
 
             // Custom models will be added to the provider's model list in future update
-            win.showToast(
-                t('ui.settings.custom_model.toast_update', 'Custom model support is being updated'),
-                'info',
-            );
+            if (showToast) {
+                showToast(
+                    t
+                        ? t(
+                              'ui.settings.custom_model.toast_update',
+                              'Custom model support is being updated',
+                          )
+                        : 'Custom model support is being updated',
+                    'info',
+                );
+            }
 
             // Re-render current modal content
             const container = document.getElementById('module-config-modal-active') as HTMLElement;
-            if (container) {
-                const currentApp = win.currentSettingsModule;
-                if (currentApp) {
-                    this._renderUniversalApiSettings(container, currentApp).catch((e) =>
-                        console.error(e),
-                    );
-                }
+            if (container && currentApp) {
+                this._renderUniversalApiSettings(container, currentApp).catch((e) =>
+                    console.error(e),
+                );
             }
 
-            win.showToast(
-                t('ui.settings.custom_model.toast_added', 'Custom model added'),
-                'success',
-            );
+            if (showToast) {
+                showToast(
+                    t
+                        ? t('ui.settings.custom_model.toast_added', 'Custom model added')
+                        : 'Custom model added',
+                    'success',
+                );
+            }
         } catch (e) {
             console.error('[SettingsUI] Failed to add custom model', e);
         }
@@ -484,7 +499,7 @@ export class SettingsUI {
             ) as HTMLElement;
             const w = widths[id];
             if (card && typeof w === 'string') {
-                card.dataset.cardWidth = w;
+                card.dataset['cardWidth'] = w;
                 this._updateCardLayout(card, w);
             }
         });
@@ -494,8 +509,8 @@ export class SettingsUI {
         const card = btn.closest('.hardware-card') as HTMLElement;
         if (!card) return;
 
-        card.dataset.cardWidth = width;
-        const id = card.dataset.cardId;
+        card.dataset['cardWidth'] = width;
+        const id = card.dataset['cardId'];
         if (id) this._state.setCardWidth(id, width);
 
         // Update active button state
@@ -540,7 +555,7 @@ export class SettingsUI {
         this._resizeState.isResizing = true;
         this._resizeState.card = handle.closest('.resizable-card');
         this._resizeState.startX = e.clientX;
-        this._resizeState.startWidth = this._resizeState.card?.dataset.cardWidth || 'full';
+        this._resizeState.startWidth = this._resizeState.card?.dataset['cardWidth'] || 'full';
         this._resizeState.hasSwitched = false;
 
         document.body.style.cursor = 'ew-resize';
@@ -569,11 +584,11 @@ export class SettingsUI {
         if (this._resizeState.hasSwitched) return;
 
         if (this._resizeState.startWidth === 'full' && delta < -threshold) {
-            this._resizeState.card.dataset.cardWidth = 'half';
+            this._resizeState.card.dataset['cardWidth'] = 'half';
             this._resizeState.hasSwitched = true;
             this._saveResizedWidth(this._resizeState.card);
         } else if (this._resizeState.startWidth === 'half' && delta > threshold) {
-            this._resizeState.card.dataset.cardWidth = 'full';
+            this._resizeState.card.dataset['cardWidth'] = 'full';
             this._resizeState.hasSwitched = true;
             this._saveResizedWidth(this._resizeState.card);
         }
@@ -597,9 +612,9 @@ export class SettingsUI {
      * Saves the new card width to state.
      */
     private _saveResizedWidth(card: HTMLElement) {
-        const id = card.dataset.cardId;
+        const id = card.dataset['cardId'];
         if (id) {
-            this._state.setCardWidth(id, card.dataset.cardWidth || 'full');
+            this._state.setCardWidth(id, card.dataset['cardWidth'] || 'full');
         }
     }
 
@@ -637,12 +652,11 @@ export class SettingsUI {
         if (!modal || !container || !title) return;
 
         // Set global context for other modules
-        const win = globalThis as unknown as Window & { currentSettingsModule: IApp };
-        win.currentSettingsModule = app;
+        const win = globalThis as unknown as Record<string, unknown>;
+        win['currentSettingsModule'] = app;
 
-        const suffix = globalThis.t
-            ? globalThis.t('ui.settings.header_suffix', 'Settings')
-            : 'Settings';
+        const t = win['t'] as ((k: string, d: string) => string) | undefined;
+        const suffix = t ? t('ui.settings.header_suffix', 'Settings') : 'Settings';
         title.innerHTML = DOMPurify.sanitize(suffix);
 
         await this._renderSpecializedModuleConfig(container, app);
@@ -673,9 +687,8 @@ export class SettingsUI {
             el = document.createElement('div');
             el.id = 'save-indicator';
             el.className = 'save-indicator';
-            const msg = globalThis.t
-                ? globalThis.t('ui.settings.saved_message', 'Settings Saved')
-                : 'Settings Saved';
+            const t = globalThis['t'] as ((k: string, d: string) => string) | undefined;
+            const msg = t ? t('ui.settings.saved_message', 'Settings Saved') : 'Settings Saved';
             el.innerHTML = DOMPurify.sanitize(`<span>${msg}</span>`);
             document.body.appendChild(el);
         }

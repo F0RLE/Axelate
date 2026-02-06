@@ -1,5 +1,6 @@
 import { MonitoringService } from '../services/MonitoringService';
-import { ISystemStats } from '../types/monitoringTypes';
+import type { ISystemStats } from '../types/monitoringTypes';
+import { type TGlobalWin } from '../../core/types/global_bridge_types';
 
 export class MonitoringUI {
     private isInit = false;
@@ -40,13 +41,14 @@ export class MonitoringUI {
     }
 
     private checkDemoMode() {
-        if (!globalThis.__TAURI__) {
+        const win = globalThis as TGlobalWin;
+        if (!win['__TAURI__']) {
             const titleEl = document.querySelector('[data-card-id="monitoring"] .card-title');
             if (titleEl) {
                 setTimeout(() => {
                     const badge = document.createElement('span');
-                    badge.textContent = globalThis.t
-                        ? globalThis.t('ui.monitoring.demo_data', ' (Demo Data)')
+                    badge.textContent = win['t']
+                        ? win['t']('ui.monitoring.demo_data', ' (Demo Data)')
                         : ' (Demo Data)';
                     badge.style.color = 'var(--warning)';
                     badge.style.fontSize = '0.8rem';

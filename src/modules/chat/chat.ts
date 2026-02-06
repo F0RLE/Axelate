@@ -5,10 +5,11 @@
 
 import { ChatService } from './services/ChatService';
 import { ChatUI } from './ui/ChatUI';
-import { IChatMessage, IChatResponse } from './types/chatTypes';
+import type { IChatMessage, IChatResponse } from './types/chatTypes';
 import { voiceInputService } from './services/VoiceInputService';
 import { chatFileHandler } from './services/ChatFileHandler'; /* Import Singleton */
 import { getTokenCount } from './utils/chatUtils';
+import { type TGlobalWin } from '../core/types/global_bridge_types';
 
 export class ChatController {
     private readonly _service: ChatService;
@@ -46,9 +47,9 @@ export class ChatController {
         }
 
         // Randomize Greeting
-        const globalContext = globalThis as unknown as Record<string, unknown>;
-        if (typeof globalContext.randomizeChatGreeting === 'function') {
-            (globalContext.randomizeChatGreeting as () => void)();
+        const globalContext = globalThis as TGlobalWin;
+        if (typeof globalContext['randomizeChatGreeting'] === 'function') {
+            (globalContext['randomizeChatGreeting'] as () => void)();
         } else {
             this._randomizeGreeting();
             // Retry after i18n loads (Core splash timeout is ~1.5s)
@@ -66,10 +67,12 @@ export class ChatController {
      */
     private async _loadHistory(): Promise<void> {
         const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win.aiBridge as { getHistory: () => Promise<IChatMessage[]> };
+        const aiBridge = win['aiBridge'] as
+            | { getHistory: () => Promise<IChatMessage[]> }
+            | undefined;
 
-        if (aiBridge && typeof aiBridge.getHistory === 'function') {
-            const history = await aiBridge.getHistory();
+        if (aiBridge && typeof aiBridge['getHistory'] === 'function') {
+            const history = await aiBridge['getHistory']();
             if (history && history.length > 0) {
                 console.log(
                     `[ChatController] Restoring ${history.length} messages from persistence`,
@@ -141,14 +144,14 @@ export class ChatController {
      */
     private _exposeGlobals(): void {
         const g = globalThis as unknown as Record<string, unknown>;
-        g.sendChat = () => this.sendChat();
-        g.pickChatFiles = () => {
+        g['sendChat'] = () => this.sendChat();
+        g['pickChatFiles'] = () => {
             const input = document.getElementById('chat-file-input');
             if (input) (input as HTMLInputElement).click();
         };
-        g.toggleVoiceInput = () => this.toggleVoiceInput();
-        g.stopVoiceRecording = () => this.stopVoiceRecording();
-        g.clearChat = () => this.clearChat();
+        g['toggleVoiceInput'] = () => this.toggleVoiceInput();
+        g['stopVoiceRecording'] = () => this.stopVoiceRecording();
+        g['clearChat'] = () => this.clearChat();
     }
 
     // --- Actions ---
@@ -266,21 +269,25 @@ export class ChatController {
 
     private _setupStreamingListener(id: string, onChunk: (chunk: string) => void) {
         const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win.aiBridge as {
-            onChunk: (id: string, cb: (c: string) => void) => void;
-        };
+        const aiBridge = win['aiBridge'] as
+            | {
+                  onChunk: (id: string, cb: (c: string) => void) => void;
+              }
+            | undefined;
         if (aiBridge) {
-            aiBridge.onChunk(id, onChunk);
+            aiBridge['onChunk'](id, onChunk);
         }
     }
 
     private _cleanupStreamingListener(id: string) {
         const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win.aiBridge as {
-            removeChunkListener: (id: string) => void;
-        };
+        const aiBridge = win['aiBridge'] as
+            | {
+                  removeChunkListener: (id: string) => void;
+              }
+            | undefined;
         if (aiBridge) {
-            aiBridge.removeChunkListener(id);
+            aiBridge['removeChunkListener'](id);
         }
     }
 
@@ -300,17 +307,17 @@ export class ChatController {
      */
     private _checkAIActive(input: HTMLTextAreaElement): boolean {
         const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win.aiBridge as Record<string, unknown>;
+        const aiBridge = win['aiBridge'] as Record<string, unknown> | undefined;
         const isAIActive =
-            typeof aiBridge?.isActive === 'function'
-                ? (aiBridge.isActive as () => boolean)()
+            typeof aiBridge?.['isActive'] === 'function'
+                ? (aiBridge['isActive'] as () => boolean)()
                 : false;
 
         if (!isAIActive) {
             const text = input ? input.value.trim() : '';
             if (text) this._ui.appendMessage('user', text);
             setTimeout(() => {
-                const t = win.t as (_k: string, _d: string) => string;
+                const t = win['t'] as ((_k: string, _d: string) => string) | undefined;
                 this._ui.appendMessage(
                     'assistant',
                     t?.(
@@ -361,7 +368,7 @@ export class ChatController {
      */
     private _getFriendlyErrorMessage(errorMsg: string, model?: string): string {
         const win = globalThis as unknown as Record<string, unknown>;
-        const t = win.t as (key: string, def?: string) => string;
+        const t = win['t'] as ((key: string, def?: string) => string) | undefined;
         if (!t) return errorMsg;
 
         const msg = (errorMsg || '').toLowerCase();
@@ -473,14 +480,14 @@ export class ChatController {
 
     private _playVoiceSound(state: boolean): void {
         const win = globalThis as unknown as Record<string, unknown>;
-        const soundFX = win.soundFX as { playToggle: (_s: boolean) => void } | undefined;
-        if (soundFX) soundFX.playToggle(state);
+        const soundFX = win['soundFX'] as { playToggle: (_s: boolean) => void } | undefined;
+        if (soundFX) soundFX['playToggle'](state);
     }
 
     private _setVoicePlaceholder(isRecording: boolean, input: HTMLTextAreaElement | null): void {
         if (!input) return;
         const win = globalThis as unknown as Record<string, unknown>;
-        const t = win.t as (key: string, def?: string) => string;
+        const t = win['t'] as ((key: string, def?: string) => string) | undefined;
 
         if (isRecording) {
             input.placeholder = t
@@ -523,7 +530,7 @@ export class ChatController {
             }
 
             const win = globalThis as unknown as Record<string, unknown>;
-            const t = win.t as (key: string, def?: string) => string;
+            const t = win['t'] as ((key: string, def?: string) => string) | undefined;
 
             if (t) {
                 el.textContent = t(
@@ -545,6 +552,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Listen for language changes to update greeting in real-time
     globalThis.addEventListener('lang:changed', () => {
         // Valid private method access for this specific context or we could make it public
-        _controller['_randomizeGreeting'](_controller['_currentGreetingIndex']);
+        const c = _controller as unknown as {
+            _randomizeGreeting: (idx?: number) => void;
+            _currentGreetingIndex: number;
+        };
+        c._randomizeGreeting(c._currentGreetingIndex);
     });
 });

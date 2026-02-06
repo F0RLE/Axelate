@@ -30,6 +30,12 @@ describe('TemplateLoader', () => {
             expect(fetch).toHaveBeenCalledWith('/templates/pages/test.html');
         });
 
+        it('should have mocked Tauri invoke', () => {
+            const win = globalThis as unknown as Record<string, any>;
+            expect(win['__TAURI__']).toBeDefined();
+            expect(typeof win['__TAURI__']['core']['invoke']).toBe('function');
+        });
+
         it('should cache templates', async () => {
             const mockHtml = '<div>Cached</div>';
             globalThis.fetch = vi.fn().mockResolvedValue({

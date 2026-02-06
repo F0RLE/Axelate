@@ -36,7 +36,7 @@ export type ChatContent = string | ChatContentPart[];
 export interface IChatMessage {
     role: 'user' | 'assistant' | 'system';
     content: ChatContent;
-    thought_signature?: string;
+    thought_signature?: string | undefined;
 }
 
 // ============================================================================
@@ -49,7 +49,7 @@ export interface IChatMessage {
 export interface IChatRequest {
     provider: string;
     model: string;
-    messages: { role: string; content: ChatContent; thought_signature?: string }[];
+    messages: { role: string; content: ChatContent; thought_signature?: string | undefined }[];
     api_key: string | null;
     thinking_level?: 'low' | 'high' | 'minimal';
     attachments?: { name: string; type: string; data_base64: string }[];

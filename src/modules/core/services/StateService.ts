@@ -4,7 +4,7 @@
  */
 
 import { Core } from '../core';
-import { IApp } from '../types/coreTypes';
+import type { IApp } from '../types/coreTypes';
 
 export interface IUIState {
     sidebar_collapsed: boolean;

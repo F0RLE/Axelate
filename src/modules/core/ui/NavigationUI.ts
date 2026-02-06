@@ -66,7 +66,9 @@ export class NavigationUI {
         });
 
         // Emit navigation event
-        eventBus.emit('page:change', { pageId, previousPageId });
+        const navPayload: { pageId: string; previousPageId?: string } = { pageId };
+        if (previousPageId) navPayload.previousPageId = previousPageId;
+        eventBus.emit('page:change', navPayload);
 
         // 3. Show target page
         const target = document.getElementById(pageId) ?? document.getElementById(`page-${pageId}`);
@@ -85,7 +87,7 @@ export class NavigationUI {
         } else {
             navBtns.forEach((b) => {
                 const el = b as HTMLElement;
-                if (el.dataset.page === pageId) {
+                if (el.dataset['page'] === pageId) {
                     el.classList.add('active');
                     el.setAttribute('aria-current', 'page');
                 }

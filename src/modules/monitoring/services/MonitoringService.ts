@@ -1,5 +1,5 @@
 import { TauriProvider } from '../../core/services/TauriProvider';
-import { ISystemStats, StatsCallback } from '../types/monitoringTypes';
+import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 interface IMonitoringGlobal {
     __TAURI__?: {
@@ -57,7 +57,7 @@ export class MonitoringService {
                 const isHidden = document.hidden;
                 // Fire and forget
                 void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
-                if (import.meta.env.DEV) {
+                if (import.meta.env['DEV']) {
                     console.debug(`[MonitoringService] Backend paused: ${isHidden}`);
                 }
             }
@@ -75,8 +75,8 @@ export class MonitoringService {
         }
         if (this.pollingInterval) {
             const g = globalThis as unknown as IMonitoringGlobal;
-            if (typeof g.clearInterval === 'function') {
-                g.clearInterval(this.pollingInterval);
+            if (typeof g['clearInterval'] === 'function') {
+                g['clearInterval'](this.pollingInterval);
             }
             this.pollingInterval = null;
         }
@@ -114,7 +114,7 @@ export class MonitoringService {
         if (this.pollingInterval) return;
 
         const g = globalThis as IMonitoringGlobal;
-        this.pollingInterval = g.setInterval(async () => {
+        this.pollingInterval = g['setInterval'](async () => {
             try {
                 const res = await fetch('/api/stats');
                 if (res.ok) {

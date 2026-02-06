@@ -11,7 +11,7 @@
  * ```
  */
 
-import { ILogEntry } from '../types/coreTypes';
+import type { ILogEntry } from '../types/coreTypes';
 
 export class LoggerService {
     private _buffer: ILogEntry[] = [];
@@ -53,8 +53,16 @@ export class LoggerService {
     }
 
     private _setupInterceptors(): void {
+        const win = globalThis as unknown as Record<string, unknown>;
+
         // Intercept window.onerror for uncaught JS errors
-        globalThis.onerror = (message, source, lineno, colno, error) => {
+        win['onerror'] = (
+            message: string,
+            source?: string,
+            lineno?: number,
+            colno?: number,
+            error?: Error,
+        ) => {
             if (this._isInternalLog) return true; // Stop propagation to avoid recursion
 
             const msgStr = this._safeStringify(message);
@@ -66,7 +74,7 @@ export class LoggerService {
         };
 
         // Intercept unhandled promise rejections
-        globalThis.onunhandledrejection = (event) => {
+        win['onunhandledrejection'] = (event: PromiseRejectionEvent) => {
             if (this._isInternalLog) return;
 
             const reason =

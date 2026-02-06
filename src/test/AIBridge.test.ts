@@ -11,7 +11,7 @@ const tauriMock = {
 };
 
 // Set before import
-(globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+(globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
 
 // Mock Core dependency
 const mockCore = {
@@ -47,7 +47,7 @@ describe('AIBridge', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
-        (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
         localStorage.clear();
         aiBridge = new AIBridge();
         aiBridge.setCore(mockCore as any);
@@ -63,8 +63,8 @@ describe('AIBridge', () => {
 
     describe('constructor', () => {
         it('should register itself on globalThis', () => {
-            const global = globalThis as unknown as { aiBridge: AIBridge };
-            expect(global.aiBridge).toBeDefined();
+            const win = globalThis as unknown as Record<string, unknown>;
+            expect(win['aiBridge']).toBeDefined();
         });
 
         it('should start with no active provider', () => {

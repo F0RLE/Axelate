@@ -13,8 +13,9 @@ describe('NavigationService', () => {
 
     afterEach(() => {
         // Clean up global
-        delete (globalThis as Record<string, unknown>).navigationService;
-        delete (globalThis as Record<string, unknown>).navigate;
+        const win = globalThis as unknown as Record<string, unknown>;
+        delete win['navigationService'];
+        delete win['navigate'];
     });
 
     describe('getInstance', () => {
@@ -61,8 +62,9 @@ describe('NavigationService', () => {
             navService.setCurrentPage('dashboard');
 
             expect(navService.getCurrentPage()).toBe('dashboard');
-            expect((globalThis as Record<string, unknown>).navigationService).toBe(navService);
-            expect(typeof (globalThis as Record<string, unknown>).navigate).toBe('function');
+            const win = globalThis as unknown as Record<string, unknown>;
+            expect(win['navigationService']).toBe(navService);
+            expect(typeof win['navigate']).toBe('function');
         });
     });
 
@@ -153,13 +155,14 @@ describe('NavigationService', () => {
                 getLastPage: vi.fn().mockReturnValue('settings'),
             };
 
-            (globalThis as Record<string, unknown>).uiState = mockUiState;
+            const win = globalThis as unknown as Record<string, unknown>;
+            win['uiState'] = mockUiState;
 
             navService.refreshFromUiState();
 
             expect(navService.getCurrentPage()).toBe('settings');
 
-            delete (globalThis as Record<string, unknown>).uiState;
+            delete win['uiState'];
         });
 
         it('should handle missing uiState gracefully', () => {
@@ -175,14 +178,15 @@ describe('NavigationService', () => {
                 getLastPage: vi.fn().mockReturnValue(''),
             };
 
-            (globalThis as Record<string, unknown>).uiState = mockUiState;
+            const win = globalThis as unknown as Record<string, unknown>;
+            win['uiState'] = mockUiState;
 
             navService.refreshFromUiState();
 
             // Empty string is falsy, should not add to history
             expect(navService.getCurrentPage()).toBeUndefined();
 
-            delete (globalThis as Record<string, unknown>).uiState;
+            delete win['uiState'];
         });
     });
 });

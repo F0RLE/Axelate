@@ -3,7 +3,7 @@
  * @description Service for sending messages through AIBridge
  */
 
-import { IChatResponse, IChatMessage, IChatAttachment } from '../types/chatTypes';
+import type { IChatResponse, IChatMessage, IChatAttachment } from '../types/chatTypes';
 
 export class ChatService {
     /**
@@ -21,9 +21,9 @@ export class ChatService {
 
         // Check if AIBridge is available and has active provider
         const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win.aiBridge as Record<string, unknown>;
+        const aiBridge = win['aiBridge'] as Record<string, unknown>;
         if (!aiBridge) {
-            const t = win.t as (_k: string, _d: string) => string;
+            const t = win['t'] as (_k: string, _d: string) => string;
             return {
                 ok: false,
                 error:
@@ -32,8 +32,11 @@ export class ChatService {
             };
         }
 
-        if (typeof aiBridge.isActive === 'function' && !(aiBridge.isActive as () => boolean)()) {
-            const t = win.t as (_k: string, _d: string) => string;
+        if (
+            typeof aiBridge['isActive'] === 'function' &&
+            !(aiBridge['isActive'] as () => boolean)()
+        ) {
+            const t = win['t'] as (_k: string, _d: string) => string;
             return {
                 ok: false,
                 error:
@@ -47,7 +50,7 @@ export class ChatService {
         try {
             // Send through AIBridge
             const response = await (
-                aiBridge.sendMessage as (
+                aiBridge['sendMessage'] as (
                     _t: string,
                     _s: string,
                     _a: IChatAttachment[],

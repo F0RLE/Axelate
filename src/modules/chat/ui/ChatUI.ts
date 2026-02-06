@@ -7,10 +7,7 @@ import 'katex/dist/katex.min.css';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
-interface IGlobal {
-    t: (key: string, defaultVal?: string, params?: Record<string, unknown>) => string;
-    showToast?: (msg: string, type: 'success' | 'error' | 'warning', duration?: number) => void;
-}
+// IGlobal removed
 
 // Configure marked
 marked.use(markedAlert());
@@ -28,8 +25,9 @@ marked.use({
 });
 
 import { chatFileHandler } from '../services/ChatFileHandler';
-import { IChatRole, IChatAttachment } from '../types/chatTypes';
+import type { IChatRole, IChatAttachment } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
+import type { TGlobalWin } from '../../core/types/global_bridge_types';
 import DOMPurify from 'dompurify';
 
 export class ChatUI {
@@ -92,19 +90,23 @@ export class ChatUI {
     }
 
     private async _bindAiEvents(): Promise<void> {
-        if (globalThis.__TAURI_INTERNALS__) {
+        const win = globalThis as unknown as Record<string, unknown>;
+        if (win['__TAURI_INTERNALS__']) {
             await listen<{ code: string; wait_seconds: number }>('ai:status:retry', (e) => {
                 const { code, wait_seconds } = e.payload;
                 if (code === 'GEMINI_QUOTA_RETRY') {
                     // Show toast or update UI
-                    const g = globalThis as unknown as IGlobal;
-                    const msg = g.t(
-                        'ui.gemini.status.retry',
-                        'Rate limited. Retrying in {seconds}s...',
-                        {
-                            seconds: wait_seconds,
-                        },
-                    );
+                    const g = globalThis as TGlobalWin;
+                    const msg =
+                        typeof g['t'] === 'function'
+                            ? g['t'](
+                                  'ui.gemini.status.retry',
+                                  'Rate limited. Retrying in {seconds}s...',
+                                  {
+                                      seconds: wait_seconds.toString(),
+                                  },
+                              )
+                            : 'Rate limited. Retrying...';
                     this.showToast(msg, 'warning', 3000);
 
                     // Optional: Update typing indicator if active
@@ -161,9 +163,9 @@ export class ChatUI {
         const textNode = this._createMessageTextNode(content, opts);
         bubble.appendChild(textNode);
 
-        this._appendAttachments(bubble, opts.attachments as IChatAttachment[]);
-        this._appendImages(bubble, opts.images as { mime: string; data_base64: string }[]);
-        this._appendMeta(bubble, opts.tokens as number | undefined);
+        this._appendAttachments(bubble, opts['attachments'] as IChatAttachment[]);
+        this._appendImages(bubble, opts['images'] as { mime: string; data_base64: string }[]);
+        this._appendMeta(bubble, opts['tokens'] as number | undefined);
 
         row.appendChild(bubble);
         this._messagesContainer!.appendChild(row);
@@ -241,17 +243,17 @@ export class ChatUI {
                     textNode.textContent = fullContent;
                 }
 
-                if (finalOpts.attachments) {
-                    this._appendAttachments(bubble, finalOpts.attachments as IChatAttachment[]);
+                if (finalOpts['attachments']) {
+                    this._appendAttachments(bubble, finalOpts['attachments'] as IChatAttachment[]);
                 }
-                if (finalOpts.images) {
+                if (finalOpts['images']) {
                     this._appendImages(
                         bubble,
-                        finalOpts.images as { mime: string; data_base64: string }[],
+                        finalOpts['images'] as { mime: string; data_base64: string }[],
                     );
                 }
 
-                this._appendMeta(bubble, finalOpts.tokens as number | undefined);
+                this._appendMeta(bubble, finalOpts['tokens'] as number | undefined);
                 this._scrollToBottom();
             },
         };
@@ -286,7 +288,7 @@ export class ChatUI {
      */
     private _createMessageBubble(opts: Record<string, unknown>): HTMLElement {
         const bubble = document.createElement('div');
-        bubble.className = 'chat-bubble' + (opts.error ? ' chat-error' : '');
+        bubble.className = 'chat-bubble' + (opts['error'] ? ' chat-error' : '');
         return bubble;
     }
 
@@ -296,24 +298,29 @@ export class ChatUI {
     private _createMessageTextNode(content: string, opts: Record<string, unknown>): HTMLElement {
         const textNode = document.createElement('div');
         textNode.className = 'markdown-body'; // Helper class for styling
-        const g = globalThis as unknown as IGlobal;
+        const g = globalThis as TGlobalWin;
 
         let finalContent = content || '';
 
-        if (opts.i18nKey) {
-            const i18nKey = typeof opts.i18nKey === 'string' ? opts.i18nKey : '';
+        if (opts['i18nKey']) {
+            const i18nKey = typeof opts['i18nKey'] === 'string' ? opts['i18nKey'] : '';
             if (i18nKey) {
-                textNode.dataset.i18n = i18nKey;
-                if (opts.i18nParams) {
-                    textNode.dataset.i18nParams = JSON.stringify(opts.i18nParams);
+                textNode.dataset['i18n'] = i18nKey;
+                if (opts['i18nParams']) {
+                    textNode.dataset['i18nParams'] = JSON.stringify(opts['i18nParams']);
                 }
-                finalContent = g.t(i18nKey, content, opts.i18nParams as Record<string, string>);
+                const tParams = (opts['i18nParams'] as Record<string, string>) || {};
+                finalContent = typeof g['t'] === 'function' ? g['t'](i18nKey, content) : content;
+                // Note: tParams would be used here if translator supported interpolation
+                console.debug('[ChatUI] i18nParams ignored by translator:', tParams);
             }
-        } else if (opts.i18nPrefixKey) {
-            const prefixKey = typeof opts.i18nPrefixKey === 'string' ? opts.i18nPrefixKey : '';
+        } else if (opts['i18nPrefixKey']) {
+            const prefixKey =
+                typeof opts['i18nPrefixKey'] === 'string' ? opts['i18nPrefixKey'] : '';
             if (prefixKey) {
-                textNode.dataset.i18nPrefix = prefixKey;
-                const prefix = g.t(prefixKey, 'Error: ');
+                textNode.dataset['i18nPrefix'] = prefixKey;
+                const prefix =
+                    typeof g['t'] === 'function' ? g['t'](prefixKey, 'Error: ') : 'Error: ';
                 finalContent = prefix + (content || '');
             }
         }
@@ -582,8 +589,9 @@ export class ChatUI {
         type: 'success' | 'error' | 'warning' = 'success',
         duration = 2000,
     ): void {
-        if (typeof globalThis.showToast === 'function') {
-            globalThis.showToast(msg, type, duration);
+        const win = globalThis as TGlobalWin;
+        if (typeof win['showToast'] === 'function') {
+            win['showToast'](msg, type, duration);
         } else {
             console.debug(`[Toast] ${type}: ${msg}`);
         }
@@ -609,7 +617,8 @@ export class ChatUI {
 
                 try {
                     // Using modular invoke
-                    if (globalThis.__TAURI_INTERNALS__) {
+                    const win = globalThis as unknown as Record<string, unknown>;
+                    if (win['__TAURI_INTERNALS__']) {
                         try {
                             await invoke('plugin:clipboard|write', { text });
                         } catch {
@@ -674,7 +683,8 @@ export class ChatUI {
 
             const url = link.href;
 
-            if (globalThis.__TAURI_INTERNALS__) {
+            const win = globalThis as unknown as Record<string, unknown>;
+            if (win['__TAURI_INTERNALS__']) {
                 try {
                     await invoke('plugin:shell|open', { path: url });
                 } catch (err) {

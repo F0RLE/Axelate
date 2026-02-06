@@ -9,7 +9,7 @@ const tauriMock = {
 };
 
 // Set before import
-(globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+(globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
 
 // Mock localStorage
 const storageMock = new Map<string, string>();
@@ -41,14 +41,14 @@ describe('StateService', () => {
         vi.clearAllMocks();
         storageMock.clear();
         vi.useFakeTimers();
-        (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+        (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
         stateService = new StateService(mockCore as unknown as Core);
     });
 
     afterEach(() => {
         vi.useRealTimers();
-        (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
-        (globalThis as any).__TAURI_INTERNALS__ = {
+        (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
+        (globalThis as any)['__TAURI_INTERNALS__'] = {
             invoke: async () => {},
             transformCallback: () => 0,
         };
@@ -78,8 +78,8 @@ describe('StateService', () => {
         });
 
         it('should fallback to localStorage when Tauri is missing', async () => {
-            delete (globalThis as Record<string, unknown>).__TAURI__;
-            delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
+            delete (globalThis as Record<string, unknown>)['__TAURI__'];
+            delete (globalThis as Record<string, unknown>)['__TAURI_INTERNALS__'];
             (mockCore.tauriProvider.isTauri as any).mockReturnValue(false);
 
             const fallbackState = {
@@ -94,7 +94,7 @@ describe('StateService', () => {
             expect(state.sidebar_width).toBe(350);
 
             // Restore
-            (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+            (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
             (globalThis as any).__TAURI_INTERNALS__ = {
                 invoke: async () => {},
                 transformCallback: () => 0,
@@ -265,8 +265,8 @@ describe('StateService', () => {
         });
 
         it('should use localStorage when Tauri is missing', () => {
-            delete (globalThis as Record<string, unknown>).__TAURI__;
-            delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
+            delete (globalThis as Record<string, unknown>)['__TAURI__'];
+            delete (globalThis as Record<string, unknown>)['__TAURI_INTERNALS__'];
             (mockCore.tauriProvider.isTauri as any).mockReturnValue(false);
 
             stateService.set('sidebar_width', 500);
@@ -275,8 +275,8 @@ describe('StateService', () => {
             expect(localStorageMock.setItem).toHaveBeenCalled();
 
             // Restore
-            (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
-            (globalThis as any).__TAURI_INTERNALS__ = {
+            (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
+            (globalThis as any)['__TAURI_INTERNALS__'] = {
                 invoke: async () => {},
                 transformCallback: () => 0,
             };

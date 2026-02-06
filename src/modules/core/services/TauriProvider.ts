@@ -16,7 +16,7 @@ export class TauriProvider {
 
     public isTauri(): boolean {
         // Dynamic check to handle injection timing
-        return !!globalThis.__TAURI_INTERNALS__ || !!globalThis.__TAURI__;
+        return !!globalThis['__TAURI_INTERNALS__'] || !!globalThis['__TAURI__'];
     }
 
     public async invoke<T, A extends Record<string, unknown> = Record<string, unknown>>(
@@ -44,7 +44,8 @@ export class TauriProvider {
         }
 
         // Priority 2: Global __TAURI__ (v1 or v2 withGlobalTauri)
-        const globalInvoke = globalThis.__TAURI__?.core?.invoke || globalThis.__TAURI__?.invoke;
+        const tauri = globalThis['__TAURI__'];
+        const globalInvoke = tauri?.core?.invoke || tauri?.invoke;
 
         if (typeof globalInvoke === 'function') {
             return await globalInvoke(cmd, args as Record<string, unknown>);
@@ -69,10 +70,10 @@ export class TauriProvider {
     private _isTest(): boolean {
         const g = globalThis as Record<string, unknown>;
         return (
-            import.meta.env.MODE === 'test' ||
-            process.env.NODE_ENV === 'test' ||
-            g.vi !== undefined ||
-            g.expect !== undefined
+            import.meta.env['MODE'] === 'test' ||
+            process.env['NODE_ENV'] === 'test' ||
+            g['vi'] !== undefined ||
+            g['expect'] !== undefined
         );
     }
 

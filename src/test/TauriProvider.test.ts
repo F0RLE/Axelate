@@ -24,7 +24,7 @@ const tauriMock = {
 };
 
 // Must set BEFORE import
-(globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+(globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
 
 // Helper implementation for listen that calls callback immediately
 function createListenWithPayload(payload: unknown) {
@@ -42,13 +42,13 @@ describe('TauriProvider', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Ensure Tauri is set
-        (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
         provider = new TauriProvider();
     });
 
     afterEach(() => {
         // Restore Tauri
-        (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
     });
 
     describe('constructor', () => {
@@ -63,8 +63,9 @@ describe('TauriProvider', () => {
         });
 
         it('should return false when __TAURI__ is missing', () => {
-            delete (globalThis as Record<string, unknown>).__TAURI__;
-            delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['__TAURI__'];
+            delete win['__TAURI_INTERNALS__'];
 
             const webProvider = new TauriProvider();
             expect(webProvider.isTauri()).toBe(false);
@@ -137,7 +138,8 @@ describe('TauriProvider', () => {
 
     describe('mock mode', () => {
         it('should work without Tauri and use mock invoke', async () => {
-            delete (globalThis as Record<string, unknown>).__TAURI__;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['__TAURI__'];
 
             const webProvider = new TauriProvider();
             expect(webProvider.isTauri()).toBe(false);

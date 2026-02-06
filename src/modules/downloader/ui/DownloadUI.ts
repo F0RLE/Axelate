@@ -3,8 +3,8 @@
  * @description UI management for the downloader module, including progress tracking and settings
  */
 
-import { IModuleDownloadState as ModuleDownloadState } from '../../core/types/coreTypes';
-import { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
+import type { IModuleDownloadState as ModuleDownloadState } from '../../core/types/coreTypes';
+import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
 
 interface IDownloaderGlobal {
     t?: (key: string, defaultVal?: string) => string;
@@ -290,9 +290,9 @@ export class DownloadUI {
         this._boundHandleUpdate = (e: Event) => {
             const payload = (e as CustomEvent).detail as ModuleDownloadState;
             this.renderDownloadsProgress({
-                percent: payload.progress * 100,
-                downloaded: payload.downloaded,
-                total: payload.total,
+                percent: (payload.progress || 0) * 100,
+                downloaded: payload.downloaded || 0,
+                total: payload.total || 0,
                 label: payload.message || '',
                 hasActive:
                     payload.status === 'downloading' ||

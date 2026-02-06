@@ -8,7 +8,8 @@ describe('Testing Setup', () => {
     });
 
     it('should have mocked Tauri invoke', () => {
-        expect((globalThis as any).__TAURI__).toBeDefined();
-        expect(typeof (globalThis as any).__TAURI__.core.invoke).toBe('function');
+        const win = globalThis as unknown as Record<string, any>;
+        expect(win['__TAURI__']).toBeDefined();
+        expect(typeof win['__TAURI__']['core']['invoke']).toBe('function');
     });
 });

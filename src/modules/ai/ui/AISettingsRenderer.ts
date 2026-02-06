@@ -6,11 +6,12 @@
 
 import DOMPurify from 'dompurify';
 
-import { IApp } from '../../core/types/coreTypes';
+import type { IApp } from '../../core/types/coreTypes';
 import { SettingsService } from '../../settings/services/SettingsService';
 import { StateService } from '../../core/services/StateService';
 import type { IAIModelData } from '../types/aiTypes';
 import { sortModelsByPower, getProviderData, getModelData } from '../utils/catalogHelpers';
+import type { TGlobalWin } from '../../core/types/global_bridge_types';
 
 // ============================================================================
 // Constants
@@ -40,11 +41,7 @@ const ICONS = {
 
 type TranslateFunc = (key: string, fallback: string) => string;
 
-interface IAISettingsGlobal {
-    t?: TranslateFunc;
-    showToast?: (message: string, type: string) => void;
-    applyTranslations?: () => void;
-}
+// IAISettingsGlobal removed as it's no longer used for strictness reasons
 
 /**
  * @class AISettingsRenderer
@@ -59,7 +56,7 @@ class AISettingsRenderer {
 
     constructor() {
         // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>).aiSettingsRenderer = this;
+        (globalThis as unknown as Record<string, unknown>)['aiSettingsRenderer'] = this;
     }
 
     /**
@@ -95,9 +92,9 @@ class AISettingsRenderer {
         }
 
         const appId = app.id;
-        const providerData = (app.apiProviderData as Record<string, unknown>) || {};
-        const models = providerData.models || {};
-        const sortedModels = sortModelsByPower(models as Record<string, IAIModelData>);
+        const providerData = (app['apiProviderData'] as Record<string, unknown>) || {};
+        const models = (providerData['models'] as Record<string, IAIModelData>) || {};
+        const sortedModels = sortModelsByPower(models);
 
         const firstModel = sortedModels[0];
         const defaultModelId = firstModel ? firstModel[0] : '';
@@ -353,9 +350,9 @@ class AISettingsRenderer {
             if (event.type === 'keydown' && keyEvent.key !== 'Enter' && keyEvent.key !== ' ')
                 return;
 
-            if (card.dataset.modelKey) {
+            if (card.dataset['modelKey']) {
                 event.preventDefault();
-                this.selectModel(appId, card.dataset.modelKey);
+                this.selectModel(appId, card.dataset['modelKey']);
             }
         };
 
@@ -373,7 +370,7 @@ class AISettingsRenderer {
             );
 
             const updateThinking = (target: HTMLElement) => {
-                const val = target.dataset.value || 'high';
+                const val = target.dataset['value'] || 'high';
                 localStorage.setItem(CACHE_KEYS.THINKING_LEVEL(appId), val);
 
                 buttons.forEach((b) => {
@@ -405,9 +402,9 @@ class AISettingsRenderer {
             });
         }
 
-        const globalContext = globalThis as unknown as IAISettingsGlobal;
-        if (typeof globalContext.applyTranslations === 'function') {
-            globalContext.applyTranslations();
+        const globalContext = globalThis as TGlobalWin;
+        if (typeof globalContext['applyTranslations'] === 'function') {
+            (globalContext['applyTranslations'] as () => void)();
         }
     }
 
@@ -524,7 +521,7 @@ class AISettingsRenderer {
 
         const grid = document.querySelector('.ai-models-grid');
         grid?.querySelectorAll('.ai-model-card').forEach((card) => {
-            const cardKey = (card as HTMLElement).dataset.modelKey;
+            const cardKey = (card as HTMLElement).dataset['modelKey'];
             card.classList.toggle('selected', cardKey === modelKey);
         });
 
@@ -541,9 +538,9 @@ class AISettingsRenderer {
             `;
             statsArea.innerHTML = DOMPurify.sanitize(rawHtml);
 
-            const globalContext = globalThis as unknown as IAISettingsGlobal;
-            if (typeof globalContext.applyTranslations === 'function') {
-                globalContext.applyTranslations();
+            const globalContext = globalThis as TGlobalWin;
+            if (typeof globalContext['applyTranslations'] === 'function') {
+                (globalContext['applyTranslations'] as () => void)();
             }
         }
     }
@@ -562,18 +559,18 @@ class AISettingsRenderer {
      * Resolves the translation service from the global context.
      */
     private _getTranslator(): TranslateFunc {
-        const globalContext = globalThis as unknown as IAISettingsGlobal;
-        const t = globalContext.t;
-        return t || ((_key: string, fallback: string) => fallback);
+        const globalContext = globalThis as TGlobalWin;
+        const t = globalContext['t'];
+        return (t as TranslateFunc) || ((_key: string, fallback: string) => fallback);
     }
 
     /**
      * Emits a toast notification to the global UI.
      */
     private _showToast(message: string, type: string): void {
-        const globalContext = globalThis as unknown as IAISettingsGlobal;
-        if (typeof globalContext.showToast === 'function') {
-            globalContext.showToast(message, type);
+        const globalContext = globalThis as TGlobalWin;
+        if (typeof globalContext['showToast'] === 'function') {
+            (globalContext['showToast'] as (m: string, t: string) => void)(message, type);
         }
     }
 }

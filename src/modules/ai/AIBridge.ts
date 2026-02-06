@@ -62,7 +62,7 @@ export class AIBridge {
                 const unlistenChunk = await this._core.tauriProvider.listen<string>(
                     'ai-chat-chunk',
                     (payload: string) => {
-                        if (import.meta.env.DEV) {
+                        if (import.meta.env['DEV']) {
                             console.debug(
                                 `[AIBridge] Stream chunk received (${payload.length} chars)`,
                             );
@@ -223,7 +223,7 @@ export class AIBridge {
 
         try {
             if (this._activeProviderId === 'axelate-localai') {
-                const msg = globalThis.t('ui.ai.local_disabled', 'Local AI is disabled.');
+                const msg = globalThis['t']('ui.ai.local_disabled', 'Local AI is disabled.');
                 this._broadcastResponse(msg, source);
                 return msg;
             }
@@ -253,14 +253,14 @@ export class AIBridge {
     }
 
     private _handleMissingApiKey(): string {
-        const msg = globalThis.t('ui.ai.no_api_key', 'API key missing');
+        const msg = globalThis['t']('ui.ai.no_api_key', 'API key missing');
         this._broadcastResponse(`Error: ${msg}`, 'system');
         this._showErrorToast('ui.ai.no_api_key', msg);
         return `Error: ${msg}`;
     }
 
     private _handleMissingProvider(): string {
-        const msg = globalThis.t('ui.ai.no_provider', 'No engine found');
+        const msg = globalThis['t']('ui.ai.no_provider', 'No engine found');
         this._broadcastResponse(msg, 'system');
         return msg;
     }
@@ -275,7 +275,7 @@ export class AIBridge {
         // Get thinking level from state instead of localStorage
         let thinkingLevel = 'high';
         if (this._core) {
-            const levels = this._core.state.get('ai_thinking_level');
+            const levels = this._core.state.get('ai_thinking_level') as Record<string, string>;
             thinkingLevel = levels[id] || 'high';
         }
 
@@ -316,8 +316,8 @@ export class AIBridge {
 
     private _processBackendResponse(response: IChatResponse, source: MessageSource): string {
         const g = globalThis as Record<string, unknown>;
-        if (typeof g.randomizeChatGreeting === 'function') {
-            (g.randomizeChatGreeting as () => void)();
+        if (typeof g['randomizeChatGreeting'] === 'function') {
+            (g['randomizeChatGreeting'] as () => void)();
         }
 
         if (response.ok && response.reply) {
@@ -416,24 +416,24 @@ export class AIBridge {
     }
 
     private _showToast(msg: string, type: 'success' | 'error' | 'info' | 'warning'): void {
-        if (typeof globalThis.showToast === 'function') {
-            globalThis.showToast(msg, type);
+        if (typeof globalThis['showToast'] === 'function') {
+            globalThis['showToast'](msg, type);
         }
     }
 
     private _showErrorToast(key: string, fallback: string): void {
-        this._showToast(globalThis.t(key, fallback), 'error');
+        this._showToast(globalThis['t'](key, fallback), 'error');
     }
 
     private _showSuccessToast(key: string, fallback: string): void {
-        this._showToast(globalThis.t(key, fallback), 'success');
+        this._showToast(globalThis['t'](key, fallback), 'success');
     }
 
     private _showInfoToast(key: string, fallback: string): void {
-        this._showToast(globalThis.t(key, fallback), 'info');
+        this._showToast(globalThis['t'](key, fallback), 'info');
     }
 }
 
 // Singleton instantiation
 export const aiBridge = new AIBridge();
-globalThis.aiBridge = aiBridge;
+globalThis['aiBridge'] = aiBridge;
