@@ -16,8 +16,38 @@ interface ToastElement extends HTMLElement {
 
 export class AppUI {
     private readonly _purifyConfig = {
-        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'code', 'pre', 'div', 'span', 'svg', 'line'],
-        ALLOWED_ATTR: ['href', 'class', 'style', 'viewBox', 'width', 'height', 'stroke', 'stroke-width', 'fill', 'stroke-linecap', 'stroke-linejoin', 'x1', 'y1', 'x2', 'y2'],
+        ALLOWED_TAGS: [
+            'b',
+            'i',
+            'em',
+            'strong',
+            'a',
+            'p',
+            'br',
+            'code',
+            'pre',
+            'div',
+            'span',
+            'svg',
+            'line',
+        ],
+        ALLOWED_ATTR: [
+            'href',
+            'class',
+            'style',
+            'viewBox',
+            'width',
+            'height',
+            'stroke',
+            'stroke-width',
+            'fill',
+            'stroke-linecap',
+            'stroke-linejoin',
+            'x1',
+            'y1',
+            'x2',
+            'y2',
+        ],
         ALLOW_DATA_ATTR: true,
     };
     private toastQueue: ToastElement[] = [];
@@ -158,7 +188,10 @@ export class AppUI {
             feedback = document.createElement('div');
             feedback.className = 'action-feedback';
             feedback.id = 'action-feedback';
-            feedback.innerHTML = DOMPurify.sanitize('<div class="action-feedback-icon"></div>', this._purifyConfig);
+            feedback.innerHTML = DOMPurify.sanitize(
+                '<div class="action-feedback-icon"></div>',
+                this._purifyConfig,
+            );
             document.body.appendChild(feedback);
         }
 
@@ -977,7 +1010,10 @@ export class AppUI {
     private _updateCardContent(card: HTMLElement, app: IApp) {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
         if (iconWrapper)
-            iconWrapper.innerHTML = DOMPurify.sanitize(`<div>${app.icon || '📦'}</div>`, this._purifyConfig);
+            iconWrapper.innerHTML = DOMPurify.sanitize(
+                `<div>${app.icon || '📦'}</div>`,
+                this._purifyConfig,
+            );
 
         const title = card.querySelector('.model-card-title');
         if (title) {

@@ -26,7 +26,7 @@ describe('AIBridge', () => {
         (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
         localStorage.clear();
         aiBridge = new AIBridge();
-        
+
         // Mock session ID for init
         mockInvoke.mockResolvedValueOnce('test-session-123');
         await aiBridge.init();
@@ -60,7 +60,8 @@ describe('AIBridge', () => {
     describe('startProvider', () => {
         it('should activate provider with valid API key', async () => {
             mockInvoke.mockImplementation(async (cmd, args) => {
-                if (cmd === 'get_secure_key' && args.service === 'gemini_api_key') return 'sk-test-key-12345';
+                if (cmd === 'get_secure_key' && args.service === 'gemini_api_key')
+                    return 'sk-test-key-12345';
                 return null;
             });
 
@@ -131,7 +132,8 @@ describe('AIBridge', () => {
         it('should invoke backend when provider is active', async () => {
             mockInvoke.mockImplementation(async (cmd) => {
                 if (cmd === 'get_secure_key') return 'sk-test-key';
-                if (cmd === 'send_chat_message') return { ok: true, reply: { text: 'Hello back!' } };
+                if (cmd === 'send_chat_message')
+                    return { ok: true, reply: { text: 'Hello back!' } };
                 return null;
             });
 

@@ -31,7 +31,6 @@ declare global {
     var catalogService: CatalogService;
 }
 
-
 const FALLBACK_CONFIG: IAppConfig = {
     catalog: {
         ai: [

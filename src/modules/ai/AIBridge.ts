@@ -20,7 +20,6 @@ import { getApiModelId, mapProviderToBackend, getMostPowerfulModel } from './uti
 export type { MessageSource, MessageHandler, ChatContentPart, ChatContent } from './types/aiTypes';
 export type IChunkHandler = (chunk: string) => void;
 
-
 /**
  * @class AIBridge
  * @description Controls AI provider orchestration and backend communication channels.
@@ -98,7 +97,6 @@ export class AIBridge {
         }
     }
 
-
     /**
      * Initiates a specific AI provider session.
      *
@@ -166,9 +164,12 @@ export class AIBridge {
     private async _getSecureVal(key: string): Promise<string | null> {
         if (globalThis.__TAURI__?.core) {
             try {
-                const val = await globalThis.__TAURI__.core.invoke<string | null>('get_secure_key', {
-                    service: key,
-                });
+                const val = await globalThis.__TAURI__.core.invoke<string | null>(
+                    'get_secure_key',
+                    {
+                        service: key,
+                    },
+                );
                 if (val !== null) return val;
             } catch (e) {
                 console.error(`[AIBridge] Secure get failed for ${key}:`, e);
@@ -410,12 +411,9 @@ export class AIBridge {
             setTimeout(() => reject(new Error('AI Bridge request timed out after 90s')), 90000);
         });
 
-        const invokePromise = globalThis.__TAURI__.core.invoke<IChatResponse>(
-            'send_chat_message',
-            {
-                request,
-            },
-        );
+        const invokePromise = globalThis.__TAURI__.core.invoke<IChatResponse>('send_chat_message', {
+            request,
+        });
 
         return await Promise.race([invokePromise, timeoutPromise]);
     }
