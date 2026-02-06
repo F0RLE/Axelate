@@ -4,7 +4,6 @@
  */
 
 import { WindowService } from '../services/WindowService';
-import { I18nService } from '../services/I18nService';
 import { StateService } from '../services/StateService';
 import { SoundService } from '../services/SoundService';
 
@@ -33,7 +32,6 @@ export class WindowUI {
 
     constructor(
         private readonly _service: WindowService,
-        private readonly _i18n: I18nService,
         private readonly _state: StateService,
         private readonly _sound: SoundService,
     ) {}

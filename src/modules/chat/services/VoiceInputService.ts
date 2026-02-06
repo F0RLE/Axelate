@@ -74,8 +74,10 @@ export class VoiceInputService {
             recognition.onresult = (event: ISpeechRecognitionEvent) => {
                 let finalText = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    if (event.results[i].isFinal) {
-                        finalText += event.results[i][0].transcript;
+                    const result = event.results[i];
+                    if (result?.isFinal) {
+                        const first = result[0];
+                        if (first) finalText += first.transcript;
                     }
                 }
                 if (finalText && this._onResult) {

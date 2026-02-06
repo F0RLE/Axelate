@@ -28,8 +28,8 @@ describe('ErrorHandler', () => {
 
             const log = errorHandler.getErrorLog();
             expect(log.length).toBe(1);
-            expect(log[0].message).toBe('Test error');
-            expect(log[0].context).toBe('test-context');
+            expect(log[0]?.message).toBe('Test error');
+            expect(log[0]?.context).toBe('test-context');
         });
 
         it('should include timestamp in error info', () => {
@@ -39,8 +39,8 @@ describe('ErrorHandler', () => {
             const afterTime = Date.now();
 
             const log = errorHandler.getErrorLog();
-            expect(log[0].timestamp).toBeGreaterThanOrEqual(beforeTime);
-            expect(log[0].timestamp).toBeLessThanOrEqual(afterTime);
+            expect(log[0]?.timestamp).toBeGreaterThanOrEqual(beforeTime);
+            expect(log[0]?.timestamp).toBeLessThanOrEqual(afterTime);
         });
     });
 
@@ -102,7 +102,7 @@ describe('ErrorHandler', () => {
 
             expect(result).toBeUndefined();
             expect(errorHandler.getErrorLog().length).toBe(1);
-            expect(errorHandler.getErrorLog()[0].context).toBe('async-context');
+            expect(errorHandler.getErrorLog()[0]?.context).toBe('async-context');
         });
     });
 
@@ -128,7 +128,7 @@ describe('ErrorHandler', () => {
             safe(mockEvent);
 
             expect(errorHandler.getErrorLog().length).toBe(1);
-            expect(errorHandler.getErrorLog()[0].context).toBe('click-handler');
+            expect(errorHandler.getErrorLog()[0]?.context).toBe('click-handler');
         });
     });
 });

@@ -99,7 +99,8 @@ class AISettingsRenderer {
         const models = providerData.models || {};
         const sortedModels = sortModelsByPower(models as Record<string, IAIModelData>);
 
-        const defaultModelId = sortedModels.length > 0 ? sortedModels[0][0] : '';
+        const firstModel = sortedModels[0];
+        const defaultModelId = firstModel ? firstModel[0] : '';
         const savedModel = this._stateService?.getSelectedAIModel(appId) || defaultModelId;
         const t = this._getTranslator();
 

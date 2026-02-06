@@ -189,7 +189,9 @@ describe('ModuleService', () => {
             await moduleService.init();
 
             expect(mockTauriProvider.listen).toHaveBeenCalledTimes(1);
-            const [eventName, handler] = mockTauriProvider.listen.mock.calls[0];
+            const firstCall = mockTauriProvider.listen.mock.calls[0];
+            if (!firstCall) throw new Error('Listen not called');
+            const [eventName, handler] = firstCall;
             expect(eventName).toBe('download_progress');
             expect(typeof handler).toBe('function');
         });

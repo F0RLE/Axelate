@@ -8,6 +8,24 @@ import pkg from './package.json';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+    plugins: [
+        {
+            name: 'prune-fonts',
+            enforce: 'post',
+            generateBundle(_, bundle) {
+                for (const fileName in bundle) {
+                    // Prune large font formats, keep woff2 for performance.
+                    // EXCEPT Cubic_11.ttf as it's the primary (and only) source for that font.
+                    if (
+                        (fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||
+                        fileName.endsWith('.woff')
+                    ) {
+                        delete bundle[fileName];
+                    }
+                }
+            },
+        },
+    ],
     // Use relative paths for Tauri release builds (tauri:// protocol)
     base: './',
 
@@ -62,6 +80,18 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 main: fileURLToPath(new URL('./index.html', import.meta.url)),
+            },
+            output: {
+                manualChunks: {
+                    'vendor-marked': [
+                        'marked',
+                        'marked-footnote',
+                        'marked-katex-extension',
+                        'marked-alert',
+                    ],
+                    'vendor-katex': ['katex'],
+                    'vendor-dompurify': ['dompurify'],
+                },
             },
         },
     },

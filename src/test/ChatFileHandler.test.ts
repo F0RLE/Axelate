@@ -27,7 +27,7 @@ describe('ChatFileHandler', () => {
 
             expect(handler.hasFiles()).toBe(true);
             expect(handler.getCount()).toBe(1);
-            expect(handler.getFiles()[0].name).toBe('test.txt');
+            expect(handler.getFiles()[0]?.name).toBe('test.txt');
         });
 
         it('should accumulate files on multiple adds', () => {
@@ -50,7 +50,7 @@ describe('ChatFileHandler', () => {
             handler.removeFile(0);
 
             expect(handler.getCount()).toBe(1);
-            expect(handler.getFiles()[0].name).toBe('file2.txt');
+            expect(handler.getFiles()[0]?.name).toBe('file2.txt');
         });
     });
 

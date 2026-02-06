@@ -11,7 +11,7 @@
         "frontendDist": "../src/dist"
     },
     "app": {
-        "withGlobalTauri": true,
+        "withGlobalTauri": false,
         "windows": [
             {
                 "title": "Axelate",

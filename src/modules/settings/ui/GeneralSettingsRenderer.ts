@@ -87,7 +87,10 @@ export class GeneralSettingsRenderer {
                 navBtn.classList.add('nav-item-hiding');
                 navBtn.classList.remove('hidden');
                 // Force reflow
-                const _ = navBtn.offsetHeight;
+                const _reflow = navBtn.offsetHeight;
+                if (_reflow) {
+                    /* ensure it's "used" if needed, though _ prefix usually suffices */
+                }
                 // Animate in
                 navBtn.classList.remove('nav-item-hiding');
             }
@@ -195,7 +198,10 @@ export class GeneralSettingsRenderer {
                 el.classList.add('hiding');
                 el.classList.remove('hidden');
                 // Force reflow
-                const _ = el.offsetHeight;
+                const _reflow = el.offsetHeight;
+                if (_reflow) {
+                    /* no-op */
+                }
                 // Remove hiding to trigger fade-in
                 el.classList.remove('hiding');
             }

@@ -72,7 +72,7 @@ export function readFileAsBase64(file: File): Promise<string> {
                 const res = reader.result;
                 const str = typeof res === 'string' ? res : '';
                 const b64 = str.includes(',') ? str.split(',')[1] : str;
-                resolve(b64);
+                resolve(b64 || '');
             } catch {
                 resolve('');
             }

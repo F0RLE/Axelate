@@ -13,6 +13,30 @@ const tauriMock = {
 // Set before import
 (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
 
+// Mock Core dependency
+const mockCore = {
+    tauriProvider: {
+        invoke: mockInvoke,
+        listen: mockListen,
+        isTauri: vi.fn().mockReturnValue(true),
+        getSecureKey: vi.fn(async (key: string) => {
+            return await mockInvoke('get_secure_key', { service: key });
+        }),
+        saveSecureKey: vi.fn(async (key: string, val: string) => {
+            await mockInvoke('save_secure_key', { service: key, key: val });
+        }),
+    },
+    state: {
+        get: vi.fn((key: string) => {
+            if (key === 'ai_thinking_level') return {};
+            return null;
+        }),
+        set: vi.fn(),
+        setSelectedAIModel: vi.fn(),
+        getSelectedAIModel: vi.fn(),
+    },
+};
+
 // Mock showToast
 vi.stubGlobal('showToast', vi.fn());
 
@@ -26,6 +50,7 @@ describe('AIBridge', () => {
         (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
         localStorage.clear();
         aiBridge = new AIBridge();
+        aiBridge.setCore(mockCore as any);
 
         // Mock session ID for init
         mockInvoke.mockResolvedValueOnce('test-session-123');
@@ -90,13 +115,14 @@ describe('AIBridge', () => {
             expect(aiBridge.getActiveProvider()?.id).toBe('gpt');
         });
 
-        it('should fallback to localStorage when backend returns null', async () => {
+        it('should NOT fallback to localStorage when backend returns null', async () => {
             mockInvoke.mockResolvedValue(null);
             localStorage.setItem('gemini_api_key', 'local-key-123');
 
             const result = await aiBridge.startProvider('gemini');
 
-            expect(result).toBe(true);
+            expect(result).toBe(false);
+            expect(aiBridge.isActive()).toBe(false);
         });
     });
 
@@ -126,7 +152,7 @@ describe('AIBridge', () => {
         it('should return message if no provider is active', async () => {
             const result = await aiBridge.sendMessage('Hello');
 
-            expect(result).toContain('No active');
+            expect(result).toContain('No engine found');
         });
 
         it('should invoke backend when provider is active', async () => {

@@ -16,6 +16,23 @@ interface AxelateAPIInterface {
     close: () => Promise<void>;
 }
 
+interface ChatContentPart {
+    type: 'text' | 'image_url' | 'file';
+    text?: string;
+    image_url?: { url: string; detail?: 'auto' | 'low' | 'high' };
+    data?: string;
+    mime?: string;
+    name?: string;
+}
+
+type ChatHistoryContent = string | ChatContentPart[];
+
+interface ChatHistoryItem {
+    role: 'user' | 'assistant' | 'system';
+    content: ChatHistoryContent;
+    timestamp?: number;
+}
+
 interface AIBridgeInterface {
     init: () => Promise<void>;
     startProvider: (_providerId: string) => Promise<boolean>;
@@ -34,16 +51,26 @@ interface AIBridgeInterface {
     removeListener: (_listenerId: string) => void;
     onChunk: (_listenerId: string, _handler: (_chunk: string) => void) => void;
     removeChunkListener: (_listenerId: string) => void;
-    getHistory: () => Promise<any[]>;
+    getHistory: () => Promise<ChatHistoryItem[]>;
+    getState: () => { activeProviderId: string | null; isRunning: boolean };
     destroy: () => void;
 }
 
-/** UI State Management interface */
+/** UI State Management interface (Section 21) */
 interface UIStateInterface {
-    load?: () => Promise<void>;
+    loadState: () => Promise<IUIState>;
+    saveAsync: () => Promise<void>;
+    saveImmediate: () => void;
+    setState: (_state: Partial<IUIState>) => void;
+    getState: () => IUIState;
+    get: <K extends keyof IUIState>(_key: K) => IUIState[K];
+    set: <K extends keyof IUIState>(_key: K, _value: IUIState[K]) => void;
+    getSelectedModules: () => Record<string, Partial<IApp>>;
+    getSelectedModule: (_category: string) => Partial<IApp> | undefined;
     setSelectedModule: (_category: string, _moduleData: Partial<IApp>) => void;
     removeSelectedModule: (_category: string) => void;
-    getSelectedModules: () => Record<string, Partial<IApp>>;
+    getSelectedAIModel: (_appId: string) => string | undefined;
+    setSelectedAIModel: (_appId: string, _modelKey: string) => void;
     getSidebarWidth: () => number;
     setSidebarWidth: (_width: number) => void;
     getSidebarCollapsed: () => boolean;
@@ -52,6 +79,12 @@ interface UIStateInterface {
     setLastPage: (_page: string) => void;
     getDownloadSettings: () => { limitEnabled: boolean; maxSpeed: number };
     setDownloadSettings: (_limitEnabled: boolean, _maxSpeed: number) => void;
+    getResolutionZoom: (_resKey: string) => number | undefined;
+    setResolutionZoom: (_resKey: string, _zoom: number) => void;
+    getZoomLevel: () => number;
+    setZoomLevel: (_zoom: number) => void;
+    getSoundEnabled: () => boolean;
+    setSoundEnabled: (_enabled: boolean) => void;
 }
 
 declare global {
@@ -76,7 +109,12 @@ declare global {
         debug: (_msg: string, ..._args: unknown[]) => void;
         getLogs: () => ILogEntry[];
     };
-    var catalogService: any;
+    interface ICatalogService {
+        loadCatalog: () => Promise<void>;
+        getAppById: (_id: string) => IApp | undefined;
+    }
+
+    var catalogService: ICatalogService;
     var randomizeChatGreeting: () => void;
     var core: unknown;
     var control: (_action: string, _service: string) => Promise<boolean>;
@@ -99,14 +137,17 @@ declare global {
     var clearChat: () => void;
     var pickChatFiles: () => void;
     var toggleVoiceInput: () => void;
+    var clearLogs: () => Promise<void>;
     var sendChat: () => void;
 
     // --- AxelateAPI & Tauri ---
     var axelateAPI: AxelateAPIInterface;
+    var __TAURI_INTERNALS__: unknown;
     var __TAURI__: {
         core: {
             invoke: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
         };
+        invoke: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
         event: {
             listen: <T>(
                 _event: string,
@@ -122,7 +163,22 @@ declare global {
             LogicalSize: new (_width: number, _height: number) => { width: number; height: number };
         };
     };
-    var APP_DATA: any; // Defined as ICatalogData in services
+    interface ICatalogData {
+        ai: IApp[];
+        services: IApp[];
+        stars?: string[];
+    }
+
+    /** Helper for type-safe category access */
+    function getCatalogCategory(_category: string): IApp[];
+
+    var __TAURI_INTERNALS__:
+        | {
+              invoke?: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
+              transformCallback?: (cb: unknown, once?: boolean) => string;
+          }
+        | undefined;
+    var APP_DATA: ICatalogData; // Defined as ICatalogData in services
 
     // --- UI State & Navigation ---
     var uiState: UIStateInterface;
@@ -132,6 +188,7 @@ declare global {
     var closeAppSelection: () => void;
     var selectApp: (_category: string, _app: IApp) => Promise<void>;
     var launchApp: (_id: string) => Promise<void>;
+    var setDebugTab: (_tabId: string, _btn: HTMLElement) => void;
 
     // --- Feedback & Notifications ---
     var showToast: (
@@ -233,11 +290,15 @@ declare global {
         sendChat: typeof sendChat;
         selectLangInModal: typeof selectLangInModal;
         confirmLanguage: typeof confirmLanguage;
+        clearLogs: typeof clearLogs;
+        setDebugTab: typeof setDebugTab;
         hideCloseConfirmModal: typeof hideCloseConfirmModal;
         confirmCloseFromModal: typeof confirmCloseFromModal;
         saveDownloadSettings: typeof saveDownloadSettings;
         updateSpeedDisplay: typeof updateSpeedDisplay;
         catalogService: typeof catalogService;
+        getCatalogCategory: typeof getCatalogCategory;
         randomizeChatGreeting: typeof randomizeChatGreeting;
+        __TAURI_INTERNALS__: typeof __TAURI_INTERNALS__;
     }
 }

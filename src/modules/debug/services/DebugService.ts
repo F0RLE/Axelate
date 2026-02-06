@@ -95,10 +95,9 @@ export class DebugService {
         return filteredLogs;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private safeJsonParse(text: string, defaultValue: any): any {
+    private safeJsonParse<T>(text: string, defaultValue: T): T {
         try {
-            return text ? JSON.parse(text) : defaultValue;
+            return text ? (JSON.parse(text) as T) : defaultValue;
         } catch {
             return defaultValue;
         }

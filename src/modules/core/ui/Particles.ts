@@ -93,7 +93,7 @@ export class Particles {
     private _random(): number {
         const buffer = new Uint32Array(1);
         crypto.getRandomValues(buffer);
-        return buffer[0] / (0xffffffff + 1);
+        return (buffer[0] ?? 0) / (0xffffffff + 1);
     }
 
     /**
@@ -197,8 +197,13 @@ export class Particles {
                 if (p.y < 0) p.y = this._height;
                 if (p.y > this._height) p.y = 0;
 
-                if (!groups[p.color]) groups[p.color] = [];
-                groups[p.color].push(p);
+                const color = p.color;
+                let group = groups[color];
+                if (!group) {
+                    group = [];
+                    groups[color] = group;
+                }
+                group.push(p);
             });
 
             // Batch Draw

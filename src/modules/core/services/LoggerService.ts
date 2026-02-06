@@ -28,9 +28,6 @@ export class LoggerService {
     private _initialized = false;
 
     constructor() {
-        // Registration on globalThis for access from HTML/legacy code (Section 31)
-        globalThis.logger = this;
-
         // Capture original methods before overriding
         this._originalConsoleError = console.error.bind(console);
         this._originalConsoleWarn = console.warn.bind(console);

@@ -4,17 +4,10 @@ import markedKatex from 'marked-katex-extension';
 import markedAlert from 'marked-alert';
 import 'katex/dist/katex.min.css';
 
-interface ITauri {
-    core: {
-        invoke: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-    };
-    event: {
-        listen: <T>(event: string, handler: (event: { payload: T }) => void) => Promise<() => void>;
-    };
-}
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 interface IGlobal {
-    __TAURI__?: ITauri;
     t: (key: string, defaultVal?: string, params?: Record<string, unknown>) => string;
     showToast?: (msg: string, type: 'success' | 'error' | 'warning', duration?: number) => void;
 }
@@ -99,44 +92,41 @@ export class ChatUI {
     }
 
     private async _bindAiEvents(): Promise<void> {
-        const g = globalThis as unknown as IGlobal;
-        if (g.__TAURI__?.event) {
-            await g.__TAURI__.event.listen<{ code: string; wait_seconds: number }>(
-                'ai:status:retry',
-                (e) => {
-                    const { code, wait_seconds } = e.payload;
-                    if (code === 'GEMINI_QUOTA_RETRY') {
-                        // Show toast or update UI
-                        const msg = g.t(
-                            'ui.gemini.status.retry',
-                            'Rate limited. Retrying in {seconds}s...',
-                            {
-                                seconds: wait_seconds,
-                            },
-                        );
-                        this.showToast(msg, 'warning', 3000);
+        if (globalThis.__TAURI_INTERNALS__) {
+            await listen<{ code: string; wait_seconds: number }>('ai:status:retry', (e) => {
+                const { code, wait_seconds } = e.payload;
+                if (code === 'GEMINI_QUOTA_RETRY') {
+                    // Show toast or update UI
+                    const g = globalThis as unknown as IGlobal;
+                    const msg = g.t(
+                        'ui.gemini.status.retry',
+                        'Rate limited. Retrying in {seconds}s...',
+                        {
+                            seconds: wait_seconds,
+                        },
+                    );
+                    this.showToast(msg, 'warning', 3000);
 
-                        // Optional: Update typing indicator if active
-                        const typing = document.querySelector(
-                            '.chat-message.assistant.typing .typing-dots',
-                        );
-                        if (typing) {
-                            const label = document.createElement('div');
-                            label.className = 'typing-status';
-                            label.textContent = msg;
-                            label.style.fontSize = '0.8em';
-                            label.style.opacity = '0.8';
-                            label.style.marginTop = '4px';
+                    // Optional: Update typing indicator if active
+                    const typing = document.querySelector(
+                        '.chat-message.assistant.typing .typing-dots',
+                    );
+                    if (typing) {
+                        const label = document.createElement('div');
+                        label.className = 'typing-status';
+                        label.textContent = msg;
+                        label.style.fontSize = '0.8em';
+                        label.style.opacity = '0.8';
+                        label.style.marginTop = '4px';
 
-                            // Remove old status if exists
-                            const old = typing.parentElement?.querySelector('.typing-status');
-                            if (old) old.remove();
+                        // Remove old status if exists
+                        const old = typing.parentElement?.querySelector('.typing-status');
+                        if (old) old.remove();
 
-                            typing.parentElement?.appendChild(label);
-                        }
+                        typing.parentElement?.appendChild(label);
                     }
-                },
-            );
+                }
+            });
         }
     }
 
@@ -616,14 +606,12 @@ export class ChatUI {
 
             if (codeEl?.textContent) {
                 const text = codeEl.textContent;
-                const g = globalThis as unknown as IGlobal;
 
                 try {
-                    // Try Tauri Clipboard Plugin first, fall back to navigator.clipboard
-                    // Note: Modern browsers and Tauri both support navigator.clipboard
-                    if (g.__TAURI__?.core?.invoke) {
+                    // Using modular invoke
+                    if (globalThis.__TAURI_INTERNALS__) {
                         try {
-                            await g.__TAURI__.core.invoke('plugin:clipboard|write', { text });
+                            await invoke('plugin:clipboard|write', { text });
                         } catch {
                             await navigator.clipboard.writeText(text);
                         }
@@ -685,11 +673,10 @@ export class ChatUI {
             e.stopPropagation();
 
             const url = link.href;
-            const g = globalThis as unknown as IGlobal;
 
-            if (g.__TAURI__?.core?.invoke) {
+            if (globalThis.__TAURI_INTERNALS__) {
                 try {
-                    await g.__TAURI__.core.invoke('plugin:shell|open', { path: url });
+                    await invoke('plugin:shell|open', { path: url });
                 } catch (err) {
                     console.error('[ChatUI] Failed to open link via shell:', err);
                     // Fallback to window.open (might be blocked or open in webview depending on config)

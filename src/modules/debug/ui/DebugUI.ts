@@ -13,14 +13,9 @@ export class DebugUI {
 
         // Shim globals for backward compat if needed, or preferably we fix the calls.
         // Legacy debug.js exposed setDebugTab. We bind it here.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (globalThis as any).setDebugTab = (tabId: string, btn: HTMLElement) =>
-            this.setTab(tabId, btn);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (globalThis as any).setLogView = (view: string, btn: HTMLElement) =>
-            this.setLogView(view, btn);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (globalThis as any).clearLogs = () => this.clearLogs();
+        globalThis.setDebugTab = (tabId: string, btn: HTMLElement) => this.setTab(tabId, btn);
+        globalThis.setLogView = (view: string, btn: HTMLElement) => this.setLogView(view, btn);
+        globalThis.clearLogs = () => this.clearLogs();
     }
 
     private bindSliders(): void {
@@ -158,15 +153,11 @@ export class DebugUI {
 
     // --- Logs ---
 
-    private currentLogView = 'general';
-
     private bindLogControls(): void {
         // logic handled via global setLogView shim
     }
 
-    private setLogView(view: string, btn: HTMLElement): void {
-        this.currentLogView = view || 'general';
-
+    private setLogView(_view: string, btn: HTMLElement): void {
         // Update tab active states
         document.querySelectorAll('.console-tab').forEach((b) => b.classList.remove('active'));
         if (btn) btn.classList.add('active');
@@ -183,13 +174,11 @@ export class DebugUI {
         await this.service.clearLogs();
         this.renderLogs(true);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const win = globalThis as any;
-        if (typeof win.showToast === 'function') {
+        if (typeof globalThis.showToast === 'function') {
             const msg = globalThis.t
                 ? globalThis.t('ui.debug.logs_cleared', 'Logs cleared')
                 : 'Logs cleared';
-            win.showToast(msg, 'success', 1500);
+            globalThis.showToast(msg, 'success', 1500);
         }
     }
 

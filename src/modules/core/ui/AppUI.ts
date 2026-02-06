@@ -437,12 +437,12 @@ export class AppUI {
             if (globalThis.__TAURI__?.core) {
                 await globalThis.__TAURI__.core.invoke('delete_module', { moduleId: app.id });
                 app.installed = false;
-                const allApps = globalThis.APP_DATA?.[category] || [];
+                const allApps = globalThis.getCatalogCategory(category);
                 this.openAppSelection(category, allApps);
             } else if (typeof globalThis.deleteModule === 'function') {
                 await globalThis.deleteModule(app.id);
                 app.installed = false;
-                const allApps = globalThis.APP_DATA?.[category] || [];
+                const allApps = globalThis.getCatalogCategory(category);
                 this.openAppSelection(category, allApps);
             } else {
                 this.showToast('Delete not available', 'warning');
@@ -470,7 +470,7 @@ export class AppUI {
                 await globalThis.downloadModule(app.id, app.repoUrl, app.expectedHash);
 
                 // Refresh modal to show immediate state change if possible
-                const allApps = globalThis.APP_DATA?.[category] || [];
+                const allApps = globalThis.getCatalogCategory(category);
                 // Small delay to let backend start emitting events
                 setTimeout(() => this.openAppSelection(category, allApps), 100);
             } else {
@@ -654,7 +654,7 @@ export class AppUI {
         }
     }
 
-    private _onDownloadError(actionBtn: HTMLElement, app: IApp, err: unknown) {
+    private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown) {
         console.error('Download error:', err);
         if (globalThis.showToast) globalThis.showToast('Download failed', 'error');
         this._setDownloadReady(actionBtn);
@@ -664,38 +664,6 @@ export class AppUI {
         if (globalThis.showToast) {
             globalThis.showToast('Download not available', 'warning');
         }
-    }
-
-    private _setupLaunchActionBtn(actionBtn: HTMLElement, app: IApp) {
-        const card = actionBtn.closest('.model-card-premium') as HTMLElement;
-        if (card) {
-            card.classList.add('has-launch');
-            card.classList.remove('has-download');
-        }
-
-        actionBtn.style.display = 'block';
-        actionBtn.classList.add('active-module-btn');
-        actionBtn.classList.remove('download-module-btn');
-
-        const isApi =
-            app.type?.toLowerCase() === 'api' ||
-            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
-
-        const setupRunning = () => this._setBtnStateRunning(actionBtn);
-        const setupStopped = () => this._setBtnStateStopped(actionBtn);
-
-        this._checkModuleStatus(app, isApi).then((running) => {
-            // Set running state via dataset for styles/logic
-            actionBtn.dataset.running = running ? 'true' : 'false';
-            if (running) {
-                setupRunning();
-            } else {
-                setupStopped();
-            }
-        });
-
-        actionBtn.onclick = (e) =>
-            this._handleLaunchClick(e, app, actionBtn, setupStopped, setupRunning);
     }
 
     private _addSettingsBtn(card: HTMLElement, app: IApp) {
@@ -843,129 +811,6 @@ export class AppUI {
     private _getAppStatusHtml(_isApi: boolean, _isInstalled: boolean): string {
         // Download button is now moved to the centered hover overlay in _createAppCard
         return '';
-    }
-
-    private _setBtnStateRunning(actionBtn: HTMLElement) {
-        const setRunningText = () => {
-            actionBtn.textContent = globalThis.t
-                ? globalThis.t('ui.launcher.status.running', 'Running')
-                : 'Running';
-            actionBtn.classList.remove('stop-btn');
-        };
-        setRunningText();
-
-        actionBtn.onmouseenter = () => {
-            if (actionBtn.dataset.running === 'true') {
-                actionBtn.textContent = globalThis.t
-                    ? globalThis.t('ui.launcher.button.stop', 'Stop')
-                    : 'Stop';
-                actionBtn.classList.add('stop-btn');
-            }
-        };
-        actionBtn.onmouseleave = () => {
-            if (actionBtn.dataset.running === 'true') {
-                setRunningText();
-            }
-        };
-    }
-
-    private _setBtnStateStopped(actionBtn: HTMLElement) {
-        actionBtn.textContent = globalThis.t
-            ? globalThis.t('ui.launcher.button.launch', 'Launch')
-            : 'Launch';
-        actionBtn.classList.remove('stop-btn');
-        actionBtn.onmouseenter = null;
-        actionBtn.onmouseleave = null;
-    }
-
-    private async _checkModuleStatus(app: IApp, isApi: boolean): Promise<boolean> {
-        if (!isApi && globalThis.__TAURI__?.core) {
-            try {
-                const status = await globalThis.__TAURI__.core.invoke('get_module_status', {
-                    moduleId: app.id,
-                });
-                return String(status) === 'running';
-            } catch (err) {
-                console.warn('[AppUI] Status check failed:', err);
-            }
-        }
-        return false;
-    }
-
-    private async _handleLaunchClick(
-        e: MouseEvent,
-        app: IApp,
-        actionBtn: HTMLElement,
-        updateToStopped: () => void,
-        updateToRunning: () => void,
-    ) {
-        e.stopImmediatePropagation();
-        e.preventDefault();
-        const currentlyRunning = actionBtn.dataset.running === 'true';
-
-        if (currentlyRunning) {
-            this._handleStopModule(app, updateToStopped, actionBtn);
-        } else {
-            await this._handleStartModule(app, updateToRunning, actionBtn);
-        }
-    }
-
-    private _handleStopModule(app: IApp, updateToStopped: () => void, actionBtn: HTMLElement) {
-        console.log('[AppUI] Stop app clicked:', app.id);
-        const isAiModule =
-            actionBtn.id.includes('ai-') ||
-            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
-            app.type?.toLowerCase() === 'api';
-
-        if (isAiModule) {
-            if (globalThis.aiBridge) globalThis.aiBridge.stopProvider();
-        } else {
-            const moduleName = app.name || app.id;
-            if (globalThis.showToast)
-                globalThis.showToast(
-                    globalThis.t
-                        ? globalThis.t('ui.launcher.module.stopped', `${moduleName} stopped`)
-                        : `${moduleName} stopped`,
-                    'info',
-                );
-        }
-        actionBtn.dataset.running = 'false';
-        updateToStopped();
-    }
-
-    private async _handleStartModule(
-        app: IApp,
-        updateToRunning: () => void,
-        actionBtn: HTMLElement,
-    ) {
-        console.log('[AppUI] Launch app clicked:', app.id);
-        const isAiModule =
-            actionBtn.id.includes('ai-') ||
-            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id) ||
-            app.type?.toLowerCase() === 'api';
-
-        if (isAiModule) {
-            if (globalThis.aiBridge) {
-                const success = await globalThis.aiBridge.startProvider(app.id);
-                if (success) {
-                    actionBtn.dataset.running = 'true';
-                    updateToRunning();
-                }
-            } else if (globalThis.showToast) {
-                globalThis.showToast('AI Bridge not initialized', 'error');
-            }
-        } else {
-            const moduleName = app.name || app.id;
-            if (globalThis.showToast)
-                globalThis.showToast(
-                    globalThis.t
-                        ? globalThis.t('ui.launcher.module.launched', `${moduleName} launched`)
-                        : `${moduleName} launched`,
-                    'success',
-                );
-            actionBtn.dataset.running = 'true';
-            updateToRunning();
-        }
     }
 
     private _updateAppModalTitle(category: string) {

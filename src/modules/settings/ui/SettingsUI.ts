@@ -17,6 +17,8 @@ import { StateService } from '../../core/services/StateService';
 import { IApp, IConfigField } from '../../core/types/coreTypes';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
 
+type SettingValue = string | number | boolean | null;
+
 interface ISettingsGlobal {
     toggleNavItem: (id: string, en: boolean) => void;
     toggleMonitorItem: (id: string, en: boolean) => void;
@@ -480,9 +482,10 @@ export class SettingsUI {
             const card = document.querySelector(
                 `.resizable-card[data-card-id="${id}"]`,
             ) as HTMLElement;
-            if (card) {
-                card.dataset.cardWidth = widths[id];
-                this._updateCardLayout(card, widths[id]);
+            const w = widths[id];
+            if (card && typeof w === 'string') {
+                card.dataset.cardWidth = w;
+                this._updateCardLayout(card, w);
             }
         });
     }
@@ -697,8 +700,8 @@ export class SettingsUI {
         row.appendChild(label);
 
         const settingKey = `${appId}_${key}`;
-        const savedSettings = this._service.getSettings();
-        const initialValue = savedSettings[settingKey] ?? field.default;
+        const savedSettings = this._service.getSettings() as Record<string, SettingValue>;
+        const initialValue = (savedSettings[settingKey] ?? field.default) as SettingValue;
 
         let input: HTMLElement;
 
@@ -722,10 +725,7 @@ export class SettingsUI {
     /**
      * Creates a select dropdown field.
      */
-    private _createSelectField(
-        options: string[],
-        currentVal: string | number | boolean | null,
-    ): HTMLElement {
+    private _createSelectField(options: string[], currentVal: SettingValue): HTMLElement {
         const select = document.createElement('select');
         select.className = 'form-select';
         options.forEach((opt) => {

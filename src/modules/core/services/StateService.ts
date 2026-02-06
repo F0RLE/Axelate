@@ -20,6 +20,10 @@ export interface IUIState {
     selected_ai_models: Record<string, string>;
     resolution_zoom: Record<string, number>;
     sound_enabled: boolean;
+    // AI session & settings (Section 36)
+    ai_thinking_level: Record<string, 'low' | 'high' | 'minimal'>;
+    last_active_provider: string | null;
+    ai_session_id: string | null;
 }
 
 const DEFAULT_UI_STATE: IUIState = {
@@ -35,17 +39,18 @@ const DEFAULT_UI_STATE: IUIState = {
     selected_ai_models: {},
     resolution_zoom: {},
     sound_enabled: true,
+    ai_thinking_level: {},
+    last_active_provider: null,
+    ai_session_id: null,
 };
 
 export class StateService {
-    private readonly _core: Core;
     private _state: IUIState = { ...DEFAULT_UI_STATE };
     private _isDirty = false;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly _STORAGE_KEY = 'axelate_ui_state';
 
-    constructor(core: Core) {
-        this._core = core;
+    constructor(private readonly _core: Core) {
         this._initAutoSave();
     }
 
@@ -54,11 +59,8 @@ export class StateService {
      */
     public async loadState(): Promise<IUIState> {
         try {
-            const win = globalThis as unknown as Window & {
-                __TAURI__?: { core: { invoke: <T>(c: string, a?: unknown) => Promise<T> } };
-            };
-            if (win.__TAURI__) {
-                const loaded = await win.__TAURI__.core.invoke<IUIState>('get_ui_state');
+            if (this._core.tauriProvider.isTauri()) {
+                const loaded = await this._core.tauriProvider.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
                 console.log('[StateService] Loaded from backend');
             } else {
@@ -178,11 +180,8 @@ export class StateService {
         if (!this._isDirty) return;
 
         try {
-            const win = globalThis as unknown as Window & {
-                __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } };
-            };
-            if (win.__TAURI__) {
-                await win.__TAURI__.core.invoke('save_ui_state', { state: this._state });
+            if (this._core.tauriProvider.isTauri()) {
+                await this._core.tauriProvider.invoke('save_ui_state', { state: this._state });
             } else {
                 localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
@@ -198,11 +197,8 @@ export class StateService {
     public saveImmediate(): void {
         if (!this._isDirty) return;
         try {
-            const win = globalThis as unknown as Window & {
-                __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } };
-            };
-            if (win.__TAURI__) {
-                void win.__TAURI__.core.invoke('save_ui_state', { state: this._state });
+            if (this._core.tauriProvider.isTauri()) {
+                void this._core.tauriProvider.invoke('save_ui_state', { state: this._state });
             } else {
                 localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
@@ -326,16 +322,15 @@ export class StateService {
     }
 
     private _syncDownloadSettingsToBackend(): void {
-        const win = globalThis as unknown as Window & {
-            __TAURI__?: { core: { invoke: (c: string, a?: unknown) => Promise<void> } };
-        };
-        if (win.__TAURI__) {
-            win.__TAURI__.core
+        if (this._core.tauriProvider.isTauri()) {
+            this._core.tauriProvider
                 .invoke('set_download_settings', {
                     enabled: this._state.download_limit_enabled,
                     max_speed: this._state.download_max_speed,
                 })
-                .catch((e) => console.error('[StateService] Failed to sync download settings:', e));
+                .catch((e: unknown) =>
+                    console.error('[StateService] Failed to sync download settings:', e),
+                );
         }
     }
 

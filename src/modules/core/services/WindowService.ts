@@ -51,12 +51,6 @@ export interface IWindowPolicy {
 }
 
 export class WindowService {
-    private _widthBreakpoints = {
-        compact: 600,
-        medium: 900,
-        large: 1200,
-    };
-    private readonly _defaultScale = 1;
     private _currentZoom = 1;
     private _lastResolutionKey = '';
     private readonly _MIN_ZOOM = 0.5;
@@ -83,15 +77,7 @@ export class WindowService {
                 this._config =
                     initialConfig || (await this._tauri.invoke<IWindowConfig>('get_window_config'));
 
-                // Update breakpoints from backend
-                if (this._config) {
-                    this._widthBreakpoints = {
-                        compact: this._config.breakpoints.compact,
-                        medium: this._config.breakpoints.medium,
-                        large: this._config.breakpoints.large,
-                    };
-                }
-
+                // Update breakpoints from backend (placeholder/not used in UI yet)
                 console.log('[WindowService] Loaded config:', this._config);
 
                 // Use pre-loaded initialZoom or determine it

@@ -50,7 +50,8 @@ export class ModuleService {
             };
 
             if (payload.status === 'complete') {
-                this._downloadState[payload.module_id].progress = 1;
+                const state = this._downloadState[payload.module_id];
+                if (state) state.progress = 1;
             }
 
             this._broadcastState(payload.module_id);
@@ -178,6 +179,9 @@ export class ModuleService {
     private _broadcastState(moduleId: string) {
         const win = globalThis as unknown as IModuleGlobal;
         if (!win.moduleDownloadState) win.moduleDownloadState = {};
-        win.moduleDownloadState[moduleId] = this._downloadState[moduleId];
+        const state = this._downloadState[moduleId];
+        if (state) {
+            win.moduleDownloadState[moduleId] = state;
+        }
     }
 }

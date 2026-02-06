@@ -34,8 +34,8 @@ dirs = "6.0.0"
 once_cell = "1.21.3"
 sysinfo = "0.38.0"
 chrono = { version = "0.4.43", features = ["serde"] }
-reqwest = { version = "0.13.1", default-features = false, features = ["json", "stream", "native-tls", "gzip", "brotli", "deflate", "http2"] }
-tokio = { version = "1.49.0", features = ["full"] }
+reqwest = { version = "0.13.1", default-features = false, features = ["json", "stream", "native-tls", "gzip"] }
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
 futures-util = "0.3.31"
 tiktoken-rs = "0.9.1"
 nvml-wrapper = "0.11.0"
@@ -57,9 +57,10 @@ tauri-plugin-single-instance = "2.3.7"
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = "s"
+opt-level = "z"
 panic = "abort"
 strip = true
+incremental = false
 
 [build-dependencies]
 tauri-build = { version = "2.5.3", features = [] }

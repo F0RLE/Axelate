@@ -6,51 +6,6 @@
 import type { Core } from '../core';
 import type { IApp } from '../types/coreTypes';
 
-interface IGlobalBridgeProperties {
-    downloadModule?: (id: string, url: string, hash?: string) => Promise<void>;
-    deleteModule?: (id: string) => Promise<void>;
-    checkModuleInstalled?: (id: string) => Promise<boolean>;
-    t?: (key: string, def?: string, ...args: unknown[]) => string;
-    currentLang?: string;
-    setLanguage?: (lang: string) => Promise<void>;
-    toggleLangMenu?: () => void;
-    toggleSidebarLangMenu?: () => void;
-    applyTranslations?: () => void;
-    initEmojiFlags?: () => void;
-    updateLangButtons?: () => void;
-    minimizeWindow?: () => Promise<void>;
-    toggleMaximizeWindow?: () => Promise<void>;
-    hideToTray?: () => Promise<void>;
-    confirmClose?: () => Promise<void>;
-    hideSplashScreen?: () => void;
-    changeLanguage?: (lang: string) => Promise<void>;
-    showPage?: (id: string, btn?: HTMLElement | null, isInitial?: boolean) => void;
-    openAppSelection?: (category: string) => void;
-    closeAppSelection?: () => void;
-    selectApp?: (category: string, app: IApp) => Promise<void>;
-    launchApp?: (id: string) => Promise<void>;
-    controlModule?: (id: string, action: string) => Promise<boolean>;
-    updateState?: () => Promise<void>;
-    showToast?: (m: string, t?: string, d?: number, title?: string | null) => void;
-    showActionFeedback?: (t?: string) => void;
-    showSkeletonLoaders?: (id: string, c?: number) => void;
-    hideSkeletonLoaders?: (id: string, c?: number) => void;
-    setButtonLoading?: (b: HTMLButtonElement | null, l: boolean) => void;
-    showPromptTab?: (tab: string, btn?: HTMLElement) => void;
-    axelateAPI?: {
-        minimize: () => Promise<void>;
-        toggleMaximize: () => Promise<void>;
-        close: () => Promise<void>;
-        secureStorage: {
-            save: (service: string, key: string) => Promise<void>;
-            get: (service: string) => Promise<string | null>;
-        };
-    };
-    uiState?: {
-        setSelectedModule: (c: string, d: unknown) => void;
-    };
-}
-
 /**
  * GlobalBridge handles the exposure of core services to the global window object.
  * This decouples legacy bridge logic and boilerplate from the main Core orchestrator.
@@ -77,7 +32,7 @@ export class GlobalBridge {
      * @sideeffect Pollutes globalThis namespace with core methods
      */
     private _exposeCoreGlobals(): void {
-        const win = globalThis as unknown as IGlobalBridgeProperties;
+        const win = globalThis;
 
         // Module management
         win.downloadModule = (id: string, url: string, hash?: string): Promise<void> =>
@@ -126,17 +81,16 @@ export class GlobalBridge {
         };
 
         win.openAppSelection = (category: string) => {
-            const catalog = this._core.catalog.getCatalog();
-            const apps = (catalog[category] as IApp[]) || [];
+            const global = globalThis as Record<string, unknown>;
+            const getCat = global.getCatalogCategory as ((_c: string) => IApp[]) | undefined;
+            const apps = getCat?.(category) || [];
             this._core.appUI.openAppSelection(category, apps);
         };
         win.closeAppSelection = () => this._core.appUI.closeAppSelection();
 
         win.selectApp = async (category: string, app: IApp): Promise<void> => {
             this._core.appUI.updateModuleCard(category, app);
-            const uiState = win.uiState as
-                | { setSelectedModule: (c: string, d: unknown) => void }
-                | undefined;
+            const uiState = win.uiState;
             if (uiState?.setSelectedModule) {
                 uiState.setSelectedModule(category, {
                     id: app.id,
@@ -179,7 +133,7 @@ export class GlobalBridge {
         // Module Control and State Updates
         win.controlModule = (id: string, action: string): Promise<boolean> =>
             this._core.moduleService.control(id, action);
-        win.updateState = async (): Promise<void> => {
+        win.updateState = (): void => {
             // No-op for now, or could trigger state refresh if needed
         };
 
@@ -196,6 +150,13 @@ export class GlobalBridge {
         };
         win.showPromptTab = (tab: string, btn?: HTMLElement): void =>
             this._core.appUI.showPromptTab(tab, btn);
+
+        // Ensure getCatalogCategory is available even if CatalogService hasn't run yet
+        const g = globalThis as Record<string, unknown>;
+        if (typeof g.getCatalogCategory !== 'function') {
+            g.getCatalogCategory = (cat: string) =>
+                (g.APP_DATA as Record<string, IApp[]>)?.[cat] || [];
+        }
     }
 
     /**
@@ -203,7 +164,7 @@ export class GlobalBridge {
      * @sideeffect Exposes axelateAPI on globalThis
      */
     private _setupAxelateAPI(): void {
-        const win = globalThis as unknown as IGlobalBridgeProperties;
+        const win = globalThis;
         win.axelateAPI = {
             minimize: async () => {
                 if (this._core.tauriProvider.isTauri())
@@ -243,29 +204,48 @@ export class GlobalBridge {
         };
     }
 
-    /**
-     * Intercept fetch calls to route /api/* to Tauri backend.
-     * @sideeffect Replaces globalThis.fetch
-     */
     private _setupFetchInterceptor(): void {
-        const originalFetch = globalThis.fetch.bind(globalThis);
+        const g = globalThis;
+        const originalFetch = g.fetch;
 
-        globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-            const url = input instanceof Request ? input.url : input.toString();
+        if (typeof originalFetch !== 'function') {
+            console.warn('[GlobalBridge] fetch is not defined on globalThis, skipping interceptor');
+            return;
+        }
 
-            if (!url.includes('/api/')) {
-                return originalFetch(input, init);
+        const boundFetch = originalFetch.bind(g);
+
+        g.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            try {
+                let url: string;
+                if (typeof input === 'string') {
+                    url = input;
+                } else if (input instanceof URL) {
+                    url = input.toString();
+                } else {
+                    url = input.url;
+                }
+
+                if (!url.includes('/api/')) {
+                    return boundFetch(input, init);
+                }
+
+                if (url.includes('/api/log')) {
+                    return new Response(JSON.stringify({ success: true }), {
+                        status: 200,
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                }
+
+                if (url.includes('/api/chat/send') && this._core.tauriProvider.isTauri()) {
+                    return await this._handleChatRequest(init);
+                }
+
+                return boundFetch(input, init);
+            } catch (err) {
+                console.error('[GlobalBridge] Fetch interceptor error:', err);
+                return boundFetch(input, init);
             }
-
-            if (url.includes('/api/log')) {
-                return new Response(JSON.stringify({ success: true }));
-            }
-
-            if (url.includes('/api/chat/send') && this._core.tauriProvider.isTauri()) {
-                return this._handleChatRequest(init);
-            }
-
-            return originalFetch(input, init);
         };
     }
 

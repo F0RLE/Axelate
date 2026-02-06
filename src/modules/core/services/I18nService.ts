@@ -94,7 +94,7 @@ export class I18nService {
         try {
             // Backend now handles merging base (en) with target lang
             const translations = await this._fetchTranslations(lang);
-            this._translations = translations;
+            this._translations = translations || {};
             this._currentLang = lang;
             document.documentElement.lang = lang;
 
@@ -175,6 +175,6 @@ export class I18nService {
      * Gets the current active language code.
      */
     public getCurrentLang(): string {
-        return this._currentLang;
+        return this._currentLang || 'en';
     }
 }

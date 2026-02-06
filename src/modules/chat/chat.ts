@@ -519,7 +519,7 @@ export class ChatController {
             } else {
                 const array = new Uint32Array(1);
                 crypto.getRandomValues(array);
-                this._currentGreetingIndex = (array[0] % 50) + 1;
+                this._currentGreetingIndex = ((array[0] ?? 0) % 50) + 1;
             }
 
             const win = globalThis as unknown as Record<string, unknown>;

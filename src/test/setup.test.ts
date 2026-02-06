@@ -9,6 +9,6 @@ describe('Testing Setup', () => {
 
     it('should have mocked Tauri invoke', () => {
         expect((globalThis as any).__TAURI__).toBeDefined();
-        expect(typeof (globalThis as any).__TAURI__.invoke).toBe('function');
+        expect(typeof (globalThis as any).__TAURI__.core.invoke).toBe('function');
     });
 });

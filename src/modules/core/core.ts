@@ -87,14 +87,14 @@ export class Core {
         this.windowService.setStateService(this.state);
         this.navigation.setStateService(this.state);
 
-        this.monitoringService = new MonitoringService();
+        this.monitoringService = new MonitoringService(this.tauriProvider);
         this.debugService = new DebugService();
         this.settingsService = new SettingsService();
 
         // 3. Init UI Handlers
         this.appUI = new AppUI();
         this.i18nUI = new I18nUI(this.i18n);
-        this.windowUI = new WindowUI(this.windowService, this.i18n, this.state, this.soundService);
+        this.windowUI = new WindowUI(this.windowService, this.state, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.state, this.soundService);
         this.downloadUI = new DownloadUI();
@@ -109,89 +109,90 @@ export class Core {
 
         // 5. Init Global Bridge
         this._globalBridge = new GlobalBridge(this);
+
+        // Inject Core into Service Singletons (Section 16.2)
+        aiBridge.setCore(this);
     }
 
     /**
-     * Executes the core initialization sequence.
+     * Executes the core initialization sequence with hardened survival logic.
      */
     public async init(): Promise<void> {
         console.groupCollapsed('%c[Core] Init Sequence', 'color: #94a3b8; font-weight: 500;');
         console.info('[Core] Init sequence started.');
 
-        // 1. Initialize Global Bridge early
-        this._globalBridge.init();
+        // 1. Emergency Safety Timeout (Guarantee splash disappears)
+        const safetyTimeout = setTimeout(() => {
+            console.warn('[Core] Emergency bootstrap timeout triggered! Forcing UI reveal.');
+            this.windowUI.hideSplashScreen();
+        }, 12000);
 
-        // 2. Fetch Bootstrap Data (Unified request for performance)
-        let bootstrapData: import('./types/coreTypes').IBootstrapData | null = null;
         try {
-            if (this.tauriProvider.isTauri()) {
-                bootstrapData =
-                    await this.tauriProvider.invoke<import('./types/coreTypes').IBootstrapData>(
-                        'get_app_bootstrap_data',
-                    );
-                console.debug('[Core] Bootstrap success:', bootstrapData);
-            }
-        } catch (e) {
-            console.warn('[Core] Bootstrap failed, falling back to sequential loading:', e);
-        }
+            // 2. Initialize Global Bridge early
+            this._globalBridge.init();
 
-        // 3. Load UI State & Templates
-        console.debug('[Core] Loading UI State & Templates...');
-
-        // Load critical templates early in parallel
-        const templateLoadPromise = Promise.all([
-            templateLoader.loadAndInject('components/sidebar', 'sidebar'),
-            templateLoader.loadAndInject('pages/settings', 'page-settings'),
-        ]).catch((e) => console.error('[Core] Template loading failed:', e));
-
-        if (bootstrapData) {
-            this.state.setState(bootstrapData.uiState);
-
-            // Apply zoom and I18n immediately if bootstrap data available
+            // 3. Fetch Bootstrap Data (with 5s timeout guard)
+            let bootstrapData: import('./types/coreTypes').IBootstrapData | null = null;
             try {
-                await this.windowService.init(
-                    bootstrapData.windowConfig,
-                    bootstrapData.initialZoom,
-                );
-                this.windowUI.init();
-                await this.i18n.init(bootstrapData.systemLanguage);
-                this.i18nUI.applyTranslations();
+                if (this.tauriProvider.isTauri()) {
+                    const bootstrapPromise =
+                        this.tauriProvider.invoke<import('./types/coreTypes').IBootstrapData>(
+                            'get_app_bootstrap_data',
+                        );
+                    const timeoutPromise = new Promise<null>((r) =>
+                        setTimeout(() => r(null), 5000),
+                    );
+
+                    bootstrapData = await Promise.race([bootstrapPromise, timeoutPromise]);
+                    console.debug(
+                        '[Core] Bootstrap result:',
+                        bootstrapData ? 'Data fetched' : 'Timed out',
+                    );
+                }
             } catch (e) {
-                console.warn('[Core] Quick init failed, following standard flow:', e);
+                console.warn('[Core] Bootstrap IPC failed:', e);
             }
 
-            await templateLoadPromise;
-        } else {
-            await Promise.all([this.state.loadState(), templateLoadPromise]);
+            // 4. Critical Service hydration
+            const templateLoadPromise = Promise.all([
+                templateLoader.loadAndInject('components/sidebar', 'sidebar'),
+                templateLoader.loadAndInject('pages/settings', 'page-settings'),
+            ]).catch((e) => console.error('[Core] Template loading failed:', e));
 
-            // Fallback init if bootstrap failed
-            await this.windowService.init();
-            this.windowUI.init();
-            await this.i18n.init();
+            if (bootstrapData) {
+                this.state.setState(bootstrapData.uiState);
+                try {
+                    await this.windowService.init(
+                        bootstrapData.windowConfig,
+                        bootstrapData.initialZoom,
+                    );
+                    this.windowUI.init();
+                    await this.i18n.init(bootstrapData.systemLanguage);
+                } catch (e) {
+                    console.warn('[Core] Fast-path init failed:', e);
+                }
+                await templateLoadPromise;
+            } else {
+                await Promise.all([this.state.loadState(), templateLoadPromise]);
+                await this.windowService.init();
+                this.windowUI.init();
+                await this.i18n.init();
+            }
+
             this.i18nUI.applyTranslations();
-        }
+            const win = globalThis as unknown as Window;
+            win.uiState = this.state as unknown as Window['uiState'];
 
-        const win = globalThis as unknown as Window & { uiState: StateService };
-        win.uiState = this.state;
+            this.navigation.refreshFromUiState();
+            const currentPage = this.navigation.getCurrentPage();
+            this.navigationUI.showPage(currentPage || 'home', null, true);
 
-        this.navigation.refreshFromUiState();
+            // 5. Show Window (race with timeout)
+            const showPromise = this.windowService.show();
+            const showTimeout = new Promise((r) => setTimeout(r, 3000));
+            await Promise.race([showPromise, showTimeout]);
 
-        // Render page immediately (behind splash screen) to avoid pop-in delay
-        const currentPage = this.navigation.getCurrentPage();
-        this.navigationUI.showPage(currentPage || 'home', null, true);
-
-        console.debug('[Core] UI State Loaded.');
-
-        // 4. Show Window (keep splash visible)
-        console.debug('[Core] Showing window...');
-        const showPromise = this.windowService.show();
-        const showTimeout = new Promise((r) => setTimeout(r, 2000));
-        await Promise.race([showPromise, showTimeout]).catch((e) =>
-            console.warn('[Core] Show window timed out or failed', e),
-        );
-
-        // 5. Init Remaining Services
-        try {
+            // 6. Init Remaining Services
             await this.moduleService.init();
             await this.sidebarUI.init();
             this.navigationUI.init();
@@ -199,45 +200,34 @@ export class Core {
             await this.settingsUI.init();
             this.monitoringUI.init();
 
-            // 6. Final UI Polish (Translations & Initial Page)
+            // 7. Catalog & AI (Resilient Load)
+            globalThis.addEventListener('catalog-loaded', () => {
+                this._restoreSelectedModules();
+            });
+
+            await aiBridge.init();
+            await this.catalog.loadCatalog();
+
             this.i18nUI.applyTranslations();
 
-            // Only show debug UI in development
             if (import.meta.env.DEV) {
                 this.debugUI.init();
             } else {
-                // Hide debug entry point in production
                 const debugEntry = document.querySelector('.debug-trigger') as HTMLElement;
                 if (debugEntry) debugEntry.style.display = 'none';
-
-                // Also hide the debug panel container if it exists
                 const debugPanel = document.getElementById('debug-panel');
                 if (debugPanel) debugPanel.style.display = 'none';
             }
         } catch (e) {
-            console.error('[Core] Services init failed:', e);
+            console.error('[Core] Critical bootstrap failure:', e);
+        } finally {
+            clearTimeout(safetyTimeout);
         }
-
-        // 6. Init Catalog
-        globalThis.addEventListener('catalog-loaded', () => {
-            this._restoreSelectedModules();
-        });
-
-        // Init AI Bridge (now manual)
-        await aiBridge.init();
-
-        // Await catalog to keep logs inside the group
-        await this.catalog.loadCatalog();
-
-        // 7. Start Polling (Monitoring handles its own lifecycle)
-        // this.diagnostics.startPolling(); // Disabled to prevent flickering conflict
 
         this._initGlobalShortcuts();
 
-        // 8. Hide Splash Screen (Only when fully ready)
+        // 8. Controlled Reveal
         console.debug('[Core] App Ready. Hiding splash...');
-
-        // Enforce minimum splash duration to avoid flickering
         await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
 
         this.windowUI.hideSplashScreen();
@@ -277,12 +267,11 @@ export class Core {
     private async _restoreSelectedModules(): Promise<void> {
         console.debug('[Core] Restoring selected modules...');
         const selected = this.state.getState().selected_modules || {};
-        const catalog = this.catalog.getCatalog();
 
         for (const category of ['ai', 'services']) {
             if (selected[category]) {
                 const savedAppId = selected[category]?.id || '';
-                const list = (catalog[category] as IApp[]) || [];
+                const list = globalThis.getCatalogCategory(category);
                 const fullApp = list.find((a: IApp) => a.id === savedAppId);
 
                 if (fullApp) {

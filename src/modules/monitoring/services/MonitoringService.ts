@@ -1,3 +1,4 @@
+import { TauriProvider } from '../../core/services/TauriProvider';
 import { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 interface IMonitoringGlobal {
@@ -16,6 +17,8 @@ export class MonitoringService {
     private pollingInterval: ReturnType<typeof setTimeout> | null = null;
     private listeners: StatsCallback[] = [];
 
+    constructor(private readonly _tauri: TauriProvider) {}
+
     /**
      * Starts listening to system stats from Tauri or starts fallback polling.
      */
@@ -23,18 +26,12 @@ export class MonitoringService {
         if (this.isListening) return;
         this.isListening = true;
 
-        const g = globalThis as unknown as IMonitoringGlobal;
-
-        if (g.__TAURI__) {
+        if (this._tauri.isTauri()) {
             try {
-                this.unlistenFn = await g.__TAURI__.event.listen<ISystemStats>(
+                this.unlistenFn = await this._tauri.listen<ISystemStats>(
                     'system_stats',
-                    (event) => {
-                        if (event?.payload) {
-                            this.notifyListeners(event.payload);
-                        } else {
-                            console.warn('[MonitoringService] Received empty payload');
-                        }
+                    (payload) => {
+                        this.notifyListeners(payload);
                     },
                 );
                 console.log('[MonitoringService] Started listening to system_stats');
@@ -44,7 +41,7 @@ export class MonitoringService {
             }
 
             // Optimization: Pause backend monitoring when window is hidden
-            this._bindVisibilityHandler(g);
+            this._bindVisibilityHandler();
         } else {
             console.log('[MonitoringService] Non-Tauri environment, starting fallback polling');
             this.startFallback();
@@ -54,16 +51,12 @@ export class MonitoringService {
     /**
      * Binds visibility change events to pause/resume backend monitoring.
      */
-    private _bindVisibilityHandler(g: IMonitoringGlobal): void {
-        const win = g as unknown as Window & {
-            __TAURI__?: { core: { invoke: (cmd: string, args?: unknown) => Promise<void> } };
-        };
-
+    private _bindVisibilityHandler(): void {
         document.addEventListener('visibilitychange', () => {
-            if (win.__TAURI__?.core) {
+            if (this._tauri.isTauri()) {
                 const isHidden = document.hidden;
                 // Fire and forget
-                void win.__TAURI__.core.invoke('set_monitoring_paused', { paused: isHidden });
+                void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
                 if (import.meta.env.DEV) {
                     console.debug(`[MonitoringService] Backend paused: ${isHidden}`);
                 }
@@ -120,7 +113,7 @@ export class MonitoringService {
     private startFallback() {
         if (this.pollingInterval) return;
 
-        const g = globalThis as unknown as IMonitoringGlobal;
+        const g = globalThis as IMonitoringGlobal;
         this.pollingInterval = g.setInterval(async () => {
             try {
                 const res = await fetch('/api/stats');
@@ -169,6 +162,6 @@ export class MonitoringService {
     private random(): number {
         const buffer = new Uint32Array(1);
         crypto.getRandomValues(buffer);
-        return buffer[0] / (0xffffffff + 1);
+        return (buffer[0] ?? 0) / (0xffffffff + 1);
     }
 }

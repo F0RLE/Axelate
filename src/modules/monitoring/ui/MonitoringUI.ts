@@ -138,43 +138,6 @@ export class MonitoringUI {
 
     private readonly _activeTweens = new Map<HTMLElement, number>();
 
-    private _animateTooltip(
-        el: HTMLElement,
-        target: number,
-        decimals: number = 0,
-        suffix: string = '',
-    ) {
-        const start = Number.parseFloat(el.textContent?.replaceAll(/[^0-9.-]/g, '') || '0') || 0;
-        if (start === target) return;
-
-        // Cancel existing tween
-        if (this._activeTweens.has(el)) {
-            cancelAnimationFrame(this._activeTweens.get(el)!);
-        }
-
-        const duration = 500;
-        const startTime = performance.now();
-
-        const animate = (currentTime: number) => {
-            const elapsed = currentTime - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-
-            // Ease out cubic
-            const ease = 1 - Math.pow(1 - progress, 3);
-
-            const current = start + (target - start) * ease;
-            el.textContent = `${current.toFixed(decimals)}${suffix}`;
-
-            if (progress < 1) {
-                this._activeTweens.set(el, requestAnimationFrame(animate));
-            } else {
-                this._activeTweens.delete(el);
-            }
-        };
-
-        this._activeTweens.set(el, requestAnimationFrame(animate));
-    }
-
     /**
      * Animates the main value of a monitoring element (CPU, RAM, etc.)
      */
@@ -377,17 +340,6 @@ export class MonitoringUI {
         el.classList.toggle('high', percent >= 85);
         el.classList.toggle('medium', percent >= 70 && percent < 85);
         el.classList.toggle('low', percent < 70);
-    }
-
-    private _formatMB(bytes: number): string {
-        const mb = Math.round(bytes / (1024 * 1024));
-        if (mb < 1) return '0 MB/s';
-        return `${mb} MB/s`;
-    }
-
-    private _formatSimpleMB(bytes: number): string {
-        const mb = Math.round(bytes / (1024 * 1024));
-        return `${mb}`;
     }
 
     /**

@@ -6,12 +6,7 @@
 import { TauriProvider } from './TauriProvider';
 import { IApp, IModule } from '../types/coreTypes';
 
-interface ICatalogData {
-    ai: IApp[];
-    services: IApp[];
-    stars?: string[];
-    [key: string]: unknown;
-}
+// Redundant ICatalogData removed (Inherited from global.d.ts)
 
 interface IApiProvider {
     id: string;
@@ -120,16 +115,23 @@ export class CatalogService {
 
     constructor(private readonly _tauri: TauriProvider) {
         if (globalThis.catalogService) {
-            console.warn('[CatalogService] Singleton instance already exists.');
+            console.warn('[CatalogService] Singleton instance collision detected.');
         }
-        globalThis.catalogService = this;
+        globalThis.catalogService = this as unknown as Window['catalogService'];
 
         // Sync with global APP_DATA (Architectural compliance Section 51)
         if (globalThis.APP_DATA) {
             Object.assign(this._appData, globalThis.APP_DATA);
         } else {
-            globalThis.APP_DATA = this._appData as any;
+            globalThis.APP_DATA = this._appData;
         }
+
+        // Expose category resolver for AppUI type safety
+        globalThis.getCatalogCategory = (cat: string): IApp[] => {
+            if (cat === 'ai') return this._appData.ai;
+            if (cat === 'services') return this._appData.services;
+            return [];
+        };
     }
 
     /**
@@ -248,7 +250,7 @@ export class CatalogService {
             if (this._appData.services) {
                 globalAppData.services = this._appData.services;
             }
-            (globalAppData as any).stars = this._appData.stars;
+            globalAppData.stars = this._appData.stars;
         }
     }
 

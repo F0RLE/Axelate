@@ -1,16 +1,25 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-// Deep mock of Tauri API
-const mockInvoke = vi.fn();
-const mockListen = vi.fn().mockResolvedValue(() => {});
+// 1. Setup mocks BEFORE imports
+vi.mock('@tauri-apps/api/core', () => ({
+    invoke: vi.fn(),
+}));
 
-// Full Tauri structure that TauriProvider expects
+vi.mock('@tauri-apps/api/event', () => ({
+    listen: vi.fn(),
+}));
+
+// 2. Import mocked versions to verify calls
+import { invoke as mockedTauriInvoke } from '@tauri-apps/api/core';
+import { listen as mockedTauriListen } from '@tauri-apps/api/event';
+
+// Full Tauri structure that TauriProvider expects (for globalThis fallback tests)
 const tauriMock = {
     core: {
-        invoke: mockInvoke,
+        invoke: mockedTauriInvoke,
     },
     event: {
-        listen: mockListen,
+        listen: mockedTauriListen,
     },
 };
 
@@ -55,6 +64,7 @@ describe('TauriProvider', () => {
 
         it('should return false when __TAURI__ is missing', () => {
             delete (globalThis as Record<string, unknown>).__TAURI__;
+            delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
 
             const webProvider = new TauriProvider();
             expect(webProvider.isTauri()).toBe(false);
@@ -63,48 +73,48 @@ describe('TauriProvider', () => {
 
     describe('invoke', () => {
         it('should call Tauri invoke with command and args', async () => {
-            mockInvoke.mockResolvedValueOnce({ success: true });
+            (mockedTauriInvoke as any).mockResolvedValueOnce({ success: true });
 
             const result = await provider.invoke('test_command', { param: 'value' });
 
-            expect(mockInvoke).toHaveBeenCalledWith('test_command', { param: 'value' });
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('test_command', { param: 'value' });
             expect(result).toEqual({ success: true });
         });
 
         it('should handle invoke errors', async () => {
-            mockInvoke.mockRejectedValueOnce(new Error('Command failed'));
+            (mockedTauriInvoke as any).mockRejectedValueOnce(new Error('Command failed'));
 
             await expect(provider.invoke('failing_command')).rejects.toThrow('Command failed');
         });
 
         it('should rethrow set_focus errors', async () => {
-            mockInvoke.mockRejectedValueOnce(new Error('Focus error'));
+            (mockedTauriInvoke as any).mockRejectedValueOnce(new Error('Focus error'));
 
             await expect(provider.invoke('set_focus')).rejects.toThrow('Focus error');
         });
 
         it('should pass empty object as default args', async () => {
-            mockInvoke.mockResolvedValueOnce(null);
+            (mockedTauriInvoke as any).mockResolvedValueOnce(null);
 
             await provider.invoke('simple_command');
 
-            expect(mockInvoke).toHaveBeenCalledWith('simple_command', {});
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('simple_command', {});
         });
     });
 
     describe('listen', () => {
         it('should subscribe to Tauri events', async () => {
             const callback = vi.fn();
-            mockListen.mockResolvedValueOnce(() => {});
+            (mockedTauriListen as any).mockResolvedValueOnce(() => {});
 
             await provider.listen('test:event', callback);
 
-            expect(mockListen).toHaveBeenCalledWith('test:event', expect.any(Function));
+            expect(mockedTauriListen).toHaveBeenCalledWith('test:event', expect.any(Function));
         });
 
         it('should return unsubscribe function', async () => {
             const unsubscribeFn = vi.fn();
-            mockListen.mockResolvedValueOnce(unsubscribeFn);
+            (mockedTauriListen as any).mockResolvedValueOnce(unsubscribeFn);
 
             const unsubscribe = await provider.listen('test:event', () => {});
 
@@ -115,7 +125,9 @@ describe('TauriProvider', () => {
             const callback = vi.fn();
 
             // Use module-level helper
-            mockListen.mockImplementationOnce(createListenWithPayload({ data: 'test' }));
+            (mockedTauriListen as any).mockImplementationOnce(
+                createListenWithPayload({ data: 'test' }),
+            );
 
             await provider.listen('test:event', callback);
 

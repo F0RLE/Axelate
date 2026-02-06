@@ -127,7 +127,8 @@ export function sortModelsByPower(models: Record<string, IAIModelData>): [string
 export function getMostPowerfulModel(providerId: string): string {
     const models = getModelsFromProvider(providerId);
     const sorted = sortModelsByPower(models);
-    return sorted.length > 0 ? sorted[0][0] : '';
+    const first = sorted[0];
+    return first ? first[0] : '';
 }
 
 /**

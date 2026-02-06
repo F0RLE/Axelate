@@ -47,6 +47,12 @@ describe('StateService', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+        (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+        (globalThis as any).__TAURI_INTERNALS__ = {
+            invoke: async () => {},
+            transformCallback: () => 0,
+        };
+        (mockCore.tauriProvider.isTauri as any).mockReturnValue(true);
     });
 
     describe('loadState', () => {
@@ -73,6 +79,8 @@ describe('StateService', () => {
 
         it('should fallback to localStorage when Tauri is missing', async () => {
             delete (globalThis as Record<string, unknown>).__TAURI__;
+            delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
+            (mockCore.tauriProvider.isTauri as any).mockReturnValue(false);
 
             const fallbackState = {
                 sidebar_collapsed: true,
@@ -87,6 +95,11 @@ describe('StateService', () => {
 
             // Restore
             (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+            (globalThis as any).__TAURI_INTERNALS__ = {
+                invoke: async () => {},
+                transformCallback: () => 0,
+            };
+            (mockCore.tauriProvider.isTauri as any).mockReturnValue(true);
         });
 
         it('should return default state when backend fails', async () => {
@@ -253,6 +266,8 @@ describe('StateService', () => {
 
         it('should use localStorage when Tauri is missing', () => {
             delete (globalThis as Record<string, unknown>).__TAURI__;
+            delete (globalThis as Record<string, unknown>).__TAURI_INTERNALS__;
+            (mockCore.tauriProvider.isTauri as any).mockReturnValue(false);
 
             stateService.set('sidebar_width', 500);
             stateService.saveImmediate();
@@ -261,6 +276,11 @@ describe('StateService', () => {
 
             // Restore
             (globalThis as Record<string, unknown>).__TAURI__ = tauriMock;
+            (globalThis as any).__TAURI_INTERNALS__ = {
+                invoke: async () => {},
+                transformCallback: () => 0,
+            };
+            (mockCore.tauriProvider.isTauri as any).mockReturnValue(true);
         });
     });
 });
