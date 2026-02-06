@@ -761,7 +761,7 @@
         transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
         backdrop-filter 0.3s ease,
         -webkit-backdrop-filter 0.3s ease;
-    
+
     will-change: transform, opacity, backdrop-filter;
     backface-visibility: hidden;
 }

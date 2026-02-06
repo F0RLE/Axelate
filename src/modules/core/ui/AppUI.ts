@@ -295,9 +295,9 @@ export class AppUI {
 
         // Self-Correction: Async check for installation status to handle race conditions
         if (!isInstalled && !isApi) {
-            const win = globalThis as any; // Access extended global
-            if (win.checkModuleInstalled) {
-                win.checkModuleInstalled(app.id)
+            if (globalThis.checkModuleInstalled) {
+                globalThis
+                    .checkModuleInstalled(app.id)
                     .then((actuallyInstalled: boolean) => {
                         if (actuallyInstalled) {
                             console.log(`[AppUI] Correcting installation status for ${app.id}`);
@@ -475,11 +475,13 @@ export class AppUI {
 
         // Verify and inject delete badge if missing
         if (!card.querySelector('.app-delete-badge')) {
-           const isApi = app.type === 'api' || ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
-           const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
-           if (badgeHtml) {
-               card.insertAdjacentHTML('afterbegin', badgeHtml);
-           }
+            const isApi =
+                app.type === 'api' ||
+                ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
+            const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
+            if (badgeHtml) {
+                card.insertAdjacentHTML('afterbegin', badgeHtml);
+            }
         }
     }
 
@@ -532,38 +534,56 @@ export class AppUI {
         e.preventDefault();
         console.log('Download module clicked (card):', app.id);
 
-        actionBtn.textContent = globalThis.t
-            ? globalThis.t('ui.launcher.module.downloading', 'Downloading...')
-            : 'Downloading...';
-        actionBtn.style.pointerEvents = 'none';
+        this._setDownloadLoading(actionBtn);
 
         try {
             if (globalThis.downloadModule && app.repoUrl) {
                 await globalThis.downloadModule(app.id, app.repoUrl, app.expectedHash);
-                if (globalThis.showToast) globalThis.showToast('Module downloaded!', 'success');
-
-                // Force update app object state
-                app.installed = true;
-
-                // Update the card immediately without full reload
-                const card =
-                    (actionBtn.closest('.model-card-premium') as HTMLElement) ||
-                    (actionBtn.closest('.app-card') as HTMLElement);
-
-                if (card) {
-                    this._markCardAsInstalled(card, app);
-                }
-            } else if (globalThis.showToast) {
-                globalThis.showToast('Download not available', 'warning');
+                this._onDownloadSuccess(actionBtn, app);
+            } else {
+                this._notifyDownloadUnavailable();
             }
         } catch (err) {
-            console.error('Download error:', err);
-            if (globalThis.showToast) globalThis.showToast('Download failed', 'error');
-            actionBtn.style.pointerEvents = 'auto';
-            if (!app.installed)
-                actionBtn.textContent = globalThis.t
-                    ? globalThis.t('ui.launcher.module.download', 'Download')
-                    : 'Download';
+            this._onDownloadError(actionBtn, app, err);
+        }
+    }
+
+    private _setDownloadLoading(btn: HTMLElement) {
+        btn.textContent = globalThis.t
+            ? globalThis.t('ui.launcher.module.downloading', 'Downloading...')
+            : 'Downloading...';
+        btn.style.pointerEvents = 'none';
+    }
+
+    private _setDownloadReady(btn: HTMLElement) {
+        btn.style.pointerEvents = 'auto';
+        btn.textContent = globalThis.t
+            ? globalThis.t('ui.launcher.module.download', 'Download')
+            : 'Download';
+    }
+
+    private _onDownloadSuccess(actionBtn: HTMLElement, app: IApp) {
+        if (globalThis.showToast) globalThis.showToast('Module downloaded!', 'success');
+        app.installed = true;
+
+        const card =
+            (actionBtn.closest('.model-card-premium') as HTMLElement) ||
+            (actionBtn.closest('.app-card') as HTMLElement);
+
+        if (card) {
+            this._markCardAsInstalled(card, app);
+        }
+    }
+
+    private _onDownloadError(actionBtn: HTMLElement, app: IApp, err: unknown) {
+        console.error('Download error:', err);
+        if (globalThis.showToast) globalThis.showToast('Download failed', 'error');
+        this._setDownloadReady(actionBtn);
+    }
+
+    private _notifyDownloadUnavailable() {
+        if (globalThis.showToast) {
+            globalThis.showToast('Download not available', 'warning');
         }
     }
 
