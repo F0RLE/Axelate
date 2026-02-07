@@ -3,7 +3,7 @@
  * @description Service for managing module downloads, installations, and status updates
  */
 
-import { TauriProvider } from './TauriProvider';
+import { type TauriProvider } from './TauriProvider';
 import type { IModuleDownloadState } from '../types/coreTypes';
 import type { TGlobalWin } from '../types/global_bridge_types';
 
@@ -12,7 +12,7 @@ import type { TGlobalWin } from '../types/global_bridge_types';
 
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
-    private readonly _deletedModules: Set<string> = new Set();
+    private readonly _deletedModules = new Set<string>();
 
     constructor(private readonly _tauri: TauriProvider) {}
 
@@ -128,6 +128,7 @@ export class ModuleService {
             await this._tauri.invoke('delete_module', { moduleId: moduleId });
 
             this._deletedModules.add(moduleId);
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {
@@ -176,10 +177,10 @@ export class ModuleService {
      */
     private _broadcastState(moduleId: string) {
         const win = globalThis as TGlobalWin;
-        if (!win['moduleDownloadState']) win['moduleDownloadState'] = {};
+        if (!win.moduleDownloadState) win.moduleDownloadState = {};
         const state = this._downloadState[moduleId];
         if (state) {
-            win['moduleDownloadState'][moduleId] = state;
+            win.moduleDownloadState[moduleId] = state;
         }
     }
 }

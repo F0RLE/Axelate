@@ -5,6 +5,8 @@ use crate::services::downloader;
 use tauri::AppHandle;
 
 #[tauri::command]
+#[specta::specta]
+/// Loads application configuration with module installation status
 pub async fn get_config(app: AppHandle) -> Result<AppConfig, AppError> {
     let mut config = config_service::load_config(&app)?;
 

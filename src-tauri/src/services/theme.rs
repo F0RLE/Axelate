@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+/// Returns the application's theme color palette
 pub fn get_theme_colors() -> HashMap<String, String> {
     let mut colors = HashMap::new();
 

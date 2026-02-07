@@ -3,6 +3,9 @@ use crate::services::translations;
 use tauri::AppHandle;
 
 #[tauri::command]
-pub fn get_translations(app: AppHandle, lang: String) -> Result<serde_json::Value, AppError> {
-    translations::get_translations(&app, &lang)
+#[specta::specta]
+/// Retrieves translation strings for the specified language
+#[allow(clippy::needless_pass_by_value)] // Tauri commands require owned AppHandle
+pub fn get_translations(app: AppHandle, lang: &str) -> Result<serde_json::Value, AppError> {
+    translations::get_translations(&app, lang)
 }

@@ -25,16 +25,17 @@ marked.use({
 });
 
 import { chatFileHandler } from '../services/ChatFileHandler';
-import type { IChatRole, IChatAttachment } from '../types/chatTypes';
+import type { IChatAttachment, IChatRole } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
 import type { TGlobalWin } from '../../core/types/global_bridge_types';
 import DOMPurify from 'dompurify';
+import { logger } from '../../core/services/LoggerService';
 
 export class ChatUI {
     private readonly _messagesContainer: HTMLElement | null;
     private readonly _chatContainer: HTMLElement | null;
     private readonly _attachmentsContainer: HTMLElement | null;
-    private readonly _typingTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
+    private readonly _typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor() {
         this._messagesContainer = document.getElementById('chat-messages');
@@ -52,7 +53,7 @@ export class ChatUI {
             lang?: string;
             escaped?: boolean;
         }): string {
-            const language = lang || 'text';
+            const language = lang ?? 'text';
             // Simple UUID-like for uniqueness if needed, but we rely on DOM traversal
             return `
              <div class="code-block-wrapper">
@@ -67,7 +68,7 @@ export class ChatUI {
                         <span>Copy</span>
                      </button>
                  </div>
-                 <pre><code class="language-${language}">${escaped ? text : text.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</code></pre>
+                 <pre><code class="language-${language}">${escaped === true ? text : text.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</code></pre>
              </div>
              `;
         };
@@ -76,8 +77,12 @@ export class ChatUI {
 
         // Bind event listeners
         if (this._messagesContainer) {
-            this._messagesContainer.addEventListener('click', this._handleMessageClick.bind(this));
-            this._messagesContainer.addEventListener('click', this._handleCopyClick.bind(this));
+            this._messagesContainer.addEventListener('click', (e) => {
+                void this._handleMessageClick(e as MouseEvent);
+            });
+            this._messagesContainer.addEventListener('click', (e) => {
+                void this._handleCopyClick(e as MouseEvent);
+            });
         }
     }
 
@@ -90,16 +95,16 @@ export class ChatUI {
     }
 
     private async _bindAiEvents(): Promise<void> {
-        const win = globalThis as unknown as Record<string, unknown>;
-        if (win['__TAURI_INTERNALS__']) {
+        const win = globalThis as TGlobalWin;
+        if (win.__TAURI_INTERNALS__ !== undefined) {
             await listen<{ code: string; wait_seconds: number }>('ai:status:retry', (e) => {
                 const { code, wait_seconds } = e.payload;
                 if (code === 'GEMINI_QUOTA_RETRY') {
                     // Show toast or update UI
                     const g = globalThis as TGlobalWin;
                     const msg =
-                        typeof g['t'] === 'function'
-                            ? g['t'](
+                        typeof g.t === 'function'
+                            ? g.t(
                                   'ui.gemini.status.retry',
                                   'Rate limited. Retrying in {seconds}s...',
                                   {
@@ -143,7 +148,7 @@ export class ChatUI {
         if (this._chatContainer) {
             this._chatContainer.classList.remove('has-messages');
         }
-        this.updateAttachments([], () => {});
+        this.updateAttachments([], () => void 0);
     }
 
     /**
@@ -157,7 +162,7 @@ export class ChatUI {
         this._prepareContainer();
 
         const row = document.createElement('div');
-        row.className = 'chat-row ' + (role === 'user' ? 'user' : 'bot');
+        row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
 
         const bubble = this._createMessageBubble(opts);
         const textNode = this._createMessageTextNode(content, opts);
@@ -168,7 +173,9 @@ export class ChatUI {
         this._appendMeta(bubble, opts['tokens'] as number | undefined);
 
         row.appendChild(bubble);
-        this._messagesContainer!.appendChild(row);
+        if (this._messagesContainer) {
+            this._messagesContainer.appendChild(row);
+        }
         this._scrollToBottom();
     }
 
@@ -186,7 +193,7 @@ export class ChatUI {
         this._prepareContainer();
 
         const row = document.createElement('div');
-        row.className = 'chat-row ' + (role === 'user' ? 'user' : 'bot');
+        row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
 
         const bubble = this._createMessageBubble(opts);
         const textNode = document.createElement('div');
@@ -194,7 +201,9 @@ export class ChatUI {
         bubble.appendChild(textNode);
 
         row.appendChild(bubble);
-        this._messagesContainer!.appendChild(row);
+        if (this._messagesContainer) {
+            this._messagesContainer.appendChild(row);
+        }
         this._scrollToBottom();
 
         let accumulatedText = '';
@@ -243,10 +252,10 @@ export class ChatUI {
                     textNode.textContent = fullContent;
                 }
 
-                if (finalOpts['attachments']) {
+                if (finalOpts['attachments'] !== undefined) {
                     this._appendAttachments(bubble, finalOpts['attachments'] as IChatAttachment[]);
                 }
-                if (finalOpts['images']) {
+                if (finalOpts['images'] !== undefined) {
                     this._appendImages(
                         bubble,
                         finalOpts['images'] as { mime: string; data_base64: string }[],
@@ -288,7 +297,7 @@ export class ChatUI {
      */
     private _createMessageBubble(opts: Record<string, unknown>): HTMLElement {
         const bubble = document.createElement('div');
-        bubble.className = 'chat-bubble' + (opts['error'] ? ' chat-error' : '');
+        bubble.className = `chat-bubble${opts['error'] ? ' chat-error' : ''}`;
         return bubble;
     }
 
@@ -298,43 +307,54 @@ export class ChatUI {
     private _createMessageTextNode(content: string, opts: Record<string, unknown>): HTMLElement {
         const textNode = document.createElement('div');
         textNode.className = 'markdown-body'; // Helper class for styling
-        const g = globalThis as TGlobalWin;
 
-        let finalContent = content || '';
-
-        if (opts['i18nKey']) {
-            const i18nKey = typeof opts['i18nKey'] === 'string' ? opts['i18nKey'] : '';
-            if (i18nKey) {
-                textNode.dataset['i18n'] = i18nKey;
-                if (opts['i18nParams']) {
-                    textNode.dataset['i18nParams'] = JSON.stringify(opts['i18nParams']);
-                }
-                const tParams = (opts['i18nParams'] as Record<string, string>) || {};
-                finalContent = typeof g['t'] === 'function' ? g['t'](i18nKey, content) : content;
-                // Note: tParams would be used here if translator supported interpolation
-                console.debug('[ChatUI] i18nParams ignored by translator:', tParams);
-            }
-        } else if (opts['i18nPrefixKey']) {
-            const prefixKey =
-                typeof opts['i18nPrefixKey'] === 'string' ? opts['i18nPrefixKey'] : '';
-            if (prefixKey) {
-                textNode.dataset['i18nPrefix'] = prefixKey;
-                const prefix =
-                    typeof g['t'] === 'function' ? g['t'](prefixKey, 'Error: ') : 'Error: ';
-                finalContent = prefix + (content || '');
-            }
-        }
+        const finalContent = this._resolveI18nContent(textNode, content, opts);
 
         // Render Markdown
         try {
             const rawHtml = marked.parse(finalContent) as string;
             textNode.innerHTML = DOMPurify.sanitize(rawHtml);
         } catch (e) {
-            console.error('[ChatUI] Markdown render error:', e);
+            logger.error('[ChatUI] Markdown render error:', e);
             textNode.textContent = finalContent;
         }
 
         return textNode;
+    }
+
+    private _resolveI18nContent(
+        el: HTMLElement,
+        content: string,
+        opts: Record<string, unknown>,
+    ): string {
+        const g = globalThis as TGlobalWin;
+
+        // Handle i18nKey
+        if (typeof opts['i18nKey'] === 'string' && opts['i18nKey']) {
+            const i18nKey = opts['i18nKey'];
+            el.dataset['i18n'] = i18nKey;
+
+            if (opts['i18nParams'] !== undefined) {
+                el.dataset['i18nParams'] = JSON.stringify(opts['i18nParams']);
+            }
+
+            const tParams = (opts['i18nParams'] as Record<string, string>) || {};
+            // Note: tParams would be used here if translator supported interpolation
+            logger.debug('[ChatUI] i18nParams ignored by translator:', tParams);
+
+            return typeof g.t === 'function' ? g.t(i18nKey, content) : content || '';
+        }
+
+        // Handle i18nPrefixKey
+        if (typeof opts['i18nPrefixKey'] === 'string' && opts['i18nPrefixKey']) {
+            const prefixKey = opts['i18nPrefixKey'];
+            el.dataset['i18nPrefix'] = prefixKey;
+
+            const prefix = typeof g.t === 'function' ? g.t(prefixKey, 'Error: ') : 'Error: ';
+            return prefix + (content || '');
+        }
+
+        return content || '';
     }
 
     /**
@@ -361,7 +381,7 @@ export class ChatUI {
                 isImage = true;
             }
 
-            card.className = 'chat-media-card' + (isImage ? ' is-image' : ' is-file');
+            card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
             const hasData = !!f.data_base64;
             const name = this._shortenFileName(f.name || 'file');
@@ -372,7 +392,7 @@ export class ChatUI {
                 const mime = f.type || (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`);
                 card.innerHTML = `
                 <img src="data:${mime};base64,${f.data_base64}" alt="${DOMPurify.sanitize(name)}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px;">
-                ${fileTokens > 0 ? `<div class="media-badge">${fileTokens}</div>` : ''}
+                ${fileTokens > 0 ? `<div class="media-badge">${String(fileTokens)}</div>` : ''}
             `;
             } else {
                 // Standard File Mode (Pill UI)
@@ -381,7 +401,7 @@ export class ChatUI {
                 <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
                 <div class="media-info">
                     <div class="media-name">${DOMPurify.sanitize(name)}</div>
-                    ${fileTokens > 0 ? `<div class="media-tokens">${fileTokens} tokens</div>` : ''}
+                    ${fileTokens > 0 ? `<div class="media-tokens">${String(fileTokens)} tokens</div>` : ''}
                 </div>
             `;
             }
@@ -391,7 +411,7 @@ export class ChatUI {
         if (hiddenCount > 0) {
             const moreCard = document.createElement('div');
             moreCard.className = 'chat-media-card more-card';
-            moreCard.innerHTML = `<span>+${hiddenCount}</span>`;
+            moreCard.innerHTML = `<span>+${String(hiddenCount)}</span>`;
             attachContainer.appendChild(moreCard);
         }
 
@@ -406,9 +426,9 @@ export class ChatUI {
         const extIndex = name.lastIndexOf('.');
         if (extIndex > 0) {
             const ext = name.substring(extIndex);
-            return name.substring(0, 18) + '..' + ext;
+            return `${name.substring(0, 18)}..${ext}`;
         }
-        return name.substring(0, 20) + '..';
+        return `${name.substring(0, 20)}..`;
     }
     /**
      * Appends images to a message bubble.
@@ -450,7 +470,7 @@ export class ChatUI {
         if (typeof tokens === 'number' && tokens > 0) {
             const tokenSpan = document.createElement('span');
             tokenSpan.className = 'chat-tokens';
-            tokenSpan.textContent = `${tokens} ${tokens === 1 ? 'token' : 'tokens'}`;
+            tokenSpan.textContent = `${String(tokens)} ${tokens === 1 ? 'token' : 'tokens'}`;
             meta.appendChild(tokenSpan);
         }
 
@@ -475,69 +495,73 @@ export class ChatUI {
         const visibleFiles = files.slice(0, maxVisible);
         const hiddenCount = files.length - maxVisible;
 
-        visibleFiles.forEach(async (f, idx) => {
-            const card = document.createElement('div');
-            const isImage = f.type.startsWith('image/');
-            card.className = 'chat-media-card' + (isImage ? ' is-image' : ' is-file');
+        visibleFiles.forEach((f, idx) => {
+            void (async () => {
+                const card = document.createElement('div');
+                const isImage = f.type.startsWith('image/');
+                card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
-            let contentHtml = '';
-            let name = f.name || 'file';
+                let contentHtml = '';
+                let name = f.name || 'file';
 
-            // Relaxed limit for names in horizontal layout
-            if (name.length > 25) {
-                const extIndex = name.lastIndexOf('.');
-                if (extIndex > 0) {
-                    name = name.substring(0, 18) + '..' + name.substring(extIndex);
+                // Relaxed limit for names in horizontal layout
+                if (name.length > 25) {
+                    const extIndex = name.lastIndexOf('.');
+                    if (extIndex > 0) {
+                        name = `${name.substring(0, 18)}..${name.substring(extIndex)}`;
+                    } else {
+                        name = `${name.substring(0, 20)}..`;
+                    }
+                }
+
+                // Get single file token count
+                const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
+
+                if (isImage) {
+                    const objectUrl = URL.createObjectURL(f);
+                    contentHtml = `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" onload="URL.revokeObjectURL(this.src)">`;
+                    if (fileTokens > 0) {
+                        contentHtml += `<div class="media-badge">${String(fileTokens)}</div>`;
+                    }
                 } else {
-                    name = name.substring(0, 20) + '..';
-                }
-            }
-
-            // Get single file token count
-            const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
-
-            if (isImage) {
-                const objectUrl = URL.createObjectURL(f);
-                contentHtml = `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" onload="URL.revokeObjectURL(this.src)">`;
-                if (fileTokens > 0) {
-                    contentHtml += `<div class="media-badge">${fileTokens}</div>`;
-                }
-            } else {
-                let iconSvg = '';
-                try {
-                    iconSvg = getFileIcon(f.name);
-                } catch {
-                    iconSvg = '📄';
-                }
-                contentHtml = `
+                    let iconSvg = '';
+                    try {
+                        iconSvg = getFileIcon(f.name);
+                    } catch {
+                        iconSvg = '📄';
+                    }
+                    contentHtml = `
                 <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
                 <div class="media-info">
                     <div class="media-name">${DOMPurify.sanitize(name)}</div>
-                    ${fileTokens > 0 ? `<div class="media-tokens">${fileTokens} tokens</div>` : ''}
+                    ${fileTokens > 0 ? `<div class="media-tokens">${String(fileTokens)} tokens</div>` : ''}
                 </div>
             `;
-            }
+                }
 
-            card.innerHTML = `
+                card.innerHTML = `
             ${contentHtml}
             <button type="button" class="media-remove" title="Remove attachment">×</button>
         `;
 
-            const btn = card.querySelector('.media-remove') as HTMLButtonElement;
-            if (btn) {
-                btn.onclick = (e) => {
-                    e.stopPropagation();
-                    onRemove(idx);
-                };
-            }
+                const btn: HTMLElement | null = card.querySelector('.media-remove');
+                if (btn) {
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        onRemove(idx);
+                    };
+                }
 
-            this._attachmentsContainer!.appendChild(card);
+                if (this._attachmentsContainer) {
+                    this._attachmentsContainer.appendChild(card);
+                }
+            })();
         });
 
-        if (hiddenCount > 0) {
+        if (hiddenCount > 0 && this._attachmentsContainer) {
             const moreCard = document.createElement('div');
             moreCard.className = 'chat-media-card more-card';
-            moreCard.innerHTML = `<span>+${hiddenCount}</span>`;
+            moreCard.innerHTML = `<span>+${String(hiddenCount)}</span>`;
             this._attachmentsContainer.appendChild(moreCard);
         }
     }
@@ -563,8 +587,8 @@ export class ChatUI {
         this._messagesContainer.scrollTop = this._messagesContainer.scrollHeight;
 
         // Safety auto-cleanup after 60 seconds
-        const timeout = globalThis.setTimeout(() => {
-            console.warn(`[ChatUI] Typing indicator ${id} timed out and was auto-removed`);
+        const timeout = globalThis.setTimeout((): void => {
+            logger.warn(`[ChatUI] Typing indicator ${id} timed out and was auto-removed`);
             this.removeTyping(id);
         }, 60000);
         this._typingTimeouts.set(id, timeout);
@@ -590,10 +614,10 @@ export class ChatUI {
         duration = 2000,
     ): void {
         const win = globalThis as TGlobalWin;
-        if (typeof win['showToast'] === 'function') {
-            win['showToast'](msg, type, duration);
+        if (typeof win.showToast === 'function') {
+            win.showToast(msg, type, duration);
         } else {
-            console.debug(`[Toast] ${type}: ${msg}`);
+            logger.debug(`[Toast] ${type}: ${msg}`);
         }
     }
 
@@ -617,7 +641,8 @@ export class ChatUI {
 
                 try {
                     // Using modular invoke
-                    const win = globalThis as unknown as Record<string, unknown>;
+                    const win = globalThis as TGlobalWin;
+                    // eslint-disable-next-line @typescript-eslint/dot-notation
                     if (win['__TAURI_INTERNALS__']) {
                         try {
                             await invoke('plugin:clipboard|write', { text });
@@ -640,7 +665,7 @@ export class ChatUI {
                         btn.innerHTML = originalHtml;
                     }, 2000);
                 } catch (err) {
-                    console.error('[ChatUI] Copy failed:', err);
+                    logger.error('[ChatUI] Copy failed:', err);
                     this.showToast('Failed to copy code', 'error');
                 }
             }
@@ -655,7 +680,7 @@ export class ChatUI {
         if (!el) return;
 
         if (count > 0) {
-            el.textContent = `${count} tokens`;
+            el.textContent = `${String(count)} tokens`;
             el.classList.add('visible');
             // Add warning color if tokens are high (heuristic: 20k tokens)
             if (count > 20000) {
@@ -682,13 +707,13 @@ export class ChatUI {
             e.stopPropagation();
 
             const url = link.href;
-
-            const win = globalThis as unknown as Record<string, unknown>;
+            const win = globalThis as TGlobalWin;
+            // eslint-disable-next-line @typescript-eslint/dot-notation
             if (win['__TAURI_INTERNALS__']) {
                 try {
                     await invoke('plugin:shell|open', { path: url });
                 } catch (err) {
-                    console.error('[ChatUI] Failed to open link via shell:', err);
+                    logger.error('[ChatUI] Failed to open link via shell:', err);
                     // Fallback to window.open (might be blocked or open in webview depending on config)
                     window.open(url, '_blank');
                 }

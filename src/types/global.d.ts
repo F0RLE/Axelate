@@ -1,4 +1,4 @@
-import { IApp, ILogEntry } from '../modules/core/types/coreTypes';
+import { type IApp, type ILogEntry } from '../modules/core/types/coreTypes';
 
 export {};
 
@@ -149,6 +149,7 @@ declare global {
         };
         invoke: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
         event: {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
             listen: <T>(
                 _event: string,
                 _handler: (_event: { payload: T }) => void,

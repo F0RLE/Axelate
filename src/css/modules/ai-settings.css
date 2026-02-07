@@ -160,6 +160,7 @@
     gap: 0.25rem;
     width: 100%; /* Stretch pricing container */
     margin-top: 0.5rem;
+    min-height: 20px;
 }
 
 .price-row {

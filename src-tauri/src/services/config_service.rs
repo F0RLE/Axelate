@@ -1,10 +1,11 @@
 use crate::errors::AppError;
-use crate::models::config::*;
+use crate::models::config::{AiModel, ApiProviderConfig, AppConfig, ConfigModels, ModuleItem};
 use crate::models::modules::ConfigField;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tauri::AppHandle;
 
+/// Resolves the path to defaults.json configuration file
 pub fn get_defaults_path(_app: &AppHandle) -> Result<PathBuf, AppError> {
     let res_dir = &*crate::utils::paths::RESOURCES_DIR;
 
@@ -22,34 +23,33 @@ pub fn get_defaults_path(_app: &AppHandle) -> Result<PathBuf, AppError> {
         }
     }
 
-    log::error!("Failed to locate defaults.json. Checked: {:?}", candidates);
+    log::error!("Failed to locate defaults.json. Checked: {candidates:?}");
     Err(AppError::Config(
         "Defaults not found in any expected location".to_string(),
     ))
 }
 
+/// Loads application configuration from defaults and API providers
 pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
     // 1. Load Defaults (Disk -> Embedded Fallback)
-    let content = match get_defaults_path(app) {
-        Ok(path) => match std::fs::read_to_string(&path) {
-            Ok(c) => c,
-            Err(e) => {
-                log::warn!(
-                    "Failed to read defaults from disk ({:?}), using embedded override: {}",
-                    path,
-                    e
-                );
-                include_str!("../../resources/config/defaults.json").to_string()
-            }
-        },
-        Err(_) => {
+    let content = get_defaults_path(app).map_or_else(
+        |_| {
             log::warn!("Defaults not found on disk, using embedded override.");
             include_str!("../../resources/config/defaults.json").to_string()
-        }
-    };
+        },
+        |path| {
+            std::fs::read_to_string(&path).unwrap_or_else(|e| {
+                log::warn!(
+                    "Failed to read defaults from disk ({}), using embedded override: {e}",
+                    path.display()
+                );
+                include_str!("../../resources/config/defaults.json").to_string()
+            })
+        },
+    );
 
     let mut config: AppConfig = serde_json::from_str(&content)
-        .map_err(|e| AppError::Config(format!("Failed to parse config: {}", e)))?;
+        .map_err(|e| AppError::Config(format!("Failed to parse config: {e}")))?;
 
     // Ensure config.models is initialized
     if config.models.is_none() {
@@ -73,7 +73,7 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
     };
 
     if let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&providers_content) {
-        config.api_providers = providers.clone();
+        config.api_providers = Some(providers.clone());
 
         for provider in providers {
             // Update catalog if not present
@@ -86,7 +86,7 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
                     ConfigField {
                         field_type: "text".to_string(),
                         label: format!("{} API Key", provider.name),
-                        default: Some(serde_json::Value::String("".to_string())),
+                        default: Some(serde_json::Value::String(String::new())),
                         required: true,
                         options: None,
                     },
@@ -134,10 +134,32 @@ pub fn load_config(app: &AppHandle) -> Result<AppConfig, AppError> {
             if let Some(provider_models) = provider.models
                 && let Some(ref mut models_map) = config.models
             {
-                if provider.id == "gpt" {
-                    models_map.gpt.extend(provider_models);
-                } else if provider.id == "gemini" {
-                    models_map.gemini.extend(provider_models);
+                // Convert ApiModelConfig to AiModel
+                let ai_models: HashMap<String, AiModel> = provider_models
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            AiModel {
+                                desc_key: format!("model.desc.{k}"),
+                                name: k.clone(),
+                                desc: k.clone(),
+                                pricing: vec![],
+                                stats: crate::models::config::ModelStats {
+                                    speed: 50,
+                                    logic: 50,
+                                    creative: 50,
+                                },
+                                api_models: Some(v.clone()),
+                            },
+                        )
+                    })
+                    .collect();
+
+                if provider.provider_type == "openai" {
+                    models_map.gpt.extend(ai_models);
+                } else if provider.provider_type == "gemini" {
+                    models_map.gemini.extend(ai_models);
                 }
             }
         }

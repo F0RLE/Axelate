@@ -2,32 +2,54 @@
     "compilerOptions": {
         "target": "ESNext",
         "useDefineForClassFields": true,
+
         "module": "ESNext",
-        "lib": ["ESNext", "DOM", "DOM.Iterable"],
-        "skipLibCheck": true,
         "moduleResolution": "bundler",
+
+        "lib": ["ESNext", "DOM", "DOM.Iterable"],
+
+        "strict": true,
+
+        "noEmit": true,
+        "isolatedModules": true,
+
+        "skipLibCheck": true,
+
         "allowImportingTsExtensions": true,
         "resolveJsonModule": true,
-        "isolatedModules": true,
-        "noEmit": true,
-        "strict": true,
+
+        "verbatimModuleSyntax": true,
+
         "noUnusedLocals": true,
         "noUnusedParameters": true,
         "noImplicitReturns": true,
         "noImplicitOverride": true,
+        "noImplicitAny": true,
+        "noImplicitThis": true,
+
+        "useUnknownInCatchVariables": true,
+
         "noUncheckedIndexedAccess": true,
         "noPropertyAccessFromIndexSignature": true,
         "exactOptionalPropertyTypes": true,
-        "verbatimModuleSyntax": true,
-        "allowJs": false,
+
         "forceConsistentCasingInFileNames": true,
         "noFallthroughCasesInSwitch": true,
+        "allowUnreachableCode": false,
+        "allowUnusedLabels": false,
+
+        "allowJs": false,
+
+        "declaration": true,
+        "declarationMap": true,
+
         "baseUrl": ".",
         "paths": {
             "@/*": ["./*"]
         },
-        "types": ["vite/client", "node"]
+
+        "types": ["vite/client"]
     },
-    "include": ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.d.ts"],
+    "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"],
     "exclude": ["node_modules", "dist"]
 }

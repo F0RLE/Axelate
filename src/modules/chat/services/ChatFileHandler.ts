@@ -14,11 +14,11 @@
 import type { IChatAttachment } from '../types/chatTypes';
 import type { TGlobalWin } from '../../core/types/global_bridge_types';
 import {
-    isTextFile,
-    readFileAsText,
-    readFileAsBase64,
     estimateTokenCount,
     getTokenCount,
+    isTextFile,
+    readFileAsBase64,
+    readFileAsText,
 } from '../utils/chatUtils';
 // ============================================================================
 // Types
@@ -153,9 +153,9 @@ export class ChatFileHandler {
     /**
      * Internal router for file processing based on environment.
      */
-    private async _processSingleFile(file: File): Promise<IFileProcessResult> {
+    private _processSingleFile(file: File): Promise<IFileProcessResult> {
         const win = globalThis as TGlobalWin;
-        if (win['__TAURI__']) {
+        if (win.__TAURI__) {
             return this._processWithBackend(file);
         }
         return this._processWithWebFallback(file);
@@ -265,7 +265,7 @@ export class ChatFileHandler {
     }
 
     // calculateCombinedContext also needs update or removal of preview logic
-    public async calculateCombinedContext(
+    public calculateCombinedContext(
         baseText: string,
     ): Promise<{ combinedText: string; attachments: IChatAttachment[] }> {
         // Without processing, we can't show "Smart Unpacked".
@@ -276,7 +276,7 @@ export class ChatFileHandler {
             size: f.size,
             data_base64: '',
         }));
-        return { combinedText: baseText + '\n[Files attached]', attachments };
+        return Promise.resolve({ combinedText: `${baseText}\n[Files attached]`, attachments });
     }
 
     public async getFileTokenEstimate(file: File): Promise<number> {

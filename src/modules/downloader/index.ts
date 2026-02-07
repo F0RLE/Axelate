@@ -1,2 +1,2 @@
-export * from './types/downloaderTypes';
+export type * from './types/downloaderTypes';
 export * from './ui/DownloadUI';

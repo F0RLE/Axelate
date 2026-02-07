@@ -7,11 +7,12 @@
 import DOMPurify from 'dompurify';
 
 import type { IApp } from '../../core/types/coreTypes';
-import { SettingsService } from '../../settings/services/SettingsService';
-import { StateService } from '../../core/services/StateService';
+import { type SettingsService } from '../../settings/services/SettingsService';
+import { type StateService } from '../../core/services/StateService';
 import type { IAIModelData } from '../types/aiTypes';
-import { sortModelsByPower, getProviderData, getModelData } from '../utils/catalogHelpers';
+import { getModelData, getProviderData, sortModelsByPower } from '../utils/catalogHelpers';
 import type { TGlobalWin } from '../../core/types/global_bridge_types';
+import { logger } from '../../core/services/LoggerService';
 
 // ============================================================================
 // Constants
@@ -68,14 +69,14 @@ class AISettingsRenderer {
      */
     public init(settingsService: SettingsService, stateService: StateService): void {
         if (this._initialized) {
-            console.warn('[AISettingsRenderer] Already initialized');
+            logger.warn('[AISettingsRenderer] Already initialized');
             return;
         }
 
         this._settingsService = settingsService;
         this._stateService = stateService;
         this._initialized = true;
-        console.debug('[AISettingsRenderer] Initialized');
+        logger.debug('[AISettingsRenderer] Initialized');
     }
 
     /**
@@ -87,18 +88,18 @@ class AISettingsRenderer {
      */
     public async render(container: HTMLElement, app: IApp): Promise<void> {
         if (!this._initialized) {
-            console.error('[AISettingsRenderer] Not initialized. Call init() first.');
+            logger.error('[AISettingsRenderer] Not initialized. Call init() first.');
             return;
         }
 
         const appId = app.id;
-        const providerData = (app['apiProviderData'] as Record<string, unknown>) || {};
-        const models = (providerData['models'] as Record<string, IAIModelData>) || {};
+        const providerData = app.apiProviderData ?? {};
+        const models = (providerData['models'] as Record<string, IAIModelData>) ?? {};
         const sortedModels = sortModelsByPower(models);
 
-        const firstModel = sortedModels[0];
+        const firstModel = sortedModels.length > 0 ? sortedModels[0] : undefined;
         const defaultModelId = firstModel ? firstModel[0] : '';
-        const savedModel = this._stateService?.getSelectedAIModel(appId) || defaultModelId;
+        const savedModel = this._stateService?.getSelectedAIModel(appId) ?? defaultModelId;
         const t = this._getTranslator();
 
         const isCleanApp =
@@ -170,7 +171,7 @@ class AISettingsRenderer {
                                 <div id="${appId}-thinking-grid" class="thinking-grid" role="radiogroup" aria-label="Thinking Level">
                                     <div class="thinking-option-card ${isHigh ? 'selected' : ''}" 
                                         role="radio" 
-                                        aria-checked="${isHigh}" 
+                                        aria-checked="${String(isHigh)}" 
                                         tabindex="0"
                                         data-value="high">
                                         <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
@@ -178,7 +179,7 @@ class AISettingsRenderer {
                                     </div>
                                     <div class="thinking-option-card ${isLow ? 'selected' : ''}" 
                                         role="radio" 
-                                        aria-checked="${isLow}" 
+                                        aria-checked="${String(isLow)}" 
                                         tabindex="0"
                                         data-value="low">
                                         <div class="thinking-option-title" data-i18n="ui.settings.thinking.low">${t('ui.settings.thinking.low', 'Low')}</div>
@@ -223,7 +224,7 @@ class AISettingsRenderer {
                 (price) => `
             <div class="price-row">
                 <span>${price.tier}</span>
-                <span>${price.note || price.in + ' / ' + price.out}</span>
+                <span>${price.note ?? `${String(price.in)} / ${String(price.out)}`}</span>
             </div>
         `,
             )
@@ -232,11 +233,11 @@ class AISettingsRenderer {
         return `
             <div class="ai-model-card ${isSelected ? 'selected' : ''}" 
                 role="option" 
-                aria-selected="${isSelected}" 
+                aria-selected="${String(isSelected)}" 
                 tabindex="0"
                 data-model-key="${key}">
                 <div class="model-name">${DOMPurify.sanitize(model.name)}</div>
-                <div class="model-desc" data-i18n="${model.descKey}">${DOMPurify.sanitize(t(model.descKey || '', model.desc))}</div>
+                <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(t(model.descKey ?? '', model.desc))}</div>
                 <div class="model-pricing">${pricingHtml}</div>
             </div>
         `;
@@ -252,11 +253,12 @@ class AISettingsRenderer {
         const t = this._getTranslator();
         const modelData = getModelData(appId, modelKey);
         const stats = modelData?.stats;
-
+        
+        // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
         if (!stats)
             return `<div class="model-desc">${t('ui.settings.stats_unavailable', 'Stats unavailable')}</div>`;
 
-        const thinkingLevel = localStorage.getItem(CACHE_KEYS.THINKING_LEVEL(appId)) || 'high';
+        const thinkingLevel = localStorage.getItem(CACHE_KEYS.THINKING_LEVEL(appId)) ?? 'high';
 
         const adjustedLogic =
             thinkingLevel === 'high' ? Math.min(10, (stats.logic || 0) + 2) : stats.logic || 0;
@@ -319,17 +321,25 @@ class AISettingsRenderer {
         const input = container.querySelector<HTMLInputElement>(`#${appId}-api-key-input`);
 
         const savedKey = await this._settingsService.getSecureKey(appId);
-        if (input && savedKey) input.value = savedKey;
+        if (input !== null && savedKey) input.value = savedKey;
 
-        const addListener = (element: Element | null, type: string, fn: EventListener) => {
-            if (element) {
+        const addListener = (element: Element | null, type: string, fn: EventListener): void => {
+            if (element !== null) {
                 element.addEventListener(type, fn);
-                this._unsubscribers.push(() => element.removeEventListener(type, fn));
+                this._unsubscribers.push(() => {
+                    element.removeEventListener(type, fn);
+                });
             }
         };
 
         addListener(input, 'input', (event) => {
-            this._settingsService?.saveSecureKey(appId, (event.target as HTMLInputElement).value);
+            if (this._settingsService) {
+                // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                this._settingsService.saveSecureKey(
+                    appId,
+                    (event.target as HTMLInputElement).value,
+                );
+            }
         });
 
         addListener(container.querySelector(`#${appId}-key-toggle-btn`), 'click', () => {
@@ -337,7 +347,7 @@ class AISettingsRenderer {
         });
 
         addListener(container.querySelector(`#${appId}-key-check-btn`), 'click', () => {
-            this.checkKey(appId);
+            void this.checkKey(appId);
         });
 
         const handleModelSelection = (event: Event) => {
@@ -364,13 +374,13 @@ class AISettingsRenderer {
         });
 
         const thinkingGrid = container.querySelector(`#${appId}-thinking-grid`);
-        if (thinkingGrid) {
+        if (thinkingGrid !== null) {
             const buttons = Array.from(
                 thinkingGrid.querySelectorAll<HTMLElement>('.thinking-option-card'),
             );
 
             const updateThinking = (target: HTMLElement) => {
-                const val = target.dataset['value'] || 'high';
+                const val = target.dataset['value'] ?? 'high';
                 localStorage.setItem(CACHE_KEYS.THINKING_LEVEL(appId), val);
 
                 buttons.forEach((b) => {
@@ -382,16 +392,16 @@ class AISettingsRenderer {
 
                 target.setAttribute('aria-checked', 'true');
 
-                const savedModel = this._stateService?.getSelectedAIModel(appId) || '';
+                const savedModel = this._stateService?.getSelectedAIModel(appId) ?? '';
                 if (savedModel) {
                     this.selectModel(appId, savedModel);
                 }
             };
 
             buttons.forEach((btn) => {
-                btn.addEventListener('click', (event) =>
-                    updateThinking(event.currentTarget as HTMLElement),
-                );
+                btn.addEventListener('click', (event) => {
+                    updateThinking(event.currentTarget as HTMLElement);
+                });
                 btn.addEventListener('keydown', (event) => {
                     const keyEvent = event;
                     if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
@@ -403,8 +413,8 @@ class AISettingsRenderer {
         }
 
         const globalContext = globalThis as TGlobalWin;
-        if (typeof globalContext['applyTranslations'] === 'function') {
-            (globalContext['applyTranslations'] as () => void)();
+        if (typeof globalContext.applyTranslations === 'function') {
+            (globalContext.applyTranslations as () => void)();
         }
     }
 
@@ -418,7 +428,7 @@ class AISettingsRenderer {
         const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
         const btn = document.getElementById(`${appId}-key-toggle-btn`);
 
-        if (input && btn) {
+        if (input !== null && btn !== null) {
             const isPassword = input.type === 'password';
             input.type = isPassword ? 'text' : 'password';
             btn.innerHTML = isPassword ? ICONS.VISIBLE : ICONS.HIDDEN;
@@ -434,7 +444,7 @@ class AISettingsRenderer {
     public async checkKey(appId: string): Promise<void> {
         const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
         const btn = document.getElementById(`${appId}-key-check-btn`);
-        if (!input || !btn) return;
+        if (input === null || btn === null) return;
 
         const t = this._getTranslator();
         const key = input.value.trim();
@@ -446,7 +456,7 @@ class AISettingsRenderer {
 
         const originalHtml = btn.innerHTML;
         const originalWidth = btn.offsetWidth;
-        btn.style.width = originalWidth + 'px';
+        btn.style.width = `${String(originalWidth)}px`;
         btn.innerHTML = ICONS.SPINNER;
         btn.style.pointerEvents = 'none';
 
@@ -460,7 +470,7 @@ class AISettingsRenderer {
                 this._showToast(t('ui.settings.key_invalid_check', 'Key is invalid'), 'error');
             }
         } catch (error: unknown) {
-            console.error('[AISettingsRenderer] Key check failed:', error);
+            logger.error('[AISettingsRenderer] Key check failed:', error);
             this._updateKeyButtonState(btn, 'error', ICONS.X);
             this._showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
         } finally {
@@ -489,7 +499,7 @@ class AISettingsRenderer {
             return res.ok;
         }
 
-        const baseUrl = providerData?.baseUrl || 'https://api.openai.com/v1';
+        const baseUrl = providerData?.baseUrl ?? 'https://api.openai.com/v1';
         const url = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
         const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
         return res.ok;
@@ -526,7 +536,7 @@ class AISettingsRenderer {
         });
 
         const statsArea = document.getElementById(`${appId}-model-stats`);
-        if (statsArea) {
+        if (statsArea !== null) {
             const t = this._getTranslator();
             const rawHtml = `
                 <div class="ai-content-panel">
@@ -539,8 +549,8 @@ class AISettingsRenderer {
             statsArea.innerHTML = DOMPurify.sanitize(rawHtml);
 
             const globalContext = globalThis as TGlobalWin;
-            if (typeof globalContext['applyTranslations'] === 'function') {
-                (globalContext['applyTranslations'] as () => void)();
+            if (typeof globalContext.applyTranslations === 'function') {
+                (globalContext.applyTranslations as () => void)();
             }
         }
     }
@@ -550,7 +560,9 @@ class AISettingsRenderer {
      * MANDATORY cleanup method required by Section 4.3.
      */
     public destroy(): void {
-        this._unsubscribers.forEach((fn) => fn());
+        this._unsubscribers.forEach((fn) => {
+            fn();
+        });
         this._unsubscribers.length = 0;
         this._initialized = false;
     }
@@ -560,8 +572,8 @@ class AISettingsRenderer {
      */
     private _getTranslator(): TranslateFunc {
         const globalContext = globalThis as TGlobalWin;
-        const t = globalContext['t'];
-        return (t as TranslateFunc) || ((_key: string, fallback: string) => fallback);
+        const t = globalContext.t;
+        return (t as TranslateFunc | undefined) ?? ((_key: string, fallback: string) => fallback);
     }
 
     /**
@@ -569,8 +581,8 @@ class AISettingsRenderer {
      */
     private _showToast(message: string, type: string): void {
         const globalContext = globalThis as TGlobalWin;
-        if (typeof globalContext['showToast'] === 'function') {
-            (globalContext['showToast'] as (m: string, t: string) => void)(message, type);
+        if (typeof globalContext.showToast === 'function') {
+            (globalContext.showToast as (m: string, t: string) => void)(message, type);
         }
     }
 }

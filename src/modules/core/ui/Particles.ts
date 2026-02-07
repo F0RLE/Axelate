@@ -10,19 +10,19 @@ interface IParticlesGlobal {
 export class Particles {
     private readonly _canvas: HTMLCanvasElement;
     private readonly _ctx: CanvasRenderingContext2D;
-    private _particles: Array<{
+    private _particles: {
         x: number;
         y: number;
         vx: number;
         vy: number;
         size: number;
         color: string;
-    }> = [];
+    }[] = [];
     private readonly _mouse: { x: number; y: number } = { x: -100, y: -100 };
     private readonly _width: number = 0;
     private readonly _height: number = 0;
-    private _isRunning: boolean = false;
-    private _lastFrameTime: number = 0;
+    private _isRunning = false;
+    private _lastFrameTime = 0;
     private readonly _cleanupAbort: AbortController = new AbortController();
 
     constructor() {
@@ -53,8 +53,8 @@ export class Particles {
 
         this._canvas.width = this._width * 0.5;
         this._canvas.height = this._height * 0.5;
-        this._canvas.style.width = this._width + 'px';
-        this._canvas.style.height = this._height + 'px';
+        this._canvas.style.width = `${this._width.toString()}px`;
+        this._canvas.style.height = `${this._height.toString()}px`;
 
         this._ctx.scale(0.5, 0.5);
 
@@ -115,8 +115,20 @@ export class Particles {
             { signal },
         );
 
-        globalThis.addEventListener('blur', () => this.stop(), { signal });
-        globalThis.addEventListener('focus', () => this._checkReducedMotionAndStart(), { signal });
+        globalThis.addEventListener(
+            'blur',
+            () => {
+                this.stop();
+            },
+            { signal },
+        );
+        globalThis.addEventListener(
+            'focus',
+            () => {
+                this._checkReducedMotionAndStart();
+            },
+            { signal },
+        );
 
         globalThis.addEventListener(
             'mousemove',
@@ -218,6 +230,8 @@ export class Particles {
             });
         }
 
-        requestAnimationFrame(() => this._animate());
+        requestAnimationFrame(() => {
+            this._animate();
+        });
     }
 }

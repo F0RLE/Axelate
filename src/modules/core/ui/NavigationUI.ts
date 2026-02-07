@@ -10,8 +10,8 @@
  */
 
 import { eventBus } from '@/modules/core/services/EventBus';
-import { NavigationService } from '../services/NavigationService';
-import { SoundService } from '../services/SoundService';
+import { type NavigationService } from '../services/NavigationService';
+import { type SoundService } from '../services/SoundService';
 
 export class NavigationUI {
     constructor(
@@ -41,11 +41,7 @@ export class NavigationUI {
      * @param btn - Optional button element that triggered the navigation
      * @param silent - If true, prevents sound effects
      */
-    public async showPage(
-        pageId: string,
-        btn: HTMLElement | null = null,
-        silent = false,
-    ): Promise<void> {
+    public showPage(pageId: string, btn: HTMLElement | null = null, silent = false): Promise<void> {
         console.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn });
         const previousPageId = this._service.getCurrentPage();
 
@@ -59,7 +55,9 @@ export class NavigationUI {
         const pages = document.querySelectorAll('.page');
         const navBtns = document.querySelectorAll('.nav-btn');
 
-        pages.forEach((el: Element) => el.classList.remove('active'));
+        pages.forEach((el: Element) => {
+            el.classList.remove('active');
+        });
         navBtns.forEach((b: Element) => {
             b.classList.remove('active');
             b.removeAttribute('aria-current');
@@ -93,5 +91,6 @@ export class NavigationUI {
                 }
             });
         }
+        return Promise.resolve();
     }
 }

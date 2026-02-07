@@ -1,14 +1,14 @@
 use crate::errors::AppError;
-use once_cell::sync::Lazy;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 /// Root directory for application data.
 /// Defaults to:
 /// - Windows: `%APPDATA%/AxelateData`
 /// - Linux: `$XDG_CONFIG_HOME/AxelateData` or `~/.config/AxelateData`
 /// - macOS: `~/Library/Application Support/AxelateData`
-pub static APPDATA_ROOT: Lazy<PathBuf> = Lazy::new(|| {
+pub static APPDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
     // 1. Try standard config dir (e.g. C:\Users\User\AppData\Roaming)
     let mut root = dirs::config_dir();
 
@@ -35,25 +35,25 @@ pub static APPDATA_ROOT: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// User-specific data root (`AxelateData/User`)
-pub static USER_ROOT: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("User"));
+pub static USER_ROOT: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("User"));
 
 /// Configuration directory for user settings (`AxelateData/User/Configs`)
-pub static CONFIG_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("Configs"));
+pub static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("Configs"));
 
 /// Directory for UI persistence state (`AxelateData/User/UI`)
-pub static UI_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("UI"));
+pub static UI_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("UI"));
 
 /// System root for internal app data (`AxelateData/System`)
-pub static SYSTEM_ROOT: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("System"));
+pub static SYSTEM_ROOT: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("System"));
 
 /// Log files directory (`AxelateData/System/Logs`)
-pub static LOG_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Logs"));
+pub static LOG_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Logs"));
 
 /// Temporary files directory (`AxelateData/System/Temp`)
-pub static TEMP_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Temp"));
+pub static TEMP_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Temp"));
 
 /// Downloaded modules directory (`AxelateData/System/Modules`)
-pub static MODULES_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Modules"));
+pub static MODULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Modules"));
 
 /// Path to application resources.
 ///
@@ -63,7 +63,7 @@ pub static MODULES_DIR: Lazy<PathBuf> = Lazy::new(|| SYSTEM_ROOT.join("Modules")
 ///
 /// This Lazy initialization performs I/O checks (filesystem existence)
 /// to determine the correct path.
-pub static RESOURCES_DIR: Lazy<PathBuf> = Lazy::new(|| {
+pub static RESOURCES_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     // 1. Production Check: Look relative to the running executable
     // Tauri bundles often place resources in the same folder or a specific relative structure
     if let Some(exe_dir) = std::env::current_exe()
@@ -104,22 +104,23 @@ pub static RESOURCES_DIR: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// Application cache directory (`AxelateData/Cache`)
-pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| APPDATA_ROOT.join("Cache"));
+pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("Cache"));
 
 /// Path to env file (`AxelateData/User/Configs/.env`)
-pub static FILE_ENV: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join(".env"));
+pub static FILE_ENV: LazyLock<PathBuf> = LazyLock::new(|| CONFIG_DIR.join(".env"));
 
 /// Path to generation config (`AxelateData/User/Configs/generation_config.json`)
-pub static FILE_GEN_CONFIG: Lazy<PathBuf> = Lazy::new(|| CONFIG_DIR.join("generation_config.json"));
+pub static FILE_GEN_CONFIG: LazyLock<PathBuf> =
+    LazyLock::new(|| CONFIG_DIR.join("generation_config.json"));
 
 /// Path to UI state file (`AxelateData/User/UI/ui_state.json`)
-pub static FILE_UI_STATE: Lazy<PathBuf> = Lazy::new(|| UI_DIR.join("ui_state.json"));
+pub static FILE_UI_STATE: LazyLock<PathBuf> = LazyLock::new(|| UI_DIR.join("ui_state.json"));
 
 /// Directory for Chat history (`AxelateData/User/Chat`)
-pub static CHAT_DIR: Lazy<PathBuf> = Lazy::new(|| USER_ROOT.join("Chat"));
+pub static CHAT_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("Chat"));
 
 /// Path to chat history file (`AxelateData/User/Chat/history.json`)
-pub static FILE_CHAT_HISTORY: Lazy<PathBuf> = Lazy::new(|| CHAT_DIR.join("history.json"));
+pub static FILE_CHAT_HISTORY: LazyLock<PathBuf> = LazyLock::new(|| CHAT_DIR.join("history.json"));
 
 /// Maximum number of log files to keep
 const MAX_LOG_FILES: usize = 5;
@@ -161,14 +162,8 @@ fn cleanup_old_logs() -> Result<(), AppError> {
     }
 
     let mut log_files: Vec<_> = fs::read_dir(&*LOG_DIR)?
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .map(|ext| ext == "log")
-                .unwrap_or(false)
-        })
+        .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "log"))
         .collect();
 
     if log_files.len() <= MAX_LOG_FILES {
@@ -186,7 +181,10 @@ fn cleanup_old_logs() -> Result<(), AppError> {
     let to_remove = log_files.len() - MAX_LOG_FILES;
     for entry in log_files.into_iter().take(to_remove) {
         if let Err(e) = fs::remove_file(entry.path()) {
-            log::warn!("Failed to remove old log file {:?}: {}", entry.path(), e);
+            log::warn!(
+                "Failed to remove old log file {}: {e}",
+                entry.path().display()
+            );
         }
     }
 

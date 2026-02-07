@@ -48,8 +48,7 @@ Write-Header "Starting Axelate (Dev Mode)"
 # 1. Setup Environment
 $ScriptDir = $PSScriptRoot
 $SrcDir = "$ScriptDir\..\..\src"
-$TauriDir = "$ScriptDir\..\..\src-tauri"
-
+а
 # Ensure Cargo is found
 $env:PATH = "$env:USERPROFILE\.cargo\bin;" + $env:PATH
 
@@ -61,8 +60,13 @@ if (-not (Test-Path "$SrcDir\node_modules")) {
 }
 
 # 3. Start Tauri (Vite is started automatically by beforeDevCommand)
-Write-Step "Launching Tauri (Vite will start automatically)..."
-Get-Process "Axelate" -ErrorAction SilentlyContinue | Stop-Process -Force
-Set-Location $TauriDir
-# Specify stable-msvc explicitly to avoid ambiguity
-rustup run stable-msvc cargo tauri dev
+Write-Step "Launching Tauri and Vite..."
+$AppProcess = Get-Process "Axelate" -ErrorAction SilentlyContinue
+if ($AppProcess) {
+    Write-Step "Closing existing Axelate instance..."
+    $AppProcess | Stop-Process -Force
+}
+
+Set-Location $SrcDir
+# Use the local npm script which points to the local Tauri CLI binary
+npm run tauri:dev

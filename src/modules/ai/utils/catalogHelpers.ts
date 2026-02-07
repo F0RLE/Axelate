@@ -3,7 +3,7 @@
  * @description Utility functions for accessing AI provider data from global APP_DATA.
  */
 
-import type { IAICatalogApp, IAIModelData, IAIProviderData, IAIModelStats } from '../types/aiTypes';
+import type { IAICatalogApp, IAIModelData, IAIModelStats, IAIProviderData } from '../types/aiTypes';
 
 // ============================================================================
 // Global Access

@@ -1,3 +1,12 @@
+//! Main build script for Axelate
+//!
+//! Handles Tauri build process and other compile-time guarantees.
+
 fn main() {
-    tauri_build::build()
+    // Watch resource files for changes to trigger rebuild during dev
+    println!("cargo:rerun-if-changed=resources/config/defaults.json");
+    println!("cargo:rerun-if-changed=resources/locales");
+    println!("cargo:rerun-if-changed=resources/api_providers.json");
+
+    tauri_build::build();
 }

@@ -48,13 +48,16 @@ class TemplateLoader {
      */
     public async loadTemplate(path: string): Promise<string> {
         if (this._cache.has(path)) {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
             return this._cache.get(path)!;
         }
 
         try {
             const response = await fetch(`/templates/${path}.html`);
             if (!response.ok) {
-                throw new Error(`Failed to load template: ${path} (Status: ${response.status})`);
+                throw new Error(
+                    `Failed to load template: ${path} (Status: ${response.status.toString()})`,
+                );
             }
             const html = await response.text();
             this._cache.set(path, html);

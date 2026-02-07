@@ -1,3 +1,4 @@
+#![allow(unsafe_code)]
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
@@ -9,11 +10,15 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
+/// Encrypted secure data container
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SecureData {
+    /// Key-value store for secure keys
     pub keys: HashMap<String, String>,
 }
 
+/// Secure storage manager for encrypted keys
+#[derive(Debug)]
 pub struct SecureStorage;
 
 use crate::errors::AppError;
@@ -40,10 +45,10 @@ impl SecureStorage {
     /// This binds the encryption to the current device.
     fn get_encryption_key() -> Result<[u8; 32], AppError> {
         let machine_id = machine_uid::get()
-            .map_err(|e| AppError::External(format!("Failed to get machine ID: {}", e)))?;
+            .map_err(|e| AppError::External(format!("Failed to get machine ID: {e}")))?;
 
         // "Pepper" to ensure the key isn't just the raw ID
-        let input = format!("AXELATE_SECURE_SALT_{}", machine_id);
+        let input = format!("AXELATE_SECURE_SALT_{machine_id}");
 
         // SHA-256 hash to get exactly 32 bytes
         let mut hasher = Sha256::new();
@@ -55,9 +60,10 @@ impl SecureStorage {
         Ok(key)
     }
 
+    /// Saves an encrypted key to secure storage
     pub fn save_key(service: String, value: String) -> Result<(), AppError> {
         // 1. Load existing data
-        let mut data = Self::load_data().unwrap_or(SecureData {
+        let mut data = Self::load_data().unwrap_or_else(|_| SecureData {
             keys: HashMap::new(),
         });
 
@@ -78,7 +84,7 @@ impl SecureStorage {
 
         let ciphertext = cipher
             .encrypt(nonce, json_bytes.as_ref())
-            .map_err(|e| AppError::External(format!("Encryption failure: {}", e)))?;
+            .map_err(|e| AppError::External(format!("Encryption failure: {e}")))?;
 
         // 5. Save [Nonce + Ciphertext]
         let mut final_payload = Vec::new();
@@ -91,9 +97,10 @@ impl SecureStorage {
         Ok(())
     }
 
-    pub fn get_key(service: String) -> Result<Option<String>, AppError> {
+    /// Retrieves an encrypted key from secure storage
+    pub fn get_key(service: &str) -> Result<Option<String>, AppError> {
         let data = Self::load_data()?;
-        Ok(data.keys.get(&service).cloned())
+        Ok(data.keys.get(service).cloned())
     }
 
     fn load_data() -> Result<SecureData, AppError> {
@@ -171,7 +178,7 @@ mod tests {
         }
 
         // 4. Get Key (Decrypt)
-        let loaded = SecureStorage::get_key(service.clone()).unwrap();
+        let loaded = SecureStorage::get_key(&service).unwrap();
         assert_eq!(
             loaded,
             Some(secret),
@@ -179,7 +186,7 @@ mod tests {
         );
 
         // 5. Test Missing Key
-        let missing = SecureStorage::get_key("non_existent".to_string()).unwrap();
+        let missing = SecureStorage::get_key("non_existent").unwrap();
         assert_eq!(missing, None, "Found key that shouldn't exist");
     }
 }

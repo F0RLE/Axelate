@@ -3,10 +3,10 @@
  * @description Manages window-related UI events, shortcuts, and screen protection
  */
 
-import { WindowService } from '../services/WindowService';
+import { type WindowService } from '../services/WindowService';
 import type { TGlobalWin } from '../types/global_bridge_types';
-import { StateService } from '../services/StateService';
-import { SoundService } from '../services/SoundService';
+import { type StateService } from '../services/StateService';
+import { type SoundService } from '../services/SoundService';
 
 // IWindowUIGlobal removed
 
@@ -102,7 +102,7 @@ export class WindowUI {
         // 2. Monitoring Pause on Blur/Hide
         const updateMonitoring = (): void => {
             const shouldPause = !this._isInGracePeriod && (document.hidden || !document.hasFocus());
-            this._service.setMonitoringPaused(shouldPause);
+            void this._service.setMonitoringPaused(shouldPause);
         };
         document.addEventListener('visibilitychange', updateMonitoring, { signal });
         globalThis.addEventListener('blur', updateMonitoring, { signal });
@@ -111,10 +111,16 @@ export class WindowUI {
         this._monitoringTimeout = setTimeout(updateMonitoring, 1000);
 
         // 3. Keydown Handlers
-        document.addEventListener('keydown', (e) => this._handleKeydown(e), {
-            capture: true,
-            signal,
-        });
+        document.addEventListener(
+            'keydown',
+            (e) => {
+                this._handleKeydown(e);
+            },
+            {
+                capture: true,
+                signal,
+            },
+        );
 
         // 4. Zoom (Ctrl+Wheel)
         document.addEventListener(
@@ -128,7 +134,9 @@ export class WindowUI {
                         .changeZoom(delta)
                         .then(() => {
                             // Ensure style recalculation happens before checking
-                            setTimeout(() => this._checkWidth(), 50);
+                            setTimeout(() => {
+                                this._checkWidth();
+                            }, 50);
                         })
                         .catch(() => {
                             /* ignore */
@@ -205,7 +213,7 @@ export class WindowUI {
         if ((e.ctrlKey && ['r', 'R', 'к', 'К'].includes(e.key)) || e.key === 'F5') {
             e.preventDefault();
             const win = globalThis as TGlobalWin;
-            if (win['location']) (win['location'] as Location).reload();
+            if (win.location) win.location.reload();
             return;
         }
 
@@ -299,7 +307,9 @@ export class WindowUI {
         this._isSmallScreen = policy.isSmallScreen;
 
         if (this._isSmallScreen) {
-            this._service.toggleMaximize().catch(() => {});
+            this._service.toggleMaximize().catch(() => {
+                /* ignore */
+            });
             this._wasMaximizedOnSmallScreen = true;
         }
     }
@@ -324,11 +334,9 @@ export class WindowUI {
 
         if (this._wasMaximizedOnSmallScreen && !isMaximized) {
             const win = globalThis as TGlobalWin;
-            if (win['screen']) {
-                const width = Math.floor((win['screen'].availWidth || win['screen'].width) * 0.85);
-                const height = Math.floor(
-                    (win['screen'].availHeight || win['screen'].height) * 0.85,
-                );
+            if (win.screen) {
+                const width = Math.floor((win.screen.availWidth || win.screen.width) * 0.85);
+                const height = Math.floor((win.screen.availHeight || win.screen.height) * 0.85);
 
                 await this._service.setSize(width, height);
                 this._wasMaximizedOnSmallScreen = false;
@@ -420,8 +428,8 @@ export class WindowUI {
 
         // Calculate effective space available to the layout
         const win = globalThis as TGlobalWin;
-        const width = win['innerWidth'] / zoom;
-        const height = win['innerHeight'] / zoom;
+        const width = win.innerWidth / zoom;
+        const height = win.innerHeight / zoom;
 
         // Use backend thresholds if available, otherwise safe defaults
         const minWidth = config?.thresholds.warningWidth || 700;

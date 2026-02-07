@@ -3,25 +3,36 @@ use crate::models::{ControlRequest, ControlResponse, Module};
 use crate::services::module_controller::{self, ModuleAction};
 use tauri::AppHandle;
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+/// Module launch response indicating how to handle the module
+#[derive(Debug, serde::Serialize, serde::Deserialize, specta::Type)]
 pub struct LaunchResponse {
+    /// Action type ("`start_local`" or "navigate")
     pub action: String,
+    /// Page to navigate to
     pub page: Option<String>,
+    /// Provider identifier
     pub provider: Option<String>,
+    /// Optional status message
     pub message: Option<String>,
 }
 
 #[tauri::command]
+#[specta::specta]
+/// Retrieves list of all available modules (AI and services)
 pub async fn get_modules() -> Result<Vec<Module>, AppError> {
     Ok(module_controller::get_all_modules())
 }
 
 #[tauri::command]
+#[specta::specta]
+/// Retrieves runtime status of a specific module
 pub async fn get_module_status(module_id: String) -> Result<String, AppError> {
     Ok(module_controller::get_module_status(&module_id))
 }
 
 #[tauri::command]
+#[specta::specta]
+/// Launches a module (local or API-based)
 pub async fn launch_module(module_id: String) -> Result<LaunchResponse, AppError> {
     // 1. Check if it's a known Local Module (folder exists)
     let module_path = crate::services::downloader::get_module_path(&module_id);
@@ -30,7 +41,7 @@ pub async fn launch_module(module_id: String) -> Result<LaunchResponse, AppError
             action: "start_local".to_string(),
             page: None,
             provider: None,
-            message: Some(format!("Starting local module: {}", module_id)),
+            message: Some(format!("Starting local module: {module_id}")),
         });
     }
 
@@ -50,6 +61,8 @@ pub async fn launch_module(module_id: String) -> Result<LaunchResponse, AppError
 }
 
 #[tauri::command]
+#[specta::specta]
+/// Controls a module (start, stop, restart)
 pub async fn control_module(
     app: AppHandle,
     request: ControlRequest,
@@ -61,5 +74,5 @@ pub async fn control_module(
 
     let action: ModuleAction = request.action.parse()?;
 
-    module_controller::control(app, module_id, action).await
+    module_controller::control(app, module_id, action)
 }

@@ -10,16 +10,23 @@ use zip::ZipArchive;
 use zip::result::ZipError;
 
 /// Download progress event payload
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, Debug)]
 pub struct DownloadProgress {
+    /// Module identifier
     pub module_id: String,
+    /// Current status ("connecting", "downloading", "extracting", "complete", "error")
     pub status: String,
+    /// Progress fraction (0.0-1.0)
     pub progress: f32,
+    /// Human-readable status message
     pub message: String,
+    /// Bytes downloaded
     pub downloaded: u64,
+    /// Total bytes
     pub total: u64,
 }
 
+/// Validates module ID to prevent directory traversal and injection attacks
 pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
     if module_id.is_empty() {
         return Err(AppError::Validation(
@@ -43,6 +50,7 @@ pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Checks if a module is installed locally
 pub fn is_module_installed(module_id: &str) -> bool {
     if validate_module_id(module_id).is_err() {
         return false;
@@ -51,11 +59,13 @@ pub fn is_module_installed(module_id: &str) -> bool {
     module_path.exists() && module_path.is_dir()
 }
 
+/// Returns the filesystem path to a module directory
 pub fn get_module_path(module_id: &str) -> PathBuf {
     // Note: Callers should validate module_id before using this path for sensitive operations
     MODULES_DIR.join(module_id)
 }
 
+/// Deletes a module from disk
 pub fn delete_module(module_id: &str) -> Result<(), AppError> {
     validate_module_id(module_id)?;
 
@@ -63,7 +73,7 @@ pub fn delete_module(module_id: &str) -> Result<(), AppError> {
     if module_path.exists() {
         fs::remove_dir_all(&module_path).map_err(AppError::Io)?;
         crate::services::logs::add_log(
-            &format!("Module {} deleted", module_id),
+            &format!("Module {module_id} deleted"),
             "Downloader",
             "info",
         );
@@ -73,17 +83,19 @@ pub fn delete_module(module_id: &str) -> Result<(), AppError> {
     }
 }
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 
 /// Global downloader service instance
-pub static DOWNLOADER: Lazy<DownloaderService> = Lazy::new(DownloaderService::new);
+pub static DOWNLOADER: LazyLock<DownloaderService> = LazyLock::new(DownloaderService::new);
 
+/// Downloader service for managing module downloads
+#[derive(Debug)]
 pub struct DownloaderService {
     settings: Arc<Mutex<DownloaderSettings>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct DownloaderSettings {
     limit_enabled: bool,
     max_speed_bytes: u64, // Bytes per second
@@ -96,6 +108,7 @@ impl Default for DownloaderService {
 }
 
 impl DownloaderService {
+    /// Creates a new downloader service instance
     pub fn new() -> Self {
         Self {
             settings: Arc::new(Mutex::new(DownloaderSettings {
@@ -105,27 +118,24 @@ impl DownloaderService {
         }
     }
 
+    /// Sets download speed limit
     pub fn set_limit(&self, enabled: bool, max_speed_mb: u64) {
         if let Ok(mut settings) = self.settings.lock() {
             settings.limit_enabled = enabled;
             settings.max_speed_bytes = max_speed_mb * 1024 * 1024;
-            log::info!(
-                "Download limit set: enabled={}, speed={}MB/s",
-                enabled,
-                max_speed_mb
-            );
+            log::info!("Download limit set: enabled={enabled}, speed={max_speed_mb}MB/s");
         }
     }
 
+    /// Gets current download settings
     pub fn get_settings(&self) -> (bool, u64) {
-        if let Ok(settings) = self.settings.lock() {
+        self.settings.lock().map_or((false, 0), |settings| {
             (settings.limit_enabled, settings.max_speed_bytes)
-        } else {
-            (false, 0)
-        }
+        })
     }
 }
 
+/// Downloads and extracts a module from a remote repository
 pub async fn download_module(
     app: AppHandle,
     module_id: String,
@@ -137,7 +147,7 @@ pub async fn download_module(
     // 1. Transform GitHub URL to ZIP URL if needed
     let download_url = repo_url.clone();
 
-    let zip_path = TEMP_DIR.join(format!("{}.zip.tmp", module_id));
+    let zip_path = TEMP_DIR.join(format!("{module_id}.zip.tmp"));
 
     // Execute download and extraction and ensure cleanup via the wrapper
     let result =
@@ -149,15 +159,15 @@ pub async fn download_module(
         let _ = tokio::fs::remove_file(&zip_path).await;
     }
 
-    if let Err(e) = &result {
+    if let Err(e) = result {
         emit_progress(&app, &module_id, "error", &e.to_string(), 0.0, 0, 0);
-        return Err(result.unwrap_err());
+        return Err(e);
     }
 
     emit_progress(&app, &module_id, "complete", "Success", 1.0, 0, 0);
 
     crate::services::logs::add_log(
-        &format!("Module {} installed via Native Downloader", module_id),
+        &format!("Module {module_id} installed via Native Downloader"),
         "Downloader",
         "info",
     );
@@ -183,7 +193,7 @@ async fn download_and_extract_internal(
     if let Some(license) = crate::services::license::storage::load_license()
         && !license.key.is_empty()
     {
-        log::info!("Injecting license key for module download: {}", module_id);
+        log::info!("Injecting license key for module download: {module_id}");
         let mut headers = reqwest::header::HeaderMap::new();
         if let Ok(auth_val) =
             reqwest::header::HeaderValue::from_str(&format!("Bearer {}", license.key))
@@ -198,37 +208,41 @@ async fn download_and_extract_internal(
 
     let client = client_builder
         .build()
-        .map_err(|e| AppError::External(format!("Client error: {}", e)))?;
+        .map_err(|e| AppError::External(format!("Client error: {e}")))?;
 
     let mut response;
 
     // GitHub Smart Branch Discovery (main -> master)
-    if download_url.contains("github.com") && !download_url.ends_with(".zip") {
+    if download_url.contains("github.com")
+        && !std::path::Path::new(download_url)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    {
         let base_url = download_url.trim_end_matches(".git");
-        let main_url = format!("{}/archive/refs/heads/main.zip", base_url);
-        let master_url = format!("{}/archive/refs/heads/master.zip", base_url);
+        let main_url = format!("{base_url}/archive/refs/heads/main.zip");
+        let master_url = format!("{base_url}/archive/refs/heads/master.zip");
 
-        log::info!("Trying to download from: {}", main_url);
+        log::info!("Trying to download from: {main_url}");
         response = client
             .get(&main_url)
             .send()
             .await
-            .map_err(|e| AppError::External(format!("Failed to connect: {}", e)))?;
+            .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            log::info!("main branch not found, trying master: {}", master_url);
+            log::info!("main branch not found, trying master: {master_url}");
             response = client
                 .get(&master_url)
                 .send()
                 .await
-                .map_err(|e| AppError::External(format!("Failed to connect: {}", e)))?;
+                .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
         }
     } else {
         response = client
             .get(download_url)
             .send()
             .await
-            .map_err(|e| AppError::External(format!("Failed to connect: {}", e)))?;
+            .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
     }
 
     if !response.status().is_success() {
@@ -252,7 +266,7 @@ async fn download_and_extract_internal(
 
     while let Some(item) = stream.next().await {
         let chunk_start = std::time::Instant::now();
-        let chunk = item.map_err(|e| AppError::External(format!("Stream error: {}", e)))?;
+        let chunk = item.map_err(|e| AppError::External(format!("Stream error: {e}")))?;
         let chunk_len = chunk.len();
 
         file.write_all(&chunk).await.map_err(AppError::Io)?;
@@ -264,22 +278,27 @@ async fn download_and_extract_internal(
             // Calculate how long this chunk *should* take
             // time_s = bytes / (bytes/s)
             // time_us = bytes * 1_000_000 / (bytes/s)
-            let ideal_duration_micros = (chunk_len as u128 * 1_000_000) / max_speed_bytes as u128;
+            let ideal_duration_micros =
+                (chunk_len as u128 * 1_000_000) / u128::from(max_speed_bytes);
             let elapsed_micros = chunk_start.elapsed().as_micros();
 
             if ideal_duration_micros > elapsed_micros {
                 let sleep_micros = ideal_duration_micros - elapsed_micros;
                 if sleep_micros > 1000 {
                     // Only sleep if meaningful (>1ms)
-                    tokio::time::sleep(tokio::time::Duration::from_micros(sleep_micros as u64))
-                        .await;
+                    tokio::time::sleep(tokio::time::Duration::from_micros(
+                        u64::try_from(sleep_micros).unwrap_or(0),
+                    ))
+                    .await;
                 }
             }
         }
 
         if total_size > 0 && last_log_time.elapsed().as_millis() > 100 {
             last_log_time = std::time::Instant::now();
-            let progress = downloaded as f32 / total_size as f32;
+            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+            // UI progress calculation
+            let progress = (downloaded as f64 / total_size as f64) as f32;
             emit_progress(
                 app,
                 module_id,
@@ -294,7 +313,9 @@ async fn download_and_extract_internal(
 
     // Hash Verification
     if let Some(expected_hash) = expected_hash {
-        if !expected_hash.trim().is_empty() {
+        if expected_hash.trim().is_empty() {
+            log::warn!("Skipping integrity check for {module_id} because expected_hash is empty");
+        } else {
             emit_progress(
                 app,
                 module_id,
@@ -319,7 +340,9 @@ async fn download_and_extract_internal(
                     if count == 0 {
                         break;
                     }
-                    hasher.update(&buffer[..count]);
+                    if let Some(slice) = buffer.get(..count) {
+                        hasher.update(slice);
+                    }
                 }
                 Ok::<String, String>(hex::encode(hasher.finalize()))
             })
@@ -329,17 +352,11 @@ async fn download_and_extract_internal(
 
             if computed_hash.to_lowercase() != expected_hash.to_lowercase() {
                 return Err(AppError::Validation(format!(
-                    "Integrity check failed. Expected {}, got {}",
-                    expected_hash, computed_hash
+                    "Integrity check failed. Expected {expected_hash}, got {computed_hash}"
                 )));
             }
 
-            log::info!("Integrity verified for {}", module_id);
-        } else {
-            log::warn!(
-                "Skipping integrity check for {} because expected_hash is empty",
-                module_id
-            );
+            log::info!("Integrity verified for {module_id}");
         }
     }
 
@@ -355,12 +372,11 @@ async fn download_and_extract_internal(
     let app_handle = app.clone();
     let mid = module_id.to_string();
     let zpath = zip_path.to_owned();
-    let fpath = final_path.to_owned();
+    let fpath = final_path.clone();
 
     tokio::task::spawn_blocking(move || {
         let zip_file = fs::File::open(&zpath).map_err(|e| e.to_string())?;
-        let mut archive =
-            ZipArchive::new(zip_file).map_err(|e| format!("Invalid archive: {}", e))?;
+        let mut archive = ZipArchive::new(zip_file).map_err(|e| format!("Invalid archive: {e}"))?;
 
         let total_files = archive.len();
 
@@ -382,9 +398,13 @@ async fn download_and_extract_internal(
                 }
 
                 match &first_dir {
-                    None => first_dir = Some(parts[0].to_string()),
+                    None => {
+                        if let Some(first) = parts.first() {
+                            first_dir = Some((*first).to_string());
+                        }
+                    }
                     Some(root) => {
-                        if parts[0] != root {
+                        if parts.first().is_some_and(|first| *first != root) {
                             all_share_root = false;
                             break;
                         }
@@ -434,17 +454,19 @@ async fn download_and_extract_internal(
                     fs::create_dir_all(p).ok();
                 }
                 let mut outfile = fs::File::create(&outpath)
-                    .map_err(|e| format!("Failed to create file {:?}: {}", outpath, e))?;
+                    .map_err(|e| format!("Failed to create file {}: {e}", outpath.display()))?;
                 copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
             }
 
             if i % 10 == 0 {
+                #[allow(clippy::cast_precision_loss)] // Acceptable for progress percentage
+                let progress = i as f32 / total_files as f32;
                 emit_progress(
                     &app_handle,
                     &mid,
                     "extracting",
                     "Extracting...",
-                    i as f32 / total_files as f32,
+                    progress,
                     0,
                     0,
                 );
@@ -453,8 +475,8 @@ async fn download_and_extract_internal(
         Ok::<(), String>(())
     })
     .await
-    .map_err(|e| AppError::Internal(format!("Blocking task failed: {}", e)))?
-    .map_err(|e| AppError::Internal(format!("Extraction failed: {}", e)))?;
+    .map_err(|e| AppError::Internal(format!("Blocking task failed: {e}")))?
+    .map_err(|e| AppError::Internal(format!("Extraction failed: {e}")))?;
 
     Ok(())
 }
@@ -481,10 +503,12 @@ fn emit_progress(
     );
 }
 
-pub fn check_module_installed(module_id: String) -> bool {
-    is_module_installed(&module_id)
+/// Checks if a module is installed (wrapper)
+pub fn check_module_installed(module_id: &str) -> bool {
+    is_module_installed(module_id)
 }
 
+/// Lists files in a module directory (stub)
 pub fn list_module_files(_module_id: String) -> Result<Vec<String>, AppError> {
     // Basic stub or implementation
     Ok(vec![])

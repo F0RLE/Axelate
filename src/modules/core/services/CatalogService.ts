@@ -3,30 +3,18 @@
  * @description Manages the application catalog and configuration
  */
 
-import { TauriProvider } from './TauriProvider';
+import { type TauriProvider } from './TauriProvider';
 import type { IApp, IModule } from '../types/coreTypes';
+import type { AppConfig } from '../types/bindings';
 
 // Redundant ICatalogData removed (Inherited from global.d.ts)
 
-interface IApiProvider {
-    id: string;
-    name: string;
-    type: string;
-    baseUrl?: string;
-    [key: string]: unknown;
-}
+// Local interfaces removed in favor of Bindings
 
-interface IAppConfig {
-    catalog?: ICatalogData;
-    models?: Record<string, unknown>;
-    apiProviders?: IApiProvider[];
-}
+import type { TGlobalWin } from '../types/global_bridge_types';
 
-declare global {
-    var catalogService: CatalogService;
-}
-
-const FALLBACK_CONFIG: IAppConfig = {
+const FALLBACK_CONFIG: AppConfig = {
+    version: '1.0.0',
     catalog: {
         ai: [
             {
@@ -35,10 +23,13 @@ const FALLBACK_CONFIG: IAppConfig = {
                 descKey: 'ui.launcher.app.axelate_localai.desc',
                 name: 'Axelate',
                 desc: 'Universal hub for pro-grade images and text.',
+                description: 'Universal hub for pro-grade images and text.',
                 icon: '🌌',
                 type: 'local',
                 repoUrl: 'https://github.com/F0RLE/Axelate_LocalAI_module',
                 expectedHash: '',
+                version: '1.0.0',
+                installed: true,
             },
             {
                 id: 'gpt',
@@ -46,8 +37,11 @@ const FALLBACK_CONFIG: IAppConfig = {
                 descKey: 'ui.launcher.app.gpt.desc',
                 name: 'GPT',
                 desc: 'Smart assistant for chat, coding and images.',
+                description: 'Smart assistant for chat, coding and images.',
                 icon: '🤖',
                 type: 'api',
+                version: '1.0.0',
+                installed: true,
             },
             {
                 id: 'gemini',
@@ -55,8 +49,11 @@ const FALLBACK_CONFIG: IAppConfig = {
                 descKey: 'ui.launcher.app.gemini.desc',
                 name: 'Gemini',
                 desc: 'Massive-context analysis and creative visuals.',
+                description: 'Massive-context analysis and creative visuals.',
                 icon: '✨',
                 type: 'api',
+                version: '1.0.0',
+                installed: true,
             },
             {
                 id: 'claude',
@@ -64,8 +61,11 @@ const FALLBACK_CONFIG: IAppConfig = {
                 descKey: 'ui.launcher.app.claude.desc',
                 name: 'Claude',
                 desc: 'Advanced AI for analysis and creativity.',
+                description: 'Advanced AI for analysis and creativity.',
                 icon: '✱',
                 type: 'api',
+                version: '1.0.0',
+                installed: true,
             },
             {
                 id: 'llama',
@@ -73,8 +73,11 @@ const FALLBACK_CONFIG: IAppConfig = {
                 descKey: 'ui.launcher.app.llama.desc',
                 name: 'Llama',
                 desc: 'Powerful open models.',
+                description: 'Powerful open models.',
                 icon: '🦙',
                 type: 'api',
+                version: '1.0.0',
+                installed: true,
             },
             {
                 id: 'deepseek',
@@ -82,8 +85,11 @@ const FALLBACK_CONFIG: IAppConfig = {
                 descKey: 'ui.launcher.app.deepseek.desc',
                 name: 'DeepSeek',
                 desc: 'Specialized models for coding.',
+                description: 'Specialized models for coding.',
                 icon: '🧠',
                 type: 'api',
+                version: '1.0.0',
+                installed: true,
             },
         ],
         services: [
@@ -93,42 +99,54 @@ const FALLBACK_CONFIG: IAppConfig = {
                 descKey: 'ui.launcher.app.axelate_telegram.desc',
                 name: 'Axelate Telegram Bot',
                 desc: 'LLM rewriting, image gen, channel posting.',
+                description: 'LLM rewriting, image gen, channel posting.',
                 icon: '🤖',
                 type: 'local',
                 repoUrl: 'https://github.com/F0RLE/Axelate-tg-bot-module',
                 expectedHash: '',
+                version: '1.0.0',
+                installed: false,
             },
         ],
     },
     apiProviders: [
-        { id: 'gpt', name: 'GPT', type: 'api', baseUrl: 'https://api.openai.com/v1' },
-        { id: 'gemini', name: 'Gemini', type: 'api' },
-        { id: 'claude', name: 'Claude', type: 'api' },
-        { id: 'llama', name: 'Llama', type: 'api' },
-        { id: 'deepseek', name: 'DeepSeek', type: 'api' },
+        { id: 'gpt', name: 'GPT', providerType: 'api', baseUrl: 'https://api.openai.com/v1' },
+        { id: 'gemini', name: 'Gemini', providerType: 'api' },
+        { id: 'claude', name: 'Claude', providerType: 'api' },
+        { id: 'llama', name: 'Llama', providerType: 'api' },
+        { id: 'deepseek', name: 'DeepSeek', providerType: 'api' },
     ],
-    models: {},
+    models: {
+        gpt: {
+            'gpt-5.2': { descKey: '', name: 'GPT-5.2', desc: 'Best for coding', pricing: [], stats: { speed: 3, logic: 5, creative: 5 } },
+            'gpt-5-mini': { descKey: '', name: 'GPT-5 mini', desc: 'Fast and efficient', pricing: [], stats: { speed: 4, logic: 3, creative: 3 } },
+        },
+        gemini: {
+            'gemini-3-pro': { descKey: '', name: 'Gemini 3 Pro', desc: 'State-of-the-art reasoning', pricing: [], stats: { speed: 3, logic: 5, creative: 5 } },
+            'gemini-3-flash': { descKey: '', name: 'Gemini 3 Flash', desc: 'Fast for quick tasks', pricing: [], stats: { speed: 5, logic: 3, creative: 3 } },
+        },
+    },
 };
 
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
 
     constructor(private readonly _tauri: TauriProvider) {
-        const win = globalThis as unknown as Record<string, unknown>;
-        if (win['catalogService']) {
+        const win = globalThis as TGlobalWin;
+        if (win.catalogService) {
             console.warn('[CatalogService] Singleton instance collision detected.');
         }
-        win['catalogService'] = this;
+        win.catalogService = this;
 
         // Sync with global APP_DATA (Architectural compliance Section 51)
-        if (win['APP_DATA']) {
-            Object.assign(this._appData, win['APP_DATA']);
+        if (win.APP_DATA) {
+            Object.assign(this._appData, win.APP_DATA);
         } else {
-            win['APP_DATA'] = this._appData;
+            win.APP_DATA = this._appData;
         }
 
         // Expose category resolver for AppUI type safety
-        win['getCatalogCategory'] = (cat: string): IApp[] => {
+        win.getCatalogCategory = (cat: string): IApp[] => {
             if (cat === 'ai') return this._appData.ai;
             if (cat === 'services') return this._appData.services;
             return [];
@@ -139,16 +157,16 @@ export class CatalogService {
      * Asynchronously loads the application catalog from the Tauri backend.
      */
     public async loadCatalog(): Promise<void> {
-        let config: IAppConfig | null = null;
+        let config: AppConfig | null = null;
         let installedModules: IModule[] = [];
 
         // 1. Fetch Config (Robust Failsafe)
         try {
             if (this._tauri.isTauri()) {
-                config = await this._tauri.invoke<IAppConfig>('get_config');
+                config = await this._tauri.invoke<AppConfig>('get_config');
             } else {
                 const res = await fetch('/api/config');
-                if (res.ok) config = await res.json();
+                if (res.ok) config = (await res.json()) as AppConfig;
             }
         } catch (e) {
             console.warn('[CatalogService] Backend config failed, using fallback:', e);
@@ -161,7 +179,7 @@ export class CatalogService {
                 installedModules = await this._tauri.invoke<IModule[]>('get_modules');
             } else {
                 const res = await fetch('/api/modules');
-                if (res.ok) installedModules = await res.json();
+                if (res.ok) installedModules = (await res.json()) as IModule[];
             }
         } catch (e) {
             console.warn('[CatalogService] Module list failed:', e);
@@ -185,25 +203,34 @@ export class CatalogService {
                         // Normalize type to lowercase for consistent checking
                         if (app.type) app.type = app.type.toLowerCase() as 'api' | 'local';
 
-                        const providers = config?.apiProviders;
-                        if (providers && Array.isArray(providers)) {
-                            // Only hydrate API metadata for settings UI if needed
-                            const provider = providers.find((p) => p.id === app.id);
-                            if (provider) {
-                                app.apiProviderData = provider as unknown as Record<
-                                    string,
-                                    unknown
-                                >;
-                            }
-                        }
-
+                        // Determine if this is an API-type app
                         const isApi =
                             app.type === 'api' ||
-                            config?.apiProviders?.some((p) => p.id === app.id);
+                            config?.apiProviders?.some((p: { id: string }) => p.id === app.id);
 
                         // Force installed status for API providers (Virtual Modules)
                         if (isApi) {
                             app.installed = true;
+                        }
+
+                        // Initialize apiProviderData for API apps
+                        const providers = config?.apiProviders;
+                        if (providers && Array.isArray(providers)) {
+                            const provider = providers.find((p: { id: string }) => p.id === app.id);
+                            if (provider) {
+                                app.apiProviderData = { ...(provider as unknown as Record<string, unknown>) };
+                            }
+                        }
+
+                        // Merge models from config.models[app.id] for API apps
+                        // This works even if apiProviders is missing (e.g., when loaded from backend)
+                        if (isApi) {
+                            const modelsRecord = config?.models as Record<string, unknown> | undefined;
+                            if (modelsRecord?.[app.id]) {
+                                // Initialize apiProviderData if not set
+                                app.apiProviderData ??= { id: app.id, name: app.name };
+                                app.apiProviderData['models'] = modelsRecord[app.id];
+                            }
                         }
 
                         // Check case-insensitively
@@ -225,11 +252,7 @@ export class CatalogService {
                 this._updateLegacySettings(config.models);
 
                 console.log('[CatalogService] Catalog initialized:', this._appData);
-                const win = globalThis as unknown as Record<string, unknown>;
-                const dispatch = win['dispatchEvent'] as ((e: Event) => boolean) | undefined;
-                if (typeof dispatch === 'function') {
-                    dispatch(new CustomEvent('catalog-loaded'));
-                }
+                globalThis.dispatchEvent(new CustomEvent('catalog-loaded'));
             }
         } catch (e) {
             console.error('[CatalogService] Failed to load catalog:', e);
@@ -241,6 +264,16 @@ export class CatalogService {
      */
     public getCatalog(): ICatalogData {
         return this._appData;
+    }
+
+    /**
+     * Retrieves an app by its ID from the catalog.
+     */
+    public getAppById(id: string): IApp | undefined {
+        return (
+            this._appData.ai.find((a) => a.id === id) ||
+            this._appData.services.find((s) => s.id === id)
+        );
     }
 
     /**
@@ -265,10 +298,8 @@ export class CatalogService {
      * Updates legacy module settings from config.
      */
     private _updateLegacySettings(models: unknown): void {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const updateFn = win['updateModuleSettings'] as
-            | ((m: Record<string, unknown>) => void)
-            | undefined;
+        const win = globalThis as TGlobalWin;
+        const updateFn = win.updateModuleSettings; // Assuming this exists or add to IGlobalBridge?
         if (typeof updateFn === 'function' && models) {
             try {
                 updateFn(models as Record<string, unknown>);

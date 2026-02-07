@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use specta::Type;
+use std::fmt::Write;
 use std::io::Read;
 use zip::ZipArchive;
 
@@ -28,20 +30,30 @@ const TEXT_EXTS: &[&str] = &[
 const MAX_TOTAL_UNCOMPRESSED_SIZE: usize = 100 * 1024 * 1024; // 100MB
 const MAX_EXTRACTED_FILE_SIZE: usize = 50 * 1024; // 50KB per file to avoid context bloating
 
-#[derive(Debug, Serialize, Deserialize)]
+/// Processed file content result
+#[derive(Debug, Serialize, Deserialize, Type)]
 pub struct ProcessedFile {
+    /// File name
     pub name: String,
+    /// Extracted text content
     pub content: String,
+    /// Whether file was a ZIP archive
     pub is_archive: bool,
+    /// Processing error if any
     pub error: Option<String>,
 }
 
 #[tauri::command]
+#[specta::specta]
+/// Processes file content for AI context (extracts text from files and archives)
 pub async fn process_file_content(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
     let lower_name = name.to_lowercase();
 
     // 1. Check if it is a ZIP archive
-    if lower_name.ends_with(".zip") {
+    if std::path::Path::new(&lower_name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    {
         return process_zip(name, data);
     }
 
@@ -71,7 +83,7 @@ pub async fn process_file_content(name: String, data: Vec<u8>) -> Result<Process
     // We return empty content for text-context purposes, but frontend handles the attachment metadata.
     Ok(ProcessedFile {
         name,
-        content: "".to_string(),
+        content: String::new(),
         is_archive: false,
         error: None,
     })
@@ -80,16 +92,16 @@ pub async fn process_file_content(name: String, data: Vec<u8>) -> Result<Process
 fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
     let reader = std::io::Cursor::new(data);
     let mut archive =
-        ZipArchive::new(reader).map_err(|e| format!("Failed to read archive: {}", e))?;
+        ZipArchive::new(reader).map_err(|e| format!("Failed to read archive: {e}"))?;
 
-    let mut combined_text = format!("\n\n--- ARCHIVE: {} (Smart Unpacked) ---\n", name);
+    let mut combined_text = format!("\n\n--- ARCHIVE: {name} (Smart Unpacked) ---\n");
     let mut total_size = 0;
 
     // Generate Structure Map
     combined_text.push_str("\nStructure Map:\n");
-    let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
+    let file_names: Vec<String> = archive.file_names().map(ToString::to_string).collect();
     // Simple sort
-    let mut sorted_names = file_names.clone();
+    let mut sorted_names = file_names;
     sorted_names.sort();
 
     for path in &sorted_names {
@@ -99,7 +111,8 @@ fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
         let icon = if is_dir { "📁 " } else { "📄 " };
         let name_part = path.split('/').rfind(|s| !s.is_empty()).unwrap_or(path);
 
-        combined_text.push_str(&format!("{}{}{}\n", indent, icon, name_part));
+        use std::fmt::Write;
+        let _ = writeln!(combined_text, "{indent}{icon}{name_part}");
     }
 
     combined_text.push_str("\n--- START EXTRACTED FILES ---\n");
@@ -117,11 +130,11 @@ fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
         }
 
         if file.size() > MAX_EXTRACTED_FILE_SIZE as u64 {
-            combined_text.push_str(&format!(
-                "\n[Skipped: {} - Too large ({}KB)]\n",
-                file_name,
+            let _ = write!(
+                combined_text,
+                "\n[Skipped: {file_name} - Too large ({}KB)]\n",
                 file.size() / 1024
-            ));
+            );
             continue;
         }
 
@@ -133,10 +146,10 @@ fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
         handle.read_to_end(&mut buffer).map_err(|e| e.to_string())?;
 
         if buffer.len() > MAX_EXTRACTED_FILE_SIZE {
-            combined_text.push_str(&format!(
-                "\n[Skipped: {} - Size limit exceeded]\n",
-                file_name
-            ));
+            let _ = write!(
+                combined_text,
+                "\n[Skipped: {file_name} - Size limit exceeded]\n"
+            );
             continue;
         }
 
@@ -148,16 +161,16 @@ fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
 
         if let Ok(content) = String::from_utf8(buffer) {
             let ext = file_name.split('.').next_back().unwrap_or("");
-            combined_text.push_str(&format!(
-                "\n\nFile: {}\n```{}\n{}\n```",
-                file_name, ext, content
-            ));
+            let _ = write!(
+                combined_text,
+                "\n\nFile: {file_name}\n```{ext}\n{content}\n```"
+            );
         } else {
-            combined_text.push_str(&format!("\n[Skipped: {} - Binary]\n", file_name));
+            let _ = write!(combined_text, "\n[Skipped: {file_name} - Binary]\n");
         }
     }
 
-    combined_text.push_str(&format!("\n--- END ARCHIVE {} ---\n", name));
+    let _ = write!(combined_text, "\n--- END ARCHIVE {name} ---\n");
 
     Ok(ProcessedFile {
         name,

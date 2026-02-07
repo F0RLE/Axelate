@@ -151,7 +151,7 @@ export function estimateTokenCount(text: string): number {
 /**
  * Accurately counts tokens using backend TikToken (if available) or falls back to heuristic.
  */
-export async function getTokenCount(text: string, model: string = 'gpt-4'): Promise<number> {
+export async function getTokenCount(text: string, model = 'gpt-4'): Promise<number> {
     if (globalThis.__TAURI__) {
         try {
             return await globalThis.__TAURI__.core.invoke('count_tokens', { text, model });

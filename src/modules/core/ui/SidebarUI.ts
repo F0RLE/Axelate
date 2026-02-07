@@ -1,12 +1,12 @@
-import { StateService } from '../services/StateService';
-import { SoundService } from '../services/SoundService';
+import { type StateService } from '../services/StateService';
+import { type SoundService } from '../services/SoundService';
 import { mountLogos } from '@/assets/logos';
 
 export class SidebarUI {
     private _initialized = false;
     private _sidebar: HTMLElement | null = null;
     private readonly _cleanupAbort: AbortController = new AbortController();
-    private _isCollapsed: boolean = false;
+    private _isCollapsed = false;
     private _snappingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor(
@@ -77,8 +77,8 @@ export class SidebarUI {
     private _initToggle(): void {
         if (!this._sidebar) return;
 
-        const logoArea = this._sidebar.querySelector('.logo-area') as HTMLElement;
-        if (logoArea) {
+        const logoArea = this._sidebar.querySelector('.logo-area');
+        if (logoArea instanceof HTMLElement) {
             // Section 23.2: Accessibility
             logoArea.style.cursor = 'pointer';
             logoArea.setAttribute('role', 'button');
@@ -86,8 +86,8 @@ export class SidebarUI {
             logoArea.setAttribute('aria-label', 'Toggle Sidebar');
             logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
 
-            const logoIcon = logoArea.querySelector('.sidebar-logo-icon') as HTMLElement;
-            if (logoIcon) {
+            const logoIcon = logoArea.querySelector('.sidebar-logo-icon');
+            if (logoIcon instanceof HTMLElement) {
                 logoIcon.classList.remove('hidden');
             }
 
@@ -145,8 +145,8 @@ export class SidebarUI {
             this._sidebar.classList.remove('collapsed');
         }
 
-        document.documentElement.style.setProperty('--sidebar-width', width + 'px');
-        this._sidebar.style.width = width + 'px';
+        document.documentElement.style.setProperty('--sidebar-width', `${String(width)}px`);
+        this._sidebar.style.width = `${String(width)}px`;
     }
 
     private _resizeObserver: ResizeObserver | null = null;
@@ -159,12 +159,18 @@ export class SidebarUI {
     private _initAdaptiveMonitoring(): void {
         if (!this._sidebar) return;
 
-        const monitor = this._sidebar.querySelector('#system-monitor') as HTMLElement;
-        const logo = this._sidebar.querySelector('.logo-area') as HTMLElement;
-        const menu = this._sidebar.querySelector('.main-menu') as HTMLElement;
-        const bottom = this._sidebar.querySelector('.bottom-menu') as HTMLElement;
+        const monitor = this._sidebar.querySelector('#system-monitor');
+        const logo = this._sidebar.querySelector('.logo-area');
+        const menu = this._sidebar.querySelector('.main-menu');
+        const bottom = this._sidebar.querySelector('.bottom-menu');
 
-        if (!monitor || !logo || !menu || !bottom) return;
+        if (
+            !(monitor instanceof HTMLElement) ||
+            !(logo instanceof HTMLElement) ||
+            !(menu instanceof HTMLElement) ||
+            !(bottom instanceof HTMLElement)
+        )
+            return;
 
         // Capture initial height of monitor to know when to bring it back
         this._minMonitorHeight = monitor.offsetHeight || 300; // Fallback to approx pixels
@@ -183,12 +189,18 @@ export class SidebarUI {
     private _checkMonitorVisibility(): void {
         if (!this._sidebar) return;
 
-        const monitor = this._sidebar.querySelector('#system-monitor') as HTMLElement;
-        const logo = this._sidebar.querySelector('.logo-area') as HTMLElement;
-        const menu = this._sidebar.querySelector('.main-menu') as HTMLElement;
-        const bottom = this._sidebar.querySelector('.bottom-menu') as HTMLElement;
+        const monitor = this._sidebar.querySelector('#system-monitor');
+        const logo = this._sidebar.querySelector('.logo-area');
+        const menu = this._sidebar.querySelector('.main-menu');
+        const bottom = this._sidebar.querySelector('.bottom-menu');
 
-        if (!monitor || !logo || !menu || !bottom) return;
+        if (
+            !(monitor instanceof HTMLElement) ||
+            !(logo instanceof HTMLElement) ||
+            !(menu instanceof HTMLElement) ||
+            !(bottom instanceof HTMLElement)
+        )
+            return;
 
         const sidebarHeight = this._sidebar.clientHeight;
 

@@ -12,8 +12,8 @@
 import DOMPurify from 'dompurify';
 import { eventBus } from '@/modules/core/services/EventBus';
 import { aiSettingsRenderer } from '@/modules/ai/ui/AISettingsRenderer';
-import { SettingsService } from '../services/SettingsService';
-import { StateService } from '../../core/services/StateService';
+import { type SettingsService } from '../services/SettingsService';
+import { type StateService } from '../../core/services/StateService';
 import type { IApp, IConfigField } from '../../core/types/coreTypes';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
 
@@ -85,7 +85,9 @@ export class SettingsUI {
         }
 
         // 0. Subscribe to navigation events (Section 2.4)
-        const unsub = eventBus.on('page:change', () => this.close());
+        const unsub = eventBus.on('page:change', () => {
+            this.close();
+        });
         this._unsubscribers.push(unsub);
 
         // 1. Load Data
@@ -96,23 +98,31 @@ export class SettingsUI {
         this._bindResizeEvents();
 
         // 4. Load GPU Info
-        this._loadGpuInfo().catch((e) => console.error('[SettingsUI] GPU Info failed:', e));
+        this._loadGpuInfo().catch((e: unknown) => {
+            console.error('[SettingsUI] GPU Info failed:', e);
+        });
 
         const win = globalThis as unknown as ISettingsGlobal;
 
-        win['toggleNavItem'] = (id: string, en: boolean) =>
+        win.toggleNavItem = (id: string, en: boolean) => {
             this._generalRenderer.toggleNavItem(id, en);
-        win['toggleMonitorItem'] = (id: string, en: boolean) =>
+        };
+        win.toggleMonitorItem = (id: string, en: boolean) => {
             this._generalRenderer.toggleMonitorItem(id, en);
-        win['setCardWidth'] = (btn: HTMLElement, w: string) => this.setCardWidth(btn, w);
-        win['control'] = (a: 'start' | 'stop' | 'restart', s: string) => {
+        };
+        win.setCardWidth = (btn: HTMLElement, w: string) => {
+            this.setCardWidth(btn, w);
+        };
+        win.control = (a: 'start' | 'stop' | 'restart', s: string) => {
             if (a === 'start' || a === 'stop' || a === 'restart') {
                 return this._service.controlService(a, s);
             }
             return Promise.resolve(false);
         };
-        win['openModuleSettings'] = (app: IApp) => {
-            this.openModuleSettings(app).catch((e) => console.error(e));
+        win.openModuleSettings = (app: IApp) => {
+            this.openModuleSettings(app).catch((e: unknown) => {
+                console.error(e);
+            });
         };
 
         // Listen for language changes to refresh dynamic UI
@@ -124,8 +134,8 @@ export class SettingsUI {
     }
 
     public static close(): void {
-        const modal = document.getElementById('module-settings-modal') as HTMLElement;
-        if (modal) {
+        const modal = document.getElementById('module-settings-modal');
+        if (modal instanceof HTMLElement) {
             // modal-backdrop uses hidden class with CSS transition
             modal.classList.add('hidden');
         }
@@ -147,8 +157,8 @@ export class SettingsUI {
 
             // Update Title
             const title = document.getElementById('module-settings-title');
-            const suffix = globalThis['t']
-                ? (globalThis['t'] as (k: string, d: string) => string)(
+            const suffix = globalThis.t
+                ? (globalThis.t as (k: string, d: string) => string)(
                       'ui.settings.header_suffix',
                       'Settings',
                   )
@@ -156,9 +166,9 @@ export class SettingsUI {
             if (title) title.innerHTML = DOMPurify.sanitize(suffix);
 
             // Dynamic re-render
-            this._renderSpecializedModuleConfig(container, currentApp).catch((e) =>
-                console.error(e),
-            );
+            this._renderSpecializedModuleConfig(container, currentApp).catch((e: unknown) => {
+                console.error(e);
+            });
         }
     }
 
@@ -171,7 +181,9 @@ export class SettingsUI {
      * MANDATORY cleanup method required by Section 4.3.
      */
     public destroy(): void {
-        this._unsubscribers.forEach((fn) => fn());
+        this._unsubscribers.forEach((fn) => {
+            fn();
+        });
         this._unsubscribers.length = 0;
         console.log('[SettingsUI] Destroyed.');
     }
@@ -190,8 +202,8 @@ export class SettingsUI {
         if (data.detected) {
             gpuInfoEl.className = 'gpu-info detected';
             gpuInfoEl.innerHTML = DOMPurify.sanitize(`
-                <div style="font-weight: 600; margin-bottom: 0.25rem;">${data.name}</div>
-                <div class="gpu-info-details">${data.cuda ? 'CUDA • ' : ''}${data.memory ? data.memory + ' GB' : ''}</div>
+                <div style="font-weight: 600; margin-bottom: 0.25rem;">${data.name ?? ''}</div>
+                <div class="gpu-info-details">${data.cuda ? 'CUDA • ' : ''}${data.memory ? `${data.memory.toString()} GB` : ''}</div>
             `);
         } else {
             gpuInfoEl.className = 'gpu-info not-detected';
@@ -318,7 +330,7 @@ export class SettingsUI {
      */
     public toggleModuleKeyVisibility(appId: string) {
         const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement;
-        const btn = document.getElementById(`${appId}-key-toggle-btn`) as HTMLElement;
+        const btn = document.getElementById(`${appId}-key-toggle-btn`);
         if (input && btn) {
             const isPass = input.type === 'password';
             input.type = isPass ? 'text' : 'password';
@@ -331,7 +343,7 @@ export class SettingsUI {
      */
     public async checkModuleKey(appId: string) {
         const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement;
-        const btn = document.getElementById(`${appId}-key-check-btn`) as HTMLElement;
+        const btn = document.getElementById(`${appId}-key-check-btn`);
         if (!input || !btn) return;
 
         const win = globalThis as unknown as Window & {
@@ -348,7 +360,7 @@ export class SettingsUI {
 
         const originalHtml = btn.innerHTML;
         const originalWidth = btn.offsetWidth;
-        btn.style.width = originalWidth + 'px';
+        btn.style.width = `${originalWidth.toString()}px`;
         btn.innerHTML = this.ICONS.SPINNER;
         btn.style.pointerEvents = 'none';
 
@@ -465,11 +477,11 @@ export class SettingsUI {
             }
 
             // Re-render current modal content
-            const container = document.getElementById('module-config-modal-active') as HTMLElement;
+            const container = document.getElementById('module-config-modal-active');
             if (container && currentApp) {
-                this._renderUniversalApiSettings(container, currentApp).catch((e) =>
-                    console.error(e),
-                );
+                this._renderUniversalApiSettings(container, currentApp).catch((e: unknown) => {
+                    console.error(e);
+                });
             }
 
             if (showToast) {
@@ -494,11 +506,9 @@ export class SettingsUI {
     private _loadCardWidths() {
         const widths = this._state.getCardWidths();
         Object.keys(widths).forEach((id) => {
-            const card = document.querySelector(
-                `.resizable-card[data-card-id="${id}"]`,
-            ) as HTMLElement;
+            const card = document.querySelector(`.resizable-card[data-card-id="${id}"]`);
             const w = widths[id];
-            if (card && typeof w === 'string') {
+            if (card instanceof HTMLElement && typeof w === 'string') {
                 card.dataset['cardWidth'] = w;
                 this._updateCardLayout(card, w);
             }
@@ -506,8 +516,8 @@ export class SettingsUI {
     }
 
     private setCardWidth(btn: HTMLElement, width: string) {
-        const card = btn.closest('.hardware-card') as HTMLElement;
-        if (!card) return;
+        const card = btn.closest('.hardware-card');
+        if (!(card instanceof HTMLElement)) return;
 
         card.dataset['cardWidth'] = width;
         const id = card.dataset['cardId'];
@@ -529,8 +539,8 @@ export class SettingsUI {
     }
 
     private _updateCardLayout(card: HTMLElement, width: string) {
-        const container = card.closest('[style*="grid-template-columns"]') as HTMLElement;
-        if (container) {
+        const container = card.closest('[style*="grid-template-columns"]');
+        if (container instanceof HTMLElement) {
             if (width === 'full') {
                 container.style.gridTemplateColumns = '1fr';
             } else {
@@ -541,13 +551,17 @@ export class SettingsUI {
 
     private _bindResizeEvents() {
         document.querySelectorAll('.resize-handle').forEach((h) => {
-            h.addEventListener('mousedown', (e) =>
-                this._startResize(e as MouseEvent, h as HTMLElement),
-            );
+            h.addEventListener('mousedown', (e) => {
+                this._startResize(e as MouseEvent, h as HTMLElement);
+            });
         });
 
-        document.addEventListener('mousemove', (e) => this._handleResizeMove(e));
-        document.addEventListener('mouseup', () => this._handleResizeUp());
+        document.addEventListener('mousemove', (e) => {
+            this._handleResizeMove(e);
+        });
+        document.addEventListener('mouseup', () => {
+            this._handleResizeUp();
+        });
     }
 
     private _startResize(e: MouseEvent, handle: HTMLElement) {
@@ -667,7 +681,9 @@ export class SettingsUI {
         // Close logic
         const closeBtn = document.getElementById('close-module-settings-btn');
         if (closeBtn) {
-            closeBtn.onclick = () => this.close();
+            closeBtn.onclick = () => {
+                this.close();
+            };
         }
 
         // Close on overlay click
@@ -687,13 +703,15 @@ export class SettingsUI {
             el = document.createElement('div');
             el.id = 'save-indicator';
             el.className = 'save-indicator';
-            const t = globalThis['t'] as ((k: string, d: string) => string) | undefined;
+            const t = globalThis.t as ((k: string, d: string) => string) | undefined;
             const msg = t ? t('ui.settings.saved_message', 'Settings Saved') : 'Settings Saved';
             el.innerHTML = DOMPurify.sanitize(`<span>${msg}</span>`);
             document.body.appendChild(el);
         }
         el.classList.add('show');
-        setTimeout(() => el?.classList.remove('show'), 2000);
+        setTimeout(() => {
+            el?.classList.remove('show');
+        }, 2000);
     }
 
     /**
@@ -793,28 +811,44 @@ export class SettingsUI {
      */
     private _attachAutoSave(input: HTMLElement, type: string, settingKey: string): void {
         const save = async (val: string | number | boolean) => {
-            console.log(`[SettingsUI] Auto-saving: ${settingKey} = ${val}`);
+            console.log(`[SettingsUI] Auto-saving: ${settingKey} = ${String(val)}`);
             await this._service.saveSetting(settingKey, val);
             this._showSaveIndicator();
         };
 
         if (type === 'boolean') {
-            const checkbox = input.querySelector('input[type="checkbox"]') as HTMLInputElement;
-            checkbox.onchange = () => {
-                save(checkbox.checked).catch((e) => console.error(e));
-            };
+            const checkbox = input.querySelector('input[type="checkbox"]');
+            if (checkbox instanceof HTMLInputElement) {
+                checkbox.onchange = () => {
+                    save(checkbox.checked).catch((e: unknown) => {
+                        console.error(e);
+                    });
+                };
+            }
         } else if (type === 'select') {
-            (input as HTMLSelectElement).onchange = () => {
-                save((input as HTMLSelectElement).value).catch((e) => console.error(e));
-            };
+            if (input instanceof HTMLSelectElement) {
+                input.onchange = () => {
+                    save(input.value).catch((e: unknown) => {
+                        console.error(e);
+                    });
+                };
+            }
         } else if (type === 'number') {
-            (input as HTMLInputElement).onchange = () => {
-                save(Number((input as HTMLInputElement).value)).catch((e) => console.error(e));
-            };
+            if (input instanceof HTMLInputElement) {
+                input.onchange = () => {
+                    save(Number(input.value)).catch((e: unknown) => {
+                        console.error(e);
+                    });
+                };
+            }
         } else {
-            (input as HTMLInputElement).onchange = () => {
-                save((input as HTMLInputElement).value).catch((e) => console.error(e));
-            };
+            if (input instanceof HTMLInputElement) {
+                input.onchange = () => {
+                    save(input.value).catch((e: unknown) => {
+                        console.error(e);
+                    });
+                };
+            }
         }
     }
 }

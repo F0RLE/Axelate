@@ -1,3 +1,4 @@
+#![allow(unsafe_code)]
 use std::net::{TcpStream, ToSocketAddrs};
 use std::ptr::null_mut;
 use std::time::Duration;
@@ -12,6 +13,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 use crate::utils::windows::detect_system_language;
 
 /// Validates that the necessary runtime environment is available.
+///
 /// If WebView2 is missing and no internet is available to download it,
 /// displays a native Windows dialog and gives the user a chance to retry.
 pub fn validate_environment() {
@@ -66,13 +68,14 @@ fn is_webview2_installed() -> bool {
 
 fn check_reg_key(hkey: isize, subkey: &[u16], value_name: &[u16]) -> bool {
     let mut hkey_out: isize = 0;
+    #[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr)] // Necessary for FFI with windows-sys
     unsafe {
         if RegOpenKeyExW(
             hkey as _,
             subkey.as_ptr(),
             0,
             KEY_READ,
-            &mut hkey_out as *mut isize as _,
+            std::ptr::addr_of_mut!(hkey_out).cast(),
         ) as u32
             == ERROR_SUCCESS
         {

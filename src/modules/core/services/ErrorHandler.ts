@@ -28,7 +28,7 @@ class ErrorHandler {
     private _initialized = false;
     private _errorLog: IErrorInfo[] = [];
     private readonly _maxLogSize = 100;
-    private readonly _callbacks: Set<ErrorCallback> = new Set();
+    private readonly _callbacks = new Set<ErrorCallback>();
 
     /**
      * Initializes global error handlers.
@@ -41,11 +41,11 @@ class ErrorHandler {
         }
 
         const win = globalThis as TGlobalWin;
-        if (win['errorHandler']) {
+        if (win.errorHandler) {
             console.warn('[ErrorHandler] Another instance already initialized. Using existing.');
             return;
         }
-        (win as TGlobalWin)['errorHandler'] = this;
+        win.errorHandler = this;
 
         // Catch uncaught errors
         globalThis.onerror = (message, source, lineno, colno, error) => {
@@ -55,10 +55,7 @@ class ErrorHandler {
             if (colno) extra.column = colno;
 
             this.captureError(
-                error ||
-                    new Error(
-                        typeof message === 'object' ? JSON.stringify(message) : String(message),
-                    ),
+                error || new Error(typeof message === 'object' ? JSON.stringify(message) : message),
                 'window.onerror',
                 extra,
             );
@@ -155,7 +152,9 @@ class ErrorHandler {
         // Auto-remove after 5 seconds
         setTimeout(() => {
             toast.classList.add('toast-fade-out');
-            setTimeout(() => toast.remove(), 300);
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
         }, 5000);
     }
 

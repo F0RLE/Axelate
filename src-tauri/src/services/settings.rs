@@ -4,6 +4,7 @@ use crate::utils::paths::{FILE_ENV, FILE_GEN_CONFIG};
 use serde_json::Value;
 use std::fs;
 
+/// Retrieves application settings from .env file
 pub fn get_settings() -> Result<AppSettings, AppError> {
     if !FILE_ENV.exists() {
         return Ok(AppSettings::default());
@@ -14,9 +15,9 @@ pub fn get_settings() -> Result<AppSettings, AppError> {
 
     for line in content.lines() {
         let parts: Vec<&str> = line.split('=').collect();
-        if parts.len() == 2 {
-            let key = parts[0].trim();
-            let value = parts[1].trim();
+        if let [key, value] = parts.as_slice() {
+            let key = key.trim();
+            let value = value.trim();
 
             match key {
                 "LANGUAGE" => settings.language = value.to_string(),
@@ -31,7 +32,8 @@ pub fn get_settings() -> Result<AppSettings, AppError> {
     Ok(settings)
 }
 
-pub fn save_settings(settings: AppSettings) -> Result<(), AppError> {
+/// Saves application settings to .env file
+pub fn save_settings(settings: &AppSettings) -> Result<(), AppError> {
     let content = format!(
         "LANGUAGE={}\nTHEME={}\nUSE_GPU={}\nDEBUG_MODE={}\n",
         settings.language, settings.theme, settings.use_gpu, settings.debug_mode
@@ -40,6 +42,7 @@ pub fn save_settings(settings: AppSettings) -> Result<(), AppError> {
     fs::write(&*FILE_ENV, content).map_err(AppError::Io)
 }
 
+/// Saves a single setting by key-value pair
 pub fn save_setting(key: &str, value: &str) -> Result<(), AppError> {
     let mut settings = get_settings()?;
 
@@ -53,9 +56,10 @@ pub fn save_setting(key: &str, value: &str) -> Result<(), AppError> {
         _ => {}
     }
 
-    save_settings(settings)
+    save_settings(&settings)
 }
 
+/// Retrieves generation configuration for AI models
 pub fn get_gen_config() -> Result<Value, AppError> {
     if !FILE_GEN_CONFIG.exists() {
         return Ok(serde_json::json!({
@@ -74,21 +78,22 @@ pub fn get_gen_config() -> Result<Value, AppError> {
     serde_json::from_str(&content).map_err(AppError::Serialization)
 }
 
-pub fn save_gen_config(config: Value) -> Result<(), AppError> {
-    let content = serde_json::to_string_pretty(&config).map_err(AppError::Serialization)?;
+/// Saves generation configuration to disk
+pub fn save_gen_config(config: &serde_json::Value) -> Result<(), AppError> {
+    let content = serde_json::to_string_pretty(config).map_err(AppError::Serialization)?;
     fs::write(&*FILE_GEN_CONFIG, content).map_err(AppError::Io)
 }
 
 /// Get current language from settings, or detect from Windows if not set
 pub fn get_language() -> String {
-    get_settings()
-        .map(|s| {
+    get_settings().map_or_else(
+        |_| crate::utils::windows::detect_system_language(),
+        |s| {
             if s.language.is_empty() {
-                // No language saved, detect from system
                 crate::utils::windows::detect_system_language()
             } else {
                 s.language
             }
-        })
-        .unwrap_or_else(|_| crate::utils::windows::detect_system_language())
+        },
+    )
 }

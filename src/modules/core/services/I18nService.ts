@@ -3,11 +3,11 @@
  * @description Internationalization service for managing translations and language settings
  */
 
-import { TauriProvider } from './TauriProvider';
+import { type TauriProvider } from './TauriProvider';
 
 export class I18nService {
     private _translations: Record<string, string> = {};
-    private _currentLang: string = 'en';
+    private _currentLang = 'en';
     private _initialized = false;
 
     constructor(private readonly _tauri: TauriProvider) {}
@@ -58,7 +58,9 @@ export class I18nService {
         try {
             const invokePromise = this._tauri.invoke('get_system_language');
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout')), 1000),
+                setTimeout(() => {
+                    reject(new Error('Timeout'));
+                }, 1000),
             );
             const res = (await Promise.race([invokePromise, timeoutPromise])) as string | undefined;
 
@@ -99,7 +101,9 @@ export class I18nService {
             document.documentElement.lang = lang;
 
             // Persist only to backend
-            this._syncToBackend(lang).catch((e) => console.error(e));
+            this._syncToBackend(lang).catch((e: unknown) => {
+                console.error(e);
+            });
 
             // Notify UI of language change
             globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
@@ -129,7 +133,9 @@ export class I18nService {
         if (this._tauri.isTauri()) {
             const p = this._tauri.invoke<Record<string, string>>('get_translations', { lang });
             const t = new Promise<Record<string, string>>((_, r) =>
-                setTimeout(() => r(new Error(failMsg)), timeoutMs),
+                setTimeout(() => {
+                    r(new Error(failMsg));
+                }, timeoutMs),
             );
             return await Promise.race([p, t]);
         } else {
@@ -162,7 +168,7 @@ export class I18nService {
     /**
      * Translates a key into the current language, with optional parameters.
      */
-    public t(key: string, defaultText: string = '', params: Record<string, unknown> = {}): string {
+    public t(key: string, defaultText = '', params: Record<string, unknown> = {}): string {
         let text = this._translations[key] || defaultText || key;
 
         for (const [k, v] of Object.entries(params)) {

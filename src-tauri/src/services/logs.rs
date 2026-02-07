@@ -1,14 +1,19 @@
-use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::collections::VecDeque;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Serialize, Clone)]
+/// Log entry for frontend display
+#[derive(Debug, Serialize, Clone, specta::Type)]
 pub struct LogEntry {
+    /// Unix timestamp
     pub timestamp: f64,
+    /// Log source component
     pub source: String,
+    /// Log level ("info", "warn", "error")
     pub level: String,
+    /// Log message
     pub message: String,
 }
 
@@ -16,14 +21,17 @@ struct LogStore {
     entries: VecDeque<LogEntry>,
 }
 
-static LOG_STORE: Lazy<Mutex<LogStore>> = Lazy::new(|| {
+static LOG_STORE: LazyLock<Mutex<LogStore>> = LazyLock::new(|| {
     Mutex::new(LogStore {
         entries: VecDeque::with_capacity(500),
     })
 });
 
+/// Adds a log entry to in-memory store
 pub fn add_log(message: &str, source: &str, level: &str) {
-    let mut store = LOG_STORE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut store = LOG_STORE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
 
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -42,8 +50,11 @@ pub fn add_log(message: &str, source: &str, level: &str) {
     }
 }
 
+/// Retrieves all log entries since a timestamp
 pub fn get_logs_since(since: f64) -> Vec<LogEntry> {
-    let store = LOG_STORE.lock().unwrap_or_else(|e| e.into_inner());
+    let store = LOG_STORE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     store
         .entries
         .iter()
@@ -52,8 +63,11 @@ pub fn get_logs_since(since: f64) -> Vec<LogEntry> {
         .collect()
 }
 
+/// Clears all log entries from the store
 pub fn clear_logs() {
-    let mut store = LOG_STORE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut store = LOG_STORE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     store.entries.clear();
 }
 
@@ -63,11 +77,11 @@ use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
 struct FrontendLogger;
 
 impl log::Log for FrontendLogger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
         metadata.level() <= Level::Info
     }
 
-    fn log(&self, record: &Record) {
+    fn log(&self, record: &Record<'_>) {
         if self.enabled(record.metadata()) {
             // Filter out noisy internal logs
             let target = record.target();
@@ -76,7 +90,10 @@ impl log::Log for FrontendLogger {
             }
 
             // Mirror to Stdout
-            println!("[{}] {}", record.level(), record.args());
+            #[allow(clippy::print_stdout)] // Intentional console output for debugging
+            {
+                println!("[{}] {}", record.level(), record.args());
+            }
 
             // Add to LogStore
             add_log(
@@ -92,6 +109,7 @@ impl log::Log for FrontendLogger {
 
 static LOGGER: FrontendLogger = FrontendLogger;
 
+/// Initializes the global logger for backend-to-frontend log forwarding
 pub fn init_global_logger() -> Result<(), SetLoggerError> {
     log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info))
 }

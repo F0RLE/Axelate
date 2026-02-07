@@ -1,10 +1,16 @@
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Global application settings
+#[derive(Debug, Serialize, Deserialize, Clone, Type)]
 pub struct AppSettings {
+    /// UI theme ("dark" or "light")
     pub theme: String,
+    /// Interface language code (e.g., "en", "ru", "zh")
     pub language: String,
+    /// Enable GPU acceleration for monitoring
     pub use_gpu: bool,
+    /// Enable debug mode and logging
     pub debug_mode: bool,
 }
 

@@ -11,7 +11,7 @@ import { SidebarUI } from './ui/SidebarUI';
 import { AppUI } from './ui/AppUI';
 import { DownloadUI } from '../downloader/ui/DownloadUI';
 import { SoundService } from './services/SoundService';
-import { logger, LoggerService } from './services/LoggerService';
+import { logger, type LoggerService } from './services/LoggerService';
 import { templateLoader } from './services/TemplateLoader';
 import type { IApp } from './types/coreTypes';
 import { EventHandler } from './boot/EventHandler';
@@ -140,7 +140,9 @@ export class Core {
                             'get_app_bootstrap_data',
                         );
                     const timeoutPromise = new Promise<null>((r) =>
-                        setTimeout(() => r(null), 5000),
+                        setTimeout(() => {
+                            r(null);
+                        }, 5000),
                     );
 
                     bootstrapData = await Promise.race([bootstrapPromise, timeoutPromise]);
@@ -157,7 +159,9 @@ export class Core {
             const templateLoadPromise = Promise.all([
                 templateLoader.loadAndInject('components/sidebar', 'sidebar'),
                 templateLoader.loadAndInject('pages/settings', 'page-settings'),
-            ]).catch((e) => console.error('[Core] Template loading failed:', e));
+            ]).catch((e: unknown) => {
+                console.error('[Core] Template loading failed:', e);
+            });
 
             if (bootstrapData) {
                 this.state.setState(bootstrapData.uiState);
@@ -185,7 +189,7 @@ export class Core {
 
             this.navigation.refreshFromUiState();
             const currentPage = this.navigation.getCurrentPage();
-            this.navigationUI.showPage(currentPage || 'home', null, true);
+            await this.navigationUI.showPage(currentPage || 'home', null, true);
 
             // 5. Show Window (race with timeout)
             const showPromise = this.windowService.show();
@@ -213,8 +217,8 @@ export class Core {
             if (import.meta.env.DEV) {
                 this.debugUI.init();
             } else {
-                const debugEntry = document.querySelector('.debug-trigger') as HTMLElement;
-                if (debugEntry) debugEntry.style.display = 'none';
+                const debugEntry = document.querySelector('.debug-trigger');
+                if (debugEntry instanceof HTMLElement) debugEntry.style.display = 'none';
                 const debugPanel = document.getElementById('debug-panel');
                 if (debugPanel) debugPanel.style.display = 'none';
             }
@@ -264,7 +268,7 @@ export class Core {
     /**
      * Restores module selection from state.
      */
-    private async _restoreSelectedModules(): Promise<void> {
+    private _restoreSelectedModules(): void {
         console.debug('[Core] Restoring selected modules...');
         const selected = this.state.getState().selected_modules || {};
 

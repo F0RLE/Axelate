@@ -115,23 +115,22 @@ export class DownloadUI {
      * Parses a raw progress payload into a normalized DownloadProgress object.
      */
     private _parseProgressState(progress: Partial<DownloadProgress>): DownloadProgress {
-        const percent = Number(progress.percent || 0);
-        const downloaded = Number(progress.downloaded || 0);
-        const total = Number(progress.total || 0);
-        const speed = Number(progress.speed || 0);
+        const percent = progress.percent || 0;
+        const downloaded = progress.downloaded || 0;
+        const total = progress.total || 0;
+        const speed = progress.speed || 0;
         const completed = !!progress.completed;
         const error = progress.error || null;
         const label = progress.label || '';
 
-        const hasActive = !!(
-            progress.hasActive ||
+        const hasActive =
+            (progress.hasActive ?? false) ||
             ((percent > 0 || downloaded > 0) &&
                 !completed &&
                 !error &&
                 total > 0 &&
                 label.trim() !== '') ||
-            (completed && label.trim() !== '')
-        );
+            (completed && label.trim() !== '');
 
         return { percent, downloaded, total, speed, completed, error, label, hasActive };
     }
@@ -182,7 +181,7 @@ export class DownloadUI {
         const { percent, speed, downloaded, total, label, hasActive } = state;
         const win = globalThis as unknown as IDownloaderGlobal;
 
-        if (els.bar) els.bar.style.width = `${Math.min(percent, 100)}%`;
+        if (els.bar) els.bar.style.width = `${String(Math.min(percent, 100))}%`;
         if (els.text) els.text.textContent = `${percent.toFixed(1)}%`;
 
         if (els.speedEl) els.speedEl.textContent = this._formatSpeed(speed);
@@ -267,11 +266,11 @@ export class DownloadUI {
             const m = win.t ? win.t('ui.common.time.m', 'm') : 'm';
 
             if (seconds < 60) {
-                els.etaEl.textContent = `${Math.floor(seconds)}${s}`;
+                els.etaEl.textContent = `${Math.floor(seconds).toString()}${s}`;
             } else {
                 const mins = Math.floor(seconds / 60);
                 const secs = Math.floor(seconds % 60);
-                els.etaEl.textContent = `${mins}${m} ${secs}${s}`;
+                els.etaEl.textContent = `${mins.toString()}${m} ${secs.toString()}${s}`;
             }
         } else {
             els.etaEl.textContent = '--';
@@ -359,7 +358,7 @@ export class DownloadUI {
         if (slider) {
             const val = typeof value === 'string' ? Number.parseInt(value, 10) : value;
             const percent = ((val - 1) / (200 - 1)) * 100;
-            slider.style.background = `linear-gradient(to right, var(--primary) ${percent}%, var(--bg-light) ${percent}%)`;
+            slider.style.background = `linear-gradient(to right, var(--primary) ${percent.toString()}%, var(--bg-light) ${percent.toString()}%)`;
         }
     }
 
@@ -406,7 +405,9 @@ export class DownloadUI {
         const toggle = document.getElementById(DownloadUI.SELECTORS.TOGGLE);
         const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER);
 
-        toggle?.addEventListener('change', () => this.saveSettings());
+        toggle?.addEventListener('change', () => {
+            this.saveSettings();
+        });
         slider?.addEventListener('input', (e) => {
             const val = (e.target as HTMLInputElement).value;
             this.updateSpeedDisplay(val);

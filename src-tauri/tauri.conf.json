@@ -5,10 +5,15 @@
     "version": "0.1.4",
     "identifier": "com.axelate",
     "build": {
-        "beforeDevCommand": "npm run dev --prefix src",
+        "beforeDevCommand": "npm run dev:web --prefix src",
         "devUrl": "http://localhost:1420",
         "beforeBuildCommand": "npm run build --prefix src",
         "frontendDist": "../src/dist"
+    },
+    "plugins": {
+        "dev": {
+            "watch": ["resources/**/*"]
+        }
     },
     "app": {
         "withGlobalTauri": false,

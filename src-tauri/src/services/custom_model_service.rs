@@ -26,14 +26,18 @@ fn save_config(config: &CustomModelConfig) -> Result<(), String> {
 }
 
 #[command]
+#[specta::specta]
+/// Retrieves all custom AI models configured by the user
 pub fn get_custom_models() -> Vec<CustomModel> {
     load_config().models
 }
 
 #[command]
+#[specta::specta]
+/// Adds a new custom AI model configuration
 pub fn add_custom_model(
     provider_id: String,
-    id: String,
+    id: &str,
     name: String,
     base_model_id: String,
 ) -> Result<(), String> {
@@ -49,7 +53,7 @@ pub fn add_custom_model(
     }
 
     config.models.push(CustomModel {
-        id: id.clone(),
+        id: id.to_string(),
         name,
         provider_id,
         base_model_id,
@@ -63,7 +67,9 @@ pub fn add_custom_model(
 }
 
 #[command]
-pub fn remove_custom_model(id: String) -> Result<(), String> {
+#[specta::specta]
+/// Removes a custom AI model by ID
+pub fn remove_custom_model(id: &str) -> Result<(), String> {
     let mut config = load_config();
     config.models.retain(|m| m.id != id);
     save_config(&config)

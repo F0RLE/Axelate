@@ -51,6 +51,35 @@ function Exec {
     Pop-Location
 }
 
+function Initialize-Environment {
+    Write-Step "Setting up environment..."
+    
+    # Check for RC.EXE (Resource Compiler) needed for Tauri
+    if (-not (Get-Command rc.exe -ErrorAction SilentlyContinue)) {
+        Write-Host "RC.EXE not found in PATH. Searching known locations..." -ForegroundColor Yellow
+        
+        $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+        if (Test-Path $kitsRoot) {
+            # Find latest version
+            $latestVersion = Get-ChildItem $kitsRoot | Where-Object { $_.PSIsContainer -and $_.Name -match '^\d+\.' } | Sort-Object Name -Descending | Select-Object -First 1
+            
+            if ($latestVersion) {
+                $rcPath = Join-Path $latestVersion.FullName "x64"
+                if (Test-Path (Join-Path $rcPath "rc.exe")) {
+                    Write-Host "Found RC.EXE at: $rcPath" -ForegroundColor DarkGray
+                    $env:PATH = "$rcPath;$env:PATH"
+                    Write-Success "Added RC.EXE to PATH"
+                }
+                else {
+                    Write-ErrorMsg "RC.EXE not found in $rcPath"
+                }
+            }
+        }
+    }
+}
+
+Setup-Environment
+
 Write-Header "Starting Full Project Verification (Axelate)"
 
 # 1. Backend Verification

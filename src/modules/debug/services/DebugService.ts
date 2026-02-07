@@ -19,7 +19,7 @@ export class DebugService {
                 return this.processLogs(logs);
             } else {
                 // Fallback to fetch for dev/browser
-                const res = await fetch(`/api/logs?since=${this.lastTimestamp}`);
+                const res = await fetch(`/api/logs?since=${this.lastTimestamp.toString()}`);
                 if (!res.ok) throw new Error('Fetch failed');
                 const text = await res.text();
                 const logs = this.safeJsonParse(text, []);

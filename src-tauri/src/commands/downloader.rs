@@ -3,6 +3,8 @@ use crate::services::downloader;
 use tauri::AppHandle;
 
 #[tauri::command]
+#[specta::specta]
+/// Downloads and verifies a module from a Git repository
 pub async fn download_module(
     app: AppHandle,
     module_id: String,
@@ -13,29 +15,37 @@ pub async fn download_module(
 }
 
 #[tauri::command]
-pub fn check_module_installed(module_id: String) -> Result<bool, AppError> {
-    Ok(downloader::is_module_installed(&module_id))
+#[specta::specta]
+/// Checks if a module is already installed locally
+pub fn check_module_installed(module_id: &str) -> Result<bool, AppError> {
+    Ok(downloader::is_module_installed(module_id))
 }
 
 #[tauri::command]
-pub fn get_module_path(module_id: String) -> Result<String, AppError> {
-    downloader::validate_module_id(&module_id)?;
+#[specta::specta]
+/// Retrieves the filesystem path to a module's directory
+pub fn get_module_path(module_id: &str) -> Result<String, AppError> {
+    downloader::validate_module_id(module_id)?;
 
-    Ok(downloader::get_module_path(&module_id)
+    Ok(downloader::get_module_path(module_id)
         .to_string_lossy()
         .to_string())
 }
 
 #[tauri::command]
-pub fn delete_module(module_id: String) -> Result<(), AppError> {
-    downloader::delete_module(&module_id)
+#[specta::specta]
+/// Deletes a module from local storage
+pub fn delete_module(module_id: &str) -> Result<(), AppError> {
+    downloader::delete_module(module_id)
 }
 
 #[tauri::command]
-pub async fn list_module_files(module_id: String) -> Result<Vec<String>, AppError> {
-    downloader::validate_module_id(&module_id)?;
+#[specta::specta]
+/// Lists all files in a module's directory
+pub async fn list_module_files(module_id: &str) -> Result<Vec<String>, AppError> {
+    downloader::validate_module_id(module_id)?;
 
-    let path = downloader::get_module_path(&module_id);
+    let path = downloader::get_module_path(module_id);
     if !path.exists() {
         return Err(AppError::NotFound(
             "Module directory does not exist".to_string(),
@@ -57,6 +67,8 @@ pub async fn list_module_files(module_id: String) -> Result<Vec<String>, AppErro
 }
 
 #[tauri::command]
+#[specta::specta]
+/// Configures download bandwidth limits
 pub fn set_download_settings(enabled: bool, max_speed: u64) {
     downloader::DOWNLOADER.set_limit(enabled, max_speed);
 }

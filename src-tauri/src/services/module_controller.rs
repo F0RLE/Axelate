@@ -7,13 +7,20 @@ use std::str::FromStr;
 use sysinfo::{Pid, ProcessesToUpdate, System};
 use tauri::AppHandle;
 
+/// Module control actions
 #[derive(Debug)]
 pub enum ModuleAction {
+    /// Start a module
     Start,
+    /// Stop a module
     Stop,
+    /// Restart a module
     Restart,
+    /// Install a module
     Install,
+    /// Uninstall a module
     Uninstall,
+    /// Update a module
     Update,
 }
 
@@ -22,17 +29,18 @@ impl FromStr for ModuleAction {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "start" => Ok(ModuleAction::Start),
-            "stop" => Ok(ModuleAction::Stop),
-            "restart" => Ok(ModuleAction::Restart),
-            "install" => Ok(ModuleAction::Install),
-            "uninstall" => Ok(ModuleAction::Uninstall),
-            "update" => Ok(ModuleAction::Update),
-            _ => Err(AppError::Validation(format!("Invalid action: {}", s))),
+            "start" => Ok(Self::Start),
+            "stop" => Ok(Self::Stop),
+            "restart" => Ok(Self::Restart),
+            "install" => Ok(Self::Install),
+            "uninstall" => Ok(Self::Uninstall),
+            "update" => Ok(Self::Update),
+            _ => Err(AppError::Validation(format!("Invalid action: {s}"))),
         }
     }
 }
 
+/// Gets the runtime status of a module (running/stopped)
 pub fn get_module_status(module_id: &str) -> String {
     let module_path = downloader::get_module_path(module_id);
     let pid_file = module_path.join("module.pid");
@@ -55,6 +63,7 @@ pub fn get_module_status(module_id: &str) -> String {
     "stopped".to_string()
 }
 
+/// Scans and returns all installed modules
 pub fn get_all_modules() -> Vec<Module> {
     let mut modules = Vec::new();
     // Scan modules dir
@@ -74,10 +83,19 @@ pub fn get_all_modules() -> Vec<Module> {
                 modules.push(Module {
                     id: id.clone(),
                     name,
+                    description: String::new(), // Default description
                     version,
-                    status: get_module_status(&id),
-                    config_schema,
+                    author: String::new(),                    // Default author
+                    category: "service".to_string(),          // Default category
+                    icon: String::new(),                      // Default icon
+                    path: path.to_string_lossy().to_string(), // Absolute path
+                    installed: true,
+                    local: true,
+                    enabled: true,
+                    status: Some(get_module_status(&id)),
                     is_deletable: true,
+                    config: std::collections::HashMap::new(), // Default config
+                    config_schema,
                 });
             }
         }
@@ -85,17 +103,19 @@ pub fn get_all_modules() -> Vec<Module> {
     modules
 }
 
-pub async fn control(
+/// Controls a module (start, stop, restart, install, uninstall, update)
+#[allow(clippy::needless_pass_by_value)] // AppHandle may be used in future implementations
+pub fn control(
     _app: AppHandle,
     module_id: &str,
     action: ModuleAction,
 ) -> Result<ControlResponse, AppError> {
     // Handle Uninstall directly
-    if let ModuleAction::Uninstall = action {
+    if matches!(action, ModuleAction::Uninstall) {
         downloader::delete_module(module_id)?;
         return Ok(ControlResponse {
             success: true,
-            message: format!("Module {} uninstalled successfully", module_id),
+            message: format!("Module {module_id} uninstalled successfully"),
             status: None,
         });
     }
@@ -107,14 +127,14 @@ pub async fn control(
     let module_path = downloader::get_module_path(module_id);
     if !module_path.exists() {
         return Err(AppError::NotFound(format!(
-            "Module {} not found at {:?}",
-            module_id, module_path
+            "Module {module_id} not found at {}",
+            module_path.display()
         )));
     }
 
     // 2. Load Manifest
     let manifest = module_lifecycle::load_manifest(&module_path)
-        .map_err(|e| AppError::Config(format!("Failed to load manifest: {}", e)))?;
+        .map_err(|e| AppError::Config(format!("Failed to load manifest: {e}")))?;
 
     // 3. Handle Start/Stop specifically for process management
     match action {
@@ -125,31 +145,31 @@ pub async fn control(
                 .and_then(|l| l.start.clone())
                 .ok_or_else(|| AppError::Config("No start script defined".to_string()))?;
 
-            log::info!("Spawning start script for {}: {}", module_id, start_script);
+            log::info!("Spawning start script for {module_id}: {start_script}");
 
             #[cfg(target_os = "windows")]
             let child = Command::new("cmd")
                 .args(["/C", &start_script])
                 .current_dir(&module_path)
                 .spawn()
-                .map_err(|e| AppError::Internal(format!("Failed to spawn process: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to spawn process: {e}")))?;
 
             #[cfg(not(target_os = "windows"))]
             let child = Command::new("sh")
                 .args(["-c", &start_script])
                 .current_dir(&module_path)
                 .spawn()
-                .map_err(|e| AppError::Internal(format!("Failed to spawn process: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to spawn process: {e}")))?;
 
             let pid = child.id();
             let pid_file = module_path.join("module.pid");
             if let Err(e) = fs::write(&pid_file, pid.to_string()) {
-                log::error!("Failed to write PID file: {}", e);
+                log::error!("Failed to write PID file: {e}");
             }
 
             Ok(ControlResponse {
                 success: true,
-                message: format!("Started process with PID {}", pid),
+                message: format!("Started process with PID {pid}"),
                 status: Some("running".to_string()),
             })
         }
@@ -161,7 +181,7 @@ pub async fn control(
             if pid_file.exists() {
                 if let Ok(pid_str) = fs::read_to_string(&pid_file) {
                     let pid_str = pid_str.trim();
-                    log::info!("Stopping {} (PID: {})", module_id, pid_str);
+                    log::info!("Stopping {module_id} (PID: {pid_str})");
 
                     #[cfg(target_os = "windows")]
                     let kill_cmd = Command::new("taskkill")
@@ -174,15 +194,15 @@ pub async fn control(
                     match kill_cmd {
                         Ok(output) => {
                             if output.status.success() {
-                                message = format!("Successfully killed PID {}", pid_str);
+                                message = format!("Successfully killed PID {pid_str}");
                             } else {
                                 let stderr = String::from_utf8_lossy(&output.stderr);
-                                message = format!("Failed to kill PID {}: {}", pid_str, stderr);
-                                log::error!("{}", message);
+                                message = format!("Failed to kill PID {pid_str}: {stderr}");
+                                log::error!("{message}");
                             }
                         }
                         Err(e) => {
-                            log::error!("Failed to execute kill command: {}", e);
+                            log::error!("Failed to execute kill command: {e}");
                         }
                     }
                 }
@@ -193,7 +213,7 @@ pub async fn control(
 
             // 2. Run stop script if defined (for graceful cleanup)
             if let Some(stop_script) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
-                log::info!("Running stop script for {}: {}", module_id, stop_script);
+                log::info!("Running stop script for {module_id}: {stop_script}");
                 // We run this blocking, just in case
                 #[cfg(target_os = "windows")]
                 let _ = Command::new("cmd")
@@ -210,16 +230,16 @@ pub async fn control(
         }
         _ => {
             // For other actions (Init, Update, etc.), run blocking as before
-            let script = match &manifest.lifecycle {
-                Some(scripts) => match action {
+            let script = manifest
+                .lifecycle
+                .as_ref()
+                .and_then(|scripts| match action {
                     ModuleAction::Install => scripts.init.clone(),
                     _ => None,
-                },
-                None => None,
-            };
+                });
 
             if let Some(cmd_str) = script {
-                log::info!("Executing blocking script for {}: {}", module_id, cmd_str);
+                log::info!("Executing blocking script for {module_id}: {cmd_str}");
 
                 #[cfg(target_os = "windows")]
                 let result = Command::new("cmd")
@@ -241,7 +261,7 @@ pub async fn control(
                         if !output.status.success() {
                             return Ok(ControlResponse {
                                 success: false,
-                                message: format!("Script failed: {}", stderr),
+                                message: format!("Script failed: {stderr}"),
                                 status: Some("error".to_string()),
                             });
                         }
@@ -255,10 +275,7 @@ pub async fn control(
                             status: Some("completed".to_string()),
                         })
                     }
-                    Err(e) => Err(AppError::Internal(format!(
-                        "Failed to launch command: {}",
-                        e
-                    ))),
+                    Err(e) => Err(AppError::Internal(format!("Failed to launch command: {e}"))),
                 }
             } else {
                 Ok(ControlResponse {

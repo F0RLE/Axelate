@@ -46,7 +46,7 @@ files.forEach((file) => {
     if (file.type === 'json') {
         const json = JSON.parse(content);
         json.version = newVersion;
-        content = JSON.stringify(json, null, 4) + '\n';
+        content = `${JSON.stringify(json, null, 4)}\n`;
     } else if (file.type === 'toml') {
         content = content.replace(/^version = ".*"/m, `version = "${newVersion}"`);
     }

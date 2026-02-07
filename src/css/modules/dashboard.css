@@ -1981,10 +1981,14 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 }
 
 .module-action-badge.close .badge-icon svg {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     stroke: currentColor;
-    transition: stroke 0.3s ease;
+    transition: stroke 0.3s ease, transform 0.2s ease;
+}
+
+.module-action-badge.close:hover .badge-icon svg {
+    transform: scale(1.15);
 }
 
 /* Pointer events */

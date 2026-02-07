@@ -1,13 +1,9 @@
 import type { IApp } from '../../core/types/coreTypes';
 import type { TGlobalWin } from '../../core/types/global_bridge_types';
 
-export interface ISettings {
-    LANGUAGE: string;
-    USE_GPU: string;
-    BOT_LANGUAGE: string;
-    DEBUG_MODE: string;
-    [key: string]: string;
-}
+import type { AppSettings } from '../../core/types/bindings';
+export type ISettings = AppSettings;
+export type SettingsValue = string | number | boolean;
 
 export interface IGpuInfo {
     detected: boolean;
@@ -31,13 +27,13 @@ export class SettingsService {
     public async loadSettings(): Promise<ISettings> {
         try {
             const win = globalThis as TGlobalWin;
-            if (win['__TAURI__']) {
-                const data = await win['__TAURI__'].core.invoke<ISettings>('get_settings');
+            if (win.__TAURI__) {
+                const data = await win.__TAURI__.core.invoke<ISettings>('get_settings');
                 this.settings = { ...this.settings, ...data };
                 return this.settings;
             } else {
                 const res = await fetch(`${this.API_BASE}/settings`);
-                const data = await res.json();
+                const data = (await res.json()) as ISettings;
                 this.settings = { ...this.settings, ...data };
                 return this.settings;
             }
@@ -47,33 +43,37 @@ export class SettingsService {
         }
     }
 
-    public async saveSetting(
-        key: string,
-        value: string | number | boolean,
-        isJson = false,
-    ): Promise<void> {
+    public set(key: string, value: SettingsValue): void {
+        // Safe cast for dynamic access
+        (this.settings as unknown as Record<string, SettingsValue>)[key] = String(value);
+        void this.saveSetting(key, value);
+    }
+
+    public async saveSetting(key: string, value: SettingsValue, isJson = false): Promise<void> {
         // Update local cache immediately
-        this.settings[key] = String(value);
+        (this.settings as unknown as Record<string, SettingsValue>)[key] = String(value);
 
         const win = globalThis as TGlobalWin;
-        if (win['__TAURI__']) {
-            await win['__TAURI__'].core.invoke('save_setting', { key, value: String(value) });
+        if (win.__TAURI__) {
+            await win.__TAURI__.core.invoke('save_setting', { key, value: String(value) });
         } else {
             // Debounce for web
             if (this.saveTimeout) clearTimeout(this.saveTimeout);
             return new Promise((resolve, reject) => {
-                this.saveTimeout = setTimeout(async () => {
-                    try {
-                        const res = await fetch(`${this.API_BASE}/settings`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ key, value, isJson }),
-                        });
-                        if (res.ok) resolve();
-                        else reject(new Error(await res.text()));
-                    } catch (e) {
-                        reject(e);
-                    }
+                this.saveTimeout = setTimeout(() => {
+                    void (async () => {
+                        try {
+                            const res = await fetch(`${this.API_BASE}/settings`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ key, value, isJson }),
+                            });
+                            if (res.ok) resolve();
+                            else reject(new Error(await res.text()));
+                        } catch (e) {
+                            reject(e instanceof Error ? e : new Error(String(e)));
+                        }
+                    })();
                 }, 100);
             });
         }
@@ -93,8 +93,8 @@ export class SettingsService {
     ): Promise<boolean> {
         try {
             const win = globalThis as TGlobalWin;
-            if (win['__TAURI__']) {
-                await win['__TAURI__'].core.invoke('control_service', { action, service });
+            if (win.__TAURI__) {
+                await win.__TAURI__.core.invoke('control_service', { action, service });
                 return true;
             } else {
                 if (action === 'restart') {
@@ -128,11 +128,11 @@ export class SettingsService {
     public async loadGpuInfo(): Promise<IGpuInfo> {
         try {
             const win = globalThis as TGlobalWin;
-            if (win['__TAURI__']) {
-                return await win['__TAURI__'].core.invoke<IGpuInfo>('get_gpu_info');
+            if (win.__TAURI__) {
+                return await win.__TAURI__.core.invoke<IGpuInfo>('get_gpu_info');
             } else {
                 const res = await fetch(`${this.API_BASE}/gpu_info`);
-                return await res.json();
+                return (await res.json()) as IGpuInfo;
             }
         } catch (e) {
             console.error('[SettingsService] Failed to load GPU info:', e);
@@ -147,11 +147,11 @@ export class SettingsService {
     public async getModules(): Promise<IApp[]> {
         try {
             const win = globalThis as TGlobalWin;
-            if (win['__TAURI__']) {
-                return await win['__TAURI__'].core.invoke<IApp[]>('get_modules');
+            if (win.__TAURI__) {
+                return await win.__TAURI__.core.invoke<IApp[]>('get_modules');
             } else {
                 const res = await fetch(`${this.API_BASE}/modules`);
-                return await res.json();
+                return (await res.json()) as IApp[];
             }
         } catch (e) {
             console.error('[SettingsService] Failed to get modules:', e);
@@ -167,8 +167,8 @@ export class SettingsService {
         const storageKey = `${provider}_api_key`;
         try {
             const win = globalThis as TGlobalWin;
-            if (win['__TAURI__']) {
-                await win['__TAURI__'].core.invoke('save_secure_key', {
+            if (win.__TAURI__) {
+                await win.__TAURI__.core.invoke('save_secure_key', {
                     service: storageKey,
                     key: key,
                 });
@@ -192,8 +192,8 @@ export class SettingsService {
         const storageKey = `${provider}_api_key`;
         try {
             const win = globalThis as TGlobalWin;
-            if (win['__TAURI__']) {
-                const value = await win['__TAURI__'].core.invoke<string | null>('get_secure_key', {
+            if (win.__TAURI__) {
+                const value = await win.__TAURI__.core.invoke<string | null>('get_secure_key', {
                     service: storageKey,
                 });
                 return value || '';
@@ -212,9 +212,9 @@ export class SettingsService {
     public async validateApiKey(provider: string, key: string): Promise<boolean> {
         try {
             const win = globalThis as TGlobalWin;
-            if (win['__TAURI__']) {
+            if (win.__TAURI__) {
                 // Now using the secure Backend command
-                return await win['__TAURI__'].core.invoke<boolean>('validate_api_key', {
+                return await win.__TAURI__.core.invoke<boolean>('validate_api_key', {
                     provider,
                     key,
                 });
@@ -230,7 +230,7 @@ export class SettingsService {
 
     public async addCustomModel(provider: string, id: string, name: string): Promise<void> {
         const win = globalThis as TGlobalWin;
-        if (win['__TAURI__']) {
+        if (win.__TAURI__) {
             try {
                 // Determine base model ID (assumed to be the ID itself for now, or passed as arg)
                 // For simplified UI, we assume id IS the base model or mapped string.
@@ -240,7 +240,7 @@ export class SettingsService {
                 // The frontend UI usually asks for "Model ID" (API string) and "Display Name".
                 // backend add_custom_model(provider_id, id, name, base_model_id)
                 // In this simplified interface, we'll treat UI ID as both unique ID and base API ID
-                await win['__TAURI__'].core.invoke('add_custom_model', {
+                await win.__TAURI__.core.invoke('add_custom_model', {
                     providerId: provider,
                     id: id,
                     name: name,
@@ -254,7 +254,7 @@ export class SettingsService {
             // Web Fallback
             const key = `custom_models_${provider}`;
             const existing = localStorage.getItem(key);
-            const models = existing ? JSON.parse(existing) : [];
+            const models = (existing ? JSON.parse(existing) : []) as ICustomModel[];
             models.push({ id, name });
             localStorage.setItem(key, JSON.stringify(models));
         }
@@ -262,9 +262,9 @@ export class SettingsService {
 
     public async getCustomModels(): Promise<ICustomModel[]> {
         const win = globalThis as TGlobalWin;
-        if (win['__TAURI__']) {
+        if (win.__TAURI__) {
             try {
-                return await win['__TAURI__'].core.invoke<ICustomModel[]>('get_custom_models');
+                return await win.__TAURI__.core.invoke<ICustomModel[]>('get_custom_models');
             } catch (e) {
                 console.error('[SettingsService] Failed to get custom models:', e);
                 return [];
@@ -277,7 +277,7 @@ export class SettingsService {
                 const key = localStorage.key(i);
                 if (key?.startsWith('custom_models_')) {
                     const provider = key.replace('custom_models_', '');
-                    const models = JSON.parse(localStorage.getItem(key) || '[]');
+                    const models = JSON.parse(localStorage.getItem(key) || '[]') as ICustomModel[];
                     all = all.concat(
                         models.map((m: ICustomModel) => ({ ...m, provider_id: provider })),
                     );

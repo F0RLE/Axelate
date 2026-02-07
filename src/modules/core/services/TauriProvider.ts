@@ -1,5 +1,6 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
+import type * as Bindings from '../types/bindings';
 
 // No local types needed, using global.d.ts
 
@@ -16,7 +17,7 @@ export class TauriProvider {
 
     public isTauri(): boolean {
         // Dynamic check to handle injection timing
-        return !!globalThis['__TAURI_INTERNALS__'] || !!globalThis['__TAURI__'];
+        return !!globalThis.__TAURI_INTERNALS__ || !!globalThis.__TAURI__;
     }
 
     public async invoke<T, A extends Record<string, unknown> = Record<string, unknown>>(
@@ -44,7 +45,7 @@ export class TauriProvider {
         }
 
         // Priority 2: Global __TAURI__ (v1 or v2 withGlobalTauri)
-        const tauri = globalThis['__TAURI__'];
+        const tauri = globalThis.__TAURI__;
         const globalInvoke = tauri?.core?.invoke || tauri?.invoke;
 
         if (typeof globalInvoke === 'function') {
@@ -57,10 +58,10 @@ export class TauriProvider {
     /**
      * Standardized error handling for IPC failures.
      */
-    private async _handleInvokeError<T>(cmd: string, args: unknown, e: unknown): Promise<T> {
+    private _handleInvokeError<T>(cmd: string, args: unknown, e: unknown): Promise<T> {
         // Propagate critical errors in tests or specific commands
         if (cmd === 'set_focus' || this._isTest()) {
-            throw e;
+            return Promise.reject(e instanceof Error ? e : new Error(String(e)));
         }
 
         console.warn(`[TauriProvider] IPC failure for ${cmd}, falling back to mock:`, e);
@@ -70,21 +71,26 @@ export class TauriProvider {
     private _isTest(): boolean {
         const g = globalThis as Record<string, unknown>;
         return (
-            import.meta.env['MODE'] === 'test' ||
+            import.meta.env.MODE === 'test' ||
             process.env['NODE_ENV'] === 'test' ||
             g['vi'] !== undefined ||
             g['expect'] !== undefined
         );
     }
 
-    public async listen<T>(event: string, callback: (_payload: T) => void): Promise<() => void> {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+    public async listen<T>(event: string, callback: (payload: T) => void): Promise<() => void> {
         if (this.isTauri()) {
             // Using imported listen for robust IPC
-            const unlisten = await listen<T>(event, (e) => callback(e.payload));
-            return unlisten as () => void;
+            const unlisten = await listen<T>(event, (e) => {
+                callback(e.payload);
+            });
+            return unlisten;
         } else {
             console.log(`[TauriProvider] Mock Listen: ${event}`);
-            return () => {};
+            return () => {
+                /* no-op */
+            };
         }
     }
 
@@ -129,7 +135,7 @@ export class TauriProvider {
         }
     }
 
-    private async _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
+    private _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
         const isProd = !this._isTest() && !import.meta.env.DEV;
         if (isProd) {
             console.warn('[TauriProvider] Mock invoked in production! Sane fallback returned.');
@@ -138,22 +144,55 @@ export class TauriProvider {
         }
 
         const saneDefaults: Record<string, unknown> = {
-            get_settings: { LANGUAGE: 'en', THEME: 'dark' },
+            get_settings: {
+                language: 'en',
+                theme: 'dark',
+                gpu_enabled: true,
+                debug_mode: false,
+                check_updates: true,
+                auto_update: true,
+                notifications: true,
+                system_tray: true,
+                start_at_login: false,
+            } satisfies Bindings.AppSettings,
             get_translations: {},
             get_system_language: 'en',
-            get_config: { catalog: { ai: [], services: [] }, apiProviders: [], models: {} },
-            get_modules: [],
+            get_config: {
+                version: '1.0.0',
+                catalog: { ai: [], services: [] },
+                apiProviders: [],
+                models: { default_text: '', default_image: '', default_code: '' },
+                pricing: {},
+                features: {},
+            } satisfies Bindings.AppConfig,
+            get_modules: [] satisfies Bindings.Module[],
             get_app_bootstrap_data: null,
             get_system_stats: {
-                cpu: { percent: 0 },
-                ram: { percent: 0 },
-                gpu: { usage: 0 },
-                disk: { utilization: 0 },
-            },
+                cpu: { percent: 0, cores: 0, name: 'Mock CPU' },
+                ram: { percent: 0, usedGb: 0, totalGb: 16, availableGb: 16 },
+                gpu: { usage: 0, temp: 0, name: 'Mock GPU', memoryUsed: 0, memoryTotal: 0 },
+                disk: {
+                    readRate: 0,
+                    writeRate: 0,
+                    utilization: 0,
+                    totalGb: 500,
+                    usedGb: 0,
+                    activityPercent: 0,
+                },
+                network: {
+                    downloadRate: 0,
+                    uploadRate: 0,
+                    totalReceived: 0,
+                    totalSent: 0,
+                    utilization: 0,
+                    activityPercent: 0,
+                },
+                pid: 1234,
+            } satisfies Bindings.SystemStats,
             validate_api_key: true,
             save_setting: true,
         };
 
-        return (saneDefaults[cmd] ?? {}) as unknown as T;
+        return Promise.resolve((saneDefaults[cmd] ?? {}) as unknown as T);
     }
 }

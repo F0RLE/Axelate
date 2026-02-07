@@ -1,3 +1,4 @@
+#![allow(unsafe_code)]
 /**
  * @module utils/memory
  * @description Utilities for managing process memory footprint

@@ -5,6 +5,12 @@ description = "Axelate"
 authors = ["F0RLE"]
 edition = "2024"
 rust-version = "1.93.0"
+license = "Proprietary"
+repository = "https://github.com/F0RLE/Axelate"
+homepage = "https://github.com/F0RLE/Axelate"
+keywords = ["tauri", "gui", "system", "ai"]
+categories = ["gui", "system-programming"]
+publish = false
 
 [lib]
 name = "axelate_lib"
@@ -15,10 +21,10 @@ name = "Axelate"
 path = "src/main.rs"
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["image-ico", "image-png", "tray-icon"] }
-tauri-plugin-shell = "2.3.4"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+tauri = { version = "2.9.5", features = ["image-ico", "image-png", "tray-icon"] } # latest stable as of late 2025/early 2026 :contentReference[oaicite:0]{index=0}
+tauri-plugin-shell = "2.3.4" # up-to-date on crates.io :contentReference[oaicite:1]{index=1}
+serde = { version = "1.0.228", features = ["derive"] } # latest serde :contentReference[oaicite:2]{index=2}
+serde_json = "1.0.149" # latest serde_json :contentReference[oaicite:3]{index=3}
 log = "0.4.29"
 env_logger = "0.11.8"
 thiserror = "2.0.18"
@@ -50,9 +56,17 @@ zip = "7.2.0"
 tempfile = "3.24.0"
 hex = "0.4.3"
 wmi = "0.18.0"
-axum = { version = "0.8.8", features = ["macros", "ws"] }
-tower-http = { version = "0.6.8", features = ["fs", "cors", "trace"] }
+
+axum = { version = "0.8.8", features = ["macros", "ws"] } # latest major used widely :contentReference[oaicite:4]{index=4}
+tower-http = { version = "0.6.8", features = ["fs", "cors", "trace"] } # up-to-date with latest minor :contentReference[oaicite:5]{index=5}
+
 tauri-plugin-single-instance = "2.3.7"
+specta = { version = "2.0.0-rc.20", features = ["derive", "serde", "serde_json"] }
+specta-typescript = "0.0.7"
+tauri-specta = { version = "2.0.0-rc.20", features = ["typescript", "derive"] }
+
+[build-dependencies]
+tauri-build = { version = "2.5.3", features = [] } # matches tauri-build used by Tauri 2.x :contentReference[oaicite:6]{index=6}
 
 [profile.release]
 codegen-units = 1
@@ -61,11 +75,55 @@ opt-level = "z"
 panic = "abort"
 strip = true
 incremental = false
+overflow-checks = true
 
-[build-dependencies]
-tauri-build = { version = "2.5.3", features = [] }
+# [patch.crates-io]
+# wry = { git = "https://github.com/F0RLE/wry.git", branch = "feat/webview2-default-allow" }
 
-# Use forked wry with permission handler API
-# PR: https://github.com/tauri-apps/wry/pull/1656
-[patch.crates-io]
-wry = { git = "https://github.com/F0RLE/wry.git", branch = "feat/webview2-default-allow" }
+# ============================================================
+# Maximum Strictness Linting Configuration
+# ============================================================
+[lints.rust]
+# Deny unsafe code unless explicitly allowed
+unsafe_code = "deny"
+# Deny missing documentation for public items
+missing_docs = "warn"
+# Deny missing debug implementations
+missing_debug_implementations = "warn"
+# Future-proofing
+future_incompatible = { level = "deny", priority = -1 }
+nonstandard_style = { level = "deny", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
+rust_2021_compatibility = { level = "deny", priority = -1 }
+
+[lints.clippy]
+# Pedantic Lints (Ultra-Strict Style)
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Specific Denials
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "warn"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "warn"
+use_debug = "warn"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+
+# Deny common mistakes
+clone_on_ref_ptr = "deny"
+expl_impl_clone_on_copy = "deny"
+if_not_else = "warn"
+implicit_clone = "warn"
+match_same_arms = "warn"
+needless_pass_by_value = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+string_add_assign = "warn"
+type_repetition_in_bounds = "warn"
+unnecessary_wraps = "warn"
+used_underscore_binding = "warn"

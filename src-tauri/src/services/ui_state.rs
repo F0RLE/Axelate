@@ -13,17 +13,17 @@ pub fn get_ui_state() -> Result<UIState, AppError> {
     match serde_json::from_str(&content) {
         Ok(state) => Ok(state),
         Err(e) => {
-            log::warn!("Failed to parse UI state, resetting to defaults: {}", e);
+            log::warn!("Failed to parse UI state, resetting to defaults: {e}");
             Ok(UIState::default())
         }
     }
 }
 
 /// Save UI state to file
-pub fn save_ui_state(state: UIState) -> Result<(), AppError> {
+pub fn save_ui_state(state: &UIState) -> Result<(), AppError> {
     if let Some(parent) = FILE_UI_STATE.parent() {
         fs::create_dir_all(parent).map_err(AppError::Io)?;
     }
-    let content = serde_json::to_string_pretty(&state).map_err(AppError::Serialization)?;
+    let content = serde_json::to_string_pretty(state).map_err(AppError::Serialization)?;
     fs::write(&*FILE_UI_STATE, content).map_err(AppError::Io)
 }

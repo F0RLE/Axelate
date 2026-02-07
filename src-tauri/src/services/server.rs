@@ -16,10 +16,9 @@ struct AppState {
     tauri_app: AppHandle,
 }
 
+/// Starts the HTTP API server on port 3000 for local access
 pub fn start_server(app: AppHandle) {
-    let state = AppState {
-        tauri_app: app.clone(),
-    };
+    let state = AppState { tauri_app: app };
 
     tauri::async_runtime::spawn(async move {
         // Define CORS
@@ -49,18 +48,18 @@ pub fn start_server(app: AppHandle) {
 
         // Bind to 127.0.0.1 for local access only initially (safer & less firewall issues)
         let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-        log::debug!("[Server] HTTP Server listening on http://{}", addr);
+        log::debug!("[Server] HTTP Server listening on http://{addr}");
 
         // SAFETY: Binding to a port might fail if occupied, but inside tokio::spawn
         // we can't easily propagate errors up. We log and exit the thread.
         match tokio::net::TcpListener::bind(addr).await {
             Ok(listener) => {
                 if let Err(e) = axum::serve(listener, app).await {
-                    log::error!("[Server] Fatal error serving HTTP: {}", e);
+                    log::error!("[Server] Fatal error serving HTTP: {e}");
                 }
             }
             Err(e) => {
-                log::error!("[Server] Failed to bind to port 3000: {}", e);
+                log::error!("[Server] Failed to bind to port 3000: {e}");
             }
         }
     });
@@ -105,21 +104,22 @@ async fn control_module_handler(
             );
             return Json(json!({
                 "success": false,
-                "message": format!("Invalid action: {}", e)
+                "message": format!("Invalid action: {e}")
             }));
         }
     };
 
-    match module_controller::control(state.tauri_app.clone(), &id, action_enum).await {
+    #[allow(clippy::redundant_clone)] // AppHandle clone is intentional for async ownership
+    match module_controller::control(state.tauri_app.clone(), &id, action_enum) {
         Ok(res) => {
-            log::info!("[Server] Module control success: {:?}", res);
+            log::info!("[Server] Module control success: {res:?}");
             Json(json!(res))
         }
         Err(e) => {
-            log::error!("[Server] Module control failed: {}", e);
+            log::error!("[Server] Module control failed: {e}");
             Json(json!({
                 "success": false,
-                "message": format!("Error: {}", e)
+                "message": format!("Error: {e}")
             }))
         }
     }
@@ -136,24 +136,29 @@ struct LangQuery {
 
 async fn translations_handler(Query(params): Query<LangQuery>) -> Json<Value> {
     let lang = params.lang.unwrap_or_else(|| "en".to_string());
-    log::debug!("[Server] Translations requested for {}", lang);
+    log::debug!("[Server] Translations requested for {lang}");
 
     // Use unified resource path resolution
     let mut path = crate::utils::paths::RESOURCES_DIR.join("locales");
-    path.push(format!("{}.json", lang));
+    path.push(format!("{lang}.json"));
 
     if path.exists() {
         if let Ok(content) = std::fs::read_to_string(&path) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
                 return Json(json);
-            } else {
-                log::error!("[Server] Failed to parse translation file at {:?}", path);
             }
+            log::error!(
+                "[Server] Failed to parse translation file at {}",
+                path.display()
+            );
         } else {
-            log::error!("[Server] Failed to read translation file at {:?}", path);
+            log::error!(
+                "[Server] Failed to read translation file at {}",
+                path.display()
+            );
         }
     } else {
-        log::warn!("[Server] Translation file not found at {:?}", path);
+        log::warn!("[Server] Translation file not found at {}", path.display());
     }
 
     // Fallback if file not found
@@ -162,7 +167,7 @@ async fn translations_handler(Query(params): Query<LangQuery>) -> Json<Value> {
         "ui.sidebar.chat": "Chat",
         "ui.sidebar.modules": "Modules",
         "ui.sidebar.settings": "Settings",
-        "ui.error.file_not_found": format!("Locales not found at {:?}", path)
+        "ui.error.file_not_found": format!("Locales not found at {path:?}")
     }))
 }
 
@@ -213,7 +218,7 @@ fn load_settings_map() -> std::collections::HashMap<String, String> {
 
 async fn get_settings_handler() -> Json<Value> {
     let map = load_settings_map();
-    Json(serde_json::to_value(map).unwrap_or(json!({})))
+    Json(serde_json::to_value(map).unwrap_or_else(|_| json!({})))
 }
 
 #[derive(serde::Deserialize)]
@@ -238,9 +243,9 @@ async fn save_setting_handler(Json(payload): Json<SaveSettingRequest>) -> Json<V
         &path,
         serde_json::to_string_pretty(&map).unwrap_or_default(),
     ) {
-        Ok(_) => Json(json!({ "success": true })),
+        Ok(()) => Json(json!({ "success": true })),
         Err(e) => {
-            log::error!("[Server] Failed to save settings: {}", e);
+            log::error!("[Server] Failed to save settings: {e}");
             Json(json!({ "success": false, "message": e.to_string() }))
         }
     }
@@ -271,10 +276,10 @@ async fn get_config_handler(State(state): State<AppState>) -> Json<Value> {
             for module in &mut config.catalog.services {
                 module.installed = downloader::is_module_installed(&module.id);
             }
-            Json(serde_json::to_value(config).unwrap_or(json!({})))
+            Json(serde_json::to_value(config).unwrap_or_else(|_| json!({})))
         }
         Err(e) => {
-            log::error!("[Server] Failed to load config: {}", e);
+            log::error!("[Server] Failed to load config: {e}");
             Json(json!({}))
         }
     }

@@ -146,7 +146,17 @@ describe('TauriProvider', () => {
 
             // Mock invoke should return mock data
             const result = await webProvider.invoke('get_settings');
-            expect(result).toEqual({ LANGUAGE: 'en', THEME: 'dark' });
+            expect(result).toEqual({
+                language: 'en',
+                theme: 'dark',
+                gpu_enabled: true,
+                debug_mode: false,
+                check_updates: true,
+                auto_update: true,
+                notifications: true,
+                system_tray: true,
+                start_at_login: false,
+            });
         });
     });
 });

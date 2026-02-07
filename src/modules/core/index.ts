@@ -10,4 +10,4 @@ export { logger } from './services/LoggerService';
 export { templateLoader } from './services/TemplateLoader';
 
 // Types
-export * from './types/coreTypes';
+export type * from './types/coreTypes';

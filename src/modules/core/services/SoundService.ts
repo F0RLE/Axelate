@@ -41,13 +41,15 @@ export class SoundService {
      * Cleans up all event listeners and audio context.
      */
     public destroy(): void {
-        this._unsubscribers.forEach((fn) => fn());
+        this._unsubscribers.forEach((fn) => {
+            fn();
+        });
         this._unsubscribers = [];
 
         if (this._ctx && this._ctx.state !== 'closed') {
-            this._ctx
-                .close()
-                .catch((e) => console.error('[SoundService] Error closing context:', e));
+            this._ctx.close().catch((e: unknown) => {
+                console.error('[SoundService] Error closing context:', e);
+            });
         }
 
         console.debug('[SoundService] Destroyed.');
@@ -70,12 +72,7 @@ export class SoundService {
     /**
      * Plays a single tone.
      */
-    private _playTone(
-        freq: number,
-        type: OscillatorType,
-        duration: number,
-        vol: number = 0.05,
-    ): void {
+    private _playTone(freq: number, type: OscillatorType, duration: number, vol = 0.05): void {
         if (!this._enabled || !this._ctx) return;
         if (this._ctx.state === 'suspended') {
             this._ctx.resume().catch(() => {
@@ -273,9 +270,15 @@ export class SoundService {
         document.addEventListener('mousedown', handleMouseDown);
 
         this._unsubscribers.push(
-            () => document.removeEventListener('mouseover', handleMouseOver),
-            () => document.removeEventListener('mouseout', handleMouseOut),
-            () => document.removeEventListener('mousedown', handleMouseDown),
+            () => {
+                document.removeEventListener('mouseover', handleMouseOver);
+            },
+            () => {
+                document.removeEventListener('mouseout', handleMouseOut);
+            },
+            () => {
+                document.removeEventListener('mousedown', handleMouseDown);
+            },
         );
     }
 

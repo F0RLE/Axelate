@@ -1,4 +1,4 @@
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 use nvml_wrapper::Nvml;
 use serde::Deserialize;
@@ -41,7 +41,7 @@ struct Win32_VideoController {
     AdapterRAM: Option<u64>,
 }
 
-static MONITOR: Lazy<Mutex<Monitor>> = Lazy::new(|| {
+static MONITOR: LazyLock<Mutex<Monitor>> = LazyLock::new(|| {
     Mutex::new(Monitor {
         sys: None,
         networks: None,
@@ -90,6 +90,9 @@ impl Monitor {
     }
 }
 
+/// Retrieves current system statistics (CPU, RAM, GPU, disk, network)
+#[allow(clippy::cast_precision_loss)] // Precision loss acceptable for UI stats
+#[allow(clippy::cast_possible_truncation)] // Truncation acceptable for UI percentages
 pub fn get_stats() -> SystemStats {
     let mut monitor = match MONITOR.lock() {
         Ok(guard) => guard,
@@ -129,8 +132,7 @@ pub fn get_stats() -> SystemStats {
         let cpus = sys.cpus();
         let name = cpus
             .first()
-            .map(|c| c.brand().to_string())
-            .unwrap_or_else(|| "Unknown".to_string());
+            .map_or_else(|| "Unknown".to_string(), |c| c.brand().to_string());
         (percent, cpus.len(), name)
     } else {
         (0.0, 0, "Unknown".to_string())
@@ -146,7 +148,7 @@ pub fn get_stats() -> SystemStats {
     };
 
     let ram_percent = if total_memory > 0.0 {
-        (used_memory / total_memory * 100.0) as f32
+        ((used_memory / total_memory) * 100.0) as f32
     } else {
         0.0
     };
@@ -342,6 +344,7 @@ pub fn get_stats() -> SystemStats {
 static MONITORING_ACTIVE: AtomicBool = AtomicBool::new(false);
 static MONITORING_PAUSED: AtomicBool = AtomicBool::new(false);
 
+/// Starts system monitoring loop that emits stats at specified interval
 pub fn start_monitoring(app: AppHandle, interval_ms: u64) {
     if MONITORING_ACTIVE.swap(true, Ordering::SeqCst) {
         return;

@@ -1,4 +1,26 @@
-edition = "2021"
+# ============================================================
+# Rustfmt Configuration - Maximum Strictness (Edition 2024)
+# ============================================================
+edition = "2024"
 max_width = 100
 tab_spaces = 4
-newline_style = "Windows"
+newline_style = "Auto"
+
+# Import organization
+reorder_imports = true
+reorder_modules = true
+group_imports = "StdExternalCrate"
+imports_granularity = "Module"
+
+# Code style
+use_field_init_shorthand = true
+use_try_shorthand = true
+format_code_in_doc_comments = true
+format_macro_matchers = true
+format_strings = true
+wrap_comments = true
+comment_width = 100
+
+# Consistency
+normalize_comments = true
+normalize_doc_attributes = true

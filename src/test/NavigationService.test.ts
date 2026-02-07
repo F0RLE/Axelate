@@ -152,6 +152,7 @@ describe('NavigationService', () => {
     describe('refreshFromUiState', () => {
         it('should restore last page from uiState', () => {
             const mockUiState = {
+                last_page: 'settings',
                 getLastPage: vi.fn().mockReturnValue('settings'),
             };
 

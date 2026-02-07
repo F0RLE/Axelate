@@ -3,7 +3,7 @@
  * @description Service for managing application window behavior, zoom, and display states
  */
 
-import { TauriProvider } from './TauriProvider';
+import { type TauriProvider } from './TauriProvider';
 
 interface IWindowGlobal {
     windowService?: WindowService;
@@ -107,7 +107,7 @@ export class WindowService {
                         e.preventDefault();
                         // Zoom Step 0.1
                         const delta = e.deltaY > 0 ? -0.1 : 0.1;
-                        this.changeZoom(delta);
+                        void this.changeZoom(delta);
                     }
                 },
                 { passive: false },
@@ -189,7 +189,10 @@ export class WindowService {
 
                 return; // Success
             } catch (e) {
-                console.warn(`[WindowService] show_window attempt ${i + 1} failed:`, e);
+                console.warn(
+                    `[WindowService] show_window attempt ${(i + 1).toString()} failed:`,
+                    e,
+                );
                 if (i < maxRetries - 1) {
                     await new Promise((r) => setTimeout(r, 300)); // Wait before retry
                 }
@@ -249,7 +252,7 @@ export class WindowService {
         if (this._stateService) {
             this._stateService.setZoomLevel(this._currentZoom);
             this._stateService.setResolutionZoom(
-                `${window.screen.width}x${window.screen.height}`,
+                `${window.screen.width.toString()}x${window.screen.height.toString()}`,
                 this._currentZoom,
             );
         }
@@ -282,7 +285,9 @@ export class WindowService {
                 await this._tauri.invoke('set_monitoring_paused', { paused });
                 const win = globalThis as unknown as IWindowGlobal;
                 win.windowService = this;
-                win.toggleMonitorBtn?.((visible: boolean) => this._toggleMonitorPanel(visible));
+                win.toggleMonitorBtn?.((visible: boolean) => {
+                    this._toggleMonitorPanel(visible);
+                });
             } catch {
                 console.error('[WindowService] Failed to set monitoring state');
             }
@@ -300,7 +305,7 @@ export class WindowService {
      */
     public async checkPolicy(): Promise<IWindowPolicy> {
         // Check if resolution changed (monitor switch)
-        const currentRes = `${window.screen.width}x${window.screen.height}`;
+        const currentRes = `${window.screen.width.toString()}x${window.screen.height.toString()}`;
         if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
             console.log(
                 `[WindowService] Resolution changed: ${this._lastResolutionKey} -> ${currentRes}`,
@@ -326,7 +331,7 @@ export class WindowService {
      * Synchronous check for immediate detection during resize/move.
      */
     public checkResolutionChange(): void {
-        const currentRes = `${window.screen.width}x${window.screen.height}`;
+        const currentRes = `${window.screen.width.toString()}x${window.screen.height.toString()}`;
         if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
             const oldRes = this._lastResolutionKey;
             this._lastResolutionKey = currentRes;
@@ -398,10 +403,14 @@ export class WindowService {
      */
     private _initWindowListeners(): void {
         // DOM Resize event covers window resizing and maximizing
-        window.addEventListener('resize', () => this._scheduleSaveWindowState());
+        window.addEventListener('resize', () => {
+            this._scheduleSaveWindowState();
+        });
 
         // Tauri move event (if supported) covers window dragging
-        void this._tauri.listen('tauri://move', () => this._scheduleSaveWindowState());
+        void this._tauri.listen('tauri://move', () => {
+            this._scheduleSaveWindowState();
+        });
     }
 
     /**
@@ -485,7 +494,7 @@ export class WindowService {
             const zoom = await this._tauri.invoke<number>('get_resolution_zoom');
 
             if (typeof zoom === 'number' && zoom > 0 && zoom !== this._currentZoom) {
-                console.log(`[WindowService] Applying zoom for new resolution: ${zoom}`);
+                console.log(`[WindowService] Applying zoom for new resolution: ${zoom.toString()}`);
                 await this.setZoom(zoom);
             }
         } catch (e) {

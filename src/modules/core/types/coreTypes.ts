@@ -24,9 +24,9 @@ export interface ITauriInstance {
         LogicalSize: new (_width: number, _height: number) => { width: number; height: number };
     };
     event: {
-        listen: <T>(
+        listen: (
             _event: string,
-            _handler: (_event: { payload: T }) => void,
+            _handler: (_event: { payload: unknown }) => void,
         ) => Promise<() => void>;
     };
 }
@@ -60,25 +60,20 @@ export interface INavigationEvent {
 /**
  * Configuration field definition for a module or app.
  */
-export interface IConfigField {
-    fieldType: string;
-    label: string;
-    default?: unknown;
-    required: boolean;
-    options?: string[];
-}
+import type * as Bindings from './bindings';
+
+/* ... imports ... */
+
+export type IConfigField = Bindings.ConfigField;
 
 /**
  * Generic module information.
  */
-export interface IModule {
-    id: string;
-    name: string;
-    version: string;
-    status: string;
-    configSchema?: Record<string, IConfigField>;
-    isDeletable: boolean;
-}
+export type IModule = Bindings.Module & {
+    // Frontend specific augmentations
+    status?: string;
+    isDeletable?: boolean;
+};
 
 // Window interface is defined in vite-env.d.ts
 
@@ -113,4 +108,10 @@ export interface IBootstrapData {
     systemLanguage: string;
     modules: IModule[];
     initialZoom: number;
+}
+
+export interface ICatalogData {
+    ai: IApp[];
+    services: IApp[];
+    stars?: string[];
 }

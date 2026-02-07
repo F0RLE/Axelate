@@ -1,10 +1,13 @@
-import { TauriProvider } from '../../core/services/TauriProvider';
+import { type TauriProvider } from '../../core/services/TauriProvider';
 import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 interface IMonitoringGlobal {
     __TAURI__?: {
         event: {
-            listen: <T>(event: string, handler: (e: { payload: T }) => void) => Promise<() => void>;
+            listen: (
+                event: string,
+                handler: (e: { payload: unknown }) => void,
+            ) => Promise<() => void>;
         };
     };
     clearInterval: (id: unknown) => void;
@@ -12,7 +15,7 @@ interface IMonitoringGlobal {
 }
 
 export class MonitoringService {
-    private isListening: boolean = false;
+    private isListening = false;
     private unlistenFn: (() => void) | null = null;
     private pollingInterval: ReturnType<typeof setTimeout> | null = null;
     private listeners: StatsCallback[] = [];
@@ -57,8 +60,8 @@ export class MonitoringService {
                 const isHidden = document.hidden;
                 // Fire and forget
                 void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
-                if (import.meta.env['DEV']) {
-                    console.debug(`[MonitoringService] Backend paused: ${isHidden}`);
+                if (import.meta.env.DEV) {
+                    console.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
                 }
             }
         });
@@ -75,8 +78,8 @@ export class MonitoringService {
         }
         if (this.pollingInterval) {
             const g = globalThis as unknown as IMonitoringGlobal;
-            if (typeof g['clearInterval'] === 'function') {
-                g['clearInterval'](this.pollingInterval);
+            if (typeof g.clearInterval === 'function') {
+                g.clearInterval(this.pollingInterval);
             }
             this.pollingInterval = null;
         }
@@ -114,48 +117,50 @@ export class MonitoringService {
         if (this.pollingInterval) return;
 
         const g = globalThis as IMonitoringGlobal;
-        this.pollingInterval = g['setInterval'](async () => {
-            try {
-                const res = await fetch('/api/stats');
-                if (res.ok) {
-                    const stats = await res.json();
-                    this.notifyListeners(stats);
-                    return;
+        this.pollingInterval = g.setInterval(() => {
+            void (async () => {
+                try {
+                    const res = await fetch('/api/stats');
+                    if (res.ok) {
+                        const stats = (await res.json()) as ISystemStats;
+                        this.notifyListeners(stats);
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('[MonitoringService] Poll failed', e);
                 }
-            } catch (e) {
-                console.warn('[MonitoringService] Poll failed', e);
-            }
-            // Fallback to mock ONLY if poll failed
-            const mockStats: ISystemStats = {
-                cpu: { percent: this.random() * 30 + 10, cores: 8, name: 'Mock CPU' },
-                ram: { used_gb: 8, total_gb: 32, percent: 25, available_gb: 24 },
-                gpu: {
-                    usage: this.random() * 50,
-                    temp: 45,
-                    memory_used: 4,
-                    memory_total: 8,
-                    name: 'Mock GPU',
-                },
-                vram: { percent: 50, used_gb: 4, total_gb: 8 },
-                disk: {
-                    used_gb: 500,
-                    total_gb: 1000,
-                    utilization: 50,
-                    read_rate: 1024,
-                    write_rate: 2048,
-                    activity_percent: 10,
-                },
-                network: {
-                    upload_rate: this.random() * 5 * 1024 * 1024,
-                    download_rate: this.random() * 20 * 1024 * 1024,
-                    total_received: 0,
-                    total_sent: 0,
-                    utilization: 0,
-                    activity_percent: 5,
-                },
-                pid: 1234,
-            };
-            this.notifyListeners(mockStats);
+                // Fallback to mock ONLY if poll failed
+                const mockStats: ISystemStats = {
+                    cpu: { percent: this.random() * 30 + 10, cores: 8, name: 'Mock CPU' },
+                    ram: { usedGb: 8, totalGb: 32, percent: 25, availableGb: 24 },
+                    gpu: {
+                        usage: this.random() * 50,
+                        temp: 45,
+                        memoryUsed: 4,
+                        memoryTotal: 8,
+                        name: 'Mock GPU',
+                    },
+                    vram: { percent: 50, usedGb: 4, totalGb: 8 },
+                    disk: {
+                        usedGb: 500,
+                        totalGb: 1000,
+                        utilization: 50,
+                        readRate: 1024,
+                        writeRate: 2048,
+                        activityPercent: 10,
+                    },
+                    network: {
+                        uploadRate: this.random() * 5 * 1024 * 1024,
+                        downloadRate: this.random() * 20 * 1024 * 1024,
+                        totalReceived: 0,
+                        totalSent: 0,
+                        utilization: 0,
+                        activityPercent: 5,
+                    },
+                    pid: 1234,
+                };
+                this.notifyListeners(mockStats);
+            })();
         }, 1000);
     }
 

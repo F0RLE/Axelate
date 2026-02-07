@@ -1,4 +1,4 @@
-import { MonitoringService } from '../services/MonitoringService';
+import { type MonitoringService } from '../services/MonitoringService';
 import type { ISystemStats } from '../types/monitoringTypes';
 import { type TGlobalWin } from '../../core/types/global_bridge_types';
 
@@ -42,13 +42,13 @@ export class MonitoringUI {
 
     private checkDemoMode() {
         const win = globalThis as TGlobalWin;
-        if (!win['__TAURI__']) {
+        if (!win.__TAURI__) {
             const titleEl = document.querySelector('[data-card-id="monitoring"] .card-title');
             if (titleEl) {
                 setTimeout(() => {
                     const badge = document.createElement('span');
-                    badge.textContent = win['t']
-                        ? win['t']('ui.monitoring.demo_data', ' (Demo Data)')
+                    badge.textContent = win.t
+                        ? win.t('ui.monitoring.demo_data', ' (Demo Data)')
                         : ' (Demo Data)';
                     badge.style.color = 'var(--warning)';
                     badge.style.fontSize = '0.8rem';
@@ -84,8 +84,8 @@ export class MonitoringUI {
     private _updateNetwork(stats: ISystemStats) {
         if (!this._isVisible('network-status')) return;
 
-        const downRate = stats.network?.download_rate || 0;
-        const upRate = stats.network?.upload_rate || 0;
+        const downRate = stats.network?.downloadRate || 0;
+        const upRate = stats.network?.uploadRate || 0;
         const netPeak = Math.max(downRate, upRate) / (1024 * 1024);
 
         const networkStatusEl = document.getElementById('network-status');
@@ -98,7 +98,7 @@ export class MonitoringUI {
         }
         if (networkProgressEl) {
             const netPercent = Math.min(100, (netPeak / 10) * 100);
-            networkProgressEl.style.width = `${Math.max(0, netPercent)}%`;
+            networkProgressEl.style.width = `${Math.max(0, netPercent).toString()}%`;
 
             if (netPeak >= 10) {
                 networkProgressEl.classList.add('sysmon-fill-gold');
@@ -116,8 +116,8 @@ export class MonitoringUI {
         if (!this._isVisible('disk-usage')) return;
 
         const diskPct = stats.disk?.utilization || 0;
-        const readRate = stats.disk?.read_rate || 0;
-        const writeRate = stats.disk?.write_rate || 0;
+        const readRate = stats.disk?.readRate || 0;
+        const writeRate = stats.disk?.writeRate || 0;
 
         const diskUsageEl = document.getElementById('disk-usage');
         const diskProgressEl = document.getElementById('disk-progress');
@@ -126,13 +126,13 @@ export class MonitoringUI {
             // Smart conversion: if > 1024 MB/s, switch both to GB/s
             const { val1, val2, unit } = this._formatSmartRate(readRate, writeRate);
             this._setValueWithSecondary(diskUsageEl, `R:${val1} • W:${val2}`, ` ${unit}`);
-            const used = stats.disk?.used_gb || 0;
-            const total = stats.disk?.total_gb || 0;
+            const used = stats.disk?.usedGb || 0;
+            const total = stats.disk?.totalGb || 0;
             diskUsageEl.title = `Space: ${used.toFixed(1)} / ${total.toFixed(1)} GB (Usage: ${diskPct.toFixed(1)}%)`;
         }
         if (diskProgressEl) {
-            const activity = stats.disk?.activity_percent || 0;
-            diskProgressEl.style.width = `${Math.max(0, Math.min(100, activity))}%`;
+            const activity = stats.disk?.activityPercent || 0;
+            diskProgressEl.style.width = `${Math.max(0, Math.min(100, activity)).toString()}%`;
             this._setProgressColor(diskProgressEl, activity);
             diskProgressEl.classList.toggle('pulse', activity > 5);
         }
@@ -143,28 +143,19 @@ export class MonitoringUI {
     /**
      * Animates the main value of a monitoring element (CPU, RAM, etc.)
      */
-    private _animateMainValue(
-        el: HTMLElement,
-        targetVal: number,
-        decimals: number = 0,
-        suffix: string = '',
-    ) {
+    private _animateMainValue(el: HTMLElement, targetVal: number, decimals = 0, suffix = '') {
         if (!el) return;
 
         // Determine target node (either el itself or .main-val child)
-        let targetNode = el.querySelector('.main-val') as HTMLElement;
+        let targetNode = el.querySelector('.main-val');
 
         // If no .main-val but we have secondary structure needed (has children), create it?
         // Or assume straight textContent for simple elements like CPU/GPU.
-        if (!targetNode && el.children.length === 0) {
+        if (!(targetNode instanceof HTMLElement) && el.children.length === 0) {
             // Simple element (CPU % etc)
             targetNode = el;
-        } else if (!targetNode) {
-            // Complex element but .main-val missing? Should have been created by _setValueWithSecondary.
-            // But we might be calling this BEFORE _setValueWithSecondary?
-            // Fallback: don't animate if structure bad.
-            return;
         }
+        if (!(targetNode instanceof HTMLElement)) return;
 
         const startText = targetNode.textContent || '0';
         const startVal = Number.parseFloat(startText.replaceAll(/[^0-9.-]/g, ''));
@@ -179,7 +170,8 @@ export class MonitoringUI {
 
         // Cancel previous animation on this node
         if (this._activeTweens.has(targetNode)) {
-            cancelAnimationFrame(this._activeTweens.get(targetNode)!);
+            const id = this._activeTweens.get(targetNode);
+            if (id) cancelAnimationFrame(id);
         }
 
         const duration = 600; // ms
@@ -192,13 +184,15 @@ export class MonitoringUI {
             const ease = 1 - Math.pow(1 - progress, 4);
 
             const val = start + (targetVal - start) * ease;
-            targetNode.textContent = `${val.toFixed(decimals)}${suffix}`;
+            if (targetNode instanceof HTMLElement) {
+                targetNode.textContent = `${val.toFixed(decimals)}${suffix}`;
 
-            if (progress < 1) {
-                this._activeTweens.set(targetNode, requestAnimationFrame(tick));
-            } else {
-                this._activeTweens.delete(targetNode);
-                targetNode.textContent = `${targetVal.toFixed(decimals)}${suffix}`; // Snap to exact end
+                if (progress < 1) {
+                    this._activeTweens.set(targetNode, requestAnimationFrame(tick));
+                } else {
+                    this._activeTweens.delete(targetNode);
+                    targetNode.textContent = `${targetVal.toFixed(decimals)}${suffix}`; // Snap to exact end
+                }
             }
         };
 
@@ -216,7 +210,7 @@ export class MonitoringUI {
             this._animateMainValue(cpuPercentEl, cpuPercent, 0, '%');
         }
         if (cpuProgressEl) {
-            cpuProgressEl.style.width = `${Math.max(0, Math.min(100, cpuPercent))}%`;
+            cpuProgressEl.style.width = `${Math.max(0, Math.min(100, cpuPercent)).toString()}%`;
             this._setProgressColor(cpuProgressEl, cpuPercent);
         }
     }
@@ -225,8 +219,8 @@ export class MonitoringUI {
         if (!this._isVisible('ram-percent')) return;
 
         const ramPercent = stats.ram?.percent || 0;
-        const ramUsed = stats.ram?.used_gb || 0;
-        const ramTotal = stats.ram?.total_gb || 0;
+        const ramUsed = stats.ram?.usedGb || 0;
+        const ramTotal = stats.ram?.totalGb || 0;
         const ramPercentEl = document.getElementById('ram-percent');
         const ramProgressEl = document.getElementById('ram-progress');
 
@@ -241,7 +235,7 @@ export class MonitoringUI {
             this._animateMainValue(ramPercentEl, ramUsed, 1);
         }
         if (ramProgressEl) {
-            ramProgressEl.style.width = `${Math.max(0, Math.min(100, ramPercent))}%`;
+            ramProgressEl.style.width = `${Math.max(0, Math.min(100, ramPercent)).toString()}%`;
             this._setProgressColor(ramProgressEl, ramPercent);
         }
     }
@@ -258,14 +252,16 @@ export class MonitoringUI {
             this._animateMainValue(gpuUtilEl, gpuUtil, 0, '%');
         }
         if (gpuProgressEl) {
-            gpuProgressEl.style.width = `${Math.max(0, Math.min(100, gpuUtil))}%`;
+            gpuProgressEl.style.width = `${Math.max(0, Math.min(100, gpuUtil)).toString()}%`;
             this._setProgressColor(gpuProgressEl, gpuUtil);
         }
 
         const vramEl = document.getElementById('gpu-memory');
-        if (vramEl && stats.vram) {
-            const vramUsed = stats.vram.used_gb || 0;
-            const vramTotal = stats.vram.total_gb || 0;
+        if (vramEl) {
+            const vramUsed = stats.vram?.usedGb || 0;
+            const vramTotal = stats.vram?.totalGb || stats.gpu?.memoryTotal
+                ? (stats.gpu?.memoryTotal || 0) / (1024 * 1024 * 1024)
+                : 0;
 
             // Ensure structure
             this._setValueWithSecondary(vramEl, vramUsed.toFixed(1), `/${vramTotal.toFixed(0)} GB`);
@@ -273,9 +269,9 @@ export class MonitoringUI {
         }
 
         const vramProgressEl = document.getElementById('vram-progress');
-        if (vramProgressEl && stats.vram) {
-            const vramPct = stats.vram.percent || 0;
-            vramProgressEl.style.width = `${Math.max(0, Math.min(100, vramPct))}%`;
+        if (vramProgressEl) {
+            const vramPct = stats.vram?.percent || 0;
+            vramProgressEl.style.width = `${Math.max(0, Math.min(100, vramPct)).toString()}%`;
             this._setProgressColor(vramProgressEl, vramPct);
         }
     }
@@ -304,8 +300,8 @@ export class MonitoringUI {
         if (!el) return;
 
         // Locate or create primary node WITHOUT nuking existing content if possible
-        let main = el.querySelector('.main-val') as HTMLElement;
-        if (!main) {
+        let main = el.querySelector('.main-val');
+        if (!(main instanceof HTMLElement)) {
             // Check if el has children (like "Waiting..." text). If so, clear it only ONCE.
             if (el.childNodes.length > 0 && !el.querySelector('.main-val')) {
                 el.innerHTML = '';
@@ -320,9 +316,9 @@ export class MonitoringUI {
         }
 
         // Locate or create secondary node
-        let sub = el.querySelector('.sysmon-value-sub') as HTMLElement;
+        let sub = el.querySelector('.sysmon-value-sub');
         if (secondaryText) {
-            if (!sub) {
+            if (!(sub instanceof HTMLElement)) {
                 sub = document.createElement('span');
                 sub.className = 'sysmon-value-sub';
                 el.appendChild(sub);
@@ -330,7 +326,7 @@ export class MonitoringUI {
             if (sub.textContent !== secondaryText) {
                 sub.textContent = secondaryText;
             }
-        } else if (sub) {
+        } else if (sub instanceof HTMLElement) {
             sub.remove();
         }
     }

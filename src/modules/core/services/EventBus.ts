@@ -27,15 +27,15 @@ export interface IEventBusEvents {
 
     // Window
     /** Emitted when the application window is minimized. */
-    'window:minimize': void;
+    'window:minimize': undefined;
     /** Emitted when the application window is maximized. */
-    'window:maximize': void;
+    'window:maximize': undefined;
     /** Emitted when the application window is closing. */
-    'window:close': void;
+    'window:close': undefined;
     /** Emitted when the application window receives focus. */
-    'window:focus': void;
+    'window:focus': undefined;
     /** Emitted when the application window loses focus. */
-    'window:blur': void;
+    'window:blur': undefined;
 
     // I18n
     /** Emitted when the active language changed. */
@@ -57,7 +57,7 @@ export interface IEventBusEvents {
     /** Emitted when the app selection modal is opened for a category. */
     'app:selection:open': { category: string };
     /** Emitted when the app selection modal is closed. */
-    'app:selection:close': void;
+    'app:selection:close': undefined;
     /** Emitted when an app is selected from the gallery. */
     'app:selection:select': { category: string; appId: string };
 
@@ -73,8 +73,8 @@ export type EventHandler<T = unknown> = (_data: T) => void;
  * Provides type-safe subscription and publication of events.
  */
 class EventBus {
-    private readonly _listeners: Map<string, Set<EventHandler>> = new Map();
-    private readonly _onceListeners: Map<string, Set<EventHandler>> = new Map();
+    private readonly _listeners = new Map<string, Set<EventHandler>>();
+    private readonly _onceListeners = new Map<string, Set<EventHandler>>();
 
     /**
      * Subscribes to an event.
@@ -85,12 +85,16 @@ class EventBus {
         handler: EventHandler<IEventBusEvents[K]>,
     ): () => void {
         const eventKey = event as string;
-        if (!this._listeners.has(eventKey)) {
-            this._listeners.set(eventKey, new Set());
+        let handlers = this._listeners.get(eventKey);
+        if (!handlers) {
+            handlers = new Set();
+            this._listeners.set(eventKey, handlers);
         }
-        this._listeners.get(eventKey)!.add(handler as EventHandler);
+        handlers.add(handler as EventHandler);
 
-        return () => this.off(event, handler);
+        return () => {
+            this.off(event, handler);
+        };
     }
 
     /**
@@ -102,10 +106,12 @@ class EventBus {
         handler: EventHandler<IEventBusEvents[K]>,
     ): () => void {
         const eventKey = event as string;
-        if (!this._onceListeners.has(eventKey)) {
-            this._onceListeners.set(eventKey, new Set());
+        let handlers = this._onceListeners.get(eventKey);
+        if (!handlers) {
+            handlers = new Set();
+            this._onceListeners.set(eventKey, handlers);
         }
-        this._onceListeners.get(eventKey)!.add(handler as EventHandler);
+        handlers.add(handler as EventHandler);
 
         return () => {
             this._onceListeners.get(eventKey)?.delete(handler as EventHandler);

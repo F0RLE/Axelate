@@ -3,7 +3,7 @@
  * @description Specialized renderer for general application settings (taskbar, monitor, etc.)
  */
 
-import { StateService } from '../../core/services/StateService';
+import { type StateService } from '../../core/services/StateService';
 import type { TGlobalWin } from '../../core/types/global_bridge_types';
 
 export class GeneralSettingsRenderer {
@@ -26,7 +26,7 @@ export class GeneralSettingsRenderer {
         container.dataset['initialized'] = 'true';
 
         const win = globalThis as TGlobalWin;
-        const t = typeof win['t'] === 'function' ? win['t'] : (_k: string, d: string) => d;
+        const t = typeof win.t === 'function' ? win.t : (_k: string, d: string) => d;
 
         const navItems = [
             { id: 'home', label: 'Home', icon: '#icon-home' },
@@ -57,8 +57,10 @@ export class GeneralSettingsRenderer {
         container.innerHTML = html;
 
         container.addEventListener('click', (e) => {
-            const item = (e.target as Element).closest('.taskbar-toggle-item') as HTMLElement;
-            if (item) {
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+            const item = target.closest('.taskbar-toggle-item');
+            if (item instanceof HTMLElement) {
                 const pageId = item.dataset['pageId'];
                 if (pageId) {
                     item.classList.toggle('active');
@@ -76,14 +78,12 @@ export class GeneralSettingsRenderer {
      */
     public toggleNavItem(pageId: string, enabled: boolean) {
         const hiddenItems = this._state.getHiddenNavItems();
-        const navBtn = document.querySelector(
-            `#sidebar .nav-btn[data-page="${pageId}"]`,
-        ) as HTMLElement;
+        const navBtn = document.querySelector(`#sidebar .nav-btn[data-page="${pageId}"]`);
 
         if (enabled) {
             const idx = hiddenItems.indexOf(pageId);
             if (idx > -1) hiddenItems.splice(idx, 1);
-            if (navBtn) {
+            if (navBtn instanceof HTMLElement) {
                 // Animate in: prepare hidden state first
                 navBtn.classList.add('nav-item-hiding');
                 navBtn.classList.remove('hidden');
@@ -97,7 +97,7 @@ export class GeneralSettingsRenderer {
             }
         } else {
             if (!hiddenItems.includes(pageId)) hiddenItems.push(pageId);
-            if (navBtn) {
+            if (navBtn instanceof HTMLElement) {
                 // Animate out
                 navBtn.classList.add('nav-item-hiding');
                 setTimeout(() => {
@@ -130,7 +130,7 @@ export class GeneralSettingsRenderer {
         container.dataset['initialized'] = 'true';
 
         const win = globalThis as TGlobalWin;
-        const t = typeof win['t'] === 'function' ? win['t'] : (_k: string, d: string) => d;
+        const t = typeof win.t === 'function' ? win.t : (_k: string, d: string) => d;
 
         const monitorItems = [
             { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
@@ -162,8 +162,10 @@ export class GeneralSettingsRenderer {
         container.innerHTML = html;
 
         container.addEventListener('click', (e) => {
-            const btn = (e.target as Element).closest('.monitor-toggle-btn') as HTMLElement;
-            if (btn) {
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+            const btn = target.closest('.monitor-toggle-btn');
+            if (btn instanceof HTMLElement) {
                 const mid = btn.dataset['monitorId'];
                 if (mid) {
                     btn.classList.toggle('active');
@@ -187,14 +189,12 @@ export class GeneralSettingsRenderer {
      */
     public toggleMonitorItem(id: string, enabled: boolean) {
         const hidden = this._state.getHiddenMonitors();
-        const el = document.querySelector(
-            `#system-monitor .sysmon-stat[data-monitor-id="${id}"]`,
-        ) as HTMLElement;
+        const el = document.querySelector(`#system-monitor .sysmon-stat[data-monitor-id="${id}"]`);
 
         if (enabled) {
             const idx = hidden.indexOf(id);
             if (idx > -1) hidden.splice(idx, 1);
-            if (el) {
+            if (el instanceof HTMLElement) {
                 // Animate in: set hiding class first (starts invisible)
                 el.classList.add('hiding');
                 el.classList.remove('hidden');
@@ -208,7 +208,7 @@ export class GeneralSettingsRenderer {
             }
         } else {
             if (!hidden.includes(id)) hidden.push(id);
-            if (el) {
+            if (el instanceof HTMLElement) {
                 // Animate out
                 el.classList.add('hiding');
                 setTimeout(() => {
@@ -258,8 +258,8 @@ export class GeneralSettingsRenderer {
      * Updates the divider visibility in the monitor panel.
      */
     private _updateMonitorDivider() {
-        const divider = document.querySelector('.sysmon-divider') as HTMLElement;
-        if (!divider) return;
+        const divider = document.querySelector('.sysmon-divider');
+        if (!(divider instanceof HTMLElement)) return;
 
         const hiddenMonitors = this._state.getHiddenMonitors();
         const aboveItems = ['cpu', 'gpu', 'ram', 'vram'];

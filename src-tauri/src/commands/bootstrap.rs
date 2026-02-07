@@ -5,19 +5,28 @@ use crate::services::{
     window_settings::{self, WindowConfig},
 };
 use serde::Serialize;
+use specta::Type;
 use tauri::Window;
 
-#[derive(Debug, Serialize)]
+/// Application bootstrap data sent to frontend during initialization
+#[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct BootstrapData {
+    /// Persisted UI state
     pub ui_state: UIState,
+    /// Window configuration settings
     pub window_config: WindowConfig,
+    /// Detected system language
     pub system_language: String,
+    /// All available modules
     pub modules: Vec<Module>,
+    /// Calculated initial zoom level
     pub initial_zoom: f64,
 }
 
 #[tauri::command]
+#[specta::specta]
+/// Retrieves all application state and configuration during app startup
 pub async fn get_app_bootstrap_data(window: Window) -> Result<BootstrapData, AppError> {
     log::info!("[Bootstrap] Collecting application data...");
 

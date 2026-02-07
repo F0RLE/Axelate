@@ -3,22 +3,13 @@
  * @description Manages application navigation and history
  */
 
-declare global {
-    var navigationService: NavigationService;
-    var navigate: (pageId: string) => void;
-}
+import type { TGlobalWin } from '../types/global_bridge_types';
 
-// Local types for global access
-interface INavigationGlobal {
-    navigationService: NavigationService;
-    navigate: (pageId: string) => void;
-}
-
-import { StateService } from './StateService';
+import { type StateService } from './StateService';
 
 export class NavigationService {
     private readonly _historyStack: string[] = [];
-    private _currentIndex: number = -1;
+    private _currentIndex = -1;
     private static _instance: NavigationService;
     private _stateService: StateService | null = null;
 
@@ -42,9 +33,9 @@ export class NavigationService {
      * Called after uiState.load() completes
      */
     public refreshFromUiState(): void {
-        const win = globalThis as unknown as Window & { uiState?: { getLastPage: () => string } };
-        if (win.uiState && typeof win.uiState.getLastPage === 'function') {
-            const lastPage = win.uiState.getLastPage();
+        const win = globalThis as TGlobalWin;
+        if (win.uiState && typeof win.uiState.last_page === 'string') {
+            const lastPage = win.uiState.last_page;
             if (lastPage) {
                 this._historyStack.push(lastPage);
                 this._currentIndex = this._historyStack.length - 1;
@@ -57,7 +48,7 @@ export class NavigationService {
      * Set the current page.
      */
     public setCurrentPage(pageId: string): void {
-        const win = globalThis as unknown as INavigationGlobal;
+        const win = globalThis as TGlobalWin;
         win.navigationService = this;
         win.navigate = this.navigate.bind(this);
         this.navigate(pageId);
@@ -96,7 +87,7 @@ export class NavigationService {
         if (this._currentIndex > 0) {
             this._currentIndex--;
             console.log(
-                `[NavigationService] Navigating back to: ${this._historyStack[this._currentIndex]}`,
+                `[NavigationService] Navigating back to: ${String(this._historyStack[this._currentIndex])}`,
             );
         }
     }
@@ -108,7 +99,7 @@ export class NavigationService {
         if (this._currentIndex < this._historyStack.length - 1) {
             this._currentIndex++;
             console.log(
-                `[NavigationService] Navigating forward to: ${this._historyStack[this._currentIndex]}`,
+                `[NavigationService] Navigating forward to: ${String(this._historyStack[this._currentIndex])}`,
             );
         }
     }

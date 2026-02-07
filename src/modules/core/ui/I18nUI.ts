@@ -3,7 +3,7 @@
  * @description Centralized UI management for internationalization and translation mapping
  */
 
-import { I18nService } from '../services/I18nService';
+import { type I18nService } from '../services/I18nService';
 
 // Local types for global access
 interface II18nGlobal {
@@ -125,9 +125,9 @@ export class I18nUI {
             });
 
             if (textNode) {
-                (textNode as Node).textContent = ' ' + text;
+                (textNode as Node).textContent = ` ${text}`;
             } else {
-                element.appendChild(document.createTextNode(' ' + text));
+                element.appendChild(document.createTextNode(` ${text}`));
             }
         } else if (element.textContent !== text) {
             element.textContent = text;

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * @module core/services/LoggerService
  * @description Centralized logging service for capturing console output and sending it to the backend.
@@ -12,6 +13,7 @@
  */
 
 import type { ILogEntry } from '../types/coreTypes';
+import type { TGlobalWin } from '../types/global_bridge_types';
 
 export class LoggerService {
     private _buffer: ILogEntry[] = [];
@@ -53,11 +55,11 @@ export class LoggerService {
     }
 
     private _setupInterceptors(): void {
-        const win = globalThis as unknown as Record<string, unknown>;
+        const win = globalThis as TGlobalWin;
 
         // Intercept window.onerror for uncaught JS errors
-        win['onerror'] = (
-            message: string,
+        win.onerror = (
+            message: string | Event,
             source?: string,
             lineno?: number,
             colno?: number,
@@ -67,14 +69,14 @@ export class LoggerService {
 
             const msgStr = this._safeStringify(message);
             const stack = error?.stack ? `\nStack: ${error.stack}` : '';
-            const errMsg = `${msgStr} at ${source}:${lineno}:${colno}${stack}`;
+            const errMsg = `${msgStr} at ${String(source)}:${String(lineno)}:${String(colno)}${stack}`;
 
             this.log('ERROR', errMsg);
             return false; // Let default handler also run
         };
 
         // Intercept unhandled promise rejections
-        win['onunhandledrejection'] = (event: PromiseRejectionEvent) => {
+        win.onunhandledrejection = (event: PromiseRejectionEvent) => {
             if (this._isInternalLog) return;
 
             const reason =
@@ -114,7 +116,7 @@ export class LoggerService {
             if (obj instanceof Error) return obj.stack || obj.message;
             if (typeof obj === 'function') return `[Function: ${obj.name || 'anonymous'}]`;
             if (typeof obj === 'symbol') return obj.toString();
-            if (typeof obj === 'bigint') return obj.toString() + 'n';
+            if (typeof obj === 'bigint') return `${obj.toString()}n`;
 
             return this._stringifyComplex(obj);
         } catch {
@@ -193,10 +195,12 @@ export class LoggerService {
             });
 
             if (level === 'ERROR' || this._buffer.length >= this._MAX_BUFFER) {
-                this._flush();
+                void this._flush();
             } else {
                 if (this._flushTimeout) clearTimeout(this._flushTimeout);
-                this._flushTimeout = setTimeout(() => this._flush(), this._FLUSH_INTERVAL);
+                this._flushTimeout = setTimeout(() => {
+                    void this._flush();
+                }, this._FLUSH_INTERVAL);
             }
         } finally {
             this._isInternalLog = false;

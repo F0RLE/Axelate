@@ -3,7 +3,7 @@
  * @description Entry point for the Chat module
  */
 
-export * from './types/chatTypes';
+export type * from './types/chatTypes';
 export * from './ui/ChatUI';
 export * from './services/ChatService';
 // Services

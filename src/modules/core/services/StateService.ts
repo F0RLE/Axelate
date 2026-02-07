@@ -3,7 +3,7 @@
  * @description Manages persistent UI state across sessions
  */
 
-import { Core } from '../core';
+import { type Core } from '../core';
 import type { IApp } from '../types/coreTypes';
 
 export interface IUIState {
@@ -66,7 +66,7 @@ export class StateService {
             } else {
                 const stored = localStorage.getItem(this._STORAGE_KEY);
                 if (stored) {
-                    this.setState(JSON.parse(stored));
+                    this.setState(JSON.parse(stored) as Partial<IUIState>);
                     console.log('[StateService] Loaded from localStorage');
                 }
             }
@@ -138,6 +138,7 @@ export class StateService {
      */
     public removeSelectedModule(category: string): void {
         if (this._state.selected_modules?.[category]) {
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._state.selected_modules[category];
             this._isDirty = true;
             this._debouncedSave();
@@ -328,9 +329,9 @@ export class StateService {
                     enabled: this._state.download_limit_enabled,
                     max_speed: this._state.download_max_speed,
                 })
-                .catch((e: unknown) =>
-                    console.error('[StateService] Failed to sync download settings:', e),
-                );
+                .catch((e: unknown) => {
+                    console.error('[StateService] Failed to sync download settings:', e);
+                });
         }
     }
 

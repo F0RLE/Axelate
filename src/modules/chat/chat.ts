@@ -29,37 +29,45 @@ export class ChatController {
      */
     private _init(): void {
         console.log('[Chat] Initializing TS Controller...');
-        this._ui.init().catch((err) => console.error('[Chat] UI init failed:', err));
+        void this._ui.init().catch((err: unknown) => {
+            console.error('[Chat] UI init failed:', err);
+        });
         this._bindEvents();
         this._exposeGlobals();
 
         // Initial UI State - Link Handler to UI
         chatFileHandler.setUpdateCallback((files, onRemove) => {
             this._ui.updateAttachments(files, onRemove);
-            this._updateTokenCount();
+            void this._updateTokenCount();
         });
 
         // Sync initial state
         if (chatFileHandler.hasFiles()) {
-            this._ui.updateAttachments(chatFileHandler.getFiles(), (idx) =>
-                chatFileHandler.removeFile(idx),
-            );
+            this._ui.updateAttachments(chatFileHandler.getFiles(), (idx) => {
+                chatFileHandler.removeFile(idx);
+            });
         }
 
         // Randomize Greeting
         const globalContext = globalThis as TGlobalWin;
-        if (typeof globalContext['randomizeChatGreeting'] === 'function') {
-            (globalContext['randomizeChatGreeting'] as () => void)();
+        if (typeof globalContext.randomizeChatGreeting === 'function') {
+            (globalContext.randomizeChatGreeting as () => void)();
         } else {
             this._randomizeGreeting();
             // Retry after i18n loads (Core splash timeout is ~1.5s)
-            setTimeout(() => this._randomizeGreeting(), 500);
-            setTimeout(() => this._randomizeGreeting(), 1500);
-            setTimeout(() => this._randomizeGreeting(), 3000);
+            setTimeout(() => {
+                this._randomizeGreeting();
+            }, 500);
+            setTimeout(() => {
+                this._randomizeGreeting();
+            }, 1500);
+            setTimeout(() => {
+                this._randomizeGreeting();
+            }, 3000);
         }
 
         // Load Persistence History
-        this._loadHistory();
+        void this._loadHistory();
     }
 
     /**
@@ -71,11 +79,11 @@ export class ChatController {
             | { getHistory: () => Promise<IChatMessage[]> }
             | undefined;
 
-        if (aiBridge && typeof aiBridge['getHistory'] === 'function') {
-            const history = await aiBridge['getHistory']();
+        if (aiBridge && typeof aiBridge.getHistory === 'function') {
+            const history = await aiBridge.getHistory();
             if (history && history.length > 0) {
                 console.log(
-                    `[ChatController] Restoring ${history.length} messages from persistence`,
+                    `[ChatController] Restoring ${String(history.length)} messages from persistence`,
                 );
                 this._chatHistory = history;
 
@@ -99,25 +107,33 @@ export class ChatController {
         // Send Button
         const sendBtn = document.getElementById('chat-send-btn');
         if (sendBtn) {
-            sendBtn.addEventListener('click', () => this.sendChat());
+            sendBtn.addEventListener('click', () => {
+                void this.sendChat();
+            });
         }
 
         // File Input
         const fileInput = document.getElementById('chat-file-input') as HTMLInputElement;
         if (fileInput) {
-            fileInput.addEventListener('change', (e) => this._handleFileSelect(e));
+            fileInput.addEventListener('change', (e) => {
+                this._handleFileSelect(e);
+            });
         }
 
         // Attach Button (Trigger File Input)
         const attachBtn = document.getElementById('chat-attach-btn');
         if (attachBtn && fileInput) {
-            attachBtn.addEventListener('click', () => fileInput.click());
+            attachBtn.addEventListener('click', () => {
+                fileInput.click();
+            });
         }
 
         // Voice Button
         const voiceBtn = document.getElementById('chat-voice-btn');
         if (voiceBtn) {
-            voiceBtn.addEventListener('click', () => this.toggleVoiceInput());
+            voiceBtn.addEventListener('click', () => {
+                this.toggleVoiceInput();
+            });
         }
 
         // Input Key Handler (Enter to send)
@@ -126,10 +142,12 @@ export class ChatController {
             chatInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    this.sendChat();
+                    void this.sendChat();
                 } else {
                     // Slight delay to ensure char is added before measuring
-                    setTimeout(() => this._autoResizeInput(), 0);
+                    setTimeout(() => {
+                        this._autoResizeInput();
+                    }, 0);
                 }
             });
             chatInput.addEventListener('input', () => {
@@ -144,14 +162,22 @@ export class ChatController {
      */
     private _exposeGlobals(): void {
         const g = globalThis as unknown as Record<string, unknown>;
-        g['sendChat'] = () => this.sendChat();
+        g['sendChat'] = () => {
+            void this.sendChat();
+        };
         g['pickChatFiles'] = () => {
             const input = document.getElementById('chat-file-input');
             if (input) (input as HTMLInputElement).click();
         };
-        g['toggleVoiceInput'] = () => this.toggleVoiceInput();
-        g['stopVoiceRecording'] = () => this.stopVoiceRecording();
-        g['clearChat'] = () => this.clearChat();
+        g['toggleVoiceInput'] = () => {
+            this.toggleVoiceInput();
+        };
+        g['stopVoiceRecording'] = () => {
+            this.stopVoiceRecording();
+        };
+        g['clearChat'] = () => {
+            this.clearChat();
+        };
     }
 
     // --- Actions ---
@@ -164,7 +190,7 @@ export class ChatController {
         if (input.files) {
             chatFileHandler.addFiles(input.files);
             input.value = '';
-            this._updateTokenCount();
+            void this._updateTokenCount();
         }
     }
 
@@ -189,8 +215,8 @@ export class ChatController {
         if (!this._checkAIActive(input)) return;
 
         const uiElements = this._lockUI(input);
-        const typingId = 'typing-' + Date.now();
-        const listenerId = 'chat-stream-' + Date.now();
+        const typingId = `typing-${String(Date.now())}`;
+        const listenerId = `chat-stream-${String(Date.now())}`;
 
         try {
             const tokenCount = await chatFileHandler.getTotalTokenEstimate(text);
@@ -275,7 +301,7 @@ export class ChatController {
               }
             | undefined;
         if (aiBridge) {
-            aiBridge['onChunk'](id, onChunk);
+            aiBridge.onChunk(id, onChunk);
         }
     }
 
@@ -287,7 +313,7 @@ export class ChatController {
               }
             | undefined;
         if (aiBridge) {
-            aiBridge['removeChunkListener'](id);
+            aiBridge.removeChunkListener(id);
         }
     }
 
@@ -412,7 +438,7 @@ export class ChatController {
     /**
      * Handles errors by showing them in the UI.
      */
-    private _handleError(errorMsg: string = 'Unknown Error', _model?: string): void {
+    private _handleError(errorMsg = 'Unknown Error', _model?: string): void {
         this._ui.appendMessage('assistant', errorMsg, { error: true });
     }
 
@@ -441,8 +467,12 @@ export class ChatController {
         }
 
         voiceInputService.start(
-            (text) => this._onVoiceResult(text),
-            (isRecording) => this._onVoiceStateChange(isRecording),
+            (text) => {
+                this._onVoiceResult(text);
+            },
+            (isRecording) => {
+                this._onVoiceStateChange(isRecording);
+            },
         );
     }
 
@@ -481,7 +511,7 @@ export class ChatController {
     private _playVoiceSound(state: boolean): void {
         const win = globalThis as unknown as Record<string, unknown>;
         const soundFX = win['soundFX'] as { playToggle: (_s: boolean) => void } | undefined;
-        if (soundFX) soundFX['playToggle'](state);
+        if (soundFX) soundFX.playToggle(state);
     }
 
     private _setVoicePlaceholder(isRecording: boolean, input: HTMLTextAreaElement | null): void {
@@ -500,7 +530,7 @@ export class ChatController {
         }
     }
 
-    private _currentGreetingIndex: number = 1;
+    private _currentGreetingIndex = 1;
 
     /**
      * Resizes the chat input based on content.
@@ -510,7 +540,7 @@ export class ChatController {
         if (el) {
             el.style.height = 'auto';
             const newHeight = Math.min(el.scrollHeight, 200);
-            el.style.height = newHeight + 'px';
+            el.style.height = `${String(newHeight)}px`;
         }
     }
 
@@ -534,7 +564,7 @@ export class ChatController {
 
             if (t) {
                 el.textContent = t(
-                    `ui.chat.greeting.${this._currentGreetingIndex}`,
+                    `ui.chat.greeting.${String(this._currentGreetingIndex)}`,
                     'How can I help you today?',
                 );
             } else {

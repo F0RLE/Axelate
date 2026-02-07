@@ -1,10 +1,8 @@
+/// <reference types="vitest" />
+
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath, URL } from 'node:url';
 import pkg from './package.json';
-
-// Ensure we use the proper Vitest config typing if available,
-// otherwise Vite-only typing works for the 'test' key in Vite 7.
-/// <reference types="vitest" />
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -13,9 +11,9 @@ export default defineConfig({
             name: 'prune-fonts',
             enforce: 'post',
             generateBundle(_, bundle) {
-                for (const fileName in bundle) {
-                    // Prune large font formats, keep woff2 for performance.
-                    // EXCEPT Cubic_11.ttf as it's the primary (and only) source for that font.
+                for (const fileName of Object.keys(bundle)) {
+                    // Keep only woff2 for performance
+                    // EXCEPT Cubic_11.ttf as it's the primary source for that font
                     if (
                         (fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||
                         fileName.endsWith('.woff')
@@ -26,24 +24,22 @@ export default defineConfig({
             },
         },
     ],
-    // Use relative paths for Tauri release builds (tauri:// protocol)
+
+    // Required for Tauri (tauri:// protocol)
     base: './',
 
     define: {
         __APP_VERSION__: JSON.stringify(pkg.version),
     },
 
-    // Vite options tailored for Tauri development
-    // prevent vite from obscuring rust errors
+    // Prevent Vite from swallowing Rust panic output
     clearScreen: false,
 
-    // Tauri expects a fixed port, fail if that port is not available
     server: {
         port: 1420,
         strictPort: true,
-        host: true, // Required for Tauri
+        host: true,
         watch: {
-            // tell vite to ignore watching `src-tauri`
             ignored: ['**/src-tauri/**'],
         },
         proxy: {
@@ -55,8 +51,7 @@ export default defineConfig({
         },
     },
 
-    // Tauri expects a fixed port, fail if that port is not available
-    // to access the Tauri environment variables set by the CLI with information about the current target
+    // Explicitly allow both Vite and Tauri env vars
     envPrefix: ['VITE_', 'TAURI_'],
 
     resolve: {
@@ -65,18 +60,24 @@ export default defineConfig({
         },
     },
 
+    // Pre-bundle known dependencies for faster dev startup
+    optimizeDeps: {
+        include: ['marked', 'katex', 'dompurify', 'marked-katex-extension', 'marked-alert'],
+    },
+
     build: {
-        // Tauri uses Chromium on Windows and WebKit on macOS and Linux
-        // Modern targets for Tauri v2
+        // Tauri v2 modern engine targets
         target: process.env['TAURI_PLATFORM'] === 'windows' ? 'chrome120' : 'safari15',
-        // don't minify for debug builds
+
         minify: process.env['TAURI_DEBUG'] ? false : 'esbuild',
-        // produce sourcemaps for debug builds
-        sourcemap: !!process.env['TAURI_DEBUG'],
-        // Increase chunk size warning limit for desktop app
+        sourcemap: Boolean(process.env['TAURI_DEBUG']),
+
+        // Desktop apps tolerate larger chunks
         chunkSizeWarningLimit: 1000,
 
-        // Multi-page app configuration
+        // Report compressed size for better insight
+        reportCompressedSize: true,
+
         rollupOptions: {
             input: {
                 main: fileURLToPath(new URL('./index.html', import.meta.url)),
@@ -92,18 +93,25 @@ export default defineConfig({
                     'vendor-katex': ['katex'],
                     'vendor-dompurify': ['dompurify'],
                 },
+                // Cleaner asset naming
+                assetFileNames: 'assets/[name]-[hash][extname]',
+                chunkFileNames: 'chunks/[name]-[hash].js',
+                entryFileNames: '[name]-[hash].js',
             },
         },
     },
+
     test: {
         globals: true,
         environment: 'jsdom',
         setupFiles: ['./test/setup.ts'],
-        include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+        include: ['**/*.{test,spec}.{ts,tsx}'],
+        // Fail fast on first error in CI
+        bail: process.env['CI'] ? 1 : 0,
         coverage: {
             provider: 'v8',
+            reporter: ['text', 'json', 'html'],
             thresholds: {
-                // Section 8.5: strict coverage requirements
                 'src/modules/**/services/*.ts': {
                     lines: 80,
                     functions: 80,

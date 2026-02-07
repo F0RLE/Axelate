@@ -1,4 +1,5 @@
 // Windows-specific utilities for language detection and system info
+#![allow(unsafe_code)]
 
 #[cfg(windows)]
 use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
@@ -15,13 +16,12 @@ pub fn detect_system_language() -> String {
         match lang_id {
             0x19 => "ru".to_string(), // Russian
             0x04 => "zh".to_string(), // Chinese
-            0x09 => "en".to_string(), // English
             0x07 => "de".to_string(), // German
             0x0C => "fr".to_string(), // French
             0x0A => "es".to_string(), // Spanish
             0x11 => "ja".to_string(), // Japanese
             0x12 => "ko".to_string(), // Korean
-            _ => "en".to_string(),    // Default to English
+            _ => "en".to_string(),    // English (default)
         }
     }
 

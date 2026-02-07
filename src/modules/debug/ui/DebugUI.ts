@@ -1,4 +1,4 @@
-import { DebugService } from '../services/DebugService';
+import { type DebugService } from '../services/DebugService';
 
 export class DebugUI {
     constructor(private readonly service: DebugService) {}
@@ -13,8 +13,12 @@ export class DebugUI {
 
         // Shim globals for backward compat if needed, or preferably we fix the calls.
         // Legacy debug.js exposed setDebugTab. We bind it here.
-        globalThis.setDebugTab = (tabId: string, btn: HTMLElement) => this.setTab(tabId, btn);
-        globalThis.setLogView = (view: string, btn: HTMLElement) => this.setLogView(view, btn);
+        globalThis.setDebugTab = (tabId: string, btn: HTMLElement) => {
+            this.setTab(tabId, btn);
+        };
+        globalThis.setLogView = (view: string, btn: HTMLElement) => {
+            this.setLogView(view, btn);
+        };
         globalThis.clearLogs = () => this.clearLogs();
     }
 
@@ -25,7 +29,7 @@ export class DebugUI {
         if (slider1 && slider1Value) {
             slider1.addEventListener('input', (e) => {
                 const target = e.target as HTMLInputElement;
-                slider1Value.textContent = target.value + '%';
+                slider1Value.textContent = `${target.value}%`;
             });
         }
 
@@ -35,7 +39,7 @@ export class DebugUI {
         if (animatedSlider && sliderValue) {
             animatedSlider.addEventListener('input', (e) => {
                 const target = e.target as HTMLInputElement;
-                sliderValue.textContent = target.value + '%';
+                sliderValue.textContent = `${target.value}%`;
             });
         }
 
@@ -45,14 +49,14 @@ export class DebugUI {
         if (slider3 && slider3Value) {
             slider3.addEventListener('input', (e) => {
                 const target = e.target as HTMLInputElement;
-                slider3Value.textContent = target.value + '%';
+                slider3Value.textContent = `${target.value}%`;
             });
         }
     }
 
     private bindDraggable(): void {
-        const draggable = document.querySelector('.debug-draggable') as HTMLElement;
-        if (!draggable) return;
+        const draggable = document.querySelector('.debug-draggable');
+        if (!(draggable instanceof HTMLElement)) return;
 
         let isDragging = false;
         let startX = 0,
@@ -79,8 +83,8 @@ export class DebugUI {
             e.preventDefault();
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
-            draggable.style.left = initialX + dx + 'px';
-            draggable.style.top = initialY + dy + 'px';
+            draggable.style.left = `${String(initialX + dx)}px`;
+            draggable.style.top = `${String(initialY + dy)}px`;
         };
 
         const handleMouseUp = () => {
@@ -101,8 +105,8 @@ export class DebugUI {
     }
 
     private bindDropzone(): void {
-        const dropzone = document.querySelector('.debug-dropzone') as HTMLElement;
-        if (!dropzone) return;
+        const dropzone = document.querySelector('.debug-dropzone');
+        if (!(dropzone instanceof HTMLElement)) return;
 
         dropzone.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -140,10 +144,12 @@ export class DebugUI {
     }
 
     private setTab(tabId: string, btn: HTMLElement): void {
-        document.querySelectorAll('.debug-tab').forEach((t) => t.classList.remove('active'));
-        document
-            .querySelectorAll('.debug-tab-content')
-            .forEach((p) => p.classList.remove('active'));
+        document.querySelectorAll('.debug-tab').forEach((t) => {
+            t.classList.remove('active');
+        });
+        document.querySelectorAll('.debug-tab-content').forEach((p) => {
+            p.classList.remove('active');
+        });
         if (btn) btn.classList.add('active');
         const tabContent = document.getElementById(`debug-${tabId}-tab`);
         if (tabContent) {
@@ -159,11 +165,15 @@ export class DebugUI {
 
     private setLogView(_view: string, btn: HTMLElement): void {
         // Update tab active states
-        document.querySelectorAll('.console-tab').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.console-tab').forEach((b) => {
+            b.classList.remove('active');
+        });
         if (btn) btn.classList.add('active');
 
         // Show correct logs pane
-        document.querySelectorAll('.logs-pane').forEach((p) => p.classList.remove('active'));
+        document.querySelectorAll('.logs-pane').forEach((p) => {
+            p.classList.remove('active');
+        });
         const pane = document.getElementById('logs-general'); // We only support general view for now per legacy
         if (pane) pane.classList.add('active');
 
@@ -190,17 +200,21 @@ export class DebugUI {
             globalThis.clearInterval(this.pollInterval);
             this.pollInterval = null;
         }
-        this.unsubscribers.forEach((fn) => fn());
+        this.unsubscribers.forEach((fn) => {
+            fn();
+        });
         this.unsubscribers = [];
     }
 
     private startLogPolling() {
         if (this.pollInterval) globalThis.clearInterval(this.pollInterval);
-        this.pollInterval = globalThis.setInterval(async () => {
-            const newLogs = await this.service.fetchLogs();
-            if (newLogs.length > 0) {
-                this.renderLogs();
-            }
+        this.pollInterval = globalThis.setInterval(() => {
+            void (async () => {
+                const newLogs = await this.service.fetchLogs();
+                if (newLogs.length > 0) {
+                    this.renderLogs();
+                }
+            })();
         }, 1000) as unknown as number;
     }
 

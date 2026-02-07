@@ -2,6 +2,7 @@ use crate::errors::AppError;
 // use serde::de::Error as _; // Import trait for .custom() - Removed as unused
 use tauri::AppHandle;
 
+/// Retrieves translation strings for the specified language
 pub fn get_translations(_app: &AppHandle, lang: &str) -> Result<serde_json::Value, AppError> {
     let base_content = include_str!("../../resources/locales/en.json");
     let mut translations: serde_json::Map<String, serde_json::Value> =
@@ -27,7 +28,7 @@ pub fn get_translations(_app: &AppHandle, lang: &str) -> Result<serde_json::Valu
     Ok(serde_json::Value::Object(translations))
 }
 
-// Helper kept for compatibility if needed, but unused for internal logic
+/// Returns the path to locales directory
 pub fn get_locales_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
     use tauri::Manager;
     app.path()
