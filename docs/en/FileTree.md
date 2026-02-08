@@ -21,7 +21,10 @@
 │   │   ├── ⚙️ ci.yml # Continuous Integration workflow
 │   │   └── ⚙️ release.yml # Release build workflow
 │   ├── 📝 PULL_REQUEST_TEMPLATE.md
-│   ├── 📄 commitlint.config.js # CommitLint configuration
+│   ├── � CODE_OF_CONDUCT.md # Code of conduct for contributors
+│   ├── 📝 CONTRIBUTING.md # Contribution guidelines
+│   ├── 📝 SECURITY.md # Security policy
+│   ├── �📄 commitlint.config.js # CommitLint configuration
 │   └── ⚙️ dependabot.yml # Dependabot configuration
 ├── 📁 docs
 │   ├── 📁 en
@@ -282,12 +285,8 @@
 ├── ⚙️ .editorconfig # Editor configuration rules
 ├── ⚙️ .gitattributes # Git attribute configurations
 ├── ⚙️ .gitignore # Git ignore rules
-├── ⚙️ .prettierignore # Prettier ignore rules
-├── 📝 CODE_OF_CONDUCT.md # Code of conduct for contributors
-├── 📝 CONTRIBUTING.md # Contribution guidelines
 ├── 📄 LICENSE # Project license
 ├── 📝 README.md # Project readme
-├── 📝 SECURITY.md # Security policy
 └── ⚙️ package.json # Project dependencies and scripts
 ```
 

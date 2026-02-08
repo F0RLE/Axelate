@@ -210,30 +210,35 @@ This document establishes strict engineering standards for the Axelate project. 
 ### 3.1. Directory Structure
 ```
 src/
-├── modules/           # Functional modules
-│   ├── core/          # Application core
-│   │   ├── boot/      # Initialization
-│   │   ├── services/  # Services (EventBus, Logger, etc.)
-│   │   ├── state/     # State management
-│   │   ├── types/     # Module types
-│   │   ├── ui/        # UI components
-│   │   └── utils/     # Utilities
-│   ├── ai/            # AI module
-│   ├── chat/          # Chat module
-│   ├── dashboard/     # Dashboard
+├── app/               # Core application logic
+│   ├── init.ts        # Entry point
+│   ├── router.ts      # Navigation router
+│   └── events.ts      # Global event handlers
+├── features/          # Feature modules (Business Logic & UI)
+│   ├── ai/            # AI features
+│   ├── chat/          # Chat interface
+│   ├── dashboard/     # Main dashboard
 │   ├── debug/         # Debug tools
-│   ├── downloader/    # Download manager
+│   ├── downloads/     # Download manager
 │   ├── monitoring/    # System monitoring
-│   └── settings/      # Settings
-├── css/               # Styles
-│   ├── base/          # Base styles (variables, reset, animations)
-│   ├── components/    # Components (buttons, cards, forms)
-│   ├── layout/        # Layout (sidebar, modals, toasts)
-│   └── modules/       # Module styles
-├── types/             # Global types
-├── templates/         # HTML templates
+│   └── settings/      # Settings pages
+├── shared/            # Shared code
+│   ├── components/    # Reusable UI components
+│   ├── services/      # Core services (Logger, EventBus)
+│   ├── types/         # Shared types
+│   └── utils/         # Utility functions
+├── infrastructure/    # Technical infrastructure
+│   ├── http/          # HTTP client
+│   ├── i18n/          # Internationalization
+│   ├── navigation/    # Navigation service
+│   └── tauri/         # Tauri bridge
+├── styles/            # Global styles
+│   ├── base/          # Base styles
+│   ├── components/    # Component styles
+│   ├── features/      # Feature-specific styles
+│   └── main.css       # Main entry point
 ├── assets/            # Static assets
-└── test/              # Tests
+└── test/              # Setup and global tests
 ```
 
 ### 3.2. Module Rules

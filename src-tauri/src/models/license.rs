@@ -1,4 +1,4 @@
-use crate::services::license::LicenseStatus;
+use crate::domain::license::types::LicenseStatus;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 

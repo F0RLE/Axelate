@@ -24,24 +24,43 @@
     clippy::useless_let_if_seq // Complex GPU/VRAM initialization with multiple conditions
 )]
 
-/// Tauri IPC command handlers for frontend-backend communication
-pub mod commands;
+/// API Layer (Tauri Commands)
+pub mod api;
+/// Domain Layer (Business Logic)
+pub mod domain;
 /// Error types and conversions for the application
 pub mod errors;
+/// Infrastructure Layer (Technical Services)
+pub mod infrastructure;
 /// Data structures for configuration, system state, and IPC
 pub mod models;
-/// Core business logic services (AI, downloads, encryption, monitoring)
-pub mod services;
 /// Utility functions for paths, process management, and Windows APIs
 pub mod utils;
 
 #[cfg(test)]
 mod tests;
 
-use commands::{
-    ai, bootstrap, config, downloader, health, license, logs, modules, secure, settings, system,
-    theme, translations, ui_state, window, window_settings,
+// Re-export API modules to match the flat structure expected by collect_commands!
+// Use 'as' or nested imports to bring them into scope with the same names as before
+use api::{
+    ai, license,
+    modules::{self, downloader},
+    secure,
+    settings::{self, theme, translations, ui_state, window_settings},
+    system::{self, bootstrap, config, health, logs},
+    window,
 };
+
+// Import necessary services for run() and create_main_window()
+use domain::ai::custom_model_service;
+use domain::monitoring::system_monitor;
+use infrastructure::filesystem::file_service;
+use infrastructure::{
+    config::{ui_state as infra_ui_state, window_settings as infra_window_settings},
+    http::server,
+    logging::logger,
+};
+
 use specta_typescript::Typescript;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
@@ -63,7 +82,7 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     }
 
     // 2. Load saved settings for "cold start" restoration
-    let settings = crate::services::window_settings::load_window_settings();
+    let settings = infra_window_settings::load_window_settings();
 
     // 3. Create the window
     let mut builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
@@ -84,7 +103,7 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     match builder.build() {
         Ok(window) => {
             // 4. Apply zoom and maximized state
-            let ui_settings = crate::services::ui_state::get_ui_state().unwrap_or_default();
+            let ui_settings = infra_ui_state::get_ui_state().unwrap_or_default();
             let mut zoom = ui_settings.zoom_level;
 
             // Try to detect monitor resolution and apply specific zoom early
@@ -96,7 +115,7 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
                     zoom = res_zoom;
                     log::debug!("Applying saved resolution zoom: {zoom} for {res_key}");
                 } else {
-                    zoom = crate::services::window_settings::calculate_adaptive_zoom(size.height);
+                    zoom = infra_window_settings::calculate_adaptive_zoom(size.height);
                     log::debug!("Applying default resolution zoom: {zoom} for {res_key}");
                 }
             }
@@ -111,7 +130,7 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
 
             // Defer window visibility until frontend initialization signals readiness
             // to mitigate visual artifacts (white flash) during WebView rehydration.
-            services::system_monitor::set_paused(false);
+            system_monitor::set_paused(false);
 
             // let _ = window.show(); // Removed to prevent flicker
             let _ = window.set_focus();
@@ -132,7 +151,7 @@ pub fn run() {
     crate::utils::setup::validate_environment();
 
     // Initialize logging
-    crate::services::logs::init_global_logger().ok();
+    logger::init_global_logger().ok();
 
     // Set WebView2 user data folder to AppData\Roaming\AxelateData\Cache
     if let Ok(app_data) = std::env::var("APPDATA") {
@@ -167,7 +186,7 @@ pub fn run() {
                     let _ = window.set_focus();
                 }
 
-                crate::services::system_monitor::set_paused(false);
+                system_monitor::set_paused(false);
             } else {
                 // If window doesn't exist (frontend destroyed), create it
                 // This matches the behavior of clicking "Open" in the tray menu
@@ -231,10 +250,10 @@ pub fn run() {
         ai::clear_chat_history,
         ai::get_chat_history,
         ai::count_tokens,
-        services::custom_model_service::get_custom_models,
-        services::custom_model_service::add_custom_model,
-        services::custom_model_service::remove_custom_model,
-        services::file_service::process_file_content,
+        custom_model_service::get_custom_models,
+        custom_model_service::add_custom_model,
+        custom_model_service::remove_custom_model,
+        file_service::process_file_content,
     ]);
 
     #[cfg(debug_assertions)]
@@ -242,7 +261,7 @@ pub fn run() {
         .export(
             Typescript::default()
                 .header("/* eslint-disable */\n// This file was generated by [tauri-specta](https://github.com/oscartbeaumont/tauri-specta).\n// Do not edit this file manually, as it will be overwritten.\n"),
-            "../src/modules/core/types/bindings.ts",
+            "../src/shared/types/bindings.ts", // Updated path to shared types!
         )
         .map_err(|e| log::error!("Failed to export typescript bindings: {e}"))
         .ok();
@@ -255,7 +274,7 @@ pub fn run() {
 
             // Start system monitoring with events
             // Polling reduced to 2000ms (2s) to save CPU
-            services::system_monitor::start_monitoring(app.handle().clone(), 2000);
+            system_monitor::start_monitoring(app.handle().clone(), 2000);
 
             // Register Global Shortcut (Modified to recreate window)
             #[cfg(desktop)]
@@ -279,13 +298,13 @@ pub fn run() {
 
                                     if is_visible && is_focused {
                                         let _ = window.minimize();
-                                        services::system_monitor::set_paused(true);
+                                        system_monitor::set_paused(true);
                                         crate::utils::memory::trim_memory();
                                     } else {
                                         let _ = window.unminimize();
                                         let _ = window.show();
                                         let _ = window.set_focus();
-                                        services::system_monitor::set_paused(false);
+                                        system_monitor::set_paused(false);
                                     }
                                 } else {
                                     log::debug!(
@@ -299,7 +318,7 @@ pub fn run() {
             }
 
             // Start HTTP Server
-            services::server::start_server(app.handle().clone());
+            server::start_server(app.handle().clone());
 
             setup_system_tray(app)?;
             log::info!("✅ Setup complete");
@@ -307,7 +326,7 @@ pub fn run() {
         })
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                services::system_monitor::set_paused(true);
+                system_monitor::set_paused(true);
                 crate::utils::memory::trim_memory();
                 // Allow window to close (Destroy WebView)
                 // But do NOT exit the app.
@@ -371,7 +390,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                         let _ = window.unminimize();
                         let _ = window.show();
                         let _ = window.set_focus();
-                        services::system_monitor::set_paused(false);
+                        system_monitor::set_paused(false);
                     } else {
                         // Does not exist: Create it.
                         // It will show ITSELF when the frontend is ready (to avoid white flash).
@@ -382,7 +401,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                 "quit" => {
                     // Graceful shutdown
                     IS_QUITTING.store(true, Ordering::Relaxed);
-                    services::system_monitor::stop_monitoring();
+                    system_monitor::stop_monitoring();
                     app.exit(0);
                 }
                 _ => {}
@@ -395,7 +414,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
-                    services::system_monitor::set_paused(false);
+                    system_monitor::set_paused(false);
                 } else {
                     create_main_window(app);
                 }

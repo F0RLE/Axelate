@@ -1,5 +1,0 @@
-dist
-src/dist
-node_modules
-src/node_modules
-src-tauri/target

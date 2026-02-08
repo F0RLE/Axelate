@@ -1,4 +1,4 @@
-use crate::services::logs;
+use crate::infrastructure::logging::logger as logs;
 
 #[cfg(windows)]
 mod win_job {
