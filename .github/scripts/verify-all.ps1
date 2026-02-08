@@ -78,7 +78,7 @@ function Initialize-Environment {
     }
 }
 
-Setup-Environment
+Initialize-Environment
 
 Write-Header "Starting Full Project Verification (Axelate)"
 

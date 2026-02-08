@@ -71,7 +71,7 @@ export type IConfigField = Bindings.ConfigField;
  */
 export type IModule = Bindings.Module & {
     // Frontend specific augmentations
-    status?: string;
+    status?: string | null;
     isDeletable?: boolean;
 };
 

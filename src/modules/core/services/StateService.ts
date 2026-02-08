@@ -4,6 +4,7 @@
  */
 
 import { type Core } from '../core';
+import { logger } from './LoggerService';
 import type { IApp } from '../types/coreTypes';
 
 export interface IUIState {
@@ -62,16 +63,16 @@ export class StateService {
             if (this._core.tauriProvider.isTauri()) {
                 const loaded = await this._core.tauriProvider.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
-                console.log('[StateService] Loaded from backend');
+                logger.info('[StateService] Loaded from backend');
             } else {
                 const stored = localStorage.getItem(this._STORAGE_KEY);
-                if (stored) {
+                if (stored !== null) {
                     this.setState(JSON.parse(stored) as Partial<IUIState>);
-                    console.log('[StateService] Loaded from localStorage');
+                    logger.info('[StateService] Loaded from localStorage');
                 }
             }
         } catch (e) {
-            console.warn('[StateService] Failed to load, using defaults:', e);
+            logger.warn(`[StateService] Failed to load, using defaults: ${String(e)}`);
             // Defaults already set
         }
 
@@ -113,21 +114,20 @@ export class StateService {
      * Returns the selected modules record.
      */
     public getSelectedModules(): Record<string, Partial<IApp>> {
-        return this._state.selected_modules || {};
+        return this._state.selected_modules;
     }
 
     /**
      * Returns a selected module for a specific category.
      */
     public getSelectedModule(category: string): Partial<IApp> | undefined {
-        return this._state.selected_modules?.[category];
+        return this._state.selected_modules[category];
     }
 
     /**
      * Updates a selected module for a category.
      */
     public setSelectedModule(category: string, data: Partial<IApp>): void {
-        if (!this._state.selected_modules) this._state.selected_modules = {};
         this._state.selected_modules[category] = data;
         this._isDirty = true;
         this._debouncedSave();
@@ -137,7 +137,7 @@ export class StateService {
      * Removes a selected module for a category.
      */
     public removeSelectedModule(category: string): void {
-        if (this._state.selected_modules?.[category]) {
+        if (this._state.selected_modules[category] !== undefined) {
             // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._state.selected_modules[category];
             this._isDirty = true;
@@ -149,14 +149,13 @@ export class StateService {
      * Returns the selected AI model for a specific app ID.
      */
     public getSelectedAIModel(appId: string): string | undefined {
-        return this._state.selected_ai_models?.[appId];
+        return this._state.selected_ai_models[appId];
     }
 
     /**
      * Sets the selected AI model for a specific app ID.
      */
     public setSelectedAIModel(appId: string, modelKey: string): void {
-        if (!this._state.selected_ai_models) this._state.selected_ai_models = {};
         this._state.selected_ai_models[appId] = modelKey;
         this._isDirty = true;
         this._debouncedSave();
@@ -166,7 +165,7 @@ export class StateService {
      * Triggers a debounced save operation.
      */
     private _debouncedSave(): void {
-        if (this._autoSaveTimer) {
+        if (this._autoSaveTimer !== null) {
             globalThis.clearTimeout(this._autoSaveTimer);
         }
         this._autoSaveTimer = globalThis.setTimeout(() => {
@@ -188,7 +187,7 @@ export class StateService {
             }
             this._isDirty = false;
         } catch (e) {
-            console.error('[StateService] Failed to save state:', e);
+            logger.error(`[StateService] Failed to save state: ${String(e)}`);
         }
     }
 
@@ -205,7 +204,7 @@ export class StateService {
             }
             this._isDirty = false;
         } catch (e) {
-            console.error('[StateService] Save immediate failed', e);
+            logger.error(`[StateService] Save immediate failed: ${String(e)}`);
         }
     }
 
@@ -295,7 +294,6 @@ export class StateService {
      * Updates a specific card's width.
      */
     public setCardWidth(cardId: string, width: string): void {
-        if (!this._state.card_widths) this._state.card_widths = {};
         this._state.card_widths[cardId] = width;
         this._isDirty = true;
         this._debouncedSave();
@@ -330,7 +328,7 @@ export class StateService {
                     max_speed: this._state.download_max_speed,
                 })
                 .catch((e: unknown) => {
-                    console.error('[StateService] Failed to sync download settings:', e);
+                    logger.error(`[StateService] Failed to sync download settings: ${String(e)}`);
                 });
         }
     }
@@ -339,7 +337,7 @@ export class StateService {
      * Returns the last visited page ID.
      */
     public getLastPage(): string {
-        return this._state.last_page || 'home';
+        return this._state.last_page ?? 'home';
     }
 
     /**
@@ -369,7 +367,7 @@ export class StateService {
      * Returns the zoom level for a specific resolution key (e.g., "1920x1080").
      */
     public getResolutionZoom(resKey: string): number | undefined {
-        return this._state.resolution_zoom?.[resKey];
+        return this._state.resolution_zoom[resKey];
     }
 
     /**
@@ -377,9 +375,6 @@ export class StateService {
      * Note: Does not trigger save as WindowService handles persistence via backend command.
      */
     public setResolutionZoom(resKey: string, zoom: number): void {
-        if (!this._state.resolution_zoom) {
-            this._state.resolution_zoom = {};
-        }
         this._state.resolution_zoom[resKey] = zoom;
         // Optimization: Do NOT mark dirty.
     }

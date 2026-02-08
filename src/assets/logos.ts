@@ -21,18 +21,18 @@ const getProcessedSvg = (
     svg = svg.replaceAll(/href="#([^"]+)"/g, `href="#${idPrefix}_$1"`);
 
     // 2. Inject Classes
-    if (className) {
+    if (className !== undefined && className !== '') {
         svg = svg.replace('<svg', `<svg class="${className}"`);
     }
 
     // 3. Inject Dimensions (Force override if provided)
-    if (width || height) {
+    if (width !== undefined || height !== undefined) {
         // Remove existing width/height to avoid conflicts
         svg = svg.replaceAll(/\s(width|height)="[^"]*"/g, '');
         // Add new Dimensions
         let dims = '';
-        if (width) dims += ` width="${width}"`;
-        if (height) dims += ` height="${height}"`;
+        if (width !== undefined) dims += ` width="${width}"`;
+        if (height !== undefined) dims += ` height="${height}"`;
         svg = svg.replace('<svg', `<svg ${dims}`);
     }
 

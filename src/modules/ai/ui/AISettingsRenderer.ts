@@ -94,8 +94,8 @@ class AISettingsRenderer {
 
         const appId = app.id;
         const providerData = app.apiProviderData ?? {};
-        const models = (providerData['models'] as Record<string, IAIModelData>) ?? {};
-        const sortedModels = sortModelsByPower(models);
+        const models = providerData['models'] as Record<string, IAIModelData> | undefined;
+        const sortedModels = sortModelsByPower(models ?? {});
 
         const firstModel = sortedModels.length > 0 ? sortedModels[0] : undefined;
         const defaultModelId = firstModel ? firstModel[0] : '';
@@ -113,7 +113,7 @@ class AISettingsRenderer {
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
                 <div class="ai-content-panel">
                     <div class="settings-card-header-center">
-                        <h3 id="${appId}-title">${app.name || 'Module'} Settings</h3>
+                        <h3 id="${appId}-title">${app.name ?? 'Module'} Settings</h3>
                          <div class="model-desc" data-i18n="ui.settings.no_settings">No additional settings required for this module.</div>
                     </div>
                 </div>
@@ -219,7 +219,7 @@ class AISettingsRenderer {
         isSelected: boolean,
         t: TranslateFunc,
     ): string {
-        const pricingHtml = (model.pricing || [])
+        const pricingHtml = (model.pricing ?? [])
             .map(
                 (price) => `
             <div class="price-row">
@@ -253,8 +253,7 @@ class AISettingsRenderer {
         const t = this._getTranslator();
         const modelData = getModelData(appId, modelKey);
         const stats = modelData?.stats;
-        
-        // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+
         if (!stats)
             return `<div class="model-desc">${t('ui.settings.stats_unavailable', 'Stats unavailable')}</div>`;
 
@@ -321,7 +320,8 @@ class AISettingsRenderer {
         const input = container.querySelector<HTMLInputElement>(`#${appId}-api-key-input`);
 
         const savedKey = await this._settingsService.getSecureKey(appId);
-        if (input !== null && savedKey) input.value = savedKey;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (input !== null && savedKey !== null && savedKey !== '') input.value = savedKey;
 
         const addListener = (element: Element | null, type: string, fn: EventListener): void => {
             if (element !== null) {
@@ -360,9 +360,10 @@ class AISettingsRenderer {
             if (event.type === 'keydown' && keyEvent.key !== 'Enter' && keyEvent.key !== ' ')
                 return;
 
-            if (card.dataset['modelKey']) {
+            const modelKey = card.dataset['modelKey'];
+            if (modelKey !== undefined && modelKey !== '') {
                 event.preventDefault();
-                this.selectModel(appId, card.dataset['modelKey']);
+                this.selectModel(appId, modelKey);
             }
         };
 
@@ -393,7 +394,7 @@ class AISettingsRenderer {
                 target.setAttribute('aria-checked', 'true');
 
                 const savedModel = this._stateService?.getSelectedAIModel(appId) ?? '';
-                if (savedModel) {
+                if (savedModel !== '') {
                     this.selectModel(appId, savedModel);
                 }
             };
@@ -475,13 +476,11 @@ class AISettingsRenderer {
             this._showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
         } finally {
             setTimeout(() => {
-                if (btn) {
-                    btn.style.pointerEvents = 'auto';
-                    btn.style.width = '';
-                    btn.style.borderColor = 'var(--border-color)';
-                    btn.style.color = 'var(--text-secondary)';
-                    btn.innerHTML = originalHtml;
-                }
+                btn.style.pointerEvents = 'auto';
+                btn.style.width = '';
+                btn.style.borderColor = 'var(--border-color)';
+                btn.style.color = 'var(--text-secondary)';
+                btn.innerHTML = originalHtml;
             }, 3000);
         }
     }

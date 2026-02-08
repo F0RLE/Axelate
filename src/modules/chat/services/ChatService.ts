@@ -5,6 +5,7 @@
 
 import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';
 import type { TGlobalWin } from '../../core/types/global_bridge_types';
+import { logger } from '../../core/services/LoggerService';
 
 export class ChatService {
     /**
@@ -16,20 +17,19 @@ export class ChatService {
         _attachments: IChatAttachment[],
     ): Promise<IChatResponse> {
         // Validation
-        if ((!text || text.trim() === '') && (!_attachments || _attachments.length === 0)) {
+        if ((text === '' || text.trim() === '') && _attachments.length === 0) {
             return { ok: false, error: 'Message is empty' };
         }
 
         // Check if AIBridge is available and has active provider
         const win = globalThis as TGlobalWin;
         const aiBridge = win.aiBridge;
-        if (!aiBridge) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (win.aiBridge === undefined) {
             const t = win.t;
             return {
                 ok: false,
-                error:
-                    t?.('ui.ai.bridge_not_ready', 'AI Bridge not initialized') ||
-                    'AI Bridge not initialized',
+                error: t('ui.ai.bridge_not_ready', 'AI Bridge not initialized'),
             };
         }
 
@@ -37,11 +37,10 @@ export class ChatService {
             const t = win.t;
             return {
                 ok: false,
-                error:
-                    t?.(
-                        'ui.ai.no_provider',
-                        'No AI module running. Please launch a module first.',
-                    ) || 'No AI module running. Please launch a module first.',
+                error: t(
+                    'ui.ai.no_provider',
+                    'No AI module running. Please launch a module first.',
+                ),
             };
         }
 
@@ -69,7 +68,7 @@ export class ChatService {
             };
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : 'Unknown error';
-            console.error('[ChatService] Error:', e);
+            logger.error(`[ChatService] Error: ${String(e)}`);
             return { ok: false, error: errorMsg };
         }
     }

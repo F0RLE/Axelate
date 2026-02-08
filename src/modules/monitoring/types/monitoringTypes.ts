@@ -54,4 +54,3 @@ export interface ISystemStats {
 }
 
 export type StatsCallback = (stats: ISystemStats) => void;
-

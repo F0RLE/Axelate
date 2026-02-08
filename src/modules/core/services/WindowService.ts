@@ -4,6 +4,7 @@
  */
 
 import { type TauriProvider } from './TauriProvider';
+import { logger } from './LoggerService';
 
 interface IWindowGlobal {
     windowService?: WindowService;
@@ -67,7 +68,7 @@ export class WindowService {
         // Load fallback from localStorage
         const saved = localStorage.getItem('axelate_zoom');
         let fallbackZoom = 1;
-        if (saved) {
+        if (saved !== null) {
             fallbackZoom = Number.parseFloat(saved) || 1;
         }
 
@@ -75,18 +76,17 @@ export class WindowService {
             try {
                 // Use pre-loaded config or fetch it
                 this._config =
-                    initialConfig || (await this._tauri.invoke<IWindowConfig>('get_window_config'));
+                    initialConfig ?? (await this._tauri.invoke<IWindowConfig>('get_window_config'));
 
                 // Update breakpoints from backend (placeholder/not used in UI yet)
-                console.log('[WindowService] Loaded config:', this._config);
+                logger.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
 
                 // Use pre-loaded initialZoom or determine it
                 const zoom = initialZoom ?? (await this._getInitialZoomWithFallback(fallbackZoom));
                 await this.setZoom(zoom);
             } catch (e) {
-                console.warn(
-                    '[WindowService] Failed to get initial window data, using fallback:',
-                    e,
+                logger.warn(
+                    `[WindowService] Failed to get initial window data, using fallback: ${String(e)}`,
                 );
                 await this.setZoom(fallbackZoom);
             }
@@ -124,7 +124,7 @@ export class WindowService {
         if (this._tauri.isTauri()) {
             await this._tauri.invoke('minimize_window');
         } else {
-            console.log('[WindowService] minimize (mock)');
+            logger.info('[WindowService] minimize (mock)');
         }
     }
 
@@ -135,7 +135,7 @@ export class WindowService {
         if (this._tauri.isTauri()) {
             await this._tauri.invoke('maximize_window');
         } else {
-            console.log('[WindowService] toggleMaximize (mock)');
+            logger.info('[WindowService] toggleMaximize (mock)');
         }
     }
 
@@ -162,7 +162,7 @@ export class WindowService {
                 await this.minimize();
             }
         } else {
-            console.log('[WindowService] hideToTray (mock)');
+            logger.info('[WindowService] hideToTray (mock)');
         }
     }
 
@@ -171,7 +171,7 @@ export class WindowService {
      */
     public async show(): Promise<void> {
         if (!this._tauri.isTauri()) {
-            console.log('[WindowService] Not in Tauri, skipping native show');
+            logger.info('[WindowService] Not in Tauri, skipping native show');
             return;
         }
 
@@ -189,16 +189,15 @@ export class WindowService {
 
                 return; // Success
             } catch (e) {
-                console.warn(
-                    `[WindowService] show_window attempt ${(i + 1).toString()} failed:`,
-                    e,
+                logger.warn(
+                    `[WindowService] show_window attempt ${(i + 1).toString()} failed: ${String(e)}`,
                 );
                 if (i < maxRetries - 1) {
                     await new Promise((r) => setTimeout(r, 300)); // Wait before retry
                 }
             }
         }
-        console.error('[WindowService] All show_window attempts failed. Continuing anyway.');
+        logger.error('[WindowService] All show_window attempts failed. Continuing anyway.');
     }
 
     // --- Zoom ---
@@ -237,7 +236,7 @@ export class WindowService {
                     zoom: this._currentZoom,
                 });
             } catch (e) {
-                console.error('[WindowService] Zoom error:', e);
+                logger.error(`[WindowService] Zoom error: ${String(e)}`);
             }
         }
 
@@ -249,7 +248,7 @@ export class WindowService {
         }
 
         // Sync with StateService (DI) for frontend reactivity
-        if (this._stateService) {
+        if (this._stateService !== null) {
             this._stateService.setZoomLevel(this._currentZoom);
             this._stateService.setResolutionZoom(
                 `${window.screen.width.toString()}x${window.screen.height.toString()}`,
@@ -289,7 +288,7 @@ export class WindowService {
                     this._toggleMonitorPanel(visible);
                 });
             } catch {
-                console.error('[WindowService] Failed to set monitoring state');
+                logger.error('[WindowService] Failed to set monitoring state');
             }
         }
     }
@@ -307,7 +306,7 @@ export class WindowService {
         // Check if resolution changed (monitor switch)
         const currentRes = `${window.screen.width.toString()}x${window.screen.height.toString()}`;
         if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
-            console.log(
+            logger.info(
                 `[WindowService] Resolution changed: ${this._lastResolutionKey} -> ${currentRes}`,
             );
             this._lastResolutionKey = currentRes;
@@ -321,7 +320,7 @@ export class WindowService {
         try {
             return await this._tauri.invoke<IWindowPolicy>('get_window_policy');
         } catch (e) {
-            console.error('[WindowService] Failed to fetch window policy:', e);
+            logger.error(`[WindowService] Failed to fetch window policy: ${String(e)}`);
             return { isSmallScreen: false, showWarning: false };
         }
     }
@@ -335,7 +334,7 @@ export class WindowService {
         if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
             const oldRes = this._lastResolutionKey;
             this._lastResolutionKey = currentRes;
-            console.log(`[WindowService] Resolution changed: ${oldRes} -> ${currentRes}`);
+            logger.info(`[WindowService] Resolution changed: ${oldRes} -> ${currentRes}`);
             void this._handleResolutionChange();
         }
     }
@@ -356,16 +355,12 @@ export class WindowService {
                 const win = globalThis as unknown as IWindowGlobal;
                 if (win.__TAURI__?.window) {
                     const appWindow = win.__TAURI__.window.getCurrentWindow();
-                    const LogicalSize =
-                        win.__TAURI__.window.LogicalSize ||
-                        (win.__TAURI__.dpi ? win.__TAURI__.dpi.LogicalSize : null);
-                    if (LogicalSize) {
-                        await appWindow.setSize(new LogicalSize(width, height));
-                        await appWindow.center();
-                    }
+                    const LogicalSize = win.__TAURI__.window.LogicalSize;
+                    await appWindow.setSize(new LogicalSize(width, height));
+                    await appWindow.center();
                 }
             } catch (e) {
-                console.warn('[WindowService] setSize failed', e);
+                logger.warn(`[WindowService] setSize failed: ${String(e)}`);
             }
         }
     }
@@ -391,7 +386,7 @@ export class WindowService {
      * Dispatches a custom event to toggle the visibility of the monitoring panel.
      */
     private _toggleMonitorPanel(visible: boolean): void {
-        console.log('[WindowService] toggleMonitorPanel:', visible);
+        logger.info(`[WindowService] toggleMonitorPanel: ${String(visible)}`);
         const event = new CustomEvent('monitor:toggle', { detail: { visible } });
         globalThis.dispatchEvent(event);
     }
@@ -417,7 +412,7 @@ export class WindowService {
      * Schedules a debounced save of the window state.
      */
     private _scheduleSaveWindowState(): void {
-        if (this._saveWindowTimer) {
+        if (this._saveWindowTimer !== null) {
             clearTimeout(this._saveWindowTimer);
         }
         this._saveWindowTimer = setTimeout(() => {
@@ -459,7 +454,7 @@ export class WindowService {
                 }
             }
         } catch (e) {
-            console.warn('[WindowService] Failed to save window state:', e);
+            logger.warn(`[WindowService] Failed to save window state: ${String(e)}`);
         }
     }
 
@@ -477,7 +472,7 @@ export class WindowService {
                 return zoom;
             }
         } catch (e) {
-            console.error('[WindowService] Failed to fetch backend zoom:', e);
+            logger.error(`[WindowService] Failed to fetch backend zoom: ${String(e)}`);
         }
 
         return fallback;
@@ -494,11 +489,10 @@ export class WindowService {
             const zoom = await this._tauri.invoke<number>('get_resolution_zoom');
 
             if (typeof zoom === 'number' && zoom > 0 && zoom !== this._currentZoom) {
-                console.log(`[WindowService] Applying zoom for new resolution: ${zoom.toString()}`);
                 await this.setZoom(zoom);
             }
         } catch (e) {
-            console.error('[WindowService] Resolution change zoom fetch failed:', e);
+            logger.error(`[WindowService] Resolution change zoom fetch failed: ${String(e)}`);
         }
     }
 }

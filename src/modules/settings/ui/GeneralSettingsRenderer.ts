@@ -4,7 +4,7 @@
  */
 
 import { type StateService } from '../../core/services/StateService';
-import type { TGlobalWin } from '../../core/types/global_bridge_types';
+import type { ISettingsUIContext } from './SettingsContext';
 
 export class GeneralSettingsRenderer {
     constructor(private readonly _state: StateService) {}
@@ -12,21 +12,20 @@ export class GeneralSettingsRenderer {
     /**
      * Initializes the general settings renderer.
      */
-    public init(): void {
-        this._initTaskbarToggles();
-        this._initMonitorToggles();
+    public init(context: ISettingsUIContext): void {
+        this._initTaskbarToggles(context);
+        this._initMonitorToggles(context);
     }
 
     /**
      * Initializes taskbar visibility toggles.
      */
-    private _initTaskbarToggles() {
+    private _initTaskbarToggles(context: ISettingsUIContext) {
         const container = document.getElementById('taskbar-toggles');
         if (!container || container.dataset['initialized'] === 'true') return;
         container.dataset['initialized'] = 'true';
 
-        const win = globalThis as TGlobalWin;
-        const t = typeof win.t === 'function' ? win.t : (_k: string, d: string) => d;
+        const t = context.t;
 
         const navItems = [
             { id: 'home', label: 'Home', icon: '#icon-home' },
@@ -62,7 +61,7 @@ export class GeneralSettingsRenderer {
             const item = target.closest('.taskbar-toggle-item');
             if (item instanceof HTMLElement) {
                 const pageId = item.dataset['pageId'];
-                if (pageId) {
+                if (pageId !== undefined && pageId !== '') {
                     item.classList.toggle('active');
                     this.toggleNavItem(pageId, item.classList.contains('active'));
                 }
@@ -124,13 +123,15 @@ export class GeneralSettingsRenderer {
     /**
      * Initializes system monitor toggles.
      */
-    private _initMonitorToggles() {
+    /**
+     * Initializes system monitor toggles.
+     */
+    private _initMonitorToggles(context: ISettingsUIContext) {
         const container = document.getElementById('monitor-toggles');
         if (!container || container.dataset['initialized'] === 'true') return;
         container.dataset['initialized'] = 'true';
 
-        const win = globalThis as TGlobalWin;
-        const t = typeof win.t === 'function' ? win.t : (_k: string, d: string) => d;
+        const t = context.t;
 
         const monitorItems = [
             { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
@@ -167,7 +168,7 @@ export class GeneralSettingsRenderer {
             const btn = target.closest('.monitor-toggle-btn');
             if (btn instanceof HTMLElement) {
                 const mid = btn.dataset['monitorId'];
-                if (mid) {
+                if (mid !== undefined && mid !== '') {
                     btn.classList.toggle('active');
                     this.toggleMonitorItem(mid, btn.classList.contains('active'));
                 }
@@ -206,6 +207,7 @@ export class GeneralSettingsRenderer {
                 // Remove hiding to trigger fade-in
                 el.classList.remove('hiding');
             }
+            this._updateMonitorPanelVisibility();
         } else {
             if (!hidden.includes(id)) hidden.push(id);
             if (el instanceof HTMLElement) {
@@ -219,9 +221,6 @@ export class GeneralSettingsRenderer {
         }
         this._state.setHiddenMonitors(hidden);
         this._updateMonitorDivider();
-        if (enabled) {
-            this._updateMonitorPanelVisibility();
-        }
     }
 
     /**

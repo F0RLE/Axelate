@@ -10,38 +10,59 @@
  */
 
 import DOMPurify from 'dompurify';
+import { type IGlobalBridge, type TGlobalWin } from '@/modules/core/types/global_bridge_types';
 import { eventBus } from '@/modules/core/services/EventBus';
 import { aiSettingsRenderer } from '@/modules/ai/ui/AISettingsRenderer';
+import { logger } from '../../core/services/LoggerService';
 import { type SettingsService } from '../services/SettingsService';
 import { type StateService } from '../../core/services/StateService';
 import type { IApp, IConfigField } from '../../core/types/coreTypes';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
+import type { ISettingsUIContext } from './SettingsContext';
+import { createField } from './components/FieldFactory';
+import { CardResizer } from './components/CardResizer';
 
 type SettingValue = string | number | boolean | null;
 
-interface ISettingsGlobal {
-    toggleNavItem: (id: string, en: boolean) => void;
-    toggleMonitorItem: (id: string, en: boolean) => void;
-    setCardWidth: (btn: HTMLElement, w: string) => void;
-    control: (a: 'start' | 'stop' | 'restart', s: string) => Promise<boolean>;
-    openModuleSettings: (app: IApp) => void;
-    t?: (key: string, defaultVal?: string, params?: unknown) => string;
-    showToast?: (m: string, s: string, d?: number) => void;
-    launchApp?: (id: string) => void;
-    currentSettingsModule?: IApp;
-    APP_DATA?: { ai: IApp[] };
-    applyTranslations?: () => void;
-}
-
 export class SettingsUI {
+    // ... existing properties ...
+
+    // ... existing methods ...
+
+    private _renderSettingField(
+        form: HTMLElement,
+        appId: string,
+        key: string,
+        field: IConfigField,
+    ): void {
+        const row = document.createElement('div');
+        row.className = 'form-row';
+
+        const label = document.createElement('label');
+        label.textContent = field.label || key;
+        row.appendChild(label);
+
+        const settingKey = `${appId}_${key}`;
+        // Safe cast to access dictionary
+        const savedSettings = this._service.getSettings() as unknown as Record<
+            string,
+            SettingValue
+        >;
+        const initialValue = savedSettings[settingKey] ?? field.default;
+
+        const fieldComponent = createField(field, initialValue);
+
+        fieldComponent.onChange((val: unknown) => {
+             // Cast val to SettingValue (string|number|boolean|null)
+            this._debouncedSave(settingKey, val as SettingValue);
+        });
+
+        row.appendChild(fieldComponent.render());
+        form.appendChild(row);
+    }
     private readonly _unsubscribers: (() => void)[] = [];
-    private readonly _resizeState = {
-        isResizing: false,
-        card: null as HTMLElement | null,
-        startX: 0,
-        startWidth: 'full',
-        hasSwitched: false,
-    };
+    private _context!: ISettingsUIContext;
+    private _resizer!: CardResizer;
 
     private readonly ICONS = {
         VISIBLE:
@@ -67,7 +88,24 @@ export class SettingsUI {
      * Initializes the settings UI, renders components, and binds events.
      */
     public async init(): Promise<void> {
-        console.log('[SettingsUI] Initializing...');
+        logger.info('[SettingsUI] Initializing...');
+
+        // 1. Setup Context
+        const win = globalThis as TGlobalWin;
+        this._context = {
+            t: win.t ?? ((_: string, d?: string) => d ?? ''),
+            showToast:
+                win.showToast ??
+                ((m: string, s: string) => {
+                    logger.info(m, s);
+                }),
+            toggleNavItem: (id: string, en: boolean) => {
+                this._generalRenderer.toggleNavItem(id, en);
+            },
+            toggleMonitorItem: (id: string, en: boolean) => {
+                this._generalRenderer.toggleMonitorItem(id, en);
+            },
+        };
 
         // Wait for settings template to be injected
         let attempts = 0;
@@ -79,58 +117,45 @@ export class SettingsUI {
         }
 
         if (!container) {
-            console.warn(
+            logger.warn(
                 '[SettingsUI] Settings container not found after 1s. Templates might still be loading.',
             );
         }
 
-        // 0. Subscribe to navigation events (Section 2.4)
+        // 0. Subscribe to navigation events
         const unsub = eventBus.on('page:change', () => {
             this.close();
         });
         this._unsubscribers.push(unsub);
 
         // 1. Load Data
-        // 2. Init UI Components
-        this._generalRenderer.init();
+        this._generalRenderer.init(this._context);
         this._loadCardWidths();
         this._bindEvents();
-        this._bindResizeEvents();
+
+        this._resizer = new CardResizer((id: string, w: string) => {
+            this._state.setCardWidth(id, w);
+        });
+        this._resizer.init();
 
         // 4. Load GPU Info
         this._loadGpuInfo().catch((e: unknown) => {
-            console.error('[SettingsUI] GPU Info failed:', e);
+            logger.error('[SettingsUI] GPU Info failed:', e);
         });
 
-        const win = globalThis as unknown as ISettingsGlobal;
-
-        win.toggleNavItem = (id: string, en: boolean) => {
-            this._generalRenderer.toggleNavItem(id, en);
-        };
-        win.toggleMonitorItem = (id: string, en: boolean) => {
-            this._generalRenderer.toggleMonitorItem(id, en);
-        };
-        win.setCardWidth = (btn: HTMLElement, w: string) => {
-            this.setCardWidth(btn, w);
-        };
-        win.control = (a: 'start' | 'stop' | 'restart', s: string) => {
-            if (a === 'start' || a === 'stop' || a === 'restart') {
-                return this._service.controlService(a, s);
-            }
-            return Promise.resolve(false);
-        };
+        // 5. Expose necessary global functions (legacy support for some templates)
         win.openModuleSettings = (app: IApp) => {
-            this.openModuleSettings(app).catch((e: unknown) => {
-                console.error(e);
+            void this._openModuleSettingsHelper(app).catch((e: unknown) => {
+                logger.error(String(e));
             });
         };
+        (win as unknown as IGlobalBridge)['setCardWidth'] = (btn: HTMLElement, w: string) => {
+            this.setCardWidth(btn, w);
+        };
 
-        // Listen for language changes to refresh dynamic UI
         globalThis.addEventListener('lang:changed', () => {
             this.refreshActiveModule();
         });
-
-        this._loadCustomModels();
     }
 
     public static close(): void {
@@ -145,29 +170,24 @@ export class SettingsUI {
      * Re-renders the currently open settings module (e.g. on language change).
      */
     public refreshActiveModule(): void {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const currentApp = win['currentSettingsModule'] as IApp | undefined;
+        const currentApp = this._context.currentModule;
 
-        // Re-render module settings if modal is open
         const modal = document.getElementById('module-settings-modal');
         const container = document.getElementById('module-config-modal-active');
 
-        if (modal && !modal.classList.contains('hidden') && container && currentApp) {
-            console.log('[SettingsUI] Refreshing active module settings:', currentApp.id);
+        if (
+            modal?.classList.contains('hidden') === false &&
+            container !== null &&
+            currentApp !== undefined
+        ) {
+            logger.debug('[SettingsUI] Refreshing active module settings:', currentApp.id);
 
-            // Update Title
             const title = document.getElementById('module-settings-title');
-            const suffix = globalThis.t
-                ? (globalThis.t as (k: string, d: string) => string)(
-                      'ui.settings.header_suffix',
-                      'Settings',
-                  )
-                : 'Settings';
-            if (title) title.innerHTML = DOMPurify.sanitize(suffix);
+            const suffix = this._context.t('ui.settings.header_suffix', 'Settings');
+            if (title !== null) title.innerHTML = DOMPurify.sanitize(suffix);
 
-            // Dynamic re-render
             this._renderSpecializedModuleConfig(container, currentApp).catch((e: unknown) => {
-                console.error(e);
+                logger.error(String(e));
             });
         }
     }
@@ -185,7 +205,7 @@ export class SettingsUI {
             fn();
         });
         this._unsubscribers.length = 0;
-        console.log('[SettingsUI] Destroyed.');
+        logger.info('[SettingsUI] Destroyed.');
     }
 
     /**
@@ -194,21 +214,18 @@ export class SettingsUI {
     private async _loadGpuInfo() {
         const data = await this._service.loadGpuInfo();
         const gpuInfoEl = document.getElementById('gpu-info');
-        const win = globalThis as unknown as Window & { t: (k: string, d: string) => string };
-        const t = win.t || ((_k: string, d: string) => d);
-
         if (!gpuInfoEl) return;
 
         if (data.detected) {
             gpuInfoEl.className = 'gpu-info detected';
             gpuInfoEl.innerHTML = DOMPurify.sanitize(`
                 <div style="font-weight: 600; margin-bottom: 0.25rem;">${data.name ?? ''}</div>
-                <div class="gpu-info-details">${data.cuda ? 'CUDA • ' : ''}${data.memory ? `${data.memory.toString()} GB` : ''}</div>
+                <div class="gpu-info-details">${data.cuda === true ? 'CUDA • ' : ''}${data.memory === undefined ? '' : `${data.memory.toString()} GB`}</div>
             `);
         } else {
             gpuInfoEl.className = 'gpu-info not-detected';
             gpuInfoEl.innerHTML = DOMPurify.sanitize(
-                `<div>${t('ui.launcher.web.gpu_not_found', 'GPU not found')}</div><div class="gpu-info-details">${t('ui.launcher.web.gpu_fallback_cpu', 'CPU will be used (slower)')}</div>`,
+                `<div>${this._context.t('ui.launcher.web.gpu_not_found', 'GPU not found')}</div><div class="gpu-info-details">${this._context.t('ui.launcher.web.gpu_fallback_cpu', 'CPU will be used (slower)')}</div>`,
             );
         }
     }
@@ -217,30 +234,53 @@ export class SettingsUI {
      * Renders a specialized module configuration UI (API, Local AI, or generic).
      */
     private async _renderSpecializedModuleConfig(container: HTMLElement, app: IApp) {
-        if (app.type === 'api' || app.id === 'gpt' || app.id === 'gemini' || app.id === 'claude') {
+        const renderers: Record<string, (c: HTMLElement, a: IApp) => Promise<void> | void> = {
+            gpt: (c, a) => {
+                void this._renderUniversalApiSettings(c, a);
+            },
+            gemini: (c, a) => {
+                void this._renderUniversalApiSettings(c, a);
+            },
+            claude: (c, a) => {
+                void this._renderUniversalApiSettings(c, a);
+            },
+            axelate: (c, a) => {
+                this._renderEmptyState(c, a);
+            },
+            'axelate-platform': (c, a) => {
+                this._renderEmptyState(c, a);
+            },
+            'axelate-localai': (c, a) => {
+                this._renderEmptyState(c, a);
+            },
+        };
+
+        const renderer = renderers[app.id];
+        if (renderer !== undefined) {
+            await renderer(container, app);
+            return;
+        }
+
+        if (app.type === 'api') {
             await this._renderUniversalApiSettings(container, app);
             return;
         }
 
-        // Clean settings for specific apps (User Request)
-        if (
-            ['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id) ||
-            app.id.includes('telegram')
-        ) {
+        if (app.id.includes('telegram')) {
             this._renderEmptyState(container, app);
             return;
         }
 
         // Default Schema-based rendering
         container.innerHTML = '';
-        if (app.configSchema && Object.keys(app.configSchema).length > 0) {
+        if (app.configSchema !== undefined && Object.keys(app.configSchema).length > 0) {
             const form = document.createElement('div');
             form.className = 'module-settings-form';
 
             const header = document.createElement('h3');
             header.style.marginBottom = '1.5rem';
             header.style.color = 'var(--text-primary)';
-            header.textContent = app.name || app.id;
+            header.textContent = app.name !== undefined && app.name !== '' ? app.name : app.id;
             form.appendChild(header);
 
             Object.entries(app.configSchema).forEach(([key, field]) => {
@@ -278,11 +318,8 @@ export class SettingsUI {
      * Renders quality and capability stats for an AI model.
      */
     private _renderAIModelStats(appId: string, modelKey: string): string {
-        const win = globalThis as unknown as Window & {
-            APP_DATA: { ai: IApp[] };
-            t: (k: string, d: string) => string;
-        };
-        const catalog = win.APP_DATA?.ai || [];
+        const win = globalThis as unknown as TGlobalWin;
+        const catalog = win.APP_DATA.ai;
         const app = catalog.find((a: IApp) => a.id === appId);
         const providerData = app?.apiProviderData as
             | {
@@ -292,8 +329,11 @@ export class SettingsUI {
                   >;
               }
             | undefined;
-        const models = providerData?.models || {};
-        const stats = models[modelKey]?.stats;
+        const providerDataModels = providerData?.models;
+        const stats =
+            providerDataModels !== undefined && modelKey !== ''
+                ? providerDataModels[modelKey]?.stats
+                : undefined;
 
         if (!stats) return '<div class="model-desc">Stats unavailable</div>';
 
@@ -305,7 +345,7 @@ export class SettingsUI {
             return s;
         };
 
-        const t = win.t || ((_k: string, d: string) => d);
+        const t = this._context.t;
 
         return `
             <div class="ai-stats-grid">
@@ -329,9 +369,9 @@ export class SettingsUI {
      * Toggles visibility of an API key input field.
      */
     public toggleModuleKeyVisibility(appId: string) {
-        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement;
+        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
         const btn = document.getElementById(`${appId}-key-toggle-btn`);
-        if (input && btn) {
+        if (input !== null && btn !== null) {
             const isPass = input.type === 'password';
             input.type = isPass ? 'text' : 'password';
             btn.innerHTML = isPass ? this.ICONS.VISIBLE : this.ICONS.HIDDEN;
@@ -342,19 +382,14 @@ export class SettingsUI {
      * Checks the validity of an API key via its provider endpoint.
      */
     public async checkModuleKey(appId: string) {
-        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement;
+        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
         const btn = document.getElementById(`${appId}-key-check-btn`);
-        if (!input || !btn) return;
+        if (input === null || btn === null) return;
 
-        const win = globalThis as unknown as Window & {
-            t: (k: string, d: string) => string;
-            showToast: (m: string, s: string) => void;
-        };
-        const t = win.t || ((_k: string, d: string) => d);
-
+        const t = this._context.t;
         const key = input.value.trim();
-        if (!key) {
-            win.showToast(t('ui.settings.key_invalid', 'Invalid Key'), 'error');
+        if (key === '') {
+            this._context.showToast(t('ui.settings.key_invalid', 'Invalid Key'), 'error');
             return;
         }
 
@@ -365,26 +400,28 @@ export class SettingsUI {
         btn.style.pointerEvents = 'none';
 
         try {
-            // Use Service to validate key (Backend secure check)
-            const provider = appId === 'gemini' ? 'gemini' : 'openai'; // Simple mapping for now
+            const provider = appId === 'gemini' ? 'gemini' : 'openai';
             const ok = await this._service.validateApiKey(provider, key);
 
             if (ok) {
                 btn.style.borderColor = 'var(--success)';
                 btn.style.color = 'var(--success)';
                 btn.innerHTML = this.ICONS.CHECK;
-                win.showToast(t('ui.settings.key_valid', 'Key is valid'), 'success');
+                this._context.showToast(t('ui.settings.key_valid', 'Key is valid'), 'success');
             } else {
                 btn.style.borderColor = 'var(--error)';
                 btn.style.color = 'var(--error)';
                 btn.innerHTML = this.ICONS.X;
-                win.showToast(t('ui.settings.key_invalid_check', 'Key is invalid'), 'error');
+                this._context.showToast(
+                    t('ui.settings.key_invalid_check', 'Key is invalid'),
+                    'error',
+                );
             }
         } catch {
             btn.style.borderColor = 'var(--error)';
             btn.style.color = 'var(--error)';
             btn.innerHTML = this.ICONS.X;
-            win.showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
+            this._context.showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
         } finally {
             setTimeout(() => {
                 btn.style.pointerEvents = 'auto';
@@ -402,71 +439,56 @@ export class SettingsUI {
     public selectAIModel(appId: string, modelKey: string) {
         this._state.setSelectedAIModel(appId, modelKey);
 
-        // Re-render only stats and update selection visually
         const grid = document.querySelector('.ai-models-grid');
         grid?.querySelectorAll('.ai-model-card').forEach((card) => {
-            const cardModelKey = (card as HTMLElement).dataset['modelKey'];
-            card.classList.toggle('selected', cardModelKey === modelKey);
+            const cardElement = card as HTMLElement;
+            const cardModelKey = cardElement.dataset['modelKey'];
+            cardElement.classList.toggle('selected', cardModelKey === modelKey);
         });
 
         const statsArea = document.getElementById(`${appId}-model-stats`);
-        if (statsArea) {
-            const win = globalThis as unknown as Record<string, unknown>;
-            const t = win['t'] as ((k: string, d: string) => string) | undefined;
-            const applyTranslations = win['applyTranslations'] as (() => void) | undefined;
+        if (statsArea !== null) {
+            const t = this._context.t;
+            const win = globalThis as unknown as TGlobalWin;
+            const applyTranslations = win.applyTranslations as (() => void) | undefined;
 
             statsArea.innerHTML = DOMPurify.sanitize(
-                `<h3 data-i18n="ui.settings.model_stats">${t ? t('ui.settings.model_stats', 'Model Stats') : 'Model Stats'}</h3>${this._renderAIModelStats(appId, modelKey)}`,
+                `<h3>${t('ui.settings.model_stats', 'Model Stats')}</h3>${this._renderAIModelStats(appId, modelKey)}`,
             );
 
-            // Apply translations to dynamically added content
             if (typeof applyTranslations === 'function') {
                 applyTranslations();
             }
         }
     }
 
-    private _loadCustomModels() {
-        // Custom models will be handled via the dynamic provider data in the next iteration
-    }
-
     /**
      * Prompts the user to add a custom AI model.
      */
     public async addCustomModelToSettings(provider: 'openai' | 'gemini' | 'local') {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const t = win['t'] as
-            | ((k: string, d?: string, p?: Record<string, unknown>) => string)
-            | undefined;
-        const currentApp = win['currentSettingsModule'] as IApp | undefined;
-        const showToast = win['showToast'] as ((m: string, s: string) => void) | undefined;
+        const t = this._context.t;
+        const currentApp = this._context.currentModule;
 
-        const promptMsg = t
-            ? t(
-                  'ui.settings.custom_model.prompt_id',
-                  `Enter Model ID for ${provider} (e.g. gpt-4o):`,
-                  {
-                      provider,
-                  },
-              )
-            : `Enter Model ID for ${provider} (e.g. gpt-4o):`;
+        const promptMsg = t(
+            'ui.settings.custom_model.prompt_id',
+            `Enter Model ID for ${provider} (e.g. gpt-4o):`,
+            { provider },
+        );
 
         const modelId = prompt(promptMsg);
-        if (!modelId) return;
+        if (modelId === null || modelId === '') return;
 
-        const promptNameMsg = t
-            ? t('ui.settings.custom_model.prompt_name', 'Enter Display Name:')
-            : 'Enter Display Name:';
+        const promptNameMsg = t('ui.settings.custom_model.prompt_name', 'Enter Display Name:');
         const modelName = prompt(promptNameMsg, modelId);
-        if (!modelName) return;
+        if (modelName === null || modelName === '') return;
 
         try {
             await this._service.addCustomModel(provider, modelId, modelName);
 
             // Custom models will be added to the provider's model list in future update
-            if (showToast) {
+            if (typeof showToast === 'function') {
                 showToast(
-                    t
+                    typeof t === 'function'
                         ? t(
                               'ui.settings.custom_model.toast_update',
                               'Custom model support is being updated',
@@ -480,20 +502,20 @@ export class SettingsUI {
             const container = document.getElementById('module-config-modal-active');
             if (container && currentApp) {
                 this._renderUniversalApiSettings(container, currentApp).catch((e: unknown) => {
-                    console.error(e);
+                    logger.error(String(e));
                 });
             }
 
-            if (showToast) {
+            if (typeof showToast === 'function') {
                 showToast(
-                    t
+                    typeof t === 'function'
                         ? t('ui.settings.custom_model.toast_added', 'Custom model added')
                         : 'Custom model added',
                     'success',
                 );
             }
         } catch (e) {
-            console.error('[SettingsUI] Failed to add custom model', e);
+            logger.error('[SettingsUI] Failed to add custom model', e);
         }
     }
 
@@ -507,10 +529,10 @@ export class SettingsUI {
         const widths = this._state.getCardWidths();
         Object.keys(widths).forEach((id) => {
             const card = document.querySelector(`.resizable-card[data-card-id="${id}"]`);
-            const w = widths[id];
-            if (card instanceof HTMLElement && typeof w === 'string') {
-                card.dataset['cardWidth'] = w;
-                this._updateCardLayout(card, w);
+            const width = widths[id];
+            if (card instanceof HTMLElement && typeof width === 'string') {
+                card.dataset['cardWidth'] = width;
+                this._updateCardLayout(card, width);
             }
         });
     }
@@ -521,9 +543,8 @@ export class SettingsUI {
 
         card.dataset['cardWidth'] = width;
         const id = card.dataset['cardId'];
-        if (id) this._state.setCardWidth(id, width);
+        if (id !== undefined) this._state.setCardWidth(id, width);
 
-        // Update active button state
         const buttons = card.querySelectorAll<HTMLElement>('.btn');
         buttons.forEach((b) => {
             if (b === btn) {
@@ -549,88 +570,7 @@ export class SettingsUI {
         }
     }
 
-    private _bindResizeEvents() {
-        document.querySelectorAll('.resize-handle').forEach((h) => {
-            h.addEventListener('mousedown', (e) => {
-                this._startResize(e as MouseEvent, h as HTMLElement);
-            });
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            this._handleResizeMove(e);
-        });
-        document.addEventListener('mouseup', () => {
-            this._handleResizeUp();
-        });
-    }
-
-    private _startResize(e: MouseEvent, handle: HTMLElement) {
-        e.preventDefault();
-        this._resizeState.isResizing = true;
-        this._resizeState.card = handle.closest('.resizable-card');
-        this._resizeState.startX = e.clientX;
-        this._resizeState.startWidth = this._resizeState.card?.dataset['cardWidth'] || 'full';
-        this._resizeState.hasSwitched = false;
-
-        document.body.style.cursor = 'ew-resize';
-        document.body.classList.add('no-select');
-
-        const overlay = document.createElement('div');
-        overlay.id = 'resize-overlay';
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100%';
-        overlay.style.height = '100%';
-        overlay.style.zIndex = '9999';
-        overlay.style.cursor = 'ew-resize';
-        document.body.appendChild(overlay);
-    }
-
-    /**
-     * Handles mouse movement during card resizing.
-     */
-    private _handleResizeMove(e: MouseEvent) {
-        if (!this._resizeState.isResizing || !this._resizeState.card) return;
-        const delta = e.clientX - this._resizeState.startX;
-        const threshold = 100;
-
-        if (this._resizeState.hasSwitched) return;
-
-        if (this._resizeState.startWidth === 'full' && delta < -threshold) {
-            this._resizeState.card.dataset['cardWidth'] = 'half';
-            this._resizeState.hasSwitched = true;
-            this._saveResizedWidth(this._resizeState.card);
-        } else if (this._resizeState.startWidth === 'half' && delta > threshold) {
-            this._resizeState.card.dataset['cardWidth'] = 'full';
-            this._resizeState.hasSwitched = true;
-            this._saveResizedWidth(this._resizeState.card);
-        }
-    }
-
-    /**
-     * Finalizes the resizing process.
-     */
-    private _handleResizeUp() {
-        if (this._resizeState.isResizing) {
-            this._resizeState.isResizing = false;
-            this._resizeState.card = null;
-            document.body.style.cursor = '';
-            document.body.classList.remove('no-select');
-            const overlay = document.getElementById('resize-overlay');
-            if (overlay) overlay.remove();
-        }
-    }
-
-    /**
-     * Saves the new card width to state.
-     */
-    private _saveResizedWidth(card: HTMLElement) {
-        const id = card.dataset['cardId'];
-        if (id) {
-            this._state.setCardWidth(id, card.dataset['cardWidth'] || 'full');
-        }
-    }
+    // Card Resizing delegated to CardResizer component
 
     // --- Auto Save ---
 
@@ -638,14 +578,12 @@ export class SettingsUI {
      * Binds global events (e.g. clicking outside dropdowns).
      */
     private _bindEvents() {
-        // Dropdown outside click
         document.addEventListener('click', (e) => {
             document.querySelectorAll('.lang-dropdown-menu').forEach((dropdown) => {
                 const page = dropdown.id.replace('lang-dropdown-menu-', '');
                 const btn = document.getElementById(`lang-dropdown-btn-${page}`);
                 if (
-                    dropdown &&
-                    btn &&
+                    btn !== null &&
                     !dropdown.contains(e.target as Node) &&
                     !btn.contains(e.target as Node)
                 ) {
@@ -656,21 +594,18 @@ export class SettingsUI {
     }
 
     /**
-     * Opens the settings modal for a specific module.
+     * Helper to open the settings modal for a specific module.
      */
-    public async openModuleSettings(app: IApp) {
+    private async _openModuleSettingsHelper(app: IApp) {
         const modal = document.getElementById('module-settings-modal');
         const container = document.getElementById('module-config-modal-active');
         const title = document.getElementById('module-settings-title');
 
-        if (!modal || !container || !title) return;
+        if (modal === null || container === null || title === null) return;
 
-        // Set global context for other modules
-        const win = globalThis as unknown as Record<string, unknown>;
-        win['currentSettingsModule'] = app;
+        this._context.currentModule = app;
 
-        const t = win['t'] as ((k: string, d: string) => string) | undefined;
-        const suffix = t ? t('ui.settings.header_suffix', 'Settings') : 'Settings';
+        const suffix = this._context.t('ui.settings.header_suffix', 'Settings');
         title.innerHTML = DOMPurify.sanitize(suffix);
 
         await this._renderSpecializedModuleConfig(container, app);
@@ -699,156 +634,33 @@ export class SettingsUI {
      */
     private _showSaveIndicator() {
         let el = document.getElementById('save-indicator');
-        if (!el) {
+        if (el === null) {
             el = document.createElement('div');
             el.id = 'save-indicator';
             el.className = 'save-indicator';
-            const t = globalThis.t as ((k: string, d: string) => string) | undefined;
-            const msg = t ? t('ui.settings.saved_message', 'Settings Saved') : 'Settings Saved';
+            const msg = this._context.t('ui.settings.saved_message', 'Settings Saved');
             el.innerHTML = DOMPurify.sanitize(`<span>${msg}</span>`);
             document.body.appendChild(el);
         }
         el.classList.add('show');
+        const indicator = el;
         setTimeout(() => {
-            el?.classList.remove('show');
+            indicator.classList.remove('show');
         }, 2000);
     }
 
-    /**
-     * Renders a single setting field based on its type.
-     */
-    private _renderSettingField(
-        form: HTMLElement,
-        appId: string,
-        key: string,
-        field: IConfigField,
-    ): void {
-        const row = document.createElement('div');
-        row.className = 'form-row';
-
-        const label = document.createElement('label');
-        label.textContent = field.label || key;
-        row.appendChild(label);
-
-        const settingKey = `${appId}_${key}`;
-        const savedSettings = this._service.getSettings() as Record<string, SettingValue>;
-        const initialValue = (savedSettings[settingKey] ?? field.default) as SettingValue;
-
-        let input: HTMLElement;
-
-        if (field.fieldType === 'select' && field.options) {
-            input = this._createSelectField(field.options, initialValue);
-        } else if (field.fieldType === 'boolean') {
-            const isTrue = String(initialValue) === 'true';
-            input = this._createToggleField(isTrue);
-        } else if (field.fieldType === 'number') {
-            input = this._createNumberField(Number(initialValue));
-        } else {
-            input = this._createTextField(String(initialValue));
-        }
-
-        row.appendChild(input);
-        form.appendChild(row);
-
-        this._attachAutoSave(input, field.fieldType, settingKey);
-    }
-
-    /**
-     * Creates a select dropdown field.
-     */
-    private _createSelectField(options: string[], currentVal: SettingValue): HTMLElement {
-        const select = document.createElement('select');
-        select.className = 'form-select';
-        options.forEach((opt) => {
-            const option = document.createElement('option');
-            option.value = opt;
-            option.textContent = opt;
-            if (currentVal === opt) option.selected = true;
-            select.appendChild(option);
-        });
-        return select;
-    }
-
-    /**
-     * Creates a toggle switch field.
-     */
-    private _createToggleField(isChecked: boolean): HTMLElement {
-        const div = document.createElement('div');
-        div.className = 'form-toggle';
-        div.innerHTML = DOMPurify.sanitize(`
-            <label class="switch">
-                <input type="checkbox" ${isChecked ? 'checked' : ''}>
-                <span class="slider round"></span>
-            </label>
-        `);
-        return div;
-    }
-
-    /**
-     * Creates a number input field.
-     */
-    private _createNumberField(value: number): HTMLElement {
-        const input = document.createElement('input');
-        input.className = 'form-input';
-        input.type = 'number';
-        input.value = String(value);
-        return input;
-    }
-
-    /**
-     * Creates a text input field.
-     */
-    private _createTextField(value: string): HTMLElement {
-        const input = document.createElement('input');
-        input.className = 'form-input';
-        input.type = 'text';
-        input.value = value;
-        return input;
-    }
-
-    /**
-     * Attaches change/input listeners for auto-saving settings.
-     */
-    private _attachAutoSave(input: HTMLElement, type: string, settingKey: string): void {
-        const save = async (val: string | number | boolean) => {
-            console.log(`[SettingsUI] Auto-saving: ${settingKey} = ${String(val)}`);
-            await this._service.saveSetting(settingKey, val);
-            this._showSaveIndicator();
-        };
-
-        if (type === 'boolean') {
-            const checkbox = input.querySelector('input[type="checkbox"]');
-            if (checkbox instanceof HTMLInputElement) {
-                checkbox.onchange = () => {
-                    save(checkbox.checked).catch((e: unknown) => {
-                        console.error(e);
-                    });
-                };
-            }
-        } else if (type === 'select') {
-            if (input instanceof HTMLSelectElement) {
-                input.onchange = () => {
-                    save(input.value).catch((e: unknown) => {
-                        console.error(e);
-                    });
-                };
-            }
-        } else if (type === 'number') {
-            if (input instanceof HTMLInputElement) {
-                input.onchange = () => {
-                    save(Number(input.value)).catch((e: unknown) => {
-                        console.error(e);
-                    });
-                };
-            }
-        } else {
-            if (input instanceof HTMLInputElement) {
-                input.onchange = () => {
-                    save(input.value).catch((e: unknown) => {
-                        console.error(e);
-                    });
-                };
-            }
-        }
+    private _saveTimer: ReturnType<typeof setTimeout> | null = null;
+    private _debouncedSave(key: string, value: SettingValue) {
+        if (this._saveTimer !== null) clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(() => {
+            void (async () => {
+                logger.info(`[SettingsUI] Debounced saving: ${key} = ${String(value)}`);
+                // Use non-null assertion or cast since backend expects non-null string|number|boolean
+                if (value !== null) {
+                    await this._service.saveSetting(key, value);
+                }
+                this._showSaveIndicator();
+            })();
+        }, 300);
     }
 }

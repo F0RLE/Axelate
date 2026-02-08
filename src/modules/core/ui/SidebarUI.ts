@@ -1,5 +1,6 @@
 import { type StateService } from '../services/StateService';
 import { type SoundService } from '../services/SoundService';
+import { logger } from '../services/LoggerService';
 import { mountLogos } from '@/assets/logos';
 
 export class SidebarUI {
@@ -24,9 +25,9 @@ export class SidebarUI {
 
         // Ensure sidebar element is present (might be injected late)
         let attempts = 0;
-        while (!this._sidebar && attempts < 10) {
+        while (this._sidebar === null && attempts < 10) {
             this._sidebar = document.getElementById('sidebar');
-            if (!this._sidebar || this._sidebar.children.length === 0) {
+            if (this._sidebar === null || this._sidebar.children.length === 0) {
                 this._sidebar = null; // Reset if empty container
                 await new Promise((r) => setTimeout(r, 100));
                 attempts++;
@@ -35,8 +36,8 @@ export class SidebarUI {
             }
         }
 
-        if (!this._sidebar) {
-            console.error('[SidebarUI] Sidebar element not found or empty after 1s');
+        if (this._sidebar === null) {
+            logger.error('[SidebarUI] Sidebar element not found or empty after 1s');
             return;
         }
 
@@ -53,10 +54,10 @@ export class SidebarUI {
      */
     public destroy(): void {
         this._cleanupAbort.abort();
-        if (this._snappingTimeout) {
+        if (this._snappingTimeout !== null) {
             clearTimeout(this._snappingTimeout);
         }
-        if (this._resizeObserver) {
+        if (this._resizeObserver !== null) {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;
         }
@@ -66,7 +67,7 @@ export class SidebarUI {
      * Restores the sidebar collapsed state from UI state.
      */
     private _restoreState(): void {
-        this._isCollapsed = this._state.getSidebarCollapsed?.() ?? false;
+        this._isCollapsed = this._state.getSidebarCollapsed();
         this._setSidebarWidth(this._isCollapsed ? 80 : 280);
     }
 
@@ -75,7 +76,7 @@ export class SidebarUI {
      * @sideeffect Adds event listener to logo area
      */
     private _initToggle(): void {
-        if (!this._sidebar) return;
+        if (this._sidebar === null) return;
 
         const logoArea = this._sidebar.querySelector('.logo-area');
         if (logoArea instanceof HTMLElement) {
@@ -92,7 +93,7 @@ export class SidebarUI {
             }
 
             const toggle = (): void => {
-                if (!this._sidebar) return;
+                if (this._sidebar === null) return;
 
                 const targetWidth = this._isCollapsed ? 280 : 80;
                 this._isCollapsed = !this._isCollapsed;
@@ -101,17 +102,17 @@ export class SidebarUI {
                 this._setSidebarWidth(targetWidth);
 
                 // Update state
-                this._state.setSidebarWidth?.(targetWidth);
-                this._state.setSidebarCollapsed?.(this._isCollapsed);
+                this._state.setSidebarWidth(targetWidth);
+                this._state.setSidebarCollapsed(this._isCollapsed);
 
                 logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
 
                 // Play sound effect
-                if (this._soundService) {
+                if (this._soundService !== undefined) {
                     this._soundService.playExpand(!this._isCollapsed);
                 }
 
-                if (this._snappingTimeout) clearTimeout(this._snappingTimeout);
+                if (this._snappingTimeout !== null) clearTimeout(this._snappingTimeout);
                 this._snappingTimeout = setTimeout(() => {
                     document.body.classList.remove('snapping');
                     this._snappingTimeout = null;
@@ -137,7 +138,7 @@ export class SidebarUI {
      * @sideeffect Modifies CSS custom properties and styles
      */
     private _setSidebarWidth(width: number): void {
-        if (!this._sidebar) return;
+        if (this._sidebar === null) return;
 
         if (width < 100) {
             this._sidebar.classList.add('collapsed');
@@ -157,7 +158,7 @@ export class SidebarUI {
      * Hides system monitor if there isn't enough vertical space.
      */
     private _initAdaptiveMonitoring(): void {
-        if (!this._sidebar) return;
+        if (this._sidebar === null) return;
 
         const monitor = this._sidebar.querySelector('#system-monitor');
         const logo = this._sidebar.querySelector('.logo-area');
@@ -187,7 +188,7 @@ export class SidebarUI {
     }
 
     private _checkMonitorVisibility(): void {
-        if (!this._sidebar) return;
+        if (this._sidebar === null) return;
 
         const monitor = this._sidebar.querySelector('#system-monitor');
         const logo = this._sidebar.querySelector('.logo-area');

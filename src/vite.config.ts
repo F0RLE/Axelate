@@ -15,8 +15,9 @@ export default defineConfig({
                     // Keep only woff2 for performance
                     // EXCEPT Cubic_11.ttf as it's the primary source for that font
                     if (
-                        (fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||
-                        fileName.endsWith('.woff')
+                        bundle[fileName]?.type === 'asset' &&
+                        ((fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||
+                            fileName.endsWith('.woff'))
                     ) {
                         delete bundle[fileName];
                     }
@@ -39,8 +40,15 @@ export default defineConfig({
         port: 1420,
         strictPort: true,
         host: true,
+        hmr: {
+            host: 'localhost',
+            port: 1420,
+            protocol: 'ws',
+        },
         watch: {
             ignored: ['**/src-tauri/**'],
+            usePolling: true,
+            interval: 100,
         },
         proxy: {
             '/api': {

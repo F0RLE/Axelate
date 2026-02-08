@@ -41,9 +41,8 @@ export class EventHandler {
     private _initGlobalDelegation(): void {
         this._addListener(document.body, 'click', (e: Event): void => {
             void (async (): Promise<void> => {
-                const target = e.target as HTMLElement;
-                // Lint says !target is always false (target is always true)
-                // if (!target) return;
+                const target = e.target as HTMLElement | null;
+                if (!target) return;
 
                 // 1. Navigation Logic [data-page]
                 const navBtn = target.closest('[data-page]');
@@ -163,7 +162,7 @@ export class EventHandler {
             }
             if (card.classList.contains('empty')) {
                 const catalog = this._core.catalog.getCatalog();
-                const apps = catalog[type] || [];
+                const apps = catalog[type];
                 this._core.appUI.openAppSelection(type, apps);
             }
         });
@@ -175,9 +174,9 @@ export class EventHandler {
             const ev = e as MouseEvent;
             ev.stopPropagation();
             const card = btn.closest('.model-card-premium');
-            if (card?.classList.contains('empty')) {
+            if (card?.classList.contains('empty') === true) {
                 const catalog = this._core.catalog.getCatalog();
-                const apps = catalog[type] || [];
+                const apps = catalog[type];
                 this._core.appUI.openAppSelection(type, apps);
             }
         });
@@ -220,7 +219,7 @@ export class EventHandler {
         document.querySelectorAll<HTMLElement>('.lang-modal-btn[data-lang]').forEach((btn) => {
             this._addListener(btn, 'click', () => {
                 const lang = btn.dataset['lang'];
-                if (lang && typeof selectLangInModal === 'function') {
+                if (lang !== undefined && typeof selectLangInModal === 'function') {
                     selectLangInModal(lang);
                 }
             });
@@ -260,15 +259,14 @@ export class EventHandler {
     }
 
     private _initDownloadSpeedSettings(): void {
-        const speedLimitToggle = document.getElementById(
-            'download-speed-limit-toggle',
-        ) as HTMLInputElement;
-        if (speedLimitToggle)
+        const speedLimitToggle = document.getElementById('download-speed-limit-toggle');
+        if (speedLimitToggle instanceof HTMLInputElement) {
             this._addListener(speedLimitToggle, 'change', () => {
                 this._core.downloadUI.saveSettings();
             });
-        const speedSlider = document.getElementById('download-speed-slider') as HTMLInputElement;
-        if (speedSlider) {
+        }
+        const speedSlider = document.getElementById('download-speed-slider');
+        if (speedSlider instanceof HTMLInputElement) {
             this._addListener(speedSlider, 'input', (e: Event) => {
                 const target = e.target as HTMLInputElement;
                 this._core.downloadUI.updateSpeedDisplay(target.value);

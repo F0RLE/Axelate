@@ -1,23 +1,22 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type * as Bindings from '../types/bindings';
+import { logger } from './LoggerService';
+import type { TGlobalWin } from '../types/global_bridge_types';
 
 // No local types needed, using global.d.ts
 
 export class TauriProvider {
     constructor() {
         if (this.isTauri()) {
-            console.log(
-                '%c TauriProvider %c Connected ',
-                'color: #10b981; font-weight: bold; padding: 2px 0;',
-                'color: #d1fae5; background: #064e3b; padding: 2px 6px; border-radius: 4px; font-size: 10px;',
-            );
+            logger.info('[TauriProvider] Connected');
         }
     }
 
     public isTauri(): boolean {
         // Dynamic check to handle injection timing
-        return !!globalThis.__TAURI_INTERNALS__ || !!globalThis.__TAURI__;
+        const win = globalThis as unknown as TGlobalWin;
+        return '__TAURI_INTERNALS__' in win || '__TAURI__' in win;
     }
 
     public async invoke<T, A extends Record<string, unknown> = Record<string, unknown>>(
@@ -45,11 +44,12 @@ export class TauriProvider {
         }
 
         // Priority 2: Global __TAURI__ (v1 or v2 withGlobalTauri)
-        const tauri = globalThis.__TAURI__;
-        const globalInvoke = tauri?.core?.invoke || tauri?.invoke;
+        const win = globalThis as unknown as TGlobalWin;
+        const tauri = win.__TAURI__;
+        const globalInvoke = tauri.core.invoke;
 
         if (typeof globalInvoke === 'function') {
-            return await globalInvoke(cmd, args as Record<string, unknown>);
+            return await (globalInvoke as (cmd: string, args: unknown) => Promise<T>)(cmd, args);
         }
 
         throw new Error('No valid invoke function available in this environment');
@@ -64,7 +64,7 @@ export class TauriProvider {
             return Promise.reject(e instanceof Error ? e : new Error(String(e)));
         }
 
-        console.warn(`[TauriProvider] IPC failure for ${cmd}, falling back to mock:`, e);
+        logger.warn(`[TauriProvider] IPC failure for ${cmd}, falling back to mock: ${String(e)}`);
         return this._mockInvoke(cmd, args);
     }
 
@@ -87,7 +87,7 @@ export class TauriProvider {
             });
             return unlisten;
         } else {
-            console.log(`[TauriProvider] Mock Listen: ${event}`);
+            logger.info(`[TauriProvider] Mock Listen: ${event}`);
             return () => {
                 /* no-op */
             };
@@ -98,7 +98,7 @@ export class TauriProvider {
         if (this.isTauri()) {
             await this.invoke('plugin:clipboard-manager|write_text', { text });
         } else {
-            console.log('[Mock Clipboard] Write:', text);
+            logger.info(`[Mock Clipboard] Write: ${text}`);
         }
     }
 
@@ -106,7 +106,7 @@ export class TauriProvider {
         if (this.isTauri()) {
             await this.invoke('plugin:shell|open', { path: url });
         } else {
-            console.log('[Mock Shell] Open URL:', url);
+            logger.info(`[Mock Shell] Open URL: ${url}`);
             window.open(url, '_blank');
         }
     }
@@ -118,7 +118,7 @@ export class TauriProvider {
         try {
             return await this.invoke<string | null>('get_secure_key', { service });
         } catch (e) {
-            console.error(`[TauriProvider] Secure get failed for ${service}:`, e);
+            logger.error(`[TauriProvider] Secure get failed for ${service}: ${String(e)}`);
             return null;
         }
     }
@@ -130,47 +130,41 @@ export class TauriProvider {
         try {
             await this.invoke('save_secure_key', { service, key });
         } catch (e) {
-            console.error(`[TauriProvider] Secure save failed for ${service}:`, e);
+            logger.error(`[TauriProvider] Secure save failed for ${service}: ${String(e)}`);
             throw e;
         }
     }
 
     private _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
-        const isProd = !this._isTest() && !import.meta.env.DEV;
+        const isProd = !this._isTest() && import.meta.env.MODE === 'production';
         if (isProd) {
-            console.warn('[TauriProvider] Mock invoked in production! Sane fallback returned.');
+            logger.warn('[TauriProvider] Mock invoked in production! Sane fallback returned.');
         } else {
-            console.debug(`[Mock Invoke] ${cmd}`, args);
+            logger.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
         }
 
         const saneDefaults: Record<string, unknown> = {
             get_settings: {
                 language: 'en',
                 theme: 'dark',
-                gpu_enabled: true,
+                use_gpu: true,
                 debug_mode: false,
-                check_updates: true,
-                auto_update: true,
-                notifications: true,
-                system_tray: true,
-                start_at_login: false,
             } satisfies Bindings.AppSettings,
             get_translations: {},
             get_system_language: 'en',
             get_config: {
                 version: '1.0.0',
-                catalog: { ai: [], services: [] },
+                catalog: { ai: [], services: [], stars: [] },
                 apiProviders: [],
-                models: { default_text: '', default_image: '', default_code: '' },
-                pricing: {},
-                features: {},
+                models: { gpt: {}, gemini: {} },
             } satisfies Bindings.AppConfig,
             get_modules: [] satisfies Bindings.Module[],
             get_app_bootstrap_data: null,
             get_system_stats: {
                 cpu: { percent: 0, cores: 0, name: 'Mock CPU' },
                 ram: { percent: 0, usedGb: 0, totalGb: 16, availableGb: 16 },
-                gpu: { usage: 0, temp: 0, name: 'Mock GPU', memoryUsed: 0, memoryTotal: 0 },
+                gpu: { usage: 0, memoryUsed: 0, memoryTotal: 0, temp: 0, name: 'Mock GPU' },
+                vram: { percent: 0, usedGb: 0, totalGb: 8 },
                 disk: {
                     readRate: 0,
                     writeRate: 0,

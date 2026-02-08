@@ -4,6 +4,7 @@
  */
 
 import type { ISpeechRecognitionEvent, ISpeechRecognitionInstance } from '../types/chatTypes';
+import { logger } from '../../core/services/LoggerService';
 
 export type VoiceResultCallback = (text: string) => void;
 export type VoiceStateCallback = (isRecording: boolean) => void;
@@ -43,11 +44,11 @@ export class VoiceInputService {
         }
 
         this._onResult = onResult;
-        this._onStateChange = onStateChange || null;
+        this._onStateChange = onStateChange ?? null;
 
         try {
             const win = globalThis as unknown as Record<string, unknown>;
-            const SpeechRecognitionConstructor = (win['webkitSpeechRecognition'] ||
+            const SpeechRecognitionConstructor = (win['webkitSpeechRecognition'] ??
                 win['SpeechRecognition']) as new () => ISpeechRecognitionInstance;
             const recognition = new SpeechRecognitionConstructor();
             this._recognition = recognition;
@@ -59,8 +60,8 @@ export class VoiceInputService {
                 ru: 'ru-RU',
                 zh: 'zh-CN',
             };
-            recognition.lang = langMap[currentLang] || currentLang || navigator.language || 'en-US';
-            console.log(
+            recognition.lang = langMap[currentLang] ?? currentLang;
+            logger.info(
                 `[VoiceInputService] Target Recognition Lang: ${recognition.lang} (from: ${currentLang})`,
             );
             recognition.continuous = true;
@@ -75,12 +76,12 @@ export class VoiceInputService {
                 let finalText = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {
                     const result = event.results[i];
-                    if (result?.isFinal) {
+                    if (result?.isFinal === true) {
                         const first = result[0];
                         if (first) finalText += first.transcript;
                     }
                 }
-                if (finalText && this._onResult) {
+                if (finalText !== '' && this._onResult) {
                     this._onResult(finalText);
                 }
             };
@@ -94,7 +95,7 @@ export class VoiceInputService {
             recognition.start();
             return true;
         } catch (e) {
-            console.error('[VoiceInputService] Error starting recognition:', e);
+            logger.error(`[VoiceInputService] Error starting recognition: ${String(e)}`);
             this.stop();
             return false;
         }

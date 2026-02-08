@@ -72,12 +72,12 @@ export class I18nUI {
             }
 
             const key = element.dataset['i18n'];
-            if (!key) return;
+            if (key === undefined || key === '') return;
 
             const paramsRaw = element.dataset['i18nParams'];
             let params: Record<string, unknown> = {};
             try {
-                if (paramsRaw) {
+                if (paramsRaw !== undefined && paramsRaw !== '') {
                     params = JSON.parse(paramsRaw) as Record<string, unknown>;
                 }
             } catch {
@@ -117,17 +117,12 @@ export class I18nUI {
     private _updateRegularElementText(element: HTMLElement, text: string): void {
         const svg = element.querySelector('svg');
         if (svg) {
-            let textNode: ChildNode | null = null;
-            element.childNodes.forEach((n) => {
-                if (n.nodeType === 3) {
-                    textNode = n;
-                }
-            });
+            const textNode = Array.from(element.childNodes).find((n) => n.nodeType === 3);
 
-            if (textNode) {
-                (textNode as Node).textContent = ` ${text}`;
-            } else {
+            if (textNode === undefined) {
                 element.appendChild(document.createTextNode(` ${text}`));
+            } else {
+                (textNode as Node).textContent = ` ${text}`;
             }
         } else if (element.textContent !== text) {
             element.textContent = text;
@@ -141,7 +136,7 @@ export class I18nUI {
         document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
             const element = el as HTMLInputElement;
             const key = element.dataset['i18nPlaceholder'];
-            if (key) {
+            if (key !== undefined && key !== '') {
                 element.placeholder = this._service.t(key, element.placeholder);
             }
         });
@@ -154,7 +149,7 @@ export class I18nUI {
         document.querySelectorAll('[data-i18n-title]').forEach((el) => {
             const element = el as HTMLElement;
             const key = element.dataset['i18nTitle'];
-            if (key) {
+            if (key !== undefined && key !== '') {
                 element.title = this._service.t(key, element.title);
             }
         });
@@ -167,10 +162,10 @@ export class I18nUI {
         document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
             const element = el as HTMLElement;
             const key = element.dataset['i18nAriaLabel'];
-            if (key) {
+            if (key !== undefined && key !== '') {
                 element.setAttribute(
                     'aria-label',
-                    this._service.t(key, element.getAttribute('aria-label') || ''),
+                    this._service.t(key, element.getAttribute('aria-label') ?? ''),
                 );
             }
         });

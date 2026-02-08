@@ -131,6 +131,7 @@ class EventBus {
                 try {
                     handler(data);
                 } catch (error) {
+                    // eslint-disable-next-line no-console
                     console.error(`[EventBus] Error in handler for "${eventKey}":`, error);
                 }
             });
@@ -143,6 +144,7 @@ class EventBus {
                 try {
                     handler(data);
                 } catch (error) {
+                    // eslint-disable-next-line no-console
                     console.error(`[EventBus] Error in once-handler for "${eventKey}":`, error);
                 }
             });
@@ -166,7 +168,7 @@ class EventBus {
      * Removes all listeners for a specific event or all events if no key is provided.
      */
     public clear(event?: keyof IEventBusEvents): void {
-        if (event) {
+        if (event !== undefined) {
             const eventKey = event as string;
             this._listeners.delete(eventKey);
             this._onceListeners.delete(eventKey);
@@ -182,8 +184,8 @@ class EventBus {
     public listenerCount(event: keyof IEventBusEvents): number {
         const eventKey = event as string;
         return (
-            (this._listeners.get(eventKey)?.size || 0) +
-            (this._onceListeners.get(eventKey)?.size || 0)
+            (this._listeners.get(eventKey)?.size ?? 0) +
+            (this._onceListeners.get(eventKey)?.size ?? 0)
         );
     }
 }

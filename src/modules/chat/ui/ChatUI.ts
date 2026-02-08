@@ -128,7 +128,7 @@ export class ChatUI {
 
                         // Remove old status if exists
                         const old = typing.parentElement?.querySelector('.typing-status');
-                        if (old) old.remove();
+                        if (old !== null && old !== undefined) old.remove();
 
                         typing.parentElement?.appendChild(label);
                     }
@@ -297,7 +297,7 @@ export class ChatUI {
      */
     private _createMessageBubble(opts: Record<string, unknown>): HTMLElement {
         const bubble = document.createElement('div');
-        bubble.className = `chat-bubble${opts['error'] ? ' chat-error' : ''}`;
+        bubble.className = `chat-bubble${opts['error'] === true ? ' chat-error' : ''}`;
         return bubble;
     }
 
@@ -330,7 +330,7 @@ export class ChatUI {
         const g = globalThis as TGlobalWin;
 
         // Handle i18nKey
-        if (typeof opts['i18nKey'] === 'string' && opts['i18nKey']) {
+        if (typeof opts['i18nKey'] === 'string' && opts['i18nKey'] !== '') {
             const i18nKey = opts['i18nKey'];
             el.dataset['i18n'] = i18nKey;
 
@@ -338,11 +338,10 @@ export class ChatUI {
                 el.dataset['i18nParams'] = JSON.stringify(opts['i18nParams']);
             }
 
-            const tParams = (opts['i18nParams'] as Record<string, string>) || {};
             // Note: tParams would be used here if translator supported interpolation
-            logger.debug('[ChatUI] i18nParams ignored by translator:', tParams);
+            logger.debug('[ChatUI] i18nParams ignored by translator');
 
-            return typeof g.t === 'function' ? g.t(i18nKey, content) : content || '';
+            return typeof g.t === 'function' ? g.t(i18nKey, content) : content;
         }
 
         // Handle i18nPrefixKey
@@ -351,17 +350,17 @@ export class ChatUI {
             el.dataset['i18nPrefix'] = prefixKey;
 
             const prefix = typeof g.t === 'function' ? g.t(prefixKey, 'Error: ') : 'Error: ';
-            return prefix + (content || '');
+            return prefix + content;
         }
 
-        return content || '';
+        return content;
     }
 
     /**
      * Appends attachments to a message bubble.
      */
     private _appendAttachments(bubble: HTMLElement, attachments?: IChatAttachment[]): void {
-        if (!attachments || attachments.length === 0) return;
+        if (attachments === undefined || attachments.length === 0) return;
 
         const attachContainer = document.createElement('div');
         attachContainer.className = 'chat-message-attachments';
@@ -375,17 +374,17 @@ export class ChatUI {
         visibleAttachments.forEach((f) => {
             const card = document.createElement('div');
 
-            let isImage = f.type?.startsWith('image/');
-            const ext = f.name?.split('.').pop()?.toLowerCase() || '';
+            let isImage = f.type.startsWith('image/');
+            const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
             if (!isImage && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
                 isImage = true;
             }
 
             card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
-            const hasData = !!f.data_base64;
-            const name = this._shortenFileName(f.name || 'file');
-            const fileTokens = f.tokens || 0;
+            const hasData = f.data_base64.length > 0;
+            const name = this._shortenFileName(f.name);
+            const fileTokens = f.tokens ?? 0;
 
             if (isImage && hasData) {
                 // Image Preview Mode
@@ -443,7 +442,7 @@ export class ChatUI {
             try {
                 const mime = img.mime || 'image/png';
                 const b64 = img.data_base64 || '';
-                if (!b64) return;
+                if (b64 === '') return;
                 const el = document.createElement('img');
                 el.className = 'chat-img';
                 el.src = `data:${mime};base64,${b64}`;
@@ -502,7 +501,7 @@ export class ChatUI {
                 card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
                 let contentHtml = '';
-                let name = f.name || 'file';
+                let name = f.name;
 
                 // Relaxed limit for names in horizontal layout
                 if (name.length > 25) {
@@ -545,7 +544,7 @@ export class ChatUI {
         `;
 
                 const btn: HTMLElement | null = card.querySelector('.media-remove');
-                if (btn) {
+                if (btn !== null) {
                     btn.onclick = (e) => {
                         e.stopPropagation();
                         onRemove(idx);
@@ -558,7 +557,7 @@ export class ChatUI {
             })();
         });
 
-        if (hiddenCount > 0 && this._attachmentsContainer) {
+        if (hiddenCount > 0) {
             const moreCard = document.createElement('div');
             moreCard.className = 'chat-media-card more-card';
             moreCard.innerHTML = `<span>+${String(hiddenCount)}</span>`;
@@ -605,7 +604,7 @@ export class ChatUI {
         }
 
         const indicator = document.getElementById(id);
-        if (indicator) indicator.remove();
+        if (indicator !== null) indicator.remove();
     }
 
     public showToast(
@@ -628,7 +627,7 @@ export class ChatUI {
         const target = e.target as HTMLElement;
         const btn = target.closest('.code-copy-btn');
 
-        if (btn) {
+        if (btn !== null) {
             e.preventDefault();
             e.stopPropagation();
 
@@ -636,14 +635,14 @@ export class ChatUI {
             const wrapper = btn.closest('.code-block-wrapper');
             const codeEl = wrapper?.querySelector('code');
 
-            if (codeEl?.textContent) {
-                const text = codeEl.textContent;
+            const text = codeEl?.textContent ?? '';
 
+            if (text !== '') {
                 try {
                     // Using modular invoke
                     const win = globalThis as TGlobalWin;
-                    // eslint-disable-next-line @typescript-eslint/dot-notation
-                    if (win['__TAURI_INTERNALS__']) {
+                    const isTauri = win.__TAURI_INTERNALS__ !== undefined;
+                    if (isTauri) {
                         try {
                             await invoke('plugin:clipboard|write', { text });
                         } catch {
@@ -677,7 +676,7 @@ export class ChatUI {
      */
     public updateTokenCount(count: number): void {
         const el = document.getElementById('chat-token-count');
-        if (!el) return;
+        if (el === null) return;
 
         if (count > 0) {
             el.textContent = `${String(count)} tokens`;
@@ -702,14 +701,14 @@ export class ChatUI {
         const target = e.target as HTMLElement;
         const link = target.closest('a');
 
-        if (link?.href) {
+        if (link !== null && link.href !== '') {
             e.preventDefault();
             e.stopPropagation();
 
             const url = link.href;
             const win = globalThis as TGlobalWin;
-            // eslint-disable-next-line @typescript-eslint/dot-notation
-            if (win['__TAURI_INTERNALS__']) {
+            const isTauri = win.__TAURI_INTERNALS__ !== undefined;
+            if (isTauri) {
                 try {
                     await invoke('plugin:shell|open', { path: url });
                 } catch (err) {

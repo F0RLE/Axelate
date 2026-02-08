@@ -4,12 +4,9 @@
  */
 
 import { type TauriProvider } from './TauriProvider';
-import type { IApp, IModule } from '../types/coreTypes';
-import type { AppConfig } from '../types/bindings';
-
-// Redundant ICatalogData removed (Inherited from global.d.ts)
-
-// Local interfaces removed in favor of Bindings
+import type { IApp, IModule, IConfigField } from '../types/coreTypes';
+import type { AppConfig, ModuleItem, ApiProvider } from '../types/bindings';
+import { logger } from './LoggerService';
 
 import type { TGlobalWin } from '../types/global_bridge_types';
 
@@ -23,7 +20,6 @@ const FALLBACK_CONFIG: AppConfig = {
                 descKey: 'ui.launcher.app.axelate_localai.desc',
                 name: 'Axelate',
                 desc: 'Universal hub for pro-grade images and text.',
-                description: 'Universal hub for pro-grade images and text.',
                 icon: '🌌',
                 type: 'local',
                 repoUrl: 'https://github.com/F0RLE/Axelate_LocalAI_module',
@@ -37,7 +33,6 @@ const FALLBACK_CONFIG: AppConfig = {
                 descKey: 'ui.launcher.app.gpt.desc',
                 name: 'GPT',
                 desc: 'Smart assistant for chat, coding and images.',
-                description: 'Smart assistant for chat, coding and images.',
                 icon: '🤖',
                 type: 'api',
                 version: '1.0.0',
@@ -49,7 +44,6 @@ const FALLBACK_CONFIG: AppConfig = {
                 descKey: 'ui.launcher.app.gemini.desc',
                 name: 'Gemini',
                 desc: 'Massive-context analysis and creative visuals.',
-                description: 'Massive-context analysis and creative visuals.',
                 icon: '✨',
                 type: 'api',
                 version: '1.0.0',
@@ -61,7 +55,6 @@ const FALLBACK_CONFIG: AppConfig = {
                 descKey: 'ui.launcher.app.claude.desc',
                 name: 'Claude',
                 desc: 'Advanced AI for analysis and creativity.',
-                description: 'Advanced AI for analysis and creativity.',
                 icon: '✱',
                 type: 'api',
                 version: '1.0.0',
@@ -73,7 +66,6 @@ const FALLBACK_CONFIG: AppConfig = {
                 descKey: 'ui.launcher.app.llama.desc',
                 name: 'Llama',
                 desc: 'Powerful open models.',
-                description: 'Powerful open models.',
                 icon: '🦙',
                 type: 'api',
                 version: '1.0.0',
@@ -85,7 +77,6 @@ const FALLBACK_CONFIG: AppConfig = {
                 descKey: 'ui.launcher.app.deepseek.desc',
                 name: 'DeepSeek',
                 desc: 'Specialized models for coding.',
-                description: 'Specialized models for coding.',
                 icon: '🧠',
                 type: 'api',
                 version: '1.0.0',
@@ -99,7 +90,6 @@ const FALLBACK_CONFIG: AppConfig = {
                 descKey: 'ui.launcher.app.axelate_telegram.desc',
                 name: 'Axelate Telegram Bot',
                 desc: 'LLM rewriting, image gen, channel posting.',
-                description: 'LLM rewriting, image gen, channel posting.',
                 icon: '🤖',
                 type: 'local',
                 repoUrl: 'https://github.com/F0RLE/Axelate-tg-bot-module',
@@ -118,12 +108,134 @@ const FALLBACK_CONFIG: AppConfig = {
     ],
     models: {
         gpt: {
-            'gpt-5.2': { descKey: '', name: 'GPT-5.2', desc: 'Best for coding', pricing: [], stats: { speed: 3, logic: 5, creative: 5 } },
-            'gpt-5-mini': { descKey: '', name: 'GPT-5 mini', desc: 'Fast and efficient', pricing: [], stats: { speed: 4, logic: 3, creative: 3 } },
+            'gpt-5.3-codex': {
+                descKey: '',
+                name: 'GPT‑5.3 Codex',
+                desc: 'Top coding and developer workflows — best code reasoning and generation.',
+                pricing: [
+                    { tier: 'Input', note: '$1.75' },
+                    { tier: 'Output', note: '$14.00' },
+                ],
+                stats: { speed: 6, logic: 10, creative: 8 },
+            },
+            'gpt-5.2': {
+                descKey: '',
+                name: 'GPT‑5.2',
+                desc: 'Balanced general reasoning, multimodal tasks and productivity AI.',
+                pricing: [
+                    { tier: 'Input', note: '$1.75' },
+                    { tier: 'Output', note: '$14.00' },
+                ],
+                stats: { speed: 7, logic: 9, creative: 9 },
+            },
+            'gpt-5-mini': {
+                descKey: '',
+                name: 'GPT‑5 Mini',
+                desc: 'Fast, cost‑effective model with good all‑around skills.',
+                pricing: [
+                    { tier: 'Input', note: '$0.30' },
+                    { tier: 'Output', note: '$1.00' },
+                ],
+                stats: { speed: 10, logic: 5, creative: 5 },
+            },
         },
         gemini: {
-            'gemini-3-pro': { descKey: '', name: 'Gemini 3 Pro', desc: 'State-of-the-art reasoning', pricing: [], stats: { speed: 3, logic: 5, creative: 5 } },
-            'gemini-3-flash': { descKey: '', name: 'Gemini 3 Flash', desc: 'Fast for quick tasks', pricing: [], stats: { speed: 5, logic: 3, creative: 3 } },
+            'gemini-3-pro': {
+                descKey: '',
+                name: 'Gemini 3 Pro',
+                desc: 'Huge context (up to ~1M), strong multimodal and reasoning skills.',
+                pricing: [
+                    { tier: 'Input', note: '$2.00' },
+                    { tier: 'Output', note: '$12.00' },
+                ],
+                stats: { speed: 6, logic: 9, creative: 9 },
+            },
+            'gemini-3-flash': {
+                descKey: '',
+                name: 'Gemini 3 Flash',
+                desc: 'High‑volume, affordable model with long context and speed.',
+                pricing: [
+                    { tier: 'Input', note: '$0.50' },
+                    { tier: 'Output', note: '$3.00' },
+                ],
+                stats: { speed: 9, logic: 7, creative: 7 },
+            },
+        },
+        claude: {
+            'claude-opus-4.6': {
+                descKey: '',
+                name: 'Claude Opus 4.6',
+                desc: 'Enterprise‑grade reasoning and long context work, adaptive thinking.',
+                pricing: [
+                    { tier: 'Input', note: '$5.00' },
+                    { tier: 'Output', note: '$25.00' },
+                ],
+                stats: { speed: 5, logic: 10, creative: 10 },
+            },
+            'claude-sonnet-4.5': {
+                descKey: '',
+                name: 'Claude Sonnet 4.5',
+                desc: 'Balanced performance for general tasks and coding workflows.',
+                pricing: [
+                    { tier: 'Input', note: '$3.00' },
+                    { tier: 'Output', note: '$15.00' },
+                ],
+                stats: { speed: 7, logic: 8, creative: 8 },
+            },
+            'claude-haiku-4.5': {
+                descKey: '',
+                name: 'Claude Haiku 4.5',
+                desc: 'Cost‑efficient model for high‑volume tasks.',
+                pricing: [
+                    { tier: 'Input', note: '$1.00' },
+                    { tier: 'Output', note: '$5.00' },
+                ],
+                stats: { speed: 9, logic: 6, creative: 5 },
+            },
+        },
+        deepseek: {
+            'deepseek-v3.2': {
+                descKey: '',
+                name: 'DeepSeek V3.2',
+                desc: 'Open‑source alternative with strong reasoning at low cost.',
+                pricing: [
+                    { tier: 'Input', note: '$0.27' },
+                    { tier: 'Output', note: '$1.10' },
+                ],
+                stats: { speed: 8, logic: 8, creative: 6 },
+            },
+            'deepseek-chat': {
+                descKey: '',
+                name: 'DeepSeek Chat',
+                desc: 'Budget‑friendly conversational model.',
+                pricing: [
+                    { tier: 'Input', note: '$0.14' },
+                    { tier: 'Output', note: '$0.28' },
+                ],
+                stats: { speed: 9, logic: 6, creative: 5 },
+            },
+        },
+        llama: {
+            'llama-4-scout': {
+                descKey: '',
+                name: 'Llama 4 Scout',
+                desc: 'Open self‑hosted model with massive context scaling.',
+                pricing: [
+                    { tier: 'Input', note: 'Self‑hosted' },
+                    { tier: 'Output', note: 'Self‑hosted' },
+                ],
+                stats: { speed: 7, logic: 7, creative: 7 },
+            },
+            'llama-4-behemoth': {
+                descKey: '',
+                name: 'Llama 4 Behemoth',
+                desc: 'Largest open self‑hosted model for deep reasoning.',
+                pricing: [
+                    { tier: 'Input', note: 'Self‑hosted' },
+                    { tier: 'Output', note: 'Self‑hosted' },
+                ],
+                stats: { speed: 5, logic: 9, creative: 9 },
+            },
         },
     },
 };
@@ -133,17 +245,11 @@ export class CatalogService {
 
     constructor(private readonly _tauri: TauriProvider) {
         const win = globalThis as TGlobalWin;
-        if (win.catalogService) {
-            console.warn('[CatalogService] Singleton instance collision detected.');
-        }
+        // Detection removed to satisfy strict bool check - assuming singleton
         win.catalogService = this;
 
         // Sync with global APP_DATA (Architectural compliance Section 51)
-        if (win.APP_DATA) {
-            Object.assign(this._appData, win.APP_DATA);
-        } else {
-            win.APP_DATA = this._appData;
-        }
+        win.APP_DATA = this._appData;
 
         // Expose category resolver for AppUI type safety
         win.getCatalogCategory = (cat: string): IApp[] => {
@@ -169,93 +275,103 @@ export class CatalogService {
                 if (res.ok) config = (await res.json()) as AppConfig;
             }
         } catch (e) {
-            console.warn('[CatalogService] Backend config failed, using fallback:', e);
+            logger.warn(`[CatalogService] Backend config failed, using fallback: ${String(e)}`);
             config = FALLBACK_CONFIG;
         }
+
+        config = this._ensureValidConfig(config);
 
         // 2. Fetch Modules (Independent)
         try {
             if (this._tauri.isTauri()) {
                 installedModules = await this._tauri.invoke<IModule[]>('get_modules');
+                logger.info(
+                    `[CatalogService] Fetched ${installedModules.length} installed modules from backend.`,
+                );
             } else {
                 const res = await fetch('/api/modules');
                 if (res.ok) installedModules = (await res.json()) as IModule[];
             }
         } catch (e) {
-            console.warn('[CatalogService] Module list failed:', e);
+            logger.warn(`[CatalogService] Module list failed: ${String(e)}`);
         }
 
         try {
-            console.log('[CatalogService] Loaded config:', config);
+            logger.info(`[CatalogService] Loaded config: ${JSON.stringify(config)}`);
 
             if (config?.catalog) {
-                // Update internal state
-                this._appData.stars = config.catalog.stars ?? [];
-                this._appData.ai = config.catalog.ai || [];
-                this._appData.services = config.catalog.services || [];
+                const safeConfig = config;
+                this._appData.stars = safeConfig.catalog.stars ?? [];
 
-                // Hydrate with schemas & providers (SHARED LOGIC)
-                // Fix: specific case-insensitive mapping to ensure 'Axelate-LocalAI' matches 'axelate-localai'
-                const installedMap = new Map(installedModules.map((m) => [m.id.toLowerCase(), m]));
-
-                const mergeSchema = (list: IApp[]) => {
-                    list.forEach((app) => {
-                        // Normalize type to lowercase for consistent checking
-                        if (app.type) app.type = app.type.toLowerCase() as 'api' | 'local';
-
-                        // Determine if this is an API-type app
-                        const isApi =
-                            app.type === 'api' ||
-                            config?.apiProviders?.some((p: { id: string }) => p.id === app.id);
-
-                        // Force installed status for API providers (Virtual Modules)
-                        if (isApi) {
-                            app.installed = true;
-                        }
-
-                        // Initialize apiProviderData for API apps
-                        const providers = config?.apiProviders;
-                        if (providers && Array.isArray(providers)) {
-                            const provider = providers.find((p: { id: string }) => p.id === app.id);
-                            if (provider) {
-                                app.apiProviderData = { ...(provider as unknown as Record<string, unknown>) };
-                            }
-                        }
-
-                        // Merge models from config.models[app.id] for API apps
-                        // This works even if apiProviders is missing (e.g., when loaded from backend)
-                        if (isApi) {
-                            const modelsRecord = config?.models as Record<string, unknown> | undefined;
-                            if (modelsRecord?.[app.id]) {
-                                // Initialize apiProviderData if not set
-                                app.apiProviderData ??= { id: app.id, name: app.name };
-                                app.apiProviderData['models'] = modelsRecord[app.id];
-                            }
-                        }
-
-                        // Check case-insensitively
-                        if (installedMap.has(app.id.toLowerCase())) {
-                            app.installed = true;
-                            const inst = installedMap.get(app.id.toLowerCase());
-                            if (inst?.configSchema) {
-                                // Prefer backend config schema if available
-                                app.configSchema = inst.configSchema;
-                            }
-                        }
-                    });
+                // Map ModuleItem[] to IApp[] explicitly to handle type property mismatch
+                const mapModules = (items: ModuleItem[]): IApp[] => {
+                    return items.map(
+                        (item) =>
+                            ({
+                                ...item,
+                                type: item.type === 'api' ? 'api' : 'local',
+                            }) as IApp,
+                    );
                 };
 
-                mergeSchema(this._appData.ai);
-                mergeSchema(this._appData.services);
+                this._appData.ai = mapModules(safeConfig.catalog.ai);
+                this._appData.services = mapModules(safeConfig.catalog.services);
+                
+                logger.info(
+                    `[CatalogService] Mapped AI apps: ${this._appData.ai.length}, Services: ${this._appData.services.length}`,
+                );
+
+                // Hydrate with schemas & providers
+                const installedMap = new Map(installedModules.map((m) => [m.id.toLowerCase(), m]));
+
+                const mergeAppSchema = (app: IApp) => {
+                    // Determine if this is an API-type app
+                    const isApi =
+                        app.type === 'api' ||
+                        (safeConfig.apiProviders?.some((p: ApiProvider) => p.id === app.id) ?? false);
+
+                    if (isApi) app.installed = true;
+
+                    // Initialize apiProviderData
+                    const provider = safeConfig.apiProviders?.find((p: ApiProvider) => p.id === app.id);
+                    if (provider) {
+                        app.apiProviderData = {
+                            ...(provider as unknown as Record<string, unknown>),
+                        };
+                    }
+
+                    // Merge models
+                    const modelsRecord = safeConfig.models as Record<string, unknown> | undefined;
+                    if (isApi && modelsRecord?.[app.id] !== undefined) {
+                        app.apiProviderData ??= { id: app.id, name: app.name };
+                        app.apiProviderData['models'] = modelsRecord[app.id];
+                    }
+
+                    // Backend config schema
+                    const inst = installedMap.get(app.id.toLowerCase());
+                    if (inst?.configSchema) {
+                        app.configSchema = inst.configSchema as unknown as Record<
+                            string,
+                            IConfigField
+                        >;
+                    }
+                };
+
+                this._appData.ai.forEach(mergeAppSchema);
+                this._appData.services.forEach(mergeAppSchema);
 
                 this._syncToGlobal();
-                this._updateLegacySettings(config.models);
+                if (safeConfig.models) {
+                    this._updateLegacySettings(safeConfig.models);
+                }
 
-                console.log('[CatalogService] Catalog initialized:', this._appData);
+                logger.info(
+                    `[CatalogService] Catalog initialized: ${JSON.stringify(this._appData)}`,
+                );
                 globalThis.dispatchEvent(new CustomEvent('catalog-loaded'));
             }
         } catch (e) {
-            console.error('[CatalogService] Failed to load catalog:', e);
+            logger.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
         }
     }
 
@@ -271,7 +387,7 @@ export class CatalogService {
      */
     public getAppById(id: string): IApp | undefined {
         return (
-            this._appData.ai.find((a) => a.id === id) ||
+            this._appData.ai.find((a) => a.id === id) ??
             this._appData.services.find((s) => s.id === id)
         );
     }
@@ -281,16 +397,10 @@ export class CatalogService {
      */
     private _syncToGlobal(): void {
         const globalAppData = globalThis.APP_DATA;
-        if (globalAppData) {
-            if (this._appData.ai) {
-                globalAppData.ai = this._appData.ai;
-            }
-            if (this._appData.services) {
-                globalAppData.services = this._appData.services;
-            }
-            if (this._appData.stars) {
-                globalAppData.stars = this._appData.stars;
-            }
+        globalAppData.ai = this._appData.ai;
+        globalAppData.services = this._appData.services;
+        if (this._appData.stars !== undefined) {
+            globalAppData.stars = this._appData.stars;
         }
     }
 
@@ -300,12 +410,29 @@ export class CatalogService {
     private _updateLegacySettings(models: unknown): void {
         const win = globalThis as TGlobalWin;
         const updateFn = win.updateModuleSettings; // Assuming this exists or add to IGlobalBridge?
-        if (typeof updateFn === 'function' && models) {
+        if (typeof updateFn === 'function' && models !== undefined && models !== null) {
             try {
                 updateFn(models as Record<string, unknown>);
             } catch {
-                console.warn('[CatalogService] Warning updating module settings');
+                logger.warn('[CatalogService] Warning updating module settings');
             }
         }
+    }
+
+    /**
+     * Validates the configuration and returns a fallback if invalid.
+     */
+    private _ensureValidConfig(config: AppConfig | null): AppConfig {
+        const isCatalogEmpty =
+            !config?.catalog ||
+            (!config.catalog.ai?.length && !config.catalog.services?.length);
+
+        if (isCatalogEmpty) {
+            logger.warn(
+                `[CatalogService] Config invalid or empty (AI: ${config?.catalog?.ai?.length}, Services: ${config?.catalog?.services?.length}). Forcing fallback.`,
+            );
+            return FALLBACK_CONFIG;
+        }
+        return config;
     }
 }

@@ -120,13 +120,15 @@ export class DebugUI {
         dropzone.addEventListener('drop', (e) => {
             e.preventDefault();
             dropzone.classList.remove('drag-over');
-            dropzone.textContent = globalThis.t
-                ? globalThis.t('ui.debug.drag_drop.dragged', 'Item dragged!')
-                : 'Item dragged!';
+            dropzone.textContent =
+                typeof globalThis.t === 'function'
+                    ? globalThis.t('ui.debug.drag_drop.dragged', 'Item dragged!')
+                    : 'Item dragged!';
             setTimeout(() => {
-                dropzone.textContent = globalThis.t
-                    ? globalThis.t('ui.debug.drag_drop.drop_here', 'Drop here')
-                    : 'Drop here';
+                dropzone.textContent =
+                    typeof globalThis.t === 'function'
+                        ? globalThis.t('ui.debug.drag_drop.drop_here', 'Drop here')
+                        : 'Drop here';
             }, 2000);
         });
     }
@@ -150,7 +152,7 @@ export class DebugUI {
         document.querySelectorAll('.debug-tab-content').forEach((p) => {
             p.classList.remove('active');
         });
-        if (btn) btn.classList.add('active');
+        btn.classList.add('active');
         const tabContent = document.getElementById(`debug-${tabId}-tab`);
         if (tabContent) {
             tabContent.classList.add('active');
@@ -168,7 +170,7 @@ export class DebugUI {
         document.querySelectorAll('.console-tab').forEach((b) => {
             b.classList.remove('active');
         });
-        if (btn) btn.classList.add('active');
+        btn.classList.add('active');
 
         // Show correct logs pane
         document.querySelectorAll('.logs-pane').forEach((p) => {
@@ -185,9 +187,10 @@ export class DebugUI {
         this.renderLogs(true);
 
         if (typeof globalThis.showToast === 'function') {
-            const msg = globalThis.t
-                ? globalThis.t('ui.debug.logs_cleared', 'Logs cleared')
-                : 'Logs cleared';
+            const msg =
+                typeof globalThis.t === 'function'
+                    ? globalThis.t('ui.debug.logs_cleared', 'Logs cleared')
+                    : 'Logs cleared';
             globalThis.showToast(msg, 'success', 1500);
         }
     }
@@ -196,7 +199,7 @@ export class DebugUI {
     private unsubscribers: (() => void)[] = [];
 
     public destroy(): void {
-        if (this.pollInterval) {
+        if (this.pollInterval !== null) {
             globalThis.clearInterval(this.pollInterval);
             this.pollInterval = null;
         }
@@ -207,7 +210,7 @@ export class DebugUI {
     }
 
     private startLogPolling() {
-        if (this.pollInterval) globalThis.clearInterval(this.pollInterval);
+        if (this.pollInterval !== null) globalThis.clearInterval(this.pollInterval);
         this.pollInterval = globalThis.setInterval(() => {
             void (async () => {
                 const newLogs = await this.service.fetchLogs();

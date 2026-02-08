@@ -36,12 +36,14 @@ class ErrorHandler {
      */
     public init(): void {
         if (this._initialized) {
+            // eslint-disable-next-line no-console
             console.warn('[ErrorHandler] Already initialized');
             return;
         }
 
         const win = globalThis as TGlobalWin;
-        if (win.errorHandler) {
+        if (win.errorHandler !== undefined) {
+            // eslint-disable-next-line no-console
             console.warn('[ErrorHandler] Another instance already initialized. Using existing.');
             return;
         }
@@ -50,12 +52,12 @@ class ErrorHandler {
         // Catch uncaught errors
         globalThis.onerror = (message, source, lineno, colno, error) => {
             const extra: { url?: string; line?: number; column?: number } = {};
-            if (source) extra.url = source;
-            if (lineno) extra.line = lineno;
-            if (colno) extra.column = colno;
+            if (source !== undefined && source !== '') extra.url = source;
+            if (lineno !== undefined) extra.line = lineno;
+            if (colno !== undefined) extra.column = colno;
 
             this.captureError(
-                error || new Error(typeof message === 'object' ? JSON.stringify(message) : message),
+                error ?? new Error(typeof message === 'object' ? JSON.stringify(message) : message),
                 'window.onerror',
                 extra,
             );
@@ -70,6 +72,7 @@ class ErrorHandler {
         };
 
         this._initialized = true;
+        // eslint-disable-next-line no-console
         console.log('[ErrorHandler] Initialized');
     }
 
@@ -86,11 +89,11 @@ class ErrorHandler {
             timestamp: Date.now(),
         };
 
-        if (error.stack) errorInfo.stack = error.stack;
-        if (context) errorInfo.context = context;
-        if (extra?.url) errorInfo.url = extra.url;
-        if (extra?.line) errorInfo.line = extra.line;
-        if (extra?.column) errorInfo.column = extra.column;
+        if (error.stack !== undefined && error.stack !== '') errorInfo.stack = error.stack;
+        if (context !== undefined && context !== '') errorInfo.context = context;
+        if (extra?.url !== undefined && extra.url !== '') errorInfo.url = extra.url;
+        if (extra?.line !== undefined) errorInfo.line = extra.line;
+        if (extra?.column !== undefined) errorInfo.column = extra.column;
 
         // Add to log (with size limit)
         this._errorLog.push(errorInfo);
@@ -99,15 +102,16 @@ class ErrorHandler {
         }
 
         // Console log with styling
+        // eslint-disable-next-line no-console
         console.error(
-            `%c[ErrorHandler] ${context || 'Error'}`,
+            `%c[ErrorHandler] ${context ?? 'Error'}`,
             'color: #ff4444; font-weight: bold',
             error,
         );
 
         // Emit event for other components
         const eventPayload: { error: Error; context?: string } = { error };
-        if (context) eventPayload.context = context;
+        if (context !== undefined && context !== '') eventPayload.context = context;
         eventBus.emit('error:global', eventPayload);
 
         // Notify callbacks
@@ -115,6 +119,7 @@ class ErrorHandler {
             try {
                 cb(errorInfo);
             } catch (e) {
+                // eslint-disable-next-line no-console
                 console.error('[ErrorHandler] Callback error:', e);
             }
         });
@@ -206,7 +211,7 @@ class ErrorHandler {
             } catch (error) {
                 this.captureError(
                     error instanceof Error ? error : new Error(String(error)),
-                    context || 'eventHandler',
+                    context ?? 'eventHandler',
                 );
             }
         };

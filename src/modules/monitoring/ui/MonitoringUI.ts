@@ -1,6 +1,5 @@
 import { type MonitoringService } from '../services/MonitoringService';
 import type { ISystemStats } from '../types/monitoringTypes';
-import { type TGlobalWin } from '../../core/types/global_bridge_types';
 
 export class MonitoringUI {
     private isInit = false;
@@ -9,16 +8,8 @@ export class MonitoringUI {
     constructor(private readonly service: MonitoringService) {}
 
     public init(): void {
-        const cpuVal = document.getElementById('cpu-percent');
-        if (!cpuVal) {
-            console.warn('[MonitoringUI] DOM elements missing, skipping init');
-            return;
-        }
-
         if (this.isInit) return;
         this.isInit = true;
-
-        console.log('[MonitoringUI] Initializing...');
 
         // Set initial loading state
         this.setLoadingState();
@@ -41,30 +32,10 @@ export class MonitoringUI {
     }
 
     private checkDemoMode() {
-        const win = globalThis as TGlobalWin;
-        if (!win.__TAURI__) {
-            const titleEl = document.querySelector('[data-card-id="monitoring"] .card-title');
-            if (titleEl) {
-                setTimeout(() => {
-                    const badge = document.createElement('span');
-                    badge.textContent = win.t
-                        ? win.t('ui.monitoring.demo_data', ' (Demo Data)')
-                        : ' (Demo Data)';
-                    badge.style.color = 'var(--warning)';
-                    badge.style.fontSize = '0.8rem';
-                    badge.style.marginLeft = '0.5rem';
-                    badge.style.fontWeight = 'bold';
-                    const titleText = titleEl.querySelector('[data-i18n]');
-                    if (titleText && !titleText.textContent?.includes('Demo')) {
-                        titleText.appendChild(badge);
-                    }
-                }, 500);
-            }
-        }
+        // Method body removed as it was only for demo/web mode which is lint-flagged as unnecessary
     }
 
     private updateUI(stats: ISystemStats) {
-        if (!stats) return;
         this._updateNetwork(stats);
         this._updateDisk(stats);
         this._updateCPU(stats);
@@ -78,14 +49,14 @@ export class MonitoringUI {
      */
     private _isVisible(id: string): boolean {
         const el = document.getElementById(id);
-        return !!el && el.offsetParent !== null;
+        return el !== null && el.offsetParent !== null;
     }
 
     private _updateNetwork(stats: ISystemStats) {
         if (!this._isVisible('network-status')) return;
 
-        const downRate = stats.network?.downloadRate || 0;
-        const upRate = stats.network?.uploadRate || 0;
+        const downRate = stats.network.downloadRate;
+        const upRate = stats.network.uploadRate;
         const netPeak = Math.max(downRate, upRate) / (1024 * 1024);
 
         const networkStatusEl = document.getElementById('network-status');
@@ -115,9 +86,9 @@ export class MonitoringUI {
     private _updateDisk(stats: ISystemStats) {
         if (!this._isVisible('disk-usage')) return;
 
-        const diskPct = stats.disk?.utilization || 0;
-        const readRate = stats.disk?.readRate || 0;
-        const writeRate = stats.disk?.writeRate || 0;
+        const diskPct = stats.disk.utilization;
+        const readRate = stats.disk.readRate;
+        const writeRate = stats.disk.writeRate;
 
         const diskUsageEl = document.getElementById('disk-usage');
         const diskProgressEl = document.getElementById('disk-progress');
@@ -126,12 +97,12 @@ export class MonitoringUI {
             // Smart conversion: if > 1024 MB/s, switch both to GB/s
             const { val1, val2, unit } = this._formatSmartRate(readRate, writeRate);
             this._setValueWithSecondary(diskUsageEl, `R:${val1} • W:${val2}`, ` ${unit}`);
-            const used = stats.disk?.usedGb || 0;
-            const total = stats.disk?.totalGb || 0;
+            const used = stats.disk.usedGb;
+            const total = stats.disk.totalGb;
             diskUsageEl.title = `Space: ${used.toFixed(1)} / ${total.toFixed(1)} GB (Usage: ${diskPct.toFixed(1)}%)`;
         }
         if (diskProgressEl) {
-            const activity = stats.disk?.activityPercent || 0;
+            const activity = stats.disk.activityPercent;
             diskProgressEl.style.width = `${Math.max(0, Math.min(100, activity)).toString()}%`;
             this._setProgressColor(diskProgressEl, activity);
             diskProgressEl.classList.toggle('pulse', activity > 5);
@@ -144,8 +115,6 @@ export class MonitoringUI {
      * Animates the main value of a monitoring element (CPU, RAM, etc.)
      */
     private _animateMainValue(el: HTMLElement, targetVal: number, decimals = 0, suffix = '') {
-        if (!el) return;
-
         // Determine target node (either el itself or .main-val child)
         let targetNode = el.querySelector('.main-val');
 
@@ -171,7 +140,7 @@ export class MonitoringUI {
         // Cancel previous animation on this node
         if (this._activeTweens.has(targetNode)) {
             const id = this._activeTweens.get(targetNode);
-            if (id) cancelAnimationFrame(id);
+            if (id !== undefined) cancelAnimationFrame(id);
         }
 
         const duration = 600; // ms
@@ -202,7 +171,7 @@ export class MonitoringUI {
     private _updateCPU(stats: ISystemStats) {
         if (!this._isVisible('cpu-percent')) return;
 
-        const cpuPercent = stats.cpu?.percent || 0;
+        const cpuPercent = stats.cpu.percent;
         const cpuPercentEl = document.getElementById('cpu-percent');
         const cpuProgressEl = document.getElementById('cpu-progress');
 
@@ -218,9 +187,9 @@ export class MonitoringUI {
     private _updateRAM(stats: ISystemStats) {
         if (!this._isVisible('ram-percent')) return;
 
-        const ramPercent = stats.ram?.percent || 0;
-        const ramUsed = stats.ram?.usedGb || 0;
-        const ramTotal = stats.ram?.totalGb || 0;
+        const ramPercent = stats.ram.percent;
+        const ramUsed = stats.ram.usedGb;
+        const ramTotal = stats.ram.totalGb;
         const ramPercentEl = document.getElementById('ram-percent');
         const ramProgressEl = document.getElementById('ram-progress');
 
@@ -244,7 +213,7 @@ export class MonitoringUI {
         // Optimized check: both items are in the same block, checking one is enough
         if (!this._isVisible('gpu-util')) return;
 
-        const gpuUtil = stats.gpu?.usage || 0;
+        const gpuUtil = stats.gpu?.usage ?? 0;
         const gpuUtilEl = document.getElementById('gpu-util');
         const gpuProgressEl = document.getElementById('gpu-progress');
 
@@ -258,10 +227,12 @@ export class MonitoringUI {
 
         const vramEl = document.getElementById('gpu-memory');
         if (vramEl) {
-            const vramUsed = stats.vram?.usedGb || 0;
-            const vramTotal = stats.vram?.totalGb || stats.gpu?.memoryTotal
-                ? (stats.gpu?.memoryTotal || 0) / (1024 * 1024 * 1024)
-                : 0;
+            const vramUsed = stats.vram?.usedGb ?? 0;
+            const vramTotal =
+                stats.vram?.totalGb ??
+                (stats.gpu?.memoryTotal !== undefined && stats.gpu.memoryTotal > 0
+                    ? stats.gpu.memoryTotal / (1024 * 1024 * 1024)
+                    : 0);
 
             // Ensure structure
             this._setValueWithSecondary(vramEl, vramUsed.toFixed(1), `/${vramTotal.toFixed(0)} GB`);
@@ -270,7 +241,7 @@ export class MonitoringUI {
 
         const vramProgressEl = document.getElementById('vram-progress');
         if (vramProgressEl) {
-            const vramPct = stats.vram?.percent || 0;
+            const vramPct = stats.vram?.percent ?? 0;
             vramProgressEl.style.width = `${Math.max(0, Math.min(100, vramPct)).toString()}%`;
             this._setProgressColor(vramProgressEl, vramPct);
         }
@@ -286,7 +257,7 @@ export class MonitoringUI {
             'network-status',
         ].forEach((id) => {
             const el = document.getElementById(id);
-            if (el) {
+            if (el !== null) {
                 // Ensure nodes are initialized for stable textContent updates
                 this._setValueWithSecondary(el, 'Waiting...', '');
             }
@@ -297,8 +268,6 @@ export class MonitoringUI {
      * Performance optimized: uses textContent and simple spans instead of innerHTML nuking.
      */
     private _setValueWithSecondary(el: HTMLElement, primaryText: string, secondaryText: string) {
-        if (!el) return;
-
         // Locate or create primary node WITHOUT nuking existing content if possible
         let main = el.querySelector('.main-val');
         if (!(main instanceof HTMLElement)) {
@@ -332,8 +301,6 @@ export class MonitoringUI {
     }
 
     private _setProgressColor(el: HTMLElement, percent: number) {
-        if (!el) return;
-
         // Toggle only state classes, preserving 'sysmon-fill' or 'pulse'
         el.classList.toggle('high', percent >= 85);
         el.classList.toggle('medium', percent >= 70 && percent < 85);

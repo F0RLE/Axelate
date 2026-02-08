@@ -7,15 +7,17 @@ import type { TGlobalWin } from '../types/global_bridge_types';
 
 import { type StateService } from './StateService';
 
+import { logger } from './LoggerService';
+
 export class NavigationService {
     private readonly _historyStack: string[] = [];
     private _currentIndex = -1;
-    private static _instance: NavigationService;
+    private static _instance: NavigationService | undefined;
     private _stateService: StateService | null = null;
 
     private constructor() {
-        if (NavigationService._instance) {
-            console.warn('[NavigationService] Instance already exists!');
+        if (NavigationService._instance !== undefined) {
+            logger.warn('[NavigationService] Instance already exists!');
         }
         NavigationService._instance = this;
     }
@@ -34,12 +36,12 @@ export class NavigationService {
      */
     public refreshFromUiState(): void {
         const win = globalThis as TGlobalWin;
-        if (win.uiState && typeof win.uiState.last_page === 'string') {
+        if (typeof win.uiState.last_page === 'string') {
             const lastPage = win.uiState.last_page;
-            if (lastPage) {
+            if (lastPage !== '') {
                 this._historyStack.push(lastPage);
                 this._currentIndex = this._historyStack.length - 1;
-                console.log(`[NavigationService] Restored last page: ${lastPage}`);
+                logger.info(`[NavigationService] Restored last page: ${lastPage}`);
             }
         }
     }
@@ -58,14 +60,14 @@ export class NavigationService {
      * Navigates to a specific page.
      */
     public navigate(pageId: string): void {
-        console.log(`[NavigationService] Navigating to: ${pageId}`);
+        logger.info(`[NavigationService] Navigating to: ${pageId}`);
         if (this._currentIndex < this._historyStack.length - 1) {
             this._historyStack.splice(this._currentIndex + 1); // Clear forward history
         }
         this._historyStack.push(pageId);
         this._currentIndex = this._historyStack.length - 1;
 
-        if (this._stateService) {
+        if (this._stateService !== null) {
             this._stateService.setLastPage(pageId);
         }
     }
@@ -74,9 +76,7 @@ export class NavigationService {
      * Returns the singleton instance of NavigationService.
      */
     public static getInstance(): NavigationService {
-        if (!NavigationService._instance) {
-            NavigationService._instance = new NavigationService();
-        }
+        NavigationService._instance ??= new NavigationService();
         return NavigationService._instance;
     }
 
@@ -86,7 +86,7 @@ export class NavigationService {
     public goBack(): void {
         if (this._currentIndex > 0) {
             this._currentIndex--;
-            console.log(
+            logger.info(
                 `[NavigationService] Navigating back to: ${String(this._historyStack[this._currentIndex])}`,
             );
         }
@@ -98,7 +98,7 @@ export class NavigationService {
     public goForward(): void {
         if (this._currentIndex < this._historyStack.length - 1) {
             this._currentIndex++;
-            console.log(
+            logger.info(
                 `[NavigationService] Navigating forward to: ${String(this._historyStack[this._currentIndex])}`,
             );
         }

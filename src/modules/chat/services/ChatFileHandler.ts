@@ -20,6 +20,7 @@ import {
     readFileAsBase64,
     readFileAsText,
 } from '../utils/chatUtils';
+import { logger } from '../../core/services/LoggerService';
 // ============================================================================
 // Types
 // ============================================================================
@@ -56,7 +57,7 @@ export class ChatFileHandler {
      */
     public init(): void {
         if (this._initialized) {
-            console.warn('[ChatFileHandler] Already initialized');
+            logger.warn('[ChatFileHandler] Already initialized');
             return;
         }
 
@@ -134,13 +135,13 @@ export class ChatFileHandler {
 
         for (const file of this._files) {
             const result = await this._processSingleFile(file);
-            if (result.error) {
+            if (result.error !== undefined && result.error !== '') {
                 combinedText += result.error;
             }
             if (result.attachment) {
                 attachments.push(result.attachment);
             }
-            if (result.content) {
+            if (result.content !== undefined && result.content !== '') {
                 combinedText += result.content;
             }
         }
@@ -155,7 +156,8 @@ export class ChatFileHandler {
      */
     private _processSingleFile(file: File): Promise<IFileProcessResult> {
         const win = globalThis as TGlobalWin;
-        if (win.__TAURI__) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (win.__TAURI__ !== undefined) {
             return this._processWithBackend(file);
         }
         return this._processWithWebFallback(file);
@@ -179,7 +181,7 @@ export class ChatFileHandler {
                 data: bytes,
             });
 
-            if (result.error) {
+            if (result.error !== undefined && result.error.length > 0) {
                 return { error: `\n[Skipped: ${file.name} - ${result.error}]` };
             }
 
@@ -212,7 +214,7 @@ export class ChatFileHandler {
 
             return { content: '' };
         } catch (e) {
-            console.error('[ChatFileHandler] Backend processing failed:', e);
+            logger.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
             return { error: `\n[Error processing ${file.name}]` };
         }
     }

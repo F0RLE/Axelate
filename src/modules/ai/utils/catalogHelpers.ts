@@ -39,7 +39,7 @@ export function getProviderFromCatalog(providerId: string): IAICatalogApp | null
     const appData = _getGlobal().APP_DATA;
     if (!appData?.ai) return null;
 
-    return appData.ai.find((app) => app.id === providerId) || null;
+    return appData.ai.find((app) => app.id === providerId) ?? null;
 }
 
 /**
@@ -50,7 +50,7 @@ export function getProviderFromCatalog(providerId: string): IAICatalogApp | null
  */
 export function getProviderData(providerId: string): IAIProviderData | null {
     const provider = getProviderFromCatalog(providerId);
-    return provider?.apiProviderData || null;
+    return provider?.apiProviderData ?? null;
 }
 
 // ============================================================================
@@ -65,7 +65,7 @@ export function getProviderData(providerId: string): IAIProviderData | null {
  */
 export function getModelsFromProvider(providerId: string): Record<string, IAIModelData> {
     const providerData = getProviderData(providerId);
-    return providerData?.models || {};
+    return providerData?.models ?? {};
 }
 
 /**
@@ -77,7 +77,7 @@ export function getModelsFromProvider(providerId: string): Record<string, IAIMod
  */
 export function getModelData(providerId: string, modelKey: string): IAIModelData | null {
     const models = getModelsFromProvider(providerId);
-    return models[modelKey] || null;
+    return models[modelKey] ?? null;
 }
 
 /**
@@ -89,7 +89,7 @@ export function getModelData(providerId: string, modelKey: string): IAIModelData
  */
 export function getApiModelId(providerId: string, uiModelKey: string): string {
     const modelData = getModelData(providerId, uiModelKey);
-    return modelData?.apiModels?.text || uiModelKey;
+    return modelData?.apiModels?.text ?? uiModelKey;
 }
 
 // ============================================================================
@@ -103,7 +103,7 @@ export function getApiModelId(providerId: string, uiModelKey: string): string {
  * @returns Aggregate power score
  */
 function _calculatePower(stats?: IAIModelStats): number {
-    return (stats?.logic || 0) + (stats?.creative || 0);
+    return (stats?.logic ?? 0) + (stats?.creative ?? 0);
 }
 
 /**
@@ -139,7 +139,7 @@ export function getMostPowerfulModel(providerId: string): string {
  */
 export function getSelectedModel(providerId: string): string {
     const saved = localStorage.getItem(`${providerId}_selected_model`);
-    return saved || getMostPowerfulModel(providerId);
+    return saved ?? getMostPowerfulModel(providerId);
 }
 
 // ============================================================================
@@ -165,5 +165,5 @@ export function mapProviderToBackend(providerId: string): string {
         local: 'local',
     };
 
-    return legacyMap[providerId] || providerId;
+    return legacyMap[providerId] ?? providerId;
 }

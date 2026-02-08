@@ -29,6 +29,7 @@ export interface IGlobalBridge {
     };
     moduleDownloadState?: Record<string, IModuleDownloadState>;
     __TAURI__?: ITauriInstance;
+    __TAURI_INTERNALS__?: unknown;
     uiState?: IUIState;
     errorHandler?: typeof errorHandler;
     getCatalogCategory?: (cat: string) => IApp[];

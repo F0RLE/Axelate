@@ -47,8 +47,9 @@ Write-Header "Starting Axelate (Dev Mode)"
 
 # 1. Setup Environment
 $ScriptDir = $PSScriptRoot
-$SrcDir = "$ScriptDir\..\..\src"
-а
+$ProjectRoot = "$ScriptDir\..\.."
+$SrcDir = "$ProjectRoot\src"
+
 # Ensure Cargo is found
 $env:PATH = "$env:USERPROFILE\.cargo\bin;" + $env:PATH
 
@@ -67,6 +68,8 @@ if ($AppProcess) {
     $AppProcess | Stop-Process -Force
 }
 
-Set-Location $SrcDir
-# Use the local npm script which points to the local Tauri CLI binary
-npm run tauri:dev
+# Run from project root so Tauri can find src-tauri/tauri.conf.json
+Set-Location $ProjectRoot
+
+# Use the Tauri CLI from src/node_modules
+& "$SrcDir\node_modules\.bin\tauri" dev --target x86_64-pc-windows-msvc

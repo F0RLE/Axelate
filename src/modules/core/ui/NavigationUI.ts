@@ -12,6 +12,7 @@
 import { eventBus } from '@/modules/core/services/EventBus';
 import { type NavigationService } from '../services/NavigationService';
 import { type SoundService } from '../services/SoundService';
+import { logger } from '../services/LoggerService';
 
 export class NavigationUI {
     constructor(
@@ -24,7 +25,7 @@ export class NavigationUI {
      * Re-binds listeners directly to ensure they work after template injection.
      */
     public init(): void {
-        console.debug('[NavigationUI] Navigation initialized (pure service mode).');
+        logger.debug('[NavigationUI] Navigation initialized (pure service mode).');
     }
 
     /**
@@ -42,7 +43,7 @@ export class NavigationUI {
      * @param silent - If true, prevents sound effects
      */
     public showPage(pageId: string, btn: HTMLElement | null = null, silent = false): Promise<void> {
-        console.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn });
+        logger.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn });
         const previousPageId = this._service.getCurrentPage();
 
         // 1. Play Sound
@@ -65,7 +66,7 @@ export class NavigationUI {
 
         // Emit navigation event
         const navPayload: { pageId: string; previousPageId?: string } = { pageId };
-        if (previousPageId) navPayload.previousPageId = previousPageId;
+        if (previousPageId !== undefined) navPayload.previousPageId = previousPageId;
         eventBus.emit('page:change', navPayload);
 
         // 3. Show target page
@@ -75,7 +76,7 @@ export class NavigationUI {
             target.classList.add('active');
             this._service.setCurrentPage(pageId);
         } else {
-            console.warn(`[NavigationUI] Page not found: ${pageId}`);
+            logger.warn(`[NavigationUI] Page not found: ${pageId}`);
         }
 
         // 4. Update Sidebar Buttons

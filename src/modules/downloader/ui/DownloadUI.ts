@@ -59,7 +59,6 @@ export class DownloadUI {
      * Initializes the downloader UI.
      */
     public init(): void {
-        console.log('[DownloadUI] Initializing...');
         this.startDownloadsPolling();
         this._initSettingsListeners();
     }
@@ -73,7 +72,6 @@ export class DownloadUI {
             globalThis.removeEventListener('download-progress-update', this._boundHandleUpdate);
             this._boundHandleUpdate = null;
         }
-        console.log('[DownloadUI] Destroyed.');
     }
 
     /**
@@ -115,19 +113,19 @@ export class DownloadUI {
      * Parses a raw progress payload into a normalized DownloadProgress object.
      */
     private _parseProgressState(progress: Partial<DownloadProgress>): DownloadProgress {
-        const percent = progress.percent || 0;
-        const downloaded = progress.downloaded || 0;
-        const total = progress.total || 0;
-        const speed = progress.speed || 0;
-        const completed = !!progress.completed;
-        const error = progress.error || null;
-        const label = progress.label || '';
+        const percent = progress.percent ?? 0;
+        const downloaded = progress.downloaded ?? 0;
+        const total = progress.total ?? 0;
+        const speed = progress.speed ?? 0;
+        const completed = progress.completed === true;
+        const error = progress.error ?? null;
+        const label = progress.label ?? '';
 
         const hasActive =
             (progress.hasActive ?? false) ||
             ((percent > 0 || downloaded > 0) &&
                 !completed &&
-                !error &&
+                error === null &&
                 total > 0 &&
                 label.trim() !== '') ||
             (completed && label.trim() !== '');
@@ -179,22 +177,46 @@ export class DownloadUI {
         state: DownloadProgress,
     ): void {
         const { percent, speed, downloaded, total, label, hasActive } = state;
-        const win = globalThis as unknown as IDownloaderGlobal;
 
         if (els.bar) els.bar.style.width = `${String(Math.min(percent, 100))}%`;
         if (els.text) els.text.textContent = `${percent.toFixed(1)}%`;
 
+        this._updateMetaStats(els, speed, downloaded, total);
+        this._updateLabel(els.labelEl, label, hasActive);
+    }
+
+    private _updateMetaStats(
+        els: {
+            speedEl: HTMLElement | null;
+            downloadedEl: HTMLElement | null;
+            totalEl: HTMLElement | null;
+        },
+        speed: number,
+        downloaded: number,
+        total: number,
+    ): void {
         if (els.speedEl) els.speedEl.textContent = this._formatSpeed(speed);
         if (els.downloadedEl) els.downloadedEl.textContent = this._formatBytes(downloaded);
         if (els.totalEl) els.totalEl.textContent = total > 0 ? this._formatBytes(total) : '--';
+    }
 
-        if (els.labelEl) {
-            const fallback = win.t
-                ? win.t('ui.downloads.no_active', 'No active downloads')
+    private _updateLabel(el: HTMLElement | null, label: string, hasActive: boolean): void {
+        if (!el) return;
+        const fallback =
+            typeof globalThis.t === 'function'
+                ? globalThis.t('ui.downloads.no_active', 'No active downloads')
                 : 'No active downloads';
-            els.labelEl.textContent = hasActive ? label : label || fallback;
-            els.labelEl.title = label;
+
+        let text = label;
+        if (!hasActive) {
+            if (label === '') {
+                text = fallback;
+            } else {
+                text = label;
+            }
         }
+        el.textContent = text;
+        el.title = label;
     }
 
     /**
@@ -226,24 +248,26 @@ export class DownloadUI {
 
         els.statusEl.classList.remove('active', 'completed', 'error');
         if (completed) {
-            els.statusEl.textContent = win.t
-                ? win.t('ui.downloads.status.completed', 'Completed')
-                : 'Completed';
+            els.statusEl.textContent =
+                typeof win.t === 'function'
+                    ? win.t('ui.downloads.status.completed', 'Completed')
+                    : 'Completed';
             els.statusEl.classList.add('completed');
-        } else if (error) {
-            els.statusEl.textContent = win.t
-                ? win.t('ui.downloads.status.error', 'Error')
-                : 'Error';
+        } else if (error !== null) {
+            els.statusEl.textContent =
+                typeof win.t === 'function' ? win.t('ui.downloads.status.error', 'Error') : 'Error';
             els.statusEl.classList.add('error');
         } else if (hasActive) {
-            els.statusEl.textContent = win.t
-                ? win.t('ui.downloads.status.in_progress', 'In Progress')
-                : 'In Progress';
+            els.statusEl.textContent =
+                typeof win.t === 'function'
+                    ? win.t('ui.downloads.status.in_progress', 'In Progress')
+                    : 'In Progress';
             els.statusEl.classList.add('active');
         } else {
-            els.statusEl.textContent = win.t
-                ? win.t('ui.downloads.status.waiting', 'Waiting')
-                : 'Waiting';
+            els.statusEl.textContent =
+                typeof win.t === 'function'
+                    ? win.t('ui.downloads.status.waiting', 'Waiting')
+                    : 'Waiting';
         }
     }
 
@@ -256,14 +280,15 @@ export class DownloadUI {
         const win = globalThis as unknown as IDownloaderGlobal;
 
         if (completed) {
-            els.etaEl.textContent = win.t ? win.t('ui.downloads.status.ready', 'Ready') : 'Ready';
-        } else if (error) {
+            els.etaEl.textContent =
+                typeof win.t === 'function' ? win.t('ui.downloads.status.ready', 'Ready') : 'Ready';
+        } else if (error !== null) {
             els.etaEl.textContent = error;
         } else if (speed > 0 && total > 0) {
             const remainingBytes = Math.max(total - downloaded, 0);
             const seconds = remainingBytes / speed;
-            const s = win.t ? win.t('ui.common.time.s', 's') : 's';
-            const m = win.t ? win.t('ui.common.time.m', 'm') : 'm';
+            const s = typeof win.t === 'function' ? win.t('ui.common.time.s', 's') : 's';
+            const m = typeof win.t === 'function' ? win.t('ui.common.time.m', 'm') : 'm';
 
             if (seconds < 60) {
                 els.etaEl.textContent = `${Math.floor(seconds).toString()}${s}`;
@@ -283,16 +308,16 @@ export class DownloadUI {
     public startDownloadsPolling(): void {
         const mainCard = document.getElementById(DownloadUI.SELECTORS.MAIN_CARD);
         const emptyText = document.getElementById(DownloadUI.SELECTORS.EMPTY_TEXT);
-        if (mainCard) mainCard.classList.add('hidden');
-        if (emptyText) emptyText.classList.remove('hidden');
+        if (mainCard !== null) mainCard.classList.add('hidden');
+        if (emptyText !== null) emptyText.classList.remove('hidden');
 
         this._boundHandleUpdate = (e: Event) => {
             const payload = (e as CustomEvent).detail as ModuleDownloadState;
             this.renderDownloadsProgress({
-                percent: (payload.progress || 0) * 100,
-                downloaded: payload.downloaded || 0,
-                total: payload.total || 0,
-                label: payload.message || '',
+                percent: payload.progress * 100,
+                downloaded: payload.downloaded ?? 0,
+                total: payload.total ?? 0,
+                label: payload.message ?? '',
                 hasActive:
                     payload.status === 'downloading' ||
                     payload.status === 'connecting' ||
@@ -313,7 +338,7 @@ export class DownloadUI {
      */
     public loadSettings(): void {
         const win = globalThis as unknown as IDownloaderGlobal;
-        if (win.uiState) {
+        if (win.uiState !== undefined) {
             this._settings = win.uiState.getDownloadSettings();
         }
     }
@@ -322,23 +347,26 @@ export class DownloadUI {
      * Saves download settings to UI state.
      */
     public saveSettings(): void {
-        const toggle = document.getElementById(DownloadUI.SELECTORS.TOGGLE) as HTMLInputElement;
-        const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER) as HTMLInputElement;
+        const toggle = document.getElementById(
+            DownloadUI.SELECTORS.TOGGLE,
+        ) as HTMLInputElement | null;
+        const slider = document.getElementById(
+            DownloadUI.SELECTORS.SLIDER,
+        ) as HTMLInputElement | null;
         const controls = document.getElementById(DownloadUI.SELECTORS.SPEED_CONTROLS);
 
-        if (toggle && slider) {
+        if (toggle instanceof HTMLInputElement && slider instanceof HTMLInputElement) {
             this._settings.limitEnabled = toggle.checked;
             this._settings.maxSpeed = Number.parseInt(slider.value, 10);
 
-            if (controls) {
-                controls.classList.toggle('opacity-50', !this._settings.limitEnabled);
-                controls.classList.toggle('pointer-none', !this._settings.limitEnabled);
+            if (controls instanceof HTMLElement) {
+                controls.classList.add(this._settings.limitEnabled ? 'opacity-50' : 'opacity-100');
             }
 
             toggle.style.background = toggle.checked ? 'var(--primary)' : 'var(--bg-light)';
 
             const win = globalThis as unknown as IDownloaderGlobal;
-            if (win.uiState) {
+            if (win.uiState !== undefined) {
                 win.uiState.setDownloadSettings(
                     this._settings.limitEnabled,
                     this._settings.maxSpeed,
@@ -352,10 +380,12 @@ export class DownloadUI {
      */
     public updateSpeedDisplay(value: string | number): void {
         const display = document.getElementById(DownloadUI.SELECTORS.SPEED_VALUE);
-        const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER) as HTMLInputElement;
-        if (display) display.textContent = value.toString();
+        const slider = document.getElementById(
+            DownloadUI.SELECTORS.SLIDER,
+        ) as HTMLInputElement | null;
+        if (display !== null) display.textContent = value.toString();
 
-        if (slider) {
+        if (slider !== null) {
             const val = typeof value === 'string' ? Number.parseInt(value, 10) : value;
             const percent = ((val - 1) / (200 - 1)) * 100;
             slider.style.background = `linear-gradient(to right, var(--primary) ${percent.toString()}%, var(--bg-light) ${percent.toString()}%)`;
@@ -368,23 +398,27 @@ export class DownloadUI {
     public openSettings(): void {
         this.loadSettings();
         const overlay = document.getElementById(DownloadUI.SELECTORS.OVERLAY);
-        const toggle = document.getElementById(DownloadUI.SELECTORS.TOGGLE) as HTMLInputElement;
-        const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER) as HTMLInputElement;
+        const toggle = document.getElementById(
+            DownloadUI.SELECTORS.TOGGLE,
+        ) as HTMLInputElement | null;
+        const slider = document.getElementById(
+            DownloadUI.SELECTORS.SLIDER,
+        ) as HTMLInputElement | null;
         const controls = document.getElementById(DownloadUI.SELECTORS.SPEED_CONTROLS);
 
-        if (toggle) {
+        if (toggle !== null) {
             toggle.checked = this._settings.limitEnabled;
             toggle.style.background = toggle.checked ? 'var(--primary)' : 'var(--bg-light)';
         }
-        if (slider) {
+        if (slider !== null) {
             slider.value = this._settings.maxSpeed.toString();
             this.updateSpeedDisplay(this._settings.maxSpeed);
         }
-        if (controls) {
+        if (controls !== null) {
             controls.style.opacity = this._settings.limitEnabled ? '1' : '0.5';
             controls.style.pointerEvents = this._settings.limitEnabled ? 'auto' : 'none';
         }
-        if (overlay) {
+        if (overlay !== null) {
             overlay.classList.remove('hidden');
             overlay.classList.add('show');
         }

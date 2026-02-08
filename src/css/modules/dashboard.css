@@ -1984,7 +1984,9 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     width: 18px;
     height: 18px;
     stroke: currentColor;
-    transition: stroke 0.3s ease, transform 0.2s ease;
+    transition:
+        stroke 0.3s ease,
+        transform 0.2s ease;
 }
 
 .module-action-badge.close:hover .badge-icon svg {

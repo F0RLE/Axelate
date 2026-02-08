@@ -3,6 +3,9 @@
  * @description Utility functions for chat-related operations
  */
 
+import type { TGlobalWin } from '../../core/types/global_bridge_types';
+import { logger } from '../../core/services/LoggerService';
+
 /**
  * Check if a file is a text-based file.
  */
@@ -45,8 +48,8 @@ export function isTextFile(file: File): boolean {
         '.env',
     ];
 
-    if (file.type && textTypes.some((t) => file.type.startsWith(t))) return true;
-    const name = (file.name || '').toLowerCase();
+    if (textTypes.some((t) => file.type.startsWith(t))) return true;
+    const name = file.name.toLowerCase();
     return textExts.some((ext) => name.endsWith(ext));
 }
 
@@ -72,7 +75,7 @@ export function readFileAsBase64(file: File): Promise<string> {
                 const res = reader.result;
                 const str = typeof res === 'string' ? res : '';
                 const b64 = str.includes(',') ? str.split(',')[1] : str;
-                resolve(b64 || '');
+                resolve(b64 !== undefined && b64 !== '' ? b64 : '');
             } catch {
                 resolve('');
             }
@@ -87,7 +90,7 @@ export function readFileAsBase64(file: File): Promise<string> {
  * Get a suitable SVG icon based on the file extension.
  */
 export function getFileIcon(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    const ext = filename.split('.').pop()?.toLowerCase() ?? '';
 
     // Code
     if (
@@ -122,7 +125,7 @@ export function getFileIcon(filename: string): string {
  * - CJK (Chinese, Japanese, Korean): ~1.5 tokens per character
  */
 export function estimateTokenCount(text: string): number {
-    if (!text) return 0;
+    if (text === '') return 0;
 
     let tokens = 0;
 
@@ -152,11 +155,12 @@ export function estimateTokenCount(text: string): number {
  * Accurately counts tokens using backend TikToken (if available) or falls back to heuristic.
  */
 export async function getTokenCount(text: string, model = 'gpt-4'): Promise<number> {
-    if (globalThis.__TAURI__) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if ((globalThis as TGlobalWin).__TAURI__ !== undefined) {
         try {
             return await globalThis.__TAURI__.core.invoke('count_tokens', { text, model });
         } catch (e) {
-            console.warn('[TokenCount] Backend failed, using heuristic:', e);
+            logger.warn(`[TokenCount] Backend failed, using heuristic: ${String(e)}`);
         }
     }
     return estimateTokenCount(text);

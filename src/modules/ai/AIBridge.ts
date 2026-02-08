@@ -8,8 +8,9 @@ import type {
     MessageSource,
 } from './types/aiTypes';
 import type { Core } from '../core/core';
-import { logger } from '../core/services/LoggerService';
 import { getApiModelId, getMostPowerfulModel, mapProviderToBackend } from './utils/catalogHelpers';
+import type { StateService } from '../core/services/StateService';
+import type { TauriProvider } from '../core/services/TauriProvider';
 
 export type { MessageSource, MessageHandler, ChatContentPart, ChatContent } from './types/aiTypes';
 export type IChunkHandler = (chunk: string) => void;
@@ -54,7 +55,7 @@ export class AIBridge {
 
             // Also persist in UI state for non-hardware-bound context
             if (this._core) {
-                this._core.state.set('ai_session_id', sid);
+                (this._core.state as unknown as StateService).set('ai_session_id', sid);
             }
         }
 
@@ -97,7 +98,7 @@ export class AIBridge {
             const apiKey = await this._getApiKey(providerId);
             const isLocal = providerId === 'local' || providerId === 'axelate-localai';
 
-            if ((apiKey === null || apiKey === '') && !isLocal) {
+            if (apiKey === '' && !isLocal) {
                 this._showErrorToast('ui.ai.no_api_key', 'API key missing');
                 return false;
             }
@@ -110,8 +111,11 @@ export class AIBridge {
 
             // Persistence via Core State (Standardized Storage Section 53)
             if (this._core) {
-                this._core.state.setSelectedAIModel(providerId, model);
-                this._core.state.set('last_active_provider', providerId);
+                (this._core.state as unknown as StateService).setSelectedAIModel(providerId, model);
+                (this._core.state as unknown as StateService).set(
+                    'last_active_provider',
+                    providerId,
+                );
             }
 
             const providerDisplay = this._getProviderDisplayName(providerId);
@@ -138,7 +142,7 @@ export class AIBridge {
 
     private _getPersistedModel(providerId: string): string | null {
         if (this._core === null) return null;
-        return this._core.state.getSelectedAIModel(providerId) ?? null;
+        return (this._core.state as unknown as StateService).getSelectedAIModel(providerId) ?? null;
     }
 
     /**
@@ -165,7 +169,7 @@ export class AIBridge {
 
     private _getDefaultModel(providerId: string): string {
         const catalogModel = getMostPowerfulModel(providerId);
-        if (catalogModel) return catalogModel;
+        if (catalogModel !== '') return catalogModel;
 
         const fallbacks: Record<string, string> = {
             gpt: 'gpt-4o',
@@ -196,7 +200,7 @@ export class AIBridge {
     public isActive(): boolean {
         if (this._activeProviderId === null) return false;
         if (this._activeProviderId === 'axelate-localai') return true;
-        return !!this._apiKey;
+        return this._apiKey !== null && this._apiKey !== '';
     }
 
     public getActiveProvider(): { id: string; name: string } | null {
@@ -219,7 +223,7 @@ export class AIBridge {
         await this._resolveEffectiveApiKey();
 
         if (
-            (!this._apiKey || this._apiKey === '') &&
+            (this._apiKey === null || this._apiKey === '') &&
             this._activeProviderId !== 'axelate-localai'
         ) {
             return this._handleMissingApiKey();
@@ -279,7 +283,9 @@ export class AIBridge {
         // Get thinking level from state instead of localStorage
         let thinkingLevel = 'high';
         if (this._core) {
-            const levels = this._core.state.get('ai_thinking_level') as Record<string, string>;
+            const levels = (this._core.state as unknown as StateService).get(
+                'ai_thinking_level',
+            ) as Record<string, string>;
             thinkingLevel = levels[id] ?? 'high';
         }
 
@@ -379,10 +385,15 @@ export class AIBridge {
         if (this._core?.tauriProvider.isTauri() === true) {
             try {
                 const sid =
-                    (this._core.state.get('ai_session_id') as string | undefined) ?? 'default';
-                return await this._core.tauriProvider.invoke('get_chat_history', {
-                    session_id: sid,
-                });
+                    ((this._core.state as unknown as StateService).get('ai_session_id') as
+                        | string
+                        | undefined) ?? 'default';
+                return await (this._core.tauriProvider as unknown as TauriProvider).invoke(
+                    'get_chat_history',
+                    {
+                        session_id: sid,
+                    },
+                );
             } catch (e) {
                 logger.error('[AIBridge] Failed to load history:', e);
             }
@@ -401,7 +412,7 @@ export class AIBridge {
         text: string,
         attachments: { name: string; type: string; data_base64: string }[],
     ): ChatContent {
-        if (!attachments || attachments.length === 0) return text;
+        if (attachments.length === 0) return text;
 
         const parts: ChatContentPart[] = [{ type: 'text', text }];
         attachments.forEach((attachment) => {

@@ -1,6 +1,6 @@
 {
     "name": "axelate-root",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "private": true,
     "description": "Root proxy for Axelate",
     "scripts": {
@@ -21,13 +21,15 @@
         "verify-all": "powershell -ExecutionPolicy Bypass -File .\\.github\\scripts\\verify-all.ps1",
         "install-deps": "cd src && npm install",
         "update": "powershell -ExecutionPolicy Bypass -File .\\.github\\scripts\\update.ps1",
-        "prepare": "husky .github/.husky",
+        "prepare": "husky",
         "bump": "node src/scripts/bump-version.js"
     },
     "devDependencies": {
         "@commitlint/cli": "^20.3.1",
         "@commitlint/config-conventional": "^20.3.1",
-        "concurrently": "^8.2.2",
         "husky": "^9.1.7"
+    },
+    "engines": {
+        "node": ">=20.0.0"
     }
 }

@@ -115,8 +115,10 @@ export class AppUI {
             container.id = 'toast-container';
             container.style.zIndex = '9999';
             const win = globalThis as TGlobalWin;
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-            container.innerHTML = DOMPurify.sanitize(win.t('ui.toast.container', ''), this._purifyConfig);
+            container.innerHTML = DOMPurify.sanitize(
+                win.t('ui.toast.container', ''),
+                this._purifyConfig,
+            );
             document.body.appendChild(container);
         }
         return container;
@@ -168,7 +170,7 @@ export class AppUI {
         toast.innerHTML = DOMPurify.sanitize(
             `
             <div class="toast-content">
-                ${title ? `<div class="toast-title">${title}</div>` : ''}
+                ${title !== null && title !== '' ? `<div class="toast-title">${title}</div>` : ''}
                 <div class="toast-message">${message}</div>
             </div>
         `,
@@ -199,26 +201,21 @@ export class AppUI {
             feedback.className = 'action-feedback';
             feedback.id = 'action-feedback';
             const win = globalThis as TGlobalWin;
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
             feedback.innerHTML = DOMPurify.sanitize(win.t('ui.feedback', ''), this._purifyConfig);
-            // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-            if (document.body === null) throw new Error('Document body is missing');
             document.body.appendChild(feedback);
         }
 
-        if (feedback !== null) {
-            feedback.className = `action-feedback ${type}`;
-            const iconElement = feedback.querySelector('.action-feedback-icon');
-            if (iconElement !== null) {
-                iconElement.textContent = '';
-            }
-            feedback.classList.add('show');
-
-            const el = feedback;
-            setTimeout(() => {
-                el.classList.remove('show');
-            }, 600);
+        feedback.className = `action-feedback ${type}`;
+        const iconElement = feedback.querySelector('.action-feedback-icon');
+        if (iconElement !== null) {
+            iconElement.textContent = '';
         }
+        feedback.classList.add('show');
+
+        const el = feedback;
+        setTimeout(() => {
+            el.classList.remove('show');
+        }, 600);
     }
 
     // --- Skeletons ---
@@ -229,7 +226,7 @@ export class AppUI {
      */
     public showSkeletonLoaders(containerId: string, count = 3): void {
         const container = document.getElementById(containerId);
-        if (!container) return;
+        if (container === null) return;
 
         const win = globalThis as TGlobalWin;
         if (typeof win.showSkeletonLoaders === 'function') {
@@ -239,7 +236,7 @@ export class AppUI {
 
         for (let i = 1; i <= count; i++) {
             const skeleton = document.getElementById(`${containerId}-skeleton-${String(i)}`);
-            if (skeleton) {
+            if (skeleton !== null) {
                 skeleton.style.display = 'block';
             }
         }
@@ -248,7 +245,7 @@ export class AppUI {
     public hideSkeletonLoaders(containerId: string, count = 3): void {
         for (let i = 1; i <= count; i++) {
             const skeleton = document.getElementById(`${containerId}-skeleton-${String(i)}`);
-            if (skeleton) {
+            if (skeleton !== null) {
                 skeleton.style.display = 'none';
             }
         }
@@ -279,6 +276,8 @@ export class AppUI {
     public openAppSelection(category: string, apps: IApp[]): void {
         const modal = document.getElementById('app-selection-modal');
         const listEl = document.getElementById('app-modal-list');
+        
+        logger.info(`[AppUI] Opening selection modal for ${category} with ${apps.length} items.`);
 
         if (modal === null || listEl === null) return;
 
@@ -327,7 +326,12 @@ export class AppUI {
             // Use pointer events to distinguish between action buttons and card background
             cardLike.onclick = (e): void => {
                 // Ignore clicks on buttons/actions
-                if ((e.target as HTMLElement).closest('button, .model-card-action, .module-action-badge')) return;
+                if (
+                    (e.target as HTMLElement).closest(
+                        'button, .model-card-action, .module-action-badge',
+                    )
+                )
+                    return;
                 this._handleModuleCardClick(e, cardLike, category);
             };
         } else {
@@ -366,11 +370,8 @@ export class AppUI {
         card.classList.toggle('is-installed', isInstalled);
 
         const g = globalThis as TGlobalWin;
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         const downloadText =
-            typeof g.t === 'function'
-                ? g.t('ui.launcher.module.download', 'Download')
-                : 'Download';
+            typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
         card.innerHTML = DOMPurify.sanitize(
             `
             ${this._getAppDeleteBadgeHtml(isApi, isInstalled)}
@@ -446,7 +447,7 @@ export class AppUI {
             app.type?.toLowerCase() === 'api' ||
             ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
 
-        if (!isApi && !app.installed) {
+        if (!isApi && app.installed !== true) {
             // Fallback allows any click for non-installed modules to trigger download
             e.stopPropagation();
             const btnToAnimate = this._resolveDownloadBtn(e, downloadBtn, overlay);
@@ -489,8 +490,9 @@ export class AppUI {
         logger.info('[AppUI] Remove module clicked:', app.id);
         const win = globalThis as TGlobalWin;
         try {
-            if (win.__TAURI__?.core !== undefined) {
-                await win.__TAURI__.core.invoke('delete_module', { moduleId: app.id });
+            const tauri = win.__TAURI__;
+            if ((win as unknown as Record<string, unknown>)['__TAURI__'] !== undefined) {
+                await tauri.core.invoke('delete_module', { moduleId: app.id });
                 app.installed = false;
                 const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(category);
                 this.openAppSelection(category, allApps);
@@ -568,20 +570,25 @@ export class AppUI {
 
     private _stopPreviousModule(card: HTMLElement, app: IApp): void {
         const previousModuleId = card.dataset['currentModule'];
-        if (previousModuleId === undefined || previousModuleId === '' || previousModuleId === app.id) return;
+        if (
+            previousModuleId === undefined ||
+            previousModuleId === '' ||
+            previousModuleId === app.id
+        )
+            return;
 
         const actionBtn = card.querySelector('.model-card-action');
         if (!(actionBtn instanceof HTMLElement)) return;
-        if (actionBtn.dataset?.['running'] !== 'true') return;
+        if (actionBtn.dataset['running'] !== 'true') return;
 
         const isApi =
-            app.type?.toLowerCase() === 'api' ||
+            (app.type?.toLowerCase() ?? '') === 'api' ||
             ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
 
         const win = globalThis as TGlobalWin;
         if (isApi) {
-            if (win.aiBridge !== undefined) win.aiBridge.stopProvider();
-        } else if (win.showToast !== undefined) {
+            win.aiBridge.stopProvider();
+        } else if (typeof win.showToast === 'function') {
             const prevName = card.dataset['currentModuleName'] ?? previousModuleId;
             win.showToast(
                 typeof win.t === 'function'
@@ -596,10 +603,7 @@ export class AppUI {
     private _updateCardAttributes(card: HTMLElement, app: IApp): void {
         card.dataset['currentModule'] = app.id;
         card.dataset['currentModuleName'] = app.name ?? app.id;
-        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-        if (card.dataset['originalHtml'] === undefined) {
-            card.dataset['originalHtml'] = card.innerHTML;
-        }
+        card.dataset['originalHtml'] ??= card.innerHTML;
     }
 
     /**
@@ -629,7 +633,7 @@ export class AppUI {
                 app.type === 'api' ||
                 ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
             const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
-            if (badgeHtml) {
+            if (badgeHtml !== '') {
                 card.insertAdjacentHTML('afterbegin', badgeHtml);
             }
         }
@@ -637,7 +641,10 @@ export class AppUI {
         if (statusBadge !== null) {
             statusBadge.classList.remove('not-installed');
             statusBadge.classList.add('installed');
-            statusBadge.innerHTML = DOMPurify.sanitize(this._getAppStatusHtml(false, true), this._purifyConfig);
+            statusBadge.innerHTML = DOMPurify.sanitize(
+                this._getAppStatusHtml(false, true),
+                this._purifyConfig,
+            );
         }
     }
 
@@ -745,7 +752,7 @@ export class AppUI {
     private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown): void {
         logger.error('Download error:', err);
         const win = globalThis as TGlobalWin;
-        if (win.showToast) win.showToast('Download failed', 'error');
+        win.showToast('Download failed', 'error');
         this._setDownloadReady(actionBtn);
     }
 
@@ -800,23 +807,19 @@ export class AppUI {
         );
         closeBtn.onclick = (e): void => {
             e.stopImmediatePropagation();
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-            card.innerHTML = card.dataset['originalHtml'] || '';
+            card.innerHTML = card.dataset['originalHtml'] ?? '';
             card.classList.remove('selected');
             card.classList.add('empty');
-            
+
             const win = globalThis as TGlobalWin;
-            if (win.uiState !== undefined) {
-                win.uiState.removeSelectedModule?.(category);
-            }
+            win.uiState.removeSelectedModule(category);
         };
         card.appendChild(closeBtn);
     }
 
     private _handleModuleCardClick(e: MouseEvent, card: HTMLElement, category: string): void {
         const target = e.target as HTMLElement;
-        if (target === null || target === undefined) return;
-        
+
         const isOnBackground =
             target === card ||
             target.classList.contains('model-icon-wrapper') ||
@@ -855,7 +858,7 @@ export class AppUI {
         if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
             return 'Axelate Local AI';
         }
-        return app.name || 'Unknown';
+        return app.name ?? 'Unknown';
     }
 
     private _getAppDesc(app: IApp): string {
@@ -866,7 +869,6 @@ export class AppUI {
         if (typeof win.t === 'function') {
             // Try to translate with explicit key or constructed key
             // We pass 'desc' as fallback. If constructed key doesn't exist, it returns fallback.
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
             const translated = win.t(key, desc);
             if (translated !== key) {
                 return translated;
@@ -878,7 +880,7 @@ export class AppUI {
     private _getAppDeleteBadgeHtml(isApi: boolean, isInstalled: boolean): string {
         if (isApi || !isInstalled) return '';
         const win = globalThis as TGlobalWin;
-        const deleteText = // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        const deleteText =
             typeof win.t === 'function' ? win.t('ui.launcher.module.delete', 'DELETE') : 'DELETE';
         return `
             <div class="app-delete-badge">
@@ -939,9 +941,10 @@ export class AppUI {
     }
 
     private _populateAppList(listEl: HTMLElement, apps: IApp[], category: string): void {
+        logger.info(`[AppUI] Populating ${category} with ${apps.length} apps`);
         listEl.innerHTML = '';
 
-        if (!apps || apps.length === 0) {
+        if (apps.length === 0) {
             listEl.innerHTML = DOMPurify.sanitize(
                 '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted);">No apps found</div>',
                 this._purifyConfig,
@@ -960,7 +963,7 @@ export class AppUI {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
         if (iconWrapper !== null)
             iconWrapper.innerHTML = DOMPurify.sanitize(
-                `<div>${app.icon || '📦'}</div>`,
+                `<div>${app.icon ?? '📦'}</div>`,
                 this._purifyConfig,
             );
 
@@ -970,9 +973,13 @@ export class AppUI {
                 title.textContent = 'Axelate Local AI';
                 delete title.dataset['i18n'];
             } else {
-                let titleText = app.name || '';
+                let titleText = app.name ?? '';
                 const win = globalThis as TGlobalWin;
-                if (typeof win.t === 'function' && app.nameKey) {
+                if (
+                    typeof win.t === 'function' &&
+                    app.nameKey !== undefined &&
+                    app.nameKey !== ''
+                ) {
                     title.dataset['i18n'] = app.nameKey;
                     titleText = win.t(app.nameKey, titleText);
                 } else {
@@ -990,7 +997,7 @@ export class AppUI {
                 desc.dataset['i18n'] = app.descKey ?? '';
                 // Use translated text OR fallback to original if translation is empty
                 const translated = win.t(app.descKey ?? '', descText);
-                descText = translated || app.desc || '';
+                descText = translated || (app.desc ?? '');
             } else {
                 delete desc.dataset['i18n'];
             }
@@ -1007,5 +1014,4 @@ export class AppUI {
         this._addSettingsBtn(card, app);
         this._addCloseBtn(card, category);
     }
-
 }

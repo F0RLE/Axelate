@@ -7,6 +7,7 @@ import { type WindowService } from '../services/WindowService';
 import type { TGlobalWin } from '../types/global_bridge_types';
 import { type StateService } from '../services/StateService';
 import { type SoundService } from '../services/SoundService';
+import { logger } from '../services/LoggerService';
 
 // IWindowUIGlobal removed
 
@@ -46,7 +47,7 @@ export class WindowUI {
 
         // Fire and forget
         this._applySmallScreenProtection().catch((err: unknown) => {
-            console.warn('[WindowUI] Failed to apply small screen protection:', err);
+            logger.warn('[WindowUI] Failed to apply small screen protection:', err);
         });
 
         // Initial check
@@ -181,7 +182,7 @@ export class WindowUI {
             this.updateMaximizeIcon(isMaximized);
             this._handlePolicyAdjustments(policy, isMaximized);
         } catch (e) {
-            console.warn('[WindowUI] Resize check failed:', e);
+            logger.warn('[WindowUI] Resize check failed:', e);
         }
     }
 
@@ -212,8 +213,7 @@ export class WindowUI {
         // Ctrl+R Refresh
         if ((e.ctrlKey && ['r', 'R', 'к', 'К'].includes(e.key)) || e.key === 'F5') {
             e.preventDefault();
-            const win = globalThis as TGlobalWin;
-            if (win.location) win.location.reload();
+            globalThis.location.reload();
             return;
         }
 
@@ -235,7 +235,7 @@ export class WindowUI {
             'selectstart',
             (e: Event) => {
                 const target = e.target as HTMLElement;
-                if (target?.closest?.(allowedSelectors)) {
+                if (target.closest(allowedSelectors)) {
                     return;
                 }
                 e.preventDefault();
@@ -248,7 +248,7 @@ export class WindowUI {
             (e: Event) => {
                 const ev = e as MouseEvent;
                 const target = ev.target as HTMLElement;
-                if (target?.closest?.(allowedSelectors)) {
+                if (target.closest(allowedSelectors)) {
                     return;
                 }
                 if (ev.detail > 1) {
@@ -334,13 +334,11 @@ export class WindowUI {
 
         if (this._wasMaximizedOnSmallScreen && !isMaximized) {
             const win = globalThis as TGlobalWin;
-            if (win.screen) {
-                const width = Math.floor((win.screen.availWidth || win.screen.width) * 0.85);
-                const height = Math.floor((win.screen.availHeight || win.screen.height) * 0.85);
+            const width = Math.floor((win.screen.availWidth || win.screen.width) * 0.85);
+            const height = Math.floor((win.screen.availHeight || win.screen.height) * 0.85);
 
-                await this._service.setSize(width, height);
-                this._wasMaximizedOnSmallScreen = false;
-            }
+            await this._service.setSize(width, height);
+            this._wasMaximizedOnSmallScreen = false;
         }
     }
 
@@ -432,8 +430,8 @@ export class WindowUI {
         const height = win.innerHeight / zoom;
 
         // Use backend thresholds if available, otherwise safe defaults
-        const minWidth = config?.thresholds.warningWidth || 700;
-        const minHeight = config?.thresholds.warningHeight || 500;
+        const minWidth = config?.thresholds.warningWidth ?? 700;
+        const minHeight = config?.thresholds.warningHeight ?? 500;
 
         if (width < minWidth || height < minHeight) {
             if (this._modulesWarning) {
@@ -442,7 +440,7 @@ export class WindowUI {
             }
             if (
                 this._settingsWarning &&
-                !document.getElementById('page-settings')?.classList.contains('hidden')
+                document.getElementById('page-settings')?.classList.contains('hidden') === false
             ) {
                 this._settingsWarning.classList.remove('hidden');
                 this._settingsWarning.classList.add('flex-important');

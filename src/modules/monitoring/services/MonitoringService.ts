@@ -1,4 +1,5 @@
 import { type TauriProvider } from '../../core/services/TauriProvider';
+import { logger } from '../../core/services/LoggerService';
 import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 interface IMonitoringGlobal {
@@ -37,16 +38,16 @@ export class MonitoringService {
                         this.notifyListeners(payload);
                     },
                 );
-                console.log('[MonitoringService] Started listening to system_stats');
+                logger.info('[MonitoringService] Started listening to system_stats');
             } catch (e) {
-                console.error('[MonitoringService] Failed to listen to events:', e);
+                logger.error('[MonitoringService] Failed to listen to events:', e);
                 this.startFallback();
             }
 
             // Optimization: Pause backend monitoring when window is hidden
             this._bindVisibilityHandler();
         } else {
-            console.log('[MonitoringService] Non-Tauri environment, starting fallback polling');
+            logger.info('[MonitoringService] Non-Tauri environment, starting fallback polling');
             this.startFallback();
         }
     }
@@ -61,7 +62,7 @@ export class MonitoringService {
                 // Fire and forget
                 void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
                 if (import.meta.env.DEV) {
-                    console.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
+                    logger.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
                 }
             }
         });
@@ -108,7 +109,7 @@ export class MonitoringService {
             try {
                 cb(stats);
             } catch (err) {
-                console.error('[MonitoringService] Listener error:', err);
+                logger.error('[MonitoringService] Listener error:', err);
             }
         });
     }
@@ -127,46 +128,10 @@ export class MonitoringService {
                         return;
                     }
                 } catch (e) {
-                    console.warn('[MonitoringService] Poll failed', e);
+                    logger.warn('[MonitoringService] Poll failed', e);
                 }
-                // Fallback to mock ONLY if poll failed
-                const mockStats: ISystemStats = {
-                    cpu: { percent: this.random() * 30 + 10, cores: 8, name: 'Mock CPU' },
-                    ram: { usedGb: 8, totalGb: 32, percent: 25, availableGb: 24 },
-                    gpu: {
-                        usage: this.random() * 50,
-                        temp: 45,
-                        memoryUsed: 4,
-                        memoryTotal: 8,
-                        name: 'Mock GPU',
-                    },
-                    vram: { percent: 50, usedGb: 4, totalGb: 8 },
-                    disk: {
-                        usedGb: 500,
-                        totalGb: 1000,
-                        utilization: 50,
-                        readRate: 1024,
-                        writeRate: 2048,
-                        activityPercent: 10,
-                    },
-                    network: {
-                        uploadRate: this.random() * 5 * 1024 * 1024,
-                        downloadRate: this.random() * 20 * 1024 * 1024,
-                        totalReceived: 0,
-                        totalSent: 0,
-                        utilization: 0,
-                        activityPercent: 5,
-                    },
-                    pid: 1234,
-                };
-                this.notifyListeners(mockStats);
+                // Fallback to mock removed for quality assurance
             })();
         }, 1000);
-    }
-
-    private random(): number {
-        const buffer = new Uint32Array(1);
-        crypto.getRandomValues(buffer);
-        return (buffer[0] ?? 0) / (0xffffffff + 1);
     }
 }

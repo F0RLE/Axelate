@@ -10,6 +10,7 @@ import { voiceInputService } from './services/VoiceInputService';
 import { chatFileHandler } from './services/ChatFileHandler'; /* Import Singleton */
 import { getTokenCount } from './utils/chatUtils';
 import { type TGlobalWin } from '../core/types/global_bridge_types';
+import { logger } from '../core/services/LoggerService';
 
 export class ChatController {
     private readonly _service: ChatService;
@@ -28,9 +29,9 @@ export class ChatController {
      * Initializes the controller and binds events.
      */
     private _init(): void {
-        console.log('[Chat] Initializing TS Controller...');
+        logger.info('[Chat] Initializing TS Controller...');
         void this._ui.init().catch((err: unknown) => {
-            console.error('[Chat] UI init failed:', err);
+            logger.error(`[Chat] UI init failed: ${String(err)}`);
         });
         this._bindEvents();
         this._exposeGlobals();
@@ -81,8 +82,8 @@ export class ChatController {
 
         if (aiBridge && typeof aiBridge.getHistory === 'function') {
             const history = await aiBridge.getHistory();
-            if (history && history.length > 0) {
-                console.log(
+            if (Array.isArray(history) && history.length > 0) {
+                logger.info(
                     `[ChatController] Restoring ${String(history.length)} messages from persistence`,
                 );
                 this._chatHistory = history;
@@ -113,7 +114,7 @@ export class ChatController {
         }
 
         // File Input
-        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement;
+        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
                 this._handleFileSelect(e);
@@ -137,7 +138,8 @@ export class ChatController {
         }
 
         // Input Key Handler (Enter to send)
-        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
+        // Input Key Handler (Enter to send)
+        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         if (chatInput) {
             chatInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -198,7 +200,7 @@ export class ChatController {
      * Updates the token count display.
      */
     private async _updateTokenCount(): Promise<void> {
-        const input = document.getElementById('chat-input') as HTMLTextAreaElement;
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         const text = input ? input.value : '';
         const count = await chatFileHandler.getTotalTokenEstimate(text);
         this._ui.updateTokenCount(count);
@@ -208,7 +210,7 @@ export class ChatController {
      * Sends the current chat input text and attachments.
      */
     public async sendChat(): Promise<void> {
-        const input = document.getElementById('chat-input') as HTMLTextAreaElement;
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         const text = (input ? input.value : '').trim();
 
         if (!this._validateInput(text)) return;
@@ -262,9 +264,9 @@ export class ChatController {
     }
 
     private _lockUI(input: HTMLTextAreaElement | null) {
-        const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement;
-        const voiceBtn = document.getElementById('chat-voice-btn') as HTMLButtonElement;
-        const attachBtn = document.getElementById('chat-attach-btn') as HTMLButtonElement;
+        const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement | null;
+        const voiceBtn = document.getElementById('chat-voice-btn') as HTMLButtonElement | null;
+        const attachBtn = document.getElementById('chat-attach-btn') as HTMLButtonElement | null;
 
         if (input) {
             input.value = '';
@@ -300,7 +302,7 @@ export class ChatController {
                   onChunk: (id: string, cb: (c: string) => void) => void;
               }
             | undefined;
-        if (aiBridge) {
+        if (aiBridge !== undefined) {
             aiBridge.onChunk(id, onChunk);
         }
     }
@@ -312,7 +314,7 @@ export class ChatController {
                   removeChunkListener: (id: string) => void;
               }
             | undefined;
-        if (aiBridge) {
+        if (aiBridge !== undefined) {
             aiBridge.removeChunkListener(id);
         }
     }
@@ -331,7 +333,7 @@ export class ChatController {
     /**
      * Checks if AI module is active.
      */
-    private _checkAIActive(input: HTMLTextAreaElement): boolean {
+    private _checkAIActive(input: HTMLTextAreaElement | null): boolean {
         const win = globalThis as unknown as Record<string, unknown>;
         const aiBridge = win['aiBridge'] as Record<string, unknown> | undefined;
         const isAIActive =
@@ -341,7 +343,7 @@ export class ChatController {
 
         if (!isAIActive) {
             const text = input ? input.value.trim() : '';
-            if (text) this._ui.appendMessage('user', text);
+            if (text !== '') this._ui.appendMessage('user', text);
             setTimeout(() => {
                 const t = win['t'] as ((_k: string, _d: string) => string) | undefined;
                 this._ui.appendMessage(
@@ -349,7 +351,7 @@ export class ChatController {
                     t?.(
                         'ui.ai.no_provider',
                         'No AI module running. Please launch a module first.',
-                    ) || 'No AI module running. Please launch a module first.',
+                    ) ?? 'No AI module running. Please launch a module first.',
                     { error: true },
                 );
             }, 500);
@@ -370,9 +372,9 @@ export class ChatController {
         } | null,
     ): Promise<void> {
         if (response.ok) {
-            const replyText = response.message || response.reply?.text || '';
+            const replyText = response.message ?? response.reply?.text ?? '';
 
-            if (replyText) {
+            if (replyText !== '') {
                 const tokens = await getTokenCount(replyText);
 
                 if (streamingHandle) {
@@ -384,7 +386,7 @@ export class ChatController {
                 this._chatHistory.push({ role: 'assistant', content: replyText });
             }
         } else {
-            const friendlyMsg = this._getFriendlyErrorMessage(response.error || '', response.model);
+            const friendlyMsg = this._getFriendlyErrorMessage(response.error ?? '', response.model);
             this._handleError(friendlyMsg, response.model);
         }
     }
@@ -398,7 +400,7 @@ export class ChatController {
         if (!t) return errorMsg;
 
         const msg = (errorMsg || '').toLowerCase();
-        const modelName = model || 'Gemini';
+        const modelName = model ?? 'Gemini';
 
         // 1. Detect common error codes (handles both plain text and JSON strings)
         // 503 / Unavailable / Overloaded
@@ -484,8 +486,8 @@ export class ChatController {
      * Handles voice recognition results.
      */
     private _onVoiceResult(text: string): void {
-        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement;
-        if (chatInput && text) {
+        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+        if (chatInput) {
             chatInput.value += (chatInput.value ? ' ' : '') + text;
             this._autoResizeInput();
         }
@@ -536,7 +538,7 @@ export class ChatController {
      * Resizes the chat input based on content.
      */
     private _autoResizeInput(): void {
-        const el = document.getElementById('chat-input') as HTMLTextAreaElement;
+        const el = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         if (el) {
             el.style.height = 'auto';
             const newHeight = Math.min(el.scrollHeight, 200);

@@ -3,23 +3,23 @@
 ```
 ├── 📁 .github
 │   ├── 📁 .husky
-│   │   ├── 📄 commit-msg
-│   │   └── 📄 pre-commit
+│   │   ├── 📄 commit-msg # Commit message hook
+│   │   └── 📄 pre-commit # Pre-commit hook
 │   ├── 📁 ISSUE_TEMPLATE
 │   │   ├── 📝 bug_report.md
 │   │   └── 📝 feature_request.md
 │   ├── 📁 scripts
-│   │   ├── 📄 clear.ps1
-│   │   ├── 📄 dev.ps1
-│   │   ├── 📄 release.ps1
-│   │   ├── 📄 update.ps1
-│   │   └── 📄 verify-all.ps1
+│   │   ├── 📄 clear.ps1 # Script to clear build artifacts
+│   │   ├── 📄 dev.ps1 # Development environment startup script
+│   │   ├── 📄 release.ps1 # Release build script
+│   │   ├── 📄 update.ps1 # Project update script
+│   │   └── 📄 verify-all.ps1 # Comprehensive project verification script
 │   ├── 📁 workflows
-│   │   ├── ⚙️ ci.yml
-│   │   └── ⚙️ release.yml
+│   │   ├── ⚙️ ci.yml # Continuous Integration workflow
+│   │   └── ⚙️ release.yml # Release build workflow
 │   ├── 📝 PULL_REQUEST_TEMPLATE.md
-│   ├── 📄 commitlint.config.js
-│   └── ⚙️ dependabot.yml
+│   ├── 📄 commitlint.config.js # CommitLint configuration
+│   └── ⚙️ dependabot.yml # Dependabot configuration
 ├── 📁 docs
 │   ├── 📁 en
 │   │   ├── 📝 CODING_STANDARDS.md
@@ -65,49 +65,49 @@
 │   ├── 📁 modules
 │   │   ├── 📁 ai
 │   │   │   ├── 📁 providers
-│   │   │   │   └── 📄 AIProvider.ts
+│   │   │   │   └── 📄 AIProvider.ts # Abstract base class for AI providers
 │   │   │   ├── 📁 types
-│   │   │   │   └── 📄 aiTypes.ts
+│   │   │   │   └── 📄 aiTypes.ts # Type definitions for AI models and responses
 │   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 AISettingsRenderer.ts
+│   │   │   │   └── 📄 AISettingsRenderer.ts # Renders AI-specific settings UI
 │   │   │   ├── 📁 utils
-│   │   │   │   └── 📄 catalogHelpers.ts
-│   │   │   ├── 📄 AIBridge.ts
-│   │   │   └── 📄 index.ts
+│   │   │   │   └── 📄 catalogHelpers.ts # Helpers for AI model catalog operations
+│   │   │   ├── 📄 AIBridge.ts # Bridge for AI operations (legacy support)
+│   │   │   └── 📄 index.ts # Module entry point
 │   │   ├── 📁 chat
 │   │   │   ├── 📁 services
-│   │   │   │   ├── 📄 ChatFileHandler.ts
-│   │   │   │   ├── 📄 ChatService.ts
-│   │   │   │   └── 📄 VoiceInputService.ts
+│   │   │   │   ├── 📄 ChatFileHandler.ts # Handles file attachments in chat
+│   │   │   │   ├── 📄 ChatService.ts # Core chat logic and state management
+│   │   │   │   └── 📄 VoiceInputService.ts # Handles voice input/STT
 │   │   │   ├── 📁 types
-│   │   │   │   └── 📄 chatTypes.ts
+│   │   │   │   └── 📄 chatTypes.ts # Chat-related type definitions
 │   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 ChatUI.ts
+│   │   │   │   └── 📄 ChatUI.ts # Chat interface renderer and interaction handler
 │   │   │   ├── 📁 utils
-│   │   │   │   └── 📄 chatUtils.ts
-│   │   │   ├── 📄 chat.ts
-│   │   │   └── 📄 index.ts
+│   │   │   │   └── 📄 chatUtils.ts # Utility functions for chat formatting
+│   │   │   ├── 📄 chat.ts # Chat module initialization (legacy)
+│   │   │   └── 📄 index.ts # Module entry point
 │   │   ├── 📁 core
 │   │   │   ├── 📁 boot
-│   │   │   │   ├── 📄 EventHandler.ts
-│   │   │   │   └── 📄 GlobalBridge.ts
+│   │   │   │   ├── 📄 EventHandler.ts # Central event handling logic
+│   │   │   │   └── 📄 GlobalBridge.ts # Exposes core services to global window object
 │   │   │   ├── 📁 services
-│   │   │   │   ├── 📄 CatalogService.ts
-│   │   │   │   ├── 📄 ErrorHandler.ts
-│   │   │   │   ├── 📄 EventBus.ts
-│   │   │   │   ├── 📄 I18nService.ts
-│   │   │   │   ├── 📄 LoggerService.ts
-│   │   │   │   ├── 📄 ModuleService.ts
-│   │   │   │   ├── 📄 NavigationService.ts
-│   │   │   │   ├── 📄 SoundService.ts
-│   │   │   │   ├── 📄 StateService.ts
-│   │   │   │   ├── 📄 TauriProvider.ts
-│   │   │   │   ├── 📄 TemplateLoader.ts
-│   │   │   │   └── 📄 WindowService.ts
+│   │   │   │   ├── 📄 CatalogService.ts # Manages app catalog and configuration
+│   │   │   │   ├── 📄 ErrorHandler.ts # Global error handling service
+│   │   │   │   ├── 📄 EventBus.ts # Pub/Sub event bus implementation
+│   │   │   │   ├── 📄 I18nService.ts # Internationalization and translation service
+│   │   │   │   ├── 📄 LoggerService.ts # Application logging service
+│   │   │   │   ├── 📄 ModuleService.ts # Manages module downloads and lifecycle
+│   │   │   │   ├── 📄 NavigationService.ts # handles page navigation
+│   │   │   │   ├── 📄 SoundService.ts # UI sound effects manager
+│   │   │   │   ├── 📄 StateService.ts # Manages global application state
+│   │   │   │   ├── 📄 TauriProvider.ts # Bridge to Tauri backend commands
+│   │   │   │   ├── 📄 TemplateLoader.ts # Loads HTML templates for UI
+│   │   │   │   └── 📄 WindowService.ts # Window management (maximize, minimize, etc.)
 │   │   │   ├── 📁 types
-│   │   │   │   ├── 📄 bindings.ts
-│   │   │   │   ├── 📄 coreTypes.ts
-│   │   │   │   └── 📄 global_bridge_types.ts
+│   │   │   │   ├── 📄 bindings.ts # TypeScript bindings for Rust structs
+│   │   │   │   ├── 📄 coreTypes.ts # Core application type definitions
+│   │   │   │   └── 📄 global_bridge_types.ts # Types for global window objects
 │   │   │   ├── 📁 ui
 │   │   │   │   ├── 📄 AppUI.ts
 │   │   │   │   ├── 📄 I18nUI.ts
@@ -119,35 +119,44 @@
 │   │   │   └── 📄 index.ts
 │   │   ├── 📁 dashboard
 │   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 DashboardUI.ts
-│   │   │   └── 📄 index.ts
+│   │   │   │   └── 📄 DashboardUI.ts # Main dashboard overview renderer
+│   │   │   └── 📄 index.ts # Module entry point
 │   │   ├── 📁 debug
 │   │   │   ├── 📁 services
-│   │   │   │   └── 📄 DebugService.ts
+│   │   │   │   └── 📄 DebugService.ts # Service for debug tools and logging
 │   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 DebugUI.ts
-│   │   │   └── 📄 index.ts
+│   │   │   │   └── 📄 DebugUI.ts # UI for debug panel and log viewer
+│   │   │   └── 📄 index.ts # Module entry point
 │   │   ├── 📁 downloader
 │   │   │   ├── 📁 types
-│   │   │   │   └── 📄 downloaderTypes.ts
+│   │   │   │   └── 📄 downloaderTypes.ts # Type definitions for downloader
 │   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 DownloadUI.ts
-│   │   │   └── 📄 index.ts
+│   │   │   │   └── 📄 DownloadUI.ts # UI for module download manager
+│   │   │   └── 📄 index.ts # Module entry point
 │   │   ├── 📁 monitoring
 │   │   │   ├── 📁 services
-│   │   │   │   └── 📄 MonitoringService.ts
+│   │   │   │   └── 📄 MonitoringService.ts # System resource monitoring service
 │   │   │   ├── 📁 types
-│   │   │   │   └── 📄 monitoringTypes.ts
+│   │   │   │   └── 📄 monitoringTypes.ts # Monitoring data types
 │   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 MonitoringUI.ts
-│   │   │   └── 📄 index.ts
+│   │   │   │   └── 📄 MonitoringUI.ts # System monitor UI renderer
+│   │   │   └── 📄 index.ts # Module entry point
 │   │   └── 📁 settings
 │   │       ├── 📁 services
-│   │       │   └── 📄 SettingsService.ts
+│   │       │   └── 📄 SettingsService.ts # Manages app settings persistence
 │   │       ├── 📁 ui
-│   │       │   ├── 📄 GeneralSettingsRenderer.ts
-│   │       │   └── 📄 SettingsUI.ts
-│   │       └── 📄 index.ts
+│   │       │   ├── 📁 components
+│   │       │   │   ├── 📄 CardResizer.ts # Logic for resizing settings cards
+│   │       │   │   ├── 📄 FieldFactory.ts # Factory for creating setting fields
+│   │       │   │   ├── 📄 ISettingField.ts # Interface for setting field components
+│   │       │   │   ├── 📄 NumberField.ts # Component for number input fields
+│   │       │   │   ├── 📄 SelectField.ts # Component for dropdown selection fields
+│   │       │   │   ├── 📄 TextField.ts # Component for text input fields
+│   │       │   │   └── 📄 ToggleField.ts # Component for checkbox toggle fields
+│   │       │   ├── 📄 GeneralSettingsRenderer.ts # Renders general application settings
+│   │       │   ├── 📄 SettingsContext.ts # Context provider for Settings UI dependencies
+│   │       │   └── 📄 SettingsUI.ts # Main Settings UI orchestrator
+│   │       └── 📄 index.ts # Module entry point
 │   ├── 📁 public
 │   │   └── 📁 templates
 │   │       ├── 📁 components
@@ -156,32 +165,29 @@
 │   │       └── 📁 pages
 │   │           └── 🌐 settings.html
 │   ├── 📁 scripts
-│   │   ├── 📄 analyze-lint-v2.cjs
-│   │   ├── 📄 bump-version.js
-│   │   └── 📄 check-size.js
+│   │   ├── 📄 analyze-lint-v2.cjs # Script for analyzing linting results
+│   │   ├── 📄 bump-version.js # Version bumping utility
+│   │   └── 📄 check-size.js # Bundle size checker
 │   ├── 📁 test
-│   │   ├── 📄 AIBridge.test.ts
-│   │   ├── 📄 ChatFileHandler.test.ts
-│   │   ├── 📄 ErrorHandler.test.ts
-│   │   ├── 📄 EventBus.test.ts
-│   │   ├── 📄 I18nService.test.ts
-│   │   ├── 📄 ModuleService.test.ts
-│   │   ├── 📄 NavigationService.test.ts
-│   │   ├── 📄 StateService.test.ts
-│   │   ├── 📄 TauriProvider.test.ts
-│   │   ├── 📄 VoiceInputService.test.ts
-│   │   ├── 📄 setup.test.ts
-│   │   ├── 📄 setup.ts
-│   │   └── 📄 templateLoader.test.ts
+│   │   ├── 📄 AIBridge.test.ts # Unit tests for AIBridge
+│   │   ├── 📄 ChatFileHandler.test.ts # Unit tests for ChatFileHandler
+│   │   ├── 📄 ErrorHandler.test.ts # Unit tests for ErrorHandler
+│   │   ├── 📄 EventBus.test.ts # Unit tests for EventBus
+│   │   ├── 📄 I18nService.test.ts # Unit tests for I18nService
+│   │   ├── 📄 ModuleService.test.ts # Unit tests for ModuleService
+│   │   ├── 📄 NavigationService.test.ts # Unit tests for NavigationService
+│   │   ├── 📄 StateService.test.ts # Unit tests for StateService
+│   │   ├── 📄 TauriProvider.test.ts # Unit tests for TauriProvider
+│   │   ├── 📄 VoiceInputService.test.ts # Unit tests for VoiceInputService
+│   │   ├── 📄 setup.test.ts # Global test setup configuration
+│   │   ├── 📄 setup.ts # Test environment initialization
+│   │   └── 📄 templateLoader.test.ts # Unit tests for TemplateLoader
 │   ├── 📁 types
 │   │   └── 📄 global.d.ts
 │   ├── ⚙️ .prettierignore
 │   ├── ⚙️ .prettierrc
 │   ├── 📄 eslint.config.js
 │   ├── 🌐 index.html
-│   ├── ⚙️ lint-results-final.json
-│   ├── ⚙️ lint-results-v2.json
-│   ├── ⚙️ lint-results.json
 │   ├── ⚙️ package.json
 │   ├── ⚙️ tsconfig.json
 │   ├── 📄 vite-env.d.ts
@@ -204,80 +210,80 @@
 │   │   └── ⚙️ api_providers.json
 │   ├── 📁 src
 │   │   ├── 📁 commands
-│   │   │   ├── 🦀 ai.rs
-│   │   │   ├── 🦀 bootstrap.rs
-│   │   │   ├── 🦀 config.rs
-│   │   │   ├── 🦀 downloader.rs
-│   │   │   ├── 🦀 health.rs
-│   │   │   ├── 🦀 license.rs
-│   │   │   ├── 🦀 logs.rs
-│   │   │   ├── 🦀 mod.rs
-│   │   │   ├── 🦀 modules.rs
-│   │   │   ├── 🦀 secure.rs
-│   │   │   ├── 🦀 settings.rs
-│   │   │   ├── 🦀 system.rs
-│   │   │   ├── 🦀 theme.rs
-│   │   │   ├── 🦀 translations.rs
-│   │   │   ├── 🦀 ui_state.rs
-│   │   │   ├── 🦀 window.rs
-│   │   │   └── 🦀 window_settings.rs
+│   │   │   ├── 🦀 ai.rs # AI-related Tauri commands
+│   │   │   ├── 🦀 bootstrap.rs # App bootstrap commands
+│   │   │   ├── 🦀 config.rs # Configuration management commands
+│   │   │   ├── 🦀 downloader.rs # Module download commands
+│   │   │   ├── 🦀 health.rs # Health check commands
+│   │   │   ├── 🦀 license.rs # License management commands
+│   │   │   ├── 🦀 logs.rs # Logging commands
+│   │   │   ├── 🦀 mod.rs # Module definition for commands
+│   │   │   ├── 🦀 modules.rs # Module lifecycle commands
+│   │   │   ├── 🦀 secure.rs # Secure storage commands
+│   │   │   ├── 🦀 settings.rs # Settings management commands
+│   │   │   ├── 🦀 system.rs # System information commands
+│   │   │   ├── 🦀 theme.rs # Theme management commands
+│   │   │   ├── 🦀 translations.rs # I18n commands
+│   │   │   ├── 🦀 ui_state.rs # UI state persistence commands
+│   │   │   ├── 🦀 window.rs # Window control commands
+│   │   │   └── 🦀 window_settings.rs # Window settings commands
 │   │   ├── 📁 models
-│   │   │   ├── 🦀 config.rs
-│   │   │   ├── 🦀 custom_models.rs
-│   │   │   ├── 🦀 license.rs
-│   │   │   ├── 🦀 mod.rs
-│   │   │   ├── 🦀 module.rs
-│   │   │   ├── 🦀 modules.rs
-│   │   │   ├── 🦀 settings.rs
-│   │   │   ├── 🦀 system.rs
-│   │   │   └── 🦀 ui_state.rs
+│   │   │   ├── 🦀 config.rs # Configuration structs
+│   │   │   ├── 🦀 custom_models.rs # Custom model structs
+│   │   │   ├── 🦀 license.rs # License structs
+│   │   │   ├── 🦀 mod.rs # Module definition for models
+│   │   │   ├── 🦀 module.rs # Module item structs
+│   │   │   ├── 🦀 modules.rs # Module collection structs
+│   │   │   ├── 🦀 settings.rs # Settings structs
+│   │   │   ├── 🦀 system.rs # System info structs
+│   │   │   └── 🦀 ui_state.rs # UI state structs
 │   │   ├── 📁 services
 │   │   │   ├── 📁 license
-│   │   │   │   ├── 🦀 mod.rs
-│   │   │   │   ├── 🦀 storage.rs
-│   │   │   │   ├── 🦀 types.rs
-│   │   │   │   └── 🦀 verifier.rs
-│   │   │   ├── 🦀 ai_service.rs
-│   │   │   ├── 🦀 config_service.rs
-│   │   │   ├── 🦀 custom_model_service.rs
-│   │   │   ├── 🦀 downloader.rs
-│   │   │   ├── 🦀 file_service.rs
-│   │   │   ├── 🦀 health.rs
-│   │   │   ├── 🦀 logs.rs
-│   │   │   ├── 🦀 mod.rs
-│   │   │   ├── 🦀 module_controller.rs
-│   │   │   ├── 🦀 module_lifecycle.rs
-│   │   │   ├── 🦀 secure_storage.rs
-│   │   │   ├── 🦀 server.rs
-│   │   │   ├── 🦀 settings.rs
-│   │   │   ├── 🦀 system_monitor.rs
-│   │   │   ├── 🦀 theme.rs
-│   │   │   ├── 🦀 translations.rs
-│   │   │   ├── 🦀 ui_state.rs
-│   │   │   └── 🦀 window_settings.rs
+│   │   │   │   ├── 🦀 mod.rs # Module definition for license service
+│   │   │   │   ├── 🦀 storage.rs # License storage logic
+│   │   │   │   ├── 🦀 types.rs # License service types
+│   │   │   │   └── 🦀 verifier.rs # License verification logic
+│   │   │   ├── 🦀 ai_service.rs # Core AI service logic
+│   │   │   ├── 🦀 config_service.rs # Configuration loading/saving
+│   │   │   ├── 🦀 custom_model_service.rs # Custom model management
+│   │   │   ├── 🦀 downloader.rs # Download manager service
+│   │   │   ├── 🦀 file_service.rs # File system operations
+│   │   │   ├── 🦀 health.rs # System health monitoring
+│   │   │   ├── 🦀 logs.rs # Logger implementation
+│   │   │   ├── 🦀 mod.rs # Module definition for services
+│   │   │   ├── 🦀 module_controller.rs # Module execution controller
+│   │   │   ├── 🦀 module_lifecycle.rs # Module lifecycle manager
+│   │   │   ├── 🦀 secure_storage.rs # Secure storage service (keytar)
+│   │   │   ├── 🦀 server.rs # Local server implementation
+│   │   │   ├── 🦀 settings.rs # Settings persistence service
+│   │   │   ├── 🦀 system_monitor.rs # System resource monitor
+│   │   │   ├── 🦀 theme.rs # Theme manager
+│   │   │   ├── 🦀 translations.rs # Translation loader
+│   │   │   ├── 🦀 ui_state.rs # UI state manager
+│   │   │   └── 🦀 window_settings.rs # Window settings manager
 │   │   ├── 📁 utils
-│   │   │   ├── 🦀 memory.rs
-│   │   │   ├── 🦀 mod.rs
-│   │   │   ├── 🦀 paths.rs
-│   │   │   ├── 🦀 process.rs
-│   │   │   ├── 🦀 setup.rs
-│   │   │   └── 🦀 windows.rs
-│   │   ├── 🦀 errors.rs
-│   │   ├── 🦀 lib.rs
-│   │   ├── 🦀 main.rs
-│   │   └── 🦀 tests.rs
-│   ├── ⚙️ Cargo.toml
-│   ├── 🦀 build.rs
-│   ├── ⚙️ rustfmt.toml
-│   └── ⚙️ tauri.conf.json
-├── ⚙️ .editorconfig
-├── ⚙️ .gitattributes
-├── ⚙️ .gitignore
-├── ⚙️ .prettierignore
-├── 📝 CODE_OF_CONDUCT.md
-├── 📝 CONTRIBUTING.md
-├── 📄 LICENSE
-├── 📝 README.md
-├── 📝 SECURITY.md
-└── ⚙️ package.json
+│   │   │   ├── 🦀 memory.rs # Memory management utils
+│   │   │   ├── 🦀 mod.rs # Module definition for utils
+│   │   │   ├── 🦀 paths.rs # Path resolution utils
+│   │   │   ├── 🦀 process.rs # Process management utils
+│   │   │   ├── 🦀 setup.rs # App setup helpers
+│   │   │   └── 🦀 windows.rs # Windows-specific utils
+│   │   ├── 🦀 errors.rs # Custom error types
+│   │   ├── 🦀 lib.rs # Library entry point
+│   │   ├── 🦀 main.rs # Application entry point
+│   │   └── 🦀 tests.rs # Rust unit tests
+│   ├── ⚙️ Cargo.toml # Rust dependencies and metadata
+│   ├── 🦀 build.rs # Build script
+│   ├── ⚙️ rustfmt.toml # Rust formatting config
+│   └── ⚙️ tauri.conf.json # Tauri configuration
+├── ⚙️ .editorconfig # Editor configuration rules
+├── ⚙️ .gitattributes # Git attribute configurations
+├── ⚙️ .gitignore # Git ignore rules
+├── ⚙️ .prettierignore # Prettier ignore rules
+├── 📝 CODE_OF_CONDUCT.md # Code of conduct for contributors
+├── 📝 CONTRIBUTING.md # Contribution guidelines
+├── 📄 LICENSE # Project license
+├── 📝 README.md # Project readme
+├── 📝 SECURITY.md # Security policy
+└── ⚙️ package.json # Project dependencies and scripts
 ```

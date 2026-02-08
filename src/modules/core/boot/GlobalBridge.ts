@@ -96,7 +96,10 @@ export class GlobalBridge {
         win.openAppSelection = (category: string) => {
             const global = globalThis as TGlobalWin;
             const getCat = global.getCatalogCategory as ((_c: string) => IApp[]) | undefined;
-            const apps = getCat?.(category) || [];
+            const apps = getCat?.(category) ?? [];
+            this._core.logger.info(
+                `[GlobalBridge] openAppSelection requested for ${category}. Found ${apps.length} apps.`,
+            );
             this._core.appUI.openAppSelection(category, apps);
         };
         win.closeAppSelection = () => {
@@ -106,15 +109,15 @@ export class GlobalBridge {
         win.selectApp = (category: string, app: IApp): Promise<void> => {
             this._core.appUI.updateModuleCard(category, app);
             const uiState = (win as TGlobalWin).uiState;
-            if (uiState?.setSelectedModule) {
+            if (typeof uiState.setSelectedModule === 'function') {
                 uiState.setSelectedModule(category, {
                     id: app.id,
-                    name: app.name || '',
-                    nameKey: app.nameKey || '',
-                    icon: app.icon || '',
-                    type: app.type || 'local',
-                    descKey: app.descKey || '',
-                    desc: app.desc || '',
+                    name: app.name ?? '',
+                    nameKey: app.nameKey ?? '',
+                    icon: app.icon ?? '',
+                    type: app.type ?? 'local',
+                    descKey: app.descKey ?? '',
+                    desc: app.desc ?? '',
                 });
             }
             return Promise.resolve();
@@ -130,7 +133,11 @@ export class GlobalBridge {
                         provider?: string;
                     }>('launch_module', { module_id: id });
 
-                    if (result.action === 'navigate' && result.provider) {
+                    if (
+                        result.action === 'navigate' &&
+                        result.provider !== undefined &&
+                        result.provider !== ''
+                    ) {
                         localStorage.setItem('selected_ai_provider', result.provider);
                     } else if (result.action === 'start_local') {
                         await this._core.moduleService.control(id, 'start');
@@ -161,10 +168,10 @@ export class GlobalBridge {
             this._core.appUI.showActionFeedback(t);
         };
         win.showSkeletonLoaders = (id: string, c?: number): void => {
-            this._core.appUI.showSkeletonLoaders(id, c || 0);
+            this._core.appUI.showSkeletonLoaders(id, c ?? 0);
         };
         win.hideSkeletonLoaders = (id: string, c?: number): void => {
-            this._core.appUI.hideSkeletonLoaders(id, c || 0);
+            this._core.appUI.hideSkeletonLoaders(id, c ?? 0);
         };
         win.setButtonLoading = (b: HTMLButtonElement | null, l: boolean): void => {
             if (b) this._core.appUI.setButtonLoading(b, l);
@@ -177,7 +184,7 @@ export class GlobalBridge {
         const g = globalThis as TGlobalWin;
         if (typeof g.getCatalogCategory !== 'function') {
             g.getCatalogCategory = (cat: string) =>
-                (g.APP_DATA as unknown as Record<string, IApp[]>)?.[cat] || [];
+                (g.APP_DATA as unknown as Record<string, IApp[]>)[cat] ?? [];
         }
     }
 
@@ -208,9 +215,8 @@ export class GlobalBridge {
                     if (this._core.tauriProvider.isTauri()) {
                         await this._core.tauriProvider.invoke('save_secure_key', { service, key });
                     } else {
-                        console.warn(
-                            '[AxelateAPI] Secure storage not available in web mode. Key not persisted:',
-                            service,
+                        this._core.logger.warn(
+                            `[AxelateAPI] Secure storage not available in web mode. Key not persisted for: ${service}`,
                         );
                         // Security: Do not persist keys in localStorage/sessionStorage
                     }
@@ -231,7 +237,9 @@ export class GlobalBridge {
         const originalFetch = g.fetch;
 
         if (typeof originalFetch !== 'function') {
-            console.warn('[GlobalBridge] fetch is not defined on globalThis, skipping interceptor');
+            this._core.logger.warn(
+                '[GlobalBridge] fetch is not defined on globalThis, skipping interceptor',
+            );
             return;
         }
 
@@ -265,7 +273,7 @@ export class GlobalBridge {
 
                 return await boundFetch(input, init);
             } catch (err) {
-                console.error('[GlobalBridge] Fetch interceptor error:', err);
+                this._core.logger.error('[GlobalBridge] Fetch interceptor error:', err);
                 return boundFetch(input, init);
             }
         };
@@ -279,17 +287,17 @@ export class GlobalBridge {
             const bodyStr = typeof init?.body === 'string' ? init.body : '{}';
             const body = JSON.parse(bodyStr) as Record<string, unknown>;
             const provider =
-                (body['provider'] as string) ||
-                localStorage.getItem('selected_ai_provider') ||
+                (body['provider'] as string | undefined) ??
+                localStorage.getItem('selected_ai_provider') ??
                 'gpt';
 
-            const model = (body['model'] as string) || this._resolveModel(provider);
+            const model = (body['model'] as string | undefined) ?? this._resolveModel(provider);
 
             const res = await this._core.tauriProvider.invoke('send_chat_message', {
                 request: {
                     provider: provider,
                     model: model,
-                    messages: (body['history'] as unknown[]) ?? [],
+                    messages: (body['history'] as unknown[] | undefined) ?? [],
                     api_key: null,
                 },
             });
@@ -306,7 +314,7 @@ export class GlobalBridge {
     private _resolveModel(provider: string): string {
         const savedKey = localStorage.getItem(`${provider}_selected_model`);
         const catalog = this._core.catalog.getCatalog();
-        const appList = catalog.ai || [];
+        const appList = catalog.ai;
         const providerApp = appList.find((a) => a.id === provider);
 
         // Define shape of provider data
@@ -321,14 +329,14 @@ export class GlobalBridge {
         }
 
         const data = providerApp?.apiProviderData as unknown as ProviderData | undefined;
-        const models = data?.models || {};
+        const models = data?.models ?? {};
 
         // 1. Saved model
-        if (savedKey) return this._getApiId(savedKey, models);
+        if (savedKey !== null && savedKey !== '') return this._getApiId(savedKey, models);
 
         // 2. Default (most powerful)
         const sortedKeys = this._sortModelsByPower(models);
-        const defaultKey = sortedKeys[0] || '';
+        const defaultKey = sortedKeys[0] ?? '';
 
         return this._getApiId(defaultKey, models);
     }
@@ -341,7 +349,7 @@ export class GlobalBridge {
         models: Record<string, { apiModels?: { text?: string } }>,
     ): string {
         const modelData = models[key];
-        return modelData?.apiModels?.text || key;
+        return modelData?.apiModels?.text ?? key;
     }
 
     /**
@@ -353,8 +361,8 @@ export class GlobalBridge {
         return Object.keys(models).sort((a, b) => {
             const statsA = models[a]?.stats;
             const statsB = models[b]?.stats;
-            const powerA = (statsA?.logic || 0) + (statsA?.creative || 0);
-            const powerB = (statsB?.logic || 0) + (statsB?.creative || 0);
+            const powerA = (statsA?.logic ?? 0) + (statsA?.creative ?? 0);
+            const powerB = (statsB?.logic ?? 0) + (statsB?.creative ?? 0);
             return powerB - powerA;
         });
     }

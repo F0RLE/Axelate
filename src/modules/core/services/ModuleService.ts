@@ -4,6 +4,7 @@
  */
 
 import { type TauriProvider } from './TauriProvider';
+import { logger } from './LoggerService';
 import type { IModuleDownloadState } from '../types/coreTypes';
 import type { TGlobalWin } from '../types/global_bridge_types';
 
@@ -30,7 +31,9 @@ export class ModuleService {
             downloaded: number;
             total: number;
         }>('download_progress', (payload) => {
-            console.log('[ModuleService] Progress Event:', payload);
+            if (import.meta.env.DEV) {
+                logger.debug(`[ModuleService] Progress Event: ${JSON.stringify(payload)}`);
+            }
 
             this._downloadState[payload.module_id] = {
                 status: payload.status as
@@ -49,7 +52,7 @@ export class ModuleService {
 
             if (payload.status === 'complete') {
                 const state = this._downloadState[payload.module_id];
-                if (state) state.progress = 1;
+                if (state !== undefined) state.progress = 1;
             }
 
             this._broadcastState(payload.module_id);
@@ -72,7 +75,7 @@ export class ModuleService {
                 moduleId: moduleId,
             });
         } catch (err) {
-            console.error('Check installed error:', err);
+            logger.error(`Check installed error: ${String(err)}`);
             return false;
         }
     }
@@ -88,8 +91,10 @@ export class ModuleService {
         repoUrl: string,
         expectedHash?: string,
     ): Promise<void> {
-        console.log(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
-        if (expectedHash) console.log(`[ModuleService] Expected hash: ${expectedHash}`);
+        logger.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
+        if (expectedHash !== undefined && expectedHash !== '') {
+            logger.info(`[ModuleService] Expected hash: ${expectedHash}`);
+        }
 
         if (!this._tauri.isTauri()) {
             throw new Error('Download available only in desktop app');
@@ -98,7 +103,8 @@ export class ModuleService {
         try {
             this._deletedModules.delete(moduleId);
             // Sanitize expectedHash: pass null if empty string or undefined to ensure rust gets None
-            const hashToPass = expectedHash && expectedHash.trim() !== '' ? expectedHash : null;
+            const hashToPass =
+                expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
 
             await this._tauri.invoke('download_module', {
                 moduleId: moduleId,
@@ -107,7 +113,7 @@ export class ModuleService {
             });
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            console.error(`[ModuleService] Download error for ${moduleId}:`, errorMessage);
+            logger.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
             this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
             this._broadcastState(moduleId);
             throw err;
@@ -119,7 +125,7 @@ export class ModuleService {
      * @param moduleId - The ID of the module to delete
      */
     public async deleteModule(moduleId: string): Promise<boolean> {
-        console.log(`[ModuleService] Deleting module: ${moduleId}`);
+        logger.info(`[ModuleService] Deleting module: ${moduleId}`);
         if (!this._tauri.isTauri()) {
             throw new Error('Delete available only in desktop app');
         }
@@ -132,7 +138,7 @@ export class ModuleService {
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {
-            console.error('[ModuleService] Delete failed:', e);
+            logger.error(`[ModuleService] Delete failed: ${String(e)}`);
             return false;
         }
     }
@@ -144,7 +150,7 @@ export class ModuleService {
      * @param action - The action to perform (start, stop, restart)
      */
     public async control(serviceName: string, action: string): Promise<boolean> {
-        console.log(`[ModuleService] Control ${serviceName} -> ${action}`);
+        logger.info(`[ModuleService] Control ${serviceName} -> ${action}`);
         if (this._tauri.isTauri()) {
             try {
                 await this._tauri.invoke('control_module', {
@@ -155,11 +161,11 @@ export class ModuleService {
                 });
                 return true;
             } catch (e) {
-                console.error('[ModuleService] Control failed:', e);
+                logger.error(`[ModuleService] Control failed: ${String(e)}`);
                 return false;
             }
         } else {
-            console.warn('[ModuleService] Control not available in web mode');
+            logger.warn('[ModuleService] Control not available in web mode');
             return false;
         }
     }
@@ -177,9 +183,9 @@ export class ModuleService {
      */
     private _broadcastState(moduleId: string) {
         const win = globalThis as TGlobalWin;
-        if (!win.moduleDownloadState) win.moduleDownloadState = {};
+        win.moduleDownloadState ??= {};
         const state = this._downloadState[moduleId];
-        if (state) {
+        if (state !== undefined) {
             win.moduleDownloadState[moduleId] = state;
         }
     }

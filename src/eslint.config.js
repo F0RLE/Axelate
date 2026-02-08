@@ -92,7 +92,6 @@ export default [
                 },
             ],
             '@typescript-eslint/no-explicit-any': 'error',
-            '@typescript-eslint/explicit-function-return-type': 'warn',
             '@typescript-eslint/no-non-null-assertion': 'error',
             '@typescript-eslint/only-throw-error': 'error',
             '@typescript-eslint/no-floating-promises': 'error',
@@ -123,18 +122,6 @@ export default [
             'no-throw-literal': 'error',
             'no-useless-concat': 'error',
             'prefer-template': 'error',
-            'require-await': 'error',
-
-            // Import organization
-            'sort-imports': [
-                'error',
-                {
-                    ignoreCase: true,
-                    ignoreDeclarationSort: true,
-                    ignoreMemberSort: false,
-                    memberSyntaxSortOrder: ['none', 'all', 'multiple', 'single'],
-                },
-            ],
         },
     },
     eslintConfigPrettier,

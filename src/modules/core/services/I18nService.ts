@@ -3,6 +3,7 @@
  * @description Internationalization service for managing translations and language settings
  */
 
+import { logger } from './LoggerService';
 import { type TauriProvider } from './TauriProvider';
 
 export class I18nService {
@@ -17,12 +18,13 @@ export class I18nService {
      */
     public async init(initialLang?: string): Promise<void> {
         if (this._initialized) {
-            console.warn('[I18n] Already initialized');
+            logger.warn('[I18n] Already initialized');
             return;
         }
 
         // Always trust the backend/system language as the source of truth
-        const lang = initialLang || (await this.getSystemLanguage());
+        const sysLang = await this.getSystemLanguage();
+        const lang = initialLang !== undefined && initialLang !== '' ? initialLang : sysLang;
         await this.loadTranslations(lang);
         this._initialized = true;
     }
@@ -33,9 +35,9 @@ export class I18nService {
     public async getSystemLanguage(): Promise<string> {
         try {
             const backendLang = await this._getBackendLanguage();
-            if (backendLang) return backendLang;
+            if (backendLang !== null && backendLang !== '') return backendLang;
         } catch (e) {
-            console.warn('[I18n] Failed to get backend language', e);
+            logger.warn('[I18n] Failed to get backend language', e);
         }
         return 'en';
     }
@@ -64,9 +66,9 @@ export class I18nService {
             );
             const res = (await Promise.race([invokePromise, timeoutPromise])) as string | undefined;
 
-            if (res && res !== 'unknown') return res;
+            if (res !== undefined && res !== 'unknown') return res;
         } catch {
-            console.warn('[I18n] Native system language check failed or timed out');
+            logger.warn('[I18n] Native system language check failed or timed out');
         }
         return null;
     }
@@ -79,7 +81,8 @@ export class I18nService {
             const res = await fetch('/api/system_language');
             if (res.ok) {
                 const data = (await res.json()) as { language?: string };
-                if (data.language && data.language !== 'unknown') return data.language;
+                if (data.language !== undefined && data.language !== 'unknown')
+                    return data.language;
             }
         } catch {
             /* ignore */
@@ -91,25 +94,25 @@ export class I18nService {
      * Loads translation files for the specified language.
      */
     public async loadTranslations(lang: string): Promise<void> {
-        console.log(`[I18n] Loading ${lang}...`);
+        logger.info(`[I18n] Loading ${lang}...`);
 
         try {
             // Backend now handles merging base (en) with target lang
             const translations = await this._fetchTranslations(lang);
-            this._translations = translations || {};
+            this._translations = translations;
             this._currentLang = lang;
             document.documentElement.lang = lang;
 
             // Persist only to backend
             this._syncToBackend(lang).catch((e: unknown) => {
-                console.error(e);
+                logger.error(String(e));
             });
 
             // Notify UI of language change
             globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
-            console.log(`[I18n] Language changed to ${lang}, event dispatched`);
+            logger.info(`[I18n] Language changed to ${lang}, event dispatched`);
         } catch (e) {
-            console.error(`[I18n] Failed to load translations for ${lang}`, e);
+            logger.error(`[I18n] Failed to load translations for ${lang}`, e);
             // Fallback to empty or keep existing?
             // If failed, we might want to try 'en' explicitly if we haven't already
             if (lang !== 'en') {
@@ -117,7 +120,7 @@ export class I18nService {
                     this._translations = await this._fetchTranslations('en');
                     this._currentLang = 'en';
                 } catch (err) {
-                    console.error('[I18n] Critical: Failed to load fallback English', err);
+                    logger.error('[I18n] Critical: Failed to load fallback English', err);
                 }
             }
         }
@@ -161,7 +164,7 @@ export class I18nService {
                 });
             }
         } catch (e) {
-            console.warn('[I18n] Sync to settings failed', e);
+            logger.warn('[I18n] Sync to settings failed', e);
         }
     }
 
@@ -169,7 +172,8 @@ export class I18nService {
      * Translates a key into the current language, with optional parameters.
      */
     public t(key: string, defaultText = '', params: Record<string, unknown> = {}): string {
-        let text = this._translations[key] || defaultText || key;
+        let text = this._translations[key] ?? defaultText;
+        if (text === '') text = key;
 
         for (const [k, v] of Object.entries(params)) {
             text = text.replace(`{${k}}`, String(v));
@@ -181,6 +185,6 @@ export class I18nService {
      * Gets the current active language code.
      */
     public getCurrentLang(): string {
-        return this._currentLang || 'en';
+        return this._currentLang === '' ? 'en' : this._currentLang;
     }
 }

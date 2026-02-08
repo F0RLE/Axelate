@@ -2,17 +2,21 @@
     "$schema": "https://schema.tauri.app/config/2",
     "productName": "Axelate",
     "mainBinaryName": "Axelate",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "identifier": "com.axelate",
     "build": {
-        "beforeDevCommand": "npm run dev:web --prefix src",
+        "beforeDevCommand": "npm run dev",
         "devUrl": "http://localhost:1420",
         "beforeBuildCommand": "npm run build --prefix src",
         "frontendDist": "../src/dist"
     },
     "plugins": {
         "dev": {
-            "watch": ["resources/**/*"]
+            "watch": [
+                "src-tauri/resources/**/*",
+                "src-tauri/src/**/*.rs",
+                "src-tauri/Cargo.toml"
+            ]
         }
     },
     "app": {

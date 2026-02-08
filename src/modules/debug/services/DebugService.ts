@@ -1,3 +1,6 @@
+import { logger } from '../../core/services/LoggerService';
+import type { TGlobalWin } from '../../core/types/global_bridge_types';
+
 export interface ILogEntry {
     timestamp: number;
     source: string;
@@ -12,21 +15,22 @@ export class DebugService {
     public async fetchLogs(): Promise<ILogEntry[]> {
         try {
             // Check for Tauri environment or Mock
-            if (globalThis.__TAURI__) {
-                const logs = await globalThis.__TAURI__.core.invoke<ILogEntry[]>('get_logs', {
-                    since: this.lastTimestamp,
-                });
-                return this.processLogs(logs);
-            } else {
+            const win = globalThis as unknown as TGlobalWin;
+            if ((win as unknown as Record<string, unknown>)['__TAURI__'] === undefined) {
                 // Fallback to fetch for dev/browser
                 const res = await fetch(`/api/logs?since=${this.lastTimestamp.toString()}`);
                 if (!res.ok) throw new Error('Fetch failed');
                 const text = await res.text();
                 const logs = this.safeJsonParse(text, []);
                 return this.processLogs(logs);
+            } else {
+                const logs = await win.__TAURI__.core.invoke<ILogEntry[]>('get_logs', {
+                    since: this.lastTimestamp,
+                });
+                return this.processLogs(logs);
             }
         } catch (e) {
-            console.error('[DebugService] Fetch logs failed:', e);
+            logger.error('[DebugService] Fetch logs failed:', e);
             return [];
         }
     }
@@ -35,14 +39,15 @@ export class DebugService {
         this.logs = [];
         this.lastTimestamp = 0;
         try {
-            if (globalThis.__TAURI__) {
-                await globalThis.__TAURI__.core.invoke('clear_logs');
-            } else {
+            const win = globalThis as unknown as TGlobalWin;
+            if ((win as unknown as Record<string, unknown>)['__TAURI__'] === undefined) {
                 await fetch('/api/logs/clear', { method: 'POST' });
+            } else {
+                await win.__TAURI__.core.invoke('clear_logs');
             }
             return true;
         } catch (e) {
-            console.error('[DebugService] Clear logs failed:', e);
+            logger.error('[DebugService] Clear logs failed:', e);
             return false;
         }
     }

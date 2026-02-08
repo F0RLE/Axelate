@@ -3,7 +3,8 @@
  * @description Provides audio feedback for UI interactions
  */
 
-// Local types for global access
+import { logger } from './LoggerService';
+
 interface ISoundGlobal {
     AudioContext?: typeof AudioContext;
     webkitAudioContext?: typeof AudioContext;
@@ -28,12 +29,12 @@ export class SoundService {
     private _initContext(): void {
         try {
             const win = globalThis as unknown as ISoundGlobal;
-            const AudioContextClass = win.AudioContext || win.webkitAudioContext;
+            const AudioContextClass = win.AudioContext ?? win.webkitAudioContext;
             if (AudioContextClass) {
                 this._ctx = new AudioContextClass();
             }
         } catch {
-            console.warn('[SoundService] AudioContext not available');
+            logger.warn('[SoundService] AudioContext not available');
         }
     }
 
@@ -48,11 +49,11 @@ export class SoundService {
 
         if (this._ctx && this._ctx.state !== 'closed') {
             this._ctx.close().catch((e: unknown) => {
-                console.error('[SoundService] Error closing context:', e);
+                logger.error(`[SoundService] Error closing context: ${String(e)}`);
             });
         }
 
-        console.debug('[SoundService] Destroyed.');
+        logger.debug('[SoundService] Destroyed.');
     }
 
     /**
