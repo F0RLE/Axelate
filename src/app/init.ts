@@ -55,9 +55,7 @@ export class Core {
 
     private readonly _eventHandler: EventHandler;
 
-    private static readonly _SPLASH_TIMEOUT_MS = 1500;
-    private static readonly _UI_REVEAL_DELAY_MS = 200;
-
+    private static readonly _SPLASH_TIMEOUT_MS = 2000;
     constructor() {
         // Initialize base services following Section 16 patterns
         this.tauriProvider = new TauriProvider();
@@ -92,7 +90,7 @@ export class Core {
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.state, this.soundService);
         this.downloadUI = new DownloadUI();
-        this.settingsUI = new SettingsUI(this.settingsService, this.state);
+        this.settingsUI = new SettingsUI(this.settingsService, this.state, this.i18nUI);
         this.particles = new Particles();
         this.monitoringUI = new MonitoringUI(this.monitoringService);
         this.debugUI = new DebugUI(this.debugService);
@@ -162,10 +160,8 @@ export class Core {
                 true,
             );
 
-            // 5. Show Window (race with timeout)
-            const showPromise = this.windowService.show();
-            const showTimeout = new Promise((r) => setTimeout(r, 3000));
-            await Promise.race([showPromise, showTimeout]);
+        // 5. Show Window (immediately if ready)
+            await this.windowService.show();
 
             // 6. Init Remaining Services
             await this.moduleService.init();
@@ -201,19 +197,27 @@ export class Core {
 
         this._initGlobalShortcuts();
 
-        // 8. Controlled Reveal
+        // 8. Controlled Reveal - Sync with CSS
         this.logger.debug('[Core] App Ready. Hiding splash...');
+        
+        // Wait for splash animation (min 2s)
         await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
 
+        // Trigger Fade Out
         this.windowUI.hideSplashScreen();
 
+        // Reveal UI elements underneath (they were hidden by .fade-in-init)
         setTimeout(() => {
-            const elements = ['sidebar', 'app-header', 'main-area'];
-            elements.forEach((id) => {
-                const el = document.getElementById(id);
-                if (el) el.classList.add('visible');
-            });
-        }, Core._UI_REVEAL_DELAY_MS);
+             const elements = ['sidebar', 'app-header', 'main-area'];
+             elements.forEach((id) => {
+                 const el = document.getElementById(id);
+                 if (el) el.classList.remove('hidden'); // Ensure they are technically display:block
+                 // 'visible' class triggers opacity: 1 transition from splash.css
+                 if (el) el.classList.add('visible');
+             });
+        }, 50); // Almost immediate, let opacity handles transition
+
+        this.logger.info('[Core] Ready.');
 
         this.logger.info('[Core] Ready.');
     }

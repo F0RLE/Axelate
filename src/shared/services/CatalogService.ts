@@ -286,7 +286,7 @@ export class CatalogService {
             if (this._tauri.isTauri()) {
                 installedModules = await this._tauri.invoke<IModule[]>('get_modules');
                 logger.info(
-                    `[CatalogService] Fetched ${installedModules.length} installed modules from backend.`,
+                    `[CatalogService] Fetched ${String(installedModules.length)} installed modules from backend.`,
                 );
             } else {
                 const res = await fetch('/api/modules');
@@ -299,6 +299,7 @@ export class CatalogService {
         try {
             logger.info(`[CatalogService] Loaded config: ${JSON.stringify(config)}`);
 
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/strict-boolean-expressions
             if (config?.catalog) {
                 const safeConfig = config;
                 this._appData.stars = safeConfig.catalog.stars ?? [];
@@ -314,11 +315,15 @@ export class CatalogService {
                     );
                 };
 
-                this._appData.ai = mapModules(safeConfig.catalog.ai);
-                this._appData.services = mapModules(safeConfig.catalog.services);
-                
+                // Type assertion assuming safeConfig matches AppConfig structure if check passed
+                const ai = safeConfig.catalog.ai;
+                const services = safeConfig.catalog.services;
+
+                this._appData.ai = mapModules(ai);
+                this._appData.services = mapModules(services);
+
                 logger.info(
-                    `[CatalogService] Mapped AI apps: ${this._appData.ai.length}, Services: ${this._appData.services.length}`,
+                    `[CatalogService] Mapped AI apps: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
                 );
 
                 // Hydrate with schemas & providers
@@ -328,12 +333,15 @@ export class CatalogService {
                     // Determine if this is an API-type app
                     const isApi =
                         app.type === 'api' ||
-                        (safeConfig.apiProviders?.some((p: ApiProvider) => p.id === app.id) ?? false);
+                        (safeConfig.apiProviders?.some((p: ApiProvider) => p.id === app.id) ??
+                            false);
 
                     if (isApi) app.installed = true;
 
                     // Initialize apiProviderData
-                    const provider = safeConfig.apiProviders?.find((p: ApiProvider) => p.id === app.id);
+                    const provider = safeConfig.apiProviders?.find(
+                        (p: ApiProvider) => p.id === app.id,
+                    );
                     if (provider) {
                         app.apiProviderData = {
                             ...(provider as unknown as Record<string, unknown>),
@@ -425,11 +433,16 @@ export class CatalogService {
     private _ensureValidConfig(config: AppConfig | null): AppConfig {
         const isCatalogEmpty =
             !config?.catalog ||
-            (!config.catalog.ai?.length && !config.catalog.services?.length);
+            (config.catalog.ai.length === 0 && config.catalog.services.length === 0);
 
         if (isCatalogEmpty) {
+            // Safe access using optional chaining or standard access if guarded
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            const aiLen = config?.catalog?.ai?.length ?? 0;
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            const srvLen = config?.catalog?.services?.length ?? 0;
             logger.warn(
-                `[CatalogService] Config invalid or empty (AI: ${config?.catalog?.ai?.length}, Services: ${config?.catalog?.services?.length}). Forcing fallback.`,
+                `[CatalogService] Config invalid or empty (AI: ${String(aiLen)}, Services: ${String(srvLen)}). Forcing fallback.`,
             );
             return FALLBACK_CONFIG;
         }

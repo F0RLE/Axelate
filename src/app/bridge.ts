@@ -98,7 +98,7 @@ export class GlobalBridge {
             const getCat = global.getCatalogCategory as ((_c: string) => IApp[]) | undefined;
             const apps = getCat?.(category) ?? [];
             this._core.logger.info(
-                `[GlobalBridge] openAppSelection requested for ${category}. Found ${apps.length} apps.`,
+                `[GlobalBridge] openAppSelection requested for ${category}. Found ${String(apps.length)} apps.`,
             );
             this._core.appUI.openAppSelection(category, apps);
         };

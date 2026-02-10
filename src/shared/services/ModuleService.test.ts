@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockTauriProvider = {
     isTauri: vi.fn().mockReturnValue(true),
     invoke: vi.fn(),
-    listen: vi.fn().mockResolvedValue(() => {}),
+    listen: vi.fn().mockResolvedValue(() => {
+        /* no-op */
+    }),
 };
 
 // Helper type for progress handler
@@ -14,7 +16,9 @@ type ProgressHandler = ((_: Record<string, unknown>) => void) | undefined;
 function createListenCapture(handlerRef: { current: ProgressHandler }) {
     return (_: unknown, handler: ProgressHandler) => {
         handlerRef.current = handler;
-        return Promise.resolve(() => {});
+        return Promise.resolve(() => {
+            /* no-op */
+        });
     };
 }
 
@@ -25,7 +29,8 @@ describe('ModuleService', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        moduleService = new ModuleService(mockTauriProvider as never);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+        moduleService = new ModuleService(mockTauriProvider as any);
     });
 
     describe('init', () => {
@@ -191,6 +196,7 @@ describe('ModuleService', () => {
             expect(mockTauriProvider.listen).toHaveBeenCalledTimes(1);
             const firstCall = mockTauriProvider.listen.mock.calls[0];
             if (!firstCall) throw new Error('Listen not called');
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const [eventName, handler] = firstCall;
             expect(eventName).toBe('download_progress');
             expect(typeof handler).toBe('function');

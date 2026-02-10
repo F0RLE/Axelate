@@ -52,7 +52,9 @@ describe('VoiceInputService', () => {
 
     describe('stop', () => {
         it('should not throw when called without active recording', () => {
-            expect(() => service.stop()).not.toThrow();
+            expect(() => {
+                service.stop();
+            }).not.toThrow();
             expect(service.isActive()).toBe(false);
         });
     });

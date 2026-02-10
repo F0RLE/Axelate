@@ -144,6 +144,7 @@ export class ChatUI {
         if (this._messagesContainer) {
             this._messagesContainer.innerHTML = '';
             this._messagesContainer.classList.remove('has-messages');
+            this._messagesContainer.style.display = '';
         }
         if (this._chatContainer) {
             this._chatContainer.classList.remove('has-messages');
@@ -485,9 +486,11 @@ export class ChatUI {
         this._attachmentsContainer.innerHTML = '';
         if (!files.length) {
             this._attachmentsContainer.classList.add('hidden');
+            this._attachmentsContainer.style.display = 'none';
             return;
         }
         this._attachmentsContainer.classList.remove('hidden');
+        this._attachmentsContainer.style.display = '';
         this._attachmentsContainer.classList.add('visible');
 
         const maxVisible = 6;
@@ -681,6 +684,7 @@ export class ChatUI {
         if (count > 0) {
             el.textContent = `${String(count)} tokens`;
             el.classList.add('visible');
+            el.style.display = '';
             // Add warning color if tokens are high (heuristic: 20k tokens)
             if (count > 20000) {
                 el.style.color = 'var(--danger)';
@@ -691,6 +695,7 @@ export class ChatUI {
             }
         } else {
             el.classList.remove('visible');
+            el.style.display = 'none';
         }
     }
 

@@ -5,10 +5,7 @@ import { NumberField } from './NumberField';
 import { ToggleField } from './ToggleField';
 import { SelectField } from './SelectField';
 
-export function createField(
-    field: IConfigField,
-    initialValue: unknown,
-): ISettingField {
+export function createField(field: IConfigField, initialValue: unknown): ISettingField {
     switch (field.fieldType) {
         case 'boolean':
             return new ToggleField(Boolean(initialValue));

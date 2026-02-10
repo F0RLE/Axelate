@@ -7,6 +7,7 @@
     justify-content: flex-start;
     background: var(--sidebar-bg) !important;
     backdrop-filter: blur(20px);
+    font-family: 'Monocraft', monospace !important; /* Global brand font restorated */
     /* Improved border rendering to avoid subpixel gaps */
     box-shadow: var(--sidebar-shadow);
     border-right: none;
@@ -33,13 +34,16 @@
 .logo-area {
     display: grid;
     place-items: center;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.2rem; /* Tight gap matching request */
     text-align: center;
     -webkit-app-region: no-drag;
     padding-top: 0;
     cursor: pointer;
     border-radius: 12px;
     position: relative;
+    background: transparent;
+    border: none;
+    width: 100%;
 }
 
 .logo-icon-wrapper {
@@ -49,6 +53,12 @@
     justify-content: center;
     width: 100%;
     cursor: pointer;
+    grid-area: 1 / 1; /* Overlay */
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s;
 }
 
 .status-under-icon {
@@ -112,10 +122,8 @@
 
 /* Launcher Icon (Hidden by default, shown when collapsed) */
 .sidebar-logo-icon {
-    grid-area: 1 / 1;
+    /* grid-area handled by wrapper */
     display: block;
-    opacity: 0;
-    visibility: hidden;
     width: 54px;
     height: 54px;
     margin: 0 auto;
@@ -174,7 +182,7 @@
 
 /* Sidebar Title Wrapper (Visible by default) */
 .sidebar-title-wrapper {
-    grid-area: 1 / 1;
+    grid-area: 1 / 1; /* Overlay */
     width: 100%;
     overflow: hidden;
     transition:
@@ -185,12 +193,12 @@
     cursor: pointer;
     opacity: 1;
     visibility: visible;
+    z-index: 10;
 }
 
 .app-title {
-    font-weight: 700;
+    font-weight: 400; /* Standard weight for Monocraft compatibility */
     font-size: 2.3rem;
-    animation: logoContainerFloat 4s ease-in-out infinite;
     will-change: transform;
     background: linear-gradient(
         90deg,
@@ -204,10 +212,13 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-top: 0.5rem;
+    margin-top: 0; /* Align perfectly */
     cursor: pointer;
     pointer-events: none;
     white-space: nowrap;
+    line-height: normal;
+    font-family: 'Monocraft', monospace !important; /* Force brand font */
+    text-shadow: 0 0 12px rgba(var(--primary-raw), 0.4); /* Premium glow */
 }
 
 /* Collapsed Sidebar State */
@@ -257,16 +268,23 @@
     opacity: 0;
 }
 
+#sidebar.collapsed .logo-icon-wrapper {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto;
+}
+
 #sidebar.collapsed .sidebar-logo-icon {
-    opacity: 1;
-    visibility: visible;
     transform: scale(1);
     display: block;
 }
 
 #sidebar.collapsed .logo-area {
-    margin-bottom: 1rem;
-    min-height: 70px;
+    margin-bottom: 0.5rem; /* Reduced from 1rem */
+    min-height: auto; /* Remove fixed height constraint */
+    display: grid;
+    place-items: center;
 }
 
 #sidebar.collapsed .nav-btn {
@@ -357,6 +375,9 @@
 
 #system-monitor {
     margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important; /* Ensure the section wrapper doesn't add space */
 }
 
 .sysmon-spacer {
@@ -382,32 +403,24 @@
 .nav-btn {
     display: flex;
     align-items: center;
-    justify-content: center;
-    /* Center the text */
+    justify-content: center; /* Centered labels as requested */
     width: 100%;
-    padding: 0.75rem 0.85rem;
-    /* Removed padding-left to ensure text is centered mathematically */
-    background: rgba(var(--primary-raw), 0.05) !important; /* Subtle launcher color tint */
+    padding: 0.75rem 1rem;
+    background: rgba(var(--primary-raw), 0.05) !important;
     border: 1px solid rgba(var(--primary-raw), 0.15) !important;
-    font-size: 1rem; /* Increased from 16px to 1rem (approx 16px but scales better) or could go slightly larger like 1.05rem if needed */
-    font-weight: 600; /* Made slightly bolder */
-    color: var(--text-primary) !important; /* Softened from #FFFFFF */
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary) !important;
     cursor: pointer !important;
     border-radius: 10px;
     margin-bottom: 0;
-    font-family: 'Monocraft', 'Inter', 'Segoe UI', sans-serif;
+    font-family: 'Monocraft', monospace !important;
     -webkit-app-region: no-drag;
     position: relative;
     overflow: hidden;
-    /* Consolidate all transitions into one property */
-    transition:
-        all 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.5s ease,
-        margin 0.5s ease,
-        padding 0.5s ease;
-    max-height: 40px;
-    /* Approximate height of nav btn */
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    height: 44px; /* Improved vertical balance */
+    max-height: 44px;
 }
 
 .nav-btn.nav-item-hiding {
@@ -540,11 +553,13 @@
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
-.monitor-card {
-    background: rgba(25, 25, 35, 0.7);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+.sysmon-card {
+    background: rgba(var(--background-raw), 0.5) !important;
+    border: 1px solid rgba(var(--primary-raw), 0.15) !important;
     backdrop-filter: blur(12px);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    border-radius: 12px;
+    padding: 1rem;
 }
 
 /* Sidebar Drag Handle */

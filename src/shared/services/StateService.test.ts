@@ -1,11 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 
 // Deep mock of Tauri API
 const mockInvoke = vi.fn().mockResolvedValue(undefined);
 
 const tauriMock = {
     core: { invoke: mockInvoke },
-    event: { listen: vi.fn().mockResolvedValue(() => {}) },
+    event: {
+        listen: vi.fn().mockResolvedValue(() => {
+            /* no-op */
+        }),
+    },
 };
 
 // Set before import
@@ -15,9 +19,13 @@ const tauriMock = {
 const storageMock = new Map<string, string>();
 const localStorageMock = {
     getItem: vi.fn((key: string) => storageMock.get(key) ?? null),
-    setItem: vi.fn((key: string, value: string) => storageMock.set(key, value)),
+    setItem: vi.fn((key: string, value: string) => {
+        storageMock.set(key, value);
+    }),
     removeItem: vi.fn((key: string) => storageMock.delete(key)),
-    clear: vi.fn(() => storageMock.clear()),
+    clear: vi.fn(() => {
+        storageMock.clear();
+    }),
     key: vi.fn(),
     length: 0,
 };
@@ -47,12 +55,14 @@ describe('StateService', () => {
 
     afterEach(() => {
         vi.useRealTimers();
-        (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
-        (globalThis as any)['__TAURI_INTERNALS__'] = {
-            invoke: async () => {},
+        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
+        (globalThis as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {
+            invoke: async () => {
+                await Promise.resolve();
+            },
             transformCallback: () => 0,
         };
-        (mockCore.tauriProvider.isTauri as any).mockReturnValue(true);
+        (mockCore.tauriProvider.isTauri as unknown as Mock).mockReturnValue(true);
     });
 
     describe('loadState', () => {
@@ -80,7 +90,7 @@ describe('StateService', () => {
         it('should fallback to localStorage when Tauri is missing', async () => {
             delete (globalThis as Record<string, unknown>)['__TAURI__'];
             delete (globalThis as Record<string, unknown>)['__TAURI_INTERNALS__'];
-            (mockCore.tauriProvider.isTauri as any).mockReturnValue(false);
+            (mockCore.tauriProvider.isTauri as unknown as Mock).mockReturnValue(false);
 
             const fallbackState = {
                 sidebar_collapsed: true,
@@ -95,11 +105,13 @@ describe('StateService', () => {
 
             // Restore
             (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
-            (globalThis as any).__TAURI_INTERNALS__ = {
-                invoke: async () => {},
+            (globalThis as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {
+                invoke: async () => {
+                    await Promise.resolve();
+                },
                 transformCallback: () => 0,
             };
-            (mockCore.tauriProvider.isTauri as any).mockReturnValue(true);
+            (mockCore.tauriProvider.isTauri as unknown as Mock).mockReturnValue(true);
         });
 
         it('should return default state when backend fails', async () => {
@@ -244,6 +256,7 @@ describe('StateService', () => {
             await stateService.saveAsync();
 
             expect(mockInvoke).toHaveBeenCalledWith('save_ui_state', {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 state: expect.objectContaining({
                     sidebar_collapsed: true,
                 }),
@@ -267,7 +280,7 @@ describe('StateService', () => {
         it('should use localStorage when Tauri is missing', () => {
             delete (globalThis as Record<string, unknown>)['__TAURI__'];
             delete (globalThis as Record<string, unknown>)['__TAURI_INTERNALS__'];
-            (mockCore.tauriProvider.isTauri as any).mockReturnValue(false);
+            (mockCore.tauriProvider.isTauri as unknown as Mock).mockReturnValue(false);
 
             stateService.set('sidebar_width', 500);
             stateService.saveImmediate();
@@ -276,11 +289,13 @@ describe('StateService', () => {
 
             // Restore
             (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
-            (globalThis as any)['__TAURI_INTERNALS__'] = {
-                invoke: async () => {},
+            (globalThis as unknown as Record<string, unknown>)['__TAURI_INTERNALS__'] = {
+                invoke: async () => {
+                    await Promise.resolve();
+                },
                 transformCallback: () => 0,
             };
-            (mockCore.tauriProvider.isTauri as any).mockReturnValue(true);
+            (mockCore.tauriProvider.isTauri as unknown as Mock).mockReturnValue(true);
         });
     });
 });

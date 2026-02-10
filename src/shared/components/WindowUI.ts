@@ -416,8 +416,6 @@ export class WindowUI {
      * @sideeffect Shows/hides warning overlays in the DOM
      */
     private _checkWidth(): void {
-        const config = this._service.getConfig();
-
         // Get current zoom factor (default 1)
         const computedStyle = getComputedStyle(document.documentElement) as CSSStyleDeclaration & {
             zoom?: string;
@@ -429,9 +427,10 @@ export class WindowUI {
         const width = win.innerWidth / zoom;
         const height = win.innerHeight / zoom;
 
-        // Use backend thresholds if available, otherwise safe defaults
-        const minWidth = config?.thresholds.warningWidth ?? 700;
-        const minHeight = config?.thresholds.warningHeight ?? 500;
+        // Use backend thresholds if available, otherwise safe defaults (0 to disable)
+        const config = this._service.getConfig();
+        const minWidth = config?.thresholds.warningWidth ?? 0;
+        const minHeight = config?.thresholds.warningHeight ?? 0;
 
         if (width < minWidth || height < minHeight) {
             if (this._modulesWarning) {
@@ -463,15 +462,22 @@ export class WindowUI {
      */
     public hideSplashScreen(): void {
         if (this._splash) {
+            // Trigger CSS Transition
             this._splash.classList.add('fade-out');
 
             if (this._splashTimeout) clearTimeout(this._splashTimeout);
+            
+            // Wait for CSS transition (600ms) + buffer
             this._splashTimeout = setTimeout(() => {
-                if (this._splash) this._splash.classList.add('hidden');
+                if (this._splash) {
+                    this._splash.classList.remove('fade-out'); // Clean up class
+                    this._splash.classList.add('hidden'); // display: none
+                }
                 document.body.classList.remove('no-overflow');
                 this._splashTimeout = null;
-            }, 500);
+            }, 650);
         }
+
 
         ['sidebar', 'app-header', 'main-area'].forEach((id) => {
             const el = document.getElementById(id);

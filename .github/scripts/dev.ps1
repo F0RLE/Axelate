@@ -68,8 +68,8 @@ if ($AppProcess) {
     $AppProcess | Stop-Process -Force
 }
 
-# Run from project root so Tauri can find src-tauri/tauri.conf.json
-Set-Location $ProjectRoot
+# Run from src directory where package.json scripts are defined
+Set-Location $SrcDir
 
-# Use the Tauri CLI from src/node_modules
-& "$SrcDir\node_modules\.bin\tauri" dev --target x86_64-pc-windows-msvc
+# Use npm script which handles the environment and path correctly
+npm run tauri:dev

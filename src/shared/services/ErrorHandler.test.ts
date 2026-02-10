@@ -5,12 +5,15 @@ describe('ErrorHandler', () => {
     let consoleSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-        consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+            /* no-op */
+        });
         // Clear error log before each test
         errorHandler.clearErrorLog();
     });
 
     afterEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
         consoleSpy.mockRestore();
     });
 
@@ -90,13 +93,18 @@ describe('ErrorHandler', () => {
 
     describe('wrapAsync', () => {
         it('should return result on success', async () => {
-            const result = await errorHandler.wrapAsync(async () => 'success', 'test-context');
+            const result = await errorHandler.wrapAsync(
+                () => Promise.resolve('success'),
+                'test-context',
+            );
 
             expect(result).toBe('success');
         });
 
         it('should capture error and return undefined on failure', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression
             const result = await errorHandler.wrapAsync(async () => {
+                await Promise.resolve(); // Ensure async
                 throw new Error('Async error');
             }, 'async-context');
 

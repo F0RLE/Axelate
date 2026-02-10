@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest';
 
 // 1. Setup mocks BEFORE imports
 vi.mock('@tauri-apps/api/core', () => ({
@@ -30,7 +30,9 @@ const tauriMock = {
 function createListenWithPayload(payload: unknown) {
     return (_: unknown, internalCb: (e: { payload: unknown }) => void) => {
         internalCb({ payload });
-        return Promise.resolve(() => {});
+        return Promise.resolve(() => {
+            /* no-op */
+        });
     };
 }
 
@@ -74,7 +76,7 @@ describe('TauriProvider', () => {
 
     describe('invoke', () => {
         it('should call Tauri invoke with command and args', async () => {
-            (mockedTauriInvoke as any).mockResolvedValueOnce({ success: true });
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce({ success: true });
 
             const result = await provider.invoke('test_command', { param: 'value' });
 
@@ -83,19 +85,21 @@ describe('TauriProvider', () => {
         });
 
         it('should handle invoke errors', async () => {
-            (mockedTauriInvoke as any).mockRejectedValueOnce(new Error('Command failed'));
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Command failed'),
+            );
 
             await expect(provider.invoke('failing_command')).rejects.toThrow('Command failed');
         });
 
         it('should rethrow set_focus errors', async () => {
-            (mockedTauriInvoke as any).mockRejectedValueOnce(new Error('Focus error'));
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(new Error('Focus error'));
 
             await expect(provider.invoke('set_focus')).rejects.toThrow('Focus error');
         });
 
         it('should pass empty object as default args', async () => {
-            (mockedTauriInvoke as any).mockResolvedValueOnce(null);
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(null);
 
             await provider.invoke('simple_command');
 
@@ -106,7 +110,9 @@ describe('TauriProvider', () => {
     describe('listen', () => {
         it('should subscribe to Tauri events', async () => {
             const callback = vi.fn();
-            (mockedTauriListen as any).mockResolvedValueOnce(() => {});
+            (mockedTauriListen as unknown as Mock).mockResolvedValueOnce(() => {
+                /* no-op */
+            });
 
             await provider.listen('test:event', callback);
 
@@ -115,9 +121,11 @@ describe('TauriProvider', () => {
 
         it('should return unsubscribe function', async () => {
             const unsubscribeFn = vi.fn();
-            (mockedTauriListen as any).mockResolvedValueOnce(unsubscribeFn);
+            (mockedTauriListen as unknown as Mock).mockResolvedValueOnce(unsubscribeFn);
 
-            const unsubscribe = await provider.listen('test:event', () => {});
+            const unsubscribe = await provider.listen('test:event', () => {
+                /* no-op */
+            });
 
             expect(typeof unsubscribe).toBe('function');
         });
@@ -126,7 +134,7 @@ describe('TauriProvider', () => {
             const callback = vi.fn();
 
             // Use module-level helper
-            (mockedTauriListen as any).mockImplementationOnce(
+            (mockedTauriListen as unknown as Mock).mockImplementationOnce(
                 createListenWithPayload({ data: 'test' }),
             );
 
@@ -149,13 +157,8 @@ describe('TauriProvider', () => {
             expect(result).toEqual({
                 language: 'en',
                 theme: 'dark',
-                gpu_enabled: true,
+                use_gpu: true,
                 debug_mode: false,
-                check_updates: true,
-                auto_update: true,
-                notifications: true,
-                system_tray: true,
-                start_at_login: false,
             });
         });
     });

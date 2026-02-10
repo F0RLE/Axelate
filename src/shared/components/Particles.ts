@@ -18,16 +18,31 @@ export class Particles {
         size: number;
         color: string;
     }[] = [];
+    
+    // Optimization: Group particles by color during init to avoid per-frame allocation
+    private _particlesByColor: Record<string, {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        color: string;
+    }[]> = {};
+
     private readonly _mouse: { x: number; y: number } = { x: -100, y: -100 };
-    private readonly _width: number = 0;
-    private readonly _height: number = 0;
+    private readonly _width: number;
+    private readonly _height: number;
+    // Track canvas size to avoid expensive property access
+    private _canvasWidth: number = 0;
+    private _canvasHeight: number = 0;
+    
     private _isRunning = false;
     private _lastFrameTime = 0;
     private readonly _cleanupAbort: AbortController = new AbortController();
 
     constructor() {
         this._canvas = document.createElement('canvas');
-        const context = this._canvas.getContext('2d');
+        const context = this._canvas.getContext('2d', { alpha: true });
         if (!context) {
             throw new Error('Failed to get 2D context');
         }
@@ -41,52 +56,84 @@ export class Particles {
         this._canvas.style.width = '100%';
         this._canvas.style.height = '100%';
         this._canvas.style.pointerEvents = 'none';
-        this._canvas.style.zIndex = '-1';
+        this._canvas.style.zIndex = '-1'; /* Behind body content */
 
-        // Use actual screen size + 20% buffer
+        // Initialize World to Physical Device Pixels
         const g = globalThis as unknown as IParticlesGlobal;
-        const sW = g.screen.width;
-        const sH = g.screen.height;
+        const dpr = window.devicePixelRatio || 1;
+        const sW = g.screen.width * dpr;
+        const sH = g.screen.height * dpr;
+        
+        // World is +20% larger than physical screen
         const maxDim = Math.max(sW, sH) * 1.2;
         this._width = maxDim;
         this._height = maxDim;
 
-        this._canvas.width = this._width * 0.5;
-        this._canvas.height = this._height * 0.5;
-        this._canvas.style.width = `${this._width.toString()}px`;
-        this._canvas.style.height = `${this._height.toString()}px`;
-
-        this._ctx.scale(0.5, 0.5);
-
+        this._resize();
+        
         this._init();
         this._bindEvents();
         this.start();
     }
 
+    private _resize(): void {
+        const dpr = window.devicePixelRatio || 1;
+        
+        // Set canvas buffer to match physical Viewport pixels
+        // This ensures 1 canvas pixel = 1 screen pixel regardless of Zoom
+        this._canvasWidth = Math.round(window.innerWidth * dpr);
+        this._canvasHeight = Math.round(window.innerHeight * dpr);
+        
+        this._canvas.width = this._canvasWidth;
+        this._canvas.height = this._canvasHeight;
+    }
+
     /**
      * Cleans up the canvas and aborts event listeners.
-     * @sideeffect Removes canvas from body and clears particle array
      */
     public destroy(): void {
         this.stop();
         this._cleanupAbort.abort();
         this._canvas.remove();
         this._particles = [];
+        this._particlesByColor = {};
     }
 
     private _init(): void {
-        const density = 30000;
+        const density = 25000; 
         const particleCount = Math.floor((this._width * this._height) / density);
+        
+        // Clear existing
+        this._particles = [];
+        this._particlesByColor = {};
 
         for (let i = 0; i < particleCount; i++) {
-            this._particles.push({
+            let color = 'rgba(255, 255, 255, 0.1)'; 
+            const rand = this._random();
+
+            if (rand > 0.6) {
+                color = 'rgba(138, 43, 226, 0.4)'; 
+            } else if (rand > 0.5) {
+                color = 'rgba(147, 51, 234, 0.3)'; 
+            }
+
+            const p = {
                 x: this._random() * this._width,
                 y: this._random() * this._height,
-                vx: (this._random() - 0.5) * 0.2,
-                vy: (this._random() - 0.5) * 0.2,
-                size: this._random() * 2 + 0.5,
-                color: this._random() > 0.5 ? 'rgba(138, 43, 226, 0.3)' : 'rgba(93, 220, 255, 0.3)',
-            });
+                vx: (this._random() - 0.5) * 0.1,
+                vy: (this._random() - 0.5) * 0.1,
+                size: Math.floor(this._random() * 3) + 2, // Fixed Physical Size
+                color: color,
+            };
+
+            this._particles.push(p);
+            
+            let group = this._particlesByColor[color];
+            if (!group) {
+                group = [];
+                this._particlesByColor[color] = group;
+            }
+            group.push(p);
         }
     }
 
@@ -96,12 +143,13 @@ export class Particles {
         return (buffer[0] ?? 0) / (0xffffffff + 1);
     }
 
-    /**
-     * Binds window/document events for visibility and mouse tracking.
-     * @sideeffect Adds global visibility and focus listeners
-     */
     private _bindEvents(): void {
         const signal = this._cleanupAbort.signal;
+
+        // Handle zoom/dpr changes
+        globalThis.addEventListener('resize', () => {
+            this._resize();
+        }, { signal });
 
         document.addEventListener(
             'visibilitychange',
@@ -133,13 +181,14 @@ export class Particles {
         globalThis.addEventListener(
             'mousemove',
             (e) => {
-                this._mouse.x = e.clientX;
-                this._mouse.y = e.clientY;
+                const dpr = window.devicePixelRatio || 1;
+                // Convert mouse to physical coordinates
+                this._mouse.x = e.clientX * dpr;
+                this._mouse.y = e.clientY * dpr;
             },
             { signal },
         );
 
-        // Reduced Motion Listener (Section 30.3)
         const motionQuery = globalThis.matchMedia('(prefers-reduced-motion: reduce)');
         const handleMotion = (): void => {
             if (motionQuery.matches) this.stop();
@@ -172,7 +221,7 @@ export class Particles {
     }
 
     /**
-     * Batched rendering logic to minimize draw calls (Section 14.1).
+     * Batched rendering logic with Zero-Allocation strategy.
      */
     private _animate(): void {
         if (!this._isRunning) return;
@@ -180,58 +229,62 @@ export class Particles {
         const now = performance.now();
         const elapsed = now - this._lastFrameTime;
 
-        // Cap to roughly 60FPS for smoothness
+        // Cap to roughly 60FPS
         if (elapsed > 16) {
             this._lastFrameTime = now - (elapsed % 16);
-            this._ctx.clearRect(0, 0, this._width, this._height);
+            
+            // Clear entire buffer
+            this._ctx.clearRect(0, 0, this._canvasWidth, this._canvasHeight);
 
-            // Group by color for batching
-            const groups: Record<string, typeof this._particles> = {};
+            // Optimization: Iterate over pre-grouped arrays. 
+            for (const color in this._particlesByColor) {
+               const group = this._particlesByColor[color];
+               if (!group) continue;
 
-            this._particles.forEach((p) => {
-                p.x += p.vx;
-                p.y += p.vy;
-
-                const dx = this._mouse.x - p.x;
-                const dy = this._mouse.y - p.y;
-                const dist = Math.hypot(dx, dy);
-                const maxDist = 150;
-
-                if (dist < maxDist) {
-                    const force = (maxDist - dist) / maxDist;
-                    const angle = Math.atan2(dy, dx);
-                    p.vx -= Math.cos(angle) * force * 0.05;
-                    p.vy -= Math.sin(angle) * force * 0.05;
-                }
-
-                if (p.x < 0) p.x = this._width;
-                if (p.x > this._width) p.x = 0;
-                if (p.y < 0) p.y = this._height;
-                if (p.y > this._height) p.y = 0;
-
-                const color = p.color;
-                let group = groups[color];
-                if (!group) {
-                    group = [];
-                    groups[color] = group;
-                }
-                group.push(p);
-            });
-
-            // Batch Draw
-            Object.entries(groups).forEach(([color, pts]) => {
-                this._ctx.fillStyle = color;
-                this._ctx.beginPath();
-                pts.forEach((p) => {
-                    this._ctx.moveTo(p.x + p.size, p.y);
-                    this._ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                });
-                this._ctx.fill();
-            });
+               this._ctx.fillStyle = color;
+               
+               // Use for-of loop (cleaner and avoids index checks)
+               for (const p of group) {
+                   this._updateParticle(p);
+                   // Draw at physical coordinates (No Scaling)
+                   // Because canvas is sized to physical pixels and P is stored in physical pixels.
+                   this._ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+               }
+            }
         }
 
         requestAnimationFrame(() => {
             this._animate();
         });
+    }
+
+    private _updateParticle(p: { x: number; y: number; vx: number; vy: number; size: number; color: string }): void {
+        // Physics Update (Physical Coordinates)
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Mouse interaction
+        const dx = this._mouse.x - p.x;
+        const dy = this._mouse.y - p.y;
+        
+        // Interaction radius (Physical Pixels)
+        const radius = 150 * (window.devicePixelRatio || 1);
+
+        if (Math.abs(dx) < radius && Math.abs(dy) < radius) {
+            const dist = Math.hypot(dx, dy);
+            if (dist < radius) {
+                const force = (radius - dist) / radius;
+                const angle = Math.atan2(dy, dx);
+                p.vx -= Math.cos(angle) * force * 0.05;
+                p.vy -= Math.sin(angle) * force * 0.05;
+            }
+        }
+
+        // Wrap around screen (Physical Dimensions)
+        if (p.x < 0) p.x = this._width;
+        else if (p.x > this._width) p.x = 0;
+        
+        if (p.y < 0) p.y = this._height;
+        else if (p.y > this._height) p.y = 0;
     }
 }

@@ -25,6 +25,8 @@ export class SelectField implements ISettingField<string> {
     }
 
     onChange(cb: (val: string) => void): void {
-        this.select.onchange = () => cb(this.select.value);
+        this.select.onchange = () => {
+            cb(this.select.value);
+        };
     }
 }

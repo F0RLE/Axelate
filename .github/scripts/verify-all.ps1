@@ -66,15 +66,31 @@ function Initialize-Environment {
             if ($latestVersion) {
                 $rcPath = Join-Path $latestVersion.FullName "x64"
                 if (Test-Path (Join-Path $rcPath "rc.exe")) {
-                    Write-Host "Found RC.EXE at: $rcPath" -ForegroundColor DarkGray
+                    Write-Host "Found RC.EXE candidate at: $rcPath" -ForegroundColor DarkGray
                     $env:PATH = "$rcPath;$env:PATH"
-                    Write-Success "Added RC.EXE to PATH"
+                    
+                    # Verify execution
+                    try {
+                        & rc.exe /? > $null 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Success "Added RC.EXE to PATH and verified execution"
+                        }
+                        else {
+                            Write-ErrorMsg "RC.EXE found but failed to execute (exit code $LASTEXITCODE)"
+                        }
+                    }
+                    catch {
+                        Write-ErrorMsg "RC.EXE found but failed to execute: $_"
+                    }
                 }
                 else {
                     Write-ErrorMsg "RC.EXE not found in $rcPath"
                 }
             }
         }
+    }
+    else {
+        Write-Success "RC.EXE found in PATH"
     }
 }
 
@@ -92,8 +108,8 @@ Write-Success "Backend checks passed"
 # 2. Frontend Verification
 Write-Step "Frontend (TypeScript) Verification"
 
-# Typecheck (from root, calling tsc on src)
-Exec "npm.cmd" @("run", "typecheck") $ROOT_DIR
+# Typecheck (from src)
+Exec "npm.cmd" @("run", "typecheck") $SRC_DIR
 
 # Lint
 Exec "npm.cmd" @("run", "lint") $SRC_DIR

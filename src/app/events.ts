@@ -57,7 +57,7 @@ export class EventHandler {
                     }
                 }
 
-                // 2. Language Switcher Trigger
+                // 2. Language Switcher Trigger (header)
                 const trigger = target.closest('#current-lang-trigger');
                 if (trigger) {
                     e.preventDefault();

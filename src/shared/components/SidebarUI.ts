@@ -87,10 +87,8 @@ export class SidebarUI {
             logoArea.setAttribute('aria-label', 'Toggle Sidebar');
             logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
 
-            const logoIcon = logoArea.querySelector('.sidebar-logo-icon');
-            if (logoIcon instanceof HTMLElement) {
-                logoIcon.classList.remove('hidden');
-            }
+            // Logic moved to CSS/HTML inline styles for FOUC prevention
+
 
             const toggle = (): void => {
                 if (this._sidebar === null) return;

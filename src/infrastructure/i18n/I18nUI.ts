@@ -46,22 +46,25 @@ export class I18nUI {
     }
 
     /**
-     * Applies translations to all UI elements, placeholders, and titles.
+     * Applies translations to UI elements, placeholders, and titles.
+     * @param container - Optional container to scope the search (defaults to document)
      * @sideeffect Modifies the DOM tree
      */
-    public applyTranslations(): void {
-        this._translateElements();
-        this._translatePlaceholders();
-        this._translateTitles();
-        this._translateAriaLabels();
-        this.updateSwitcherUI();
+    public applyTranslations(container: HTMLElement | Document = document): void {
+        this._translateElements(container);
+        this._translatePlaceholders(container);
+        this._translateTitles(container);
+        this._translateAriaLabels(container);
+        if (container === document) {
+            this.updateSwitcherUI();
+        }
     }
 
     /**
      * Translates elements with the [data-i18n] attribute.
      */
-    private _translateElements(): void {
-        document.querySelectorAll('[data-i18n]').forEach((el: Element) => {
+    private _translateElements(container: HTMLElement | Document = document): void {
+        container.querySelectorAll('[data-i18n]').forEach((el: Element) => {
             const element = el as HTMLElement;
 
             if (
@@ -132,8 +135,8 @@ export class I18nUI {
     /**
      * Translates elements with [data-i18n-placeholder].
      */
-    private _translatePlaceholders(): void {
-        document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    private _translatePlaceholders(container: HTMLElement | Document = document): void {
+        container.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
             const element = el as HTMLInputElement;
             const key = element.dataset['i18nPlaceholder'];
             if (key !== undefined && key !== '') {
@@ -145,8 +148,8 @@ export class I18nUI {
     /**
      * Translates elements with [data-i18n-title].
      */
-    private _translateTitles(): void {
-        document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    private _translateTitles(container: HTMLElement | Document = document): void {
+        container.querySelectorAll('[data-i18n-title]').forEach((el) => {
             const element = el as HTMLElement;
             const key = element.dataset['i18nTitle'];
             if (key !== undefined && key !== '') {
@@ -158,8 +161,8 @@ export class I18nUI {
     /**
      * Translates elements with [data-i18n-aria-label].
      */
-    private _translateAriaLabels(): void {
-        document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
+    private _translateAriaLabels(container: HTMLElement | Document = document): void {
+        container.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
             const element = el as HTMLElement;
             const key = element.dataset['i18nAriaLabel'];
             if (key !== undefined && key !== '') {

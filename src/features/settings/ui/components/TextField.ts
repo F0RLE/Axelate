@@ -1,7 +1,7 @@
 import type { ISettingField } from './ISettingField';
 
 export class TextField implements ISettingField<string> {
-    private input: HTMLInputElement;
+    private readonly input: HTMLInputElement;
 
     constructor(initialValue: string) {
         this.input = document.createElement('input');
@@ -19,6 +19,8 @@ export class TextField implements ISettingField<string> {
     }
 
     onChange(cb: (val: string) => void): void {
-        this.input.onchange = () => cb(this.input.value);
+        this.input.onchange = () => {
+            cb(this.input.value);
+        };
     }
 }

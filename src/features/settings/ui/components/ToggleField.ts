@@ -11,17 +11,17 @@ export class ToggleField implements ISettingField<boolean> {
 
         this.wrapper = document.createElement('div');
         this.wrapper.className = 'form-toggle';
-        
+
         // Add Slider/Switch logic if needed visually, for now raw checkbox wrapped
         // Assuming CSS handles .form-toggle checkbox styling
         const slider = document.createElement('span');
         slider.className = 'slider round'; // Valid CSS assumption based on common toggles
-        
+
         const label = document.createElement('label');
         label.className = 'switch';
         label.appendChild(this.checkbox);
         label.appendChild(slider);
-        
+
         this.wrapper.appendChild(label);
     }
 
@@ -34,6 +34,8 @@ export class ToggleField implements ISettingField<boolean> {
     }
 
     onChange(cb: (val: boolean) => void): void {
-        this.checkbox.onchange = () => cb(this.checkbox.checked);
+        this.checkbox.onchange = () => {
+            cb(this.checkbox.checked);
+        };
     }
 }

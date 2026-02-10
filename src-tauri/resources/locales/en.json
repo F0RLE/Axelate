@@ -280,5 +280,8 @@
   "ui.chat.greeting.47": "Limits are only in your head. Axelate helps erase them.",
   "ui.chat.greeting.48": "New session — new opportunities.",
   "ui.chat.greeting.49": "Connecting to your creativity... Connection established.",
-  "ui.chat.greeting.50": "Axelate: Your launch into infinity."
+  "ui.chat.greeting.50": "Axelate: Your launch into infinity.",
+  "ui.launcher.web.home": "Home",
+  "ui.settings.no_settings": "No additional settings required for this module.",
+  "ui.settings.module_not_ready": "This module is not ready yet."
 }

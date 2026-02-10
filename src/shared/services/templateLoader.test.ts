@@ -27,13 +27,15 @@ describe('TemplateLoader', () => {
             const result = await templateLoader.loadTemplate('pages/test');
 
             expect(result).toBe(mockHtml);
-            expect(fetch).toHaveBeenCalledWith('/templates/pages/test.html');
+            expect(fetch).toHaveBeenCalledWith(expect.stringContaining('templates/pages/test.html'));
         });
 
         it('should have mocked Tauri invoke', () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const win = globalThis as unknown as Record<string, any>;
             expect(win['__TAURI__']).toBeDefined();
-            expect(typeof win['__TAURI__']['core']['invoke']).toBe('function');
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+            expect(typeof win['__TAURI__'].core.invoke).toBe('function');
         });
 
         it('should cache templates', async () => {

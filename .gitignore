@@ -7,11 +7,12 @@
 # Rust / Tauri / Backend
 # ─────────────────────────────────────────────────────────────────────
 **/target/
-Cargo.lock
 src-tauri/gen/
 src-tauri/check_output.txt
-src-tauri/resources/tools/
 **/*.rs.bk
+
+# Note: Cargo.lock IS tracked for applications (reproducible builds)
+# Cargo.lock
 
 # ─────────────────────────────────────────────────────────────────────
 # Node.js / Frontend
@@ -19,17 +20,28 @@ src-tauri/resources/tools/
 node_modules/
 **/dist/
 .vite/
-package-lock.json
-yarn.lock
 pnpm-lock.yaml
+yarn.lock
 
+# Ignore root package-lock (we use src/package.json)
+/package-lock.json
+
+# Allow src/package-lock.json
+!src/package-lock.json
+
+# ─────────────────────────────────────────────────────────────────────
 # Logs
+# ─────────────────────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.log
+error.log
 
+# ─────────────────────────────────────────────────────────────────────
 # Testing & Linting
+# ─────────────────────────────────────────────────────────────────────
 coverage/
 .vitest/
 .eslintcache
@@ -94,17 +106,15 @@ build/
 *.AppImage
 
 # ─────────────────────────────────────────────────────────────────────
-# Logs & Temporary Files
+# Temporary Files
 # ─────────────────────────────────────────────────────────────────────
-*.log
 *.tmp
 *.temp
 *.bak
 *.cache
-error.log
 
 # ─────────────────────────────────────────────────────────────────────
-# Application Data (runtime)
+# Application Data
 # ─────────────────────────────────────────────────────────────────────
 AxelateData/
 data/
@@ -116,9 +126,4 @@ data/
 .agent/
 .turbo/
 .cache/
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Backup
-# ─────────────────────────────────────────────────────────────────────
 backup/

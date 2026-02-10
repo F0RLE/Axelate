@@ -24,9 +24,9 @@ pub const BP_MEDIUM: u32 = 900;
 pub const BP_LARGE: u32 = 1200;
 
 /// Warning threshold width
-pub const THRESHOLD_WARNING_WIDTH: u32 = 700;
+pub const THRESHOLD_WARNING_WIDTH: u32 = 0;
 /// Warning threshold height
-pub const THRESHOLD_WARNING_HEIGHT: u32 = 500;
+pub const THRESHOLD_WARNING_HEIGHT: u32 = 0;
 
 /// Small screen width threshold
 pub const THRESHOLD_SMALL_SCREEN_WIDTH: u32 = 1400;

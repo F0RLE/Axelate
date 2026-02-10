@@ -14,11 +14,12 @@ html {
     height: 100%;
     /* Fluid Scaling: Min 12px, Ideal 14px + 0.4vw, Max 18px */
     font-size: clamp(12px, 0.8rem + 0.4vw, 18px);
+    background: var(--bg-dark); /* Moved from body */
 }
 
 body {
     font-family: 'Monocraft', 'Inter', sans-serif;
-    background: var(--bg-dark);
+    background: transparent; /* Allow particles (z-index -1) to show through */
     color: var(--text-primary);
     margin: 0;
     padding: 0;
@@ -42,4 +43,14 @@ textarea,
     -webkit-user-select: text !important;
     user-select: text !important;
     cursor: text;
+}
+
+/* Global Utilities */
+.hidden {
+    display: none !important;
+}
+
+.visible {
+    opacity: 1 !important;
+    visibility: visible !important;
 }

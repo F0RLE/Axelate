@@ -21,6 +21,7 @@ import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
 import type { ISettingsUIContext } from './SettingsContext';
 import { createField } from './components/FieldFactory';
 import { CardResizer } from './components/CardResizer';
+import { type I18nUI } from '@/infrastructure/i18n/I18nUI';
 
 type SettingValue = string | number | boolean | null;
 
@@ -48,13 +49,15 @@ export class SettingsUI {
             string,
             SettingValue
         >;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const initialValue = savedSettings[settingKey] ?? field.default;
 
         const fieldComponent = createField(field, initialValue);
 
         fieldComponent.onChange((val: unknown) => {
-             // Cast val to SettingValue (string|number|boolean|null)
-            this._debouncedSave(settingKey, val as SettingValue);
+            // Cast val to SettingValue (string|number|boolean|null)
+            const value = val as SettingValue;
+            this._debouncedSave(settingKey, value);
         });
 
         row.appendChild(fieldComponent.render());
@@ -79,6 +82,7 @@ export class SettingsUI {
     constructor(
         private readonly _service: SettingsService,
         private readonly _state: StateService,
+        private readonly _i18nUI: I18nUI,
     ) {
         aiSettingsRenderer.init(_service, _state);
         this._generalRenderer = new GeneralSettingsRenderer(_state);
@@ -105,21 +109,24 @@ export class SettingsUI {
             toggleMonitorItem: (id: string, en: boolean) => {
                 this._generalRenderer.toggleMonitorItem(id, en);
             },
+            i18nUI: this._i18nUI,
         };
 
         // Wait for settings template to be injected
         let attempts = 0;
         let container = document.getElementById('settings-grid');
-        while (!container && attempts < 10) {
+        while (container === null && attempts < 50) {
             await new Promise((r) => setTimeout(r, 100));
             container = document.getElementById('settings-grid');
             attempts++;
         }
 
-        if (!container) {
-            logger.warn(
-                '[SettingsUI] Settings container not found after 1s. Templates might still be loading.',
+        if (container === null) {
+            logger.error(
+                '[SettingsUI] Settings container "settings-grid" not found after 5s. Rendering failed.',
             );
+        } else {
+            logger.info('[SettingsUI] Settings container found. Initializing renderers.');
         }
 
         // 0. Subscribe to navigation events
@@ -138,10 +145,7 @@ export class SettingsUI {
         });
         this._resizer.init();
 
-        // 4. Load GPU Info
-        this._loadGpuInfo().catch((e: unknown) => {
-            logger.error('[SettingsUI] GPU Info failed:', e);
-        });
+
 
         // 5. Expose necessary global functions (legacy support for some templates)
         win.openModuleSettings = (app: IApp) => {
@@ -163,6 +167,8 @@ export class SettingsUI {
         if (modal instanceof HTMLElement) {
             // modal-backdrop uses hidden class with CSS transition
             modal.classList.add('hidden');
+            // Wait for transition if needed, or enforce immediately if logic dictates
+            setTimeout(() => { modal.style.display = 'none'; }, 300); // match transition
         }
     }
 
@@ -208,27 +214,7 @@ export class SettingsUI {
         logger.info('[SettingsUI] Destroyed.');
     }
 
-    /**
-     * Loads GPU information from the service and updates the UI.
-     */
-    private async _loadGpuInfo() {
-        const data = await this._service.loadGpuInfo();
-        const gpuInfoEl = document.getElementById('gpu-info');
-        if (!gpuInfoEl) return;
 
-        if (data.detected) {
-            gpuInfoEl.className = 'gpu-info detected';
-            gpuInfoEl.innerHTML = DOMPurify.sanitize(`
-                <div style="font-weight: 600; margin-bottom: 0.25rem;">${data.name ?? ''}</div>
-                <div class="gpu-info-details">${data.cuda === true ? 'CUDA • ' : ''}${data.memory === undefined ? '' : `${data.memory.toString()} GB`}</div>
-            `);
-        } else {
-            gpuInfoEl.className = 'gpu-info not-detected';
-            gpuInfoEl.innerHTML = DOMPurify.sanitize(
-                `<div>${this._context.t('ui.launcher.web.gpu_not_found', 'GPU not found')}</div><div class="gpu-info-details">${this._context.t('ui.launcher.web.gpu_fallback_cpu', 'CPU will be used (slower)')}</div>`,
-            );
-        }
-    }
 
     /**
      * Renders a specialized module configuration UI (API, Local AI, or generic).
@@ -297,10 +283,11 @@ export class SettingsUI {
      * "There is nothing there" - Minimalist visual standard.
      */
     private _renderEmptyState(container: HTMLElement, _app: IApp) {
+        const t = this._context.t;
         container.innerHTML = DOMPurify.sanitize(`
             <div class="ai-module-config universal-api-theme" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 2rem 0;">
-                <div style="text-align: center; color: var(--text-secondary); font-size: 1.2rem; opacity: 0.7;">
-                    This module is not ready yet.
+                <div style="text-align: center; color: var(--text-secondary); font-size: 1.2rem; opacity: 0.7;" data-i18n="ui.settings.module_not_ready">
+                    ${t('ui.settings.module_not_ready', 'This module is not ready yet.')}
                 </div>
             </div>
         `);
@@ -609,6 +596,7 @@ export class SettingsUI {
         title.innerHTML = DOMPurify.sanitize(suffix);
 
         await this._renderSpecializedModuleConfig(container, app);
+        this._context.i18nUI.applyTranslations(container);
 
         // modal-backdrop: just remove hidden class, CSS handles animation
         modal.classList.remove('hidden');

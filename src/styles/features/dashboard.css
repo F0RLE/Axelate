@@ -189,6 +189,10 @@
 }
 
 /* Width Warning Overlay */
+.width-warning.hidden {
+    display: none !important;
+}
+
 .width-warning {
     position: fixed !important;
     top: 0 !important;

@@ -36,6 +36,7 @@ export class NavigationService {
      */
     public refreshFromUiState(): void {
         const win = globalThis as TGlobalWin;
+        // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unnecessary-condition
         if (win.uiState && typeof win.uiState.last_page === 'string') {
             const lastPage = win.uiState.last_page;
             if (lastPage !== '') {

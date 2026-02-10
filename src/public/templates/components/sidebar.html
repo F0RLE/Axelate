@@ -1,0 +1,107 @@
+<!-- Sidebar: logo, nav, monitor, settings -->
+<button class="logo-area" type="button" aria-label="Toggle sidebar">
+    <div class="logo-icon-wrapper" style="display: none;">
+        <div class="sidebar-logo-icon" aria-hidden="true"></div>
+    </div>
+    <div class="sidebar-title-wrapper">
+        <span class="app-title" data-i18n="ui.launcher.web.app_title">Axelate</span>
+    </div>
+</button>
+
+<nav class="nav-section main-menu" aria-label="Main navigation">
+    <button type="button" class="nav-btn" data-page="home" aria-current="page">
+        <svg class="icon"><use href="#icon-home"></use></svg>
+        <span data-i18n="ui.launcher.web.home">Home</span>
+    </button>
+    <button type="button" class="nav-btn" data-page="chat">
+        <svg class="icon"><use href="#icon-chat"></use></svg>
+        <span data-i18n="ui.launcher.web.chat">Chat</span>
+    </button>
+    <button type="button" class="nav-btn" data-page="modules">
+        <svg class="icon"><use href="#icon-folder"></use></svg>
+        <span data-i18n="ui.launcher.web.modules">Modules</span>
+    </button>
+    <button type="button" class="nav-btn" data-page="settings">
+        <svg class="icon"><use href="#icon-settings"></use></svg>
+        <span data-i18n="ui.launcher.web.settings">Settings</span>
+    </button>
+    <button type="button" class="nav-btn debug-trigger" data-page="debug">
+        <svg class="icon"><use href="#icon-console"></use></svg>
+        <span data-i18n="ui.launcher.web.console">Console</span>
+    </button>
+</nav>
+
+<div class="sysmon-spacer"></div>
+
+<div id="system-monitor" class="nav-section sysmon-card" aria-label="System monitor">
+    <div class="sysmon-stat" data-monitor-id="cpu">
+        <div class="sysmon-header">
+            <div class="sysmon-label">
+                <svg class="sysmon-icon"><use href="#icon-cpu"></use></svg>
+                <span class="sysmon-label-text" data-i18n="ui.launcher.settings.monitor_cpu">CPU</span>
+            </div>
+            <div class="sysmon-value" id="cpu-percent"><span class="main-val">0</span>%</div>
+        </div>
+        <div class="sysmon-track"><div class="sysmon-fill" id="cpu-progress"></div></div>
+    </div>
+    <div class="sysmon-stat" data-monitor-id="gpu">
+        <div class="sysmon-header">
+            <div class="sysmon-label">
+                <svg class="sysmon-icon"><use href="#icon-gpu"></use></svg>
+                <span class="sysmon-label-text" data-i18n="ui.launcher.settings.monitor_gpu">GPU</span>
+            </div>
+            <div class="sysmon-value" id="gpu-util"><span class="main-val">0</span>%</div>
+        </div>
+        <div class="sysmon-track"><div class="sysmon-fill" id="gpu-progress"></div></div>
+    </div>
+    <div class="sysmon-stat" data-monitor-id="ram">
+        <div class="sysmon-header">
+            <div class="sysmon-label">
+                <svg class="sysmon-icon"><use href="#icon-ram"></use></svg>
+                <span class="sysmon-label-text" data-i18n="ui.launcher.settings.monitor_ram">RAM</span>
+            </div>
+            <div class="sysmon-value" id="ram-percent"><span class="main-val">0</span><span class="sysmon-value-sub">/0 GB</span></div>
+        </div>
+        <div class="sysmon-track"><div class="sysmon-fill" id="ram-progress"></div></div>
+    </div>
+    <div class="sysmon-stat" data-monitor-id="vram">
+        <div class="sysmon-header">
+            <div class="sysmon-label">
+                <svg class="sysmon-icon"><use href="#icon-vram"></use></svg>
+                <span class="sysmon-label-text" data-i18n="ui.launcher.settings.monitor_vram">VRAM</span>
+            </div>
+            <div class="sysmon-value" id="gpu-memory"><span class="main-val">0</span><span class="sysmon-value-sub">/0 GB</span></div>
+        </div>
+        <div class="sysmon-track"><div class="sysmon-fill" id="vram-progress"></div></div>
+    </div>
+    <div class="sysmon-divider"></div>
+    <div class="sysmon-stat" data-monitor-id="disk">
+        <div class="sysmon-header">
+            <div class="sysmon-label">
+                <svg class="sysmon-icon"><use href="#icon-disk"></use></svg>
+                <span class="sysmon-label-text" data-i18n="ui.launcher.settings.monitor_disk">Disk</span>
+            </div>
+            <div class="sysmon-value" id="disk-usage"><span class="main-val">--</span><span class="sysmon-value-sub"></span></div>
+        </div>
+        <div class="sysmon-track"><div class="sysmon-fill" id="disk-progress"></div></div>
+    </div>
+    <div class="sysmon-stat" data-monitor-id="network">
+        <div class="sysmon-header">
+            <div class="sysmon-label">
+                <svg class="sysmon-icon"><use href="#icon-network"></use></svg>
+                <span class="sysmon-label-text" data-i18n="ui.launcher.settings.monitor_network">Network</span>
+            </div>
+            <div class="sysmon-value" id="network-status"><span class="main-val">--</span><span class="sysmon-value-sub"></span></div>
+        </div>
+        <div class="sysmon-track"><div class="sysmon-fill" id="network-progress"></div></div>
+    </div>
+</div>
+
+<div class="sysmon-spacer"></div>
+
+<nav class="nav-section bottom-menu" aria-label="Downloads">
+    <button type="button" class="nav-btn" data-page="downloads">
+        <svg class="icon"><use href="#icon-download"></use></svg>
+        <span data-i18n="ui.launcher.web.downloads">Downloads</span>
+    </button>
+</nav>

@@ -115,10 +115,14 @@ describe('EventBus', () => {
         it('should return correct count', () => {
             expect(eventBus.listenerCount('page:change')).toBe(0);
 
-            eventBus.on('page:change', () => {});
+            eventBus.on('page:change', () => {
+                /* no-op */
+            });
             expect(eventBus.listenerCount('page:change')).toBe(1);
 
-            eventBus.on('page:change', () => {});
+            eventBus.on('page:change', () => {
+                /* no-op */
+            });
             expect(eventBus.listenerCount('page:change')).toBe(2);
         });
     });

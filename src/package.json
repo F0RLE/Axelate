@@ -8,7 +8,7 @@
         "build": "tsc && vite build",
         "preview": "vite preview",
         "clean": "node --input-type=module -e \"import { rmSync } from 'fs'; rmSync('dist', { recursive: true, force: true });\" && echo Cleaned",
-        "tauri:dev": "taskkill /F /IM \"Axelate.exe\" /T >nul 2>nul & tauri dev --target x86_64-pc-windows-msvc",
+        "tauri:dev": "taskkill /F /IM \"Axelate.exe\" /T >nul 2>nul & cd .. && .\\src\\node_modules\\.bin\\tauri dev --target x86_64-pc-windows-msvc",
         "tauri:build": "taskkill /F /IM \"Axelate.exe\" /T >nul 2>nul & cd .. && .\\src\\node_modules\\.bin\\tauri build",
         "release": "taskkill /F /IM \"Axelate.exe\" /T >nul 2>nul & npm run format && npm run typecheck && npm run lint && npm run test && npm run build && cd .. && .\\src\\node_modules\\.bin\\tauri build --release && explorer ..\\src-tauri\\target\\release\\bundle",
         "check-size": "node scripts/check-size.js",

@@ -4,33 +4,39 @@
 
 /* System Monitor Card */
 .sysmon-card {
-    font-family: 'Monocraft', 'Inter', sans-serif;
+    font-family: 'Monocraft', monospace !important;
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    padding: 10px; /* Reduced padding to gain horizontal space */
+    border: none;
+    border-radius: 12px;
+    padding: 10px 14px;
+/* background/backdrop handled by sidebar.css */
     display: flex;
     flex-direction: column;
     gap: 12px;
     overflow: hidden;
     max-width: 100%;
+    flex-shrink: 0; /* Prevent vertical squashing */
+    min-height: fit-content;
+    box-sizing: border-box;
     -webkit-app-region: no-drag;
-    transition:
-        opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        padding 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        margin 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        border-color 0.5s ease;
-    max-height: 800px; /* Sufficient max-height for animation */
+    transition: 
+        opacity 0.4s var(--ease-smooth),
+        max-height 0.4s var(--ease-smooth),
+        margin 0.4s var(--ease-smooth),
+        padding 0.4s var(--ease-smooth),
+        transform 0.4s var(--ease-smooth);
+    max-height: 800px;
+    transform: translateY(0);
 }
 
 .sysmon-card.adaptive-hidden {
     opacity: 0;
-    max-height: 0;
-    padding: 0;
-    margin: 0;
-    border-color: transparent;
+    max-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important; /* Forces margin collapse */
+    border: none !important;
     pointer-events: none;
+    transform: translateY(10px);
 }
 
 .sysmon-stat {
@@ -40,85 +46,62 @@
     overflow: hidden;
     opacity: 1;
     max-height: 80px;
-    transition:
-        opacity 0.25s ease,
-        max-height 0.25s ease;
-}
-
-.sysmon-stat.hiding {
-    opacity: 0;
-    max-height: 0;
-}
-
-.sysmon-stat.hidden {
-    display: none !important;
 }
 
 .sysmon-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 11px;
     min-width: 0;
-    gap: 4px; /* Reduced gap to prevent cut-off */
+    gap: 4px;
 }
 
 .sysmon-label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-width: 50px;
-    max-width: 50%;
-    color: #a0a0b0;
-    font-weight: 500;
-    flex-shrink: 0;
+    gap: 5px;
+    min-width: 0;
+    flex: 1;
+    color: #ffffff;
+    font-weight: normal;
 }
 
 .sysmon-label-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.9rem !important; /* Uniform size */
+    font-size: 0.72rem;
+    font-family: 'Monocraft', monospace !important;
 }
 
 .sysmon-icon {
     width: 12px;
     height: 12px;
-    opacity: 0.9;
-    flex-shrink: 0;
-}
-
-/* Hyper-specific override to force font size application */
-#sidebar #system-monitor .sysmon-stat .sysmon-header .sysmon-value {
-    font-size: 0.75rem !important; /* Reduced further */
-    font-family: 'Monocraft', monospace !important;
-}
-
-#sidebar #system-monitor .sysmon-stat .sysmon-header .sysmon-label .sysmon-label-text {
-    font-size: 0.75rem !important; /* Reduced further */
+    opacity: 0.85;
 }
 
 .sysmon-value {
     flex-shrink: 0;
     color: #ffffff;
-    font-family: 'Monocraft', monospace;
-    font-size: 0.75rem !important; /* Fallback reduced */
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    text-align: right;
-    min-width: 0;
+    font-family: 'Monocraft', monospace !important;
+    font-size: 0.72rem;
+    font-weight: normal; 
+    letter-spacing: -0.01em;
     display: flex;
-    align-items: center;
-    justify-content: flex-end; /* Ensures alignment to the right edge */
-    gap: 4px;
+    align-items: baseline;
+    gap: 2px;
+    white-space: nowrap;
+}
+
+.main-val {
+    color: inherit;
+    font-family: inherit;
 }
 
 .sysmon-value-sub {
-    color: #888; /* Explicit gray for separation */
-    opacity: 1;
-    font-size: 0.75rem; /* Matched to main value size */
-    font-weight: 500;
+    color: rgba(255, 255, 255, 0.65);
+    font-family: 'Monocraft', monospace !important;
+    font-size: 0.64rem;
     margin-left: 1px;
 }
 
@@ -136,7 +119,7 @@
 .sysmon-track {
     height: 8px;
     background: rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
+    border-radius: 4px; /* Tech rounding instead of capsule */
     overflow: hidden;
 }
 
@@ -144,7 +127,7 @@
     height: 100%;
     width: 0%;
     background: linear-gradient(90deg, var(--primary), var(--primary-light));
-    border-radius: 999px;
+    border-radius: 4px;
     transform: scale(1);
     box-shadow: 0 0 8px rgba(var(--primary-raw), 0.3);
     transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);

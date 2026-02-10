@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Deep mock of Tauri API
 const mockInvoke = vi.fn();
-const mockListen = vi.fn().mockResolvedValue(() => {});
+const mockListen = vi.fn().mockResolvedValue(() => {
+    /* no-op */
+});
 const mockEmit = vi.fn();
 
 const tauriMock = {
@@ -20,6 +22,7 @@ const mockCore = {
         listen: mockListen,
         isTauri: vi.fn().mockReturnValue(true),
         getSecureKey: vi.fn(async (key: string) => {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
             return await mockInvoke('get_secure_key', { service: key });
         }),
         saveSecureKey: vi.fn(async (key: string, val: string) => {
@@ -39,6 +42,12 @@ const mockCore = {
 
 // Mock showToast
 vi.stubGlobal('showToast', vi.fn());
+vi.stubGlobal('logger', {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+});
 
 import { AIBridge } from '@/features/ai/services/AIBridge';
 
@@ -50,6 +59,7 @@ describe('AIBridge', () => {
         (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
         localStorage.clear();
         aiBridge = new AIBridge();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
         aiBridge.setCore(mockCore as any);
 
         // Mock session ID for init
@@ -85,6 +95,8 @@ describe('AIBridge', () => {
     describe('startProvider', () => {
         it('should activate provider with valid API key', async () => {
             mockInvoke.mockImplementation(async (cmd, args) => {
+                await Promise.resolve(); // Ensure async
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                 if (cmd === 'get_secure_key' && args.service === 'gemini_api_key')
                     return 'sk-test-key-12345';
                 return null;
@@ -157,6 +169,7 @@ describe('AIBridge', () => {
 
         it('should invoke backend when provider is active', async () => {
             mockInvoke.mockImplementation(async (cmd) => {
+                await Promise.resolve(); // Ensure async
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message')
                     return { ok: true, reply: { text: 'Hello back!' } };
@@ -169,6 +182,7 @@ describe('AIBridge', () => {
             expect(mockInvoke).toHaveBeenCalledWith(
                 'send_chat_message',
                 expect.objectContaining({
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                     request: expect.any(Object),
                 }),
             );

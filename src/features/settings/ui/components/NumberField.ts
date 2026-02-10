@@ -1,7 +1,7 @@
 import type { ISettingField } from './ISettingField';
 
 export class NumberField implements ISettingField<number> {
-    private input: HTMLInputElement;
+    private readonly input: HTMLInputElement;
 
     constructor(initialValue: number) {
         this.input = document.createElement('input');
@@ -19,6 +19,8 @@ export class NumberField implements ISettingField<number> {
     }
 
     onChange(cb: (val: number) => void): void {
-        this.input.onchange = () => cb(Number(this.input.value));
+        this.input.onchange = () => {
+            cb(Number(this.input.value));
+        };
     }
 }

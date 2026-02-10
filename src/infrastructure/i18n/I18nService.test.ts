@@ -13,6 +13,7 @@ describe('I18nService', () => {
 
     beforeEach(() => {
         mockTauri = createMockTauri(false);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
         i18n = new I18nService(mockTauri as any);
         localStorage.clear();
     });
@@ -34,6 +35,7 @@ describe('I18nService', () => {
 
         it('should replace params in translation', () => {
             // Manually set translations for testing
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
             (i18n as any)._translations = {
                 greeting: 'Hello, {name}!',
             };
@@ -42,6 +44,7 @@ describe('I18nService', () => {
         });
 
         it('should replace multiple params', () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
             (i18n as any)._translations = {
                 message: '{action} {count} items',
             };
@@ -50,7 +53,11 @@ describe('I18nService', () => {
         });
     });
 
-    const mockFetchResponse = (data: any, ok = true) => {
+    const mockFetchResponse = (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: any,
+        ok = true,
+    ) => {
         vi.stubGlobal(
             'fetch',
             vi.fn().mockResolvedValue({

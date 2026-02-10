@@ -1,4 +1,13 @@
-﻿/* Confirmation Modal */
+/* Prevent modals from flashing on load (they must stay hidden until opened) */
+.modal-overlay.hidden,
+.modal-backdrop.hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Confirmation Modal */
 /* Blur launcher when closing - apply to all content containers */
 body.launcher-blur .page,
 body.launcher-blur .top-controls,

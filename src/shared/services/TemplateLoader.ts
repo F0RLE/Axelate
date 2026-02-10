@@ -54,7 +54,9 @@ class TemplateLoader {
         }
 
         try {
-            const response = await fetch(`/templates/${path}.html`);
+            const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '') || '.';
+            const url = `${base}/templates/${path}.html`;
+            const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(
                     `Failed to load template: ${path} (Status: ${response.status.toString()})`,

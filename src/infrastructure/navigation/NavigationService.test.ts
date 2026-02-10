@@ -177,7 +177,13 @@ describe('NavigationService', () => {
         });
 
         it('should handle missing uiState gracefully', () => {
-            // No uiState present
+            // Ensure no uiState exists
+            const win = globalThis as unknown as Record<string, unknown>;
+            if (win['uiState'] !== undefined) {
+                delete win['uiState'];
+            }
+
+            // Should not throw, page should be undefined
             navService.refreshFromUiState();
 
             // Should not throw, page should be undefined

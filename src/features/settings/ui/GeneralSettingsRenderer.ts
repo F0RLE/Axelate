@@ -4,6 +4,7 @@
  */
 
 import { type StateService } from '@/shared/services/StateService';
+import { logger } from '@/shared/services/LoggerService';
 import type { ISettingsUIContext } from './SettingsContext';
 
 export class GeneralSettingsRenderer {
@@ -13,6 +14,7 @@ export class GeneralSettingsRenderer {
      * Initializes the general settings renderer.
      */
     public init(context: ISettingsUIContext): void {
+        logger.info('[GeneralSettingsRenderer] Initializing...');
         this._initTaskbarToggles(context);
         this._initMonitorToggles(context);
     }
@@ -22,8 +24,16 @@ export class GeneralSettingsRenderer {
      */
     private _initTaskbarToggles(context: ISettingsUIContext) {
         const container = document.getElementById('taskbar-toggles');
-        if (!container || container.dataset['initialized'] === 'true') return;
+        if (!container) {
+            logger.warn('[GeneralSettingsRenderer] #taskbar-toggles not found');
+            return;
+        }
+        if (container.dataset['initialized'] === 'true') {
+            logger.info('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
+            return;
+        }
         container.dataset['initialized'] = 'true';
+        logger.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
 
         const t = context.t;
 
@@ -31,8 +41,9 @@ export class GeneralSettingsRenderer {
             { id: 'home', label: 'Home', icon: '#icon-home' },
             { id: 'chat', label: 'Chat', icon: '#icon-chat' },
             { id: 'modules', label: 'Modules', icon: '#icon-folder' },
-            { id: 'downloads', label: 'Downloads', icon: '#icon-download' },
+            { id: 'settings', label: 'Settings', icon: '#icon-settings' },
             { id: 'debug', label: 'Console', icon: '#icon-console' },
+            { id: 'downloads', label: 'Downloads', icon: '#icon-download' },
         ];
 
         const hiddenItems = this._state.getHiddenNavItems();
@@ -128,8 +139,16 @@ export class GeneralSettingsRenderer {
      */
     private _initMonitorToggles(context: ISettingsUIContext) {
         const container = document.getElementById('monitor-toggles');
-        if (!container || container.dataset['initialized'] === 'true') return;
+        if (!container) {
+            logger.warn('[GeneralSettingsRenderer] #monitor-toggles not found');
+            return;
+        }
+        if (container.dataset['initialized'] === 'true') {
+            logger.info('[GeneralSettingsRenderer] #monitor-toggles already initialized');
+            return;
+        }
         container.dataset['initialized'] = 'true';
+        logger.info('[GeneralSettingsRenderer] Initializing monitor toggles');
 
         const t = context.t;
 

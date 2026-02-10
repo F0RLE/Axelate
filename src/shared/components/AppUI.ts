@@ -276,8 +276,10 @@ export class AppUI {
     public openAppSelection(category: string, apps: IApp[]): void {
         const modal = document.getElementById('app-selection-modal');
         const listEl = document.getElementById('app-modal-list');
-        
-        logger.info(`[AppUI] Opening selection modal for ${category} with ${apps.length} items.`);
+
+        logger.info(
+            `[AppUI] Opening selection modal for ${category} with ${String(apps.length)} items.`,
+        );
 
         if (modal === null || listEl === null) return;
 
@@ -941,7 +943,7 @@ export class AppUI {
     }
 
     private _populateAppList(listEl: HTMLElement, apps: IApp[], category: string): void {
-        logger.info(`[AppUI] Populating ${category} with ${apps.length} apps`);
+        logger.info(`[AppUI] Populating ${category} with ${String(apps.length)} apps`);
         listEl.innerHTML = '';
 
         if (apps.length === 0) {
