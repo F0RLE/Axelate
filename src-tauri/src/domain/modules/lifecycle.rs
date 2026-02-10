@@ -79,12 +79,18 @@ pub struct LifecycleScripts {
     pub health: Option<String>,
 }
 
-/// Loads module manifest from module.json
-pub fn load_manifest(module_dir: &std::path::Path) -> Result<ModuleManifest, AppError> {
-    let manifest_path = module_dir.join("module.json");
-    if !manifest_path.exists() {
-        return Err(AppError::NotFound("Manifest not found".to_string()));
+/// Responsible for locating and loading module manifests
+#[derive(Debug)]
+pub struct ManifestLoader;
+
+impl ManifestLoader {
+    /// Loads module manifest from module.json
+    pub fn load(module_dir: &std::path::Path) -> Result<ModuleManifest, AppError> {
+        let manifest_path = module_dir.join("module.json");
+        if !manifest_path.exists() {
+            return Err(AppError::NotFound("Manifest not found".to_string()));
+        }
+        let content = std::fs::read_to_string(&manifest_path).map_err(AppError::Io)?;
+        serde_json::from_str(&content).map_err(AppError::Serialization)
     }
-    let content = std::fs::read_to_string(&manifest_path).map_err(AppError::Io)?;
-    serde_json::from_str(&content).map_err(AppError::Serialization)
 }

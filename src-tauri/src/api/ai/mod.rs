@@ -23,9 +23,7 @@ pub async fn validate_api_key(provider: String, key: String) -> Result<bool, App
 #[specta::specta]
 /// Clears chat history for a specific session
 pub fn clear_chat_history(session_id: &str) -> Result<(), AppError> {
-    if let Ok(mut sessions) = ai_service::SESSIONS.lock() {
-        sessions.remove(session_id);
-    }
+    ai_service::clear_chat_history(session_id);
     Ok(())
 }
 
@@ -33,12 +31,7 @@ pub fn clear_chat_history(session_id: &str) -> Result<(), AppError> {
 #[specta::specta]
 /// Retrieves chat history for a specific session
 pub fn get_chat_history(session_id: &str) -> Result<Vec<ai_service::ChatMessage>, AppError> {
-    if let Ok(sessions) = ai_service::SESSIONS.lock()
-        && let Some(session) = sessions.get(session_id)
-    {
-        return Ok(session.history.clone());
-    }
-    Ok(Vec::new())
+    Ok(ai_service::get_chat_history(session_id))
 }
 
 #[tauri::command]

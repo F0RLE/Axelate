@@ -3,7 +3,7 @@ use crate::utils::paths::{MODULES_DIR, TEMP_DIR};
 use futures_util::StreamExt;
 use std::fs;
 use std::io::copy;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 use zip::ZipArchive;
@@ -135,187 +135,178 @@ impl DownloaderService {
     }
 }
 
-/// Downloads and extracts a module from a remote repository
-pub async fn download_module(
-    app: AppHandle,
-    module_id: String,
-    repo_url: String,
-    expected_hash: Option<String>,
-) -> Result<(), AppError> {
-    validate_module_id(&module_id)?;
+// --- New Components ---
 
-    // 1. Transform GitHub URL to ZIP URL if needed
-    let download_url = repo_url.clone();
+struct UrlResolver;
 
-    let zip_path = TEMP_DIR.join(format!("{module_id}.zip.tmp"));
-
-    // Execute download and extraction and ensure cleanup via the wrapper
-    let result =
-        download_and_extract_internal(&app, &module_id, &download_url, &zip_path, expected_hash)
-            .await;
-
-    // Guaranteed cleanup of the temp file
-    if zip_path.exists() {
-        let _ = tokio::fs::remove_file(&zip_path).await;
-    }
-
-    if let Err(e) = result {
-        emit_progress(&app, &module_id, "error", &e.to_string(), 0.0, 0, 0);
-        return Err(e);
-    }
-
-    emit_progress(&app, &module_id, "complete", "Success", 1.0, 0, 0);
-
-    crate::infrastructure::logging::logger::add_log(
-        &format!("Module {module_id} installed via Native Downloader"),
-        "Downloader",
-        "info",
-    );
-
-    Ok(())
-}
-
-/// Internal implementation of download and extraction to allow guaranteed cleanup in the wrapper
-async fn download_and_extract_internal(
-    app: &AppHandle,
-    module_id: &str,
-    download_url: &str,
-    zip_path: &std::path::Path,
-    expected_hash: Option<String>,
-) -> Result<(), AppError> {
-    emit_progress(app, module_id, "connecting", "Connecting...", 0.0, 0, 0);
-
-    let mut client_builder = reqwest::Client::builder()
-        .user_agent("Axelate/1.0.0 (Tauri; Windows)")
-        .timeout(std::time::Duration::from_secs(600));
-
-    // Inject License Key if available
-    if let Some(license) = crate::domain::license::storage::load_license()
-        && !license.key.is_empty()
-    {
-        log::info!("Injecting license key for module download: {module_id}");
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Ok(auth_val) =
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", license.key))
+impl UrlResolver {
+    /// Resolves the actual download URL, handling GitHub specific logic (main/master fallback)
+    async fn resolve(client: &reqwest::Client, download_url: &str) -> Result<String, AppError> {
+        // GitHub Smart Branch Discovery (main -> master)
+        if download_url.contains("github.com")
+            && !Path::new(download_url)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
         {
-            headers.insert(reqwest::header::AUTHORIZATION, auth_val);
-        }
-        if let Ok(lic_val) = reqwest::header::HeaderValue::from_str(&license.key) {
-            headers.insert("X-Axelate-License", lic_val);
-        }
-        client_builder = client_builder.default_headers(headers);
-    }
+            let base_url = download_url.trim_end_matches(".git");
+            let main_url = format!("{base_url}/archive/refs/heads/main.zip");
+            let master_url = format!("{base_url}/archive/refs/heads/master.zip");
 
-    let client = client_builder
-        .build()
-        .map_err(|e| AppError::External(format!("Client error: {e}")))?;
-
-    let mut response;
-
-    // GitHub Smart Branch Discovery (main -> master)
-    if download_url.contains("github.com")
-        && !std::path::Path::new(download_url)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
-    {
-        let base_url = download_url.trim_end_matches(".git");
-        let main_url = format!("{base_url}/archive/refs/heads/main.zip");
-        let master_url = format!("{base_url}/archive/refs/heads/master.zip");
-
-        log::info!("Trying to download from: {main_url}");
-        response = client
-            .get(&main_url)
-            .send()
-            .await
-            .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
-
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            log::info!("main branch not found, trying master: {master_url}");
-            response = client
-                .get(&master_url)
+            log::info!("Trying to download from: {main_url}");
+            let response = client
+                .get(&main_url)
                 .send()
                 .await
                 .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
+
+            if response.status() == reqwest::StatusCode::NOT_FOUND {
+                log::info!("main branch not found, trying master: {master_url}");
+                let _ = client
+                    .get(&master_url)
+                    .send()
+                    .await
+                    .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
+
+                // If master also fails, we return master_url anyway?
+                // Original code implicitly returned the *response* of the last attempt.
+                // Here we return the URL that succeeded or the last attempted URL.
+                return Ok(master_url);
+            }
+            return Ok(main_url);
         }
-    } else {
-        response = client
-            .get(download_url)
+
+        Ok(download_url.to_string())
+    }
+}
+
+struct NetworkClient;
+
+impl NetworkClient {
+    /// Builds the HTTP client with correct headers and license injection
+    fn build_client(module_id: &str) -> Result<reqwest::Client, AppError> {
+        let mut client_builder = reqwest::Client::builder()
+            .user_agent("Axelate/1.0.0 (Tauri; Windows)")
+            .timeout(std::time::Duration::from_secs(600));
+
+        // Inject License Key if available
+        if let Some(license) = crate::domain::license::storage::load_license()
+            && !license.key.is_empty()
+        {
+            log::info!("Injecting license key for module download: {module_id}");
+            let mut headers = reqwest::header::HeaderMap::new();
+            if let Ok(auth_val) =
+                reqwest::header::HeaderValue::from_str(&format!("Bearer {}", license.key))
+            {
+                headers.insert(reqwest::header::AUTHORIZATION, auth_val);
+            }
+            if let Ok(lic_val) = reqwest::header::HeaderValue::from_str(&license.key) {
+                headers.insert("X-Axelate-License", lic_val);
+            }
+            client_builder = client_builder.default_headers(headers);
+        }
+
+        client_builder
+            .build()
+            .map_err(|e| AppError::External(format!("Client error: {e}")))
+    }
+
+    /// Downloads content with progress reporting and rate limiting
+    async fn download_file(
+        app: &AppHandle,
+        client: &reqwest::Client,
+        url: &str,
+        dest_path: &Path,
+        module_id: &str,
+    ) -> Result<(), AppError> {
+        let response = client
+            .get(url)
             .send()
             .await
             .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
-    }
 
-    if !response.status().is_success() {
-        return Err(AppError::External(format!(
-            "Download failed: {}",
-            response.status()
-        )));
-    }
+        if !response.status().is_success() {
+            return Err(AppError::External(format!(
+                "Download failed: {}",
+                response.status()
+            )));
+        }
 
-    let total_size = response.content_length().unwrap_or(0);
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
+        let total_size = response.content_length().unwrap_or(0);
+        let mut downloaded: u64 = 0;
+        let mut stream = response.bytes_stream();
 
-    fs::create_dir_all(&*TEMP_DIR)?;
+        fs::create_dir_all(&*TEMP_DIR)?;
 
-    let mut file = tokio::fs::File::create(zip_path)
-        .await
-        .map_err(AppError::Io)?;
+        let mut file = tokio::fs::File::create(dest_path)
+            .await
+            .map_err(AppError::Io)?;
 
-    let mut last_log_time = std::time::Instant::now();
+        let mut last_log_time = std::time::Instant::now();
 
-    while let Some(item) = stream.next().await {
-        let chunk_start = std::time::Instant::now();
-        let chunk = item.map_err(|e| AppError::External(format!("Stream error: {e}")))?;
-        let chunk_len = chunk.len();
+        while let Some(item) = stream.next().await {
+            let chunk_start = std::time::Instant::now();
+            let chunk = item.map_err(|e| AppError::External(format!("Stream error: {e}")))?;
+            let chunk_len = chunk.len();
 
-        file.write_all(&chunk).await.map_err(AppError::Io)?;
-        downloaded += chunk_len as u64;
+            file.write_all(&chunk).await.map_err(AppError::Io)?;
+            downloaded += chunk_len as u64;
 
-        // Rate Limiting Logic
-        let (limit_enabled, max_speed_bytes) = DOWNLOADER.get_settings();
-        if limit_enabled && max_speed_bytes > 0 {
-            // Calculate how long this chunk *should* take
-            // time_s = bytes / (bytes/s)
-            // time_us = bytes * 1_000_000 / (bytes/s)
-            let ideal_duration_micros =
-                (chunk_len as u128 * 1_000_000) / u128::from(max_speed_bytes);
-            let elapsed_micros = chunk_start.elapsed().as_micros();
+            // Rate Limiting Logic via global service
+            let (limit_enabled, max_speed_bytes) = DOWNLOADER.get_settings();
+            if limit_enabled && max_speed_bytes > 0 {
+                let ideal_duration_micros =
+                    (chunk_len as u128 * 1_000_000) / u128::from(max_speed_bytes);
+                let elapsed_micros = chunk_start.elapsed().as_micros();
 
-            if ideal_duration_micros > elapsed_micros {
-                let sleep_micros = ideal_duration_micros - elapsed_micros;
-                if sleep_micros > 1000 {
-                    // Only sleep if meaningful (>1ms)
-                    tokio::time::sleep(tokio::time::Duration::from_micros(
-                        u64::try_from(sleep_micros).unwrap_or(0),
-                    ))
-                    .await;
+                if ideal_duration_micros > elapsed_micros {
+                    let sleep_micros = ideal_duration_micros - elapsed_micros;
+                    if sleep_micros > 1000 {
+                        tokio::time::sleep(tokio::time::Duration::from_micros(
+                            u64::try_from(sleep_micros).unwrap_or(0),
+                        ))
+                        .await;
+                    }
                 }
+            }
+
+            if total_size > 0 && last_log_time.elapsed().as_millis() > 100 {
+                last_log_time = std::time::Instant::now();
+                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                let progress = (downloaded as f64 / total_size as f64) as f32;
+                emit_progress(
+                    app,
+                    module_id,
+                    "downloading",
+                    "Downloading...",
+                    progress,
+                    downloaded,
+                    total_size,
+                );
             }
         }
 
-        if total_size > 0 && last_log_time.elapsed().as_millis() > 100 {
-            last_log_time = std::time::Instant::now();
-            #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-            // UI progress calculation
-            let progress = (downloaded as f64 / total_size as f64) as f32;
-            emit_progress(
-                app,
-                module_id,
-                "downloading",
-                "Downloading...",
-                progress,
-                downloaded,
-                total_size,
-            );
-        }
+        Ok(())
     }
+}
 
-    // Hash Verification
-    if let Some(expected_hash) = expected_hash {
-        if expected_hash.trim().is_empty() {
-            log::warn!("Skipping integrity check for {module_id} because expected_hash is empty");
-        } else {
+struct FileVerifier;
+
+impl FileVerifier {
+    /// Verifies the SHA256 hash of a file
+    async fn verify(
+        app: &AppHandle,
+        file_path: &Path,
+        expected_hash: Option<String>,
+        module_id: &str,
+    ) -> Result<(), AppError> {
+        if let Some(expected_hash) = expected_hash {
+            if expected_hash.trim().is_empty() {
+                log::warn!(
+                    "Skipping integrity check for {module_id} because expected_hash is empty"
+                );
+                return Ok(());
+            }
+
             emit_progress(
                 app,
                 module_id,
@@ -326,7 +317,7 @@ async fn download_and_extract_internal(
                 0,
             );
 
-            let path_clone = zip_path.to_path_buf();
+            let path_clone = file_path.to_path_buf();
             let computed_hash = tokio::task::spawn_blocking(move || {
                 use sha2::{Digest, Sha256};
                 use std::io::Read;
@@ -358,125 +349,181 @@ async fn download_and_extract_internal(
 
             log::info!("Integrity verified for {module_id}");
         }
+        Ok(())
     }
+}
 
-    // 2. Extract
-    emit_progress(app, module_id, "extracting", "Extracting...", 0.0, 0, 0);
-    let final_path = MODULES_DIR.join(module_id);
+struct ArchiveExtractor;
 
-    if final_path.exists() {
-        fs::remove_dir_all(&final_path).ok();
-    }
-    fs::create_dir_all(&final_path).map_err(AppError::Io)?;
+impl ArchiveExtractor {
+    /// Extracts a ZIP archive to the target directory, handling nested roots
+    async fn extract(app: &AppHandle, zip_path: &Path, module_id: &str) -> Result<(), AppError> {
+        emit_progress(app, module_id, "extracting", "Extracting...", 0.0, 0, 0);
 
-    let app_handle = app.clone();
-    let mid = module_id.to_string();
-    let zpath = zip_path.to_owned();
-    let fpath = final_path.clone();
+        let final_path = MODULES_DIR.join(module_id);
 
-    tokio::task::spawn_blocking(move || {
-        let zip_file = fs::File::open(&zpath).map_err(|e| e.to_string())?;
-        let mut archive = ZipArchive::new(zip_file).map_err(|e| format!("Invalid archive: {e}"))?;
+        if final_path.exists() {
+            fs::remove_dir_all(&final_path).ok();
+        }
+        fs::create_dir_all(&final_path).map_err(AppError::Io)?;
 
-        let total_files = archive.len();
+        let app_handle = app.clone();
+        let mid = module_id.to_string();
+        let zpath = zip_path.to_owned();
+        let fpath = final_path.clone();
 
-        // 2a. Determine if there is a common root folder to skip (standard for GitHub ZIPs)
-        let root_to_skip = {
-            let mut first_dir: Option<String> = None;
-            let mut all_share_root = true;
+        tokio::task::spawn_blocking(move || {
+            let zip_file = fs::File::open(&zpath).map_err(|e| e.to_string())?;
+            let mut archive =
+                ZipArchive::new(zip_file).map_err(|e| format!("Invalid archive: {e}"))?;
+
+            let total_files = archive.len();
+
+            // Determine if there is a common root folder to skip (standard for GitHub ZIPs)
+            let root_to_skip = {
+                let mut first_dir: Option<String> = None;
+                let mut all_share_root = true;
+
+                for i in 0..total_files {
+                    let file = archive.by_index(i).map_err(|e: ZipError| e.to_string())?;
+                    let name = file.name().to_string();
+                    if name == "/" || name.is_empty() {
+                        continue;
+                    }
+
+                    let parts: Vec<&str> =
+                        name.split('/').filter(|s: &&str| !s.is_empty()).collect();
+                    if parts.is_empty() {
+                        continue;
+                    }
+
+                    match &first_dir {
+                        None => {
+                            if let Some(first) = parts.first() {
+                                first_dir = Some((*first).to_string());
+                            }
+                        }
+                        Some(root) => {
+                            if parts.first().is_some_and(|first| *first != root) {
+                                all_share_root = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if all_share_root { first_dir } else { None }
+            };
 
             for i in 0..total_files {
-                let file = archive.by_index(i).map_err(|e: ZipError| e.to_string())?;
-                let name = file.name().to_string();
-                if name == "/" || name.is_empty() {
-                    continue;
-                }
+                let mut file = archive
+                    .by_index(i)
+                    .map_err(|e: zip::result::ZipError| e.to_string())?;
 
-                let parts: Vec<&str> = name.split('/').filter(|s: &&str| !s.is_empty()).collect();
-                if parts.is_empty() {
-                    continue;
-                }
-
-                match &first_dir {
-                    None => {
-                        if let Some(first) = parts.first() {
-                            first_dir = Some((*first).to_string());
-                        }
-                    }
-                    Some(root) => {
-                        if parts.first().is_some_and(|first| *first != root) {
-                            all_share_root = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            if all_share_root { first_dir } else { None }
-        };
-
-        for i in 0..total_files {
-            let mut file = archive
-                .by_index(i)
-                .map_err(|e: zip::result::ZipError| e.to_string())?;
-
-            let outpath = match file.enclosed_name() {
-                Some(path) => {
-                    if let Some(root) = &root_to_skip {
-                        let mut components = path.as_path().components();
-                        let first = components.next();
-                        // Double check it matches the detected root
-                        if let Some(std::path::Component::Normal(c)) = first {
-                            if c.to_string_lossy() == *root {
-                                fpath.join(components.as_path())
+                let outpath = match file.enclosed_name() {
+                    Some(path) => {
+                        if let Some(root) = &root_to_skip {
+                            let mut components = path.as_path().components();
+                            let first = components.next();
+                            if let Some(std::path::Component::Normal(c)) = first {
+                                if c.to_string_lossy() == *root {
+                                    fpath.join(components.as_path())
+                                } else {
+                                    fpath.join(path)
+                                }
                             } else {
                                 fpath.join(path)
                             }
                         } else {
                             fpath.join(path)
                         }
-                    } else {
-                        fpath.join(path)
                     }
+                    None => continue,
+                };
+
+                if outpath == fpath {
+                    continue;
                 }
-                None => continue,
-            };
 
-            if outpath == fpath {
-                continue;
-            }
-
-            if (*file.name()).ends_with('/') {
-                fs::create_dir_all(&outpath).ok();
-            } else {
-                if let Some(p) = outpath.parent()
-                    && !p.exists()
-                {
-                    fs::create_dir_all(p).ok();
+                if (*file.name()).ends_with('/') {
+                    fs::create_dir_all(&outpath).ok();
+                } else {
+                    if let Some(p) = outpath.parent()
+                        && !p.exists()
+                    {
+                        fs::create_dir_all(p).ok();
+                    }
+                    let mut outfile = fs::File::create(&outpath)
+                        .map_err(|e| format!("Failed to create file {}: {e}", outpath.display()))?;
+                    copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
                 }
-                let mut outfile = fs::File::create(&outpath)
-                    .map_err(|e| format!("Failed to create file {}: {e}", outpath.display()))?;
-                copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
-            }
 
-            if i % 10 == 0 {
-                #[allow(clippy::cast_precision_loss)] // Acceptable for progress percentage
-                let progress = i as f32 / total_files as f32;
-                emit_progress(
-                    &app_handle,
-                    &mid,
-                    "extracting",
-                    "Extracting...",
-                    progress,
-                    0,
-                    0,
-                );
+                if i % 10 == 0 {
+                    #[allow(clippy::cast_precision_loss)]
+                    let progress = i as f32 / total_files as f32;
+                    emit_progress(
+                        &app_handle,
+                        &mid,
+                        "extracting",
+                        "Extracting...",
+                        progress,
+                        0,
+                        0,
+                    );
+                }
             }
-        }
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| AppError::Internal(format!("Blocking task failed: {e}")))?
-    .map_err(|e| AppError::Internal(format!("Extraction failed: {e}")))?;
+            Ok::<(), String>(())
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Blocking task failed: {e}")))?
+        .map_err(|e| AppError::Internal(format!("Extraction failed: {e}")))?;
+
+        Ok(())
+    }
+}
+
+/// Downloads and extracts a module from a remote repository
+pub async fn download_module(
+    app: AppHandle,
+    module_id: String,
+    repo_url: String,
+    expected_hash: Option<String>,
+) -> Result<(), AppError> {
+    validate_module_id(&module_id)?;
+
+    let zip_path = TEMP_DIR.join(format!("{module_id}.zip.tmp"));
+
+    // Orchestrate components
+    let result = async {
+        emit_progress(&app, &module_id, "connecting", "Connecting...", 0.0, 0, 0);
+
+        let client = NetworkClient::build_client(&module_id)?;
+        let final_url = UrlResolver::resolve(&client, &repo_url).await?;
+
+        NetworkClient::download_file(&app, &client, &final_url, &zip_path, &module_id).await?;
+        FileVerifier::verify(&app, &zip_path, expected_hash, &module_id).await?;
+        ArchiveExtractor::extract(&app, &zip_path, &module_id).await?;
+
+        Ok::<(), AppError>(())
+    }
+    .await;
+
+    // Guaranteed cleanup
+    if zip_path.exists() {
+        let _ = tokio::fs::remove_file(&zip_path).await;
+    }
+
+    if let Err(e) = result {
+        emit_progress(&app, &module_id, "error", &e.to_string(), 0.0, 0, 0);
+        return Err(e);
+    }
+
+    emit_progress(&app, &module_id, "complete", "Success", 1.0, 0, 0);
+
+    crate::infrastructure::logging::logger::add_log(
+        &format!("Module {module_id} installed via Native Downloader"),
+        "Downloader",
+        "info",
+    );
 
     Ok(())
 }

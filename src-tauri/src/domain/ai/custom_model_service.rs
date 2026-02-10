@@ -1,35 +1,107 @@
+use crate::errors::AppError;
 use crate::models::custom_models::{CustomModel, CustomModelConfig};
 use crate::utils::paths::CONFIG_DIR;
+use std::path::PathBuf;
 use tauri::command;
 
-fn get_config_path() -> std::path::PathBuf {
-    CONFIG_DIR.join("custom_models.json")
-}
+// ==================================================================================
+// Repository (Data Access)
+// ==================================================================================
 
-fn load_config() -> CustomModelConfig {
-    let path = get_config_path();
-    if path.exists()
-        && let Ok(content) = std::fs::read_to_string(&path)
-        && let Ok(config) = serde_json::from_str::<CustomModelConfig>(&content)
-    {
-        return config;
+struct CustomModelConfigRepository;
+
+impl CustomModelConfigRepository {
+    fn get_path() -> PathBuf {
+        CONFIG_DIR.join("custom_models.json")
     }
-    CustomModelConfig::default()
+
+    fn load() -> Result<CustomModelConfig, AppError> {
+        let path = Self::get_path();
+        if !path.exists() {
+            return Ok(CustomModelConfig::default());
+        }
+        let content = std::fs::read_to_string(&path).map_err(AppError::Io)?;
+        serde_json::from_str(&content).map_err(AppError::Serialization)
+    }
+
+    fn save(config: &CustomModelConfig) -> Result<(), AppError> {
+        let path = Self::get_path();
+        let content = serde_json::to_string_pretty(config).map_err(AppError::Serialization)?;
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(AppError::Io)?;
+        }
+
+        std::fs::write(path, content).map_err(AppError::Io)?;
+        Ok(())
+    }
 }
 
-fn save_config(config: &CustomModelConfig) -> Result<(), String> {
-    let path = get_config_path();
-    let content = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(CONFIG_DIR.as_path()).map_err(|e| e.to_string())?;
-    std::fs::write(path, content).map_err(|e| e.to_string())?;
-    Ok(())
+// ==================================================================================
+// Service (Business Logic)
+// ==================================================================================
+
+/// Service responsible for managing custom AI model configurations.
+#[derive(Debug)]
+pub struct CustomModelManager;
+
+impl CustomModelManager {
+    /// Retrieves all configured custom models.
+    pub fn get_all() -> Result<Vec<CustomModel>, AppError> {
+        let config = CustomModelConfigRepository::load().unwrap_or_default();
+        Ok(config.models)
+    }
+
+    /// Adds a new custom model configuration.
+    pub fn add(
+        provider_id: String,
+        id: String,
+        name: String,
+        base_model_id: String,
+    ) -> Result<(), AppError> {
+        let mut config = CustomModelConfigRepository::load().unwrap_or_default();
+
+        // Idempotency check
+        if config
+            .models
+            .iter()
+            .any(|m| m.id == id && m.provider_id == provider_id)
+        {
+            return Ok(());
+        }
+
+        let new_model = CustomModel {
+            id,
+            name,
+            provider_id,
+            base_model_id,
+            created_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        };
+
+        config.models.push(new_model);
+        CustomModelConfigRepository::save(&config)
+    }
+
+    /// Removes a custom model by its ID.
+    pub fn remove(id: &str) -> Result<(), AppError> {
+        let mut config = CustomModelConfigRepository::load().unwrap_or_default();
+        config.models.retain(|m| m.id != id);
+        CustomModelConfigRepository::save(&config)
+    }
 }
+
+// ==================================================================================
+// Commands (Interface Adapter)
+// ==================================================================================
 
 #[command]
 #[specta::specta]
 /// Retrieves all custom AI models configured by the user
-pub fn get_custom_models() -> Vec<CustomModel> {
-    load_config().models
+pub fn get_custom_models() -> Result<Vec<CustomModel>, AppError> {
+    CustomModelManager::get_all()
 }
 
 #[command]
@@ -37,40 +109,16 @@ pub fn get_custom_models() -> Vec<CustomModel> {
 /// Adds a new custom AI model configuration
 pub fn add_custom_model(
     provider_id: String,
-    id: &str,
+    id: String,
     name: String,
     base_model_id: String,
-) -> Result<(), String> {
-    let mut config = load_config();
-
-    // Check duplicates
-    if config
-        .models
-        .iter()
-        .any(|m| m.id == id && m.provider_id == provider_id)
-    {
-        return Ok(()); // Already exists, maybe update? For now just ignore or overwrite.
-    }
-
-    config.models.push(CustomModel {
-        id: id.to_string(),
-        name,
-        provider_id,
-        base_model_id,
-        created_at: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-    });
-
-    save_config(&config)
+) -> Result<(), AppError> {
+    CustomModelManager::add(provider_id, id, name, base_model_id)
 }
 
 #[command]
 #[specta::specta]
 /// Removes a custom AI model by ID
-pub fn remove_custom_model(id: &str) -> Result<(), String> {
-    let mut config = load_config();
-    config.models.retain(|m| m.id != id);
-    save_config(&config)
+pub fn remove_custom_model(id: String) -> Result<(), AppError> {
+    CustomModelManager::remove(&id)
 }
