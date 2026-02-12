@@ -34,7 +34,7 @@ reqwest = { version = "0.13.1", default-features = false, features = ["json", "s
 tokio = { version = "1.49.0", features = ["full"] }
 futures-util = "0.3.31"
 indexmap = { version = "2.13.0", features = ["std", "serde"] }
-nvml-wrapper = "0.11.0"
+nvml-wrapper = "0.12.0"
 tauri-plugin-global-shortcut = "2.3.1"
 tauri-plugin-clipboard-manager = "2.3.2"
 aes-gcm = "0.10.3"
