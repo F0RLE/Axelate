@@ -198,7 +198,7 @@ export class StateService {
         if (!this._isDirty) return;
         try {
             if (this._bridge.isTauri()) {
-                this._bridge.invoke('save_ui_state', { state: this._state });
+                void this._bridge.invoke('save_ui_state', { state: this._state });
             } else {
                 localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }

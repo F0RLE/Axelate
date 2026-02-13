@@ -85,7 +85,6 @@ export class SidebarUI extends BaseComponent {
 
             // Logic moved to CSS/HTML inline styles for FOUC prevention
 
-
             const toggle = (): void => {
                 if (this._sidebar === null) return;
 
@@ -113,7 +112,10 @@ export class SidebarUI extends BaseComponent {
                 }, 300);
             };
 
-            logoArea.addEventListener('click', toggle, { signal: this._abortController!.signal });
+            const signal = this._abortController?.signal;
+            if (!signal) return;
+
+            logoArea.addEventListener('click', toggle, { signal });
             logoArea.addEventListener(
                 'keydown',
                 ((e: KeyboardEvent) => {
@@ -122,7 +124,7 @@ export class SidebarUI extends BaseComponent {
                         toggle();
                     }
                 }) as EventListener,
-                { signal: this._abortController!.signal },
+                { signal },
             );
         }
     }
@@ -198,7 +200,7 @@ export class SidebarUI extends BaseComponent {
             return;
 
         const sidebarHeight = this._sidebar.clientHeight;
-        
+
         // Accurate space calculation matching sidebar.css:
         // top_padding(1.5rem) + logo + [auto] + menu + 1.5rem + monitor + 1.5rem + [auto] + bottom + bottom_padding(1.5rem)
         // 1.5rem = 24px (at 16px base)
@@ -207,8 +209,9 @@ export class SidebarUI extends BaseComponent {
         const bottomH = bottom.offsetHeight;
         const paddingAndMargins = 24 * 4; // top_pad + mid_margin1 + mid_margin2 + bottom_pad
         const autoMarginBuffer = 20; // Some extra space for the "centering" effect to be visible
-        
-        const requiredSpace = logoH + menuH + bottomH + this._minMonitorHeight + paddingAndMargins + autoMarginBuffer;
+
+        const requiredSpace =
+            logoH + menuH + bottomH + this._minMonitorHeight + paddingAndMargins + autoMarginBuffer;
 
         // If currently showing but sidebar has scrollbar (clipping!), hide it immediately
         const isOverflowing = this._sidebar.scrollHeight > sidebarHeight + 2;
@@ -217,7 +220,7 @@ export class SidebarUI extends BaseComponent {
         if (isVisible && (sidebarHeight < requiredSpace || isOverflowing)) {
             monitor.classList.add('adaptive-hidden');
             logger.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
-        } else if (!isVisible && sidebarHeight >= requiredSpace + 10) { 
+        } else if (!isVisible && sidebarHeight >= requiredSpace + 10) {
             // Only bring back if there's substantial extra space to avoid flickering
             monitor.classList.remove('adaptive-hidden');
             logger.debug('[SidebarUI] Showing monitor (space restored)');

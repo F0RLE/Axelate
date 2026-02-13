@@ -22,7 +22,7 @@ impl ConfigService {
         let providers = self.repo.load_providers()?;
 
         // Hydraulic initialization of providers and catalog
-        config.api_providers = providers.clone();
+        config.api_providers.clone_from(&providers);
 
         for provider in &providers {
             // Update catalog if not present

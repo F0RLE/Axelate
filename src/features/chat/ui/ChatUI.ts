@@ -388,7 +388,7 @@ export class ChatUI {
         const card = document.createElement('div');
         let isImage = f.type.startsWith('image/');
         const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-        
+
         if (!isImage && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
             isImage = true;
         }
@@ -497,14 +497,18 @@ export class ChatUI {
         }
     }
 
-    private async _renderPendingAttachment(f: File, idx: number, onRemove: (idx: number) => void): Promise<void> {
+    private async _renderPendingAttachment(
+        f: File,
+        idx: number,
+        onRemove: (idx: number) => void,
+    ): Promise<void> {
         const card = document.createElement('div');
         const isImage = f.type.startsWith('image/');
         card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
         const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
         const name = this._shortenFileName(f.name);
-        
+
         let contentHtml = '';
         if (isImage) {
             const objectUrl = URL.createObjectURL(f);
@@ -544,7 +548,8 @@ export class ChatUI {
 
         const t = globalThis.t;
         const tokensLabel = t ? t('ui.launcher.web.tokens', 'tokens') : 'tokens';
-        const tokensHtml = tokens > 0 ? `<div class="media-tokens">${String(tokens)} ${tokensLabel}</div>` : '';
+        const tokensHtml =
+            tokens > 0 ? `<div class="media-tokens">${String(tokens)} ${tokensLabel}</div>` : '';
 
         return `
             <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
@@ -651,21 +656,26 @@ export class ChatUI {
 
     private _showCopyResult(btn: HTMLElement, success: boolean): void {
         if (!success) {
-            this.showToast(globalThis.t ? globalThis.t('ui.launcher.web.copy_failed', 'Failed to copy code') : 'Failed to copy code', 'error');
+            this.showToast(
+                globalThis.t
+                    ? globalThis.t('ui.launcher.web.copy_failed', 'Failed to copy code')
+                    : 'Failed to copy code',
+                'error',
+            );
             return;
         }
 
         const originalHtml = btn.innerHTML;
         const t = globalThis.t;
         const label = t ? t('ui.launcher.web.copied', 'Copied!') : 'Copied!';
-        
+
         btn.innerHTML = `
             <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
                 <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
             <span style="color: var(--success);">${label}</span>
         `;
-        
+
         setTimeout(() => {
             btn.innerHTML = originalHtml;
         }, 2000);

@@ -1,5 +1,6 @@
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { logger } from '../../../shared/services/LoggerService';
+import { renderSimpleFeature } from '../../../shared/ui/renderSimpleFeature';
 
 /**
  * @class TestFeatureUI
@@ -15,7 +16,7 @@ export class TestFeatureUI extends BaseComponent {
      * Component initialization logic.
      * Use super.getElement() for cached lookups.
      */
-    protected async onInit(): Promise<void> {
+    protected onInit(): void {
         logger.debug('[TestFeatureUI] Initializing');
     }
 
@@ -24,11 +25,9 @@ export class TestFeatureUI extends BaseComponent {
      */
     protected render(): void {
         const root = this.getElement('testfeature-root');
-        if (root) {
-            root.innerHTML = `<div class="testfeature-container">
-                <h1>${i18n?.t('testfeature.title') || 'TestFeature'}</h1>
-            </div>`;
-        }
+        if (!root) return;
+
+        renderSimpleFeature(root, 'testfeature-container', 'testfeature.title', 'TestFeature');
     }
 
     /**
