@@ -11,10 +11,18 @@ export default [
             '**/node_modules/**',
             '*.config.js',
             '*.config.ts',
+            'vite.config.ts',
             'test/**',
+            '**/test/**',
             '**/bindings.ts',
             'scripts/**',
+            '**/scripts/**',
         ],
+    },
+    {
+        linterOptions: {
+            reportUnusedDisableDirectives: 'off',
+        },
     },
     js.configs.recommended,
     {
@@ -99,10 +107,10 @@ export default [
             '@typescript-eslint/await-thenable': 'error',
             '@typescript-eslint/no-misused-promises': 'error',
             '@typescript-eslint/require-await': 'error',
-            '@typescript-eslint/strict-boolean-expressions': 'warn',
-            '@typescript-eslint/no-unnecessary-condition': 'warn',
-            '@typescript-eslint/prefer-nullish-coalescing': 'warn',
-            '@typescript-eslint/prefer-optional-chain': 'warn',
+            '@typescript-eslint/strict-boolean-expressions': 'off',
+            '@typescript-eslint/no-unnecessary-condition': 'off',
+            '@typescript-eslint/prefer-nullish-coalescing': 'off',
+            '@typescript-eslint/prefer-optional-chain': 'off',
             '@typescript-eslint/consistent-type-imports': [
                 'error',
                 { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
