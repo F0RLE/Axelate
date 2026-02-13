@@ -19,20 +19,23 @@ export class ActionButton extends BaseComponent {
      */
     protected onInit(): void {
         const btn = this.getElement<HTMLButtonElement>(this._id);
-        if (btn) {
-            btn.addEventListener('click', async (e) => {
+        const signal = this._abortController?.signal;
+        if (btn && signal) {
+            btn.addEventListener('click', (e) => {
                 if (this._isLoading) return;
-                
-                try {
-                    const result = this._onClick(e);
-                    if (result instanceof Promise) {
-                        this.setLoading(true);
-                        await result;
+
+                void (async () => {
+                    try {
+                        const result = this._onClick(e);
+                        if (result instanceof Promise) {
+                            this.setLoading(true);
+                            await result;
+                        }
+                    } finally {
+                        this.setLoading(false);
                     }
-                } finally {
-                    this.setLoading(false);
-                }
-            }, { signal: this._abortController!.signal });
+                })();
+            }, { signal });
         }
     }
 

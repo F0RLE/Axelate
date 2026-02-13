@@ -27,7 +27,7 @@ export class CatalogService {
 
         // KISS: Use dev-only global for debugging
         if (import.meta.env.DEV) {
-            (win as any).__DEV_CATALOG = this;
+            (win as TGlobalWin & { __DEV_CATALOG?: CatalogService }).__DEV_CATALOG = this;
         }
 
         // Sync with global APP_DATA for downstream components
@@ -154,7 +154,7 @@ export class CatalogService {
                 repoUrl: item.repoUrl ?? '',
                 expectedHash: item.expectedHash ?? '',
                 version: item.version ?? '1.0.0',
-                installed: (item as any).installed ?? false,
+                installed: (item as ModuleItem & { installed?: boolean }).installed ?? false,
             } as IApp;
         });
     }

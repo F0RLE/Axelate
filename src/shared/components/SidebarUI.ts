@@ -113,7 +113,10 @@ export class SidebarUI extends BaseComponent {
                 }, 300);
             };
 
-            logoArea.addEventListener('click', toggle, { signal: this._abortController!.signal });
+            const signal = this._abortController?.signal;
+            if (!signal) return;
+
+            logoArea.addEventListener('click', toggle, { signal });
             logoArea.addEventListener(
                 'keydown',
                 ((e: KeyboardEvent) => {
@@ -122,7 +125,7 @@ export class SidebarUI extends BaseComponent {
                         toggle();
                     }
                 }) as EventListener,
-                { signal: this._abortController!.signal },
+                { signal },
             );
         }
     }

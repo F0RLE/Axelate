@@ -928,7 +928,10 @@ export class AppUI {
         
         logger.info(`[AppUI] _populateAppList called for ${category}.`);
         logger.info(`[AppUI] Apps received (arg): ${String(apps.length)}`);
-        logger.info(`[AppUI] Apps in global APP_DATA.${category}: ${String((catalog as any)?.[category]?.length ?? 'missing')}`);
+        const catalogByCategory = catalog as unknown as Partial<Record<string, IApp[]>>;
+        logger.info(
+            `[AppUI] Apps in global APP_DATA.${category}: ${String(catalogByCategory[category]?.length ?? 'missing')}`,
+        );
 
         listEl.innerHTML = '';
 
@@ -981,8 +984,11 @@ export class AppUI {
         let titleText = app.name ?? '';
         const win = globalThis as TGlobalWin;
         if (typeof win.t === 'function' && (app.nameKey ?? '') !== '') {
-            title.dataset['i18n'] = app.nameKey;
-            titleText = win.t(app.nameKey!, titleText);
+            const nameKey = app.nameKey;
+            if (nameKey) {
+                title.dataset['i18n'] = nameKey;
+                titleText = win.t(nameKey, titleText);
+            }
         } else {
             delete title.dataset['i18n'];
         }
@@ -996,9 +1002,12 @@ export class AppUI {
         let descText = app.desc ?? '';
         const win = globalThis as TGlobalWin;
         if (typeof win.t === 'function' && (app.descKey ?? '') !== '') {
-            desc.dataset['i18n'] = app.descKey!;
-            const translated = win.t(app.descKey!, descText);
-            descText = translated || descText;
+            const descKey = app.descKey;
+            if (descKey) {
+                desc.dataset['i18n'] = descKey;
+                const translated = win.t(descKey, descText);
+                descText = translated || descText;
+            }
         } else {
             delete desc.dataset['i18n'];
         }

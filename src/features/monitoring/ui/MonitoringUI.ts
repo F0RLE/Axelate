@@ -107,7 +107,10 @@ export class MonitoringUI extends BaseComponent {
         }
 
         if (this._activeTweens.has(targetNode)) {
-            cancelAnimationFrame(this._activeTweens.get(targetNode)!);
+            const frameId = this._activeTweens.get(targetNode);
+            if (frameId !== undefined) {
+                cancelAnimationFrame(frameId);
+            }
         }
 
         const duration = 400; // Snapper animation (400ms)

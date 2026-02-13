@@ -452,24 +452,29 @@ export class WindowUI {
         const minWidth = config?.thresholds.warningWidth ?? 0;
         const minHeight = config?.thresholds.warningHeight ?? 0;
 
-        if (width < minWidth || height < minHeight) {
-            if (this._modulesWarning) {
+        const showWarning = width < minWidth || height < minHeight;
+
+        const modulesPage = document.getElementById('page-modules');
+        const settingsPage = document.getElementById('page-settings');
+
+        const isModulesActive = modulesPage?.classList.contains('active') === true;
+        const isSettingsActive = settingsPage?.classList.contains('active') === true;
+
+        if (this._modulesWarning) {
+            if (showWarning && isModulesActive) {
                 this._modulesWarning.classList.remove('hidden');
                 this._modulesWarning.classList.add('flex-important');
-            }
-            if (
-                this._settingsWarning &&
-                document.getElementById('page-settings')?.classList.contains('hidden') === false
-            ) {
-                this._settingsWarning.classList.remove('hidden');
-                this._settingsWarning.classList.add('flex-important');
-            }
-        } else {
-            if (this._modulesWarning) {
+            } else {
                 this._modulesWarning.classList.remove('flex-important');
                 this._modulesWarning.classList.add('hidden');
             }
-            if (this._settingsWarning) {
+        }
+
+        if (this._settingsWarning) {
+            if (showWarning && isSettingsActive) {
+                this._settingsWarning.classList.remove('hidden');
+                this._settingsWarning.classList.add('flex-important');
+            } else {
                 this._settingsWarning.classList.remove('flex-important');
                 this._settingsWarning.classList.add('hidden');
             }
