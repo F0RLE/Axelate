@@ -5,6 +5,7 @@
 
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { logger } from '../../../shared/services/LoggerService';
+import type { TGlobalWin } from '../../../shared/types/global_bridge_types';
 
 /**
  * @class FinalCheckUI
@@ -29,11 +30,14 @@ export class FinalCheckUI extends BaseComponent {
      */
     protected render(): void {
         const root = this.getElement('finalcheck-root');
-        if (root) {
-            root.innerHTML = `<div class="finalcheck-container">
-                <h1>${i18n?.t('finalcheck.title') || 'FinalCheck'}</h1>
+        if (!root) return;
+
+        const win = globalThis as TGlobalWin;
+        const title = typeof win.t === 'function' ? win.t('finalcheck.title', 'FinalCheck') : 'FinalCheck';
+
+        root.innerHTML = `<div class="finalcheck-container">
+                <h1>${title}</h1>
             </div>`;
-        }
     }
 
     /**

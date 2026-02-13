@@ -1,5 +1,6 @@
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
 import globals from 'globals';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
@@ -16,18 +17,10 @@ export default [
         ],
     },
     js.configs.recommended,
-    ...tseslint.configs.strictTypeChecked,
-    ...tseslint.configs.stylisticTypeChecked,
     {
-        files: ['scripts/**/*.js'],
+        files: ['**/*.{ts,tsx}'],
         languageOptions: {
-            globals: {
-                ...globals.node,
-            },
-        },
-    },
-    {
-        languageOptions: {
+            parser: tsParser,
             globals: {
                 ...globals.browser,
                 t: 'readonly',
@@ -78,6 +71,9 @@ export default [
                 tsconfigRootDir: import.meta.dirname,
             },
         },
+        plugins: {
+            '@typescript-eslint': tsPlugin,
+        },
         rules: {
             // ============================================================
             // Maximum Strictness ESLint Rules
@@ -122,6 +118,14 @@ export default [
             'no-throw-literal': 'error',
             'no-useless-concat': 'error',
             'prefer-template': 'error',
+        },
+    },
+    {
+        files: ['scripts/**/*.js'],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
         },
     },
     eslintConfigPrettier,
