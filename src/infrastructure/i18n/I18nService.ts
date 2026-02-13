@@ -4,14 +4,14 @@
  */
 
 import { logger } from '@/shared/services/LoggerService';
-import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import { type IBridge } from '@/shared/types/IBridge';
 
 export class I18nService {
     private _translations: Record<string, string> = {};
     private _currentLang = 'en';
     private _initialized = false;
 
-    constructor(private readonly _tauri: TauriProvider) {}
+    constructor(private readonly _bridge: IBridge) {}
 
     /**
      * Initializes the i18n service by detecting system language and loading translations.
@@ -46,7 +46,7 @@ export class I18nService {
      * Fetches language from the backend (Tauri or Mock API).
      */
     private async _getBackendLanguage(): Promise<string | null> {
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             return await this._getTauriLanguage();
         } else {
             return await this._getBrowserApiLanguage();
@@ -58,7 +58,7 @@ export class I18nService {
      */
     private async _getTauriLanguage(): Promise<string | null> {
         try {
-            const invokePromise = this._tauri.invoke('get_system_language');
+            const invokePromise = this._bridge.invoke('get_system_language');
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => {
                     reject(new Error('Timeout'));
@@ -133,8 +133,8 @@ export class I18nService {
         const timeoutMs = 2000;
         const failMsg = `Timeout loading translations for ${lang}`;
 
-        if (this._tauri.isTauri()) {
-            const p = this._tauri.invoke<Record<string, string>>('get_translations', { lang });
+        if (this._bridge.isTauri()) {
+            const p = this._bridge.invoke<Record<string, string>>('get_translations', { lang });
             const t = new Promise<Record<string, string>>((_, r) =>
                 setTimeout(() => {
                     r(new Error(failMsg));
@@ -153,9 +153,9 @@ export class I18nService {
      */
     private async _syncToBackend(lang: string) {
         try {
-            if (this._tauri.isTauri()) {
-                await this._tauri.invoke('save_setting', { key: 'LANGUAGE', value: lang });
-                await this._tauri.invoke('save_setting', { key: 'BOT_LANGUAGE', value: '' });
+            if (this._bridge.isTauri()) {
+                await this._bridge.invoke('save_setting', { key: 'LANGUAGE', value: lang });
+                await this._bridge.invoke('save_setting', { key: 'BOT_LANGUAGE', value: '' });
             } else {
                 await fetch('/api/settings', {
                     method: 'POST',

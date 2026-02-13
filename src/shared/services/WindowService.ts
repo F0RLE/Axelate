@@ -3,7 +3,7 @@
  * @description Service for managing application window behavior, zoom, and display states
  */
 
-import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import { type IBridge } from '@/shared/types/IBridge';
 import { logger } from './LoggerService';
 
 interface IWindowGlobal {
@@ -59,7 +59,7 @@ export class WindowService {
     private _saveWindowTimer: ReturnType<typeof setTimeout> | null = null;
     private _config: IWindowConfig | null = null;
 
-    constructor(private readonly _tauri: TauriProvider) {}
+    constructor(private readonly _bridge: IBridge) {}
 
     /**
      * Initializes the window service by retrieving the current zoom level from the host.
@@ -72,11 +72,11 @@ export class WindowService {
             fallbackZoom = Number.parseFloat(saved) || 1;
         }
 
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             try {
                 // Use pre-loaded config or fetch it
                 this._config =
-                    initialConfig ?? (await this._tauri.invoke<IWindowConfig>('get_window_config'));
+                    initialConfig ?? (await this._bridge.invoke<IWindowConfig>('get_window_config'));
 
                 // Update breakpoints from backend (placeholder/not used in UI yet)
                 logger.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
@@ -121,8 +121,8 @@ export class WindowService {
      * Minimizes the application window.
      */
     public async minimize(): Promise<void> {
-        if (this._tauri.isTauri()) {
-            await this._tauri.invoke('minimize_window');
+        if (this._bridge.isTauri()) {
+            await this._bridge.invoke('minimize_window');
         } else {
             logger.info('[WindowService] minimize (mock)');
         }
@@ -132,8 +132,8 @@ export class WindowService {
      * Toggles the maximized state of the window.
      */
     public async toggleMaximize(): Promise<void> {
-        if (this._tauri.isTauri()) {
-            await this._tauri.invoke('maximize_window');
+        if (this._bridge.isTauri()) {
+            await this._bridge.invoke('maximize_window');
         } else {
             logger.info('[WindowService] toggleMaximize (mock)');
         }
@@ -143,8 +143,8 @@ export class WindowService {
      * Closes the application window or browser tab.
      */
     public async close(): Promise<void> {
-        if (this._tauri.isTauri()) {
-            await this._tauri.invoke('close_window');
+        if (this._bridge.isTauri()) {
+            await this._bridge.invoke('close_window');
         } else {
             globalThis.close();
         }
@@ -154,9 +154,9 @@ export class WindowService {
      * Hides the window to the system tray.
      */
     public async hideToTray(): Promise<void> {
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             try {
-                await this._tauri.invoke('hide_window');
+                await this._bridge.invoke('hide_window');
             } catch {
                 // Fallback
                 await this.minimize();
@@ -170,7 +170,7 @@ export class WindowService {
      * Shows and focuses the application window.
      */
     public async show(): Promise<void> {
-        if (!this._tauri.isTauri()) {
+        if (!this._bridge.isTauri()) {
             logger.info('[WindowService] Not in Tauri, skipping native show');
             return;
         }
@@ -178,11 +178,11 @@ export class WindowService {
         const maxRetries = 3;
         for (let i = 0; i < maxRetries; i++) {
             try {
-                await this._tauri.invoke('show_window');
+                await this._bridge.invoke('show_window');
 
                 // Try to set focus, but don't fail if command missing
                 try {
-                    await this._tauri.invoke('set_focus');
+                    await this._bridge.invoke('set_focus');
                 } catch {
                     // set_focus command not found - skipping focus step
                 }
@@ -230,9 +230,9 @@ export class WindowService {
         // Always save to localStorage as backup
         localStorage.setItem('axelate_zoom', this._currentZoom.toString());
 
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             try {
-                await this._tauri.invoke('set_webview_zoom', {
+                await this._bridge.invoke('set_webview_zoom', {
                     zoom: this._currentZoom,
                 });
             } catch (e) {
@@ -241,7 +241,7 @@ export class WindowService {
         }
 
         // Apply CSS Variable (for Web fallback UI scaling)
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             document.documentElement.style.setProperty('--app-zoom', '1');
         } else {
             document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
@@ -279,9 +279,9 @@ export class WindowService {
      * Notifies the backend of a change in system monitoring state.
      */
     public async setMonitoringPaused(paused: boolean): Promise<void> {
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             try {
-                await this._tauri.invoke('set_monitoring_paused', { paused });
+                await this._bridge.invoke('set_monitoring_paused', { paused });
                 const win = globalThis as unknown as IWindowGlobal;
                 win.windowService = this;
                 win.toggleMonitorBtn?.((visible: boolean) => {
@@ -313,12 +313,12 @@ export class WindowService {
             void this._handleResolutionChange();
         }
 
-        if (!this._tauri.isTauri()) {
+        if (!this._bridge.isTauri()) {
             return { isSmallScreen: false, showWarning: false };
         }
 
         try {
-            return await this._tauri.invoke<IWindowPolicy>('get_window_policy');
+            return await this._bridge.invoke<IWindowPolicy>('get_window_policy');
         } catch (e) {
             logger.error(`[WindowService] Failed to fetch window policy: ${String(e)}`);
             return { isSmallScreen: false, showWarning: false };
@@ -350,7 +350,7 @@ export class WindowService {
      * Resizes and centers the application window.
      */
     public async setSize(width: number, height: number): Promise<void> {
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             try {
                 const win = globalThis as unknown as IWindowGlobal;
                 if (win.__TAURI__?.window) {
@@ -369,7 +369,7 @@ export class WindowService {
      * Checks if the window is currently maximized.
      */
     public async isMaximized(): Promise<boolean> {
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             try {
                 const win = globalThis as unknown as IWindowGlobal;
                 if (win.__TAURI__?.window) {
@@ -403,7 +403,7 @@ export class WindowService {
         });
 
         // Tauri move event (if supported) covers window dragging
-        void this._tauri.listen('tauri://move', () => {
+        void this._bridge.listen('tauri://move', () => {
             this._scheduleSaveWindowState();
         });
     }
@@ -424,7 +424,7 @@ export class WindowService {
      * Persists the current window state (size, position, maximized) to the backend.
      */
     private async _saveWindowState(): Promise<void> {
-        if (!this._tauri.isTauri()) return;
+        if (!this._bridge.isTauri()) return;
 
         try {
             const win = globalThis as unknown as IWindowGlobal;
@@ -433,7 +433,7 @@ export class WindowService {
                 const isMaximized = await appWindow.isMaximized();
 
                 // Save maximized state
-                await this._tauri.invoke('save_maximized_state', { maximized: isMaximized });
+                await this._bridge.invoke('save_maximized_state', { maximized: isMaximized });
 
                 // Only save specific dimensions if NOT maximized
                 // (Restoring a maximized window with maximized=true is enough,
@@ -442,12 +442,12 @@ export class WindowService {
                     const size = await appWindow.innerSize();
                     const pos = await appWindow.outerPosition();
 
-                    await this._tauri.invoke('save_window_size', {
+                    await this._bridge.invoke('save_window_size', {
                         width: size.width,
                         height: size.height,
                     });
 
-                    await this._tauri.invoke('save_window_position', {
+                    await this._bridge.invoke('save_window_position', {
                         x: pos.x,
                         y: pos.y,
                     });
@@ -462,11 +462,11 @@ export class WindowService {
      * Helper to retrieve initial zoom with timeout and state service priority.
      */
     private async _getInitialZoomWithFallback(fallback: number): Promise<number> {
-        if (!this._tauri.isTauri()) return fallback;
+        if (!this._bridge.isTauri()) return fallback;
 
         try {
             // Backend is the Source of Truth: It calculates and persists the zoom
-            const zoom = await this._tauri.invoke<number>('get_resolution_zoom');
+            const zoom = await this._bridge.invoke<number>('get_resolution_zoom');
 
             if (typeof zoom === 'number' && zoom > 0) {
                 return zoom;
@@ -483,10 +483,10 @@ export class WindowService {
      * Used when the window moves between monitors.
      */
     private async _handleResolutionChange(): Promise<void> {
-        if (!this._tauri.isTauri()) return;
+        if (!this._bridge.isTauri()) return;
 
         try {
-            const zoom = await this._tauri.invoke<number>('get_resolution_zoom');
+            const zoom = await this._bridge.invoke<number>('get_resolution_zoom');
 
             if (typeof zoom === 'number' && zoom > 0 && zoom !== this._currentZoom) {
                 await this.setZoom(zoom);

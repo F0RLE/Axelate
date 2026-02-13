@@ -15,6 +15,7 @@ import { SoundService } from '@/shared/services/SoundService';
 import { logger, type LoggerService } from '@/shared/services/LoggerService';
 import { templateLoader } from '@/shared/services/TemplateLoader';
 import type { IApp, IBootstrapData } from '@/shared/types/coreTypes';
+import { GlobalBridge } from './bridge';
 import { EventHandler } from './events';
 import { StateService } from '@/shared/services/StateService';
 import { Particles } from '@/shared/components/Particles';
@@ -25,6 +26,7 @@ import { DebugUI } from '@/features/debug/ui/DebugUI';
 import { SettingsService } from '@/features/settings/services/SettingsService';
 import { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import { aiBridge } from '@/features/ai/services/AIBridge';
+import '@/features/chat/chat'; // Bundles chat logic and controller
 
 export class Core {
     // Services - Made public for EventHandler and GlobalBridge
@@ -53,6 +55,7 @@ export class Core {
     public readonly downloadUI: DownloadUI;
     public readonly settingsUI: SettingsUI;
 
+    private readonly _bridge: GlobalBridge;
     private readonly _eventHandler: EventHandler;
 
     private static readonly _SPLASH_TIMEOUT_MS = 2000;
@@ -65,14 +68,14 @@ export class Core {
         this.logger.info(`AXELATE v${__APP_VERSION__}`);
 
         // 2. Init Core Services
-        this.i18n = new I18nService(this.tauriProvider);
-        templateLoader.init();
-        this.windowService = new WindowService(this.tauriProvider);
+        this.state = new StateService(this.tauriProvider);
         this.moduleService = new ModuleService(this.tauriProvider);
+        this.windowService = new WindowService(this.tauriProvider);
+        this.i18n = new I18nService(this.tauriProvider);
         this.catalog = new CatalogService(this.tauriProvider);
         this.navigation = NavigationService.getInstance();
         this.soundService = new SoundService();
-        this.state = new StateService(this);
+        templateLoader.init();
 
         // Inject StateService into WindowService (Dependency Injection) to ensure zoom sync
         // works immediately, avoiding startup race conditions.
@@ -95,7 +98,10 @@ export class Core {
         this.monitoringUI = new MonitoringUI(this.monitoringService);
         this.debugUI = new DebugUI(this.debugService);
 
-        // 4. Init Event Handler
+        // 4. Init Event Handler and Bridge
+        this._bridge = new GlobalBridge(this);
+        this._bridge.init();
+
         this._eventHandler = new EventHandler(this);
         this._eventHandler.init();
 

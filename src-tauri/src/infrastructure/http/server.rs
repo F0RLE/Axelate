@@ -176,7 +176,7 @@ async fn gpu_info_handler() -> Json<Value> {
 
     if let Some(gpu) = stats.gpu {
         // Convert Bytes to MB
-        let memory_mb = gpu.memory_total / 1024 / 1024;
+        let memory_mb = (gpu.memory_total / 1024.0 / 1024.0) as u64;
 
         Json(json!({
             "detected": true,
@@ -266,8 +266,14 @@ async fn system_language_handler() -> Json<Value> {
 }
 
 async fn get_config_handler(State(state): State<AppState>) -> Json<Value> {
-    use crate::{domain::modules::downloader, infrastructure::config::config_service};
-    match config_service::load_config(&state.tauri_app) {
+    use crate::domain::modules::downloader;
+    use crate::domain::system::config_service::ConfigService;
+    use crate::infrastructure::config::config_repository::FileConfigRepository;
+
+    let repo = FileConfigRepository::new(state.tauri_app.clone());
+    let service = ConfigService::new(Box::new(repo));
+
+    match service.load_full_config() {
         Ok(mut config) => {
             // Populate installed status
             for module in &mut config.catalog.ai {
@@ -276,6 +282,10 @@ async fn get_config_handler(State(state): State<AppState>) -> Json<Value> {
             for module in &mut config.catalog.services {
                 module.installed = downloader::is_module_installed(&module.id);
             }
+            let _ai = config.catalog.ai.len();
+            let _srv = config.catalog.services.len();
+            // The original instruction had a malformed line here. Assuming the intent was to keep the loop for services.
+            // If there was an intent to remove the loop for services, please clarify.
             Json(serde_json::to_value(config).unwrap_or_else(|_| json!({})))
         }
         Err(e) => {

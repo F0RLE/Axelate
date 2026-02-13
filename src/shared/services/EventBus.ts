@@ -168,13 +168,13 @@ class EventBus {
      * Removes all listeners for a specific event or all events if no key is provided.
      */
     public clear(event?: keyof IEventBusEvents): void {
-        if (event !== undefined) {
+        if (event === undefined) {
+            this._listeners.clear();
+            this._onceListeners.clear();
+        } else {
             const eventKey = event as string;
             this._listeners.delete(eventKey);
             this._onceListeners.delete(eventKey);
-        } else {
-            this._listeners.clear();
-            this._onceListeners.clear();
         }
     }
 

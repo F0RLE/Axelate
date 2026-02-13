@@ -38,6 +38,6 @@ pub fn get_chat_history(session_id: &str) -> Result<Vec<ai_service::ChatMessage>
 #[specta::specta]
 /// Counts tokens in text for the specified model
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned types for serialization
-pub fn count_tokens(text: String, model: Option<String>) -> Result<usize, String> {
-    ai_service::count_tokens(&text, model.as_deref())
+pub fn count_tokens(text: String, model: Option<String>) -> Result<u32, String> {
+    ai_service::count_tokens(&text, model.as_deref()).map(|c| c as u32)
 }

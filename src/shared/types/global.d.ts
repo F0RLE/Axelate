@@ -34,6 +34,7 @@ interface ChatHistoryItem {
 }
 
 interface AIBridgeInterface {
+    setCore: (_core: any) => void;
     init: () => Promise<void>;
     startProvider: (_providerId: string) => Promise<boolean>;
     stopProvider: () => void;

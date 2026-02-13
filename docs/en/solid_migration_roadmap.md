@@ -10,8 +10,11 @@
 - **Modules**
     - [x] `src/domain/modules/controller.rs`
     - [x] `src/domain/modules/lifecycle.rs`
-    - [ ] `src/domain/modules/downloader.rs`
+    - [x] `src/domain/modules/downloader.rs`
     - [ ] `src/domain/modules/mod.rs`
+- **Phase 5: UI/UX Polish** (2026-02-12)
+    - [x] Fix sidebar layout spacing when monitoring panel is hidden.
+    - [ ] Complete UI consistency audit.
 - **Monitoring**
     - [x] `src/domain/monitoring/system_monitor.rs`
     - [ ] `src/domain/monitoring/health.rs`
@@ -62,7 +65,7 @@
     - [ ] `src/infrastructure/config/window_settings.rs`
 - **Crypto**
     - [ ] `src/infrastructure/crypto/mod.rs`
-    - [ ] `src/infrastructure/crypto/secure_storage.rs`
+    - [x] `src/infrastructure/crypto/secure_storage.rs`
 - **Filesystem**
     - [ ] `src/infrastructure/filesystem/file_service.rs`
     - [ ] `src/infrastructure/filesystem/mod.rs`
@@ -89,9 +92,9 @@
 ### Utils
 - [ ] `src/utils/memory.rs`
 - [ ] `src/utils/mod.rs`
-- [ ] `src/utils/paths.rs`
+- [x] `src/utils/paths.rs`
 - [ ] `src/utils/process.rs`
-- [ ] `src/utils/setup.rs`
+- [x] `src/utils/setup.rs`
 - [ ] `src/utils/windows.rs`
 
 ### Core
@@ -101,9 +104,9 @@
 - [ ] `src/tests.rs`
 - [-] `build.rs` (Build script - Config)
 - [-] `Cargo.lock` (Auto-generated)
-- [-] `Cargo.toml` (Config)
+- [x] `Cargo.toml` (Config)
 - [-] `rustfmt.toml` (Config)
-- [-] `tauri.conf.json` (Config)
+- [x] `tauri.conf.json` (Config)
 
 ---
 
@@ -112,23 +115,34 @@
 - [-] `src-tauri/icons/*`
 - [-] `src-tauri/resources/*`
 
-## Frontend (TypeScript / `src`) - Out of Scope for Backend SOLID Refactor
-- [-] `src/app/*`
-- [-] `src/assets/*`
-- [-] `src/features/*`
-- [-] `src/infrastructure/*` (Frontend)
-- [-] `src/scripts/*`
-- [-] `src/shared/*`
-- [-] `src/styles/*` (CSS)
-- [-] `src/templates/*`
-- [-] `src/test/*`
-- [-] `src/*.ts` (Config/Env)
-- [-] `package.json`
-- [-] `.prettierrc`
-- [-] `eslint.config.js`
-- [-] `index.html`
-- [-] `tsconfig.json`
-- [-] `vite.config.ts`
+## Frontend (TypeScript / `src`)
+- **Foundational Services (DIP/SOLID)**
+    - [x] `src/shared/services/CatalogService.ts`
+    - [x] `src/infrastructure/i18n/I18nService.ts`
+    [x] Phase 4: Foundation Services SOLID Migration (DIP & SRP)
+[/] Phase 5: UI/UX Polish & Layout Fixes
+    [x] Investigate Sidebar Layout Spacing issue
+    [x] Fix Sidebar Layout Spacing (empty space when monitor hidden)
+    [ ] Continuous SOLID Audit for remaining components
+[/] Phase 6: Feature Services SOLID Migration
+    [ ] MonitoringService Refactoring
+    [ ] SettingsService Refactoring
+    [ ] NavigationService Refactoring
+[ ] Phase 7: Verification & Final Polish
+    [ ] Full regression testing
+    [ ] Documentation finalization
+    - [x] `src/shared/services/ModuleService.ts`
+    - [x] `src/shared/services/WindowService.ts`
+    - [x] `src/shared/services/StateService.ts`
+    - [x] `src/app/init.ts` (Boot Sequence)
+- **Feature Services**
+    - [ ] `src/shared/services/MonitoringService.ts`
+    - [ ] `src/shared/services/SettingsService.ts`
+    - [ ] `src/shared/services/NavigationService.ts`
+- **Other**
+    - [-] `src/assets/*`
+    - [-] `src/styles/*`
+    - [-] `package.json`
 
 ## Documentation & Github
 - [-] `.github/*`

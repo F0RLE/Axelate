@@ -143,59 +143,9 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     }
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[allow(unsafe_code)]
-/// Main entry point for the Tauri application
-pub fn run() {
-    // 1. Mandatory Environment Validation (WebView2 & Internet)
-    crate::utils::setup::validate_environment();
-
-    // Initialize logging
-    logger::init_global_logger().ok();
-
-    // Set WebView2 user data folder to AppData\Roaming\AxelateData\Cache
-    if let Ok(app_data) = std::env::var("APPDATA") {
-        let mut path = std::path::PathBuf::from(app_data);
-        path.push("AxelateData");
-        path.push("Cache");
-        path.push("com.axelate");
-        if let Err(e) = std::fs::create_dir_all(&path) {
-            log::error!("Failed to create custom data directory: {e}");
-        } else if !path.as_os_str().is_empty() {
-            unsafe {
-                std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
-            }
-        }
-    }
-    let tauri_builder = tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Check if window exists (might be destroyed for optimization)
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-
-                #[cfg(target_os = "windows")]
-                {
-                    // Force window to top to steal focus from the new instance
-                    let _ = window.set_always_on_top(true);
-                    std::thread::sleep(std::time::Duration::from_millis(100)); // Minimal delay to ensure OS registers layer change
-                    let _ = window.set_always_on_top(false);
-                    let _ = window.set_focus();
-                }
-
-                system_monitor::set_paused(false);
-            } else {
-                // If window doesn't exist (frontend destroyed), create it
-                // This matches the behavior of clicking "Open" in the tray menu
-                create_main_window(app);
-            }
-            log::info!("Single instance lock: Second instance launch attempt detected.");
-        }));
-
-    let builder = Builder::<tauri::Wry>::new().commands(collect_commands![
+/// Creates and configures the Specta builder with all application commands.
+pub fn create_specta_builder() -> Builder<tauri::Wry> {
+    Builder::<tauri::Wry>::new().commands(collect_commands![
         health::get_health,
         config::get_config,
         settings::get_settings,
@@ -254,7 +204,72 @@ pub fn run() {
         custom_model_service::add_custom_model,
         custom_model_service::remove_custom_model,
         file_service::process_file_content,
-    ]);
+    ])
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(unsafe_code)]
+/// Main entry point for the Tauri application
+pub fn run() {
+    // 1. Mandatory Environment Validation (WebView2 & Internet)
+    {
+        use crate::domain::system::startup::EnvironmentValidator;
+        use crate::infrastructure::system::startup::WindowsStartupInfrastructure;
+
+        let validator = EnvironmentValidator::new(
+            Box::new(WindowsStartupInfrastructure),
+            Box::new(WindowsStartupInfrastructure),
+            Box::new(WindowsStartupInfrastructure),
+        );
+        validator.validate();
+    }
+
+    // Initialize logging
+    logger::init_global_logger().ok();
+
+    // Set WebView2 user data folder to AppData\Roaming\AxelateData\Cache
+    if let Ok(app_data) = std::env::var("APPDATA") {
+        let mut path = std::path::PathBuf::from(app_data);
+        path.push("AxelateData");
+        path.push("Cache");
+        path.push("com.axelate");
+        if let Err(e) = std::fs::create_dir_all(&path) {
+            log::error!("Failed to create custom data directory: {e}");
+        } else if !path.as_os_str().is_empty() {
+            unsafe {
+                std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
+            }
+        }
+    }
+    let tauri_builder = tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Check if window exists (might be destroyed for optimization)
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+                #[cfg(target_os = "windows")]
+                {
+                    // Force window to top to steal focus from the new instance
+                    let _ = window.set_always_on_top(true);
+                    std::thread::sleep(std::time::Duration::from_millis(100)); // Minimal delay to ensure OS registers layer change
+                    let _ = window.set_always_on_top(false);
+                }
+
+                system_monitor::set_paused(false);
+            } else {
+                // If window doesn't exist (frontend destroyed), create it
+                // This matches the behavior of clicking "Open" in the tray menu
+                create_main_window(app);
+            }
+            log::info!("Single instance lock: Second instance launch attempt detected.");
+        }));
+
+    let builder = create_specta_builder();
 
     #[cfg(debug_assertions)]
     builder

@@ -1,0 +1,8 @@
+/* UserPreferences Feature Styles */
+.user-preferences-root {
+    padding: var(--spacing-lg);
+}
+
+.user-preferences-container {
+    animation: fadeIn var(--transition-normal) ease-out;
+}

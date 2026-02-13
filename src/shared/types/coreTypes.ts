@@ -41,6 +41,7 @@ export interface IApp {
     desc?: string;
     descKey?: string;
     icon?: string;
+    category?: string;
     type?: 'api' | 'local';
     installed?: boolean;
     repoUrl?: string;

@@ -68,7 +68,7 @@ export class LoggerService {
             if (this._isInternalLog) return true; // Stop propagation to avoid recursion
 
             const msgStr = this._safeStringify(message);
-            const stack = error?.stack !== undefined ? `\nStack: ${error.stack}` : '';
+            const stack = error?.stack ? `\nStack: ${error.stack}` : '';
             const errMsg = `${msgStr} at ${String(source)}:${String(lineno)}:${String(colno)}${stack}`;
 
             this.log('ERROR', errMsg);
@@ -115,7 +115,7 @@ export class LoggerService {
             if (obj === undefined) return 'undefined';
             if (obj instanceof Error) return obj.stack ?? obj.message;
             if (typeof obj === 'function')
-                return `[Function: ${obj.name !== '' ? obj.name : 'anonymous'}]`;
+                return `[Function: ${obj.name || 'anonymous'}]`;
             if (typeof obj === 'symbol') return obj.toString();
             if (typeof obj === 'bigint') return `${obj.toString()}n`;
 
@@ -141,7 +141,7 @@ export class LoggerService {
      */
     private _redact(key: string, value: unknown): unknown {
         const SENSITIVE_KEYS = /password|token|secret|key|auth|authorization|credit_card/i;
-        if (key !== '' && SENSITIVE_KEYS.test(key)) {
+        if (key && SENSITIVE_KEYS.test(key)) {
             return '[REDACTED]';
         }
         return value;
@@ -156,7 +156,7 @@ export class LoggerService {
             if (obj === undefined) return 'undefined';
 
             if (typeof obj === 'function') {
-                return `[Function: ${obj.name !== '' ? obj.name : 'anonymous'}]`;
+                return `[Function: ${obj.name || 'anonymous'}]`;
             }
 
             if (

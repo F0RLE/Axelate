@@ -94,13 +94,13 @@ export class GlobalBridge {
         };
 
         win.openAppSelection = (category: string) => {
-            const global = globalThis as TGlobalWin;
-            const getCat = global.getCatalogCategory as ((_c: string) => IApp[]) | undefined;
-            const apps = getCat?.(category) ?? [];
+            const cat = category.toLowerCase();
+            const catalog = this._core.catalog.getCatalog();
+            const apps = (catalog as any)[cat] ?? [];
             this._core.logger.info(
-                `[GlobalBridge] openAppSelection requested for ${category}. Found ${String(apps.length)} apps.`,
+                `[GlobalBridge] openAppSelection requested for ${cat}. Found ${String(apps.length)} apps. (keys: ${Object.keys(catalog).join(', ')})`,
             );
-            this._core.appUI.openAppSelection(category, apps);
+            this._core.appUI.openAppSelection(cat, apps);
         };
         win.closeAppSelection = () => {
             this._core.appUI.closeAppSelection();
@@ -180,12 +180,13 @@ export class GlobalBridge {
             this._core.appUI.showPromptTab(tab, btn);
         };
 
-        // Ensure getCatalogCategory is available even if CatalogService hasn't run yet
+        // Ensure getCatalogCategory is available and robust
         const g = globalThis as TGlobalWin;
-        if (typeof g.getCatalogCategory !== 'function') {
-            g.getCatalogCategory = (cat: string) =>
-                (g.APP_DATA as unknown as Record<string, IApp[]>)[cat] ?? [];
-        }
+        g.getCatalogCategory = (cat: string) => {
+            const lowCat = cat.toLowerCase();
+            const catalog = this._core.catalog.getCatalog();
+            return (catalog as any)[lowCat] ?? [];
+        };
     }
 
     /**

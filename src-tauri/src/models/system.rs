@@ -28,9 +28,9 @@ pub struct GpuStats {
     /// GPU usage percentage (0-100)
     pub usage: u32,
     /// Memory currently used (bytes)
-    pub memory_used: u64,
+    pub memory_used: f64,
     /// Total available memory (bytes)
-    pub memory_total: u64,
+    pub memory_total: f64,
     /// GPU temperature (Celsius)
     pub temp: u32,
     /// GPU model name
@@ -56,7 +56,7 @@ pub struct CpuStats {
     /// CPU usage percentage (0-100)
     pub percent: f32,
     /// Number of logical cores
-    pub cores: usize,
+    pub cores: u32,
     /// CPU model name
     pub name: String,
 }
@@ -102,9 +102,9 @@ pub struct NetworkStats {
     /// Upload speed (bytes/sec)
     pub upload_rate: f64,
     /// Total bytes received since boot
-    pub total_received: u64,
+    pub total_received: f64,
     /// Total bytes sent since boot
-    pub total_sent: u64,
+    pub total_sent: f64,
     /// Network utilization percentage (0-100)
     pub utilization: f32,
     /// Network activity percentage (0-100)

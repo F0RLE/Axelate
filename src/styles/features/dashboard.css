@@ -412,7 +412,7 @@
 }
 
 /* Hide header on small heights to prioritize cards */
-@media (max-height: 950px) {
+@media (max-height: 500px) {
     .models-header {
         display: none !important;
     }

@@ -5,17 +5,17 @@
 /* System Monitor Card */
 .sysmon-card {
     font-family: 'Monocraft', monospace !important;
-    background: transparent;
-    border: none;
+    background: rgba(var(--background-raw), 0.5) !important;
+    border: 1px solid rgba(var(--primary-raw), 0.15) !important;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     border-radius: 12px;
-    padding: 10px 14px;
-/* background/backdrop handled by sidebar.css */
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    overflow: hidden;
+    gap: 14px;
     max-width: 100%;
-    flex-shrink: 0; /* Prevent vertical squashing */
+    flex-shrink: 0;
     min-height: fit-content;
     box-sizing: border-box;
     -webkit-app-region: no-drag;
@@ -24,28 +24,44 @@
         max-height 0.4s var(--ease-smooth),
         margin 0.4s var(--ease-smooth),
         padding 0.4s var(--ease-smooth),
-        transform 0.4s var(--ease-smooth);
+        transform 0.4s var(--ease-smooth),
+        visibility 0.4s; /* Consistent timing */
     max-height: 800px;
     transform: translateY(0);
+    visibility: visible;
 }
 
 .sysmon-card.adaptive-hidden {
     opacity: 0;
     max-height: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important; /* Forces margin collapse */
-    border: none !important;
+    min-height: 0 !important; /* CRITICAL: Prevents fit-content from keeping space */
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    border-width: 0 !important; /* Ensure borders don't add subpixel height */
     pointer-events: none;
-    transform: translateY(10px);
+    transform: scale(0.95);
+    visibility: hidden;
+    transition: 
+        opacity 0.2s ease,
+        max-height 0.4s var(--ease-smooth),
+        min-height 0.4s var(--ease-smooth),
+        margin 0.4s var(--ease-smooth),
+        padding 0.4s var(--ease-smooth),
+        transform 0.3s ease,
+        visibility 0s 0.4s;
+    overflow: hidden;
 }
 
 .sysmon-stat {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    overflow: hidden;
+    gap: 6px;
     opacity: 1;
     max-height: 80px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .sysmon-header {

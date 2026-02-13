@@ -1,5 +1,5 @@
-/// Main configuration service
-pub mod config_service;
+/// Repository for configuration data
+pub mod config_repository;
 /// General settings management
 pub mod settings;
 /// Theme configuration

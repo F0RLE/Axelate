@@ -1,4 +1,14 @@
 {
+  "ui.launcher.web.app_title": "Axelate",
+  "ui.launcher.web.toggle_sound": "开启/关闭声音",
+  "ui.launcher.web.copy": "复制",
+  "ui.launcher.web.copied": "已复制！",
+  "ui.launcher.web.copy_code": "复制代码",
+  "ui.launcher.web.copy_failed": "复制代码失败",
+  "ui.launcher.web.delete_not_available": "无法删除",
+  "ui.launcher.web.download_url_empty": "下载 URL 为空",
+  "ui.launcher.web.module_downloaded": "模块已下载！",
+  "ui.launcher.web.remove_attachment": "移除附件",
   "ui.launcher.web.main_menu": "主菜单",
   "ui.launcher.web.chat": "聊天",
   "ui.launcher.web.modules": "模块",
@@ -11,6 +21,7 @@
   "ui.launcher.web.status_online": "在线",
   "ui.launcher.web.launcher_running": "启动器运行中",
   "ui.launcher.web.all": "全部",
+  "ui.launcher.web.tokens": "Token",
   "ui.launcher.web.logs_general": "常规",
   "ui.launcher.web.select_language": "选择语言",
   "ui.launcher.web.select_language_desc": "选择首选界面语言",
@@ -96,6 +107,7 @@
   "ui.launcher.button.close": "关闭",
   "ui.launcher.button.minimize": "最小化",
   "ui.launcher.button.maximize": "最大化",
+  "ui.launcher.button.restore": "还原",
   "ui.launcher.web.chat_no_one_heard": "没人听到你的声音",
   "ui.launcher.web.close_confirm_title": "退出应用",
   "ui.launcher.web.close_confirm_message": "您确定要关闭应用程序吗？",
@@ -278,5 +290,8 @@
   "ui.chat.greeting.48": "新会话 —— 新机遇。",
   "ui.chat.greeting.49": "正在连接你的创造力... 连接已建立。",
   "ui.chat.greeting.50": "Axelate：你通往无限的发射台。",
-  "ui.launcher.web.expand_window": "展开窗口以查看正常界面显示"
+  "ui.launcher.web.expand_window": "展开窗口以查看正常界面显示",
+  "ui.launcher.web.home": "首页",
+  "ui.settings.no_settings": "此模块无需额外设置。",
+  "ui.settings.module_not_ready": "此模块尚未就绪。"
 }

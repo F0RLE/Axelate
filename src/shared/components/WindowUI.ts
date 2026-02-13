@@ -347,22 +347,8 @@ export class WindowUI {
      * @sideeffect Modifies the DOM safely
      */
     public updateMaximizeIcon(isMaximized: boolean): void {
-        if (!this._maximizeIcon) return;
-
-        // Section 4.4 Fix: Use safe structure manipulation
-        const use = this._maximizeIcon.querySelector('use');
-        if (use) {
-            use.setAttribute('href', isMaximized ? '#icon-restore' : '#icon-maximize');
-        } else {
-            // Re-create safe structure
-            this._maximizeIcon.textContent = '';
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('class', 'icon');
-            const useEl = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-            useEl.setAttribute('href', isMaximized ? '#icon-restore' : '#icon-maximize');
-            svg.appendChild(useEl);
-            this._maximizeIcon.appendChild(svg);
-        }
+        this._updateMaximizeButtonLabels(isMaximized);
+        this._updateMaximizeButtonIcon(isMaximized);
 
         // Toggle body class for styling adjustments (e.g. squaring off corners)
         if (isMaximized) {
@@ -370,6 +356,40 @@ export class WindowUI {
         } else {
             document.body.classList.remove('maximized');
         }
+    }
+
+    private _updateMaximizeButtonLabels(isMaximized: boolean): void {
+        const btn = document.getElementById('maximize-btn');
+        if (!btn) return;
+
+        const g = globalThis as TGlobalWin;
+        const labelKey = isMaximized ? 'ui.launcher.button.restore' : 'ui.launcher.button.maximize';
+        const fallback = isMaximized ? 'Restore' : 'Maximize';
+        const label = typeof g.t === 'function' ? g.t(labelKey, fallback) : fallback;
+        
+        btn.setAttribute('aria-label', label);
+        btn.setAttribute('title', label);
+        btn.dataset['i18nAriaLabel'] = labelKey;
+        btn.dataset['i18nTitle'] = labelKey;
+    }
+
+    private _updateMaximizeButtonIcon(isMaximized: boolean): void {
+        if (!this._maximizeIcon) return;
+
+        const use = this._maximizeIcon.querySelector('use');
+        if (use) {
+            use.setAttribute('href', isMaximized ? '#icon-restore' : '#icon-maximize');
+            return;
+        }
+
+        // Re-create safe structure if 'use' is missing
+        this._maximizeIcon.textContent = '';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'icon');
+        const useEl = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        useEl.setAttribute('href', isMaximized ? '#icon-restore' : '#icon-maximize');
+        svg.appendChild(useEl);
+        this._maximizeIcon.appendChild(svg);
     }
 
     /**

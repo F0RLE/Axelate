@@ -13,7 +13,7 @@ pub struct CustomModel {
     /// Base model identifier (e.g., "ft:gpt-3.5-turbo:...")
     pub base_model_id: String,
     /// Creation timestamp (Unix epoch)
-    pub created_at: u64,
+    pub created_at: f64,
 }
 
 /// Configuration for all custom models

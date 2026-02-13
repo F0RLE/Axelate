@@ -20,12 +20,13 @@ pub struct ModelPricing {
     /// Pricing tier name (e.g., "Standard", "Pro")
     pub tier: String,
     /// Input token price
-    #[serde(rename = "in")]
+    #[serde(rename = "in", skip_serializing_if = "Option::is_none")]
     pub price_in: Option<String>,
     /// Output token price
-    #[serde(rename = "out")]
+    #[serde(rename = "out", skip_serializing_if = "Option::is_none")]
     pub price_out: Option<String>,
     /// Additional pricing notes
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
@@ -82,6 +83,9 @@ pub struct ModuleItem {
     pub repo_url: Option<String>,
     /// SHA-256 hash for integrity verification
     pub expected_hash: Option<String>,
+    /// Semantic version (e.g., "1.0.0")
+    #[serde(default = "default_version")]
+    pub version: String,
     /// Whether module is currently installed (runtime only)
     #[serde(skip_deserializing, default)]
     pub installed: bool,
@@ -91,13 +95,7 @@ pub struct ModuleItem {
 }
 
 /// AI model configurations grouped by provider
-#[derive(Debug, Serialize, Deserialize, Clone, Type)]
-pub struct ConfigModels {
-    /// GPT models configuration
-    pub gpt: HashMap<String, AiModel>,
-    /// Gemini models configuration
-    pub gemini: HashMap<String, AiModel>,
-}
+pub type ConfigModels = HashMap<String, HashMap<String, AiModel>>;
 
 /// Application catalog containing available modules and services
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
@@ -107,32 +105,41 @@ pub struct ConfigCatalog {
     pub ai: Vec<ModuleItem>,
     /// Service integrations (Telegram, Discord)
     pub services: Vec<ModuleItem>,
+    /// Starred/Favorite module IDs
+    pub stars: Vec<String>,
 }
 
 /// Configuration for an AI API provider (OpenAI, Gemini, Claude, etc.)
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
 #[serde(rename_all = "camelCase")]
-pub struct ApiProviderConfig {
+pub struct ApiProvider {
     /// Unique identifier (e.g., "gpt", "gemini")
     pub id: String,
     /// Display name (e.g., "GPT", "Gemini")
     pub name: String,
     /// Localization key for description
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub desc_key: Option<String>,
     /// Direct description text
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Icon/emoji for UI display
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
     /// Provider type (e.g., "openai", "google")
     #[serde(rename = "providerType")]
     pub provider_type: String,
     /// Base URL for API endpoints
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
     /// Environment variable name for API key
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub api_key_env: Option<String>,
     /// Available models configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub models: Option<std::collections::HashMap<String, ApiModelConfig>>,
     /// Model aliases (UI name → API ID mappings)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model_aliases: Option<std::collections::HashMap<String, String>>,
 }
 
@@ -142,10 +149,14 @@ pub struct ApiProviderConfig {
 pub struct AppConfig {
     /// Configuration version
     pub version: String,
-    /// Modules catalog
+    /// Model-specific default settings
+    pub models: ConfigModels,
+    /// Available API providers
+    pub api_providers: Vec<ApiProvider>,
+    /// Catalog of available apps/services
     pub catalog: ConfigCatalog,
-    /// API provider configurations
-    pub api_providers: Option<Vec<ApiProviderConfig>>,
-    /// Model definitions
-    pub models: Option<ConfigModels>,
+}
+
+fn default_version() -> String {
+    "1.0.0".to_string()
 }

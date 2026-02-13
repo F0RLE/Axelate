@@ -40,7 +40,6 @@ const mockCore = {
 };
 
 import { StateService } from '@/shared/services/StateService';
-import type { Core } from '@/app/init';
 
 describe('StateService', () => {
     let stateService: StateService;
@@ -50,7 +49,7 @@ describe('StateService', () => {
         storageMock.clear();
         vi.useFakeTimers();
         (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
-        stateService = new StateService(mockCore as unknown as Core);
+        stateService = new StateService(mockCore.tauriProvider as any);
     });
 
     afterEach(() => {

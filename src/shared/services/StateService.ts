@@ -3,7 +3,7 @@
  * @description Manages persistent UI state across sessions
  */
 
-import { type Core } from '@/app/init';
+import { type IBridge } from '@/shared/types/IBridge';
 import { logger } from './LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
 
@@ -51,7 +51,7 @@ export class StateService {
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly _STORAGE_KEY = 'axelate_ui_state';
 
-    constructor(private readonly _core: Core) {
+    constructor(private readonly _bridge: IBridge) {
         this._initAutoSave();
     }
 
@@ -60,8 +60,8 @@ export class StateService {
      */
     public async loadState(): Promise<IUIState> {
         try {
-            if (this._core.tauriProvider.isTauri()) {
-                const loaded = await this._core.tauriProvider.invoke<IUIState>('get_ui_state');
+            if (this._bridge.isTauri()) {
+                const loaded = await this._bridge.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
                 logger.info('[StateService] Loaded from backend');
             } else {
@@ -180,8 +180,8 @@ export class StateService {
         if (!this._isDirty) return;
 
         try {
-            if (this._core.tauriProvider.isTauri()) {
-                await this._core.tauriProvider.invoke('save_ui_state', { state: this._state });
+            if (this._bridge.isTauri()) {
+                await this._bridge.invoke('save_ui_state', { state: this._state });
             } else {
                 localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
@@ -197,8 +197,8 @@ export class StateService {
     public saveImmediate(): void {
         if (!this._isDirty) return;
         try {
-            if (this._core.tauriProvider.isTauri()) {
-                void this._core.tauriProvider.invoke('save_ui_state', { state: this._state });
+            if (this._bridge.isTauri()) {
+                this._bridge.invoke('save_ui_state', { state: this._state });
             } else {
                 localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
@@ -321,8 +321,8 @@ export class StateService {
     }
 
     private _syncDownloadSettingsToBackend(): void {
-        if (this._core.tauriProvider.isTauri()) {
-            this._core.tauriProvider
+        if (this._bridge.isTauri()) {
+            this._bridge
                 .invoke('set_download_settings', {
                     enabled: this._state.download_limit_enabled,
                     max_speed: this._state.download_max_speed,

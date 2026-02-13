@@ -144,8 +144,8 @@ impl GpuCollector {
 
             let gpu = GpuStats {
                 usage: util.gpu,
-                memory_used: mem.used,
-                memory_total: mem.total,
+                memory_used: mem.used as f64,
+                memory_total: mem.total as f64,
                 temp: device
                     .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
                     .unwrap_or(0),
@@ -171,8 +171,8 @@ impl GpuCollector {
                     let vram_bytes = best_gpu.AdapterRAM.unwrap_or(0);
                     let gpu = GpuStats {
                         usage: 0,
-                        memory_used: 0,
-                        memory_total: vram_bytes,
+                        memory_used: 0.0,
+                        memory_total: vram_bytes as f64,
                         temp: 0,
                         name: best_gpu.Name.clone(),
                     };
@@ -345,7 +345,7 @@ impl SystemMonitorService {
         SystemStats {
             cpu: CpuStats {
                 percent: cpu_percent,
-                cores: cpu_cores,
+                cores: cpu_cores as u32,
                 name: cpu_name,
             },
             ram: RamStats {
@@ -371,8 +371,8 @@ impl SystemMonitorService {
             network: NetworkStats {
                 download_rate: self.cached_down_rate,
                 upload_rate: self.cached_up_rate,
-                total_received: total_recv,
-                total_sent,
+                total_received: total_recv as f64,
+                total_sent: total_sent as f64,
                 utilization: 0.0,
                 activity_percent: net_activity_percent,
             },

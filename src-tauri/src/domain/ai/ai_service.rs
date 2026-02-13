@@ -3,14 +3,14 @@
 //! This module provides the backend logic for interacting with various AI API providers
 //! (OpenAI, Gemini, etc.) and managing their lifecycle within the Axelate.
 
+use crate::models::config::ApiProvider;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use tauri::Emitter;
-use crate::models::config::ApiProviderConfig;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
+use tauri::Emitter;
 
 // ==================================================================================
 // DTOs (Data Transfer Objects)
@@ -74,7 +74,7 @@ pub struct ChatSession {
     /// Message history
     pub history: Vec<ChatMessage>,
     /// Last modification time (Unix timestamp)
-    pub last_updated: u64,
+    pub last_updated: f64,
 }
 
 // ==================================================================================
@@ -97,9 +97,10 @@ impl ChatSessionManager {
         }
 
         let content = std::fs::read_to_string(path)?;
-        let sessions: HashMap<String, ChatSession> = serde_json::from_str(&content).map_err(|e| {
-            crate::errors::AppError::Internal(format!("Failed to parse chat history: {e}"))
-        })?;
+        let sessions: HashMap<String, ChatSession> =
+            serde_json::from_str(&content).map_err(|e| {
+                crate::errors::AppError::Internal(format!("Failed to parse chat history: {e}"))
+            })?;
 
         Ok(sessions)
     }
@@ -119,14 +120,16 @@ impl ChatSessionManager {
     /// Retrieves or creates a session, updating it with new user messages
     fn get_or_create_session(session_id: &str, new_messages: &[ChatMessage]) -> Vec<ChatMessage> {
         if let Ok(mut sessions) = SESSIONS.lock() {
-            let session = sessions.entry(session_id.to_string()).or_insert_with(|| ChatSession {
-                history: Vec::new(),
-                last_updated: Self::current_timestamp(),
-            });
+            let session = sessions
+                .entry(session_id.to_string())
+                .or_insert_with(|| ChatSession {
+                    history: Vec::new(),
+                    last_updated: Self::current_timestamp(),
+                });
 
             session.history.extend(new_messages.iter().cloned());
             session.last_updated = Self::current_timestamp();
-            
+
             // Return full history
             return session.history.clone();
         }
@@ -136,7 +139,7 @@ impl ChatSessionManager {
 
     /// Appends an assistant response to the session
     fn append_response(session_id: &str, reply: &ChatReply, signature: Option<String>) {
-         if let Ok(mut sessions) = SESSIONS.lock() {
+        if let Ok(mut sessions) = SESSIONS.lock() {
             if let Some(session) = sessions.get_mut(session_id) {
                 session.history.push(ChatMessage {
                     role: reply.role.clone(),
@@ -149,11 +152,11 @@ impl ChatSessionManager {
         let _ = Self::save_to_disk();
     }
 
-    fn current_timestamp() -> u64 {
+    fn current_timestamp() -> f64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs()
+            .as_secs_f64()
     }
 }
 
@@ -208,7 +211,10 @@ impl AIProvider for OpenAIProvider {
         window: tauri::Window,
         req: ChatRequest,
     ) -> Result<ChatResponse, crate::errors::AppError> {
-        let api_key = req.api_key.clone().ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
+        let api_key = req
+            .api_key
+            .clone()
+            .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(60))
             .build()
@@ -243,7 +249,7 @@ impl AIProvider for OpenAIProvider {
                 _ => {}
             }
         } else {
-             payload.insert("max_tokens".to_string(), serde_json::json!(8192));
+            payload.insert("max_tokens".to_string(), serde_json::json!(8192));
         }
 
         let endpoint = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
@@ -258,9 +264,9 @@ impl AIProvider for OpenAIProvider {
             .map_err(|e| crate::errors::AppError::External(format!("Request failed: {e}")))?;
 
         if !res.status().is_success() {
-             let status = res.status();
-             let error_text = res.text().await.unwrap_or_default();
-             return Ok(ChatResponse {
+            let status = res.status();
+            let error_text = res.text().await.unwrap_or_default();
+            return Ok(ChatResponse {
                 ok: false,
                 reply: None,
                 error: Some(format!("API Error {status}: {error_text}")),
@@ -284,24 +290,33 @@ impl AIProvider for OpenAIProvider {
 
                 if line.starts_with("data: ") {
                     let data = line.trim_start_matches("data: ");
-                    if data == "[DONE]" { break; }
+                    if data == "[DONE]" {
+                        break;
+                    }
 
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
                         && let Some(choices) = json.get("choices").and_then(|c| c.as_array())
                         && let Some(choice) = choices.first()
                     {
                         let delta = choice.get("delta");
-                         // Reasoning extraction
+                        // Reasoning extraction
                         if let Some(reasoning) = delta
                             .and_then(|d| d.get("reasoning_content"))
                             .and_then(|v| v.as_str())
-                            .or_else(|| delta.and_then(|d| d.get("reasoning")).and_then(|v| v.as_str()))
+                            .or_else(|| {
+                                delta
+                                    .and_then(|d| d.get("reasoning"))
+                                    .and_then(|v| v.as_str())
+                            })
                         {
                             let _ = window.emit("ai:thought:chunk", reasoning);
                         }
 
                         // Content extraction
-                        if let Some(content) = delta.and_then(|d| d.get("content")).and_then(|v| v.as_str()) {
+                        if let Some(content) = delta
+                            .and_then(|d| d.get("content"))
+                            .and_then(|v| v.as_str())
+                        {
                             full_content.push_str(content);
                             let _ = window.emit("ai:chat:chunk", content);
                         }
@@ -332,7 +347,10 @@ impl AIProvider for GeminiProvider {
         window: tauri::Window,
         req: ChatRequest,
     ) -> Result<ChatResponse, crate::errors::AppError> {
-        let api_key = req.api_key.clone().ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
+        let api_key = req
+            .api_key
+            .clone()
+            .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(60))
             .build()
@@ -358,8 +376,8 @@ impl AIProvider for GeminiProvider {
                 _ => vec![serde_json::json!({ "text": "" })],
             };
 
-            if let Some(sig) = &msg.thought_signature 
-                && let Some(obj) = parts_array.get_mut(0).and_then(|p| p.as_object_mut()) 
+            if let Some(sig) = &msg.thought_signature
+                && let Some(obj) = parts_array.get_mut(0).and_then(|p| p.as_object_mut())
             {
                 obj.insert("thoughtSignature".to_string(), serde_json::Value::String(sig.clone()));
             }
@@ -369,40 +387,68 @@ impl AIProvider for GeminiProvider {
 
         let mut generation_config = serde_json::Map::new();
         if let Some(level) = &req.thinking_level {
-             let mut thinking_config = serde_json::Map::new();
-             thinking_config.insert("thinkingLevel".to_string(), serde_json::Value::String(level.clone()));
-             thinking_config.insert("includeThoughts".to_string(), serde_json::Value::Bool(true));
-             generation_config.insert("thinkingConfig".to_string(), serde_json::Value::Object(thinking_config));
+            let mut thinking_config = serde_json::Map::new();
+            thinking_config.insert(
+                "thinkingLevel".to_string(),
+                serde_json::Value::String(level.clone()),
+            );
+            thinking_config.insert("includeThoughts".to_string(), serde_json::Value::Bool(true));
+            generation_config.insert(
+                "thinkingConfig".to_string(),
+                serde_json::Value::Object(thinking_config),
+            );
         }
 
-        let payload = serde_json::json!({ "contents": contents, "generationConfig": generation_config });
-        let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?alt=sse&key={}", req.model, api_key);
+        let payload =
+            serde_json::json!({ "contents": contents, "generationConfig": generation_config });
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?alt=sse&key={}",
+            req.model, api_key
+        );
 
         let max_retries = 3;
         let mut retry_count = 0;
 
         loop {
-            let res = client.post(&url).header("Content-Type", "application/json").json(&payload).send().await;
-            
+            let res = client
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .json(&payload)
+                .send()
+                .await;
+
             match res {
                 Ok(response) => {
                     if !response.status().is_success() {
                         let status = response.status();
-                        if status == reqwest::StatusCode::TOO_MANY_REQUESTS && retry_count < max_retries {
-                             let wait = std::time::Duration::from_secs(2u64.pow(retry_count + 1));
-                             let _ = window.emit("ai:status:retry", serde_json::json!({ "code": "GEMINI_QUOTA_RETRY", "wait_seconds": wait.as_secs() }).to_string());
-                             tokio::time::sleep(wait).await;
-                             retry_count += 1;
-                             continue;
+                        if status == reqwest::StatusCode::TOO_MANY_REQUESTS
+                            && retry_count < max_retries
+                        {
+                            let wait = std::time::Duration::from_secs(2u64.pow(retry_count + 1));
+                            let _ = window.emit("ai:status:retry", serde_json::json!({ "code": "GEMINI_QUOTA_RETRY", "wait_seconds": wait.as_secs() }).to_string());
+                            tokio::time::sleep(wait).await;
+                            retry_count += 1;
+                            continue;
                         }
-                         let err_msg = if status == reqwest::StatusCode::FORBIDDEN || status == reqwest::StatusCode::UNAUTHORIZED {
+                        let err_msg = if status == reqwest::StatusCode::FORBIDDEN
+                            || status == reqwest::StatusCode::UNAUTHORIZED
+                        {
                             "ui.gemini.error.auth".to_string()
                         } else if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
                             "ui.gemini.error.unavailable".to_string()
                         } else {
-                            response.text().await.unwrap_or_else(|_| "Unknown error".to_string())
+                            response
+                                .text()
+                                .await
+                                .unwrap_or_else(|_| "Unknown error".to_string())
                         };
-                         return Ok(ChatResponse { ok: false, reply: None, error: Some(err_msg), model: Some(req.model), thought_signature: None });
+                        return Ok(ChatResponse {
+                            ok: false,
+                            reply: None,
+                            error: Some(err_msg),
+                            model: Some(req.model),
+                            thought_signature: None,
+                        });
                     }
 
                     let mut stream = response.bytes_stream();
@@ -411,54 +457,81 @@ impl AIProvider for GeminiProvider {
                     let mut buffer = String::new();
 
                     while let Some(item) = stream.next().await {
-                         let chunk = item.map_err(|e| crate::errors::AppError::External(e.to_string()))?;
-                         buffer.push_str(&String::from_utf8_lossy(&chunk));
+                        let chunk =
+                            item.map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+                        buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-                         while let Some(pos) = buffer.find('\n') {
-                             let line = buffer[..pos].trim().to_string();
-                             buffer.drain(..=pos);
+                        while let Some(pos) = buffer.find('\n') {
+                            let line = buffer[..pos].trim().to_string();
+                            buffer.drain(..=pos);
 
-                             if line.starts_with("data: ") {
-                                 let data = line.trim_start_matches("data: ");
-                                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) 
-                                     && let Some(parts) = json.get("candidates").and_then(|c| c.get(0)).and_then(|c| c.get("content")).and_then(|c| c.get("parts")).and_then(|p| p.as_array()) 
-                                 {
-                                     for part in parts {
-                                         let is_thought = part.get("thought").and_then(|v| v.as_bool()).unwrap_or(false);
-                                         if is_thought {
-                                             if let Some(t) = part.get("text").and_then(|v| v.as_str()) { let _ = window.emit("ai:thought:chunk", t); }
-                                         } else if let Some(t) = part.get("thought").and_then(|v| v.as_str()) {
-                                              let _ = window.emit("ai:thought:chunk", t);
-                                         } else if let Some(t) = part.get("text").and_then(|v| v.as_str()) {
-                                              full_content.push_str(t);
-                                              let _ = window.emit("ai:chat:chunk", t);
-                                         }
-                                         
-                                         if let Some(sig) = part.get("thoughtSignature").and_then(|s| s.as_str()) {
-                                             thought_signature = Some(sig.to_string());
-                                         }
-                                     }
-                                 }
-                             }
-                         }
+                            if line.starts_with("data: ") {
+                                let data = line.trim_start_matches("data: ");
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
+                                    && let Some(parts) = json
+                                        .get("candidates")
+                                        .and_then(|c| c.get(0))
+                                        .and_then(|c| c.get("content"))
+                                        .and_then(|c| c.get("parts"))
+                                        .and_then(|p| p.as_array())
+                                {
+                                    for part in parts {
+                                        let is_thought = part
+                                            .get("thought")
+                                            .and_then(|v| v.as_bool())
+                                            .unwrap_or(false);
+                                        if is_thought {
+                                            if let Some(t) =
+                                                part.get("text").and_then(|v| v.as_str())
+                                            {
+                                                let _ = window.emit("ai:thought:chunk", t);
+                                            }
+                                        } else if let Some(t) =
+                                            part.get("thought").and_then(|v| v.as_str())
+                                        {
+                                            let _ = window.emit("ai:thought:chunk", t);
+                                        } else if let Some(t) =
+                                            part.get("text").and_then(|v| v.as_str())
+                                        {
+                                            full_content.push_str(t);
+                                            let _ = window.emit("ai:chat:chunk", t);
+                                        }
+
+                                        if let Some(sig) =
+                                            part.get("thoughtSignature").and_then(|s| s.as_str())
+                                        {
+                                            thought_signature = Some(sig.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     return Ok(ChatResponse {
                         ok: true,
-                        reply: Some(ChatReply { text: full_content, role: "model".to_string() }),
+                        reply: Some(ChatReply {
+                            text: full_content,
+                            role: "model".to_string(),
+                        }),
                         error: None,
                         model: Some(req.model),
                         thought_signature,
                     });
                 }
                 Err(e) => {
-                     return Ok(ChatResponse { ok: false, reply: None, error: Some(format!("Request failed: {e}")), model: Some(req.model), thought_signature: None });
+                    return Ok(ChatResponse {
+                        ok: false,
+                        reply: None,
+                        error: Some(format!("Request failed: {e}")),
+                        model: Some(req.model),
+                        thought_signature: None,
+                    });
                 }
             }
         }
     }
 }
-
 
 // ==================================================================================
 // Service Orchestrator
@@ -474,7 +547,7 @@ pub async fn process_chat_request(
     if let Some(sid) = &request.session_id {
         messages_context = ChatSessionManager::get_or_create_session(sid, &request.messages);
         // Save just in case user added new messages
-        let _ = ChatSessionManager::save_to_disk(); 
+        let _ = ChatSessionManager::save_to_disk();
     }
 
     // 2. Resolve Provider Configuration (URL, Models, etc)
@@ -485,41 +558,57 @@ pub async fn process_chat_request(
     // Standard provider resolution logic
     match request.provider.as_str() {
         "gemini" => provider_type = "gemini".to_string(),
-        "gpt" => { provider_type = "openai".to_string(); base_url = "https://api.openai.com/v1".to_string(); }
+        "gpt" => {
+            provider_type = "openai".to_string();
+            base_url = "https://api.openai.com/v1".to_string();
+        }
         _ => {}
     }
 
     // Config lookup
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
     if providers_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&providers_path) 
-           && let Ok(providers) = serde_json::from_str::<Vec<ApiProviderConfig>>(&content)
-           && let Some(p) = providers.iter().find(|p| p.id == request.provider) 
+        if let Ok(content) = std::fs::read_to_string(&providers_path)
+            && let Ok(providers) = serde_json::from_str::<Vec<ApiProvider>>(&content)
+            && let Some(p) = providers.iter().find(|p| p.id == request.provider)
         {
             provider_type = p.provider_type.clone();
-            if let Some(url) = &p.base_url { base_url = url.clone(); }
-            
+            if let Some(url) = &p.base_url {
+                base_url = url.clone();
+            }
+
             // Resolve aliases
             if let Some(target) = p.model_aliases.as_ref().and_then(|m| m.get(&request.model)) {
-                 log::info!("Resolved model alias: {} -> {}", request.model, target);
-                 effective_model = target.clone();
+                log::info!("Resolved model alias: {} -> {}", request.model, target);
+                effective_model = target.clone();
             }
 
             // Resolve proper model ID
-            if let Some(models) = &p.models && let Some(def) = models.get(&effective_model) && let Some(tm) = &def.text {
-                 log::info!("Resolved API model ID: {} -> {}", effective_model, tm);
-                 effective_model = tm.clone();
+            if let Some(models) = &p.models
+                && let Some(def) = models.get(&effective_model)
+                && let Some(tm) = &def.text
+            {
+                log::info!("Resolved API model ID: {} -> {}", effective_model, tm);
+                effective_model = tm.clone();
             } else {
-                 // Check custom models
-                 let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
-                 if custom_path.exists() 
+                // Check custom models
+                let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
+                if custom_path.exists()
                     && let Ok(c) = std::fs::read_to_string(&custom_path)
-                    && let Ok(cc) = serde_json::from_str::<crate::models::custom_models::CustomModelConfig>(&c)
-                    && let Some(custom) = cc.models.iter().find(|m| m.id == effective_model && m.provider_id == request.provider)
-                 {
-                      log::info!("Resolved Custom Model: {} -> {}", effective_model, custom.base_model_id);
-                      effective_model = custom.base_model_id.clone();
-                 }
+                    && let Ok(cc) =
+                        serde_json::from_str::<crate::models::custom_models::CustomModelConfig>(&c)
+                    && let Some(custom) = cc
+                        .models
+                        .iter()
+                        .find(|m| m.id == effective_model && m.provider_id == request.provider)
+                {
+                    log::info!(
+                        "Resolved Custom Model: {} -> {}",
+                        effective_model,
+                        custom.base_model_id
+                    );
+                    effective_model = custom.base_model_id.clone();
+                }
             }
         }
     }
@@ -551,10 +640,10 @@ pub async fn process_chat_request(
     };
 
     // 4. Save Response to History
-    if let Ok(res) = &response 
-        && res.ok 
-        && let Some(reply) = &res.reply 
-        && let Some(sid) = &request.session_id 
+    if let Ok(res) = &response
+        && res.ok
+        && let Some(reply) = &res.reply
+        && let Some(sid) = &request.session_id
     {
         ChatSessionManager::append_response(sid, reply, res.thought_signature.clone());
     }
@@ -588,7 +677,11 @@ pub async fn validate_api_key(
         }
         "gemini" => {
             let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={key}");
-            let res = client.get(&url).send().await.map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+            let res = client
+                .get(&url)
+                .send()
+                .await
+                .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
             Ok(res.status().is_success())
         }
         _ => Ok(false),

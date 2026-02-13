@@ -7,7 +7,8 @@
     ],
     "services": [
       { "id": "axelate-telegram-bot", "nameKey": "ui.launcher.app.axelate_telegram.name", "descKey": "ui.launcher.app.axelate_telegram.desc", "name": "Axelate Telegram Bot", "desc": "LLM rewriting, image gen, channel posting.", "icon": "🤖", "type": "local", "repoUrl": "https://github.com/F0RLE/Axelate-tg-bot-module", "expectedHash": "" }
-    ]
+    ],
+    "stars": []
   },
   "models": {
     "gpt": {

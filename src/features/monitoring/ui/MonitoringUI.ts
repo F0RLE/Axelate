@@ -1,22 +1,19 @@
+import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { type MonitoringService } from '../services/MonitoringService';
 import type { ISystemStats } from '../types/monitoringTypes';
 
-export class MonitoringUI {
-    private isInit = false;
+export class MonitoringUI extends BaseComponent {
     private readonly _boundUpdateUI = this.updateUI.bind(this);
     
-    // Cache for DOM elements to avoid expensive lookups
-    private readonly _elementCache = new Map<string, HTMLElement | null>();
     // Cache for numerical state to avoid string parsing in animations
     private readonly _lastValues = new Map<HTMLElement, number>();
     private readonly _activeTweens = new Map<HTMLElement, number>();
 
-    constructor(private readonly service: MonitoringService) {}
+    constructor(private readonly service: MonitoringService) {
+        super();
+    }
 
-    public init(): void {
-        if (this.isInit) return;
-        this.isInit = true;
-
+    protected onInit(): void {
         // Subscribe to service
         this.service.subscribe(this._boundUpdateUI);
 
@@ -24,18 +21,15 @@ export class MonitoringUI {
         void this.service.startMonitoring();
     }
 
-    public destroy(): void {
+    protected onDestroy(): void {
         this.service.unsubscribe(this._boundUpdateUI);
-        this._elementCache.clear();
         this._lastValues.clear();
-        this.isInit = false;
-    }
-
-    private _getElement(id: string): HTMLElement | null {
-        if (!this._elementCache.has(id)) {
-            this._elementCache.set(id, document.getElementById(id));
+        
+        // Cancel any active animations
+        for (const tweenId of this._activeTweens.values()) {
+            cancelAnimationFrame(tweenId);
         }
-        return this._elementCache.get(id) || null;
+        this._activeTweens.clear();
     }
 
     private updateUI(stats: ISystemStats) {
@@ -46,20 +40,16 @@ export class MonitoringUI {
         this._updateGPU(stats);
     }
 
-    private _isVisible(id: string): boolean {
-        const el = this._getElement(id);
-        return el !== null && el.offsetParent !== null;
-    }
 
     private _updateNetwork(stats: ISystemStats) {
-        if (!this._isVisible('network-status')) return;
+        if (!this.isVisible('network-status')) return;
 
         const downRate = stats.network.downloadRate;
         const upRate = stats.network.uploadRate;
         const netPeak = Math.max(downRate, upRate) / (1024 * 1024);
 
-        const networkStatusEl = this._getElement('network-status');
-        const networkProgressEl = this._getElement('network-progress');
+        const networkStatusEl = this.getElement('network-status');
+        const networkProgressEl = this.getElement('network-progress');
 
         if (networkStatusEl) {
             const { val1, val2, unit } = this._formatSmartRate(downRate, upRate);
@@ -79,13 +69,13 @@ export class MonitoringUI {
     }
 
     private _updateDisk(stats: ISystemStats) {
-        if (!this._isVisible('disk-usage')) return;
+        if (!this.isVisible('disk-usage')) return;
 
         const readRate = stats.disk.readRate;
         const writeRate = stats.disk.writeRate;
 
-        const diskUsageEl = this._getElement('disk-usage');
-        const diskProgressEl = this._getElement('disk-progress');
+        const diskUsageEl = this.getElement('disk-usage');
+        const diskProgressEl = this.getElement('disk-progress');
 
         if (diskUsageEl) {
             const { val1, val2, unit } = this._formatSmartRate(readRate, writeRate);
@@ -144,9 +134,9 @@ export class MonitoringUI {
     }
 
     private _updateCPU(stats: ISystemStats) {
-        if (!this._isVisible('cpu-percent')) return;
-        const cpuPercentEl = this._getElement('cpu-percent');
-        const cpuProgressEl = this._getElement('cpu-progress');
+        if (!this.isVisible('cpu-percent')) return;
+        const cpuPercentEl = this.getElement('cpu-percent');
+        const cpuProgressEl = this.getElement('cpu-progress');
 
         if (cpuPercentEl) this._animateMainValue(cpuPercentEl, stats.cpu.percent, 0); // Removed suffix
         if (cpuProgressEl) {
@@ -156,9 +146,9 @@ export class MonitoringUI {
     }
 
     private _updateRAM(stats: ISystemStats) {
-        if (!this._isVisible('ram-percent')) return;
-        const ramPercentEl = this._getElement('ram-percent');
-        const ramProgressEl = this._getElement('ram-progress');
+        if (!this.isVisible('ram-percent')) return;
+        const ramPercentEl = this.getElement('ram-percent');
+        const ramProgressEl = this.getElement('ram-progress');
 
         if (ramPercentEl) {
             this._setValueWithSecondary(ramPercentEl, stats.ram.usedGb.toFixed(1), `/${stats.ram.totalGb.toFixed(0)}G`);
@@ -171,9 +161,9 @@ export class MonitoringUI {
     }
 
     private _updateGPU(stats: ISystemStats) {
-        if (!this._isVisible('gpu-util')) return;
-        const gpuUtilEl = this._getElement('gpu-util');
-        const gpuProgressEl = this._getElement('gpu-progress');
+        if (!this.isVisible('gpu-util')) return;
+        const gpuUtilEl = this.getElement('gpu-util');
+        const gpuProgressEl = this.getElement('gpu-progress');
 
         if (gpuUtilEl) this._animateMainValue(gpuUtilEl, stats.gpu?.usage ?? 0, 0); // Removed suffix
         if (gpuProgressEl) {
@@ -182,7 +172,7 @@ export class MonitoringUI {
             this._setProgressColor(gpuProgressEl, usage);
         }
 
-        const vramEl = this._getElement('gpu-memory');
+        const vramEl = this.getElement('gpu-memory');
         if (vramEl) {
             const vramUsed = stats.vram?.usedGb ?? 0;
             const vramTotal = stats.vram?.totalGb ?? 0;

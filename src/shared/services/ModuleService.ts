@@ -3,7 +3,7 @@
  * @description Service for managing module downloads, installations, and status updates
  */
 
-import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import { type IBridge } from '@/shared/types/IBridge';
 import { logger } from './LoggerService';
 import type { IModuleDownloadState } from '../types/coreTypes';
 import type { TGlobalWin } from '../types/global_bridge_types';
@@ -15,15 +15,15 @@ export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
     private readonly _deletedModules = new Set<string>();
 
-    constructor(private readonly _tauri: TauriProvider) {}
+    constructor(private readonly _bridge: IBridge) {}
 
     /**
      * Initializes the module service and binds to download progress events from the backend.
      */
     public async init() {
-        if (!this._tauri.isTauri()) return;
+        if (!this._bridge.isTauri()) return;
 
-        await this._tauri.listen<{
+        await this._bridge.listen<{
             module_id: string;
             status: string;
             progress: number;
@@ -67,11 +67,11 @@ export class ModuleService {
      * Checks if a module is currently installed on the system.
      */
     public async checkInstalled(moduleId: string): Promise<boolean> {
-        if (!this._tauri.isTauri()) return false;
+        if (!this._bridge.isTauri()) return false;
         if (this._deletedModules.has(moduleId)) return false;
 
         try {
-            return await this._tauri.invoke<boolean>('check_module_installed', {
+            return await this._bridge.invoke<boolean>('check_module_installed', {
                 moduleId: moduleId,
             });
         } catch (err) {
@@ -96,7 +96,7 @@ export class ModuleService {
             logger.info(`[ModuleService] Expected hash: ${expectedHash}`);
         }
 
-        if (!this._tauri.isTauri()) {
+        if (!this._bridge.isTauri()) {
             throw new Error('Download available only in desktop app');
         }
 
@@ -106,7 +106,7 @@ export class ModuleService {
             const hashToPass =
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
 
-            await this._tauri.invoke('download_module', {
+            await this._bridge.invoke('download_module', {
                 moduleId: moduleId,
                 repoUrl: repoUrl,
                 expectedHash: hashToPass,
@@ -126,12 +126,12 @@ export class ModuleService {
      */
     public async deleteModule(moduleId: string): Promise<boolean> {
         logger.info(`[ModuleService] Deleting module: ${moduleId}`);
-        if (!this._tauri.isTauri()) {
+        if (!this._bridge.isTauri()) {
             throw new Error('Delete available only in desktop app');
         }
 
         try {
-            await this._tauri.invoke('delete_module', { moduleId: moduleId });
+            await this._bridge.invoke('delete_module', { moduleId: moduleId });
 
             this._deletedModules.add(moduleId);
             // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
@@ -151,9 +151,9 @@ export class ModuleService {
      */
     public async control(serviceName: string, action: string): Promise<boolean> {
         logger.info(`[ModuleService] Control ${serviceName} -> ${action}`);
-        if (this._tauri.isTauri()) {
+        if (this._bridge.isTauri()) {
             try {
-                await this._tauri.invoke('control_module', {
+                await this._bridge.invoke('control_module', {
                     request: {
                         module_id: serviceName,
                         action: action.toLowerCase(),

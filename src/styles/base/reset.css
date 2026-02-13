@@ -18,7 +18,7 @@ html {
 }
 
 body {
-    font-family: 'Monocraft', 'Inter', sans-serif;
+    font-family: 'Monocraft', 'Cubic11', 'Inter', sans-serif;
     background: transparent; /* Allow particles (z-index -1) to show through */
     color: var(--text-primary);
     margin: 0;

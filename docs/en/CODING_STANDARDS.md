@@ -1,9 +1,9 @@
 # CODING STANDARDS & REQUIREMENTS (AXELATE ENGINEERING STANDARDS)
 
-**Document Version:** 2.6.0  
-**Last Updated:** 2026-01-30  
+**Document Version:** 2.8.0  
+**Last Updated:** 2026-02-13  
 **Status:** MANDATORY  
-**Total Lines:** ~4250 | **Sections:** 61
+**Total Lines:** ~4350 | **Sections:** 62
 
 > [!IMPORTANT]
 > **⚠️ LARGE DOCUMENT WARNING**
@@ -140,6 +140,8 @@ This document establishes strict engineering standards for the Axelate project. 
 - [58. Console Interceptors](#58-console-interceptors)
 - [59. Log Filtering](#59-incremental-log-fetch--filtering)
 - [60. Service Delegation](#60-service-to-bridge-delegation)
+- [61. Security Deep Dive](#61-security-deep-dive-critical)
+- [62. Unified UI Architecture](#62-unified-ui-architecture-basecomponent)
 
 </details>
 
@@ -4198,6 +4200,79 @@ try {
 
 ---
 
+## 62. Unified UI Architecture (BaseComponent)
+
+### 62.1. Principle: Lifecycle over Magic
+Axelate uses a standardized, explicit lifecycle for all UI features. Every complex UI class MUST extend `BaseComponent` to ensure memory safety and consistency.
+
+**Lifecycle Hooks:**
+- `onInit()`: Async entry point. Setup listeners and fetch data here.
+- `render()`: Generate or update DOM. Should be idempotent if possible.
+- `onDestroy()`: Specialized cleanup (manual map clearing, etc.).
+
+### 62.2. The "Perfect Feature" Pattern
+A feature UI should focus on *what* to display, leaving the *how* (lifecycle/caching) to the base class.
+
+```typescript
+export class MyFeatureUI extends BaseComponent {
+    protected async onInit(): Promise<void> {
+        // 1. Mandatory use of this._abortController!.signal for all listeners
+        window.addEventListener('resize', () => this.render(), { 
+            signal: this._abortController!.signal 
+        });
+        
+        // 2. Async data fetching
+        await this._loadData();
+    }
+
+    protected render(): void {
+        const title = this.getElement('feature-title');
+        if (title) title.textContent = i18n.t('my_feature.title');
+    }
+
+    protected onDestroy(): void {
+        // BaseComponent handles AbortController and Cache clearing automatically
+    }
+}
+```
+
+### 62.3. Anti-Patterns (The "Don'ts")
+- ❌ **Direct `addEventListener`**: Never add a listener without a `signal`. It leads to memory leaks.
+- ❌ **Global `document.getElementById`**: Use `this.getElement('id')` to leverage caching and prevent expensive lookups.
+- ❌ **Logic in Constructor**: `constructor` should be for dependency injection only. Side effects and DOM touches belong in `onInit`.
+- ❌ **Ignoring `super.init()` / `super.destroy()`**: If you override `init` or `destroy` directly (not recommended), you MUST call `super`.
+
+### 62.4. Specialized Patterns
+- **AsyncView<T>**: Use for data-driven views with Loading/Error/Ready states.
+- **ActionButton**: Use for interactive buttons to handle async loading states automatically.
+
+### 62.6. UI Invariants (The Stability Contract)
+All UI components based on `BaseComponent` MUST adhere to these operational guarantees:
+
+**The UI Guarantees:**
+- **Deterministic Cleanup**: `destroy()` is guaranteed to be called on navigation or closure.
+- **Leak-Free Events**: 100% of event listeners use `_abortController.signal`.
+- **Cancelable Async**: All pending fetch operations or timers are aborted when the component is destroyed.
+- **Centralized Selection**: DOM access is exclusively via `getElement()` or `subSelect()`, ensuring caching and safety.
+
+**The UI DOES NOT Guarantee:**
+- **Implicit Reactivity**: State changes do not trigger re-renders automatically (use explicit `render()`).
+- **Global State Ownership**: UI components reflect state, they don't own it. Domain logic stays in `services/`.
+- **Virtual DOM Diffing**: `render()` usually replaces innerHTML or updates specific nodes; we don't use a global shadow DOM.
+
+### 62.7. Streaming & Partial Rendering Guidelines
+AI and long-running operations require a non-blocking UI that grows as data arrives.
+
+**Rules:**
+- **Decouple Transport from View**: The SSE/Stream handler should update a secondary `view-state`, which then triggers a partial render.
+- **No Direct Mutation from Stream**: ❌ Never mutate the DOM directly inside a fast stream loop. Batch updates or use `requestAnimationFrame`.
+- **AsyncView Integration**: Extend `AsyncView` for streaming.
+    - `Loading`: Initial handshake.
+    - `Partial`: Appending chunks (use a specialized `onChunk` handler).
+    - `Ready`: Final sanitized output.
+
+---
+
 ## Appendix A: Quick Reference Card
 
 ```
@@ -4304,7 +4379,7 @@ try {
 
 ---
 
-*Document updated: 2026-01-30*  
-*Version: 2.6.0*  
+*Document updated: 2026-02-13*  
+*Version: 2.8.0*  
 *Maintainer: Axelate Team*  
-*Total Sections: 61 + 3 Appendices*
+*Total Sections: 62 + 3 Appendices*

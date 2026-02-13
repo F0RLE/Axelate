@@ -1,32 +1,29 @@
+import { BaseComponent } from '../ui/BaseComponent';
 import { type StateService } from '../services/StateService';
 import { type SoundService } from '../services/SoundService';
 import { logger } from '../services/LoggerService';
 import { mountLogos } from '@/assets/logos';
 
-export class SidebarUI {
-    private _initialized = false;
+export class SidebarUI extends BaseComponent {
     private _sidebar: HTMLElement | null = null;
-    private readonly _cleanupAbort: AbortController = new AbortController();
     private _isCollapsed = false;
     private _snappingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor(
         private readonly _state: StateService,
         private readonly _soundService?: SoundService,
-    ) {}
+    ) {
+        super();
+    }
 
     /**
      * Initializes the sidebar element, restores its last state, and sets up toggle logic.
-     * @sideeffect Accesses DOM and adds listeners
      */
-    public async init(): Promise<void> {
-        if (this._initialized) return;
-        this._initialized = true;
-
+    protected async onInit(): Promise<void> {
         // Ensure sidebar element is present (might be injected late)
         let attempts = 0;
         while (this._sidebar === null && attempts < 10) {
-            this._sidebar = document.getElementById('sidebar');
+            this._sidebar = this.getElement('sidebar');
             if (this._sidebar === null || this._sidebar.children.length === 0) {
                 this._sidebar = null; // Reset if empty container
                 await new Promise((r) => setTimeout(r, 100));
@@ -52,8 +49,7 @@ export class SidebarUI {
     /**
      * Cleans up event listeners.
      */
-    public destroy(): void {
-        this._cleanupAbort.abort();
+    protected onDestroy(): void {
         if (this._snappingTimeout !== null) {
             clearTimeout(this._snappingTimeout);
         }
@@ -117,16 +113,16 @@ export class SidebarUI {
                 }, 300);
             };
 
-            logoArea.addEventListener('click', toggle, { signal: this._cleanupAbort.signal });
+            logoArea.addEventListener('click', toggle, { signal: this._abortController!.signal });
             logoArea.addEventListener(
                 'keydown',
-                (e: KeyboardEvent) => {
+                ((e: KeyboardEvent) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         toggle();
                     }
-                },
-                { signal: this._cleanupAbort.signal },
+                }) as EventListener,
+                { signal: this._abortController!.signal },
             );
         }
     }
@@ -202,24 +198,29 @@ export class SidebarUI {
             return;
 
         const sidebarHeight = this._sidebar.clientHeight;
-
-        // Calculate used space by other static elements
+        
+        // Accurate space calculation matching sidebar.css:
+        // top_padding(1.5rem) + logo + [auto] + menu + 1.5rem + monitor + 1.5rem + [auto] + bottom + bottom_padding(1.5rem)
+        // 1.5rem = 24px (at 16px base)
         const logoH = logo.offsetHeight;
         const menuH = menu.offsetHeight;
         const bottomH = bottom.offsetHeight;
+        const paddingAndMargins = 24 * 4; // top_pad + mid_margin1 + mid_margin2 + bottom_pad
+        const autoMarginBuffer = 20; // Some extra space for the "centering" effect to be visible
+        
+        const requiredSpace = logoH + menuH + bottomH + this._minMonitorHeight + paddingAndMargins + autoMarginBuffer;
 
-        // Add some breathing room (margins/padding)
-        const buffer = 40;
+        // If currently showing but sidebar has scrollbar (clipping!), hide it immediately
+        const isOverflowing = this._sidebar.scrollHeight > sidebarHeight + 2;
+        const isVisible = !monitor.classList.contains('adaptive-hidden');
 
-        const requiredSpace = logoH + menuH + bottomH + this._minMonitorHeight + buffer;
-
-        if (sidebarHeight < requiredSpace) {
+        if (isVisible && (sidebarHeight < requiredSpace || isOverflowing)) {
             monitor.classList.add('adaptive-hidden');
-            // Remove inline display if it exists from previous logic
-            monitor.style.display = '';
-        } else {
+            logger.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
+        } else if (!isVisible && sidebarHeight >= requiredSpace + 10) { 
+            // Only bring back if there's substantial extra space to avoid flickering
             monitor.classList.remove('adaptive-hidden');
-            monitor.style.display = '';
+            logger.debug('[SidebarUI] Showing monitor (space restored)');
         }
     }
 }

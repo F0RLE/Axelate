@@ -59,13 +59,13 @@ export class ChatUI {
              <div class="code-block-wrapper">
                  <div class="code-block-header">
                      <span class="code-lang">${language}</span>
-                     <button class="code-copy-btn" title="Copy code">
+                     <button class="code-copy-btn" title="${globalThis.t ? globalThis.t('ui.launcher.web.copy_code', 'Copy code') : 'Copy code'}">
                         <!-- Simple Copy Icon -->
                         <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                         </svg>
-                        <span>Copy</span>
+                        <span>${globalThis.t ? globalThis.t('ui.launcher.web.copy', 'Copy') : 'Copy'}</span>
                      </button>
                  </div>
                  <pre><code class="language-${language}">${escaped === true ? text : text.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</code></pre>
@@ -365,47 +365,13 @@ export class ChatUI {
 
         const attachContainer = document.createElement('div');
         attachContainer.className = 'chat-message-attachments';
-        // Removed legacy inline styles to favor CSS class
 
-        // Limit visible attachments in bubble
         const maxVisible = 6;
         const visibleAttachments = attachments.slice(0, maxVisible);
         const hiddenCount = attachments.length - maxVisible;
 
         visibleAttachments.forEach((f) => {
-            const card = document.createElement('div');
-
-            let isImage = f.type.startsWith('image/');
-            const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
-            if (!isImage && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
-                isImage = true;
-            }
-
-            card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
-
-            const hasData = f.data_base64.length > 0;
-            const name = this._shortenFileName(f.name);
-            const fileTokens = f.tokens ?? 0;
-
-            if (isImage && hasData) {
-                // Image Preview Mode
-                const mime = f.type || (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`);
-                card.innerHTML = `
-                <img src="data:${mime};base64,${f.data_base64}" alt="${DOMPurify.sanitize(name)}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px;">
-                ${fileTokens > 0 ? `<div class="media-badge">${String(fileTokens)}</div>` : ''}
-            `;
-            } else {
-                // Standard File Mode (Pill UI)
-                const iconSvg = getFileIcon(f.name);
-                card.innerHTML = `
-                <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
-                <div class="media-info">
-                    <div class="media-name">${DOMPurify.sanitize(name)}</div>
-                    ${fileTokens > 0 ? `<div class="media-tokens">${String(fileTokens)} tokens</div>` : ''}
-                </div>
-            `;
-            }
-            attachContainer.appendChild(card);
+            this._renderChatAttachment(attachContainer, f);
         });
 
         if (hiddenCount > 0) {
@@ -418,9 +384,31 @@ export class ChatUI {
         bubble.appendChild(attachContainer);
     }
 
-    /**
-     * Shortens a file name for display.
-     */
+    private _renderChatAttachment(container: HTMLElement, f: IChatAttachment): void {
+        const card = document.createElement('div');
+        let isImage = f.type.startsWith('image/');
+        const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+        
+        if (!isImage && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+            isImage = true;
+        }
+
+        card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
+        const name = this._shortenFileName(f.name);
+        const fileTokens = f.tokens ?? 0;
+
+        if (isImage && f.data_base64.length > 0) {
+            const mime = f.type || (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`);
+            card.innerHTML = `
+                <img src="data:${mime};base64,${f.data_base64}" alt="${DOMPurify.sanitize(name)}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px;">
+                ${fileTokens > 0 ? `<div class="media-badge">${String(fileTokens)}</div>` : ''}
+            `;
+        } else {
+            card.innerHTML = this._createFilePillHtml(f.name, fileTokens, name);
+        }
+        container.appendChild(card);
+    }
+
     private _shortenFileName(name: string): string {
         if (name.length <= 25) return name;
         const extIndex = name.lastIndexOf('.');
@@ -470,17 +458,17 @@ export class ChatUI {
         if (typeof tokens === 'number' && tokens > 0) {
             const tokenSpan = document.createElement('span');
             tokenSpan.className = 'chat-tokens';
-            tokenSpan.textContent = `${String(tokens)} ${tokens === 1 ? 'token' : 'tokens'}`;
+            const t = globalThis.t;
+            const fallback = tokens === 1 ? 'token' : 'tokens';
+            const tokensWord = t ? t('ui.launcher.web.tokens', fallback) : fallback;
+            tokenSpan.textContent = `${String(tokens)} ${tokensWord}`;
             meta.appendChild(tokenSpan);
         }
 
         bubble.appendChild(meta);
     }
 
-    /**
-     * Updates the attachment list in the UI.
-     */
-    public updateAttachments(files: File[], onRemove: (_index: number) => void): void {
+    public updateAttachments(files: File[], onRemove: (index: number) => void): void {
         if (!this._attachmentsContainer) return;
 
         this._attachmentsContainer.innerHTML = '';
@@ -498,66 +486,7 @@ export class ChatUI {
         const hiddenCount = files.length - maxVisible;
 
         visibleFiles.forEach((f, idx) => {
-            void (async () => {
-                const card = document.createElement('div');
-                const isImage = f.type.startsWith('image/');
-                card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
-
-                let contentHtml = '';
-                let name = f.name;
-
-                // Relaxed limit for names in horizontal layout
-                if (name.length > 25) {
-                    const extIndex = name.lastIndexOf('.');
-                    if (extIndex > 0) {
-                        name = `${name.substring(0, 18)}..${name.substring(extIndex)}`;
-                    } else {
-                        name = `${name.substring(0, 20)}..`;
-                    }
-                }
-
-                // Get single file token count
-                const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
-
-                if (isImage) {
-                    const objectUrl = URL.createObjectURL(f);
-                    contentHtml = `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" onload="URL.revokeObjectURL(this.src)">`;
-                    if (fileTokens > 0) {
-                        contentHtml += `<div class="media-badge">${String(fileTokens)}</div>`;
-                    }
-                } else {
-                    let iconSvg = '';
-                    try {
-                        iconSvg = getFileIcon(f.name);
-                    } catch {
-                        iconSvg = '📄';
-                    }
-                    contentHtml = `
-                <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
-                <div class="media-info">
-                    <div class="media-name">${DOMPurify.sanitize(name)}</div>
-                    ${fileTokens > 0 ? `<div class="media-tokens">${String(fileTokens)} tokens</div>` : ''}
-                </div>
-            `;
-                }
-
-                card.innerHTML = `
-            ${contentHtml}
-            <button type="button" class="media-remove" title="Remove attachment">×</button>
-        `;
-
-                const btn: HTMLElement | null = card.querySelector('.media-remove');
-                if (btn !== null) {
-                    btn.onclick = (e) => {
-                        e.stopPropagation();
-                        onRemove(idx);
-                    };
-                }
-
-                if (this._attachmentsContainer) {
-                    this._attachmentsContainer.appendChild(card);
-                }
-            })();
+            void this._renderPendingAttachment(f, idx, onRemove);
         });
 
         if (hiddenCount > 0) {
@@ -566,6 +495,64 @@ export class ChatUI {
             moreCard.innerHTML = `<span>+${String(hiddenCount)}</span>`;
             this._attachmentsContainer.appendChild(moreCard);
         }
+    }
+
+    private async _renderPendingAttachment(f: File, idx: number, onRemove: (idx: number) => void): Promise<void> {
+        const card = document.createElement('div');
+        const isImage = f.type.startsWith('image/');
+        card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
+
+        const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
+        const name = this._shortenFileName(f.name);
+        
+        let contentHtml = '';
+        if (isImage) {
+            const objectUrl = URL.createObjectURL(f);
+            contentHtml = `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" alt="${DOMPurify.sanitize(name)}" onload="URL.revokeObjectURL(this.src)">`;
+            if (fileTokens > 0) {
+                contentHtml += `<div class="media-badge">${String(fileTokens)}</div>`;
+            }
+        } else {
+            contentHtml = this._createFilePillHtml(f.name, fileTokens, name);
+        }
+
+        card.innerHTML = `
+            ${contentHtml}
+            <button type="button" class="media-remove" title="${globalThis.t ? globalThis.t('ui.launcher.web.remove_attachment', 'Remove attachment') : 'Remove attachment'}">×</button>
+        `;
+
+        const btn: HTMLElement | null = card.querySelector('.media-remove');
+        if (btn !== null) {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                onRemove(idx);
+            };
+        }
+
+        if (this._attachmentsContainer) {
+            this._attachmentsContainer.appendChild(card);
+        }
+    }
+
+    private _createFilePillHtml(originalName: string, tokens: number, displayName: string): string {
+        let iconSvg = '';
+        try {
+            iconSvg = getFileIcon(originalName);
+        } catch {
+            iconSvg = '📄';
+        }
+
+        const t = globalThis.t;
+        const tokensLabel = t ? t('ui.launcher.web.tokens', 'tokens') : 'tokens';
+        const tokensHtml = tokens > 0 ? `<div class="media-tokens">${String(tokens)} ${tokensLabel}</div>` : '';
+
+        return `
+            <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
+            <div class="media-info">
+                <div class="media-name">${DOMPurify.sanitize(displayName)}</div>
+                ${tokensHtml}
+            </div>
+        `;
     }
 
     /**
@@ -629,49 +616,59 @@ export class ChatUI {
     private async _handleCopyClick(e: MouseEvent): Promise<void> {
         const target = e.target as HTMLElement;
         const btn = target.closest('.code-copy-btn');
+        if (btn === null) return;
 
-        if (btn !== null) {
-            e.preventDefault();
-            e.stopPropagation();
+        e.preventDefault();
+        e.stopPropagation();
 
-            // Find the code block within the same wrapper
-            const wrapper = btn.closest('.code-block-wrapper');
-            const codeEl = wrapper?.querySelector('code');
+        const wrapper = btn.closest('.code-block-wrapper');
+        const codeEl = wrapper?.querySelector('code');
+        const text = codeEl?.textContent ?? '';
+        if (text === '') return;
 
-            const text = codeEl?.textContent ?? '';
+        try {
+            await this._copyToClipboard(text);
+            this._showCopyResult(btn as HTMLElement, true);
+        } catch (err) {
+            logger.error('[ChatUI] Copy failed:', err);
+            this._showCopyResult(btn as HTMLElement, false);
+        }
+    }
 
-            if (text !== '') {
-                try {
-                    // Using modular invoke
-                    const win = globalThis as TGlobalWin;
-                    const isTauri = win.__TAURI_INTERNALS__ !== undefined;
-                    if (isTauri) {
-                        try {
-                            await invoke('plugin:clipboard|write', { text });
-                        } catch {
-                            await navigator.clipboard.writeText(text);
-                        }
-                    } else {
-                        await navigator.clipboard.writeText(text);
-                    }
-
-                    // Visual feedback
-                    const originalHtml = btn.innerHTML;
-                    btn.innerHTML = `
-                         <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                         </svg>
-                         <span style="color: var(--success);">Copied!</span>
-                    `;
-                    setTimeout(() => {
-                        btn.innerHTML = originalHtml;
-                    }, 2000);
-                } catch (err) {
-                    logger.error('[ChatUI] Copy failed:', err);
-                    this.showToast('Failed to copy code', 'error');
-                }
+    private async _copyToClipboard(text: string): Promise<void> {
+        const win = globalThis as TGlobalWin;
+        const isTauri = win.__TAURI_INTERNALS__ !== undefined;
+        if (isTauri) {
+            try {
+                await invoke('plugin:clipboard|write', { text });
+                return;
+            } catch {
+                // Fallback to navigator
             }
         }
+        await navigator.clipboard.writeText(text);
+    }
+
+    private _showCopyResult(btn: HTMLElement, success: boolean): void {
+        if (!success) {
+            this.showToast(globalThis.t ? globalThis.t('ui.launcher.web.copy_failed', 'Failed to copy code') : 'Failed to copy code', 'error');
+            return;
+        }
+
+        const originalHtml = btn.innerHTML;
+        const t = globalThis.t;
+        const label = t ? t('ui.launcher.web.copied', 'Copied!') : 'Copied!';
+        
+        btn.innerHTML = `
+            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span style="color: var(--success);">${label}</span>
+        `;
+        
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+        }, 2000);
     }
 
     /**
@@ -682,7 +679,7 @@ export class ChatUI {
         if (el === null) return;
 
         if (count > 0) {
-            el.textContent = `${String(count)} tokens`;
+            el.textContent = `${String(count)} ${globalThis.t ? globalThis.t('ui.launcher.web.tokens', 'tokens') : 'tokens'}`;
             el.classList.add('visible');
             el.style.display = '';
             // Add warning color if tokens are high (heuristic: 20k tokens)

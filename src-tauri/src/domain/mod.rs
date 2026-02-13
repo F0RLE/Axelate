@@ -6,3 +6,5 @@ pub mod license;
 pub mod modules;
 /// Monitoring domain logic
 pub mod monitoring;
+/// System domain logic
+pub mod system;

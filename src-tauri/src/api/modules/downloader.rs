@@ -69,6 +69,6 @@ pub async fn list_module_files(module_id: &str) -> Result<Vec<String>, AppError>
 #[tauri::command]
 #[specta::specta]
 /// Configures download bandwidth limits
-pub fn set_download_settings(enabled: bool, max_speed: u64) {
+pub fn set_download_settings(enabled: bool, max_speed: u32) {
     downloader::DOWNLOADER.set_limit(enabled, max_speed);
 }

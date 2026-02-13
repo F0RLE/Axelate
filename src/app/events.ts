@@ -155,15 +155,14 @@ export class EventHandler {
             if (!(target instanceof HTMLElement)) return;
             if (
                 target.closest(
-                    '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn',
+                    '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
                 )
             ) {
                 return;
             }
-            if (card.classList.contains('empty')) {
-                const catalog = this._core.catalog.getCatalog();
-                const apps = catalog[type];
-                this._core.appUI.openAppSelection(type, apps);
+            const win = globalThis as TGlobalWin;
+            if (typeof win.openAppSelection === 'function') {
+                win.openAppSelection(type);
             }
         });
     }
@@ -173,11 +172,9 @@ export class EventHandler {
         this._addListener(btn, 'click', (e): void => {
             const ev = e as MouseEvent;
             ev.stopPropagation();
-            const card = btn.closest('.model-card-premium');
-            if (card?.classList.contains('empty') === true) {
-                const catalog = this._core.catalog.getCatalog();
-                const apps = catalog[type];
-                this._core.appUI.openAppSelection(type, apps);
+            const win = globalThis as TGlobalWin;
+            if (typeof win.openAppSelection === 'function') {
+                win.openAppSelection(type);
             }
         });
     }
@@ -197,15 +194,15 @@ export class EventHandler {
             const clearChat = win.clearChat;
             if (typeof clearChat === 'function') clearChat();
         });
-        this._addListener(document.getElementById('pick-chat-files-btn'), 'click', () => {
+        this._addListener(document.getElementById('chat-attach-btn'), 'click', () => {
             const pickChatFiles = win.pickChatFiles;
             if (typeof pickChatFiles === 'function') pickChatFiles();
         });
-        this._addListener(document.getElementById('voice-input-btn'), 'click', () => {
+        this._addListener(document.getElementById('chat-voice-btn'), 'click', () => {
             const toggleVoiceInput = win.toggleVoiceInput;
             if (typeof toggleVoiceInput === 'function') toggleVoiceInput();
         });
-        this._addListener(document.getElementById('send-chat-btn'), 'click', () => {
+        this._addListener(document.getElementById('chat-send-btn'), 'click', () => {
             const sendChat = win.sendChat;
             if (typeof sendChat === 'function') sendChat();
         });

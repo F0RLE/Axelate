@@ -78,7 +78,7 @@ impl CustomModelManager {
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_secs(),
+                .as_secs() as f64,
         };
 
         config.models.push(new_model);

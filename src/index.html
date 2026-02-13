@@ -31,19 +31,6 @@
             width: 100vw;
         }
         
-        /* Ensure splash is visible immediately */
-        #splash-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            /* No background - transparent to show particles */
-            z-index: 999999; /* Highest priority */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
 
         /* Hide UI elements immediately, but allow them to be shown when .visible class is added */
         .fade-in-init:not(.visible) {
@@ -80,7 +67,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 999998;
+            z-index: 999999;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -175,7 +162,7 @@
                 <div class="splash-logo-container">
                     <!-- Injected by logos.js -->
                 </div>
-                <div class="splash-title">Axelate</div>
+                <div class="splash-title" data-i18n="ui.launcher.web.app_title">Axelate</div>
                 <div class="splash-progress-container">
                     <div class="splash-progress-bar"></div>
                 </div>
@@ -240,7 +227,10 @@
                 <button
                     class="window-control-btn minimize-btn"
                     id="minimize-btn"
+                    data-i18n-aria-label="ui.launcher.button.minimize"
+                    data-i18n-title="ui.launcher.button.minimize"
                     aria-label="Minimize"
+                    title="Minimize"
                 >
                     <svg class="icon">
                         <use href="#icon-minimize"></use>
@@ -249,7 +239,10 @@
                 <button
                     class="window-control-btn maximize-btn"
                     id="maximize-btn"
+                    data-i18n-aria-label="ui.launcher.button.maximize"
+                    data-i18n-title="ui.launcher.button.maximize"
                     aria-label="Maximize"
+                    title="Maximize"
                 >
                     <svg class="icon" id="maximize-icon">
                         <use href="#icon-maximize"></use>
@@ -258,7 +251,10 @@
                 <button
                     class="window-control-btn close-btn"
                     id="close-btn"
+                    data-i18n-aria-label="ui.launcher.button.close"
+                    data-i18n-title="ui.launcher.button.close"
                     aria-label="Close"
+                    title="Close"
                 >
                     <svg class="icon">
                         <use href="#icon-close"></use>
@@ -717,7 +713,6 @@
                         <div
                             id="chat-attachments"
                             class="hidden"
-                            style="display: none;"
                         ></div>
                         <div class="chat-input-bar">
                             <input
@@ -725,7 +720,6 @@
                                 type="file"
                                 multiple
                                 class="hidden"
-                                style="display: none;"
                             />
                             <button
                                 id="chat-attach-btn"
@@ -773,7 +767,7 @@
             </div>
 
             <!-- App Selection Modal (Moved here for proper positioning) -->
-            <div id="app-selection-modal" class="modal-backdrop hidden" style="display: none;">
+            <div id="app-selection-modal" class="modal-backdrop hidden">
                 <div class="app-modal">
                     <div class="app-modal-header">
                         <h2 id="app-modal-title" class="app-modal-title">
@@ -798,7 +792,6 @@
             <div
                 id="module-settings-modal"
                 class="modal-backdrop hidden"
-                style="display: none;"
             >
                 <div class="app-modal">
                     <div class="app-modal-header">
@@ -833,7 +826,7 @@
             </div>
         </main>
 
-        <div id="lang-modal" class="modal-overlay hidden" style="display: none;">
+        <div id="lang-modal" class="modal-overlay hidden">
             <div class="modal">
                 <div
                     class="modal-title"

@@ -49,6 +49,11 @@ pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
     }
     Ok(())
 }
+/// Returns the filesystem path to a module's directory
+pub fn get_module_path(module_id: &str) -> PathBuf {
+    // Note: Callers should validate module_id before using this path for sensitive operations
+    MODULES_DIR.join(module_id)
+}
 
 /// Checks if a module is installed locally
 pub fn is_module_installed(module_id: &str) -> bool {
@@ -57,12 +62,6 @@ pub fn is_module_installed(module_id: &str) -> bool {
     }
     let module_path = MODULES_DIR.join(module_id);
     module_path.exists() && module_path.is_dir()
-}
-
-/// Returns the filesystem path to a module directory
-pub fn get_module_path(module_id: &str) -> PathBuf {
-    // Note: Callers should validate module_id before using this path for sensitive operations
-    MODULES_DIR.join(module_id)
 }
 
 /// Deletes a module from disk
@@ -119,18 +118,21 @@ impl DownloaderService {
     }
 
     /// Sets download speed limit
-    pub fn set_limit(&self, enabled: bool, max_speed_mb: u64) {
+    pub fn set_limit(&self, enabled: bool, max_speed_mb: u32) {
         if let Ok(mut settings) = self.settings.lock() {
             settings.limit_enabled = enabled;
-            settings.max_speed_bytes = max_speed_mb * 1024 * 1024;
+            settings.max_speed_bytes = u64::from(max_speed_mb) * 1024 * 1024;
             log::info!("Download limit set: enabled={enabled}, speed={max_speed_mb}MB/s");
         }
     }
 
     /// Gets current download settings
-    pub fn get_settings(&self) -> (bool, u64) {
+    pub fn get_settings(&self) -> (bool, u32) {
         self.settings.lock().map_or((false, 0), |settings| {
-            (settings.limit_enabled, settings.max_speed_bytes)
+            (
+                settings.limit_enabled,
+                settings.max_speed_bytes as u32 / 1024 / 1024,
+            )
         })
     }
 }

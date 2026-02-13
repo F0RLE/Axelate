@@ -290,17 +290,23 @@ export class AppUI {
         this._populateAppList(listEl, apps, category);
 
         modal.classList.remove('hidden');
+        modal.style.display = 'flex';
 
         // Close on overlay click
-        modal.onclick = (e): void => {
-            if (e.target === modal) this.closeAppSelection();
+        const closeOnOverlay = (e: MouseEvent): void => {
+            if (e.target === modal) {
+                this.closeAppSelection();
+                modal.removeEventListener('click', closeOnOverlay);
+            }
         };
+        modal.addEventListener('click', closeOnOverlay);
     }
 
     public closeAppSelection(): void {
         const modal = document.getElementById('app-selection-modal');
         if (modal !== null) {
             modal.classList.add('hidden');
+            modal.style.display = 'none';
         }
     }
 
@@ -323,19 +329,6 @@ export class AppUI {
             this._updateCardContent(cardLike, app);
             this._configureActionBtn(cardLike, app);
             this._refreshCardActions(cardLike, app, category);
-
-            // Card background click
-            // Use pointer events to distinguish between action buttons and card background
-            cardLike.onclick = (e): void => {
-                // Ignore clicks on buttons/actions
-                if (
-                    (e.target as HTMLElement).closest(
-                        'button, .model-card-action, .module-action-badge',
-                    )
-                )
-                    return;
-                this._handleModuleCardClick(e, cardLike, category);
-            };
         } else {
             logger.warn(`[AppUI] Could not find module card: ${cardId}`);
         }
@@ -504,7 +497,8 @@ export class AppUI {
                 const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(category);
                 this.openAppSelection(category, allApps);
             } else {
-                this.showToast('Delete not available', 'warning');
+                const g = globalThis as TGlobalWin;
+                this.showToast(typeof g.t === 'function' ? g.t('ui.launcher.web.delete_not_available', 'Delete not available') : 'Delete not available', 'warning');
             }
         } catch (err) {
             logger.error('[AppUI] Delete error:', err);
@@ -533,7 +527,8 @@ export class AppUI {
             const win = globalThis as TGlobalWin;
             const downloadUrl = app.repoUrl; // Use app.repoUrl for download
             if (downloadUrl === undefined || downloadUrl === '') {
-                this.showToast('Download URL is empty', 'warning');
+                const g = globalThis as TGlobalWin;
+                this.showToast(typeof g.t === 'function' ? g.t('ui.launcher.web.download_url_empty', 'Download URL is empty') : 'Download URL is empty', 'warning');
                 return;
             }
             if (typeof win.downloadModule === 'function') {
@@ -740,7 +735,7 @@ export class AppUI {
 
     private _onDownloadSuccess(actionBtn: HTMLElement, app: IApp): void {
         const win = globalThis as TGlobalWin;
-        if (typeof win.showToast === 'function') win.showToast('Module downloaded!', 'success');
+        if (typeof win.showToast === 'function') win.showToast(typeof win.t === 'function' ? win.t('ui.launcher.web.module_downloaded', 'Module downloaded!') : 'Module downloaded!', 'success');
         app.installed = true;
 
         let card = actionBtn.closest('.model-card-premium');
@@ -754,7 +749,7 @@ export class AppUI {
     private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown): void {
         logger.error('Download error:', err);
         const win = globalThis as TGlobalWin;
-        win.showToast('Download failed', 'error');
+        win.showToast(typeof win.t === 'function' ? win.t('ui.launcher.web.download_error', 'Download failed') : 'Download failed', 'error');
         this._setDownloadReady(actionBtn);
     }
 
@@ -819,23 +814,7 @@ export class AppUI {
         card.appendChild(closeBtn);
     }
 
-    private _handleModuleCardClick(e: MouseEvent, card: HTMLElement, category: string): void {
-        const target = e.target as HTMLElement;
 
-        const isOnBackground =
-            target === card ||
-            target.classList.contains('model-icon-wrapper') ||
-            target.classList.contains('model-card-title') ||
-            target.classList.contains('model-card-desc') ||
-            target.closest('.model-icon-wrapper') !== null;
-
-        if (isOnBackground) {
-            const win = globalThis as TGlobalWin;
-            if (typeof win.openAppSelection === 'function') {
-                (win.openAppSelection as (cat: string) => void)(category);
-            }
-        }
-    }
 
     // --- Prompt Tab Switching (for chat/settings) ---
     public showPromptTab(tab: string, btn?: HTMLElement): void {
@@ -858,7 +837,8 @@ export class AppUI {
     // --- New Private Helpers ---
     private _getAppName(app: IApp): string {
         if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
-            return 'Axelate Local AI';
+            const win = globalThis as TGlobalWin;
+            return typeof win.t === 'function' ? win.t('ui.launcher.web.app_title', 'Axelate') : 'Axelate';
         }
         return app.name ?? 'Unknown';
     }
@@ -943,10 +923,17 @@ export class AppUI {
     }
 
     private _populateAppList(listEl: HTMLElement, apps: IApp[], category: string): void {
-        logger.info(`[AppUI] Populating ${category} with ${String(apps.length)} apps`);
+        const win = globalThis as TGlobalWin;
+        const catalog = win.APP_DATA;
+        
+        logger.info(`[AppUI] _populateAppList called for ${category}.`);
+        logger.info(`[AppUI] Apps received (arg): ${String(apps.length)}`);
+        logger.info(`[AppUI] Apps in global APP_DATA.${category}: ${String((catalog as any)?.[category]?.length ?? 'missing')}`);
+
         listEl.innerHTML = '';
 
-        if (apps.length === 0) {
+        if (!apps || apps.length === 0) {
+            logger.warn(`[AppUI] No apps found to display for ${category}`);
             listEl.innerHTML = DOMPurify.sanitize(
                 '<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted);">No apps found</div>',
                 this._purifyConfig,
@@ -955,56 +942,67 @@ export class AppUI {
         }
 
         const sortedApps = this._getSortedApps(apps);
+        logger.info(`[AppUI] Rendering ${String(sortedApps.length)} sorted apps.`);
+        
         for (const app of sortedApps) {
             const card = this._createAppCard(app, category);
+            card.dataset['category'] = category; // Diagnostic
             listEl.appendChild(card);
         }
     }
 
     private _updateCardContent(card: HTMLElement, app: IApp): void {
+        this._updateCardIcon(card, app);
+        this._updateCardTitle(card, app);
+        this._updateCardDesc(card, app);
+    }
+
+    private _updateCardIcon(card: HTMLElement, app: IApp): void {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
-        if (iconWrapper !== null)
-            iconWrapper.innerHTML = DOMPurify.sanitize(
-                `<div>${app.icon ?? '📦'}</div>`,
-                this._purifyConfig,
-            );
+        if (iconWrapper === null) return;
+        
+        iconWrapper.innerHTML = DOMPurify.sanitize(
+            `<div>${app.icon ?? '📦'}</div>`,
+            this._purifyConfig,
+        );
+    }
 
+    private _updateCardTitle(card: HTMLElement, app: IApp): void {
         const title = card.querySelector('.model-card-title');
-        if (title instanceof HTMLElement) {
-            if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
-                title.textContent = 'Axelate Local AI';
-                delete title.dataset['i18n'];
-            } else {
-                let titleText = app.name ?? '';
-                const win = globalThis as TGlobalWin;
-                if (
-                    typeof win.t === 'function' &&
-                    app.nameKey !== undefined &&
-                    app.nameKey !== ''
-                ) {
-                    title.dataset['i18n'] = app.nameKey;
-                    titleText = win.t(app.nameKey, titleText);
-                } else {
-                    delete title.dataset['i18n'];
-                }
-                title.textContent = titleText;
-            }
+        if (!(title instanceof HTMLElement)) return;
+
+        if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
+            const win = globalThis as TGlobalWin;
+            title.textContent = typeof win.t === 'function' ? win.t('ui.launcher.web.app_title', 'Axelate') : 'Axelate';
+            delete title.dataset['i18n'];
+            return;
         }
 
-        const desc = card.querySelector('.model-card-desc');
-        if (desc instanceof HTMLElement) {
-            let descText = app.desc ?? '';
-            const win = globalThis as TGlobalWin;
-            if (typeof win.t === 'function' && (app.descKey ?? '') !== '') {
-                desc.dataset['i18n'] = app.descKey ?? '';
-                // Use translated text OR fallback to original if translation is empty
-                const translated = win.t(app.descKey ?? '', descText);
-                descText = translated || (app.desc ?? '');
-            } else {
-                delete desc.dataset['i18n'];
-            }
-            desc.textContent = descText;
+        let titleText = app.name ?? '';
+        const win = globalThis as TGlobalWin;
+        if (typeof win.t === 'function' && (app.nameKey ?? '') !== '') {
+            title.dataset['i18n'] = app.nameKey;
+            titleText = win.t(app.nameKey!, titleText);
+        } else {
+            delete title.dataset['i18n'];
         }
+        title.textContent = titleText;
+    }
+
+    private _updateCardDesc(card: HTMLElement, app: IApp): void {
+        const desc = card.querySelector('.model-card-desc');
+        if (!(desc instanceof HTMLElement)) return;
+
+        let descText = app.desc ?? '';
+        const win = globalThis as TGlobalWin;
+        if (typeof win.t === 'function' && (app.descKey ?? '') !== '') {
+            desc.dataset['i18n'] = app.descKey!;
+            const translated = win.t(app.descKey!, descText);
+            descText = translated || descText;
+        } else {
+            delete desc.dataset['i18n'];
+        }
+        desc.textContent = descText;
     }
 
     private _refreshCardActions(card: HTMLElement, app: IApp, category: string): void {

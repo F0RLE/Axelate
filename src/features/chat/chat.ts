@@ -11,6 +11,8 @@ import { chatFileHandler } from './services/ChatFileHandler'; /* Import Singleto
 import { getTokenCount } from './utils/chatUtils';
 import { type TGlobalWin } from '@/shared/types/global_bridge_types';
 import { logger } from '@/shared/services/LoggerService';
+import { open } from '@tauri-apps/plugin-dialog';
+import { readFile } from '@tauri-apps/plugin-fs';
 
 export class ChatController {
     private readonly _service: ChatService;
@@ -106,12 +108,7 @@ export class ChatController {
      */
     private _bindEvents(): void {
         // Send Button
-        const sendBtn = document.getElementById('chat-send-btn');
-        if (sendBtn) {
-            sendBtn.addEventListener('click', () => {
-                void this.sendChat();
-            });
-        }
+        // Handled by EventHandler.ts via global exposure
 
         // File Input
         const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
@@ -122,20 +119,10 @@ export class ChatController {
         }
 
         // Attach Button (Trigger File Input)
-        const attachBtn = document.getElementById('chat-attach-btn');
-        if (attachBtn && fileInput) {
-            attachBtn.addEventListener('click', () => {
-                fileInput.click();
-            });
-        }
+        // Handled by EventHandler.ts via global exposure
 
         // Voice Button
-        const voiceBtn = document.getElementById('chat-voice-btn');
-        if (voiceBtn) {
-            voiceBtn.addEventListener('click', () => {
-                this.toggleVoiceInput();
-            });
-        }
+        // Handled by EventHandler.ts via global exposure
 
         // Input Key Handler (Enter to send)
         // Input Key Handler (Enter to send)
@@ -168,8 +155,7 @@ export class ChatController {
             void this.sendChat();
         };
         g['pickChatFiles'] = () => {
-            const input = document.getElementById('chat-file-input');
-            if (input) (input as HTMLInputElement).click();
+            void this.pickChatFiles();
         };
         g['toggleVoiceInput'] = () => {
             this.toggleVoiceInput();
@@ -183,6 +169,52 @@ export class ChatController {
     }
 
     // --- Actions ---
+
+    /**
+     * Entry point for picking files (Native or Web fallback).
+     */
+    public async pickChatFiles(): Promise<void> {
+        const win = globalThis as TGlobalWin;
+        // Check if we are in Tauri to use native dialog
+        if (win.__TAURI_INTERNALS__ !== undefined) {
+            const success = await this._pickNativeFiles(win);
+            if (success) return;
+        }
+
+        const input = document.getElementById('chat-file-input') as HTMLInputElement | null;
+        if (input) input.click();
+    }
+
+    /**
+     * Internal helper for native file picking via Tauri.
+     */
+    private async _pickNativeFiles(win: TGlobalWin): Promise<boolean> {
+        try {
+            const selected = await open({
+                multiple: true,
+                title: win.t ? win.t('ui.launcher.web.select_files', 'Select Files') : 'Select Files',
+            });
+
+            if (selected === null) return true; // User cancelled, don't fallback
+
+            const paths = Array.isArray(selected) ? selected : [selected];
+            const files: File[] = [];
+
+            for (const p of paths) {
+                const file = await this._readNativeFile(p);
+                if (file) files.push(file);
+            }
+
+            if (files.length > 0) {
+                chatFileHandler.addFiles(files);
+                void this._updateTokenCount();
+            }
+            return true;
+        } catch (err) {
+            logger.error('[ChatController] Native file picker failed:', err);
+            return false;
+        }
+    }
 
     /**
      * Handles file selection from the file input.
@@ -572,6 +604,33 @@ export class ChatController {
             } else {
                 el.textContent = 'How can I help you today?';
             }
+        }
+    }
+    /**
+     * Reads a file from a native path and converts it to a web File object.
+     */
+    private async _readNativeFile(path: string): Promise<File | null> {
+        try {
+            const data = await readFile(path);
+            const name = path.split(/[\\/]/).pop() ?? 'file';
+            const ext = name.split('.').pop()?.toLowerCase() ?? '';
+            const mimeMap: Record<string, string> = {
+                png: 'image/png',
+                jpg: 'image/jpeg',
+                jpeg: 'image/jpeg',
+                gif: 'image/gif',
+                webp: 'image/webp',
+                svg: 'image/svg+xml',
+                txt: 'text/plain',
+                md: 'text/markdown',
+                json: 'application/json',
+                zip: 'application/zip',
+            };
+            const mime = mimeMap[ext] ?? 'application/octet-stream';
+            return new File([data], name, { type: mime });
+        } catch (err) {
+            logger.error(`[ChatController] Failed to read picked file: ${path}`, err);
+            return null;
         }
     }
 }

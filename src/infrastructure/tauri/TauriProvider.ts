@@ -2,11 +2,12 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type * as Bindings from '@/shared/types/bindings';
 import { logger } from '@/shared/services/LoggerService';
+import type { IBridge } from '@/shared/types/IBridge';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
 // No local types needed, using global.d.ts
 
-export class TauriProvider {
+export class TauriProvider implements IBridge {
     constructor() {
         if (this.isTauri()) {
             logger.info('[TauriProvider] Connected');
