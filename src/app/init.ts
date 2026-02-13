@@ -175,7 +175,7 @@ export class Core {
             this.navigationUI.init();
             this.downloadUI.init();
             await this.settingsUI.init();
-            this.monitoringUI.init();
+            await this.monitoringUI.init();
 
             // 7. Catalog & AI (Resilient Load)
             globalThis.addEventListener('catalog-loaded', () => {

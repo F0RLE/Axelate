@@ -5,7 +5,7 @@
 
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { logger } from '../../../shared/services/LoggerService';
-import type { TGlobalWin } from '../../../shared/types/global_bridge_types';
+import { renderSimpleFeature } from '../../../shared/ui/renderSimpleFeature';
 
 /**
  * @class FinalCheckUI
@@ -21,7 +21,7 @@ export class FinalCheckUI extends BaseComponent {
      * Component initialization logic.
      * Use super.getElement() for cached lookups.
      */
-    protected async onInit(): Promise<void> {
+    protected onInit(): void {
         logger.debug('[FinalCheckUI] Initializing');
     }
 
@@ -32,12 +32,7 @@ export class FinalCheckUI extends BaseComponent {
         const root = this.getElement('finalcheck-root');
         if (!root) return;
 
-        const win = globalThis as TGlobalWin;
-        const title = typeof win.t === 'function' ? win.t('finalcheck.title', 'FinalCheck') : 'FinalCheck';
-
-        root.innerHTML = `<div class="finalcheck-container">
-                <h1>${title}</h1>
-            </div>`;
+        renderSimpleFeature(root, 'finalcheck-container', 'finalcheck.title', 'FinalCheck');
     }
 
     /**

@@ -63,6 +63,7 @@ export default [
                 updateSaveButton: 'writable',
                 showNotification: 'writable',
                 loadSettings: 'writable',
+                __APP_VERSION__: 'readonly',
             },
             parserOptions: {
                 projectService: {
@@ -75,6 +76,10 @@ export default [
             '@typescript-eslint': tsPlugin,
         },
         rules: {
+            // Disable base JS rules in TS files in favor of TS-aware versions
+            'no-unused-vars': 'off',
+            'no-undef': 'off',
+
             // ============================================================
             // Maximum Strictness ESLint Rules
             // ============================================================

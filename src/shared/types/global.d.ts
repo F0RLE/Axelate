@@ -1,4 +1,5 @@
 import { type IApp, type ILogEntry } from '@/shared/types/coreTypes';
+import type { Core } from '@/app/init';
 
 export {};
 
@@ -34,7 +35,7 @@ interface ChatHistoryItem {
 }
 
 interface AIBridgeInterface {
-    setCore: (_core: any) => void;
+    setCore: (_core: Core) => void;
     init: () => Promise<void>;
     startProvider: (_providerId: string) => Promise<boolean>;
     stopProvider: () => void;

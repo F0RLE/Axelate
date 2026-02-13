@@ -5,7 +5,7 @@
 
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { logger } from '../../../shared/services/LoggerService';
-import type { TGlobalWin } from '../../../shared/types/global_bridge_types';
+import { renderSimpleFeature } from '../../../shared/ui/renderSimpleFeature';
 
 /**
  * @class UserPreferencesUI
@@ -21,12 +21,8 @@ export class UserPreferencesUI extends BaseComponent {
      * Component initialization logic.
      * Use super.getElement() for cached lookups.
      */
-    protected async onInit(): Promise<void> {
+    protected onInit(): void {
         logger.debug('[UserPreferencesUI] Initializing');
-
-        // Example: this.getElement('btn').addEventListener('click', () => {}, { 
-        //    signal: this._abortController!.signal 
-        // });
     }
 
     /**
@@ -36,12 +32,12 @@ export class UserPreferencesUI extends BaseComponent {
         const root = this.getElement('user-preferences-root');
         if (!root) return;
 
-        const win = globalThis as TGlobalWin;
-        const title = typeof win.t === 'function' ? win.t('user-preferences.title', 'UserPreferences') : 'UserPreferences';
-
-        root.innerHTML = `<div class="user-preferences-container">
-                <h1>${title}</h1>
-            </div>`;
+        renderSimpleFeature(
+            root,
+            'user-preferences-container',
+            'user-preferences.title',
+            'UserPreferences',
+        );
     }
 
     /**

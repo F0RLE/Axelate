@@ -1,6 +1,6 @@
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { logger } from '../../../shared/services/LoggerService';
-import type { TGlobalWin } from '../../../shared/types/global_bridge_types';
+import { renderSimpleFeature } from '../../../shared/ui/renderSimpleFeature';
 
 /**
  * @class TestFeatureUI
@@ -16,7 +16,7 @@ export class TestFeatureUI extends BaseComponent {
      * Component initialization logic.
      * Use super.getElement() for cached lookups.
      */
-    protected async onInit(): Promise<void> {
+    protected onInit(): void {
         logger.debug('[TestFeatureUI] Initializing');
     }
 
@@ -27,12 +27,7 @@ export class TestFeatureUI extends BaseComponent {
         const root = this.getElement('testfeature-root');
         if (!root) return;
 
-        const win = globalThis as TGlobalWin;
-        const title = typeof win.t === 'function' ? win.t('testfeature.title', 'TestFeature') : 'TestFeature';
-
-        root.innerHTML = `<div class="testfeature-container">
-                <h1>${title}</h1>
-            </div>`;
+        renderSimpleFeature(root, 'testfeature-container', 'testfeature.title', 'TestFeature');
     }
 
     /**

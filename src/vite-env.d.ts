@@ -14,5 +14,13 @@ declare module '@tauri-apps/plugin-fs' {
 }
 
 declare module 'marked' {
-    export const marked: any;
+    export const marked: {
+        parse: (content: string) => string;
+        use: (...args: unknown[]) => void;
+        Renderer: new () => {
+            link?: unknown;
+            code?: unknown;
+            [key: string]: unknown;
+        };
+    };
 }
