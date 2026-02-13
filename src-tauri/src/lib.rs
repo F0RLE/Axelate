@@ -209,6 +209,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[allow(unsafe_code)]
+#[allow(clippy::large_stack_frames)]
 /// Main entry point for the Tauri application
 pub fn run() {
     // 1. Mandatory Environment Validation (WebView2 & Internet)

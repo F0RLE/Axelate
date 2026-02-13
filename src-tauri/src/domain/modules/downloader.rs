@@ -129,9 +129,10 @@ impl DownloaderService {
     /// Gets current download settings
     pub fn get_settings(&self) -> (bool, u32) {
         self.settings.lock().map_or((false, 0), |settings| {
+            let speed_mb = settings.max_speed_bytes / 1024 / 1024;
             (
                 settings.limit_enabled,
-                settings.max_speed_bytes as u32 / 1024 / 1024,
+                u32::try_from(speed_mb).unwrap_or(u32::MAX),
             )
         })
     }

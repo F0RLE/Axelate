@@ -139,15 +139,15 @@ impl ChatSessionManager {
 
     /// Appends an assistant response to the session
     fn append_response(session_id: &str, reply: &ChatReply, signature: Option<String>) {
-        if let Ok(mut sessions) = SESSIONS.lock() {
-            if let Some(session) = sessions.get_mut(session_id) {
-                session.history.push(ChatMessage {
-                    role: reply.role.clone(),
-                    content: serde_json::Value::String(reply.text.clone()),
-                    thought_signature: signature,
-                });
-                session.last_updated = Self::current_timestamp();
-            }
+        if let Ok(mut sessions) = SESSIONS.lock()
+            && let Some(session) = sessions.get_mut(session_id)
+        {
+            session.history.push(ChatMessage {
+                role: reply.role.clone(),
+                content: serde_json::Value::String(reply.text.clone()),
+                thought_signature: signature,
+            });
+            session.last_updated = Self::current_timestamp();
         }
         let _ = Self::save_to_disk();
     }
@@ -162,10 +162,10 @@ impl ChatSessionManager {
 
 /// Retrieves chat history for a session
 pub fn get_chat_history(session_id: &str) -> Vec<ChatMessage> {
-    if let Ok(sessions) = SESSIONS.lock() {
-        if let Some(session) = sessions.get(session_id) {
-            return session.history.clone();
-        }
+    if let Ok(sessions) = SESSIONS.lock()
+        && let Some(session) = sessions.get(session_id)
+    {
+        return session.history.clone();
     }
     Vec::new()
 }
@@ -478,7 +478,7 @@ impl AIProvider for GeminiProvider {
                                     for part in parts {
                                         let is_thought = part
                                             .get("thought")
-                                            .and_then(|v| v.as_bool())
+                                            .and_then(serde_json::Value::as_bool)
                                             .unwrap_or(false);
                                         if is_thought {
                                             if let Some(t) =
@@ -567,48 +567,47 @@ pub async fn process_chat_request(
 
     // Config lookup
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
-    if providers_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&providers_path)
-            && let Ok(providers) = serde_json::from_str::<Vec<ApiProvider>>(&content)
-            && let Some(p) = providers.iter().find(|p| p.id == request.provider)
+    if providers_path.exists()
+        && let Ok(content) = std::fs::read_to_string(&providers_path)
+        && let Ok(providers) = serde_json::from_str::<Vec<ApiProvider>>(&content)
+        && let Some(p) = providers.iter().find(|p| p.id == request.provider)
+    {
+        provider_type = p.provider_type.clone();
+        if let Some(url) = &p.base_url {
+            base_url = url.clone();
+        }
+
+        // Resolve aliases
+        if let Some(target) = p.model_aliases.as_ref().and_then(|m| m.get(&request.model)) {
+            log::info!("Resolved model alias: {} -> {}", request.model, target);
+            effective_model = target.clone();
+        }
+
+        // Resolve proper model ID
+        if let Some(models) = &p.models
+            && let Some(def) = models.get(&effective_model)
+            && let Some(tm) = &def.text
         {
-            provider_type = p.provider_type.clone();
-            if let Some(url) = &p.base_url {
-                base_url = url.clone();
-            }
-
-            // Resolve aliases
-            if let Some(target) = p.model_aliases.as_ref().and_then(|m| m.get(&request.model)) {
-                log::info!("Resolved model alias: {} -> {}", request.model, target);
-                effective_model = target.clone();
-            }
-
-            // Resolve proper model ID
-            if let Some(models) = &p.models
-                && let Some(def) = models.get(&effective_model)
-                && let Some(tm) = &def.text
+            log::info!("Resolved API model ID: {effective_model} -> {tm}");
+            effective_model = tm.clone();
+        } else {
+            // Check custom models
+            let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
+            if custom_path.exists()
+                && let Ok(c) = std::fs::read_to_string(&custom_path)
+                && let Ok(cc) =
+                    serde_json::from_str::<crate::models::custom_models::CustomModelConfig>(&c)
+                && let Some(custom) = cc
+                    .models
+                    .iter()
+                    .find(|m| m.id == effective_model && m.provider_id == request.provider)
             {
-                log::info!("Resolved API model ID: {} -> {}", effective_model, tm);
-                effective_model = tm.clone();
-            } else {
-                // Check custom models
-                let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
-                if custom_path.exists()
-                    && let Ok(c) = std::fs::read_to_string(&custom_path)
-                    && let Ok(cc) =
-                        serde_json::from_str::<crate::models::custom_models::CustomModelConfig>(&c)
-                    && let Some(custom) = cc
-                        .models
-                        .iter()
-                        .find(|m| m.id == effective_model && m.provider_id == request.provider)
-                {
-                    log::info!(
-                        "Resolved Custom Model: {} -> {}",
-                        effective_model,
-                        custom.base_model_id
-                    );
-                    effective_model = custom.base_model_id.clone();
-                }
+                log::info!(
+                    "Resolved Custom Model: {} -> {}",
+                    effective_model,
+                    custom.base_model_id
+                );
+                effective_model = custom.base_model_id.clone();
             }
         }
     }
