@@ -49,7 +49,9 @@ describe('StateService', () => {
         storageMock.clear();
         vi.useFakeTimers();
         (globalThis as Record<string, unknown>)['__TAURI__'] = tauriMock;
-        stateService = new StateService(mockCore.tauriProvider as any);
+        stateService = new StateService(
+            mockCore.tauriProvider as unknown as ConstructorParameters<typeof StateService>[0],
+        );
     });
 
     afterEach(() => {

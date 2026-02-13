@@ -5,6 +5,7 @@
 
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { logger } from '../../../shared/services/LoggerService';
+import { renderSimpleFeature } from '../../../shared/ui/renderSimpleFeature';
 
 /**
  * @class UserPreferencesUI
@@ -20,12 +21,8 @@ export class UserPreferencesUI extends BaseComponent {
      * Component initialization logic.
      * Use super.getElement() for cached lookups.
      */
-    protected async onInit(): Promise<void> {
+    protected onInit(): void {
         logger.debug('[UserPreferencesUI] Initializing');
-
-        // Example: this.getElement('btn').addEventListener('click', () => {}, { 
-        //    signal: this._abortController!.signal 
-        // });
     }
 
     /**
@@ -33,11 +30,14 @@ export class UserPreferencesUI extends BaseComponent {
      */
     protected render(): void {
         const root = this.getElement('user-preferences-root');
-        if (root) {
-            root.innerHTML = `<div class="user-preferences-container">
-                <h1>${i18n?.t('user-preferences.title') || 'UserPreferences'}</h1>
-            </div>`;
-        }
+        if (!root) return;
+
+        renderSimpleFeature(
+            root,
+            'user-preferences-container',
+            'user-preferences.title',
+            'UserPreferences',
+        );
     }
 
     /**

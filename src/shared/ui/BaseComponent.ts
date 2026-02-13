@@ -16,7 +16,7 @@ export abstract class BaseComponent {
         if (this._isInit) return;
         this._isInit = true;
         this._abortController = new AbortController();
-        
+
         try {
             await this.onInit();
         } catch (err) {
@@ -29,7 +29,7 @@ export abstract class BaseComponent {
      */
     public destroy(): void {
         if (!this._isInit) return;
-        
+
         if (this._abortController) {
             this._abortController.abort();
             this._abortController = null;

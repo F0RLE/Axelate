@@ -166,7 +166,7 @@ export class Core {
                 true,
             );
 
-        // 5. Show Window (immediately if ready)
+            // 5. Show Window (immediately if ready)
             await this.windowService.show();
 
             // 6. Init Remaining Services
@@ -175,7 +175,7 @@ export class Core {
             this.navigationUI.init();
             this.downloadUI.init();
             await this.settingsUI.init();
-            this.monitoringUI.init();
+            await this.monitoringUI.init();
 
             // 7. Catalog & AI (Resilient Load)
             globalThis.addEventListener('catalog-loaded', () => {
@@ -205,7 +205,7 @@ export class Core {
 
         // 8. Controlled Reveal - Sync with CSS
         this.logger.debug('[Core] App Ready. Hiding splash...');
-        
+
         // Wait for splash animation (min 2s)
         await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
 
@@ -214,13 +214,13 @@ export class Core {
 
         // Reveal UI elements underneath (they were hidden by .fade-in-init)
         setTimeout(() => {
-             const elements = ['sidebar', 'app-header', 'main-area'];
-             elements.forEach((id) => {
-                 const el = document.getElementById(id);
-                 if (el) el.classList.remove('hidden'); // Ensure they are technically display:block
-                 // 'visible' class triggers opacity: 1 transition from splash.css
-                 if (el) el.classList.add('visible');
-             });
+            const elements = ['sidebar', 'app-header', 'main-area'];
+            elements.forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('hidden'); // Ensure they are technically display:block
+                // 'visible' class triggers opacity: 1 transition from splash.css
+                if (el) el.classList.add('visible');
+            });
         }, 50); // Almost immediate, let opacity handles transition
 
         this.logger.info('[Core] Ready.');

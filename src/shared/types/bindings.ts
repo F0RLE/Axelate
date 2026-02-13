@@ -6,1610 +6,1683 @@
 
 /** user-defined commands **/
 
-
 export const commands = {
-/**
- * Checks backend health status
- */
-async getHealth() : Promise<Result<string, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_health") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Loads application configuration with module installation status
- */
-async getConfig() : Promise<Result<AppConfig, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_config") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves application settings (theme, language, GPU, debug)
- */
-async getSettings() : Promise<Result<AppSettings, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_settings") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves application settings
- */
-async saveSettings(settings: AppSettings) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_settings", { settings }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves a single setting by key-value pair
- */
-async saveSetting(key: string, value: string) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_setting", { key, value }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Detects and returns the current system language code
- */
-async getSystemLanguage() : Promise<Result<string, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_system_language") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves log entries since a given timestamp
- */
-async getLogs(since: number) : Promise<Result<LogEntry[], { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_logs", { since }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Clears all stored log entries
- */
-async clearLogs() : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("clear_logs") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Adds a single log entry to the log store
- */
-async addLog(msg: string, source: string, level: string) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("add_log", { msg, source, level }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Adds multiple log entries in batch from frontend
- */
-async logBatch(logs: BatchLogEntry[]) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("log_batch", { logs }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Downloads and verifies a module from a Git repository
- */
-async downloadModule(moduleId: string, repoUrl: string, expectedHash: string | null) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Checks if a module is already installed locally
- */
-async checkModuleInstalled(moduleId: string) : Promise<Result<boolean, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("check_module_installed", { moduleId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves the filesystem path to a module's directory
- */
-async getModulePath(moduleId: string) : Promise<Result<string, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_module_path", { moduleId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Deletes a module from local storage
- */
-async deleteModule(moduleId: string) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("delete_module", { moduleId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Lists all files in a module's directory
- */
-async listModuleFiles(moduleId: string) : Promise<Result<string[], { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("list_module_files", { moduleId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Configures download bandwidth limits
- */
-async setDownloadSettings(enabled: boolean, maxSpeed: number) : Promise<void> {
-    await TAURI_INVOKE("set_download_settings", { enabled, maxSpeed });
-},
-/**
- * Retrieves real-time system statistics (CPU, RAM, GPU, disk, network)
- */
-async getSystemStats() : Promise<Result<SystemStats, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_system_stats") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves GPU model name or indicates if no GPU is present
- */
-async getGpuInfo() : Promise<Result<string, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_gpu_info") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Pauses or resumes system monitoring
- */
-async setMonitoringPaused(paused: boolean) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("set_monitoring_paused", { paused }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves list of all available modules (AI and services)
- */
-async getModules() : Promise<Result<Module[], { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_modules") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Controls a module (start, stop, restart)
- */
-async controlModule(request: ControlRequest) : Promise<Result<ControlResponse, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("control_module", { request }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves runtime status of a specific module
- */
-async getModuleStatus(moduleId: string) : Promise<Result<string, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_module_status", { moduleId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Launches a module (local or API-based)
- */
-async launchModule(moduleId: string) : Promise<Result<LaunchResponse, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("launch_module", { moduleId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Minimizes the application window
- */
-async minimizeWindow() : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("minimize_window") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Maximizes or unmaximizes the window
- */
-async maximizeWindow() : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("maximize_window") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Closes the window gracefully (app remains in tray)
- */
-async closeWindow() : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("close_window") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Shows and focuses the window
- */
-async showWindow() : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("show_window") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Hides the window
- */
-async hideWindow() : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("hide_window") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves translation strings for the specified language
- */
-async getTranslations(lang: string) : Promise<Result<JsonValue, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_translations", { lang }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves current license activation status
- */
-async getLicenseStatus() : Promise<Result<LicenseStatusResponse, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_license_status") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Activates a license key with optional email
- */
-async activateLicense(key: string, email: string | null) : Promise<Result<LicenseStatus, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("activate_license", { key, email }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Deactivates the current license
- */
-async deactivateLicense() : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("deactivate_license") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Checks if a specific feature is enabled by the current license
- */
-async checkFeature(feature: string) : Promise<Result<boolean, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("check_feature", { feature }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves current theme color palette
- */
-async getThemeColors() : Promise<Result<{ [key in string]: string }, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_theme_colors") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves persisted window settings (size, position, maximized state)
- */
-async getWindowSettings() : Promise<Result<WindowSettings, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_window_settings") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves window dimensions to disk
- */
-async saveWindowSize(width: number, height: number) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_window_size", { width, height }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves window screen position to disk
- */
-async saveWindowPosition(x: number, y: number) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_window_position", { x, y }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves maximized/unmaximized state to disk
- */
-async saveMaximizedState(maximized: boolean) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_maximized_state", { maximized }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves global zoom level to UI state
- */
-async saveZoomLevel(zoom: number) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_zoom_level", { zoom }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Set `WebView` zoom level and persist for current resolution
- */
-async setWebviewZoom(zoom: number) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("set_webview_zoom", { zoom }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves current global `WebView` zoom level
- */
-async getWebviewZoom() : Promise<Result<number, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_webview_zoom") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Get initial zoom for a resolution. Calculates default if not exists.
- */
-async getResolutionZoom() : Promise<Result<number, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_resolution_zoom") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves window configuration settings
- */
-async getWindowConfig() : Promise<WindowConfig> {
-    return await TAURI_INVOKE("get_window_config");
-},
-/**
- * Calculates window layout policy based on screen size and zoom
- */
-async getWindowPolicy() : Promise<WindowPolicy> {
-    return await TAURI_INVOKE("get_window_policy");
-},
-/**
- * Retrieves persisted UI state (sidebar, zoom, selected modules)
- */
-async getUiState() : Promise<Result<UIState, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_ui_state") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves UI state to persistent storage
- */
-async saveUiState(state: UIState) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_ui_state", { state }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves all application state and configuration during app startup
- */
-async getAppBootstrapData() : Promise<Result<BootstrapData, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_app_bootstrap_data") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Saves anAPI key securely to system credential storage
- */
-async saveSecureKey(service: string, key: string) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("save_secure_key", { service, key }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves an API key from system credential storage
- */
-async getSecureKey(service: string) : Promise<Result<string | null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_secure_key", { service }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Sends a chat message to the AI provider and streams the response
- */
-async sendChatMessage(request: ChatRequest) : Promise<Result<ChatResponse, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("send_chat_message", { request }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Validates an API key for the specified provider
- */
-async validateApiKey(provider: string, key: string) : Promise<Result<boolean, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("validate_api_key", { provider, key }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Clears chat history for a specific session
- */
-async clearChatHistory(sessionId: string) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("clear_chat_history", { sessionId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves chat history for a specific session
- */
-async getChatHistory(sessionId: string) : Promise<Result<ChatMessage[], { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_chat_history", { sessionId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Counts tokens in text for the specified model
- */
-async countTokens(text: string, model: string | null) : Promise<Result<number, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("count_tokens", { text, model }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Retrieves all custom AI models configured by the user
- */
-async getCustomModels() : Promise<Result<CustomModel[], { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_custom_models") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Adds a new custom AI model configuration
- */
-async addCustomModel(providerId: string, id: string, name: string, baseModelId: string) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("add_custom_model", { providerId, id, name, baseModelId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Removes a custom AI model by ID
- */
-async removeCustomModel(id: string) : Promise<Result<null, { code: string; message: string }>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("remove_custom_model", { id }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-/**
- * Processes file content for AI context (extracts text from files and archives)
- */
-async processFileContent(name: string, data: number[]) : Promise<Result<ProcessedFile, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("process_file_content", { name, data }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-}
-}
+    /**
+     * Checks backend health status
+     */
+    async getHealth(): Promise<Result<string, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_health') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Loads application configuration with module installation status
+     */
+    async getConfig(): Promise<Result<AppConfig, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_config') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves application settings (theme, language, GPU, debug)
+     */
+    async getSettings(): Promise<Result<AppSettings, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_settings') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves application settings
+     */
+    async saveSettings(
+        settings: AppSettings,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('save_settings', { settings }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves a single setting by key-value pair
+     */
+    async saveSetting(
+        key: string,
+        value: string,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('save_setting', { key, value }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Detects and returns the current system language code
+     */
+    async getSystemLanguage(): Promise<Result<string, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_system_language') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves log entries since a given timestamp
+     */
+    async getLogs(since: number): Promise<Result<LogEntry[], { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_logs', { since }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Clears all stored log entries
+     */
+    async clearLogs(): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('clear_logs') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Adds a single log entry to the log store
+     */
+    async addLog(
+        msg: string,
+        source: string,
+        level: string,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('add_log', { msg, source, level }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Adds multiple log entries in batch from frontend
+     */
+    async logBatch(
+        logs: BatchLogEntry[],
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('log_batch', { logs }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Downloads and verifies a module from a Git repository
+     */
+    async downloadModule(
+        moduleId: string,
+        repoUrl: string,
+        expectedHash: string | null,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return {
+                status: 'ok',
+                data: await TAURI_INVOKE('download_module', { moduleId, repoUrl, expectedHash }),
+            };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Checks if a module is already installed locally
+     */
+    async checkModuleInstalled(
+        moduleId: string,
+    ): Promise<Result<boolean, { code: string; message: string }>> {
+        try {
+            return {
+                status: 'ok',
+                data: await TAURI_INVOKE('check_module_installed', { moduleId }),
+            };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves the filesystem path to a module's directory
+     */
+    async getModulePath(
+        moduleId: string,
+    ): Promise<Result<string, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_module_path', { moduleId }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Deletes a module from local storage
+     */
+    async deleteModule(moduleId: string): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('delete_module', { moduleId }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Lists all files in a module's directory
+     */
+    async listModuleFiles(
+        moduleId: string,
+    ): Promise<Result<string[], { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('list_module_files', { moduleId }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Configures download bandwidth limits
+     */
+    async setDownloadSettings(enabled: boolean, maxSpeed: number): Promise<void> {
+        await TAURI_INVOKE('set_download_settings', { enabled, maxSpeed });
+    },
+    /**
+     * Retrieves real-time system statistics (CPU, RAM, GPU, disk, network)
+     */
+    async getSystemStats(): Promise<Result<SystemStats, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_system_stats') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves GPU model name or indicates if no GPU is present
+     */
+    async getGpuInfo(): Promise<Result<string, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_gpu_info') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Pauses or resumes system monitoring
+     */
+    async setMonitoringPaused(
+        paused: boolean,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('set_monitoring_paused', { paused }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves list of all available modules (AI and services)
+     */
+    async getModules(): Promise<Result<Module[], { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_modules') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Controls a module (start, stop, restart)
+     */
+    async controlModule(
+        request: ControlRequest,
+    ): Promise<Result<ControlResponse, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('control_module', { request }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves runtime status of a specific module
+     */
+    async getModuleStatus(
+        moduleId: string,
+    ): Promise<Result<string, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_module_status', { moduleId }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Launches a module (local or API-based)
+     */
+    async launchModule(
+        moduleId: string,
+    ): Promise<Result<LaunchResponse, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('launch_module', { moduleId }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Minimizes the application window
+     */
+    async minimizeWindow(): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('minimize_window') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Maximizes or unmaximizes the window
+     */
+    async maximizeWindow(): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('maximize_window') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Closes the window gracefully (app remains in tray)
+     */
+    async closeWindow(): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('close_window') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Shows and focuses the window
+     */
+    async showWindow(): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('show_window') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Hides the window
+     */
+    async hideWindow(): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('hide_window') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves translation strings for the specified language
+     */
+    async getTranslations(
+        lang: string,
+    ): Promise<Result<JsonValue, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_translations', { lang }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves current license activation status
+     */
+    async getLicenseStatus(): Promise<
+        Result<LicenseStatusResponse, { code: string; message: string }>
+    > {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_license_status') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Activates a license key with optional email
+     */
+    async activateLicense(
+        key: string,
+        email: string | null,
+    ): Promise<Result<LicenseStatus, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('activate_license', { key, email }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Deactivates the current license
+     */
+    async deactivateLicense(): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('deactivate_license') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Checks if a specific feature is enabled by the current license
+     */
+    async checkFeature(
+        feature: string,
+    ): Promise<Result<boolean, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('check_feature', { feature }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves current theme color palette
+     */
+    async getThemeColors(): Promise<
+        Result<{ [key in string]: string }, { code: string; message: string }>
+    > {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_theme_colors') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves persisted window settings (size, position, maximized state)
+     */
+    async getWindowSettings(): Promise<Result<WindowSettings, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_window_settings') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves window dimensions to disk
+     */
+    async saveWindowSize(
+        width: number,
+        height: number,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return {
+                status: 'ok',
+                data: await TAURI_INVOKE('save_window_size', { width, height }),
+            };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves window screen position to disk
+     */
+    async saveWindowPosition(
+        x: number,
+        y: number,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('save_window_position', { x, y }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves maximized/unmaximized state to disk
+     */
+    async saveMaximizedState(
+        maximized: boolean,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return {
+                status: 'ok',
+                data: await TAURI_INVOKE('save_maximized_state', { maximized }),
+            };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves global zoom level to UI state
+     */
+    async saveZoomLevel(zoom: number): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('save_zoom_level', { zoom }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Set `WebView` zoom level and persist for current resolution
+     */
+    async setWebviewZoom(zoom: number): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('set_webview_zoom', { zoom }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves current global `WebView` zoom level
+     */
+    async getWebviewZoom(): Promise<Result<number, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_webview_zoom') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Get initial zoom for a resolution. Calculates default if not exists.
+     */
+    async getResolutionZoom(): Promise<Result<number, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_resolution_zoom') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves window configuration settings
+     */
+    async getWindowConfig(): Promise<WindowConfig> {
+        return await TAURI_INVOKE('get_window_config');
+    },
+    /**
+     * Calculates window layout policy based on screen size and zoom
+     */
+    async getWindowPolicy(): Promise<WindowPolicy> {
+        return await TAURI_INVOKE('get_window_policy');
+    },
+    /**
+     * Retrieves persisted UI state (sidebar, zoom, selected modules)
+     */
+    async getUiState(): Promise<Result<UIState, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_ui_state') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves UI state to persistent storage
+     */
+    async saveUiState(state: UIState): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('save_ui_state', { state }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves all application state and configuration during app startup
+     */
+    async getAppBootstrapData(): Promise<Result<BootstrapData, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_app_bootstrap_data') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Saves anAPI key securely to system credential storage
+     */
+    async saveSecureKey(
+        service: string,
+        key: string,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('save_secure_key', { service, key }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves an API key from system credential storage
+     */
+    async getSecureKey(
+        service: string,
+    ): Promise<Result<string | null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_secure_key', { service }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Sends a chat message to the AI provider and streams the response
+     */
+    async sendChatMessage(
+        request: ChatRequest,
+    ): Promise<Result<ChatResponse, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('send_chat_message', { request }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Validates an API key for the specified provider
+     */
+    async validateApiKey(
+        provider: string,
+        key: string,
+    ): Promise<Result<boolean, { code: string; message: string }>> {
+        try {
+            return {
+                status: 'ok',
+                data: await TAURI_INVOKE('validate_api_key', { provider, key }),
+            };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Clears chat history for a specific session
+     */
+    async clearChatHistory(
+        sessionId: string,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('clear_chat_history', { sessionId }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves chat history for a specific session
+     */
+    async getChatHistory(
+        sessionId: string,
+    ): Promise<Result<ChatMessage[], { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_chat_history', { sessionId }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Counts tokens in text for the specified model
+     */
+    async countTokens(text: string, model: string | null): Promise<Result<number, string>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('count_tokens', { text, model }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Retrieves all custom AI models configured by the user
+     */
+    async getCustomModels(): Promise<Result<CustomModel[], { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('get_custom_models') };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Adds a new custom AI model configuration
+     */
+    async addCustomModel(
+        providerId: string,
+        id: string,
+        name: string,
+        baseModelId: string,
+    ): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return {
+                status: 'ok',
+                data: await TAURI_INVOKE('add_custom_model', { providerId, id, name, baseModelId }),
+            };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Removes a custom AI model by ID
+     */
+    async removeCustomModel(id: string): Promise<Result<null, { code: string; message: string }>> {
+        try {
+            return { status: 'ok', data: await TAURI_INVOKE('remove_custom_model', { id }) };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+    /**
+     * Processes file content for AI context (extracts text from files and archives)
+     */
+    async processFileContent(name: string, data: number[]): Promise<Result<ProcessedFile, string>> {
+        try {
+            return {
+                status: 'ok',
+                data: await TAURI_INVOKE('process_file_content', { name, data }),
+            };
+        } catch (e) {
+            if (e instanceof Error) throw e;
+            else return { status: 'error', error: e as any };
+        }
+    },
+};
 
 /** user-defined events **/
 
-
-
 /** user-defined constants **/
-
-
 
 /** user-defined types **/
 
 /**
  * Complete AI model definition
  */
-export type AiModel = { 
-/**
- * Localization key for description
- */
-descKey: string; 
-/**
- * Display name
- */
-name: string; 
-/**
- * Human-readable description
- */
-desc: string; 
-/**
- * Available pricing tiers
- */
-pricing: ModelPricing[]; 
-/**
- * Performance statistics
- */
-stats: ModelStats; 
-/**
- * API model identifiers
- */
-apiModels: ApiModelConfig | null }
+export type AiModel = {
+    /**
+     * Localization key for description
+     */
+    descKey: string;
+    /**
+     * Display name
+     */
+    name: string;
+    /**
+     * Human-readable description
+     */
+    desc: string;
+    /**
+     * Available pricing tiers
+     */
+    pricing: ModelPricing[];
+    /**
+     * Performance statistics
+     */
+    stats: ModelStats;
+    /**
+     * API model identifiers
+     */
+    apiModels: ApiModelConfig | null;
+};
 /**
  * API model identifiers for different capabilities
  */
-export type ApiModelConfig = { 
-/**
- * Model ID for text generation
- */
-text: string | null; 
-/**
- * Model ID for image generation
- */
-image: string | null }
+export type ApiModelConfig = {
+    /**
+     * Model ID for text generation
+     */
+    text: string | null;
+    /**
+     * Model ID for image generation
+     */
+    image: string | null;
+};
 /**
  * Configuration for an AI API provider (OpenAI, Gemini, Claude, etc.)
  */
-export type ApiProvider = { 
-/**
- * Unique identifier (e.g., "gpt", "gemini")
- */
-id: string; 
-/**
- * Display name (e.g., "GPT", "Gemini")
- */
-name: string; 
-/**
- * Localization key for description
- */
-descKey?: string | null; 
-/**
- * Direct description text
- */
-description?: string | null; 
-/**
- * Icon/emoji for UI display
- */
-icon?: string | null; 
-/**
- * Provider type (e.g., "openai", "google")
- */
-providerType: string; 
-/**
- * Base URL for API endpoints
- */
-baseUrl?: string | null; 
-/**
- * Environment variable name for API key
- */
-apiKeyEnv?: string | null; 
-/**
- * Available models configuration
- */
-models?: { [key in string]: ApiModelConfig } | null; 
-/**
- * Model aliases (UI name → API ID mappings)
- */
-modelAliases?: { [key in string]: string } | null }
+export type ApiProvider = {
+    /**
+     * Unique identifier (e.g., "gpt", "gemini")
+     */
+    id: string;
+    /**
+     * Display name (e.g., "GPT", "Gemini")
+     */
+    name: string;
+    /**
+     * Localization key for description
+     */
+    descKey?: string | null;
+    /**
+     * Direct description text
+     */
+    description?: string | null;
+    /**
+     * Icon/emoji for UI display
+     */
+    icon?: string | null;
+    /**
+     * Provider type (e.g., "openai", "google")
+     */
+    providerType: string;
+    /**
+     * Base URL for API endpoints
+     */
+    baseUrl?: string | null;
+    /**
+     * Environment variable name for API key
+     */
+    apiKeyEnv?: string | null;
+    /**
+     * Available models configuration
+     */
+    models?: { [key in string]: ApiModelConfig } | null;
+    /**
+     * Model aliases (UI name → API ID mappings)
+     */
+    modelAliases?: { [key in string]: string } | null;
+};
 /**
  * Root application configuration
  */
-export type AppConfig = { 
-/**
- * Configuration version
- */
-version: string; 
-/**
- * Model-specific default settings
- */
-models: { [key in string]: { [key in string]: AiModel } }; 
-/**
- * Available API providers
- */
-apiProviders: ApiProvider[]; 
-/**
- * Catalog of available apps/services
- */
-catalog: ConfigCatalog }
+export type AppConfig = {
+    /**
+     * Configuration version
+     */
+    version: string;
+    /**
+     * Model-specific default settings
+     */
+    models: { [key in string]: { [key in string]: AiModel } };
+    /**
+     * Available API providers
+     */
+    apiProviders: ApiProvider[];
+    /**
+     * Catalog of available apps/services
+     */
+    catalog: ConfigCatalog;
+};
 /**
  * Global application settings
  */
-export type AppSettings = { 
-/**
- * UI theme ("dark" or "light")
- */
-theme: string; 
-/**
- * Interface language code (e.g., "en", "ru", "zh")
- */
-language: string; 
-/**
- * Enable GPU acceleration for monitoring
- */
-use_gpu: boolean; 
-/**
- * Enable debug mode and logging
- */
-debug_mode: boolean }
+export type AppSettings = {
+    /**
+     * UI theme ("dark" or "light")
+     */
+    theme: string;
+    /**
+     * Interface language code (e.g., "en", "ru", "zh")
+     */
+    language: string;
+    /**
+     * Enable GPU acceleration for monitoring
+     */
+    use_gpu: boolean;
+    /**
+     * Enable debug mode and logging
+     */
+    debug_mode: boolean;
+};
 /**
  * Batch log entry from frontend
  */
-export type BatchLogEntry = { 
-/**
- * Log level ("info", "warn", "error")
- */
-level: string; 
-/**
- * Log message content
- */
-message: string }
+export type BatchLogEntry = {
+    /**
+     * Log level ("info", "warn", "error")
+     */
+    level: string;
+    /**
+     * Log message content
+     */
+    message: string;
+};
 /**
  * Application bootstrap data sent to frontend during initialization
  */
-export type BootstrapData = { 
-/**
- * Persisted UI state
- */
-uiState: UIState; 
-/**
- * Window configuration settings
- */
-windowConfig: WindowConfig; 
-/**
- * Detected system language
- */
-systemLanguage: string; 
-/**
- * All available modules
- */
-modules: Module[]; 
-/**
- * Calculated initial zoom level
- */
-initialZoom: number }
+export type BootstrapData = {
+    /**
+     * Persisted UI state
+     */
+    uiState: UIState;
+    /**
+     * Window configuration settings
+     */
+    windowConfig: WindowConfig;
+    /**
+     * Detected system language
+     */
+    systemLanguage: string;
+    /**
+     * All available modules
+     */
+    modules: Module[];
+    /**
+     * Calculated initial zoom level
+     */
+    initialZoom: number;
+};
 /**
  * Responsive breakpoints for layout
  */
-export type Breakpoints = { 
-/**
- * Compact width
- */
-compact: number; 
-/**
- * Medium width
- */
-medium: number; 
-/**
- * Large width
- */
-large: number }
+export type Breakpoints = {
+    /**
+     * Compact width
+     */
+    compact: number;
+    /**
+     * Medium width
+     */
+    medium: number;
+    /**
+     * Large width
+     */
+    large: number;
+};
 /**
  * AI chat message with role and content
  */
-export type ChatMessage = { 
-/**
- * Role ("user", "assistant", "system")
- */
-role: string; 
-/**
- * Message content (text or structured data)
- */
-content: JsonValue; 
-/**
- * Optional signature for extended thinking
- */
-thought_signature: string | null }
+export type ChatMessage = {
+    /**
+     * Role ("user", "assistant", "system")
+     */
+    role: string;
+    /**
+     * Message content (text or structured data)
+     */
+    content: JsonValue;
+    /**
+     * Optional signature for extended thinking
+     */
+    thought_signature: string | null;
+};
 /**
  * AI reply content
  */
-export type ChatReply = { 
-/**
- * Reply text
- */
-text: string; 
-/**
- * Role (typically "assistant")
- */
-role: string }
+export type ChatReply = {
+    /**
+     * Reply text
+     */
+    text: string;
+    /**
+     * Role (typically "assistant")
+     */
+    role: string;
+};
 /**
  * AI chat request parameters
  */
-export type ChatRequest = { 
-/**
- * AI provider ("openai", "gemini", "local")
- */
-provider: string; 
-/**
- * Model identifier
- */
-model: string; 
-/**
- * Chat history and new message
- */
-messages: ChatMessage[]; 
-/**
- * Optional API key
- */
-api_key: string | null; 
-/**
- * Thinking level ("low", "high", "minimal")
- */
-thinking_level: string | null; 
-/**
- * Session identifier for history tracking
- */
-session_id: string | null }
+export type ChatRequest = {
+    /**
+     * AI provider ("openai", "gemini", "local")
+     */
+    provider: string;
+    /**
+     * Model identifier
+     */
+    model: string;
+    /**
+     * Chat history and new message
+     */
+    messages: ChatMessage[];
+    /**
+     * Optional API key
+     */
+    api_key: string | null;
+    /**
+     * Thinking level ("low", "high", "minimal")
+     */
+    thinking_level: string | null;
+    /**
+     * Session identifier for history tracking
+     */
+    session_id: string | null;
+};
 /**
  * AI chat response
  */
-export type ChatResponse = { 
-/**
- * Whether request was successful
- */
-ok: boolean; 
-/**
- * AI reply content
- */
-reply: ChatReply | null; 
-/**
- * Error message if failed
- */
-error: string | null; 
-/**
- * Model used
- */
-model: string | null; 
-/**
- * Thinking signature
- */
-thought_signature: string | null }
+export type ChatResponse = {
+    /**
+     * Whether request was successful
+     */
+    ok: boolean;
+    /**
+     * AI reply content
+     */
+    reply: ChatReply | null;
+    /**
+     * Error message if failed
+     */
+    error: string | null;
+    /**
+     * Model used
+     */
+    model: string | null;
+    /**
+     * Thinking signature
+     */
+    thought_signature: string | null;
+};
 /**
  * Application catalog containing available modules and services
  */
-export type ConfigCatalog = { 
-/**
- * AI generation modules (text, images, `LocalAI`)
- */
-ai: ModuleItem[]; 
-/**
- * Service integrations (Telegram, Discord)
- */
-services: ModuleItem[]; 
-/**
- * Starred/Favorite module IDs
- */
-stars: string[] }
+export type ConfigCatalog = {
+    /**
+     * AI generation modules (text, images, `LocalAI`)
+     */
+    ai: ModuleItem[];
+    /**
+     * Service integrations (Telegram, Discord)
+     */
+    services: ModuleItem[];
+    /**
+     * Starred/Favorite module IDs
+     */
+    stars: string[];
+};
 /**
  * Configuration field schema for module settings
  */
-export type ConfigField = { 
-/**
- * Field type ("text", "password", "select", "checkbox")
- */
-fieldType: string; 
-/**
- * Display label in UI
- */
-label: string; 
-/**
- * Default value
- */
-default: JsonValue | null; 
-/**
- * Whether field is required
- */
-required: boolean; 
-/**
- * Available options for "select" type
- */
-options: string[] | null }
+export type ConfigField = {
+    /**
+     * Field type ("text", "password", "select", "checkbox")
+     */
+    fieldType: string;
+    /**
+     * Display label in UI
+     */
+    label: string;
+    /**
+     * Default value
+     */
+    default: JsonValue | null;
+    /**
+     * Whether field is required
+     */
+    required: boolean;
+    /**
+     * Available options for "select" type
+     */
+    options: string[] | null;
+};
 /**
  * Module control request from frontend
  */
-export type ControlRequest = { 
-/**
- * Module identifier (optional for global actions)
- */
-module_id: string | null; 
-/**
- * Control action ("start", "stop", "restart")
- */
-action: string }
+export type ControlRequest = {
+    /**
+     * Module identifier (optional for global actions)
+     */
+    module_id: string | null;
+    /**
+     * Control action ("start", "stop", "restart")
+     */
+    action: string;
+};
 /**
  * Module control response to frontend
  */
-export type ControlResponse = { 
-/**
- * Whether the operation succeeded
- */
-success: boolean; 
-/**
- * Human-readable result message
- */
-message: string; 
-/**
- * Current module status after operation
- */
-status: string | null }
+export type ControlResponse = {
+    /**
+     * Whether the operation succeeded
+     */
+    success: boolean;
+    /**
+     * Human-readable result message
+     */
+    message: string;
+    /**
+     * Current module status after operation
+     */
+    status: string | null;
+};
 /**
  * CPU (Central Processing Unit) statistics
  */
-export type CpuStats = { 
-/**
- * CPU usage percentage (0-100)
- */
-percent: number; 
-/**
- * Number of logical cores
- */
-cores: number; 
-/**
- * CPU model name
- */
-name: string }
+export type CpuStats = {
+    /**
+     * CPU usage percentage (0-100)
+     */
+    percent: number;
+    /**
+     * Number of logical cores
+     */
+    cores: number;
+    /**
+     * CPU model name
+     */
+    name: string;
+};
 /**
  * User-created fine-tuned or custom AI model
  */
-export type CustomModel = { 
-/**
- * Unique identifier
- */
-id: string; 
-/**
- * Display name
- */
-name: string; 
-/**
- * Provider ID (e.g., "gpt", "deepseek")
- */
-provider_id: string; 
-/**
- * Base model identifier (e.g., "ft:gpt-3.5-turbo:...")
- */
-base_model_id: string; 
-/**
- * Creation timestamp (Unix epoch)
- */
-created_at: number }
+export type CustomModel = {
+    /**
+     * Unique identifier
+     */
+    id: string;
+    /**
+     * Display name
+     */
+    name: string;
+    /**
+     * Provider ID (e.g., "gpt", "deepseek")
+     */
+    provider_id: string;
+    /**
+     * Base model identifier (e.g., "ft:gpt-3.5-turbo:...")
+     */
+    base_model_id: string;
+    /**
+     * Creation timestamp (Unix epoch)
+     */
+    created_at: number;
+};
 /**
  * Disk I/O (Input/Output) statistics
  */
-export type DiskStats = { 
-/**
- * Read speed (bytes/sec)
- */
-readRate: number; 
-/**
- * Write speed (bytes/sec)
- */
-writeRate: number; 
-/**
- * Disk utilization percentage (0-100)
- */
-utilization: number; 
-/**
- * Total disk capacity (GB)
- */
-totalGb: number; 
-/**
- * Disk space currently used (GB)
- */
-usedGb: number; 
-/**
- * Disk activity percentage (0-100)
- */
-activityPercent: number }
+export type DiskStats = {
+    /**
+     * Read speed (bytes/sec)
+     */
+    readRate: number;
+    /**
+     * Write speed (bytes/sec)
+     */
+    writeRate: number;
+    /**
+     * Disk utilization percentage (0-100)
+     */
+    utilization: number;
+    /**
+     * Total disk capacity (GB)
+     */
+    totalGb: number;
+    /**
+     * Disk space currently used (GB)
+     */
+    usedGb: number;
+    /**
+     * Disk activity percentage (0-100)
+     */
+    activityPercent: number;
+};
 /**
  * GPU (Graphics Processing Unit) statistics
  */
-export type GpuStats = { 
-/**
- * GPU usage percentage (0-100)
- */
-usage: number; 
-/**
- * Memory currently used (bytes)
- */
-memoryUsed: number; 
-/**
- * Total available memory (bytes)
- */
-memoryTotal: number; 
-/**
- * GPU temperature (Celsius)
- */
-temp: number; 
-/**
- * GPU model name
- */
-name: string }
-export type JsonValue = null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue }
+export type GpuStats = {
+    /**
+     * GPU usage percentage (0-100)
+     */
+    usage: number;
+    /**
+     * Memory currently used (bytes)
+     */
+    memoryUsed: number;
+    /**
+     * Total available memory (bytes)
+     */
+    memoryTotal: number;
+    /**
+     * GPU temperature (Celsius)
+     */
+    temp: number;
+    /**
+     * GPU model name
+     */
+    name: string;
+};
+export type JsonValue =
+    | null
+    | boolean
+    | number
+    | string
+    | JsonValue[]
+    | { [key in string]: JsonValue };
 /**
  * Module launch response indicating how to handle the module
  */
-export type LaunchResponse = { 
-/**
- * Action type ("`start_local`" or "navigate")
- */
-action: string; 
-/**
- * Page to navigate to
- */
-page: string | null; 
-/**
- * Provider identifier
- */
-provider: string | null; 
-/**
- * Optional status message
- */
-message: string | null }
+export type LaunchResponse = {
+    /**
+     * Action type ("`start_local`" or "navigate")
+     */
+    action: string;
+    /**
+     * Page to navigate to
+     */
+    page: string | null;
+    /**
+     * Provider identifier
+     */
+    provider: string | null;
+    /**
+     * Optional status message
+     */
+    message: string | null;
+};
 /**
  * License tier status
  */
-export type LicenseStatus = 
-/**
- * Free tier
- */
-"Free" | 
-/**
- * Pro tier
- */
-"Pro" | 
-/**
- * Enterprise tier
- */
-"Enterprise" | 
-/**
- * Expired license
- */
-"Expired" | 
-/**
- * Invalid license key
- */
-"Invalid"
+export type LicenseStatus =
+    /**
+     * Free tier
+     */
+    | 'Free'
+    /**
+     * Pro tier
+     */
+    | 'Pro'
+    /**
+     * Enterprise tier
+     */
+    | 'Enterprise'
+    /**
+     * Expired license
+     */
+    | 'Expired'
+    /**
+     * Invalid license key
+     */
+    | 'Invalid';
 /**
  * License activation status response
  */
-export type LicenseStatusResponse = { 
-/**
- * Current license activation status
- */
-status: LicenseStatus; 
-/**
- * Email address associated with the license
- */
-email: string | null }
+export type LicenseStatusResponse = {
+    /**
+     * Current license activation status
+     */
+    status: LicenseStatus;
+    /**
+     * Email address associated with the license
+     */
+    email: string | null;
+};
 /**
  * Log entry for frontend display
  */
-export type LogEntry = { 
-/**
- * Unix timestamp
- */
-timestamp: number; 
-/**
- * Log source component
- */
-source: string; 
-/**
- * Log level ("info", "warn", "error")
- */
-level: string; 
-/**
- * Log message
- */
-message: string }
+export type LogEntry = {
+    /**
+     * Unix timestamp
+     */
+    timestamp: number;
+    /**
+     * Log source component
+     */
+    source: string;
+    /**
+     * Log level ("info", "warn", "error")
+     */
+    level: string;
+    /**
+     * Log message
+     */
+    message: string;
+};
 /**
  * Pricing information for an AI model tier
  */
-export type ModelPricing = { 
-/**
- * Pricing tier name (e.g., "Standard", "Pro")
- */
-tier: string; 
-/**
- * Input token price
- */
-in?: string | null; 
-/**
- * Output token price
- */
-out?: string | null; 
-/**
- * Additional pricing notes
- */
-note?: string | null }
+export type ModelPricing = {
+    /**
+     * Pricing tier name (e.g., "Standard", "Pro")
+     */
+    tier: string;
+    /**
+     * Input token price
+     */
+    in?: string | null;
+    /**
+     * Output token price
+     */
+    out?: string | null;
+    /**
+     * Additional pricing notes
+     */
+    note?: string | null;
+};
 /**
  * Performance characteristics of an AI model (0-10 scale)
  */
-export type ModelStats = { 
-/**
- * Response speed rating
- */
-speed: number; 
-/**
- * Logical reasoning capability
- */
-logic: number; 
-/**
- * Creative output quality
- */
-creative: number }
+export type ModelStats = {
+    /**
+     * Response speed rating
+     */
+    speed: number;
+    /**
+     * Logical reasoning capability
+     */
+    logic: number;
+    /**
+     * Creative output quality
+     */
+    creative: number;
+};
 /**
  * Complete module metadata and state
  */
-export type Module = { 
-/**
- * Unique module identifier
- */
-id: string; 
-/**
- * Display name
- */
-name: string; 
-/**
- * User-facing description
- */
-description: string; 
-/**
- * Semantic version (e.g., "1.0.0")
- */
-version: string; 
-/**
- * Author username or organization
- */
-author: string; 
-/**
- * Category ("ai" or "service")
- */
-category: string; 
-/**
- * Icon/emoji for UI display
- */
-icon: string; 
-/**
- * Absolute filesystem path to module directory
- */
-path: string; 
-/**
- * Whether module files are present locally
- */
-installed: boolean; 
-/**
- * Whether module is user-installed (vs. built-in)
- */
-local: boolean; 
-/**
- * Whether module is enabled for auto-start
- */
-enabled: boolean; 
-/**
- * Current runtime status ("running", "stopped", "error")
- */
-status: string | null; 
-/**
- * Whether module can be deleted by user
- */
-isDeletable: boolean; 
-/**
- * Current configuration values
- */
-config: { [key in string]: JsonValue }; 
-/**
- * Configuration schema definition
- */
-configSchema: { [key in string]: ConfigField } | null }
+export type Module = {
+    /**
+     * Unique module identifier
+     */
+    id: string;
+    /**
+     * Display name
+     */
+    name: string;
+    /**
+     * User-facing description
+     */
+    description: string;
+    /**
+     * Semantic version (e.g., "1.0.0")
+     */
+    version: string;
+    /**
+     * Author username or organization
+     */
+    author: string;
+    /**
+     * Category ("ai" or "service")
+     */
+    category: string;
+    /**
+     * Icon/emoji for UI display
+     */
+    icon: string;
+    /**
+     * Absolute filesystem path to module directory
+     */
+    path: string;
+    /**
+     * Whether module files are present locally
+     */
+    installed: boolean;
+    /**
+     * Whether module is user-installed (vs. built-in)
+     */
+    local: boolean;
+    /**
+     * Whether module is enabled for auto-start
+     */
+    enabled: boolean;
+    /**
+     * Current runtime status ("running", "stopped", "error")
+     */
+    status: string | null;
+    /**
+     * Whether module can be deleted by user
+     */
+    isDeletable: boolean;
+    /**
+     * Current configuration values
+     */
+    config: { [key in string]: JsonValue };
+    /**
+     * Configuration schema definition
+     */
+    configSchema: { [key in string]: ConfigField } | null;
+};
 /**
  * Catalog item for downloadable modules
  */
-export type ModuleItem = { 
-/**
- * Unique module identifier
- */
-id: string; 
-/**
- * Localization key for name
- */
-nameKey: string; 
-/**
- * Localization key for description
- */
-descKey: string; 
-/**
- * Display name
- */
-name: string; 
-/**
- * Description text
- */
-desc: string; 
-/**
- * Icon/emoji
- */
-icon: string; 
-/**
- * Module type ("ai" or "service")
- */
-type: string; 
-/**
- * GitHub repository URL
- */
-repoUrl: string | null; 
-/**
- * SHA-256 hash for integrity verification
- */
-expectedHash: string | null; 
-/**
- * Semantic version (e.g., "1.0.0")
- */
-version?: string }
+export type ModuleItem = {
+    /**
+     * Unique module identifier
+     */
+    id: string;
+    /**
+     * Localization key for name
+     */
+    nameKey: string;
+    /**
+     * Localization key for description
+     */
+    descKey: string;
+    /**
+     * Display name
+     */
+    name: string;
+    /**
+     * Description text
+     */
+    desc: string;
+    /**
+     * Icon/emoji
+     */
+    icon: string;
+    /**
+     * Module type ("ai" or "service")
+     */
+    type: string;
+    /**
+     * GitHub repository URL
+     */
+    repoUrl: string | null;
+    /**
+     * SHA-256 hash for integrity verification
+     */
+    expectedHash: string | null;
+    /**
+     * Semantic version (e.g., "1.0.0")
+     */
+    version?: string;
+};
 /**
  * Network I/O statistics
  */
-export type NetworkStats = { 
-/**
- * Download speed (bytes/sec)
- */
-downloadRate: number; 
-/**
- * Upload speed (bytes/sec)
- */
-uploadRate: number; 
-/**
- * Total bytes received since boot
- */
-totalReceived: number; 
-/**
- * Total bytes sent since boot
- */
-totalSent: number; 
-/**
- * Network utilization percentage (0-100)
- */
-utilization: number; 
-/**
- * Network activity percentage (0-100)
- */
-activityPercent: number }
+export type NetworkStats = {
+    /**
+     * Download speed (bytes/sec)
+     */
+    downloadRate: number;
+    /**
+     * Upload speed (bytes/sec)
+     */
+    uploadRate: number;
+    /**
+     * Total bytes received since boot
+     */
+    totalReceived: number;
+    /**
+     * Total bytes sent since boot
+     */
+    totalSent: number;
+    /**
+     * Network utilization percentage (0-100)
+     */
+    utilization: number;
+    /**
+     * Network activity percentage (0-100)
+     */
+    activityPercent: number;
+};
 /**
  * Processed file content result
  */
-export type ProcessedFile = { 
-/**
- * File name
- */
-name: string; 
-/**
- * Extracted text content
- */
-content: string; 
-/**
- * Whether file was a ZIP archive
- */
-is_archive: boolean; 
-/**
- * Processing error if any
- */
-error: string | null }
+export type ProcessedFile = {
+    /**
+     * File name
+     */
+    name: string;
+    /**
+     * Extracted text content
+     */
+    content: string;
+    /**
+     * Whether file was a ZIP archive
+     */
+    is_archive: boolean;
+    /**
+     * Processing error if any
+     */
+    error: string | null;
+};
 /**
  * RAM (Random Access Memory) statistics
  */
-export type RamStats = { 
-/**
- * RAM usage percentage (0-100)
- */
-percent: number; 
-/**
- * RAM currently used (GB)
- */
-usedGb: number; 
-/**
- * Total RAM capacity (GB)
- */
-totalGb: number; 
-/**
- * RAM available for allocation (GB)
- */
-availableGb: number }
+export type RamStats = {
+    /**
+     * RAM usage percentage (0-100)
+     */
+    percent: number;
+    /**
+     * RAM currently used (GB)
+     */
+    usedGb: number;
+    /**
+     * Total RAM capacity (GB)
+     */
+    totalGb: number;
+    /**
+     * RAM available for allocation (GB)
+     */
+    availableGb: number;
+};
 /**
  * Currently selected module in UI
  */
-export type SelectedModule = { 
-/**
- * Module identifier
- */
-id: string; 
-/**
- * Display name
- */
-name: string; 
-/**
- * Localization key for name
- */
-nameKey: string | null; 
-/**
- * Icon/emoji
- */
-icon: string; 
-/**
- * Module type
- */
-type: string; 
-/**
- * Localization key for description
- */
-descKey: string | null; 
-/**
- * Description text
- */
-desc: string }
+export type SelectedModule = {
+    /**
+     * Module identifier
+     */
+    id: string;
+    /**
+     * Display name
+     */
+    name: string;
+    /**
+     * Localization key for name
+     */
+    nameKey: string | null;
+    /**
+     * Icon/emoji
+     */
+    icon: string;
+    /**
+     * Module type
+     */
+    type: string;
+    /**
+     * Localization key for description
+     */
+    descKey: string | null;
+    /**
+     * Description text
+     */
+    desc: string;
+};
 /**
  * Complete system statistics snapshot
  */
-export type SystemStats = { 
-/**
- * CPU usage and information
- */
-cpu: CpuStats; 
-/**
- * RAM usage and availability
- */
-ram: RamStats; 
-/**
- * GPU usage (if available)
- */
-gpu: GpuStats | null; 
-/**
- * VRAM usage (if GPU present)
- */
-vram: VramStats | null; 
-/**
- * Disk I/O statistics
- */
-disk: DiskStats; 
-/**
- * Network I/O statistics
- */
-network: NetworkStats; 
-/**
- * Current process ID
- */
-pid: number }
+export type SystemStats = {
+    /**
+     * CPU usage and information
+     */
+    cpu: CpuStats;
+    /**
+     * RAM usage and availability
+     */
+    ram: RamStats;
+    /**
+     * GPU usage (if available)
+     */
+    gpu: GpuStats | null;
+    /**
+     * VRAM usage (if GPU present)
+     */
+    vram: VramStats | null;
+    /**
+     * Disk I/O statistics
+     */
+    disk: DiskStats;
+    /**
+     * Network I/O statistics
+     */
+    network: NetworkStats;
+    /**
+     * Current process ID
+     */
+    pid: number;
+};
 /**
  * Screen thresholds for warnings
  */
-export type Thresholds = { 
-/**
- * Warning width
- */
-warningWidth: number; 
-/**
- * Warning height
- */
-warningHeight: number; 
-/**
- * Small screen width
- */
-smallScreenWidth: number; 
-/**
- * Small screen height
- */
-smallScreenHeight: number }
+export type Thresholds = {
+    /**
+     * Warning width
+     */
+    warningWidth: number;
+    /**
+     * Warning height
+     */
+    warningHeight: number;
+    /**
+     * Small screen width
+     */
+    smallScreenWidth: number;
+    /**
+     * Small screen height
+     */
+    smallScreenHeight: number;
+};
 /**
  * UI State that persists across sessions
  */
-export type UIState = { 
-/**
- * Sidebar collapsed state
- */
-sidebar_collapsed: boolean; 
-/**
- * Sidebar width in pixels
- */
-sidebar_width: number; 
-/**
- * Hidden navigation items (page IDs)
- */
-hidden_nav_items: string[]; 
-/**
- * Hidden system monitor items
- */
-hidden_monitors: string[]; 
-/**
- * Card widths map (`card_id` -> "full" | "half")
- */
-card_widths: { [key in string]: string }; 
-/**
- * Download settings
- */
-download_limit_enabled: boolean; 
-/**
- * Maximum download speed in MB/s
- */
-download_max_speed: number; 
-/**
- * Selected modules by category
- */
-selected_modules: { [key in string]: SelectedModule }; 
-/**
- * Global Zoom Level
- */
-zoom_level: number; 
-/**
- * Selected AI Models (`AppID` -> `ModelKey`)
- */
-selected_ai_models: { [key in string]: string }; 
-/**
- * Last visited page ID
- */
-last_page: string | null; 
-/**
- * Per-resolution zoom levels ("WxH" -> value)
- * Per-resolution zoom levels (e.g., "1920x1080" -> 1.2)
- */
-resolution_zoom: { [key in string]: number }; 
-/**
- * Sound effects enabled state
- */
-sound_enabled: boolean }
+export type UIState = {
+    /**
+     * Sidebar collapsed state
+     */
+    sidebar_collapsed: boolean;
+    /**
+     * Sidebar width in pixels
+     */
+    sidebar_width: number;
+    /**
+     * Hidden navigation items (page IDs)
+     */
+    hidden_nav_items: string[];
+    /**
+     * Hidden system monitor items
+     */
+    hidden_monitors: string[];
+    /**
+     * Card widths map (`card_id` -> "full" | "half")
+     */
+    card_widths: { [key in string]: string };
+    /**
+     * Download settings
+     */
+    download_limit_enabled: boolean;
+    /**
+     * Maximum download speed in MB/s
+     */
+    download_max_speed: number;
+    /**
+     * Selected modules by category
+     */
+    selected_modules: { [key in string]: SelectedModule };
+    /**
+     * Global Zoom Level
+     */
+    zoom_level: number;
+    /**
+     * Selected AI Models (`AppID` -> `ModelKey`)
+     */
+    selected_ai_models: { [key in string]: string };
+    /**
+     * Last visited page ID
+     */
+    last_page: string | null;
+    /**
+     * Per-resolution zoom levels ("WxH" -> value)
+     * Per-resolution zoom levels (e.g., "1920x1080" -> 1.2)
+     */
+    resolution_zoom: { [key in string]: number };
+    /**
+     * Sound effects enabled state
+     */
+    sound_enabled: boolean;
+};
 /**
  * VRAM (Video RAM) statistics
  */
-export type VramStats = { 
-/**
- * VRAM usage percentage (0-100)
- */
-percent: number; 
-/**
- * VRAM currently used (GB)
- */
-usedGb: number; 
-/**
- * Total VRAM capacity (GB)
- */
-totalGb: number }
+export type VramStats = {
+    /**
+     * VRAM usage percentage (0-100)
+     */
+    percent: number;
+    /**
+     * VRAM currently used (GB)
+     */
+    usedGb: number;
+    /**
+     * Total VRAM capacity (GB)
+     */
+    totalGb: number;
+};
 /**
  * Window configuration for the frontend
  */
-export type WindowConfig = { 
-/**
- * Responsive breakpoints
- */
-breakpoints: Breakpoints; 
-/**
- * Screen thresholds
- */
-thresholds: Thresholds }
+export type WindowConfig = {
+    /**
+     * Responsive breakpoints
+     */
+    breakpoints: Breakpoints;
+    /**
+     * Screen thresholds
+     */
+    thresholds: Thresholds;
+};
 /**
  * Window policy response
  */
-export type WindowPolicy = { 
-/**
- * Whether screen is small
- */
-isSmallScreen: boolean; 
-/**
- * Whether to show size warning
- */
-showWarning: boolean }
+export type WindowPolicy = {
+    /**
+     * Whether screen is small
+     */
+    isSmallScreen: boolean;
+    /**
+     * Whether to show size warning
+     */
+    showWarning: boolean;
+};
 /**
  * Window settings structure
  */
-export type WindowSettings = { 
-/**
- * Window width
- */
-width: number; 
-/**
- * Window height
- */
-height: number; 
-/**
- * Window X position
- */
-x: number | null; 
-/**
- * Window Y position
- */
-y: number | null; 
-/**
- * Whether window is maximized
- */
-maximized: boolean }
+export type WindowSettings = {
+    /**
+     * Window width
+     */
+    width: number;
+    /**
+     * Window height
+     */
+    height: number;
+    /**
+     * Window X position
+     */
+    x: number | null;
+    /**
+     * Window Y position
+     */
+    y: number | null;
+    /**
+     * Whether window is maximized
+     */
+    maximized: boolean;
+};
 
 /** tauri-specta globals **/
 
-import {
-	invoke as TAURI_INVOKE,
-	Channel as TAURI_CHANNEL,
-} from "@tauri-apps/api/core";
-import * as TAURI_API_EVENT from "@tauri-apps/api/event";
-import { type WebviewWindow as __WebviewWindow__ } from "@tauri-apps/api/webviewWindow";
+import { invoke as TAURI_INVOKE } from '@tauri-apps/api/core';
 
-type __EventObj__<T> = {
-	listen: (
-		cb: TAURI_API_EVENT.EventCallback<T>,
-	) => ReturnType<typeof TAURI_API_EVENT.listen<T>>;
-	once: (
-		cb: TAURI_API_EVENT.EventCallback<T>,
-	) => ReturnType<typeof TAURI_API_EVENT.once<T>>;
-	emit: null extends T
-		? (payload?: T) => ReturnType<typeof TAURI_API_EVENT.emit>
-		: (payload: T) => ReturnType<typeof TAURI_API_EVENT.emit>;
-};
-
-export type Result<T, E> =
-	| { status: "ok"; data: T }
-	| { status: "error"; error: E };
-
-function __makeEvents__<T extends Record<string, any>>(
-	mappings: Record<keyof T, string>,
-) {
-	return new Proxy(
-		{} as unknown as {
-			[K in keyof T]: __EventObj__<T[K]> & {
-				(handle: __WebviewWindow__): __EventObj__<T[K]>;
-			};
-		},
-		{
-			get: (_, event) => {
-				const name = mappings[event as keyof T];
-
-				return new Proxy((() => {}) as any, {
-					apply: (_, __, [window]: [__WebviewWindow__]) => ({
-						listen: (arg: any) => window.listen(name, arg),
-						once: (arg: any) => window.once(name, arg),
-						emit: (arg: any) => window.emit(name, arg),
-					}),
-					get: (_, command: keyof __EventObj__<any>) => {
-						switch (command) {
-							case "listen":
-								return (arg: any) => TAURI_API_EVENT.listen(name, arg);
-							case "once":
-								return (arg: any) => TAURI_API_EVENT.once(name, arg);
-							case "emit":
-								return (arg: any) => TAURI_API_EVENT.emit(name, arg);
-						}
-					},
-				});
-			},
-		},
-	);
-}
+export type Result<T, E> = { status: 'ok'; data: T } | { status: 'error'; error: E };
