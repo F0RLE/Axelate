@@ -22,7 +22,7 @@ impl WindowsStartupInfrastructure {
     }
 
     #[allow(unsafe_code)]
-    fn check_reg_key(&self, hkey: isize, subkey: &[u16], value_name: &[u16]) -> bool {
+    fn check_reg_key(hkey: isize, subkey: &[u16], value_name: &[u16]) -> bool {
         let mut hkey_out: isize = 0;
         #[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr)]
         unsafe {
@@ -67,10 +67,10 @@ impl SystemRuntime for WindowsStartupInfrastructure {
         );
         let value_name = Self::encode_wide("pv");
 
-        if self.check_reg_key(HKEY_LOCAL_MACHINE as _, &subkey, &value_name) {
+        if Self::check_reg_key(HKEY_LOCAL_MACHINE as _, &subkey, &value_name) {
             return true;
         }
-        if self.check_reg_key(HKEY_CURRENT_USER as _, &subkey_user, &value_name) {
+        if Self::check_reg_key(HKEY_CURRENT_USER as _, &subkey_user, &value_name) {
             return true;
         }
         false

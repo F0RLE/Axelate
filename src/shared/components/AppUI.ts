@@ -498,7 +498,12 @@ export class AppUI {
                 this.openAppSelection(category, allApps);
             } else {
                 const g = globalThis as TGlobalWin;
-                this.showToast(typeof g.t === 'function' ? g.t('ui.launcher.web.delete_not_available', 'Delete not available') : 'Delete not available', 'warning');
+                this.showToast(
+                    typeof g.t === 'function'
+                        ? g.t('ui.launcher.web.delete_not_available', 'Delete not available')
+                        : 'Delete not available',
+                    'warning',
+                );
             }
         } catch (err) {
             logger.error('[AppUI] Delete error:', err);
@@ -528,7 +533,12 @@ export class AppUI {
             const downloadUrl = app.repoUrl; // Use app.repoUrl for download
             if (downloadUrl === undefined || downloadUrl === '') {
                 const g = globalThis as TGlobalWin;
-                this.showToast(typeof g.t === 'function' ? g.t('ui.launcher.web.download_url_empty', 'Download URL is empty') : 'Download URL is empty', 'warning');
+                this.showToast(
+                    typeof g.t === 'function'
+                        ? g.t('ui.launcher.web.download_url_empty', 'Download URL is empty')
+                        : 'Download URL is empty',
+                    'warning',
+                );
                 return;
             }
             if (typeof win.downloadModule === 'function') {
@@ -735,7 +745,13 @@ export class AppUI {
 
     private _onDownloadSuccess(actionBtn: HTMLElement, app: IApp): void {
         const win = globalThis as TGlobalWin;
-        if (typeof win.showToast === 'function') win.showToast(typeof win.t === 'function' ? win.t('ui.launcher.web.module_downloaded', 'Module downloaded!') : 'Module downloaded!', 'success');
+        if (typeof win.showToast === 'function')
+            win.showToast(
+                typeof win.t === 'function'
+                    ? win.t('ui.launcher.web.module_downloaded', 'Module downloaded!')
+                    : 'Module downloaded!',
+                'success',
+            );
         app.installed = true;
 
         let card = actionBtn.closest('.model-card-premium');
@@ -749,7 +765,12 @@ export class AppUI {
     private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown): void {
         logger.error('Download error:', err);
         const win = globalThis as TGlobalWin;
-        win.showToast(typeof win.t === 'function' ? win.t('ui.launcher.web.download_error', 'Download failed') : 'Download failed', 'error');
+        win.showToast(
+            typeof win.t === 'function'
+                ? win.t('ui.launcher.web.download_error', 'Download failed')
+                : 'Download failed',
+            'error',
+        );
         this._setDownloadReady(actionBtn);
     }
 
@@ -814,8 +835,6 @@ export class AppUI {
         card.appendChild(closeBtn);
     }
 
-
-
     // --- Prompt Tab Switching (for chat/settings) ---
     public showPromptTab(tab: string, btn?: HTMLElement): void {
         document.querySelectorAll('.prompt-tab-content').forEach((t) => {
@@ -838,7 +857,9 @@ export class AppUI {
     private _getAppName(app: IApp): string {
         if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
             const win = globalThis as TGlobalWin;
-            return typeof win.t === 'function' ? win.t('ui.launcher.web.app_title', 'Axelate') : 'Axelate';
+            return typeof win.t === 'function'
+                ? win.t('ui.launcher.web.app_title', 'Axelate')
+                : 'Axelate';
         }
         return app.name ?? 'Unknown';
     }
@@ -925,10 +946,13 @@ export class AppUI {
     private _populateAppList(listEl: HTMLElement, apps: IApp[], category: string): void {
         const win = globalThis as TGlobalWin;
         const catalog = win.APP_DATA;
-        
+
         logger.info(`[AppUI] _populateAppList called for ${category}.`);
         logger.info(`[AppUI] Apps received (arg): ${String(apps.length)}`);
-        logger.info(`[AppUI] Apps in global APP_DATA.${category}: ${String((catalog as any)?.[category]?.length ?? 'missing')}`);
+        const catalogByCategory = catalog as unknown as Partial<Record<string, IApp[]>>;
+        logger.info(
+            `[AppUI] Apps in global APP_DATA.${category}: ${String(catalogByCategory[category]?.length ?? 'missing')}`,
+        );
 
         listEl.innerHTML = '';
 
@@ -943,7 +967,7 @@ export class AppUI {
 
         const sortedApps = this._getSortedApps(apps);
         logger.info(`[AppUI] Rendering ${String(sortedApps.length)} sorted apps.`);
-        
+
         for (const app of sortedApps) {
             const card = this._createAppCard(app, category);
             card.dataset['category'] = category; // Diagnostic
@@ -960,7 +984,7 @@ export class AppUI {
     private _updateCardIcon(card: HTMLElement, app: IApp): void {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
         if (iconWrapper === null) return;
-        
+
         iconWrapper.innerHTML = DOMPurify.sanitize(
             `<div>${app.icon ?? '📦'}</div>`,
             this._purifyConfig,
@@ -973,7 +997,10 @@ export class AppUI {
 
         if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
             const win = globalThis as TGlobalWin;
-            title.textContent = typeof win.t === 'function' ? win.t('ui.launcher.web.app_title', 'Axelate') : 'Axelate';
+            title.textContent =
+                typeof win.t === 'function'
+                    ? win.t('ui.launcher.web.app_title', 'Axelate')
+                    : 'Axelate';
             delete title.dataset['i18n'];
             return;
         }
@@ -981,8 +1008,11 @@ export class AppUI {
         let titleText = app.name ?? '';
         const win = globalThis as TGlobalWin;
         if (typeof win.t === 'function' && (app.nameKey ?? '') !== '') {
-            title.dataset['i18n'] = app.nameKey;
-            titleText = win.t(app.nameKey!, titleText);
+            const nameKey = app.nameKey;
+            if (nameKey) {
+                title.dataset['i18n'] = nameKey;
+                titleText = win.t(nameKey, titleText);
+            }
         } else {
             delete title.dataset['i18n'];
         }
@@ -996,9 +1026,12 @@ export class AppUI {
         let descText = app.desc ?? '';
         const win = globalThis as TGlobalWin;
         if (typeof win.t === 'function' && (app.descKey ?? '') !== '') {
-            desc.dataset['i18n'] = app.descKey!;
-            const translated = win.t(app.descKey!, descText);
-            descText = translated || descText;
+            const descKey = app.descKey;
+            if (descKey) {
+                desc.dataset['i18n'] = descKey;
+                const translated = win.t(descKey, descText);
+                descText = translated || descText;
+            }
         } else {
             delete desc.dataset['i18n'];
         }

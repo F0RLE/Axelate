@@ -4,7 +4,7 @@ import type { ISystemStats } from '../types/monitoringTypes';
 
 export class MonitoringUI extends BaseComponent {
     private readonly _boundUpdateUI = this.updateUI.bind(this);
-    
+
     // Cache for numerical state to avoid string parsing in animations
     private readonly _lastValues = new Map<HTMLElement, number>();
     private readonly _activeTweens = new Map<HTMLElement, number>();
@@ -24,7 +24,7 @@ export class MonitoringUI extends BaseComponent {
     protected onDestroy(): void {
         this.service.unsubscribe(this._boundUpdateUI);
         this._lastValues.clear();
-        
+
         // Cancel any active animations
         for (const tweenId of this._activeTweens.values()) {
             cancelAnimationFrame(tweenId);
@@ -39,7 +39,6 @@ export class MonitoringUI extends BaseComponent {
         this._updateRAM(stats);
         this._updateGPU(stats);
     }
-
 
     private _updateNetwork(stats: ISystemStats) {
         if (!this.isVisible('network-status')) return;
@@ -56,10 +55,10 @@ export class MonitoringUI extends BaseComponent {
             let compactUnit = unit;
             if (unit === 'MB/s') compactUnit = 'M/s';
             else if (unit === 'GB/s') compactUnit = 'G/s';
-            
+
             this._setValueWithSecondary(networkStatusEl, `↓${val1}·↑${val2}`, compactUnit);
         }
-        
+
         if (networkProgressEl) {
             const netPercent = Math.min(100, (netPeak / 10) * 100);
             networkProgressEl.style.width = `${Math.max(0, netPercent).toString()}%`;
@@ -86,7 +85,7 @@ export class MonitoringUI extends BaseComponent {
             this._setValueWithSecondary(diskUsageEl, `R${val1}·W${val2}`, compactUnit);
             diskUsageEl.title = `Usage: ${stats.disk.utilization.toFixed(1)}%`;
         }
-        
+
         if (diskProgressEl) {
             const activity = stats.disk.activityPercent;
             diskProgressEl.style.width = `${Math.max(0, Math.min(100, activity)).toString()}%`;
@@ -107,7 +106,10 @@ export class MonitoringUI extends BaseComponent {
         }
 
         if (this._activeTweens.has(targetNode)) {
-            cancelAnimationFrame(this._activeTweens.get(targetNode)!);
+            const frameId = this._activeTweens.get(targetNode);
+            if (frameId !== undefined) {
+                cancelAnimationFrame(frameId);
+            }
         }
 
         const duration = 400; // Snapper animation (400ms)
@@ -151,7 +153,11 @@ export class MonitoringUI extends BaseComponent {
         const ramProgressEl = this.getElement('ram-progress');
 
         if (ramPercentEl) {
-            this._setValueWithSecondary(ramPercentEl, stats.ram.usedGb.toFixed(1), `/${stats.ram.totalGb.toFixed(0)}G`);
+            this._setValueWithSecondary(
+                ramPercentEl,
+                stats.ram.usedGb.toFixed(1),
+                `/${stats.ram.totalGb.toFixed(0)}G`,
+            );
             this._animateMainValue(ramPercentEl, stats.ram.usedGb, 1);
         }
         if (ramProgressEl) {
@@ -184,7 +190,7 @@ export class MonitoringUI extends BaseComponent {
     private _setValueWithSecondary(el: HTMLElement, primaryText: string, secondaryText: string) {
         let main = el.querySelector('.main-val');
         if (!(main instanceof HTMLElement)) {
-            el.innerHTML = ''; 
+            el.innerHTML = '';
             main = document.createElement('span');
             main.className = 'main-val';
             el.appendChild(main);

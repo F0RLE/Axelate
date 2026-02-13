@@ -76,7 +76,8 @@ export class WindowService {
             try {
                 // Use pre-loaded config or fetch it
                 this._config =
-                    initialConfig ?? (await this._bridge.invoke<IWindowConfig>('get_window_config'));
+                    initialConfig ??
+                    (await this._bridge.invoke<IWindowConfig>('get_window_config'));
 
                 // Update breakpoints from backend (placeholder/not used in UI yet)
                 logger.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);

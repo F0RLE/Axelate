@@ -4,27 +4,27 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath, URL } from 'node:url';
 import pkg from './package.json';
 
+const pruneFontsPlugin = {
+    name: 'prune-fonts',
+    enforce: 'post' as const,
+    generateBundle(_outputOptions: unknown, bundle: Record<string, any>) {
+        for (const fileName of Object.keys(bundle)) {
+            const chunk = bundle[fileName];
+            if (!chunk || chunk.type !== 'asset') continue;
+
+            if (
+                (fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||
+                fileName.endsWith('.woff')
+            ) {
+                delete bundle[fileName];
+            }
+        }
+    },
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [
-        {
-            name: 'prune-fonts',
-            enforce: 'post',
-            generateBundle(_, bundle) {
-                for (const fileName of Object.keys(bundle)) {
-                    // Keep only woff2 for performance
-                    // EXCEPT Cubic_11.ttf as it's the primary source for that font
-                    if (
-                        bundle[fileName]?.type === 'asset' &&
-                        ((fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||
-                            fileName.endsWith('.woff'))
-                    ) {
-                        delete bundle[fileName];
-                    }
-                }
-            },
-        },
-    ],
+    plugins: [pruneFontsPlugin],
 
     // Required for Tauri (tauri:// protocol)
     base: './',

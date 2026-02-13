@@ -78,7 +78,7 @@ impl CustomModelManager {
             created_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_secs() as f64,
+                .as_secs_f64(),
         };
 
         config.models.push(new_model);
@@ -119,6 +119,7 @@ pub fn add_custom_model(
 #[command]
 #[specta::specta]
 /// Removes a custom AI model by ID
+#[allow(clippy::needless_pass_by_value)]
 pub fn remove_custom_model(id: String) -> Result<(), AppError> {
     CustomModelManager::remove(&id)
 }

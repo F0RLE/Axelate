@@ -11,6 +11,7 @@ import type { Core } from '@/app/init';
 import { getApiModelId, getMostPowerfulModel, mapProviderToBackend } from '../utils/catalogHelpers';
 import type { StateService } from '@/shared/services/StateService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import { logger } from '@/shared/services/LoggerService';
 
 export type { MessageSource, MessageHandler, ChatContentPart, ChatContent } from '../types/aiTypes';
 export type IChunkHandler = (chunk: string) => void;

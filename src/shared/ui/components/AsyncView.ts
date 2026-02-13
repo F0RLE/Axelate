@@ -38,7 +38,7 @@ export abstract class AsyncView<T> extends BaseComponent {
      * Implementation-specific data fetching.
      */
     protected abstract fetchData(): Promise<T>;
-    
+
     /**
      * Renders the current state into the container.
      */

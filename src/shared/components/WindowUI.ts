@@ -366,7 +366,7 @@ export class WindowUI {
         const labelKey = isMaximized ? 'ui.launcher.button.restore' : 'ui.launcher.button.maximize';
         const fallback = isMaximized ? 'Restore' : 'Maximize';
         const label = typeof g.t === 'function' ? g.t(labelKey, fallback) : fallback;
-        
+
         btn.setAttribute('aria-label', label);
         btn.setAttribute('title', label);
         btn.dataset['i18nAriaLabel'] = labelKey;
@@ -452,24 +452,29 @@ export class WindowUI {
         const minWidth = config?.thresholds.warningWidth ?? 0;
         const minHeight = config?.thresholds.warningHeight ?? 0;
 
-        if (width < minWidth || height < minHeight) {
-            if (this._modulesWarning) {
+        const showWarning = width < minWidth || height < minHeight;
+
+        const modulesPage = document.getElementById('page-modules');
+        const settingsPage = document.getElementById('page-settings');
+
+        const isModulesActive = modulesPage?.classList.contains('active') === true;
+        const isSettingsActive = settingsPage?.classList.contains('active') === true;
+
+        if (this._modulesWarning) {
+            if (showWarning && isModulesActive) {
                 this._modulesWarning.classList.remove('hidden');
                 this._modulesWarning.classList.add('flex-important');
-            }
-            if (
-                this._settingsWarning &&
-                document.getElementById('page-settings')?.classList.contains('hidden') === false
-            ) {
-                this._settingsWarning.classList.remove('hidden');
-                this._settingsWarning.classList.add('flex-important');
-            }
-        } else {
-            if (this._modulesWarning) {
+            } else {
                 this._modulesWarning.classList.remove('flex-important');
                 this._modulesWarning.classList.add('hidden');
             }
-            if (this._settingsWarning) {
+        }
+
+        if (this._settingsWarning) {
+            if (showWarning && isSettingsActive) {
+                this._settingsWarning.classList.remove('hidden');
+                this._settingsWarning.classList.add('flex-important');
+            } else {
                 this._settingsWarning.classList.remove('flex-important');
                 this._settingsWarning.classList.add('hidden');
             }
@@ -486,7 +491,7 @@ export class WindowUI {
             this._splash.classList.add('fade-out');
 
             if (this._splashTimeout) clearTimeout(this._splashTimeout);
-            
+
             // Wait for CSS transition (600ms) + buffer
             this._splashTimeout = setTimeout(() => {
                 if (this._splash) {
@@ -497,7 +502,6 @@ export class WindowUI {
                 this._splashTimeout = null;
             }, 650);
         }
-
 
         ['sidebar', 'app-header', 'main-area'].forEach((id) => {
             const el = document.getElementById(id);

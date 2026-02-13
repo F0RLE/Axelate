@@ -14,7 +14,7 @@ impl FileConfigRepository {
         Self
     }
 
-    fn get_defaults_path(&self) -> Result<PathBuf, AppError> {
+    fn get_defaults_path() -> Result<PathBuf, AppError> {
         let res_dir = &*crate::utils::paths::RESOURCES_DIR;
 
         let candidates = [
@@ -38,7 +38,7 @@ impl FileConfigRepository {
 
 impl ConfigRepository for FileConfigRepository {
     fn load_defaults(&self) -> Result<AppConfig, AppError> {
-        let content = self.get_defaults_path().map_or_else(
+        let content = Self::get_defaults_path().map_or_else(
             |_| {
                 log::warn!("Defaults not found on disk, using embedded override.");
                 include_str!("../../../resources/config/defaults.json").to_string()

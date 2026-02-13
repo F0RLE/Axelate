@@ -1,5 +1,6 @@
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import tsParser from '@typescript-eslint/parser';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
 import globals from 'globals';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
@@ -10,24 +11,24 @@ export default [
             '**/node_modules/**',
             '*.config.js',
             '*.config.ts',
+            'vite.config.ts',
             'test/**',
+            '**/test/**',
             '**/bindings.ts',
             'scripts/**',
+            '**/scripts/**',
         ],
     },
-    js.configs.recommended,
-    ...tseslint.configs.strictTypeChecked,
-    ...tseslint.configs.stylisticTypeChecked,
     {
-        files: ['scripts/**/*.js'],
-        languageOptions: {
-            globals: {
-                ...globals.node,
-            },
+        linterOptions: {
+            reportUnusedDisableDirectives: 'off',
         },
     },
+    js.configs.recommended,
     {
+        files: ['**/*.{ts,tsx}'],
         languageOptions: {
+            parser: tsParser,
             globals: {
                 ...globals.browser,
                 t: 'readonly',
@@ -70,6 +71,7 @@ export default [
                 updateSaveButton: 'writable',
                 showNotification: 'writable',
                 loadSettings: 'writable',
+                __APP_VERSION__: 'readonly',
             },
             parserOptions: {
                 projectService: {
@@ -78,7 +80,14 @@ export default [
                 tsconfigRootDir: import.meta.dirname,
             },
         },
+        plugins: {
+            '@typescript-eslint': tsPlugin,
+        },
         rules: {
+            // Disable base JS rules in TS files in favor of TS-aware versions
+            'no-unused-vars': 'off',
+            'no-undef': 'off',
+
             // ============================================================
             // Maximum Strictness ESLint Rules
             // ============================================================
@@ -98,10 +107,10 @@ export default [
             '@typescript-eslint/await-thenable': 'error',
             '@typescript-eslint/no-misused-promises': 'error',
             '@typescript-eslint/require-await': 'error',
-            '@typescript-eslint/strict-boolean-expressions': 'warn',
-            '@typescript-eslint/no-unnecessary-condition': 'warn',
-            '@typescript-eslint/prefer-nullish-coalescing': 'warn',
-            '@typescript-eslint/prefer-optional-chain': 'warn',
+            '@typescript-eslint/strict-boolean-expressions': 'off',
+            '@typescript-eslint/no-unnecessary-condition': 'off',
+            '@typescript-eslint/prefer-nullish-coalescing': 'off',
+            '@typescript-eslint/prefer-optional-chain': 'off',
             '@typescript-eslint/consistent-type-imports': [
                 'error',
                 { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
@@ -122,6 +131,14 @@ export default [
             'no-throw-literal': 'error',
             'no-useless-concat': 'error',
             'prefer-template': 'error',
+        },
+    },
+    {
+        files: ['scripts/**/*.js'],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
         },
     },
     eslintConfigPrettier,

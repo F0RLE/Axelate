@@ -55,10 +55,10 @@ impl ProcessManager {
 
     /// Reads a PID from a file if it exists and is valid
     fn read_pid_file(path: &Path) -> Option<usize> {
-        if path.exists() {
-            if let Ok(pid_str) = fs::read_to_string(path) {
-                return pid_str.trim().parse::<usize>().ok();
-            }
+        if path.exists()
+            && let Ok(pid_str) = fs::read_to_string(path)
+        {
+            return pid_str.trim().parse::<usize>().ok();
         }
         None
     }
@@ -248,7 +248,7 @@ impl ModuleController {
     fn execute(&self, action: ModuleAction) -> Result<ControlResponse, AppError> {
         match action {
             ModuleAction::Start => self.start(),
-            ModuleAction::Stop => self.stop(),
+            ModuleAction::Stop => Ok(self.stop()),
             ModuleAction::Restart => self.restart(),
             ModuleAction::Install => self.run_lifecycle_script("init"),
             ModuleAction::Update => self.run_lifecycle_script("update"), // Assuming 'update' script might exist or just generic script execution
@@ -286,7 +286,7 @@ impl ModuleController {
         })
     }
 
-    fn stop(&self) -> Result<ControlResponse, AppError> {
+    fn stop(&self) -> ControlResponse {
         let pid_file = self.module_path.join("module.pid");
         let message = if let Some(pid) = ProcessManager::read_pid_file(&pid_file) {
             let msg = match ProcessManager::kill_process(pid) {
@@ -305,15 +305,15 @@ impl ModuleController {
         // 2. Run stop hook
         let _ = self.run_lifecycle_script_silent("stop");
 
-        Ok(ControlResponse {
+        ControlResponse {
             success: true,
             message,
             status: Some("stopped".to_string()),
-        })
+        }
     }
 
     fn restart(&self) -> Result<ControlResponse, AppError> {
-        let _ = self.stop()?;
+        let _ = self.stop();
         // Short delay could be added here if needed
         self.start()
     }
