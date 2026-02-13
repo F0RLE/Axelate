@@ -27,12 +27,8 @@ export class NavigationService {
     }
 
     /**
-     * Refresh current page from loaded uiState
-     * Called after uiState.load() completes
-     */
-    /**
-     * Refresh current page from loaded uiState
-     * Called after uiState.load() completes
+     * Refresh current page from loaded uiState.
+     * Called after uiState.load() completes.
      */
     public refreshFromUiState(): void {
         const win = globalThis as TGlobalWin;
@@ -51,9 +47,6 @@ export class NavigationService {
      * Set the current page.
      */
     public setCurrentPage(pageId: string): void {
-        const win = globalThis as TGlobalWin;
-        win.navigationService = this;
-        win.navigate = this.navigate.bind(this);
         this.navigate(pageId);
     }
 

@@ -28,10 +28,13 @@
 │   │   ├── 📝 CODING_STANDARDS.md
 │   │   ├── 📝 FileTree.md
 │   │   ├── 📝 architecture.md
-│   │   └── 📝 getting-started.md
+│   │   ├── 📝 getting-started.md
+│   │   └── 📝 solid_migration_roadmap.md
 │   ├── 📁 ru
 │   │   └── 📝 VISION.md
 │   └── 📁 zn
+├── 📁 scripts
+│   └── 📄 scaffold-ui.js
 ├── 📁 src
 │   ├── 📁 app
 │   │   ├── 📄 bridge.ts
@@ -89,6 +92,12 @@
 │   │   │   ├── 📁 ui
 │   │   │   │   └── 📄 DownloadUI.ts
 │   │   │   └── 📄 index.ts
+│   │   ├── 📁 finalcheck
+│   │   │   ├── 📁 services
+│   │   │   ├── 📁 types
+│   │   │   ├── 📁 ui
+│   │   │   │   └── 📄 FinalCheckUI.ts
+│   │   │   └── 📄 index.ts
 │   │   ├── 📁 monitoring
 │   │   │   ├── 📁 services
 │   │   │   │   └── 📄 MonitoringService.ts
@@ -97,21 +106,33 @@
 │   │   │   ├── 📁 ui
 │   │   │   │   └── 📄 MonitoringUI.ts
 │   │   │   └── 📄 index.ts
-│   │   └── 📁 settings
+│   │   ├── 📁 settings
+│   │   │   ├── 📁 services
+│   │   │   │   └── 📄 SettingsService.ts
+│   │   │   ├── 📁 ui
+│   │   │   │   ├── 📁 components
+│   │   │   │   │   ├── 📄 CardResizer.ts
+│   │   │   │   │   ├── 📄 FieldFactory.ts
+│   │   │   │   │   ├── 📄 ISettingField.ts
+│   │   │   │   │   ├── 📄 NumberField.ts
+│   │   │   │   │   ├── 📄 SelectField.ts
+│   │   │   │   │   ├── 📄 TextField.ts
+│   │   │   │   │   └── 📄 ToggleField.ts
+│   │   │   │   ├── 📄 GeneralSettingsRenderer.ts
+│   │   │   │   ├── 📄 SettingsContext.ts
+│   │   │   │   └── 📄 SettingsUI.ts
+│   │   │   └── 📄 index.ts
+│   │   ├── 📁 testfeature
+│   │   │   ├── 📁 services
+│   │   │   ├── 📁 types
+│   │   │   ├── 📁 ui
+│   │   │   │   └── 📄 TestFeatureUI.ts
+│   │   │   └── 📄 index.ts
+│   │   └── 📁 user-preferences
 │   │       ├── 📁 services
-│   │       │   └── 📄 SettingsService.ts
+│   │       ├── 📁 types
 │   │       ├── 📁 ui
-│   │       │   ├── 📁 components
-│   │       │   │   ├── 📄 CardResizer.ts
-│   │       │   │   ├── 📄 FieldFactory.ts
-│   │       │   │   ├── 📄 ISettingField.ts
-│   │       │   │   ├── 📄 NumberField.ts
-│   │       │   │   ├── 📄 SelectField.ts
-│   │       │   │   ├── 📄 TextField.ts
-│   │       │   │   └── 📄 ToggleField.ts
-│   │       │   ├── 📄 GeneralSettingsRenderer.ts
-│   │       │   ├── 📄 SettingsContext.ts
-│   │       │   └── 📄 SettingsUI.ts
+│   │       │   └── 📄 UserPreferencesUI.ts
 │   │       └── 📄 index.ts
 │   ├── 📁 infrastructure
 │   │   ├── 📁 i18n
@@ -126,6 +147,12 @@
 │   │   └── 📁 tauri
 │   │       ├── 📄 TauriProvider.test.ts
 │   │       └── 📄 TauriProvider.ts
+│   ├── 📁 public
+│   │   └── 📁 templates
+│   │       ├── 📁 components
+│   │       │   └── 🌐 sidebar.html
+│   │       └── 📁 pages
+│   │           └── 🌐 settings.html
 │   ├── 📁 scripts
 │   │   ├── 📄 analyze-lint-v2.cjs
 │   │   ├── 📄 bump-version.js
@@ -136,6 +163,8 @@
 │   │   │   ├── 📄 Particles.ts
 │   │   │   ├── 📄 SidebarUI.ts
 │   │   │   └── 📄 WindowUI.ts
+│   │   ├── 📁 config
+│   │   │   └── 📄 catalog_fallback.ts
 │   │   ├── 📁 services
 │   │   │   ├── 📄 CatalogService.ts
 │   │   │   ├── 📄 ErrorHandler.test.ts
@@ -152,10 +181,17 @@
 │   │   │   ├── 📄 WindowService.ts
 │   │   │   └── 📄 templateLoader.test.ts
 │   │   ├── 📁 types
+│   │   │   ├── 📄 IBridge.ts
 │   │   │   ├── 📄 bindings.ts
 │   │   │   ├── 📄 coreTypes.ts
 │   │   │   ├── 📄 global.d.ts
 │   │   │   └── 📄 global_bridge_types.ts
+│   │   ├── 📁 ui
+│   │   │   ├── 📁 components
+│   │   │   │   ├── 📄 ActionButton.ts
+│   │   │   │   └── 📄 AsyncView.ts
+│   │   │   ├── 📄 BaseComponent.ts
+│   │   │   └── 📄 renderSimpleFeature.ts
 │   │   └── 📁 utils
 │   ├── 📁 styles
 │   │   ├── 📁 base
@@ -175,8 +211,11 @@
 │   │   │   ├── 🎨 dashboard.css
 │   │   │   ├── 🎨 debug.css
 │   │   │   ├── 🎨 downloads.css
+│   │   │   ├── 🎨 finalcheck.css
 │   │   │   ├── 🎨 monitoring.css
-│   │   │   └── 🎨 settings.css
+│   │   │   ├── 🎨 settings.css
+│   │   │   ├── 🎨 testfeature.css
+│   │   │   └── 🎨 user-preferences.css
 │   │   ├── 📁 layouts
 │   │   │   ├── 🎨 controls.css
 │   │   │   ├── 🎨 main-area.css
@@ -263,10 +302,15 @@
 │   │   │   │   ├── 🦀 health.rs
 │   │   │   │   ├── 🦀 mod.rs
 │   │   │   │   └── 🦀 system_monitor.rs
+│   │   │   ├── 📁 system
+│   │   │   │   ├── 🦀 config_repository.rs
+│   │   │   │   ├── 🦀 config_service.rs
+│   │   │   │   ├── 🦀 mod.rs
+│   │   │   │   └── 🦀 startup.rs
 │   │   │   └── 🦀 mod.rs
 │   │   ├── 📁 infrastructure
 │   │   │   ├── 📁 config
-│   │   │   │   ├── 🦀 config_service.rs
+│   │   │   │   ├── 🦀 config_repository.rs
 │   │   │   │   ├── 🦀 mod.rs
 │   │   │   │   ├── 🦀 settings.rs
 │   │   │   │   ├── 🦀 theme.rs
@@ -285,6 +329,9 @@
 │   │   │   ├── 📁 logging
 │   │   │   │   ├── 🦀 logger.rs
 │   │   │   │   └── 🦀 mod.rs
+│   │   │   ├── 📁 system
+│   │   │   │   ├── 🦀 mod.rs
+│   │   │   │   └── 🦀 startup.rs
 │   │   │   └── 🦀 mod.rs
 │   │   ├── 📁 models
 │   │   │   ├── 🦀 config.rs
@@ -301,7 +348,6 @@
 │   │   │   ├── 🦀 mod.rs
 │   │   │   ├── 🦀 paths.rs
 │   │   │   ├── 🦀 process.rs
-│   │   │   ├── 🦀 setup.rs
 │   │   │   └── 🦀 windows.rs
 │   │   ├── 🦀 errors.rs
 │   │   ├── 🦀 lib.rs

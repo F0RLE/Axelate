@@ -107,15 +107,20 @@ export default [
             '@typescript-eslint/await-thenable': 'error',
             '@typescript-eslint/no-misused-promises': 'error',
             '@typescript-eslint/require-await': 'error',
-            '@typescript-eslint/strict-boolean-expressions': 'off',
-            '@typescript-eslint/no-unnecessary-condition': 'off',
-            '@typescript-eslint/prefer-nullish-coalescing': 'off',
-            '@typescript-eslint/prefer-optional-chain': 'off',
+            '@typescript-eslint/strict-boolean-expressions': 'error',
+            '@typescript-eslint/no-unnecessary-condition': 'error',
+            '@typescript-eslint/prefer-nullish-coalescing': 'error',
+            '@typescript-eslint/prefer-optional-chain': 'error',
             '@typescript-eslint/consistent-type-imports': [
                 'error',
                 { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
             ],
             '@typescript-eslint/consistent-type-exports': 'error',
+
+            // Safety: prevent `any` leaks and implicit coercions
+            '@typescript-eslint/no-unsafe-assignment': 'error',
+            '@typescript-eslint/no-unsafe-return': 'error',
+            '@typescript-eslint/restrict-template-expressions': 'error',
 
             // General code quality (Strictest)
             'no-console': 'warn',

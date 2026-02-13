@@ -72,6 +72,66 @@ use tauri_specta::{Builder, collect_commands};
 
 static IS_QUITTING: AtomicBool = AtomicBool::new(false);
 
+/// Shows, unminimizes, and focuses an existing window.
+fn show_and_focus_window(window: &tauri::WebviewWindow) {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
+/// Configures the WebView2 user data folder to isolate cache.
+#[allow(unsafe_code)]
+fn setup_webview2_cache() {
+    if let Ok(app_data) = std::env::var("APPDATA") {
+        let mut path = std::path::PathBuf::from(app_data);
+        path.push("AxelateData");
+        path.push("Cache");
+        path.push("com.axelate");
+        if let Err(e) = std::fs::create_dir_all(&path) {
+            log::error!("Failed to create custom data directory: {e}");
+        } else if !path.as_os_str().is_empty() {
+            unsafe {
+                std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
+            }
+        }
+    }
+}
+
+/// Registers the Ctrl+Space global shortcut for window toggling.
+#[cfg(desktop)]
+fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
+
+    app.handle().plugin(
+        tauri_plugin_global_shortcut::Builder::new()
+            .with_shortcut("Ctrl+Space")?
+            .with_handler(move |app, shortcut, event| {
+                if event.state == ShortcutState::Pressed
+                    && shortcut.matches(Modifiers::CONTROL, Code::Space)
+                {
+                    if let Some(window) = app.get_webview_window("main") {
+                        log::info!("Ctrl+Space pressed. Toggling existing window.");
+                        let is_visible = window.is_visible().unwrap_or(false);
+                        let is_focused = window.is_focused().unwrap_or(false);
+
+                        if is_visible && is_focused {
+                            let _ = window.minimize();
+                            system_monitor::set_paused(true);
+                            crate::utils::memory::trim_memory();
+                        } else {
+                            show_and_focus_window(&window);
+                            system_monitor::set_paused(false);
+                        }
+                    } else {
+                        log::debug!("Ctrl+Space pressed but WebView is dead. Ignoring.");
+                    }
+                }
+            })
+            .build(),
+    )?;
+    Ok(())
+}
+
 /// Orchestrates the creation or restoration of the primary application window.
 ///
 /// Retrieves serialized window state to preserve user context across sessions.
@@ -228,43 +288,23 @@ pub fn run() {
     // Initialize logging
     logger::init_global_logger().ok();
 
-    // Set WebView2 user data folder to AppData\Roaming\AxelateData\Cache
-    if let Ok(app_data) = std::env::var("APPDATA") {
-        let mut path = std::path::PathBuf::from(app_data);
-        path.push("AxelateData");
-        path.push("Cache");
-        path.push("com.axelate");
-        if let Err(e) = std::fs::create_dir_all(&path) {
-            log::error!("Failed to create custom data directory: {e}");
-        } else if !path.as_os_str().is_empty() {
-            unsafe {
-                std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
-            }
-        }
-    }
+    setup_webview2_cache();
     let tauri_builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Check if window exists (might be destroyed for optimization)
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
+                show_and_focus_window(&window);
                 #[cfg(target_os = "windows")]
                 {
-                    // Force window to top to steal focus from the new instance
                     let _ = window.set_always_on_top(true);
-                    std::thread::sleep(std::time::Duration::from_millis(100)); // Minimal delay to ensure OS registers layer change
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                     let _ = window.set_always_on_top(false);
                 }
-
                 system_monitor::set_paused(false);
             } else {
-                // If window doesn't exist (frontend destroyed), create it
-                // This matches the behavior of clicking "Open" in the tray menu
                 create_main_window(app);
             }
             log::info!("Single instance lock: Second instance launch attempt detected.");
@@ -286,52 +326,13 @@ pub fn run() {
         .invoke_handler(builder.invoke_handler())
         .setup(|app| {
             crate::utils::paths::init_filesystem().ok();
-            crate::utils::process::init_process_group();
 
             // Start system monitoring with events
             // Polling reduced to 2000ms (2s) to save CPU
             system_monitor::start_monitoring(app.handle().clone(), 2000);
 
-            // Register Global Shortcut (Modified to recreate window)
             #[cfg(desktop)]
-            {
-                use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
-
-                app.handle().plugin(
-                    tauri_plugin_global_shortcut::Builder::new()
-                        .with_shortcut("Ctrl+Space")?
-                        .with_handler(move |app, shortcut, event| {
-                            if event.state == ShortcutState::Pressed
-                                && shortcut.matches(Modifiers::CONTROL, Code::Space)
-                            {
-                                // User Request: Shortcut only works if WebView is alive.
-                                // Do NOT create window if missing.
-                                if let Some(window) = app.get_webview_window("main") {
-                                    log::info!("Ctrl+Space pressed. Toggling existing window.");
-                                    // If visible and focused -> minimize
-                                    let is_visible = window.is_visible().unwrap_or(false);
-                                    let is_focused = window.is_focused().unwrap_or(false);
-
-                                    if is_visible && is_focused {
-                                        let _ = window.minimize();
-                                        system_monitor::set_paused(true);
-                                        crate::utils::memory::trim_memory();
-                                    } else {
-                                        let _ = window.unminimize();
-                                        let _ = window.show();
-                                        let _ = window.set_focus();
-                                        system_monitor::set_paused(false);
-                                    }
-                                } else {
-                                    log::debug!(
-                                        "Ctrl+Space pressed but WebView is dead. Ignoring."
-                                    );
-                                }
-                            }
-                        })
-                        .build(),
-                )?;
-            }
+            setup_global_shortcut(app)?;
 
             // Start HTTP Server
             server::start_server(app.handle().clone());
@@ -380,8 +381,8 @@ pub fn run() {
 /// Setup system tray icon with menu
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Create menu items
-    let show_item = MenuItem::with_id(app, "show", "Открыть", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "Open", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
     // Create menu
     let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
@@ -402,10 +403,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                 "show" => {
                     // Check if window exists first to determine "Show" strategy
                     if let Some(window) = app.get_webview_window("main") {
-                        // Exists: Safe to show immediately
-                        let _ = window.unminimize();
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                        show_and_focus_window(&window);
                         system_monitor::set_paused(false);
                     } else {
                         // Does not exist: Create it.
@@ -427,9 +425,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
             if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.show();
-                    let _ = window.set_focus();
+                    show_and_focus_window(&window);
                     system_monitor::set_paused(false);
                 } else {
                     create_main_window(app);

@@ -48,9 +48,7 @@ pub fn save_zoom_level(zoom: f64) -> Result<(), AppError> {
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned WebviewWindow
 pub fn set_webview_zoom(window: tauri::WebviewWindow, zoom: f64) -> Result<(), AppError> {
-    window
-        .set_zoom(zoom)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    window.set_zoom(zoom)?;
 
     // Save to UI State (Global and Per-Resolution)
     let mut state = ui_state::get_ui_state().unwrap_or_default();

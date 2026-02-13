@@ -17,7 +17,7 @@
 
 ---
 
-## Version 0.1.4 (Active Development)
+## Version 0.1.5 (Active Development)
 
 > **Proprietary Notice**<br>This document contains deep internal details of the Axelate architecture. Intended for Core Engineers. Unauthorized distribution is prohibited.
 
@@ -27,16 +27,19 @@
 
 ### 1.1 Hybrid Kernel Architecture
 
-Axelate is built as a **Hybrid Kernel** application. 
-*Detailed structural rules are defined in [CODING_STANDARDS.md](CODING_STANDARDS.md).*
+Axelate is built as a **Hybrid Kernel** application.
+*Full engineering standards, compiler configs, and dependency rules: [CODING_STANDARDS.md](CODING_STANDARDS.md).*
 
-* **Kernel (Rust)**: Responsible for direct I/O, encryption, and process management.
-* **Shell (TS)**: Stateless visualization layer. No direct file I/O allowed.
+* **Kernel (Rust)**: Direct I/O, encryption, process management. All business logic lives here.
+* **Shell (TS)**: Stateless visualization layer. No direct file I/O — all data via IPC.
 
 ### 1.2 The "Pass-Through" IPC Pattern
 
-Requests map directly to Rust services without heavy middleware.
-*Implementation patterns: see IPC section in [CODING_STANDARDS.md](CODING_STANDARDS.md).*
+Frontend requests map directly to Rust services via thin Tauri command adapters — no middleware layer.
+
+```
+Frontend → TauriProvider.invoke() → [IPC] → api/ adapter → domain/ service → Result<T>
+```
 
 ---
 
@@ -77,7 +80,6 @@ All commands return `Promise<Result<T, AppError>>`.
 | **modules** | `download_module` | `{id: string, url: string}` | `void` | Triggers event-driven download & extract. |
 | | `start_module` | `{id: string}` | `void` | Spawns process via `ModuleController`. |
 | | `stop_module` | `{id: string}` | `void` | `taskkill /pid` or `SIGTERM`. |
-
 | **secure** | `save_secure_key` | `{service: string, key: string}` | `void` | Encrypts and persists value. |
 | | `get_secure_key` | `{service: string}` | `Option<string>` | Decrypts and returns value. |
 | **ai** | `send_chat_message` | `ChatRequest` | `ChatResponse` | See struct definitions below. |
@@ -91,7 +93,7 @@ All commands return `Promise<Result<T, AppError>>`.
 
 ### 3.2 Event Stream (Backend → Frontend)
 
-Subscribed via `EventBus.ts` (TS) or `app_handle.emit_all` (Rust).
+Subscribed via `TauriProvider.listen<T>()`.
 
 | Topic | Frequency | Payload Structure (TS Interface) |
 | :--- | :--- | :--- |
@@ -100,7 +102,7 @@ Subscribed via `EventBus.ts` (TS) or `app_handle.emit_all` (Rust).
 
 ### 3.3 Data Models (Strict)
 
-**ChatRequest** (`ai_service.rs`)
+**ChatRequest** (`domain/ai/ai_service.rs`)
 ```typescript
 interface ChatRequest {
   provider: string; // 'openai' | 'gemini' | 'gpt' | 'deepseek' | ...
@@ -117,7 +119,7 @@ interface ChatMessage {
 }
 ```
 
-**SystemStats** (`system.rs`)
+**SystemStats** (`domain/monitoring/system_monitor.rs`)
 ```typescript
 interface SystemStats {
   cpu: { percent: number; cores: number; name: string };
@@ -136,46 +138,55 @@ interface SystemStats {
 
 ```text
 Axelate/
-├── src-tauri/                 # Backend (Rust Kernel)
-│   ├── src/
-│   │   ├── commands/          # IPC Command Registry
-│   │   ├── services/          # Core Business Logic
-│   │   └── main.rs            # Entry Point
-├── src/                       # Frontend (Vite + TS Shell)
-│   ├── modules/               # Feature Modules
-│   │   ├── ai/                # AI Bridge & Providers
-│   │   ├── chat/              # Chat Interface
-│   │   ├── core/              # Core Services (EventBus, Boot)
-│   │   ├── dashboard/         # Main UI Dashboard
-│   │   ├── debug/             # Debug Tools
-│   │   ├── downloader/        # Module Downloader UI
-│   │   ├── monitoring/        # System Monitoring UI
-│   │   └── settings/          # App Settings & Configs
-└── docs/                      # Documentation
+├── src/                           # Frontend (Vite + TypeScript)
+│   ├── app/                       # Boot sequence (init, router, events, bridge)
+│   ├── features/                  # Feature modules
+│   │   ├── ai/                    # AI Bridge & providers
+│   │   ├── chat/                  # Chat interface
+│   │   ├── dashboard/             # Main dashboard
+│   │   ├── debug/                 # Debug tools
+│   │   ├── downloads/             # Module downloader UI
+│   │   ├── monitoring/            # System monitoring UI
+│   │   └── settings/              # App settings & configs
+│   ├── shared/                    # Cross-feature services, components, types
+│   ├── infrastructure/            # Technical adapters (tauri/, i18n/, navigation/)
+│   └── styles/                    # CSS (base/, components/, features/, layouts/)
+│
+├── src-tauri/                     # Backend (Rust Kernel)
+│   └── src/
+│       ├── api/                   # Tauri command adapters (thin, no logic)
+│       ├── domain/                # Business logic (ai/, modules/, monitoring/, license/)
+│       ├── infrastructure/        # Implementation (config/, crypto/, http/, logging/)
+│       ├── models/                # Shared data types
+│       ├── utils/                 # Pure helpers (paths, process, memory, windows)
+│       ├── errors.rs              # Centralized error types
+│       └── lib.rs                 # App entry, tray, setup
+│
+└── docs/                          # Documentation (en/, ru/)
 ```
 
 ---
 
-## 5. Low-Level Rust Services (`src-tauri/src/services/`)
+## 5. Backend Services (`src-tauri/src/domain/`)
 
-### 5.1 AI Service (`ai_service.rs`)
+### 5.1 AI Service (`domain/ai/ai_service.rs`)
 
 * **Providers**: OpenAI, Google (Gemini), Anthropic (via OpenRouter/Proxy), DeepSeek, Llama.
 * **Thinking Engines**: Supports 'reasoning_effort' (OpenAI) and 'thinking' (Anthropic/DeepSeek) protocols.
 * **Note**: Frontend `AIBridge.ts` handles prompt construction and stream management.
 * **Security**: Keys are fetched from SecureStorage per-request.
 
-### 5.2 Secure Storage (`secure_storage.rs`)
+### 5.2 Secure Storage (`infrastructure/crypto/secure_storage.rs`)
 
 * **Engine**: AES-256-GCM.
 * **Binding**: Machine-bound via unique Hardware ID.
 
 ### 5.3 System Services
 
-* **ModuleController**: manages isolated processes (`module_controller.rs`).
-* **Downloader**: Async-stream based downloader with hash verification (`downloader.rs`).
-* **SystemMonitor**: Real-time hardware polling (`system_monitor.rs`).
-* **License**: Offline/Online license state validation (`license/`).
+* **ModuleController**: manages isolated processes (`domain/modules/controller.rs`).
+* **Downloader**: Async-stream based downloader with hash verification (`domain/modules/downloader.rs`).
+* **SystemMonitor**: Real-time hardware polling (`domain/monitoring/system_monitor.rs`).
+* **License**: Offline/Online license state validation (`domain/license/`).
 
 ---
 

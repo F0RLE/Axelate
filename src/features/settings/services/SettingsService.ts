@@ -1,5 +1,5 @@
+import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { IApp } from '@/shared/types/coreTypes';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
 import { logger } from '@/shared/services/LoggerService';
 import type { AppSettings } from '@/shared/types/bindings';
@@ -23,10 +23,11 @@ export interface ICustomModel {
 export class SettingsService {
     private settings: ISettings = {} as ISettings;
 
+    constructor(private readonly _tauri: TauriProvider) {}
+
     public async loadSettings(): Promise<ISettings> {
         try {
-            const win = globalThis as TGlobalWin;
-            const data = await win.__TAURI__.core.invoke<ISettings>('get_settings');
+            const data = await this._tauri.invoke<ISettings>('get_settings');
             this.settings = { ...this.settings, ...data };
             return this.settings;
         } catch (e) {
@@ -45,8 +46,7 @@ export class SettingsService {
         // Update local cache immediately
         (this.settings as unknown as Record<string, SettingsValue>)[key] = String(value);
 
-        const win = globalThis as TGlobalWin;
-        await win.__TAURI__.core.invoke('save_setting', { key, value: String(value) });
+        await this._tauri.invoke('save_setting', { key, value: String(value) });
     }
 
     public async updateSettings(updates: Partial<ISettings>): Promise<void> {
@@ -62,8 +62,7 @@ export class SettingsService {
         service: string,
     ): Promise<boolean> {
         try {
-            const win = globalThis as TGlobalWin;
-            await win.__TAURI__.core.invoke('control_service', { action, service });
+            await this._tauri.invoke('control_service', { action, service });
             return true;
         } catch (e) {
             logger.error('[SettingsService] Control service failed:', e);
@@ -73,8 +72,7 @@ export class SettingsService {
 
     public async loadGpuInfo(): Promise<IGpuInfo> {
         try {
-            const win = globalThis as TGlobalWin;
-            return await win.__TAURI__.core.invoke<IGpuInfo>('get_gpu_info');
+            return await this._tauri.invoke<IGpuInfo>('get_gpu_info');
         } catch (e) {
             logger.error('[SettingsService] Failed to load GPU info:', e);
             return { detected: false };
@@ -87,8 +85,7 @@ export class SettingsService {
 
     public async getModules(): Promise<IApp[]> {
         try {
-            const win = globalThis as TGlobalWin;
-            return await win.__TAURI__.core.invoke<IApp[]>('get_modules');
+            return await this._tauri.invoke<IApp[]>('get_modules');
         } catch (e) {
             logger.error('[SettingsService] Failed to get modules:', e);
             return [];
@@ -102,14 +99,12 @@ export class SettingsService {
     public async saveSecureKey(provider: string, key: string): Promise<void> {
         const storageKey = `${provider}_api_key`;
         try {
-            const win = globalThis as TGlobalWin;
-            await win.__TAURI__.core.invoke('save_secure_key', {
+            await this._tauri.invoke('save_secure_key', {
                 service: storageKey,
                 key: key,
             });
         } catch (e) {
             logger.error('[SettingsService] Failed to save secure key:', e);
-            // Insecure fallback removed
         }
     }
 
@@ -119,8 +114,7 @@ export class SettingsService {
     public async getSecureKey(provider: string): Promise<string> {
         const storageKey = `${provider}_api_key`;
         try {
-            const win = globalThis as TGlobalWin;
-            const value = await win.__TAURI__.core.invoke<string | null>('get_secure_key', {
+            const value = await this._tauri.invoke<string | null>('get_secure_key', {
                 service: storageKey,
             });
             return value ?? '';
@@ -135,9 +129,7 @@ export class SettingsService {
      */
     public async validateApiKey(provider: string, key: string): Promise<boolean> {
         try {
-            const win = globalThis as TGlobalWin;
-            // Now using the secure Backend command
-            return await win.__TAURI__.core.invoke<boolean>('validate_api_key', {
+            return await this._tauri.invoke<boolean>('validate_api_key', {
                 provider,
                 key,
             });
@@ -148,9 +140,8 @@ export class SettingsService {
     }
 
     public async addCustomModel(provider: string, id: string, name: string): Promise<void> {
-        const win = globalThis as TGlobalWin;
         try {
-            await win.__TAURI__.core.invoke('add_custom_model', {
+            await this._tauri.invoke('add_custom_model', {
                 providerId: provider,
                 id: id,
                 name: name,
@@ -163,30 +154,11 @@ export class SettingsService {
     }
 
     public async getCustomModels(): Promise<ICustomModel[]> {
-        const win = globalThis as TGlobalWin;
-        if ((win as unknown as Record<string, unknown>)['__TAURI__'] === undefined) {
-            // Web fallback (aggregate all providers? or just return empty for compliance)
-            // returning all local keys
-            let all: ICustomModel[] = [];
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key?.startsWith('custom_models_') === true) {
-                    const provider = key.replace('custom_models_', '');
-                    const item = localStorage.getItem(key);
-                    const models = JSON.parse(item ?? '[]') as ICustomModel[];
-                    all = all.concat(
-                        models.map((m: ICustomModel) => ({ ...m, provider_id: provider })),
-                    );
-                }
-            }
-            return all;
-        } else {
-            try {
-                return await win.__TAURI__.core.invoke<ICustomModel[]>('get_custom_models');
-            } catch (e) {
-                logger.error('[SettingsService] Failed to get custom models:', e);
-                return [];
-            }
+        try {
+            return await this._tauri.invoke<ICustomModel[]>('get_custom_models');
+        } catch (e) {
+            logger.error('[SettingsService] Failed to get custom models:', e);
+            return [];
         }
     }
 }

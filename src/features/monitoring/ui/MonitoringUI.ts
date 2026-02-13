@@ -38,6 +38,7 @@ export class MonitoringUI extends BaseComponent {
         this._updateCPU(stats);
         this._updateRAM(stats);
         this._updateGPU(stats);
+        this._updateVRAM(stats);
     }
 
     private _updateNetwork(stats: ISystemStats) {
@@ -171,19 +172,31 @@ export class MonitoringUI extends BaseComponent {
         const gpuUtilEl = this.getElement('gpu-util');
         const gpuProgressEl = this.getElement('gpu-progress');
 
-        if (gpuUtilEl) this._animateMainValue(gpuUtilEl, stats.gpu?.usage ?? 0, 0); // Removed suffix
+        if (gpuUtilEl) this._animateMainValue(gpuUtilEl, stats.gpu?.usage ?? 0, 0);
         if (gpuProgressEl) {
             const usage = stats.gpu?.usage ?? 0;
             gpuProgressEl.style.width = `${Math.max(0, Math.min(100, usage)).toString()}%`;
             this._setProgressColor(gpuProgressEl, usage);
         }
+    }
 
+    private _updateVRAM(stats: ISystemStats) {
+        if (!this.isVisible('gpu-memory')) return;
         const vramEl = this.getElement('gpu-memory');
+        const vramProgressEl = this.getElement('vram-progress');
+
         if (vramEl) {
             const vramUsed = stats.vram?.usedGb ?? 0;
             const vramTotal = stats.vram?.totalGb ?? 0;
             this._setValueWithSecondary(vramEl, vramUsed.toFixed(1), `/${vramTotal.toFixed(0)}G`);
             this._animateMainValue(vramEl, vramUsed, 1);
+        }
+        if (vramProgressEl) {
+            const vramUsed = stats.vram?.usedGb ?? 0;
+            const vramTotal = stats.vram?.totalGb ?? 0;
+            const percent = vramTotal > 0 ? (vramUsed / vramTotal) * 100 : 0;
+            vramProgressEl.style.width = `${Math.max(0, Math.min(100, percent)).toString()}%`;
+            this._setProgressColor(vramProgressEl, percent);
         }
     }
 

@@ -84,7 +84,7 @@ export class Core {
 
         this.monitoringService = new MonitoringService(this.tauriProvider);
         this.debugService = new DebugService();
-        this.settingsService = new SettingsService();
+        this.settingsService = new SettingsService(this.tauriProvider);
 
         // 3. Init UI Handlers
         this.appUI = new AppUI();

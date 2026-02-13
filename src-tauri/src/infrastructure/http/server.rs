@@ -138,7 +138,6 @@ async fn translations_handler(Query(params): Query<LangQuery>) -> Json<Value> {
     let lang = params.lang.unwrap_or_else(|| "en".to_string());
     log::debug!("[Server] Translations requested for {lang}");
 
-    // Use unified resource path resolution
     let mut path = crate::utils::paths::RESOURCES_DIR.join("locales");
     path.push(format!("{lang}.json"));
 
@@ -161,17 +160,17 @@ async fn translations_handler(Query(params): Query<LangQuery>) -> Json<Value> {
         log::warn!("[Server] Translation file not found at {}", path.display());
     }
 
-    // Fallback if file not found
     Json(json!({
-        "ui.sidebar.menu": "Main Menu (Fallback)",
-        "ui.sidebar.chat": "Chat",
-        "ui.sidebar.modules": "Modules",
-        "ui.sidebar.settings": "Settings",
-        "ui.error.file_not_found": format!("Locales not found at {path:?}")
+        "error": "TRANSLATION_NOT_FOUND",
+        "message": format!("Locale file not found: {}", path.display())
     }))
 }
 
-#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+#[allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss
+)]
 async fn gpu_info_handler() -> Json<Value> {
     let stats = system_monitor::get_stats();
 
@@ -204,31 +203,17 @@ async fn gpu_info_handler() -> Json<Value> {
     }
 }
 
-// Helpers for settings persistence
-fn get_settings_path() -> std::path::PathBuf {
-    crate::utils::paths::CONFIG_DIR.join("user_settings.json")
-}
-
-#[allow(clippy::collapsible_if)]
-fn load_settings_map() -> std::collections::HashMap<String, String> {
-    let path = get_settings_path();
-    if let Ok(content) = std::fs::read_to_string(path) {
-        if let Ok(map) = serde_json::from_str::<std::collections::HashMap<String, String>>(&content)
-        {
-            return map;
-        }
-    }
-    // Return defaults if no file or parsing fails
-    let mut map = std::collections::HashMap::new();
-    map.insert("LANGUAGE".to_string(), "en".to_string());
-    map.insert("THEME".to_string(), "dark".to_string());
-    map.insert("USE_GPU".to_string(), "true".to_string());
-    map
-}
+// Reuse infrastructure settings instead of duplicate persistence
+use crate::infrastructure::config::settings as infra_settings;
 
 async fn get_settings_handler() -> Json<Value> {
-    let map = load_settings_map();
-    Json(serde_json::to_value(map).unwrap_or_else(|_| json!({})))
+    match infra_settings::get_settings() {
+        Ok(settings) => Json(serde_json::to_value(settings).unwrap_or_else(|_| json!({}))),
+        Err(e) => {
+            log::error!("[Server] Failed to load settings: {e}");
+            Json(json!({}))
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -240,22 +225,10 @@ struct SaveSettingRequest {
 async fn save_setting_handler(Json(payload): Json<SaveSettingRequest>) -> Json<Value> {
     log::info!("[Server] Save setting: {} = {}", payload.key, payload.value);
 
-    let mut map = load_settings_map();
-    map.insert(payload.key, payload.value);
-
-    let path = get_settings_path();
-    // Ensure dir exists
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-
-    match std::fs::write(
-        &path,
-        serde_json::to_string_pretty(&map).unwrap_or_default(),
-    ) {
+    match infra_settings::save_setting(&payload.key, &payload.value) {
         Ok(()) => Json(json!({ "success": true })),
         Err(e) => {
-            log::error!("[Server] Failed to save settings: {e}");
+            log::error!("[Server] Failed to save setting: {e}");
             Json(json!({ "success": false, "message": e.to_string() }))
         }
     }
@@ -267,11 +240,7 @@ async fn get_modules_handler() -> Json<Value> {
 }
 
 async fn system_language_handler() -> Json<Value> {
-    let map = load_settings_map();
-    let lang = map
-        .get("LANGUAGE")
-        .cloned()
-        .unwrap_or_else(|| "en".to_string());
+    let lang = infra_settings::get_language();
     Json(json!({ "language": lang }))
 }
 

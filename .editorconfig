@@ -12,9 +12,13 @@ end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-# JSON, YAML, TOML, Markdown - often use 2 spaces
-[*.{yml,yaml,toml,json}]
+# YAML, TOML - use 2 spaces
+[*.{yml,yaml,toml}]
 indent_size = 2
+
+# JSON - project uses 4 spaces (matches Prettier tabWidth)
+[*.json]
+indent_size = 4
 
 # JavaScript, TypeScript, CSS - maintain 4 spaces (Axelate style)
 [*.{js,jsx,ts,tsx,css,scss,html}]

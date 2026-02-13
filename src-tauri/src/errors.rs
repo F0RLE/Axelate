@@ -91,22 +91,7 @@ impl Serialize for AppError {
     where
         S: serde::Serializer,
     {
-        let (code, message) = match self {
-            Self::Validation(msg) => ("VALIDATION", msg.clone()),
-            Self::NotFound(msg) => ("NOT_FOUND", msg.clone()),
-            Self::PermissionDenied(msg) => ("PERMISSION_DENIED", msg.clone()),
-            Self::Io(e) => ("IO_ERROR", e.to_string()),
-            Self::Serialization(e) => ("SERIALIZATION", e.to_string()),
-            Self::Config(msg) => ("CONFIG", msg.clone()),
-            Self::External(msg) => ("EXTERNAL", msg.clone()),
-            Self::Internal(msg) => ("INTERNAL", msg.clone()),
-        };
-
-        IpcError {
-            code: code.to_string(),
-            message,
-        }
-        .serialize(serializer)
+        IpcError::from(self.clone()).serialize(serializer)
     }
 }
 
@@ -122,5 +107,11 @@ impl Clone for AppError {
             Self::External(s) => Self::External(s.clone()),
             Self::Internal(s) => Self::Internal(s.clone()),
         }
+    }
+}
+
+impl From<tauri::Error> for AppError {
+    fn from(err: tauri::Error) -> Self {
+        Self::Internal(err.to_string())
     }
 }

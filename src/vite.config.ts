@@ -120,13 +120,25 @@ export default defineConfig({
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
             thresholds: {
-                'src/modules/**/services/*.ts': {
+                'src/features/**/services/*.ts': {
                     lines: 80,
                     functions: 80,
                     branches: 80,
                     statements: 80,
                 },
-                'src/modules/**/utils/*.ts': {
+                'src/shared/**/services/*.ts': {
+                    lines: 80,
+                    functions: 80,
+                    branches: 80,
+                    statements: 80,
+                },
+                'src/infrastructure/**/services/*.ts': {
+                    lines: 80,
+                    functions: 80,
+                    branches: 80,
+                    statements: 80,
+                },
+                'src/shared/**/utils/*.ts': {
                     lines: 100,
                     functions: 100,
                     branches: 100,
