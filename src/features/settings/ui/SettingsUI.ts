@@ -145,8 +145,6 @@ export class SettingsUI {
         });
         this._resizer.init();
 
-
-
         // 5. Expose necessary global functions (legacy support for some templates)
         win.openModuleSettings = (app: IApp) => {
             void this._openModuleSettingsHelper(app).catch((e: unknown) => {
@@ -168,7 +166,9 @@ export class SettingsUI {
             // modal-backdrop uses hidden class with CSS transition
             modal.classList.add('hidden');
             // Wait for transition if needed, or enforce immediately if logic dictates
-            setTimeout(() => { modal.style.display = 'none'; }, 300); // match transition
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300); // match transition
         }
     }
 
@@ -213,8 +213,6 @@ export class SettingsUI {
         this._unsubscribers.length = 0;
         logger.info('[SettingsUI] Destroyed.');
     }
-
-
 
     /**
      * Renders a specialized module configuration UI (API, Local AI, or generic).

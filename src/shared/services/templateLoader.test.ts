@@ -27,7 +27,9 @@ describe('TemplateLoader', () => {
             const result = await templateLoader.loadTemplate('pages/test');
 
             expect(result).toBe(mockHtml);
-            expect(fetch).toHaveBeenCalledWith(expect.stringContaining('templates/pages/test.html'));
+            expect(fetch).toHaveBeenCalledWith(
+                expect.stringContaining('templates/pages/test.html'),
+            );
         });
 
         it('should have mocked Tauri invoke', () => {

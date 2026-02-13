@@ -192,7 +192,9 @@ export class ChatController {
         try {
             const selected = await open({
                 multiple: true,
-                title: win.t ? win.t('ui.launcher.web.select_files', 'Select Files') : 'Select Files',
+                title: win.t
+                    ? win.t('ui.launcher.web.select_files', 'Select Files')
+                    : 'Select Files',
             });
 
             if (selected === null) return true; // User cancelled, don't fallback

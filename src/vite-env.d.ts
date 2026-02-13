@@ -2,7 +2,6 @@
 
 declare const __APP_VERSION__: string;
 
-
 declare module '@tauri-apps/plugin-dialog' {
     export type DialogOpenOptions = Record<string, unknown>;
     export function open(options?: DialogOpenOptions): Promise<string | string[] | null>;

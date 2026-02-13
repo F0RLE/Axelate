@@ -19,7 +19,7 @@
     min-height: fit-content;
     box-sizing: border-box;
     -webkit-app-region: no-drag;
-    transition: 
+    transition:
         opacity 0.4s var(--ease-smooth),
         max-height 0.4s var(--ease-smooth),
         margin 0.4s var(--ease-smooth),
@@ -43,7 +43,7 @@
     pointer-events: none;
     transform: scale(0.95);
     visibility: hidden;
-    transition: 
+    transition:
         opacity 0.2s ease,
         max-height 0.4s var(--ease-smooth),
         min-height 0.4s var(--ease-smooth),
@@ -101,7 +101,7 @@
     color: #ffffff;
     font-family: 'Monocraft', monospace !important;
     font-size: 0.72rem;
-    font-weight: normal; 
+    font-weight: normal;
     letter-spacing: -0.01em;
     display: flex;
     align-items: baseline;

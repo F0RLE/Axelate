@@ -206,17 +206,25 @@ export class CatalogService {
         const fallbackServices = FALLBACK_CONFIG.catalog.services;
 
         if (this._appData.ai.length === 0) {
-            logger.warn(`[CatalogService] AI catalog still empty (fallback source has ${String(fallbackAi.length)} items), injecting fallbacks.`);
+            logger.warn(
+                `[CatalogService] AI catalog still empty (fallback source has ${String(fallbackAi.length)} items), injecting fallbacks.`,
+            );
             this._appData.ai = this._mapModuleItems(fallbackAi, 'ai');
             this._appData.ai.forEach(mergeAppSchema);
-            logger.info(`[CatalogService] AI catalog now has ${String(this._appData.ai.length)} items.`);
+            logger.info(
+                `[CatalogService] AI catalog now has ${String(this._appData.ai.length)} items.`,
+            );
         }
 
         if (this._appData.services.length === 0) {
-            logger.warn(`[CatalogService] Services catalog still empty (fallback source has ${String(fallbackServices.length)} items), injecting fallbacks.`);
+            logger.warn(
+                `[CatalogService] Services catalog still empty (fallback source has ${String(fallbackServices.length)} items), injecting fallbacks.`,
+            );
             this._appData.services = this._mapModuleItems(fallbackServices, 'services');
             this._appData.services.forEach(mergeAppSchema);
-            logger.info(`[CatalogService] Services catalog now has ${String(this._appData.services.length)} items.`);
+            logger.info(
+                `[CatalogService] Services catalog now has ${String(this._appData.services.length)} items.`,
+            );
         }
     }
 

@@ -366,7 +366,7 @@ export class WindowUI {
         const labelKey = isMaximized ? 'ui.launcher.button.restore' : 'ui.launcher.button.maximize';
         const fallback = isMaximized ? 'Restore' : 'Maximize';
         const label = typeof g.t === 'function' ? g.t(labelKey, fallback) : fallback;
-        
+
         btn.setAttribute('aria-label', label);
         btn.setAttribute('title', label);
         btn.dataset['i18nAriaLabel'] = labelKey;
@@ -491,7 +491,7 @@ export class WindowUI {
             this._splash.classList.add('fade-out');
 
             if (this._splashTimeout) clearTimeout(this._splashTimeout);
-            
+
             // Wait for CSS transition (600ms) + buffer
             this._splashTimeout = setTimeout(() => {
                 if (this._splash) {
@@ -502,7 +502,6 @@ export class WindowUI {
                 this._splashTimeout = null;
             }, 650);
         }
-
 
         ['sidebar', 'app-header', 'main-area'].forEach((id) => {
             const el = document.getElementById(id);

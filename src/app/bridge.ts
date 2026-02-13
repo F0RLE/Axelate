@@ -185,11 +185,7 @@ export class GlobalBridge {
         g.getCatalogCategory = (cat: string) => {
             const lowCat = cat.toLowerCase();
             const catalog = this._core.catalog.getCatalog();
-            return lowCat === 'ai'
-                ? catalog.ai
-                : lowCat === 'services'
-                  ? catalog.services
-                  : [];
+            return lowCat === 'ai' ? catalog.ai : lowCat === 'services' ? catalog.services : [];
         };
     }
 

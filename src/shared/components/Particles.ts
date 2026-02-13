@@ -18,16 +18,19 @@ export class Particles {
         size: number;
         color: string;
     }[] = [];
-    
+
     // Optimization: Group particles by color during init to avoid per-frame allocation
-    private _particlesByColor: Record<string, {
-        x: number;
-        y: number;
-        vx: number;
-        vy: number;
-        size: number;
-        color: string;
-    }[]> = {};
+    private _particlesByColor: Record<
+        string,
+        {
+            x: number;
+            y: number;
+            vx: number;
+            vy: number;
+            size: number;
+            color: string;
+        }[]
+    > = {};
 
     private readonly _mouse: { x: number; y: number } = { x: -100, y: -100 };
     private readonly _width: number;
@@ -35,7 +38,7 @@ export class Particles {
     // Track canvas size to avoid expensive property access
     private _canvasWidth: number = 0;
     private _canvasHeight: number = 0;
-    
+
     private _isRunning = false;
     private _lastFrameTime = 0;
     private readonly _cleanupAbort: AbortController = new AbortController();
@@ -63,14 +66,14 @@ export class Particles {
         const dpr = window.devicePixelRatio || 1;
         const sW = g.screen.width * dpr;
         const sH = g.screen.height * dpr;
-        
+
         // World is +20% larger than physical screen
         const maxDim = Math.max(sW, sH) * 1.2;
         this._width = maxDim;
         this._height = maxDim;
 
         this._resize();
-        
+
         this._init();
         this._bindEvents();
         this.start();
@@ -78,12 +81,12 @@ export class Particles {
 
     private _resize(): void {
         const dpr = window.devicePixelRatio || 1;
-        
+
         // Set canvas buffer to match physical Viewport pixels
         // This ensures 1 canvas pixel = 1 screen pixel regardless of Zoom
         this._canvasWidth = Math.round(window.innerWidth * dpr);
         this._canvasHeight = Math.round(window.innerHeight * dpr);
-        
+
         this._canvas.width = this._canvasWidth;
         this._canvas.height = this._canvasHeight;
     }
@@ -100,21 +103,21 @@ export class Particles {
     }
 
     private _init(): void {
-        const density = 25000; 
+        const density = 25000;
         const particleCount = Math.floor((this._width * this._height) / density);
-        
+
         // Clear existing
         this._particles = [];
         this._particlesByColor = {};
 
         for (let i = 0; i < particleCount; i++) {
-            let color = 'rgba(255, 255, 255, 0.1)'; 
+            let color = 'rgba(255, 255, 255, 0.1)';
             const rand = this._random();
 
             if (rand > 0.6) {
-                color = 'rgba(138, 43, 226, 0.4)'; 
+                color = 'rgba(138, 43, 226, 0.4)';
             } else if (rand > 0.5) {
-                color = 'rgba(147, 51, 234, 0.3)'; 
+                color = 'rgba(147, 51, 234, 0.3)';
             }
 
             const p = {
@@ -127,7 +130,7 @@ export class Particles {
             };
 
             this._particles.push(p);
-            
+
             let group = this._particlesByColor[color];
             if (!group) {
                 group = [];
@@ -147,9 +150,13 @@ export class Particles {
         const signal = this._cleanupAbort.signal;
 
         // Handle zoom/dpr changes
-        globalThis.addEventListener('resize', () => {
-            this._resize();
-        }, { signal });
+        globalThis.addEventListener(
+            'resize',
+            () => {
+                this._resize();
+            },
+            { signal },
+        );
 
         document.addEventListener(
             'visibilitychange',
@@ -232,24 +239,24 @@ export class Particles {
         // Cap to roughly 60FPS
         if (elapsed > 16) {
             this._lastFrameTime = now - (elapsed % 16);
-            
+
             // Clear entire buffer
             this._ctx.clearRect(0, 0, this._canvasWidth, this._canvasHeight);
 
-            // Optimization: Iterate over pre-grouped arrays. 
+            // Optimization: Iterate over pre-grouped arrays.
             for (const color in this._particlesByColor) {
-               const group = this._particlesByColor[color];
-               if (!group) continue;
+                const group = this._particlesByColor[color];
+                if (!group) continue;
 
-               this._ctx.fillStyle = color;
-               
-               // Use for-of loop (cleaner and avoids index checks)
-               for (const p of group) {
-                   this._updateParticle(p);
-                   // Draw at physical coordinates (No Scaling)
-                   // Because canvas is sized to physical pixels and P is stored in physical pixels.
-                   this._ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
-               }
+                this._ctx.fillStyle = color;
+
+                // Use for-of loop (cleaner and avoids index checks)
+                for (const p of group) {
+                    this._updateParticle(p);
+                    // Draw at physical coordinates (No Scaling)
+                    // Because canvas is sized to physical pixels and P is stored in physical pixels.
+                    this._ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+                }
             }
         }
 
@@ -258,7 +265,14 @@ export class Particles {
         });
     }
 
-    private _updateParticle(p: { x: number; y: number; vx: number; vy: number; size: number; color: string }): void {
+    private _updateParticle(p: {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        color: string;
+    }): void {
         // Physics Update (Physical Coordinates)
         p.x += p.vx;
         p.y += p.vy;
@@ -266,7 +280,7 @@ export class Particles {
         // Mouse interaction
         const dx = this._mouse.x - p.x;
         const dy = this._mouse.y - p.y;
-        
+
         // Interaction radius (Physical Pixels)
         const radius = 150 * (window.devicePixelRatio || 1);
 
@@ -283,7 +297,7 @@ export class Particles {
         // Wrap around screen (Physical Dimensions)
         if (p.x < 0) p.x = this._width;
         else if (p.x > this._width) p.x = 0;
-        
+
         if (p.y < 0) p.y = this._height;
         else if (p.y > this._height) p.y = 0;
     }
