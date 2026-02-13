@@ -96,7 +96,7 @@ export class GlobalBridge {
         win.openAppSelection = (category: string) => {
             const cat = category.toLowerCase();
             const catalog = this._core.catalog.getCatalog();
-            const apps = (catalog as any)[cat] ?? [];
+            const apps = cat === 'ai' ? catalog.ai : cat === 'services' ? catalog.services : [];
             this._core.logger.info(
                 `[GlobalBridge] openAppSelection requested for ${cat}. Found ${String(apps.length)} apps. (keys: ${Object.keys(catalog).join(', ')})`,
             );
@@ -185,7 +185,7 @@ export class GlobalBridge {
         g.getCatalogCategory = (cat: string) => {
             const lowCat = cat.toLowerCase();
             const catalog = this._core.catalog.getCatalog();
-            return (catalog as any)[lowCat] ?? [];
+            return lowCat === 'ai' ? catalog.ai : lowCat === 'services' ? catalog.services : [];
         };
     }
 

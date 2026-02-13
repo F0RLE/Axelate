@@ -25,7 +25,7 @@ struct SystemCollector {
 }
 
 impl SystemCollector {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             sys: None,
             networks: None,
@@ -111,7 +111,7 @@ struct Win32_VideoController {
 }
 
 impl GpuCollector {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self { nvml: None }
     }
 
@@ -125,6 +125,7 @@ impl GpuCollector {
         self.nvml = None;
     }
 
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     fn collect(&self) -> (Option<GpuStats>, Option<VramStats>) {
         let bytes_to_gb = |b: f64| (b / 1024.0 / 1024.0 / 1024.0) as f32;
 
@@ -162,27 +163,26 @@ impl GpuCollector {
         // 2. Fallback to WMI (Local Scope for Thread Safety)
         if let Ok(wmi) = WMIConnection::new() {
             let results: Result<Vec<Win32_VideoController>, _> = wmi.query();
-            if let Ok(controllers) = results {
-                if let Some(best_gpu) = controllers
+            if let Ok(controllers) = results
+                && let Some(best_gpu) = controllers
                     .iter()
                     .filter(|c| !c.Name.contains("Microsoft Remote Display Adapter"))
                     .max_by_key(|c| c.AdapterRAM.unwrap_or(0))
-                {
-                    let vram_bytes = best_gpu.AdapterRAM.unwrap_or(0);
-                    let gpu = GpuStats {
-                        usage: 0,
-                        memory_used: 0.0,
-                        memory_total: vram_bytes as f64,
-                        temp: 0,
-                        name: best_gpu.Name.clone(),
-                    };
-                    let vram = VramStats {
-                        percent: 0.0,
-                        used_gb: 0.0,
-                        total_gb: bytes_to_gb(vram_bytes as f64),
-                    };
-                    return (Some(gpu), Some(vram));
-                }
+            {
+                let vram_bytes = best_gpu.AdapterRAM.unwrap_or(0);
+                let gpu = GpuStats {
+                    usage: 0,
+                    memory_used: 0.0,
+                    memory_total: vram_bytes as f64,
+                    temp: 0,
+                    name: best_gpu.Name.clone(),
+                };
+                let vram = VramStats {
+                    percent: 0.0,
+                    used_gb: 0.0,
+                    total_gb: bytes_to_gb(vram_bytes as f64),
+                };
+                return (Some(gpu), Some(vram));
             }
         }
 
@@ -282,7 +282,7 @@ impl SystemMonitorService {
         let mut total_recv: u64 = 0;
         let mut total_sent: u64 = 0;
         if let Some(networks) = self.system.networks.as_ref() {
-            for (_, data) in networks.iter() {
+            for (_, data) in networks {
                 total_recv += data.total_received();
                 total_sent += data.total_transmitted();
             }

@@ -171,12 +171,18 @@ async fn translations_handler(Query(params): Query<LangQuery>) -> Json<Value> {
     }))
 }
 
+#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
 async fn gpu_info_handler() -> Json<Value> {
     let stats = system_monitor::get_stats();
 
     if let Some(gpu) = stats.gpu {
         // Convert Bytes to MB
-        let memory_mb = (gpu.memory_total / 1024.0 / 1024.0) as u64;
+        let memory_mb = if gpu.memory_total.is_finite() && gpu.memory_total > 0.0 {
+            let mb = gpu.memory_total / 1024.0 / 1024.0;
+            mb.floor() as u64
+        } else {
+            0
+        };
 
         Json(json!({
             "detected": true,
@@ -270,7 +276,7 @@ async fn get_config_handler(State(state): State<AppState>) -> Json<Value> {
     use crate::domain::system::config_service::ConfigService;
     use crate::infrastructure::config::config_repository::FileConfigRepository;
 
-    let repo = FileConfigRepository::new(state.tauri_app.clone());
+    let repo = FileConfigRepository::new(state.tauri_app);
     let service = ConfigService::new(Box::new(repo));
 
     match service.load_full_config() {

@@ -5,6 +5,7 @@
 
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { logger } from '../../../shared/services/LoggerService';
+import { renderSimpleFeature } from '../../../shared/ui/renderSimpleFeature';
 
 /**
  * @class FinalCheckUI
@@ -20,7 +21,7 @@ export class FinalCheckUI extends BaseComponent {
      * Component initialization logic.
      * Use super.getElement() for cached lookups.
      */
-    protected async onInit(): Promise<void> {
+    protected onInit(): void {
         logger.debug('[FinalCheckUI] Initializing');
     }
 
@@ -29,11 +30,9 @@ export class FinalCheckUI extends BaseComponent {
      */
     protected render(): void {
         const root = this.getElement('finalcheck-root');
-        if (root) {
-            root.innerHTML = `<div class="finalcheck-container">
-                <h1>${i18n?.t('finalcheck.title') || 'FinalCheck'}</h1>
-            </div>`;
-        }
+        if (!root) return;
+
+        renderSimpleFeature(root, 'finalcheck-container', 'finalcheck.title', 'FinalCheck');
     }
 
     /**

@@ -114,8 +114,7 @@ export class LoggerService {
             if (obj === null) return 'null';
             if (obj === undefined) return 'undefined';
             if (obj instanceof Error) return obj.stack ?? obj.message;
-            if (typeof obj === 'function')
-                return `[Function: ${obj.name || 'anonymous'}]`;
+            if (typeof obj === 'function') return `[Function: ${obj.name || 'anonymous'}]`;
             if (typeof obj === 'symbol') return obj.toString();
             if (typeof obj === 'bigint') return `${obj.toString()}n`;
 
