@@ -675,9 +675,37 @@ export class AppUI {
         if (!isApi && !isInstalled) {
             this._setupDownloadActionBtn(actionBtn, app);
         } else {
-            // User requested to remove Launch button entirely (selection is done via card click)
-            actionBtn.style.display = 'none';
+            this._setupLaunchActionBtn(actionBtn, app);
         }
+    }
+
+    private _setupLaunchActionBtn(actionBtn: HTMLElement, app: IApp): void {
+        const card = actionBtn.closest('.model-card-premium');
+        if (card !== null) {
+            card.classList.add('has-launch');
+            card.classList.remove('has-download');
+        }
+
+        actionBtn.style.display = 'block';
+        const g = globalThis as TGlobalWin;
+        actionBtn.textContent =
+            typeof g.t === 'function' ? g.t('ui.launcher.button.launch', 'Launch') : 'Launch';
+        actionBtn.classList.add('active-module-btn');
+        actionBtn.classList.remove('download-module-btn');
+        actionBtn.dataset['running'] = 'false';
+        actionBtn.removeAttribute('onclick');
+
+        actionBtn.onclick = (e) => {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+
+            const win = globalThis as TGlobalWin;
+            if (typeof win.launchApp === 'function') {
+                void win.launchApp(app.id);
+            } else {
+                logger.error('[AppUI] globalThis.launchApp is undefined');
+            }
+        };
     }
 
     private _setupDownloadActionBtn(actionBtn: HTMLElement, app: IApp): void {

@@ -598,6 +598,7 @@ export class SettingsUI {
 
         // modal-backdrop: just remove hidden class, CSS handles animation
         modal.classList.remove('hidden');
+        modal.style.display = 'flex';
 
         // Close logic
         const closeBtn = document.getElementById('close-module-settings-btn');
