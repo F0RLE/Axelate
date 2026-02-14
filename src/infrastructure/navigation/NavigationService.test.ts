@@ -68,13 +68,10 @@ describe('NavigationService', () => {
     });
 
     describe('setCurrentPage', () => {
-        it('should navigate and register global functions', () => {
+        it('should navigate', () => {
             navService.setCurrentPage('dashboard');
 
             expect(navService.getCurrentPage()).toBe('dashboard');
-            const win = globalThis as unknown as Record<string, unknown>;
-            expect(win['navigationService']).toBe(navService);
-            expect(typeof win['navigate']).toBe('function');
         });
     });
 

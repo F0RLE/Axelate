@@ -10,7 +10,7 @@ const pruneFontsPlugin = {
     generateBundle(_outputOptions: unknown, bundle: Record<string, any>) {
         for (const fileName of Object.keys(bundle)) {
             const chunk = bundle[fileName];
-            if (!chunk || chunk.type !== 'asset') continue;
+            if (!chunk || chunk?.type !== 'asset') continue;
 
             if (
                 (fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||

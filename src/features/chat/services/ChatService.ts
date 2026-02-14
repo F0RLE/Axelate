@@ -1,13 +1,14 @@
-/**
- * @module chat/services/ChatService
- * @description Service for sending messages through AIBridge
- */
-
 import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 import { logger } from '@/shared/services/LoggerService';
+import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 export class ChatService {
+    constructor(
+        private readonly _aiBridge: AIBridge,
+        private readonly _i18n: I18nService,
+    ) {}
+
     /**
      * Sends a message through AIBridge to the active AI provider.
      */
@@ -22,22 +23,18 @@ export class ChatService {
         }
 
         // Check if AIBridge is available and has active provider
-        const win = globalThis as TGlobalWin;
-        const aiBridge = win.aiBridge;
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (win.aiBridge === undefined) {
-            const t = win.t;
+        if (this._aiBridge === undefined) {
             return {
                 ok: false,
-                error: t('ui.ai.bridge_not_ready', 'AI Bridge not initialized'),
+                error: this._i18n.t('ui.ai.bridge_not_ready', 'AI Bridge not initialized'),
             };
         }
 
-        if (typeof aiBridge.isActive === 'function' && !(aiBridge.isActive as () => boolean)()) {
-            const t = win.t;
+        if (!this._aiBridge.isActive()) {
             return {
                 ok: false,
-                error: t(
+                error: this._i18n.t(
                     'ui.ai.no_provider',
                     'No AI module running. Please launch a module first.',
                 ),
@@ -46,13 +43,7 @@ export class ChatService {
 
         try {
             // Send through AIBridge
-            const response = await (
-                aiBridge.sendMessage as (
-                    _t: string,
-                    _s: string,
-                    _a: IChatAttachment[],
-                ) => Promise<string>
-            )(text, 'chat', _attachments);
+            const response = await this._aiBridge.sendMessage(text, 'chat', _attachments);
 
             // Handle potential error string from bridge
             if (response.startsWith('Error: ')) {

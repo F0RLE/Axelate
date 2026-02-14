@@ -5,14 +5,8 @@
 
 import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types/coreTypes';
 import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
-
-interface IDownloaderGlobal {
-    t?: (key: string, defaultVal?: string) => string;
-    uiState?: {
-        getDownloadSettings: () => DownloadSettings;
-        setDownloadSettings: (enabled: boolean, maxSpeed: number) => void;
-    };
-}
+import type { StateService } from '@/shared/services/StateService';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 export class DownloadUI {
     private _settings: DownloadSettings = {
@@ -51,7 +45,10 @@ export class DownloadUI {
 
     private _boundHandleUpdate: ((e: Event) => void) | null = null;
 
-    constructor() {
+    constructor(
+        private readonly _stateService: StateService,
+        private readonly _i18n: I18nService,
+    ) {
         this.loadSettings();
     }
 
@@ -202,10 +199,7 @@ export class DownloadUI {
 
     private _updateLabel(el: HTMLElement | null, label: string, hasActive: boolean): void {
         if (!el) return;
-        const fallback =
-            typeof globalThis.t === 'function'
-                ? globalThis.t('ui.downloads.no_active', 'No active downloads')
-                : 'No active downloads';
+        const fallback = this._i18n.t('ui.downloads.no_active', 'No active downloads');
 
         let text = label;
         if (!hasActive) {
@@ -244,30 +238,19 @@ export class DownloadUI {
     private _updateStatus(els: { statusEl: HTMLElement | null }, state: DownloadProgress): void {
         if (!els.statusEl) return;
         const { completed, error, hasActive } = state;
-        const win = globalThis as unknown as IDownloaderGlobal;
 
         els.statusEl.classList.remove('active', 'completed', 'error');
         if (completed) {
-            els.statusEl.textContent =
-                typeof win.t === 'function'
-                    ? win.t('ui.downloads.status.completed', 'Completed')
-                    : 'Completed';
+            els.statusEl.textContent = this._i18n.t('ui.downloads.status.completed', 'Completed');
             els.statusEl.classList.add('completed');
         } else if (error !== null) {
-            els.statusEl.textContent =
-                typeof win.t === 'function' ? win.t('ui.downloads.status.error', 'Error') : 'Error';
+            els.statusEl.textContent = this._i18n.t('ui.downloads.status.error', 'Error');
             els.statusEl.classList.add('error');
         } else if (hasActive) {
-            els.statusEl.textContent =
-                typeof win.t === 'function'
-                    ? win.t('ui.downloads.status.in_progress', 'In Progress')
-                    : 'In Progress';
+            els.statusEl.textContent = this._i18n.t('ui.downloads.status.in_progress', 'In Progress');
             els.statusEl.classList.add('active');
         } else {
-            els.statusEl.textContent =
-                typeof win.t === 'function'
-                    ? win.t('ui.downloads.status.waiting', 'Waiting')
-                    : 'Waiting';
+            els.statusEl.textContent = this._i18n.t('ui.downloads.status.waiting', 'Waiting');
         }
     }
 
@@ -277,18 +260,16 @@ export class DownloadUI {
     private _updateEta(els: { etaEl: HTMLElement | null }, state: DownloadProgress): void {
         if (!els.etaEl) return;
         const { completed, error, speed, total, downloaded } = state;
-        const win = globalThis as unknown as IDownloaderGlobal;
 
         if (completed) {
-            els.etaEl.textContent =
-                typeof win.t === 'function' ? win.t('ui.downloads.status.ready', 'Ready') : 'Ready';
+            els.etaEl.textContent = this._i18n.t('ui.downloads.status.ready', 'Ready');
         } else if (error !== null) {
             els.etaEl.textContent = error;
         } else if (speed > 0 && total > 0) {
             const remainingBytes = Math.max(total - downloaded, 0);
             const seconds = remainingBytes / speed;
-            const s = typeof win.t === 'function' ? win.t('ui.common.time.s', 's') : 's';
-            const m = typeof win.t === 'function' ? win.t('ui.common.time.m', 'm') : 'm';
+            const s = this._i18n.t('ui.common.time.s', 's');
+            const m = this._i18n.t('ui.common.time.m', 'm');
 
             if (seconds < 60) {
                 els.etaEl.textContent = `${Math.floor(seconds).toString()}${s}`;
@@ -337,10 +318,7 @@ export class DownloadUI {
      * Loads download settings from UI state.
      */
     public loadSettings(): void {
-        const win = globalThis as unknown as IDownloaderGlobal;
-        if (win.uiState !== undefined) {
-            this._settings = win.uiState.getDownloadSettings();
-        }
+        this._settings = this._stateService.getDownloadSettings();
     }
 
     /**
@@ -365,13 +343,10 @@ export class DownloadUI {
 
             toggle.style.background = toggle.checked ? 'var(--primary)' : 'var(--bg-light)';
 
-            const win = globalThis as unknown as IDownloaderGlobal;
-            if (win.uiState !== undefined) {
-                win.uiState.setDownloadSettings(
-                    this._settings.limitEnabled,
-                    this._settings.maxSpeed,
-                );
-            }
+            this._stateService.setDownloadSettings(
+                this._settings.limitEnabled,
+                this._settings.maxSpeed,
+            );
         }
     }
 

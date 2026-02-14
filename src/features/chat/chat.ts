@@ -13,6 +13,9 @@ import { type TGlobalWin } from '@/shared/types/global_bridge_types';
 import { logger } from '@/shared/services/LoggerService';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
+import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import type { SoundService } from '@/shared/services/SoundService';
 
 export class ChatController {
     private readonly _service: ChatService;
@@ -20,17 +23,20 @@ export class ChatController {
     private _chatHistory: IChatMessage[] = [];
     /* Removed _chatFiles state - using singleton */
 
-    constructor() {
-        this._service = new ChatService();
+    constructor(
+        private readonly _aiBridge: AIBridge,
+        private readonly _i18n: I18nService,
+        private readonly _soundService: SoundService,
+    ) {
+        this._service = new ChatService(_aiBridge, _i18n);
         // Initialized without arguments
         this._ui = new ChatUI();
-        this._init();
     }
 
     /**
      * Initializes the controller and binds events.
      */
-    private _init(): void {
+    public init(): void {
         logger.info('[Chat] Initializing TS Controller...');
         void this._ui.init().catch((err: unknown) => {
             logger.error(`[Chat] UI init failed: ${String(err)}`);
@@ -38,7 +44,7 @@ export class ChatController {
         this._bindEvents();
         this._exposeGlobals();
 
-        // Initial UI State - Link Handler to UI
+        // Initial UI State - Link Link Handler to UI
         chatFileHandler.setUpdateCallback((files, onRemove) => {
             this._ui.updateAttachments(files, onRemove);
             void this._updateTokenCount();
@@ -71,35 +77,38 @@ export class ChatController {
 
         // Load Persistence History
         void this._loadHistory();
+
+        // Listen for language changes to update greeting in real-time
+        globalThis.addEventListener('lang:changed', () => {
+             this._randomizeGreeting(this._currentGreetingIndex);
+        });
     }
 
     /**
      * Loads chat history from the backend bridge.
      */
     private async _loadHistory(): Promise<void> {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win['aiBridge'] as
-            | { getHistory: () => Promise<IChatMessage[]> }
-            | undefined;
+        const history = await this._aiBridge.getHistory();
+        if (Array.isArray(history) && history.length > 0) {
+            logger.info(
+                `[ChatController] Restoring ${String(history.length)} messages from persistence`,
+            );
+            
+            // Map to local type, filtering out incompatible roles and normalizing content
+            this._chatHistory = history
+                .filter(msg => msg.role === 'user' || msg.role === 'assistant')
+                .map(msg => ({
+                    role: msg.role as 'user' | 'assistant',
+                    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+                }));
 
-        if (aiBridge && typeof aiBridge.getHistory === 'function') {
-            const history = await aiBridge.getHistory();
-            if (Array.isArray(history) && history.length > 0) {
-                logger.info(
-                    `[ChatController] Restoring ${String(history.length)} messages from persistence`,
-                );
-                this._chatHistory = history;
-
-                // Redraw UI
-                history.forEach((msg) => {
-                    const content =
-                        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-                    this._ui.appendMessage(msg.role as 'user' | 'assistant', content, {
-                        tokens: 0, // We could count them but it's historical
-                        skipAnimation: true,
-                    });
+            // Redraw UI
+            this._chatHistory.forEach((msg) => {
+                this._ui.appendMessage(msg.role, msg.content, {
+                    tokens: 0, // We could count them but it's historical
+                    skipAnimation: true,
                 });
-            }
+            });
         }
     }
 
@@ -124,7 +133,6 @@ export class ChatController {
         // Voice Button
         // Handled by EventHandler.ts via global exposure
 
-        // Input Key Handler (Enter to send)
         // Input Key Handler (Enter to send)
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         if (chatInput) {
@@ -166,6 +174,10 @@ export class ChatController {
         g['clearChat'] = () => {
             this.clearChat();
         };
+        // Expose randomizeChatGreeting so global logic can call it (e.g. from init.ts or events)
+        g['randomizeChatGreeting'] = (idx?: number) => {
+            this._randomizeGreeting(idx);
+        }
     }
 
     // --- Actions ---
@@ -177,7 +189,7 @@ export class ChatController {
         const win = globalThis as TGlobalWin;
         // Check if we are in Tauri to use native dialog
         if (win.__TAURI_INTERNALS__ !== undefined) {
-            const success = await this._pickNativeFiles(win);
+            const success = await this._pickNativeFiles();
             if (success) return;
         }
 
@@ -188,13 +200,11 @@ export class ChatController {
     /**
      * Internal helper for native file picking via Tauri.
      */
-    private async _pickNativeFiles(win: TGlobalWin): Promise<boolean> {
+    private async _pickNativeFiles(): Promise<boolean> {
         try {
             const selected = await open({
                 multiple: true,
-                title: win.t
-                    ? win.t('ui.launcher.web.select_files', 'Select Files')
-                    : 'Select Files',
+                title: this._i18n.t('ui.launcher.web.select_files', 'Select Files'),
             });
 
             if (selected === null) return true; // User cancelled, don't fallback
@@ -330,27 +340,11 @@ export class ChatController {
     }
 
     private _setupStreamingListener(id: string, onChunk: (chunk: string) => void) {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win['aiBridge'] as
-            | {
-                  onChunk: (id: string, cb: (c: string) => void) => void;
-              }
-            | undefined;
-        if (aiBridge !== undefined) {
-            aiBridge.onChunk(id, onChunk);
-        }
+        this._aiBridge.onChunk(id, onChunk);
     }
 
     private _cleanupStreamingListener(id: string) {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win['aiBridge'] as
-            | {
-                  removeChunkListener: (id: string) => void;
-              }
-            | undefined;
-        if (aiBridge !== undefined) {
-            aiBridge.removeChunkListener(id);
-        }
+        this._aiBridge.removeChunkListener(id);
     }
 
     /**
@@ -368,24 +362,18 @@ export class ChatController {
      * Checks if AI module is active.
      */
     private _checkAIActive(input: HTMLTextAreaElement | null): boolean {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const aiBridge = win['aiBridge'] as Record<string, unknown> | undefined;
-        const isAIActive =
-            typeof aiBridge?.['isActive'] === 'function'
-                ? (aiBridge['isActive'] as () => boolean)()
-                : false;
+        const isAIActive = this._aiBridge.isActive();
 
         if (!isAIActive) {
             const text = input ? input.value.trim() : '';
             if (text !== '') this._ui.appendMessage('user', text);
             setTimeout(() => {
-                const t = win['t'] as ((_k: string, _d: string) => string) | undefined;
                 this._ui.appendMessage(
                     'assistant',
-                    t?.(
+                    this._i18n.t(
                         'ui.ai.no_provider',
                         'No AI module running. Please launch a module first.',
-                    ) ?? 'No AI module running. Please launch a module first.',
+                    ),
                     { error: true },
                 );
             }, 500);
@@ -429,17 +417,13 @@ export class ChatController {
      * Maps raw error messages to user-friendly localized strings.
      */
     private _getFriendlyErrorMessage(errorMsg: string, model?: string): string {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const t = win['t'] as ((key: string, def?: string) => string) | undefined;
-        if (!t) return errorMsg;
-
         const msg = (errorMsg || '').toLowerCase();
         const modelName = model ?? 'Gemini';
 
         // 1. Detect common error codes (handles both plain text and JSON strings)
         // 503 / Unavailable / Overloaded
         if (msg.includes('503') || msg.includes('unavailable') || msg.includes('overloaded')) {
-            return t(
+            return this._i18n.t(
                 'ui.gemini.error.unavailable',
                 `Error 503: Service Unavailable (${modelName})`,
             ).replace('{model}', modelName);
@@ -447,7 +431,7 @@ export class ChatController {
 
         // 429 / Quota / Rate Limit
         if (msg.includes('429') || msg.includes('quota') || msg.includes('limit reached')) {
-            return t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`).replace(
+            return this._i18n.t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`).replace(
                 '{model}',
                 modelName,
             );
@@ -455,18 +439,18 @@ export class ChatController {
 
         // 403 / Auth / Key
         if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('api key')) {
-            return t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`).replace(
+            return this._i18n.t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`).replace(
                 '{model}',
                 modelName,
             );
         }
 
         // 2. Generic API / OpenAI Fallbacks
-        if (msg.includes('quota')) return t('ui.chat.error.quota', 'Quota limit reached');
+        if (msg.includes('quota')) return this._i18n.t('ui.chat.error.quota', 'Quota limit reached');
         if (msg.includes('auth') || msg.includes('api key'))
-            return t('ui.chat.error.auth', 'Invalid API Key');
+            return this._i18n.t('ui.chat.error.auth', 'Invalid API Key');
         if (msg.includes('server error') || msg.includes('500'))
-            return t('ui.chat.error.server', 'Server error. Please try again later.');
+            return this._i18n.t('ui.chat.error.server', 'Server error. Please try again later.');
 
         return errorMsg;
     }
@@ -545,28 +529,21 @@ export class ChatController {
     }
 
     private _playVoiceSound(state: boolean): void {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const soundFX = win['soundFX'] as { playToggle: (_s: boolean) => void } | undefined;
-        if (soundFX) soundFX.playToggle(state);
+        this._soundService.playToggle(state);
     }
 
     private _setVoicePlaceholder(isRecording: boolean, input: HTMLTextAreaElement | null): void {
         if (!input) return;
-        const win = globalThis as unknown as Record<string, unknown>;
-        const t = win['t'] as ((key: string, def?: string) => string) | undefined;
 
         if (isRecording) {
-            input.placeholder = t
-                ? t('ui.launcher.web.voice_listening', 'Listening...')
-                : 'Listening...';
+            input.placeholder = this._i18n.t('ui.launcher.web.voice_listening', 'Listening...');
         } else {
-            input.placeholder = t
-                ? t('ui.launcher.web.chat_placeholder_ask', 'Ask anything...')
-                : 'Ask anything...';
+            input.placeholder = this._i18n.t('ui.launcher.web.chat_placeholder_ask', 'Ask anything...');
         }
     }
 
     private _currentGreetingIndex = 1;
+
 
     /**
      * Resizes the chat input based on content.
@@ -595,17 +572,10 @@ export class ChatController {
                 this._currentGreetingIndex = ((array[0] ?? 0) % 50) + 1;
             }
 
-            const win = globalThis as unknown as Record<string, unknown>;
-            const t = win['t'] as ((key: string, def?: string) => string) | undefined;
-
-            if (t) {
-                el.textContent = t(
-                    `ui.chat.greeting.${String(this._currentGreetingIndex)}`,
-                    'How can I help you today?',
-                );
-            } else {
-                el.textContent = 'How can I help you today?';
-            }
+            el.textContent = this._i18n.t(
+                `ui.chat.greeting.${String(this._currentGreetingIndex)}`,
+                'How can I help you today?',
+            );
         }
     }
     /**
@@ -636,19 +606,3 @@ export class ChatController {
         }
     }
 }
-
-// Instantiate
-document.addEventListener('DOMContentLoaded', () => {
-    // Keep reference in case we need it, though strictly internal side-effect
-    const _controller = new ChatController();
-
-    // Listen for language changes to update greeting in real-time
-    globalThis.addEventListener('lang:changed', () => {
-        // Valid private method access for this specific context or we could make it public
-        const c = _controller as unknown as {
-            _randomizeGreeting: (idx?: number) => void;
-            _currentGreetingIndex: number;
-        };
-        c._randomizeGreeting(c._currentGreetingIndex);
-    });
-});

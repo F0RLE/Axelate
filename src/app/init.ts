@@ -26,7 +26,7 @@ import { DebugUI } from '@/features/debug/ui/DebugUI';
 import { SettingsService } from '@/features/settings/services/SettingsService';
 import { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import { aiBridge } from '@/features/ai/services/AIBridge';
-import '@/features/chat/chat'; // Bundles chat logic and controller
+import { ChatController } from '@/features/chat/chat';
 
 export class Core {
     // Services - Made public for EventHandler and GlobalBridge
@@ -45,6 +45,7 @@ export class Core {
     public readonly debugService: DebugService;
     public readonly debugUI: DebugUI;
     public readonly settingsService: SettingsService;
+    public readonly chatController: ChatController;
 
     // UI
     public readonly appUI: AppUI;
@@ -83,7 +84,7 @@ export class Core {
         this.navigation.setStateService(this.state);
 
         this.monitoringService = new MonitoringService(this.tauriProvider);
-        this.debugService = new DebugService();
+        this.debugService = new DebugService(this.tauriProvider);
         this.settingsService = new SettingsService(this.tauriProvider);
 
         // 3. Init UI Handlers
@@ -92,7 +93,7 @@ export class Core {
         this.windowUI = new WindowUI(this.windowService, this.state, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.state, this.soundService);
-        this.downloadUI = new DownloadUI();
+        this.downloadUI = new DownloadUI(this.state, this.i18n);
         this.settingsUI = new SettingsUI(this.settingsService, this.state, this.i18nUI);
         this.particles = new Particles();
         this.monitoringUI = new MonitoringUI(this.monitoringService);
@@ -107,6 +108,9 @@ export class Core {
 
         // Inject Core into Service Singletons (Section 16.2)
         aiBridge.setCore(this);
+
+        this.chatController = new ChatController(aiBridge, this.i18n, this.soundService);
+        this.chatController.init();
     }
 
     /**
@@ -225,7 +229,7 @@ export class Core {
 
         this.logger.info('[Core] Ready.');
 
-        this.logger.info('[Core] Ready.');
+
     }
 
     /**

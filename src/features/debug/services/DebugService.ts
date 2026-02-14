@@ -1,5 +1,5 @@
 import { logger } from '@/shared/services/LoggerService';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 
 export interface ILogEntry {
     timestamp: number;
@@ -12,21 +12,21 @@ export class DebugService {
     private logs: ILogEntry[] = [];
     private lastTimestamp = 0;
 
+    constructor(private readonly tauriProvider: TauriProvider) {}
+
     public async fetchLogs(): Promise<ILogEntry[]> {
         try {
-            // Check for Tauri environment or Mock
-            const win = globalThis as unknown as TGlobalWin;
-            if ((win as unknown as Record<string, unknown>)['__TAURI__'] === undefined) {
+            if (this.tauriProvider.isTauri()) {
+                const logs = await this.tauriProvider.invoke<ILogEntry[]>('get_logs', {
+                    since: this.lastTimestamp,
+                });
+                return this.processLogs(logs);
+            } else {
                 // Fallback to fetch for dev/browser
                 const res = await fetch(`/api/logs?since=${this.lastTimestamp.toString()}`);
                 if (!res.ok) throw new Error('Fetch failed');
                 const text = await res.text();
                 const logs = this.safeJsonParse(text, []);
-                return this.processLogs(logs);
-            } else {
-                const logs = await win.__TAURI__.core.invoke<ILogEntry[]>('get_logs', {
-                    since: this.lastTimestamp,
-                });
                 return this.processLogs(logs);
             }
         } catch (e) {
@@ -39,11 +39,10 @@ export class DebugService {
         this.logs = [];
         this.lastTimestamp = 0;
         try {
-            const win = globalThis as unknown as TGlobalWin;
-            if ((win as unknown as Record<string, unknown>)['__TAURI__'] === undefined) {
-                await fetch('/api/logs/clear', { method: 'POST' });
+            if (this.tauriProvider.isTauri()) {
+                await this.tauriProvider.invoke('clear_logs');
             } else {
-                await win.__TAURI__.core.invoke('clear_logs');
+                await fetch('/api/logs/clear', { method: 'POST' });
             }
             return true;
         } catch (e) {
