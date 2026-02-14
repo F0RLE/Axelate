@@ -12,7 +12,7 @@
  */
 
 import DOMPurify from 'dompurify';
-import { logger } from './LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 /**
  * @class TemplateLoader
@@ -54,7 +54,7 @@ class TemplateLoader {
         }
 
         try {
-            const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '') || '.';
+            const base = (import.meta.env.BASE_URL).replace(/\/$/, '') || '.';
             const url = `${base}/templates/${path}.html`;
             const response = await fetch(url);
             if (!response.ok) {

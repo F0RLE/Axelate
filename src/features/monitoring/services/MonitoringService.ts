@@ -1,5 +1,5 @@
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 interface IMonitoringGlobal {

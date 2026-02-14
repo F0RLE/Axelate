@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type * as Bindings from '@/shared/types/bindings';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import type { IBridge } from '@/shared/types/IBridge';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 

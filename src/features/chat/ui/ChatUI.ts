@@ -29,7 +29,7 @@ import type { IChatAttachment, IChatRole } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 import DOMPurify from 'dompurify';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 export class ChatUI {
     private readonly _messagesContainer: HTMLElement | null;
@@ -59,13 +59,13 @@ export class ChatUI {
              <div class="code-block-wrapper">
                  <div class="code-block-header">
                      <span class="code-lang">${language}</span>
-                     <button class="code-copy-btn" title="${globalThis.t ? globalThis.t('ui.launcher.web.copy_code', 'Copy code') : 'Copy code'}">
+                     <button class="code-copy-btn" title="${(globalThis as TGlobalWin).t('ui.launcher.web.copy_code', 'Copy code')}">
                         <!-- Simple Copy Icon -->
                         <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                         </svg>
-                        <span>${globalThis.t ? globalThis.t('ui.launcher.web.copy', 'Copy') : 'Copy'}</span>
+                        <span>${(globalThis as TGlobalWin).t('ui.launcher.web.copy', 'Copy')}</span>
                      </button>
                  </div>
                  <pre><code class="language-${language}">${escaped === true ? text : text.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</code></pre>
@@ -458,9 +458,9 @@ export class ChatUI {
         if (typeof tokens === 'number' && tokens > 0) {
             const tokenSpan = document.createElement('span');
             tokenSpan.className = 'chat-tokens';
-            const t = globalThis.t;
+            const t = (globalThis as TGlobalWin).t;
             const fallback = tokens === 1 ? 'token' : 'tokens';
-            const tokensWord = t ? t('ui.launcher.web.tokens', fallback) : fallback;
+            const tokensWord = t('ui.launcher.web.tokens', fallback);
             tokenSpan.textContent = `${String(tokens)} ${tokensWord}`;
             meta.appendChild(tokenSpan);
         }
@@ -522,7 +522,7 @@ export class ChatUI {
 
         card.innerHTML = `
             ${contentHtml}
-            <button type="button" class="media-remove" title="${globalThis.t ? globalThis.t('ui.launcher.web.remove_attachment', 'Remove attachment') : 'Remove attachment'}">×</button>
+            <button type="button" class="media-remove" title="${(globalThis as TGlobalWin).t('ui.launcher.web.remove_attachment', 'Remove attachment')}">×</button>
         `;
 
         const btn: HTMLElement | null = card.querySelector('.media-remove');
@@ -546,8 +546,8 @@ export class ChatUI {
             iconSvg = '📄';
         }
 
-        const t = globalThis.t;
-        const tokensLabel = t ? t('ui.launcher.web.tokens', 'tokens') : 'tokens';
+        const t = (globalThis as TGlobalWin).t;
+        const tokensLabel = t('ui.launcher.web.tokens', 'tokens');
         const tokensHtml =
             tokens > 0 ? `<div class="media-tokens">${String(tokens)} ${tokensLabel}</div>` : '';
 
@@ -657,17 +657,15 @@ export class ChatUI {
     private _showCopyResult(btn: HTMLElement, success: boolean): void {
         if (!success) {
             this.showToast(
-                globalThis.t
-                    ? globalThis.t('ui.launcher.web.copy_failed', 'Failed to copy code')
-                    : 'Failed to copy code',
+                (globalThis as TGlobalWin).t('ui.launcher.web.copy_failed', 'Failed to copy code'),
                 'error',
             );
             return;
         }
 
         const originalHtml = btn.innerHTML;
-        const t = globalThis.t;
-        const label = t ? t('ui.launcher.web.copied', 'Copied!') : 'Copied!';
+        const t = (globalThis as TGlobalWin).t;
+        const label = t('ui.launcher.web.copied', 'Copied!');
 
         btn.innerHTML = `
             <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
@@ -689,7 +687,7 @@ export class ChatUI {
         if (el === null) return;
 
         if (count > 0) {
-            el.textContent = `${String(count)} ${globalThis.t ? globalThis.t('ui.launcher.web.tokens', 'tokens') : 'tokens'}`;
+            el.textContent = `${String(count)} ${(globalThis as TGlobalWin).t('ui.launcher.web.tokens', 'tokens')}`;
             el.classList.add('visible');
             el.style.display = '';
             // Add warning color if tokens are high (heuristic: 20k tokens)

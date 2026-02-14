@@ -1,4 +1,5 @@
 import { type IApp, type ILogEntry } from '@/shared/types/coreTypes';
+import type { IBridgeResponse } from '@/features/ai/types/aiTypes';
 import type { Core } from '@/app/init';
 
 export {};
@@ -45,7 +46,7 @@ interface AIBridgeInterface {
         _text: string,
         _source?: 'chat' | 'service' | 'system',
         _attachments?: { name: string; type: string; data_base64: string }[],
-    ) => Promise<string>;
+    ) => Promise<IBridgeResponse>;
     onMessage: (
         _listenerId: string,
         _handler: (_response: string, _source: string) => void,

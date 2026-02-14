@@ -46,7 +46,9 @@ body.snapping #app-header {
     gap: 0;
     height: 100%;
     align-self: stretch;
-    -webkit-app-region: no-drag;
+    -webkit-app-region: no-drag !important;
+    z-index: 10000;
+    pointer-events: auto !important;
 
     /* Adjustable Positioning */
     position: relative;
@@ -66,7 +68,10 @@ body.snapping #app-header {
     height: 100%;
     transition: background 0.2s var(--ease-smooth);
     color: var(--text-secondary);
-    -webkit-app-region: no-drag;
+    -webkit-app-region: no-drag !important;
+    position: relative;
+    z-index: 10000;
+    pointer-events: auto !important;
 }
 
 .window-control-btn svg {

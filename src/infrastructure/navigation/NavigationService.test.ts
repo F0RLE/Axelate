@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NavigationService } from '@/infrastructure/navigation/NavigationService';
 
 // Mock LoggerService
-vi.mock('@/shared/services/LoggerService', () => ({
+vi.mock('@/infrastructure/logging/LoggerService', () => ({
     logger: {
         info: vi.fn(),
         warn: vi.fn(),

@@ -6,7 +6,7 @@
 import type { IBridge } from '@/shared/types/IBridge';
 import type { IApp, IModule, IConfigField, ICatalogData } from '@/shared/types/coreTypes';
 import type { AppConfig, ModuleItem, ApiProvider } from '@/shared/types/bindings';
-import { logger } from './LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
@@ -54,8 +54,7 @@ export class CatalogService {
         const validConfig = this._ensureValidConfig(config);
 
         try {
-            if (validConfig.catalog) {
-                this._appData.stars = validConfig.catalog.stars ?? [];
+            this._appData.stars = validConfig.catalog.stars;
 
                 const ai = validConfig.catalog.ai;
                 const services = validConfig.catalog.services;
@@ -85,13 +84,9 @@ export class CatalogService {
 
                 const event = new CustomEvent('catalog-loaded');
                 globalThis.dispatchEvent(event);
-            } else {
-                logger.warn('[CatalogService] Config missing catalog property!');
-            }
 
-            if (validConfig.models) {
-                this._updateLegacySettings(validConfig.models);
-            }
+
+            this._updateLegacySettings(validConfig.models);
 
             logger.info(
                 `[CatalogService] Catalog initialized. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,

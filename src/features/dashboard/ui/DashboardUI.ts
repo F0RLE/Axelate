@@ -3,7 +3,7 @@
  * @description Main dashboard UI component. Currently a placeholder for future widgets and charts.
  */
 
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 export class DashboardUI {
     constructor() {

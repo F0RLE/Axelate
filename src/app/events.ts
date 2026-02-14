@@ -20,6 +20,7 @@ export class EventHandler {
      */
     public init(): void {
         this._initGlobalDelegation();
+        this._initWindowControls();
 
         this._initDownloadsPage();
         this._initAppModuleCards();
@@ -78,8 +79,7 @@ export class EventHandler {
                     }
                 }
 
-                // 4. Window Controls
-                if (this._handleWindowControls(target)) return;
+                // 4. Window Controls (Moved to direct listeners)
 
                 // 5. Debug Console Logic
                 if (target.closest('#clear-logs-btn') !== null) {
@@ -272,23 +272,47 @@ export class EventHandler {
         }
     }
 
-    private _handleWindowControls(target: HTMLElement): boolean {
-        if (target.closest('#minimize-btn') !== null) {
-            void this._core.windowService.minimize();
-            return true;
-        }
-        if (target.closest('#maximize-btn') !== null) {
-            void this._core.windowService.toggleMaximize();
-            return true;
-        }
-        if (target.closest('#close-btn') !== null) {
-            void this._core.windowService.close();
-            return true;
-        }
-        if (target.closest('#sound-toggle-btn') !== null) {
-            this._core.windowUI.toggleSound();
-            return true;
-        }
-        return false;
+    private _initWindowControls(): void {
+        const handler = (e: Event): void => {
+            const target = e.target as HTMLElement;
+
+            // Minimize
+            if (target.closest('#minimize-btn')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                void this._core.windowService.minimize();
+                return;
+            }
+
+            // Maximize
+            if (target.closest('#maximize-btn')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                void this._core.windowService.toggleMaximize();
+                return;
+            }
+
+            // Close
+            if (target.closest('#close-btn')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                void this._core.windowService.close();
+                return;
+            }
+
+            // Sound Toggle
+            if (target.closest('#sound-toggle-btn')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                this._core.windowUI.toggleSound();
+            }
+        };
+
+        // Use Capture Phase { capture: true } to intercept events before bubbling
+        globalThis.addEventListener('click', handler, { capture: true });
+
+        this._unsubscribers.push(() => {
+            globalThis.removeEventListener('click', handler, { capture: true });
+        });
     }
 }

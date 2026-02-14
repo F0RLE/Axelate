@@ -1,7 +1,7 @@
 import { BaseComponent } from '../ui/BaseComponent';
 import { type StateService } from '../services/StateService';
 import { type SoundService } from '../services/SoundService';
-import { logger } from '../services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import { mountLogos } from '@/assets/logos';
 
 export class SidebarUI extends BaseComponent {

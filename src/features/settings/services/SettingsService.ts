@@ -1,7 +1,7 @@
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { IApp } from '@/shared/types/coreTypes';
 
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import type { AppSettings } from '@/shared/types/bindings';
 export type ISettings = AppSettings;
 export type SettingsValue = string | number | boolean;

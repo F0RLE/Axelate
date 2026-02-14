@@ -12,8 +12,8 @@
  * ```
  */
 
-import type { ILogEntry } from '../types/coreTypes';
-import type { TGlobalWin } from '../types/global_bridge_types';
+import type { ILogEntry } from '@/shared/types/coreTypes';
+import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
 export class LoggerService {
     private _buffer: ILogEntry[] = [];

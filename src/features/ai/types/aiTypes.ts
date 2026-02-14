@@ -67,6 +67,15 @@ export interface IChatResponse {
     thought_signature?: string;
 }
 
+/**
+ * Structured response from AIBridge operations.
+ */
+export interface IBridgeResponse {
+    ok: boolean;
+    text?: string;
+    error?: string;
+}
+
 // ============================================================================
 // State Interrogations
 // ============================================================================

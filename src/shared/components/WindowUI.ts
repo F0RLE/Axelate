@@ -7,7 +7,7 @@ import { type WindowService } from '../services/WindowService';
 import type { TGlobalWin } from '../types/global_bridge_types';
 import { type StateService } from '../services/StateService';
 import { type SoundService } from '../services/SoundService';
-import { logger } from '../services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 // IWindowUIGlobal removed
 

@@ -28,9 +28,9 @@
 │   │   ├── 📝 CODING_STANDARDS.md
 │   │   ├── 📝 FileTree.md
 │   │   ├── 📝 architecture.md
-│   │   ├── 📝 getting-started.md
-│   │   └── 📝 solid_migration_roadmap.md
+│   │   └── 📝 getting-started.md
 │   ├── 📁 ru
+│   │   ├── 📝 ROADMAP.md
 │   │   └── 📝 VISION.md
 │   └── 📁 zn
 ├── 📁 scripts
@@ -65,6 +65,7 @@
 │   │   │   ├── 📁 services
 │   │   │   │   ├── 📄 ChatFileHandler.test.ts
 │   │   │   │   ├── 📄 ChatFileHandler.ts
+│   │   │   │   ├── 📄 ChatService.test.ts
 │   │   │   │   ├── 📄 ChatService.ts
 │   │   │   │   ├── 📄 VoiceInputService.test.ts
 │   │   │   │   └── 📄 VoiceInputService.ts
@@ -82,6 +83,7 @@
 │   │   │   └── 📄 index.ts
 │   │   ├── 📁 debug
 │   │   │   ├── 📁 services
+│   │   │   │   ├── 📄 DebugService.test.ts
 │   │   │   │   └── 📄 DebugService.ts
 │   │   │   ├── 📁 ui
 │   │   │   │   └── 📄 DebugUI.ts
@@ -158,7 +160,15 @@
 │   │   ├── 📄 bump-version.js
 │   │   └── 📄 check-size.js
 │   ├── 📁 shared
+│   │   ├── 📁 api
+│   │   │   ├── 📄 invoke.ts
+│   │   │   └── 📄 types.ts
 │   │   ├── 📁 components
+│   │   │   ├── 📁 ui
+│   │   │   │   ├── 📄 ModalManager.ts
+│   │   │   │   ├── 📄 ModuleCardRenderer.ts
+│   │   │   │   ├── 📄 SkeletonManager.ts
+│   │   │   │   └── 📄 ToastManager.ts
 │   │   │   ├── 📄 AppUI.ts
 │   │   │   ├── 📄 Particles.ts
 │   │   │   ├── 📄 SidebarUI.ts
@@ -172,6 +182,7 @@
 │   │   │   ├── 📄 EventBus.test.ts
 │   │   │   ├── 📄 EventBus.ts
 │   │   │   ├── 📄 LoggerService.ts
+│   │   │   ├── 📄 ModulePlatformService.ts
 │   │   │   ├── 📄 ModuleService.test.ts
 │   │   │   ├── 📄 ModuleService.ts
 │   │   │   ├── 📄 SoundService.ts

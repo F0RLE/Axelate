@@ -1,4 +1,4 @@
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 
 export interface ILogEntry {

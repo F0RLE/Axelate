@@ -4,7 +4,7 @@
  */
 
 import type { ISpeechRecognitionEvent, ISpeechRecognitionInstance } from '../types/chatTypes';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 export type VoiceResultCallback = (text: string) => void;
 export type VoiceStateCallback = (isRecording: boolean) => void;

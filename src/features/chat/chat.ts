@@ -10,7 +10,7 @@ import { voiceInputService } from './services/VoiceInputService';
 import { chatFileHandler } from './services/ChatFileHandler'; /* Import Singleton */
 import { getTokenCount } from './utils/chatUtils';
 import { type TGlobalWin } from '@/shared/types/global_bridge_types';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import type { AIBridge } from '@/features/ai/services/AIBridge';

@@ -4,9 +4,11 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { logger } from './LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import type { IModuleDownloadState } from '../types/coreTypes';
 import type { TGlobalWin } from '../types/global_bridge_types';
+import { commands } from '../types/bindings';
+import { invokeSafe } from '../api/invoke';
 
 // Local types for global access
 // IModuleGlobal removed
@@ -71,9 +73,13 @@ export class ModuleService {
         if (this._deletedModules.has(moduleId)) return false;
 
         try {
-            return await this._bridge.invoke<boolean>('check_module_installed', {
-                moduleId: moduleId,
-            });
+            // Updated to use new API layer
+            const result = await invokeSafe(commands.checkModuleInstalled(moduleId));
+            if (result.status === 'ok') {
+                return result.data;
+            }
+            logger.warn(`[ModuleService] Check installed failed: ${result.error.message}`);
+            return false;
         } catch (err) {
             logger.error(`Check installed error: ${String(err)}`);
             return false;
@@ -106,11 +112,14 @@ export class ModuleService {
             const hashToPass =
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
 
-            await this._bridge.invoke('download_module', {
-                moduleId: moduleId,
-                repoUrl: repoUrl,
-                expectedHash: hashToPass,
-            });
+            // Updated to use new API layer
+            const result = await invokeSafe(
+                commands.downloadModule(moduleId, repoUrl, hashToPass)
+            );
+
+            if (result.status === 'error') {
+                throw new Error(result.error.message);
+            }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             logger.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
@@ -131,14 +140,20 @@ export class ModuleService {
         }
 
         try {
-            await this._bridge.invoke('delete_module', { moduleId: moduleId });
+            // Updated to use new API layer
+            const result = await invokeSafe(commands.deleteModule(moduleId));
+            
+            if (result.status === 'error') {
+                 logger.error(`[ModuleService] Delete failed: ${result.error.message}`);
+                 return false;
+            }
 
             this._deletedModules.add(moduleId);
             // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {
-            logger.error(`[ModuleService] Delete failed: ${String(e)}`);
+            logger.error(`[ModuleService] Delete exception: ${String(e)}`);
             return false;
         }
     }

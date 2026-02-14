@@ -4,7 +4,7 @@
  */
 
 import { BaseComponent } from '../../../shared/ui/BaseComponent';
-import { logger } from '../../../shared/services/LoggerService';
+import { logger } from '../../../infrastructure/logging/LoggerService';
 import { renderSimpleFeature } from '../../../shared/ui/renderSimpleFeature';
 
 /**

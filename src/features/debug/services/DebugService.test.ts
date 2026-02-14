@@ -30,7 +30,7 @@ describe('DebugService', () => {
         
         expect(mockTauriProvider.invoke).toHaveBeenCalledWith('get_logs', { since: 0 });
         expect(logs).toHaveLength(1);
-        expect(logs[0]!.message).toBe('Test log');
+        expect(logs[0]?.message).toBe('Test log');
     });
 
     it('should fetch logs via fetch when NOT in Tauri', async () => {
@@ -49,7 +49,7 @@ describe('DebugService', () => {
         expect(globalThis.fetch).toHaveBeenCalled();
         expect(mockTauriProvider.invoke).not.toHaveBeenCalled();
         expect(logs).toHaveLength(1);
-        expect(logs[0]!.message).toBe('Browser log');
+        expect(logs[0]?.message).toBe('Browser log');
     });
 
     it('should clear logs via Tauri invoke when in Tauri', async () => {

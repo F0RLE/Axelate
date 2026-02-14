@@ -4,7 +4,7 @@
  */
 
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 /**
  * Check if a file is a text-based file.

@@ -7,7 +7,7 @@ import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
 import { type StateService } from '@/shared/services/StateService';
 
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationService {
     private readonly _historyStack: string[] = [];

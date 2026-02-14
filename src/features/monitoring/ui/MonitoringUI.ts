@@ -96,7 +96,7 @@ export class MonitoringUI extends BaseComponent {
     }
 
     private _animateMainValue(el: HTMLElement, targetVal: number, decimals = 0, suffix = '') {
-        const targetNode = el.querySelector('.main-val') || el;
+        const targetNode = el.querySelector('.main-val') ?? el;
         if (!(targetNode instanceof HTMLElement)) return;
 
         const start = this._lastValues.get(targetNode) ?? 0;

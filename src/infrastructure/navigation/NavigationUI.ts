@@ -12,7 +12,7 @@
 import { eventBus } from '@/shared/services/EventBus';
 import { type NavigationService } from './NavigationService';
 import { type SoundService } from '@/shared/services/SoundService';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationUI {
     constructor(

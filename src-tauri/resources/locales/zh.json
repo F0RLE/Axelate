@@ -135,12 +135,6 @@
   "ui.launcher.module.settings": "设置",
   "ui.launcher.module.change": "更换应用",
   "ui.launcher.module.remove": "移除模块",
-  "ui.launcher.module.remove_short": "关闭",
-  "ui.launcher.module.settings_short": "设置",
-  "ui.launcher.module.delete": "删除",
-  "ui.launcher.module.type_local": "本地",
-  "ui.launcher.module.type_api": "云端",
-  "ui.launcher.web.module_status.not_installed": "未安装",
   "ui.launcher.module.download": "下载",
   "ui.launcher.module.downloading": "下载中...",
   "ui.gpt.model.gpt52.desc": "各行业编码和代理任务的最佳模型",
@@ -293,5 +287,7 @@
   "ui.launcher.web.expand_window": "展开窗口以查看正常界面显示",
   "ui.launcher.web.home": "首页",
   "ui.settings.no_settings": "此模块无需额外设置。",
-  "ui.settings.module_not_ready": "此模块尚未就绪。"
+  "ui.settings.module_not_ready": "此模块尚未就绪。",
+  "ui.launcher.badge.cloud": "云端",
+  "ui.launcher.badge.local": "本地"
 }

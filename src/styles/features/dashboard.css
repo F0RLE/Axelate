@@ -778,16 +778,7 @@
     -webkit-backdrop-filter: blur(0px) saturate(100%);
 }
 
-@keyframes cardIn {
-    0% {
-        opacity: 0;
-        transform: translate3d(0, 30px, 0) scale(0.97);
-    }
-    100% {
-        opacity: 1;
-        transform: translate3d(0, 0, 0) scale(1);
-    }
-}
+
 
 .modal-backdrop:not(.hidden) .app-card {
     /* Use 'backwards' to hide element during delay (apply 0% style) but release after completion for hover */
@@ -1002,16 +993,7 @@
 }
 
 /* Define missing keyframes for card entrance */
-@keyframes cardIn {
-    0% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
+
 
 .app-icon-wrapper {
     width: 70px; /* Slightly smaller for density */
@@ -1347,20 +1329,21 @@
 /* App Type Badge */
 .app-type-badge {
     position: absolute;
-    top: 6px;
-    right: 6px;
+    top: 10px;
+    right: 10px;
     z-index: 100;
 
     /* Flex Layout */
     display: flex;
     align-items: center;
+    justify-content: center; /* Center content when collapsed */
     gap: 0; /* Starts with 0 gap */
 
     /* Sizing & Shape */
-    height: 28px;
-    border-radius: 14px; /* Circle pill */
-    padding: 0 8px; /* Padding for icon */
-    max-width: 28px; /* Collapsed width matches height/padding approx */
+    height: 32px;
+    border-radius: 16px; /* Circle pill */
+    padding: 0; /* Remove padding, let badge-icon define the shape */
+    max-width: 32px; /* Collapsed */
     overflow: hidden;
 
     /* Typography */
@@ -1371,9 +1354,18 @@
     white-space: nowrap;
 
     /* Visuals */
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(30, 30, 35, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     color: var(--text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* border: 1px solid rgba(255, 255, 255, 0.1); REMOVED as requested */
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    
+    opacity: 0; /* Hidden by default */
+
+    /* Animation */
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Ensure all elements in the card show pointer */
@@ -1382,71 +1374,101 @@
 }
 
 .app-type-badge:hover {
-    max-width: 120px; /* Expand enough to fit text */
-    gap: 8px;
-    background: rgba(20, 20, 25, 0.95);
-    border-color: var(--primary);
+    max-width: 140px; /* Expand enough */
+    padding-left: 12px; /* Add spacing for text on the left */
+    background: rgba(30, 30, 35, 0.95);
     box-shadow: none;
+    opacity: 1;
+    justify-content: center;
+}
+
+.app-card:hover .app-type-badge {
+    opacity: 1;
 }
 
 .badge-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1rem;
-    min-width: 12px;
+    font-size: 1.2rem;
+    line-height: 1;
+    
+    /* Enforce fixed square size for perfect centering */
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
 }
 
 .badge-text {
     opacity: 0;
-    transition: opacity 0.3s;
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 0.3s, max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     transition-delay: 0.05s;
 }
 
 .app-type-badge:hover .badge-text {
     opacity: 1;
+    max-width: 100px;
 }
 
-.app-type-badge.local {
-    color: #27ae60;
-    border-color: rgba(33, 136, 56, 0.3);
-}
-.app-type-badge.local:hover {
-    background: rgba(46, 204, 113, 0.1);
-}
 
-.app-type-badge.api {
-    color: #3498db;
-    border-color: rgba(52, 152, 219, 0.3);
-}
-.app-type-badge.api:hover {
-    background: rgba(52, 152, 219, 0.1);
-}
 
 .app-type-badge.core {
     color: #9b59b6;
     border-color: rgba(155, 89, 182, 0.3);
 }
 .app-type-badge.core:hover {
-    background: rgba(155, 89, 182, 0.1);
+    background: rgba(155, 89, 182, 0.2); /* Updated opacity */
 }
 
 /* Status Badges */
+/* .installed class is added when module is installed, but we want Type color to persist */
+/* So we only use .installed for generic styling if needed, or ensure Type overrides it */
+
 .app-type-badge.installed {
-    color: #27ae60;
-    border-color: rgba(33, 136, 56, 0.3);
-}
-.app-type-badge.installed:hover {
-    background: rgba(46, 204, 113, 0.1);
+    /* Default installed color (Green) - only if no type is specific? */
+    /* Actually, user wants API to be Blue even if installed. */
+    /* So we don't force color here if it is API. */
+    color: #27ae60; 
 }
 
-.app-type-badge.not-installed {
-    color: var(--text-muted);
-    border-color: rgba(255, 255, 255, 0.2);
+/* Force API color even when installed */
+/* Force API color always */
+.app-type-badge.api {
+    color: #3498db !important;
 }
-.app-type-badge.not-installed:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
+
+/* Local color - Green when installed, Grey when not */
+.app-type-badge.local {
+    color: #27ae60; 
+}
+.app-type-badge.local.not-installed {
+    color: var(--text-muted) !important;
+    background: rgba(30, 30, 35, 0.6);
+}
+
+/* Hover states */
+.app-type-badge.api:hover {
+    background: rgba(52, 152, 219, 0.15); /* Slightly more subtle */
+    color: #5dade2 !important; /* Lighter blue for contrast on dark */
+}
+
+.app-type-badge.local:hover {
+    background: rgba(46, 204, 113, 0.15);
+    color: #58d68d !important; /* Lighter green for contrast on dark */
+}
+.app-type-badge.local.not-installed:hover {
+    background: rgba(30, 30, 35, 0.95); /* Dark background like delete */
+    color: var(--text-muted) !important;
+}
+
+/* Status Badges */
+
+/* Hide badge completely if not installed (User request: "only download", "like delete") */
+.app-type-badge.not-installed {
+    display: none !important;
 }
 
 /* --- Module Card State Transition Animation --- */
@@ -1680,9 +1702,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     padding-right: 10px;
 }
 
-.app-card:hover .app-type-badge {
-    opacity: 1;
-}
+
 
 /* --- Type Badge Overrides (API/Local) --- */
 .type-badge {

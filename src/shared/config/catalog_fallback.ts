@@ -102,6 +102,7 @@ export const FALLBACK_CONFIG: AppConfig = {
     ],
     models: {
         gpt: {
+
             'gpt-5.3-codex': {
                 descKey: '',
                 name: 'GPT‑5.3 Codex',
@@ -231,10 +232,10 @@ export const FALLBACK_CONFIG: AppConfig = {
                 stats: { speed: 7, logic: 7, creative: 7 },
                 apiModels: null,
             },
-            'llama-4-behemoth': {
+            'llama-4-maverick': {
                 descKey: '',
-                name: 'Llama 4 Behemoth',
-                desc: 'Largest open self‑hosted model for deep reasoning.',
+                name: 'Llama 4 Maverick',
+                desc: '400B parameter general purpose powerhouse.',
                 pricing: [
                     { tier: 'Input', note: 'Self‑hosted' },
                     { tier: 'Output', note: 'Self‑hosted' },

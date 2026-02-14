@@ -12,7 +12,7 @@ import { SidebarUI } from '@/shared/components/SidebarUI';
 import { AppUI } from '@/shared/components/AppUI';
 import { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import { SoundService } from '@/shared/services/SoundService';
-import { logger, type LoggerService } from '@/shared/services/LoggerService';
+import { logger, type LoggerService } from '@/infrastructure/logging/LoggerService';
 import { templateLoader } from '@/shared/services/TemplateLoader';
 import type { IApp, IBootstrapData } from '@/shared/types/coreTypes';
 import { GlobalBridge } from './bridge';
@@ -27,6 +27,7 @@ import { SettingsService } from '@/features/settings/services/SettingsService';
 import { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import { aiBridge } from '@/features/ai/services/AIBridge';
 import { ChatController } from '@/features/chat/chat';
+import { ModulePlatformService } from '@/shared/services/ModulePlatformService';
 
 export class Core {
     // Services - Made public for EventHandler and GlobalBridge
@@ -46,6 +47,7 @@ export class Core {
     public readonly debugUI: DebugUI;
     public readonly settingsService: SettingsService;
     public readonly chatController: ChatController;
+    public readonly modulePlatformService: ModulePlatformService;
 
     // UI
     public readonly appUI: AppUI;
@@ -71,6 +73,7 @@ export class Core {
         // 2. Init Core Services
         this.state = new StateService(this.tauriProvider);
         this.moduleService = new ModuleService(this.tauriProvider);
+        this.modulePlatformService = new ModulePlatformService(() => this.moduleService);
         this.windowService = new WindowService(this.tauriProvider);
         this.i18n = new I18nService(this.tauriProvider);
         this.catalog = new CatalogService(this.tauriProvider);
@@ -88,7 +91,7 @@ export class Core {
         this.settingsService = new SettingsService(this.tauriProvider);
 
         // 3. Init UI Handlers
-        this.appUI = new AppUI();
+        this.appUI = new AppUI(this.modulePlatformService);
         this.i18nUI = new I18nUI(this.i18n);
         this.windowUI = new WindowUI(this.windowService, this.state, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);

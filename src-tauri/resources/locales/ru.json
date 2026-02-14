@@ -293,5 +293,7 @@
   "ui.chat.greeting.50": "Axelate: Твой запуск в бесконечность.",
   "ui.launcher.web.home": "Главное меню",
   "ui.settings.no_settings": "Дополнительные настройки для этого модуля не требуются",
-  "ui.settings.module_not_ready": "Этот модуль еще не готов"
+  "ui.settings.module_not_ready": "Этот модуль еще не готов",
+  "ui.launcher.badge.cloud": "ОБЛАКО",
+  "ui.launcher.badge.local": "ЛОКАЛЬНО"
 }

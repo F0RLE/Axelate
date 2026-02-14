@@ -3,7 +3,7 @@
  * @description Internationalization service for managing translations and language settings
  */
 
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import { type IBridge } from '@/shared/types/IBridge';
 
 export class I18nService {

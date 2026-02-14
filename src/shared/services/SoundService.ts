@@ -3,7 +3,7 @@
  * @description Provides audio feedback for UI interactions
  */
 
-import { logger } from './LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 interface ISoundGlobal {
     AudioContext?: typeof AudioContext;

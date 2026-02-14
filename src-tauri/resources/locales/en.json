@@ -293,5 +293,7 @@
   "ui.chat.greeting.50": "Axelate: Your launch into infinity.",
   "ui.launcher.web.home": "Home",
   "ui.settings.no_settings": "No additional settings required for this module.",
-  "ui.settings.module_not_ready": "This module is not ready yet."
+  "ui.settings.module_not_ready": "This module is not ready yet.",
+  "ui.launcher.badge.cloud": "CLOUD",
+  "ui.launcher.badge.local": "LOCAL"
 }

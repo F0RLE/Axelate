@@ -4,7 +4,7 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { logger } from './LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
 
 export interface IUIState {

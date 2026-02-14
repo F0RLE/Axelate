@@ -20,7 +20,7 @@ import {
     readFileAsBase64,
     readFileAsText,
 } from '../utils/chatUtils';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 // ============================================================================
 // Types
 // ============================================================================

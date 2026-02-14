@@ -4,7 +4,7 @@
  */
 
 import { type StateService } from '@/shared/services/StateService';
-import { logger } from '@/shared/services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 import type { ISettingsUIContext } from './SettingsContext';
 
 export class GeneralSettingsRenderer {

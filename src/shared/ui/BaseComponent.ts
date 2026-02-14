@@ -1,4 +1,4 @@
-import { logger } from '../services/LoggerService';
+import { logger } from '@/infrastructure/logging/LoggerService';
 
 /**
  * @abstract BaseComponent
