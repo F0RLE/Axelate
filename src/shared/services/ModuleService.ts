@@ -113,9 +113,7 @@ export class ModuleService {
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
 
             // Updated to use new API layer
-            const result = await invokeSafe(
-                commands.downloadModule(moduleId, repoUrl, hashToPass)
-            );
+            const result = await invokeSafe(commands.downloadModule(moduleId, repoUrl, hashToPass));
 
             if (result.status === 'error') {
                 throw new Error(result.error.message);
@@ -142,10 +140,10 @@ export class ModuleService {
         try {
             // Updated to use new API layer
             const result = await invokeSafe(commands.deleteModule(moduleId));
-            
+
             if (result.status === 'error') {
-                 logger.error(`[ModuleService] Delete failed: ${result.error.message}`);
-                 return false;
+                logger.error(`[ModuleService] Delete failed: ${result.error.message}`);
+                return false;
             }
 
             this._deletedModules.add(moduleId);

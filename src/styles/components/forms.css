@@ -400,7 +400,7 @@ input[type='range']::-moz-range-thumb {
 .range-val {
     width: 50px;
     text-align: right;
-    font-family: 'Monocraft', monospace;
+    font-family: var(--app-font-family);
     color: var(--primary);
     font-size: 0.85rem;
     font-weight: 600;

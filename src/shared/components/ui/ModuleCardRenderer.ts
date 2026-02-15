@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 import type { IApp } from '../../types/coreTypes';
 import type { TGlobalWin } from '../../types/global_bridge_types';
+import { logger } from '../../../infrastructure/logging/LoggerService';
 
 /**
  * @class ModuleCardRenderer
@@ -8,16 +9,48 @@ import type { TGlobalWin } from '../../types/global_bridge_types';
  */
 export class ModuleCardRenderer {
     private readonly _purifyConfig = {
-        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'code', 'pre', 'div', 'span', 'svg', 'line', 'path'],
+        ALLOWED_TAGS: [
+            'b',
+            'i',
+            'em',
+            'strong',
+            'a',
+            'p',
+            'br',
+            'code',
+            'pre',
+            'div',
+            'span',
+            'svg',
+            'line',
+            'path',
+        ],
         ALLOWED_ATTR: [
-            'href', 'class', 'style', 'viewBox', 'width', 'height', 'stroke',
-            'stroke-width', 'fill', 'stroke-linecap', 'stroke-linejoin',
-            'x1', 'y1', 'x2', 'y2', 'd'
+            'href',
+            'class',
+            'style',
+            'viewBox',
+            'width',
+            'height',
+            'stroke',
+            'stroke-width',
+            'fill',
+            'stroke-linecap',
+            'stroke-linejoin',
+            'x1',
+            'y1',
+            'x2',
+            'y2',
+            'd',
         ],
         ALLOW_DATA_ATTR: true,
     };
 
-    public createCard(app: IApp, _category: string, onClick: (e: MouseEvent, app: IApp) => void): HTMLElement {
+    public createCard(
+        app: IApp,
+        _category: string,
+        onClick: (e: MouseEvent, app: IApp) => void,
+    ): HTMLElement {
         const card = document.createElement('div');
         card.className = 'app-card';
         card.dataset['appId'] = app.id;
@@ -29,7 +62,8 @@ export class ModuleCardRenderer {
         card.classList.toggle('is-installed', isInstalled);
 
         const g = globalThis as TGlobalWin;
-        const downloadText = typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
+        const downloadText =
+            typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
 
         card.innerHTML = DOMPurify.sanitize(
             `
@@ -39,13 +73,17 @@ export class ModuleCardRenderer {
             <div class="app-card-title">${this._getAppName(app)}</div>
             <div class="app-card-desc">${this._getAppDesc(app)}</div>
             ${this._getAppStatusHtml(isApi, isInstalled)}
-            ${!isInstalled && !isApi ? `
+            ${
+                !isInstalled && !isApi
+                    ? `
                 <div class="app-card-overlay">
                     <div class="app-status download-btn centered">
                         ${downloadText}
                     </div>
                 </div>
-            ` : ''}
+            `
+                    : ''
+            }
         `,
             this._purifyConfig,
         );
@@ -63,12 +101,12 @@ export class ModuleCardRenderer {
                         )(app.id);
                         if (actuallyInstalled) {
                             app.installed = true;
-                            
+
                             card.classList.remove('has-download');
                             card.classList.add('has-launch', 'is-installed');
                             const overlay = card.querySelector('.app-card-overlay');
                             if (overlay) overlay.remove();
-                            
+
                             const typeBadge = card.querySelector('.app-type-badge');
                             if (typeBadge) {
                                 typeBadge.classList.remove('not-installed');
@@ -85,7 +123,9 @@ export class ModuleCardRenderer {
                             }
                         }
                     } catch (err) {
-                        console.debug('[ModuleCardRenderer] Failed to check installation status for', app.id, err);
+                        logger.debug(
+                            `[ModuleCardRenderer] Failed to check installation status for ${app.id}: ${String(err)}`,
+                        );
                     }
                 })();
             }
@@ -109,7 +149,7 @@ export class ModuleCardRenderer {
     private _updateCardIcon(card: HTMLElement, app: IApp): void {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
         if (iconWrapper === null) return;
-        
+
         iconWrapper.innerHTML = DOMPurify.sanitize(
             `<div>${app.icon ?? '📦'}</div>`,
             this._purifyConfig,
@@ -122,7 +162,10 @@ export class ModuleCardRenderer {
 
         if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
             const win = globalThis as TGlobalWin;
-            title.textContent = typeof win.t === 'function' ? win.t('ui.launcher.web.app_title', 'Axelate') : 'Axelate';
+            title.textContent =
+                typeof win.t === 'function'
+                    ? win.t('ui.launcher.web.app_title', 'Axelate')
+                    : 'Axelate';
             delete title.dataset['i18n'];
             return;
         }
@@ -154,7 +197,11 @@ export class ModuleCardRenderer {
         desc.textContent = descText;
     }
 
-    public markCardAsInstalled(card: HTMLElement, app: IApp, configureActionBtn: (card: HTMLElement, app: IApp) => void): void {
+    public markCardAsInstalled(
+        card: HTMLElement,
+        app: IApp,
+        configureActionBtn: (card: HTMLElement, app: IApp) => void,
+    ): void {
         card.classList.remove('has-download');
         card.classList.add('has-launch', 'is-installed');
 
@@ -177,7 +224,7 @@ export class ModuleCardRenderer {
                 card.insertAdjacentHTML('afterbegin', badgeHtml);
             }
         }
-        
+
         // Status badge updates removed as the element is no longer rendered
     }
 
@@ -210,18 +257,18 @@ export class ModuleCardRenderer {
         let iconHtml: string;
 
         if (isApi) {
-             text = typeof g.t === 'function' ? g.t('ui.launcher.badge.cloud', 'CLOUD') : 'CLOUD';
-             // Cloud Emoji
-             iconHtml = '<span style="font-size: 1.1rem;">☁️</span>';
+            text = typeof g.t === 'function' ? g.t('ui.launcher.badge.cloud', 'CLOUD') : 'CLOUD';
+            // Cloud Emoji
+            iconHtml = '<span style="font-size: 1.1rem;">☁️</span>';
         } else {
-             text = typeof g.t === 'function' ? g.t('ui.launcher.badge.local', 'LOCAL') : 'LOCAL';
-             // House Emoji (restored from history)
-             iconHtml = '<span style="font-size: 1.1rem;">🏠</span>';
+            text = typeof g.t === 'function' ? g.t('ui.launcher.badge.local', 'LOCAL') : 'LOCAL';
+            // House Emoji (restored from history)
+            iconHtml = '<span style="font-size: 1.1rem;">🏠</span>';
         }
-        
+
         const defaultClass = isApi ? 'api' : 'local';
-        const installClass = (isApi || isInstalled) ? 'installed' : 'not-installed';
-        
+        const installClass = isApi || isInstalled ? 'installed' : 'not-installed';
+
         return `
             <div class="app-type-badge ${defaultClass} ${installClass}">
                 <div class="badge-text">${text}</div>
@@ -237,8 +284,9 @@ export class ModuleCardRenderer {
     private _getAppDeleteBadgeHtml(isApi: boolean, isInstalled: boolean): string {
         if (isApi || !isInstalled) return '';
         const win = globalThis as TGlobalWin;
-        const deleteText = typeof win.t === 'function' ? win.t('ui.launcher.module.delete', 'DELETE') : 'DELETE';
-        
+        const deleteText =
+            typeof win.t === 'function' ? win.t('ui.launcher.module.delete', 'DELETE') : 'DELETE';
+
         return `
             <div class="app-delete-badge">
                 <div class="badge-icon"><span style="font-size: 1.1rem; line-height: 1;">🗑️</span></div>

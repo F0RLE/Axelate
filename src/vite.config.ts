@@ -13,8 +13,11 @@ const pruneFontsPlugin = {
             if (!chunk || chunk?.type !== 'asset') continue;
 
             if (
-                (fileName.endsWith('.ttf') && !fileName.includes('Cubic_11')) ||
-                fileName.endsWith('.woff')
+                (fileName.endsWith('.woff2') &&
+                    !fileName.includes('Cubic_11') &&
+                    !fileName.includes('Monocraft')) ||
+                fileName.endsWith('.woff') ||
+                fileName.endsWith('.ttf')
             ) {
                 delete bundle[fileName];
             }
@@ -70,14 +73,20 @@ export default defineConfig({
 
     // Pre-bundle known dependencies for faster dev startup
     optimizeDeps: {
-        include: ['marked', 'katex', 'dompurify', 'marked-katex-extension', 'marked-alert'],
+        include: ['marked', 'dompurify', 'marked-alert'],
     },
 
     build: {
         // Tauri v2 modern engine targets
         target: process.env['TAURI_PLATFORM'] === 'windows' ? 'chrome120' : 'safari15',
 
-        minify: process.env['TAURI_DEBUG'] ? false : 'esbuild',
+        minify: process.env['TAURI_DEBUG'] ? false : 'terser',
+        terserOptions: {
+            compress: {
+                drop_console: true,
+                drop_debugger: true,
+            },
+        },
         sourcemap: Boolean(process.env['TAURI_DEBUG']),
 
         // Desktop apps tolerate larger chunks
@@ -92,14 +101,7 @@ export default defineConfig({
             },
             output: {
                 manualChunks: {
-                    'vendor-marked': [
-                        'marked',
-                        'marked-footnote',
-                        'marked-katex-extension',
-                        'marked-alert',
-                    ],
-                    'vendor-katex': ['katex'],
-                    'vendor-dompurify': ['dompurify'],
+                    'vendor-markdown': ['marked', 'dompurify', 'marked-alert', 'marked-footnote'],
                 },
                 // Cleaner asset naming
                 assetFileNames: 'assets/[name]-[hash][extname]',

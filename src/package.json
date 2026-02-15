@@ -32,6 +32,7 @@
         "husky": "^9.1.7",
         "jsdom": "^27.4.0",
         "prettier": "^3.8.1",
+        "terser": "^5.46.0",
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.19.1",
         "vite": "^7.3.1",
@@ -42,11 +43,10 @@
         "@tauri-apps/plugin-dialog": "^2.6.0",
         "@tauri-apps/plugin-fs": "^2.4.5",
         "dompurify": "^3.3.1",
-        "katex": "^0.16.28",
         "marked": "^17.0.1",
         "marked-alert": "^2.0.1",
         "marked-footnote": "^1.2.4",
-        "marked-katex-extension": "^5.1.2"
+        "wawoff2": "^2.0.1"
     },
     "engines": {
         "node": ">=20.0.0"

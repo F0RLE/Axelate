@@ -1,5 +1,5 @@
 import type { IApp } from '../types/coreTypes';
-import { ModuleService } from './ModuleService';
+import type { ModuleService } from './ModuleService';
 import { aiBridge } from '@/features/ai/services/AIBridge';
 import { logger } from '@/infrastructure/logging/LoggerService';
 
@@ -21,12 +21,13 @@ export class ModulePlatformService {
      */
     public async download(app: IApp): Promise<void> {
         logger.info(`[ModulePlatformService] Downloading: ${app.id}`);
-        
-        if (!app.repoUrl) {
+
+        if (app.repoUrl === undefined || app.repoUrl === '') {
             throw new Error('ui.launcher.web.download_url_empty'); // Key for localization
         }
 
-        await this._moduleService.downloadModule(app.id, app.repoUrl, app.expectedHash);
+        const url: string = app.repoUrl;
+        await this._moduleService.downloadModule(app.id, url, app.expectedHash);
     }
 
     /**
@@ -55,19 +56,19 @@ export class ModulePlatformService {
         } else {
             // Stop Local Process
             // Currently ModuleService.control handles this, or backend kills process?
-            // Existing AppUI logic just showed a toast for local modules saying "Stopped" 
+            // Existing AppUI logic just showed a toast for local modules saying "Stopped"
             // but didn't actually call a stop command for local/binary modules explicitly here?
             // Wait, previous code:
             // if (isApi) { win.aiBridge.stopProvider(); }
             // else { win.showToast(... "stopped"); logger.info(...); }
             // So for local modules, it seems it was just a UI state update or the backend handles it via other means?
             // Actually ModuleService has `control(name, 'stop')`.
-            
+
             // Let's try to actually stop it if possible, or just log it as before.
             // If it's a "service" module (managed by backend), we should call control or stop.
             // But AppUI's `_stopPreviousModule` seemed to only effectively stop AIProviders.
             // For now, we replicate existing behavior but clearer.
-            
+
             logger.info(`[ModulePlatformService] Requesting stop for local module: ${app.id}`);
             // If we have a control method, use it:
             return await this._moduleService.control(app.id, 'stop');
@@ -82,9 +83,7 @@ export class ModulePlatformService {
     }
 
     private _isApiModule(app: IApp): boolean {
-        return (
-            (app.type?.toLowerCase() ?? '') === 'api' ||
-            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id)
-        );
+        const type = app.type?.toLowerCase();
+        return type === 'api' || ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
     }
 }

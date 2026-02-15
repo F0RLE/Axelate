@@ -68,7 +68,9 @@ export class LoggerService {
             if (this._isInternalLog) return true; // Stop propagation to avoid recursion
 
             const msgStr = this._safeStringify(message);
-            const stack = error?.stack ? `\nStack: ${error.stack}` : '';
+            const stackTrace = error?.stack;
+            const stack =
+                typeof stackTrace === 'string' && stackTrace !== '' ? `\nStack: ${stackTrace}` : '';
             const errMsg = `${msgStr} at ${String(source)}:${String(lineno)}:${String(colno)}${stack}`;
 
             this.log('ERROR', errMsg);

@@ -23,11 +23,12 @@ export class AIChatTransport implements IChatTransport {
 
     public async init(): Promise<void> {
         if (this._core?.tauriProvider.isTauri() === true) {
-            // Setup global listener for streaming chunks if needed here, 
+            // Setup global listener for streaming chunks if needed here,
             // or let the bridge handle the subscription via onStream.
             // For now, we follow the pattern that Transport manages the low-level listener.
             logger.info('[AIChatTransport] Transport initialized');
         }
+        await Promise.resolve();
     }
 
     /**
@@ -62,7 +63,7 @@ export class AIChatTransport implements IChatTransport {
      * Returns an unlisten function.
      */
     public onStream(listener: (chunk: string) => void): () => void {
-        if (!this._core?.tauriProvider.isTauri()) {
+        if (this._core?.tauriProvider.isTauri() !== true) {
             return () => {};
         }
 
@@ -71,15 +72,17 @@ export class AIChatTransport implements IChatTransport {
         let unlistenFn: (() => void) | undefined;
         let isActive = true;
 
-        this._core.tauriProvider.listen<string>('ai-chat-chunk', (payload: string) => {
-            if (isActive) listener(payload);
-        }).then((fn) => {
-            if (!isActive) {
-                fn(); // If already cancelled, clean up immediately
-            } else {
-                unlistenFn = fn;
-            }
-        });
+        void this._core.tauriProvider
+            .listen<string>('ai-chat-chunk', (payload: string) => {
+                if (isActive) listener(payload);
+            })
+            .then((fn) => {
+                if (isActive) {
+                    unlistenFn = fn;
+                } else {
+                    fn(); // If already cancelled, clean up immediately
+                }
+            });
 
         return () => {
             isActive = false;

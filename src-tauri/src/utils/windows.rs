@@ -1,13 +1,13 @@
 // Windows-specific utilities for language detection and system info
 #![allow(unsafe_code)]
 
-#[cfg(windows)]
+#[cfg(all(windows, not(test)))]
 use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
 
 /// Detect system UI language using Windows API
 /// Returns language code: "ru", "zh", or "en" (default)
 pub fn detect_system_language() -> String {
-    #[cfg(windows)]
+    #[cfg(all(windows, not(test)))]
     {
         // SAFETY: GetUserDefaultUILanguage is a safe Windows API call
         let lcid = unsafe { GetUserDefaultUILanguage() };
@@ -23,6 +23,11 @@ pub fn detect_system_language() -> String {
             0x12 => "ko".to_string(), // Korean
             _ => "en".to_string(),    // English (default)
         }
+    }
+
+    #[cfg(any(not(windows), test))]
+    {
+        "en".to_string()
     }
 
     #[cfg(not(windows))]

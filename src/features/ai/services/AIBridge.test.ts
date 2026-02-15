@@ -164,7 +164,7 @@ describe('AIBridge', () => {
         it('should return message if no provider is active', async () => {
             const result = await aiBridge.sendMessage('Hello');
 
-            expect(result).toContain('No engine found');
+            expect(result.error).toContain('No engine found');
         });
 
         it('should invoke backend when provider is active', async () => {

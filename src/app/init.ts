@@ -194,14 +194,7 @@ export class Core {
 
             this.i18nUI.applyTranslations();
 
-            if (import.meta.env.DEV) {
-                this.debugUI.init();
-            } else {
-                const debugEntry = document.querySelector('.debug-trigger');
-                if (debugEntry instanceof HTMLElement) debugEntry.style.display = 'none';
-                const debugPanel = document.getElementById('debug-panel');
-                if (debugPanel) debugPanel.style.display = 'none';
-            }
+            this.debugUI.init();
         } catch (e) {
             this.logger.error(`[Core] Critical bootstrap failure: ${String(e)}`);
         } finally {
@@ -231,8 +224,6 @@ export class Core {
         }, 50); // Almost immediate, let opacity handles transition
 
         this.logger.info('[Core] Ready.');
-
-
     }
 
     /**

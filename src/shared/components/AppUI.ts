@@ -8,13 +8,12 @@ import { ToastManager } from './ui/ToastManager';
 import { ModuleCardRenderer } from './ui/ModuleCardRenderer';
 import { ModalManager } from './ui/ModalManager';
 import { SkeletonManager } from './ui/SkeletonManager';
-import { ModulePlatformService } from '../services/ModulePlatformService';
+import type { ModulePlatformService } from '../services/ModulePlatformService';
 
 /**
  * @class AppUI
  * @description Facade for UI components. Delegates to specific managers.
  */
-
 
 // Note: Window interface extensions are defined in core.ts
 
@@ -66,13 +65,12 @@ export class AppUI {
         this._toastManager = new ToastManager();
         this._cardRenderer = new ModuleCardRenderer();
         this._skeletonManager = new SkeletonManager();
-        this._modalManager = new ModalManager(
-            this._cardRenderer,
-            (e, app, category) => { void this._handleAppCardClick(e, app, category); }
-        );
+        this._modalManager = new ModalManager(this._cardRenderer, (e, app, category) => {
+            void this._handleAppCardClick(e, app, category);
+        });
 
         globalThis.addEventListener('language-changed', () => {
-             this._modalManager.refreshCurrentSelection();
+            this._modalManager.refreshCurrentSelection();
         });
 
         // Close modal when navigating away from modules page
@@ -168,8 +166,6 @@ export class AppUI {
         this._modalManager.closeAppSelection();
     }
 
-
-
     /**
      * Updates a specific module card on the dashboard.
      * @param {string} category - The module category.
@@ -191,7 +187,7 @@ export class AppUI {
             // The dashboard card structure is slightly different from modal cards.
             // Delegate content update to renderer
             this._cardRenderer.updateCardContent(cardLike, app);
-            
+
             this._configureActionBtn(cardLike, app);
             this._refreshCardActions(cardLike, app, category);
         } else {
@@ -229,6 +225,10 @@ export class AppUI {
 
         if (!isApi && app.installed !== true) {
             // Fallback allows any click for non-installed modules to trigger download
+            if (app.repoUrl === undefined || app.repoUrl === '') {
+                throw new Error('ui.launcher.web.download_url_empty'); // Key for localization
+            }
+
             e.stopPropagation();
             const btnToAnimate = this._resolveDownloadBtn(e, downloadBtn, overlay);
             await this._handleDownloadModule(app, category, btnToAnimate);
@@ -275,16 +275,16 @@ export class AppUI {
             // Refresh logic remains in UI for now (Phase 1 can refactor this)
             const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(category);
             this.openAppSelection(category, allApps);
-        } catch (err: any) {
-             logger.error('[AppUI] Delete error:', err);
-            const msg = err.message.startsWith('ui.') ? err.message : 'ui.launcher.web.delete_model_error';
+        } catch (err: unknown) {
+            logger.error('[AppUI] Delete error:', err);
+            const error = err as Error;
+            const msg = error.message.startsWith('ui.')
+                ? error.message
+                : 'ui.launcher.web.delete_model_error';
             const fallback = msg === 'ui.launcher.web.delete_model_error' ? 'Delete error' : msg;
-            
+
             const g = globalThis as TGlobalWin;
-            this.showToast(
-                typeof g.t === 'function' ? g.t(msg, fallback) : fallback,
-                'error',
-            );
+            this.showToast(typeof g.t === 'function' ? g.t(msg, fallback) : fallback, 'error');
         }
     }
 
@@ -310,19 +310,19 @@ export class AppUI {
             setTimeout(() => {
                 this.openAppSelection(category, allApps);
             }, 100);
-        } catch (err: any) {
+        } catch (err: unknown) {
             logger.error('[AppUI] Download error:', err);
             if (btn !== null) {
                 btn.classList.remove('downloading');
                 btn.style.pointerEvents = 'auto';
             }
-            const msg = err.message?.startsWith('ui.') ? err.message : 'ui.launcher.web.download_error';
+            const error = err as Error;
+            const msg = error.message.startsWith('ui.')
+                ? error.message
+                : 'ui.launcher.web.download_error';
             const fallback = msg === 'ui.launcher.web.download_error' ? 'Download failed' : msg;
-             const win = globalThis as TGlobalWin;
-            this.showToast(
-                typeof win.t === 'function' ? win.t(msg, fallback) : fallback,
-                'error',
-            );
+            const win = globalThis as TGlobalWin;
+            this.showToast(typeof win.t === 'function' ? win.t(msg, fallback) : fallback, 'error');
         }
     }
 
@@ -348,40 +348,43 @@ export class AppUI {
         // Let's rely on cached module list or simply infer.
         // The Service handles inference? No, service needs IApp to check props.
         // Existing code constructed `isApi` bool locally.
-        
+
         // Let's just pass `app` (the current one) ? No, we need to stop the PREVIOUS one.
         // But we don't have the previous IApp object here easily.
         // The DOM has `dataset['currentModule']`.
-        
+
         // HACK: Reconstruct a partial IApp to pass to `stop`.
         // This is a limitation of the current UI storage.
         // Ideally `AppUI` should track `_currentActiveApp: IApp`.
-        
+
         const prevId = previousModuleId;
-        const partialApp: IApp = { id: prevId, name: card.dataset['currentModuleName'] ?? prevId } as IApp;
-        
+        const partialApp: IApp = {
+            id: prevId,
+            name: card.dataset['currentModuleName'] ?? prevId,
+        } as IApp;
+
         // We need to know if it was API to know if we should call AIBridge.
         // StartPreviousModule logic:
         // const isApi = (app.type?.toLowerCase() ?? '') === 'api' || ['gpt',...].includes(app.id);
         // We can do the checks on ID.
         // PlatformService `isApiModule` checks ID list too.
-        
+
         void this._platformService.stop(partialApp).then(() => {
-             const prevName = card.dataset['currentModuleName'] ?? prevId;
-             // UI Toast (service handles API stop silent, local logs info)
-             // If local, we might want to show toast.
-             // For now, let's keep the toast here as UI feedback.
-             if (!this._platformService.isApiModule(partialApp)) {
-                 const win = globalThis as TGlobalWin;
-                 if (typeof win.showToast === 'function') {
+            const prevName = card.dataset['currentModuleName'] ?? prevId;
+            // UI Toast (service handles API stop silent, local logs info)
+            // If local, we might want to show toast.
+            // For now, let's keep the toast here as UI feedback.
+            if (!this._platformService.isApiModule(partialApp)) {
+                const win = globalThis as TGlobalWin;
+                if (typeof win.showToast === 'function') {
                     win.showToast(
                         typeof win.t === 'function'
                             ? win.t('ui.launcher.module.stopped', `${prevName} stopped`)
                             : `${prevName} stopped`,
                         'info',
                     );
-                 }
-             }
+                }
+            }
         });
 
         logger.info('[AppUI] Stopped previous module:', previousModuleId);
@@ -391,7 +394,7 @@ export class AppUI {
 
     // _markCardAsInstalled delegated
     private _markCardAsInstalled(card: HTMLElement, app: IApp): void {
-         this._cardRenderer.markCardAsInstalled(card, app, (c, a) => this._configureActionBtn(c, a));
+        this._cardRenderer.markCardAsInstalled(card, app, (c, a) => this._configureActionBtn(c, a));
     }
 
     private _configureActionBtn(card: HTMLElement, app: IApp): void {
@@ -417,7 +420,6 @@ export class AppUI {
             actionBtn.style.display = 'none';
         }
     }
-
 
     private _setupDownloadActionBtn(actionBtn: HTMLElement, app: IApp): void {
         const card = actionBtn.closest('.model-card-premium');
@@ -452,13 +454,8 @@ export class AppUI {
         this._setDownloadLoading(actionBtn);
 
         try {
-            const win = globalThis as TGlobalWin;
-            if (typeof win.downloadModule === 'function' && app.repoUrl !== undefined) {
-                await win.downloadModule(app.id, app.repoUrl, app.expectedHash);
-                this._onDownloadSuccess(actionBtn, app);
-            } else {
-                this._notifyDownloadUnavailable();
-            }
+            await this._platformService.download(app);
+            this._onDownloadSuccess(actionBtn, app);
         } catch (err) {
             this._onDownloadError(actionBtn, app, err);
         }
@@ -484,7 +481,13 @@ export class AppUI {
 
     private _onDownloadSuccess(actionBtn: HTMLElement, app: IApp): void {
         const win = globalThis as TGlobalWin;
-        if (typeof win.showToast === 'function') win.showToast(typeof win.t === 'function' ? win.t('ui.launcher.web.module_downloaded', 'Module downloaded!') : 'Module downloaded!', 'success');
+        if (typeof win.showToast === 'function')
+            win.showToast(
+                typeof win.t === 'function'
+                    ? win.t('ui.launcher.web.module_downloaded', 'Module downloaded!')
+                    : 'Module downloaded!',
+                'success',
+            );
         app.installed = true;
 
         let card = actionBtn.closest('.model-card-premium');
@@ -498,15 +501,13 @@ export class AppUI {
     private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown): void {
         logger.error('Download error:', err);
         const win = globalThis as TGlobalWin;
-        win.showToast(typeof win.t === 'function' ? win.t('ui.launcher.web.download_error', 'Download failed') : 'Download failed', 'error');
+        win.showToast(
+            typeof win.t === 'function'
+                ? win.t('ui.launcher.web.download_error', 'Download failed')
+                : 'Download failed',
+            'error',
+        );
         this._setDownloadReady(actionBtn);
-    }
-
-    private _notifyDownloadUnavailable(): void {
-        const win = globalThis as TGlobalWin;
-        if (typeof win.showToast === 'function') {
-            win.showToast('Download not available', 'warning');
-        }
     }
 
     private _addSettingsBtn(card: HTMLElement, app: IApp): void {
@@ -562,8 +563,6 @@ export class AppUI {
         };
         card.appendChild(closeBtn);
     }
-
-
 
     // --- Prompt Tab Switching (for chat/settings) ---
     public showPromptTab(tab: string, btn?: HTMLElement): void {

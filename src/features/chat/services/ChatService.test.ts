@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatService } from './ChatService';
@@ -29,8 +30,8 @@ describe('ChatService', () => {
     });
 
     it('should return error if AIBridge sends error string', async () => {
-        vi.mocked(mockAIBridge.isActive).mockReturnValue(true);
-        vi.mocked(mockAIBridge.sendMessage).mockResolvedValue('Error: Some error');
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockResolvedValue({ ok: false, error: 'Some error' });
 
         const result = await chatService.sendMessage('Hello', [], []);
         expect(result.ok).toBe(false);
@@ -38,8 +39,8 @@ describe('ChatService', () => {
     });
 
     it('should return success response on valid send', async () => {
-        vi.mocked(mockAIBridge.isActive).mockReturnValue(true);
-        vi.mocked(mockAIBridge.sendMessage).mockResolvedValue('Hello there');
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockResolvedValue({ ok: true, text: 'Hello there' });
 
         const result = await chatService.sendMessage('Hi', [], []);
         expect(result.ok).toBe(true);
@@ -47,8 +48,8 @@ describe('ChatService', () => {
     });
 
     it('should return error if AIBridge throws', async () => {
-        vi.mocked(mockAIBridge.isActive).mockReturnValue(true);
-        vi.mocked(mockAIBridge.sendMessage).mockRejectedValue(new Error('Network fail'));
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockRejectedValue(new Error('Network fail'));
 
         const result = await chatService.sendMessage('Hi', [], []);
         expect(result.ok).toBe(false);

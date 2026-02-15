@@ -4,9 +4,7 @@ export type AppError = {
     details?: unknown;
 };
 
-export type Result<T, E = AppError> = 
-    | { status: 'ok'; data: T }
-    | { status: 'error'; error: E };
+export type Result<T, E = AppError> = { status: 'ok'; data: T } | { status: 'error'; error: E };
 
 export function isOk<T, E>(result: Result<T, E>): result is { status: 'ok'; data: T } {
     return result.status === 'ok';

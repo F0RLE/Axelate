@@ -247,7 +247,10 @@ export class DownloadUI {
             els.statusEl.textContent = this._i18n.t('ui.downloads.status.error', 'Error');
             els.statusEl.classList.add('error');
         } else if (hasActive) {
-            els.statusEl.textContent = this._i18n.t('ui.downloads.status.in_progress', 'In Progress');
+            els.statusEl.textContent = this._i18n.t(
+                'ui.downloads.status.in_progress',
+                'In Progress',
+            );
             els.statusEl.classList.add('active');
         } else {
             els.statusEl.textContent = this._i18n.t('ui.downloads.status.waiting', 'Waiting');

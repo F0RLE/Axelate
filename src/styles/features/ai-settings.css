@@ -67,10 +67,7 @@
 
 .ai-module-config h3 {
     font-family:
-        var(--font-body),
-        system-ui,
-        -apple-system,
-        sans-serif;
+        var(--app-font-family);
     font-weight: 700;
     font-size: 1.1rem; /* Enforce uniform size */
     margin: 0;
@@ -270,13 +267,13 @@
     box-shadow: none !important;
     padding: 0 1rem;
     color: var(--text-primary);
-    font-family: 'Monocraft', monospace !important;
+    font-family: var(--app-font-family) !important;
     font-size: 0.85rem;
     letter-spacing: 0.5px;
 }
 
 .ai-key-input-row input::placeholder {
-    font-family: 'Monocraft', monospace !important;
+    font-family: var(--app-font-family) !important;
     opacity: 0.5;
     font-size: 0.8rem;
 }

@@ -9,29 +9,37 @@ use std::sync::LazyLock;
 /// - Linux: `$XDG_CONFIG_HOME/AxelateData` or `~/.config/AxelateData`
 /// - macOS: `~/Library/Application Support/AxelateData`
 pub static APPDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
-    // 1. Try standard config dir (e.g. C:\Users\User\AppData\Roaming)
-    let mut root = dirs::config_dir();
-
-    // 2. Windows Fallback: Try APPDATA env var explicitly
-    #[cfg(target_os = "windows")]
+    #[cfg(test)]
     {
-        root = root.or_else(|| std::env::var("APPDATA").ok().map(PathBuf::from));
+        PathBuf::from("./test_appdata_root")
     }
 
-    // 3. Unix Fallback: Try HOME/.config
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(test))]
     {
-        root = root.or_else(|| {
-            std::env::var("HOME")
-                .ok()
-                .map(|home| PathBuf::from(home).join(".config"))
-        });
-    }
+        // 1. Try standard config dir (e.g. C:\Users\User\AppData\Roaming)
+        let mut root = dirs::config_dir();
 
-    // 4. Ultimate Fallback: Current Directory (Development only usually)
-    let mut path = root.unwrap_or_else(|| PathBuf::from("."));
-    path.push("AxelateData");
-    path
+        // 2. Windows Fallback: Try APPDATA env var explicitly
+        #[cfg(target_os = "windows")]
+        {
+            root = root.or_else(|| std::env::var("APPDATA").ok().map(PathBuf::from));
+        }
+
+        // 3. Unix Fallback: Try HOME/.config
+        #[cfg(not(target_os = "windows"))]
+        {
+            root = root.or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|home| PathBuf::from(home).join(".config"))
+            });
+        }
+
+        // 4. Ultimate Fallback: Current Directory (Development only usually)
+        let mut path = root.unwrap_or_else(|| PathBuf::from("."));
+        path.push("AxelateData");
+        path
+    }
 });
 
 /// User-specific data root (`AxelateData/User`)

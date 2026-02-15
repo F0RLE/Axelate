@@ -1,7 +1,7 @@
 import type { IApp } from '../../types/coreTypes';
 import type { TGlobalWin } from '../../types/global_bridge_types';
 import { logger } from '@/infrastructure/logging/LoggerService';
-import { ModuleCardRenderer } from './ModuleCardRenderer';
+import { type ModuleCardRenderer } from './ModuleCardRenderer';
 
 /**
  * @class ModalManager
@@ -17,7 +17,7 @@ export class ModalManager {
 
     constructor(
         cardRenderer: ModuleCardRenderer,
-        onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void
+        onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void,
     ) {
         this._cardRenderer = cardRenderer;
         this._onAppInteraction = onAppInteraction;
@@ -63,11 +63,11 @@ export class ModalManager {
     }
 
     public refreshCurrentSelection(): void {
-        if (this._currentCategory && this._currentApps.length > 0) {
-             const modal = document.getElementById('app-selection-modal');
-             if (modal && !modal.classList.contains('hidden')) {
-                 this.openAppSelection(this._currentCategory, this._currentApps);
-             }
+        if (this._currentCategory !== null && this._currentApps.length > 0) {
+            const modal = document.getElementById('app-selection-modal');
+            if (modal !== null && !modal.classList.contains('hidden')) {
+                this.openAppSelection(this._currentCategory, this._currentApps);
+            }
         }
     }
 
@@ -84,8 +84,7 @@ export class ModalManager {
         const defaultText = category === 'ai' ? 'Select AI Module' : 'Select Service';
         const win = globalThis as TGlobalWin;
 
-        titleEl.textContent =
-            typeof win.t === 'function' ? win.t(key, defaultText) : defaultText;
+        titleEl.textContent = typeof win.t === 'function' ? win.t(key, defaultText) : defaultText;
     }
 
     private _populateAppList(listEl: HTMLElement, apps: IApp[], category: string): void {
@@ -93,7 +92,9 @@ export class ModalManager {
         const sorted = this._getSortedApps(apps);
 
         sorted.forEach((app) => {
-            const card = this._cardRenderer.createCard(app, category, (e, a) => this._onAppInteraction(e, a, category));
+            const card = this._cardRenderer.createCard(app, category, (e, a) =>
+                this._onAppInteraction(e, a, category),
+            );
             listEl.appendChild(card);
         });
     }

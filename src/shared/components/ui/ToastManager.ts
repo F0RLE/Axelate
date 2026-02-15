@@ -15,11 +15,37 @@ export interface ToastElement extends HTMLElement {
  */
 export class ToastManager {
     private readonly _purifyConfig = {
-        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'code', 'pre', 'div', 'span', 'svg', 'line'],
+        ALLOWED_TAGS: [
+            'b',
+            'i',
+            'em',
+            'strong',
+            'a',
+            'p',
+            'br',
+            'code',
+            'pre',
+            'div',
+            'span',
+            'svg',
+            'line',
+        ],
         ALLOWED_ATTR: [
-            'href', 'class', 'style', 'viewBox', 'width', 'height', 'stroke',
-            'stroke-width', 'fill', 'stroke-linecap', 'stroke-linejoin',
-            'x1', 'y1', 'x2', 'y2'
+            'href',
+            'class',
+            'style',
+            'viewBox',
+            'width',
+            'height',
+            'stroke',
+            'stroke-width',
+            'fill',
+            'stroke-linecap',
+            'stroke-linejoin',
+            'x1',
+            'y1',
+            'x2',
+            'y2',
         ],
         ALLOW_DATA_ATTR: true,
     };
@@ -63,7 +89,8 @@ export class ToastManager {
             container.style.zIndex = '9999';
             const win = globalThis as TGlobalWin;
             // Fallback for translation if not available
-            const containerTitle = typeof win.t === 'function' ? win.t('ui.toast.container', '') : '';
+            const containerTitle =
+                typeof win.t === 'function' ? win.t('ui.toast.container', '') : '';
             container.innerHTML = DOMPurify.sanitize(containerTitle, this._purifyConfig);
             document.body.appendChild(container);
         }

@@ -102,7 +102,6 @@ export const FALLBACK_CONFIG: AppConfig = {
     ],
     models: {
         gpt: {
-
             'gpt-5.3-codex': {
                 descKey: '',
                 name: 'GPT‑5.3 Codex',

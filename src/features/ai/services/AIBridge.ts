@@ -80,28 +80,25 @@ export class AIBridge {
      */
     public async startProvider(providerId: string): Promise<boolean> {
         const started = await this._manager.startProvider(providerId);
-        
+
         if (started) {
             const display = this._manager.getProviderDisplayName(providerId);
             this._showSuccessToast('ui.ai.provider_started', `${display} active`);
         } else {
             // Check if it failed due to missing key
             const isLocal = providerId === 'local' || providerId === 'axelate-localai';
-            if (!isLocal && !this._manager.apiKey) {
-                 this._showErrorToast('ui.ai.no_api_key', 'API key missing');
+            if (!isLocal && this._manager.apiKey === null) {
+                this._showErrorToast('ui.ai.no_api_key', 'API key missing');
             } else {
-                 this._showToast('Provider activation failed', 'error');
+                this._showToast('Provider activation failed', 'error');
             }
         }
         return started;
     }
 
-
-
     /**
      * Resolves the API key from the designated security layer.
      */
-
 
     /**
      * Terminates the active provider session.
@@ -122,7 +119,7 @@ export class AIBridge {
 
     public getActiveProvider(): { id: string; name: string } | null {
         const id = this._manager.activeProviderId;
-        if (!id) return null;
+        if (id === null) return null;
         return {
             id,
             name: this._manager.getProviderDisplayName(id),
@@ -134,21 +131,19 @@ export class AIBridge {
         source: MessageSource = 'chat',
         attachments: { name: string; type: string; data_base64: string }[] = [],
     ): Promise<IBridgeResponse> {
-        if (!this._manager.activeProviderId) {
+        if (this._manager.activeProviderId === null) {
             return this._handleMissingProvider(source);
         }
 
         await this._manager.refreshActiveApiKey();
 
-        if (
-            !this._manager.apiKey &&
-            this._manager.activeProviderId !== 'axelate-localai'
-        ) {
+        if (this._manager.apiKey === null && this._manager.activeProviderId !== 'axelate-localai') {
             return this._handleMissingApiKey(source);
         }
 
         try {
-            const providerId = this._manager.activeProviderId ?? '';
+            const providerId = this._manager.activeProviderId;
+            // if (providerId === null) { ... } // Removed as linter says it's unnecessary
 
             if (providerId === 'axelate-localai') {
                 const msg = globalThis.t('ui.ai.local_disabled', 'Local AI is disabled.');
@@ -187,8 +182,6 @@ export class AIBridge {
         }
     }
 
-
-
     private _handleMissingApiKey(source: MessageSource): IBridgeResponse {
         const msg = globalThis.t('ui.ai.no_api_key', 'API key missing');
         this._broadcastResponse(`Error: ${msg}`, source); // Broadcasts to UI listeners if any
@@ -202,19 +195,18 @@ export class AIBridge {
         return { ok: false, error: msg };
     }
 
-
-
-
-
-    private _handleTransportResponse(response: IBridgeResponse, source: MessageSource): IBridgeResponse {
+    private _handleTransportResponse(
+        response: IBridgeResponse,
+        source: MessageSource,
+    ): IBridgeResponse {
         const g = globalThis as Record<string, unknown>;
         if (typeof g['randomizeChatGreeting'] === 'function') {
             (g['randomizeChatGreeting'] as () => void)();
         }
 
-        if (response.ok && response.text) {
+        if (response.ok && typeof response.text === 'string' && response.text !== '') {
             this._broadcastResponse(response.text, source);
-        } else if (!response.ok && response.error) {
+        } else if (!response.ok && typeof response.error === 'string' && response.error !== '') {
             logger.error('[AIBridge] Backend operation anomaly:', response.error);
         }
 
@@ -281,8 +273,6 @@ export class AIBridge {
             isRunning: this._manager.isActive(),
         };
     }
-
-
 
     public destroy(): void {
         this._manager.stopProvider();

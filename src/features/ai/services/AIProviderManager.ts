@@ -8,7 +8,7 @@ export class AIProviderManager {
     private _activeProviderId: string | null = null;
     private _apiKey: string | null = null;
     private _model = '';
-    
+
     // Session Management
     private _sessionId: string = 'default';
 
@@ -19,11 +19,11 @@ export class AIProviderManager {
     public async init(): Promise<void> {
         // Initialize Session ID using Secure Storage
         let sid = await this._getSecureVal('ai_session_id');
-        if (!sid) {
+        if (sid === null || sid === '') {
             sid = crypto.randomUUID();
             await this._saveSecureVal('ai_session_id', sid);
         }
-        
+
         this._sessionId = sid;
 
         // Sync UI state
@@ -36,8 +36,8 @@ export class AIProviderManager {
         if (this._activeProviderId === providerId) return true;
 
         logger.info(`[AIProviderManager] Switching provider to: ${providerId}`);
-        
-        if (this._activeProviderId) {
+
+        if (this._activeProviderId !== null) {
             this.stopProvider();
         }
 
@@ -45,7 +45,7 @@ export class AIProviderManager {
             const apiKey = await this._resolveApiKey(providerId);
             const isLocal = providerId === 'local' || providerId === 'axelate-localai';
 
-            if (!apiKey && !isLocal) {
+            if (apiKey === '' && !isLocal) {
                 return false;
             }
 
@@ -70,7 +70,7 @@ export class AIProviderManager {
     }
 
     public stopProvider(): void {
-        if (this._activeProviderId) {
+        if (this._activeProviderId !== null) {
             this._activeProviderId = null;
             this._apiKey = null;
             this._model = '';
@@ -79,9 +79,9 @@ export class AIProviderManager {
     }
 
     public isActive(): boolean {
-        if (!this._activeProviderId) return false;
+        if (this._activeProviderId === null) return false;
         if (this._activeProviderId === 'axelate-localai') return true;
-        return !!this._apiKey;
+        return this._apiKey !== null && this._apiKey !== '';
     }
 
     public get activeProviderId(): string | null {
@@ -114,7 +114,7 @@ export class AIProviderManager {
      * Use this before sending messages to ensure key validity if it changed.
      */
     public async refreshActiveApiKey(): Promise<void> {
-        if (this._activeProviderId) {
+        if (this._activeProviderId !== null) {
             const freshKey = await this._resolveApiKey(this._activeProviderId);
             if (freshKey !== this._apiKey) {
                 this._apiKey = freshKey;

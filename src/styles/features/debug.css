@@ -90,7 +90,7 @@
 }
 
 .modules-title {
-    font-family: 'Monocraft', 'Inter', sans-serif;
+    font-family: var(--app-font-family);
     font-size: 2rem;
     font-weight: 700;
     color: var(--text-primary);
@@ -148,7 +148,7 @@
     border-radius: 8px;
     padding: 0.5rem 1rem;
     color: var(--text-secondary);
-    font-family: 'Monocraft', monospace;
+    font-family: var(--app-font-family);
     font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -181,7 +181,7 @@
     border-radius: 8px;
     padding: 0.5rem 1rem;
     color: var(--text-secondary);
-    font-family: 'Monocraft', monospace;
+    font-family: var(--app-font-family);
     font-size: 0.85rem;
     cursor: pointer;
     display: flex;
@@ -207,7 +207,7 @@
     overflow-y: auto;
     padding: 1rem;
     padding-top: 4rem; /* Space for floating buttons */
-    font-family: 'Monocraft', 'Fira Code', monospace;
+    font-family: var(--app-font-family);
     font-size: 0.85rem;
     line-height: 1.3;
     color: var(--text-primary);
@@ -384,7 +384,7 @@
     padding: 0.5rem 1rem;
     background: rgba(255, 255, 255, 0.02);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    font-family: 'Monocraft', monospace;
+    font-family: var(--app-font-family);
     font-size: 0.7rem;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -395,7 +395,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 1rem;
-    font-family: 'Monocraft', 'Cascadia Code', 'Consolas', monospace;
+    font-family: var(--app-font-family);
     font-size: 0.8rem;
     line-height: 1.5;
     color: #d0d0e0;
@@ -464,7 +464,7 @@
 }
 
 .debug-value-text {
-    font-family: 'Monocraft', monospace;
+    font-family: var(--app-font-family);
     font-size: 0.8rem;
     color: var(--primary);
 }

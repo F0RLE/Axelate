@@ -666,7 +666,7 @@
     background: #ffffff;
     padding: 2px 6px;
     border-radius: 4px;
-    font-family: monospace;
+    font-family: var(--app-font-family);
     color: #000000 !important;
     font-weight: 700;
 }
@@ -777,8 +777,6 @@
     backdrop-filter: blur(0px) saturate(100%);
     -webkit-backdrop-filter: blur(0px) saturate(100%);
 }
-
-
 
 .modal-backdrop:not(.hidden) .app-card {
     /* Use 'backwards' to hide element during delay (apply 0% style) but release after completion for hover */
@@ -993,7 +991,6 @@
 }
 
 /* Define missing keyframes for card entrance */
-
 
 .app-icon-wrapper {
     width: 70px; /* Slightly smaller for density */
@@ -1361,7 +1358,7 @@
     /* border: 1px solid rgba(255, 255, 255, 0.1); REMOVED as requested */
     border: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    
+
     opacity: 0; /* Hidden by default */
 
     /* Animation */
@@ -1392,7 +1389,7 @@
     justify-content: center;
     font-size: 1.2rem;
     line-height: 1;
-    
+
     /* Enforce fixed square size for perfect centering */
     width: 32px;
     height: 32px;
@@ -1404,7 +1401,9 @@
     max-width: 0;
     overflow: hidden;
     white-space: nowrap;
-    transition: opacity 0.3s, max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        opacity 0.3s,
+        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     transition-delay: 0.05s;
 }
 
@@ -1412,8 +1411,6 @@
     opacity: 1;
     max-width: 100px;
 }
-
-
 
 .app-type-badge.core {
     color: #9b59b6;
@@ -1431,7 +1428,7 @@
     /* Default installed color (Green) - only if no type is specific? */
     /* Actually, user wants API to be Blue even if installed. */
     /* So we don't force color here if it is API. */
-    color: #27ae60; 
+    color: #27ae60;
 }
 
 /* Force API color even when installed */
@@ -1442,7 +1439,7 @@
 
 /* Local color - Green when installed, Grey when not */
 .app-type-badge.local {
-    color: #27ae60; 
+    color: #27ae60;
 }
 .app-type-badge.local.not-installed {
     color: var(--text-muted) !important;
@@ -1701,8 +1698,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     max-width: 100px;
     padding-right: 10px;
 }
-
-
 
 /* --- Type Badge Overrides (API/Local) --- */
 .type-badge {

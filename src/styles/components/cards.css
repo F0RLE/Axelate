@@ -5,7 +5,7 @@
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: 12px;
-    font-family: 'Monocraft', 'Inter', 'Segoe UI', sans-serif;
+    font-family: var(--app-font-family);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 

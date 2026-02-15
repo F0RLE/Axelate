@@ -4,7 +4,7 @@
 
 /* System Monitor Card */
 .sysmon-card {
-    font-family: 'Monocraft', monospace !important;
+    font-family: var(--app-font-family) !important;
     background: rgba(var(--background-raw), 0.5) !important;
     border: 1px solid rgba(var(--primary-raw), 0.15) !important;
     backdrop-filter: blur(12px);
@@ -87,7 +87,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 0.72rem;
-    font-family: 'Monocraft', monospace !important;
+    font-family: var(--app-font-family) !important;
 }
 
 .sysmon-icon {
@@ -99,7 +99,7 @@
 .sysmon-value {
     flex-shrink: 0;
     color: #ffffff;
-    font-family: 'Monocraft', monospace !important;
+    font-family: var(--app-font-family) !important;
     font-size: 0.72rem;
     font-weight: normal;
     letter-spacing: -0.01em;
@@ -116,7 +116,7 @@
 
 .sysmon-value-sub {
     color: rgba(255, 255, 255, 0.65);
-    font-family: 'Monocraft', monospace !important;
+    font-family: var(--app-font-family) !important;
     font-size: 0.64rem;
     margin-left: 1px;
 }

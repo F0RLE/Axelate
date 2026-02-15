@@ -56,35 +56,34 @@ export class CatalogService {
         try {
             this._appData.stars = validConfig.catalog.stars;
 
-                const ai = validConfig.catalog.ai;
-                const services = validConfig.catalog.services;
+            const ai = validConfig.catalog.ai;
+            const services = validConfig.catalog.services;
 
-                logger.info(
-                    `[CatalogService] Mapping config - AI: ${String(ai.length)}, Services: ${String(services.length)}`,
-                );
+            logger.info(
+                `[CatalogService] Mapping config - AI: ${String(ai.length)}, Services: ${String(services.length)}`,
+            );
 
-                this._appData.ai = this._mapModuleItems(ai, 'ai');
-                this._appData.services = this._mapModuleItems(services, 'services');
+            this._appData.ai = this._mapModuleItems(ai, 'ai');
+            this._appData.services = this._mapModuleItems(services, 'services');
 
-                logger.info(
-                    `[CatalogService] After mapping - AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
-                );
+            logger.info(
+                `[CatalogService] After mapping - AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
+            );
 
-                // Hydrate with schemas & providers
-                this._hydrateApps(validConfig, installedModules);
+            // Hydrate with schemas & providers
+            this._hydrateApps(validConfig, installedModules);
 
-                // Final check for fallbacks
-                this._ensureFallbacks();
+            // Final check for fallbacks
+            this._ensureFallbacks();
 
-                this._syncToGlobal();
+            this._syncToGlobal();
 
-                logger.info(
-                    `[CatalogService] Catalog hydrated successfully. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
-                );
+            logger.info(
+                `[CatalogService] Catalog hydrated successfully. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
+            );
 
-                const event = new CustomEvent('catalog-loaded');
-                globalThis.dispatchEvent(event);
-
+            const event = new CustomEvent('catalog-loaded');
+            globalThis.dispatchEvent(event);
 
             this._updateLegacySettings(validConfig.models);
 
@@ -162,18 +161,17 @@ export class CatalogService {
 
         const mergeAppSchema = (app: IApp) => {
             const isApi =
-                app.type === 'api' ||
-                (config.apiProviders?.some((p: ApiProvider) => p.id === app.id) ?? false);
+                app.type === 'api' || config.apiProviders.some((p: ApiProvider) => p.id === app.id);
 
             if (isApi) app.installed = true;
 
-            const provider = config.apiProviders?.find((p: ApiProvider) => p.id === app.id);
+            const provider = config.apiProviders.find((p: ApiProvider) => p.id === app.id);
             if (provider) {
                 app.apiProviderData = { ...provider };
             }
 
             const modelsRecord = config.models;
-            if (isApi && modelsRecord?.[app.id] !== undefined) {
+            if (isApi && modelsRecord[app.id] !== undefined) {
                 app.apiProviderData ??= { id: app.id, name: app.name };
                 app.apiProviderData['models'] = modelsRecord[app.id];
             }
@@ -273,14 +271,14 @@ export class CatalogService {
     private _ensureValidConfig(config: AppConfig | null): AppConfig {
         const fallback = FALLBACK_CONFIG;
 
-        const isCatalogEmpty =
-            !config?.catalog ||
-            ((config.catalog.ai?.length ?? 0) === 0 &&
-                (config.catalog.services?.length ?? 0) === 0);
+        if (!config) {
+            logger.warn('[CatalogService] Config is null. Using FALLBACK_CONFIG.');
+            return fallback;
+        }
 
-        if (isCatalogEmpty) {
-            const aiLen = config?.catalog?.ai?.length ?? 0;
-            const srvLen = config?.catalog?.services?.length ?? 0;
+        if (config.catalog.ai.length === 0 && config.catalog.services.length === 0) {
+            const aiLen = config.catalog.ai.length;
+            const srvLen = config.catalog.services.length;
             logger.warn(
                 `[CatalogService] Config invalid or empty (AI: ${String(aiLen)}, Services: ${String(srvLen)}). FORCING FALLBACK_CONFIG.`,
             );
@@ -288,7 +286,7 @@ export class CatalogService {
         }
 
         logger.info(
-            `[CatalogService] _ensureValidConfig passed (AI: ${String(config?.catalog?.ai?.length ?? 0)}, Services: ${String(config?.catalog?.services?.length ?? 0)})`,
+            `[CatalogService] _ensureValidConfig passed (AI: ${String(config.catalog.ai.length)}, Services: ${String(config.catalog.services.length)})`,
         );
         return config;
     }

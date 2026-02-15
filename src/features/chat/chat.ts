@@ -80,7 +80,7 @@ export class ChatController {
 
         // Listen for language changes to update greeting in real-time
         globalThis.addEventListener('lang:changed', () => {
-             this._randomizeGreeting(this._currentGreetingIndex);
+            this._randomizeGreeting(this._currentGreetingIndex);
         });
     }
 
@@ -93,13 +93,14 @@ export class ChatController {
             logger.info(
                 `[ChatController] Restoring ${String(history.length)} messages from persistence`,
             );
-            
+
             // Map to local type, filtering out incompatible roles and normalizing content
             this._chatHistory = history
-                .filter(msg => msg.role === 'user' || msg.role === 'assistant')
-                .map(msg => ({
+                .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+                .map((msg) => ({
                     role: msg.role as 'user' | 'assistant',
-                    content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+                    content:
+                        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
                 }));
 
             // Redraw UI
@@ -177,7 +178,7 @@ export class ChatController {
         // Expose randomizeChatGreeting so global logic can call it (e.g. from init.ts or events)
         g['randomizeChatGreeting'] = (idx?: number) => {
             this._randomizeGreeting(idx);
-        }
+        };
     }
 
     // --- Actions ---
@@ -423,30 +424,28 @@ export class ChatController {
         // 1. Detect common error codes (handles both plain text and JSON strings)
         // 503 / Unavailable / Overloaded
         if (msg.includes('503') || msg.includes('unavailable') || msg.includes('overloaded')) {
-            return this._i18n.t(
-                'ui.gemini.error.unavailable',
-                `Error 503: Service Unavailable (${modelName})`,
-            ).replace('{model}', modelName);
+            return this._i18n
+                .t('ui.gemini.error.unavailable', `Error 503: Service Unavailable (${modelName})`)
+                .replace('{model}', modelName);
         }
 
         // 429 / Quota / Rate Limit
         if (msg.includes('429') || msg.includes('quota') || msg.includes('limit reached')) {
-            return this._i18n.t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`).replace(
-                '{model}',
-                modelName,
-            );
+            return this._i18n
+                .t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`)
+                .replace('{model}', modelName);
         }
 
         // 403 / Auth / Key
         if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('api key')) {
-            return this._i18n.t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`).replace(
-                '{model}',
-                modelName,
-            );
+            return this._i18n
+                .t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`)
+                .replace('{model}', modelName);
         }
 
         // 2. Generic API / OpenAI Fallbacks
-        if (msg.includes('quota')) return this._i18n.t('ui.chat.error.quota', 'Quota limit reached');
+        if (msg.includes('quota'))
+            return this._i18n.t('ui.chat.error.quota', 'Quota limit reached');
         if (msg.includes('auth') || msg.includes('api key'))
             return this._i18n.t('ui.chat.error.auth', 'Invalid API Key');
         if (msg.includes('server error') || msg.includes('500'))
@@ -538,12 +537,14 @@ export class ChatController {
         if (isRecording) {
             input.placeholder = this._i18n.t('ui.launcher.web.voice_listening', 'Listening...');
         } else {
-            input.placeholder = this._i18n.t('ui.launcher.web.chat_placeholder_ask', 'Ask anything...');
+            input.placeholder = this._i18n.t(
+                'ui.launcher.web.chat_placeholder_ask',
+                'Ask anything...',
+            );
         }
     }
 
     private _currentGreetingIndex = 1;
-
 
     /**
      * Resizes the chat input based on content.

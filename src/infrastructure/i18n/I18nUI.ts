@@ -257,6 +257,7 @@ export class I18nUI {
 
         // Load translations and apply
         await this._service.loadTranslations(lang);
+        document.documentElement.lang = lang; // Set explicit lang for font switching
         this.applyTranslations();
 
         // Notify other components if needed

@@ -7,7 +7,7 @@
     justify-content: flex-start !important; /* Managed by auto-margins for better control */
     background: var(--sidebar-bg) !important;
     backdrop-filter: blur(20px);
-    font-family: 'Monocraft', monospace !important; /* Global brand font restorated */
+    font-family: var(--app-font-family) !important; /* Global brand font restorated */
     /* Improved border rendering to avoid subpixel gaps */
     box-shadow: var(--sidebar-shadow);
     border-right: none;
@@ -218,7 +218,7 @@
     pointer-events: none;
     white-space: nowrap;
     line-height: normal;
-    font-family: 'Monocraft', monospace !important; /* Force brand font */
+    font-family: var(--app-font-family) !important; /* Force brand font */
     text-shadow: 0 0 12px rgba(var(--primary-raw), 0.4); /* Premium glow */
 }
 
@@ -433,7 +433,7 @@
     cursor: pointer !important;
     border-radius: 10px;
     margin-bottom: 0;
-    font-family: 'Monocraft', monospace !important;
+    font-family: var(--app-font-family) !important;
     -webkit-app-region: no-drag;
     position: relative;
     overflow: hidden;
@@ -568,7 +568,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
     padding: 12px;
-    font-family: 'Monocraft', 'Inter', 'Segoe UI', sans-serif;
+    font-family: var(--app-font-family);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
@@ -583,7 +583,7 @@
     transition: background 0.2s;
     border-radius: 8px;
     margin-bottom: 0.25rem;
-    font-family: 'Monocraft', 'Inter', 'Segoe UI', sans-serif;
+    font-family: var(--app-font-family);
     -webkit-app-region: no-drag;
 }
 

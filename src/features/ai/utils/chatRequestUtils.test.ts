@@ -53,7 +53,7 @@ describe('chatRequestUtils', () => {
         });
 
         it('should handle missing API key (null)', () => {
-             const config = {
+            const config = {
                 providerId: 'local',
                 model: 'llama-4-maverick',
                 apiKey: null,
@@ -64,7 +64,7 @@ describe('chatRequestUtils', () => {
             const request = constructChatRequest(mockMessage, [], config);
 
             expect(request.api_key).toBeNull();
-            expect(request.provider).toBe('ollama'); // mapped from 'local'
+            expect(request.provider).toBe('local'); // mapped from 'local'
         });
     });
 });

@@ -1,16 +1,37 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ModuleService } from '@/shared/services/ModuleService';
 
-// Create mock before import
-const mockTauriProvider = {
-    isTauri: vi.fn().mockReturnValue(true),
-    invoke: vi.fn(),
-    listen: vi.fn().mockResolvedValue(() => {
-        /* no-op */
-    }),
-};
-
-// Helper type for progress handler
+// TYPES
 type ProgressHandler = ((_: Record<string, unknown>) => void) | undefined;
+
+// HOISTED MOCKS
+const mocks = vi.hoisted(() => {
+    return {
+        invokeSafe: vi.fn(),
+        commands: {
+            checkModuleInstalled: vi.fn(),
+            downloadModule: vi.fn(),
+            deleteModule: vi.fn(),
+        },
+        tauriProvider: {
+            isTauri: vi.fn().mockReturnValue(true),
+            invoke: vi.fn(),
+            listen: vi.fn().mockResolvedValue(() => {
+                /* no-op */
+            }),
+        },
+    };
+});
+
+// MOCK MODULES
+vi.mock('@/shared/api/invoke', () => ({
+    invokeSafe: (...args: any[]) => mocks.invokeSafe(...args),
+}));
+
+vi.mock('@/shared/types/bindings', () => ({
+    commands: mocks.commands,
+}));
 
 // Helper to create listen implementation that captures handler
 function createListenCapture(handlerRef: { current: ProgressHandler }) {
@@ -22,67 +43,72 @@ function createListenCapture(handlerRef: { current: ProgressHandler }) {
     };
 }
 
-import { ModuleService } from '@/shared/services/ModuleService';
-
 describe('ModuleService', () => {
     let moduleService: ModuleService;
 
     beforeEach(() => {
         vi.clearAllMocks();
+
+        // Reset default behaviors
+        mocks.tauriProvider.isTauri.mockReturnValue(true);
+        mocks.commands.checkModuleInstalled.mockResolvedValue({ status: 'ok', data: true });
+        mocks.commands.downloadModule.mockResolvedValue({ status: 'ok', data: null });
+        mocks.commands.deleteModule.mockResolvedValue({ status: 'ok', data: null });
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
-        moduleService = new ModuleService(mockTauriProvider as any);
+        moduleService = new ModuleService(mocks.tauriProvider as any);
     });
 
     describe('init', () => {
         it('should set up download progress listener', async () => {
             await moduleService.init();
 
-            expect(mockTauriProvider.listen).toHaveBeenCalledWith(
+            expect(mocks.tauriProvider.listen).toHaveBeenCalledWith(
                 'download_progress',
                 expect.any(Function),
             );
         });
 
         it('should skip initialization when not in Tauri', async () => {
-            mockTauriProvider.isTauri.mockReturnValueOnce(false);
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
 
             await moduleService.init();
 
-            expect(mockTauriProvider.listen).not.toHaveBeenCalled();
+            expect(mocks.tauriProvider.listen).not.toHaveBeenCalled();
         });
     });
 
     describe('checkInstalled', () => {
         it('should return true when module is installed', async () => {
-            mockTauriProvider.invoke.mockResolvedValueOnce(true);
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: true });
 
             const result = await moduleService.checkInstalled('test-module');
 
             expect(result).toBe(true);
-            expect(mockTauriProvider.invoke).toHaveBeenCalledWith('check_module_installed', {
-                moduleId: 'test-module',
-            });
+            expect(mocks.commands.checkModuleInstalled).toHaveBeenCalledWith('test-module');
+            expect(mocks.invokeSafe).toHaveBeenCalled();
         });
 
         it('should return false when module is not installed', async () => {
-            mockTauriProvider.invoke.mockResolvedValueOnce(false);
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: false });
 
             const result = await moduleService.checkInstalled('test-module');
 
             expect(result).toBe(false);
+            expect(mocks.commands.checkModuleInstalled).toHaveBeenCalledWith('test-module');
         });
 
         it('should return false when not in Tauri', async () => {
-            mockTauriProvider.isTauri.mockReturnValueOnce(false);
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
 
             const result = await moduleService.checkInstalled('test-module');
 
             expect(result).toBe(false);
-            expect(mockTauriProvider.invoke).not.toHaveBeenCalled();
+            expect(mocks.commands.checkModuleInstalled).not.toHaveBeenCalled();
         });
 
         it('should return false on error', async () => {
-            mockTauriProvider.invoke.mockRejectedValueOnce(new Error('Check failed'));
+            mocks.invokeSafe.mockRejectedValueOnce(new Error('Check failed'));
 
             const result = await moduleService.checkInstalled('test-module');
 
@@ -92,19 +118,20 @@ describe('ModuleService', () => {
 
     describe('downloadModule', () => {
         it('should invoke download_module command', async () => {
-            mockTauriProvider.invoke.mockResolvedValueOnce(undefined);
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
 
             await moduleService.downloadModule('test-module', 'https://repo.com/module');
 
-            expect(mockTauriProvider.invoke).toHaveBeenCalledWith('download_module', {
-                moduleId: 'test-module',
-                repoUrl: 'https://repo.com/module',
-                expectedHash: null,
-            });
+            expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
+                'test-module',
+                'https://repo.com/module',
+                null,
+            );
+            expect(mocks.invokeSafe).toHaveBeenCalled();
         });
 
         it('should throw when not in Tauri', async () => {
-            mockTauriProvider.isTauri.mockReturnValueOnce(false);
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
 
             await expect(
                 moduleService.downloadModule('test-module', 'https://repo.com'),
@@ -112,7 +139,10 @@ describe('ModuleService', () => {
         });
 
         it('should update state on error', async () => {
-            mockTauriProvider.invoke.mockRejectedValueOnce(new Error('Download failed'));
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'Download failed' },
+            });
 
             await expect(moduleService.downloadModule('test-module', 'url')).rejects.toThrow();
 
@@ -123,18 +153,17 @@ describe('ModuleService', () => {
 
     describe('deleteModule', () => {
         it('should invoke delete_module command', async () => {
-            mockTauriProvider.invoke.mockResolvedValueOnce(undefined);
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
 
             const result = await moduleService.deleteModule('test-module');
 
             expect(result).toBe(true);
-            expect(mockTauriProvider.invoke).toHaveBeenCalledWith('delete_module', {
-                moduleId: 'test-module',
-            });
+            expect(mocks.commands.deleteModule).toHaveBeenCalledWith('test-module');
+            expect(mocks.invokeSafe).toHaveBeenCalled();
         });
 
         it('should throw when not in Tauri', async () => {
-            mockTauriProvider.isTauri.mockReturnValueOnce(false);
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
 
             await expect(moduleService.deleteModule('test-module')).rejects.toThrow(
                 'Delete available only in desktop app',
@@ -142,7 +171,10 @@ describe('ModuleService', () => {
         });
 
         it('should return false on error', async () => {
-            mockTauriProvider.invoke.mockRejectedValueOnce(new Error('Delete failed'));
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'Delete failed' },
+            });
 
             const result = await moduleService.deleteModule('test-module');
 
@@ -152,12 +184,12 @@ describe('ModuleService', () => {
 
     describe('control', () => {
         it('should invoke control_module command', async () => {
-            mockTauriProvider.invoke.mockResolvedValueOnce(undefined);
+            mocks.tauriProvider.invoke.mockResolvedValueOnce(undefined);
 
             const result = await moduleService.control('test-service', 'start');
 
             expect(result).toBe(true);
-            expect(mockTauriProvider.invoke).toHaveBeenCalledWith('control_module', {
+            expect(mocks.tauriProvider.invoke).toHaveBeenCalledWith('control_module', {
                 request: {
                     module_id: 'test-service',
                     action: 'start',
@@ -166,7 +198,7 @@ describe('ModuleService', () => {
         });
 
         it('should return false when not in Tauri', async () => {
-            mockTauriProvider.isTauri.mockReturnValueOnce(false);
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
 
             const result = await moduleService.control('test-service', 'start');
 
@@ -174,7 +206,7 @@ describe('ModuleService', () => {
         });
 
         it('should return false on error', async () => {
-            mockTauriProvider.invoke.mockRejectedValueOnce(new Error('Control failed'));
+            mocks.tauriProvider.invoke.mockRejectedValueOnce(new Error('Control failed'));
 
             const result = await moduleService.control('test-service', 'start');
 
@@ -193,8 +225,8 @@ describe('ModuleService', () => {
         it('should register listener on init', async () => {
             await moduleService.init();
 
-            expect(mockTauriProvider.listen).toHaveBeenCalledTimes(1);
-            const firstCall = mockTauriProvider.listen.mock.calls[0];
+            expect(mocks.tauriProvider.listen).toHaveBeenCalledTimes(1);
+            const firstCall = mocks.tauriProvider.listen.mock.calls[0];
             if (!firstCall) throw new Error('Listen not called');
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const [eventName, handler] = firstCall;
@@ -205,7 +237,7 @@ describe('ModuleService', () => {
         it('should process progress payload correctly', async () => {
             // Use ref pattern with module-level helper
             const handlerRef: { current: ProgressHandler } = { current: undefined };
-            mockTauriProvider.listen.mockImplementation(createListenCapture(handlerRef));
+            mocks.tauriProvider.listen.mockImplementation(createListenCapture(handlerRef));
 
             await moduleService.init();
 
@@ -226,7 +258,7 @@ describe('ModuleService', () => {
 
         it('should set progress to 1 on complete', async () => {
             const handlerRef: { current: ProgressHandler } = { current: undefined };
-            mockTauriProvider.listen.mockImplementation(createListenCapture(handlerRef));
+            mocks.tauriProvider.listen.mockImplementation(createListenCapture(handlerRef));
 
             await moduleService.init();
 

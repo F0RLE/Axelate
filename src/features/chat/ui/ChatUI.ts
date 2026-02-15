@@ -1,9 +1,7 @@
 import { marked } from 'marked';
 import markedFootnote from 'marked-footnote';
-import markedKatex from 'marked-katex-extension';
-import markedAlert from 'marked-alert';
-import 'katex/dist/katex.min.css';
 
+import markedAlert from 'marked-alert';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
@@ -11,11 +9,7 @@ import { listen } from '@tauri-apps/api/event';
 
 // Configure marked
 marked.use(markedAlert());
-marked.use(
-    markedKatex({
-        throwOnError: false,
-    }),
-);
+
 // Syntax highlighting removed by user request
 
 marked.use(markedFootnote());

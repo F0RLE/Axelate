@@ -199,7 +199,7 @@ body.launcher-blur .modal {
 
 .module-settings-content .form-textarea {
     min-height: 100px;
-    font-family: 'Monocraft', 'Consolas', 'Monaco', monospace;
+    font-family: var(--app-font-family);
     resize: vertical;
 }
 
