@@ -67,6 +67,7 @@
   "ui.launcher.settings.toggle_chat": "Чат",
   "ui.launcher.settings.toggle_modules": "Модули",
   "ui.launcher.settings.toggle_downloads": "Загрузки",
+  "ui.launcher.settings.toggle_settings": "Настройки",
   "ui.launcher.settings.toggle_debug": "Консоль",
   "ui.launcher.settings.monitor_cpu": "CPU",
   "ui.launcher.settings.monitor_gpu": "GPU",
@@ -295,5 +296,11 @@
   "ui.settings.no_settings": "Дополнительные настройки для этого модуля не требуются",
   "ui.settings.module_not_ready": "Этот модуль еще не готов",
   "ui.launcher.badge.cloud": "ОБЛАКО",
-  "ui.launcher.badge.local": "ЛОКАЛЬНО"
+  "ui.launcher.badge.local": "ЛОКАЛЬНО",
+  "ui.gpt.model.spark.desc": "Сверхбыстрая модель для кодинга и агентов",
+  "ui.gpt.model.gpt53codex.desc": "Высокопроизводительная модель для кодинга",
+  "ui.claude.model.claude45sonnet.desc": "Сбалансированная модель Claude 3 для большинства задач",
+  "ui.claude.model.claude46opus.desc": "Самая мощная модель Claude 3",
+  "ui.gemini.model.gemini3propreview.desc": "Новейшая мультимодальная модель от Google",
+  "ui.llama.model.maverick.desc": "Мультимодальная версия Llama 4"
 }

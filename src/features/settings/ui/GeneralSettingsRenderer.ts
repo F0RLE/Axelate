@@ -35,13 +35,13 @@ export class GeneralSettingsRenderer {
         container.dataset['initialized'] = 'true';
         logger.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
 
-        const t = context.t;
+        const { t } = context;
 
         const navItems = [
             { id: 'home', label: 'Home', icon: '#icon-home' },
             { id: 'chat', label: 'Chat', icon: '#icon-chat' },
             { id: 'modules', label: 'Modules', icon: '#icon-folder' },
-            { id: 'settings', label: 'Settings', icon: '#icon-settings' },
+            // Settings omitted to prevent lockout
             { id: 'debug', label: 'Console', icon: '#icon-console' },
             { id: 'downloads', label: 'Downloads', icon: '#icon-download' },
         ];
@@ -52,14 +52,14 @@ export class GeneralSettingsRenderer {
             .map((item) => {
                 const labelKey = `ui.launcher.settings.toggle_${item.id}`;
                 return `
-                <div class="taskbar-toggle-item ${hiddenItems.includes(item.id) ? '' : 'active'}"
+                <button class="monitor-toggle-btn ${hiddenItems.includes(item.id) ? '' : 'active'}"
                      data-page-id="${item.id}"
                      >
                     <svg class="toggle-icon">
                         <use href="${item.icon}"></use>
                     </svg>
                     <span class="toggle-label" data-i18n="${labelKey}">${t(labelKey, item.label)}</span>
-                </div>
+                </button>
             `;
             })
             .join('');
@@ -69,7 +69,7 @@ export class GeneralSettingsRenderer {
         container.addEventListener('click', (e) => {
             const target = e.target;
             if (!(target instanceof Element)) return;
-            const item = target.closest('.taskbar-toggle-item');
+            const item = target.closest('.monitor-toggle-btn');
             if (item instanceof HTMLElement) {
                 const pageId = item.dataset['pageId'];
                 if (pageId !== undefined && pageId !== '') {
@@ -81,6 +81,16 @@ export class GeneralSettingsRenderer {
 
         this._applyHiddenState(hiddenItems);
         this._observeToggleGrid('taskbar-toggles');
+    }
+
+    /**
+     * Applies hidden state to navigation items on startup.
+     */
+    private _applyHiddenState(hidden: string[]) {
+        hidden.forEach((id) => {
+            const btn = document.querySelector(`#sidebar .nav-btn[data-page="${id}"]`);
+            if (btn) btn.classList.add('hidden');
+        });
     }
 
     /**
@@ -115,20 +125,10 @@ export class GeneralSettingsRenderer {
                         navBtn.classList.add('hidden');
                         navBtn.classList.remove('nav-item-hiding');
                     }
-                }, 500);
+                }, 350); // Match CSS transition (300ms) + buffer
             }
         }
         this._state.setHiddenNavItems(hiddenItems);
-    }
-
-    /**
-     * Applies hidden state to navigation items on startup.
-     */
-    private _applyHiddenState(hidden: string[]) {
-        hidden.forEach((id) => {
-            const btn = document.querySelector(`#sidebar .nav-btn[data-page="${id}"]`);
-            if (btn) btn.classList.add('hidden');
-        });
     }
 
     /**
@@ -149,9 +149,6 @@ export class GeneralSettingsRenderer {
         }
         container.dataset['initialized'] = 'true';
         logger.info('[GeneralSettingsRenderer] Initializing monitor toggles');
-
-        const t = context.t;
-
         const monitorItems = [
             { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
             { id: 'gpu', label: 'GPU', icon: '#icon-gpu' },
@@ -162,6 +159,8 @@ export class GeneralSettingsRenderer {
         ];
 
         const hiddenMonitors = this._state.getHiddenMonitors();
+
+        const { t } = context;
 
         const html = monitorItems
             .map((item) => {
@@ -201,6 +200,9 @@ export class GeneralSettingsRenderer {
             if (el) el.classList.add('hidden');
         });
 
+        this._updateMonitorPanelVisibility(false);
+        this._updateMonitorDivider(false);
+
         this._observeToggleGrid('monitor-toggles');
     }
 
@@ -220,13 +222,10 @@ export class GeneralSettingsRenderer {
                 el.classList.remove('hidden');
                 // Force reflow
                 const _reflow = el.offsetHeight;
-                if (_reflow) {
-                    /* no-op */
-                }
+                if (_reflow) { /* no-op */ }
                 // Remove hiding to trigger fade-in
                 el.classList.remove('hiding');
             }
-            this._updateMonitorPanelVisibility();
         } else {
             if (!hidden.includes(id)) hidden.push(id);
             if (el instanceof HTMLElement) {
@@ -234,48 +233,38 @@ export class GeneralSettingsRenderer {
                 el.classList.add('hiding');
                 setTimeout(() => {
                     el.classList.add('hidden');
-                    this._updateMonitorPanelVisibility();
-                }, 250);
+                    el.classList.remove('hiding');
+                }, 350); 
             }
         }
         this._state.setHiddenMonitors(hidden);
-        this._updateMonitorDivider();
+        
+        // Parallel update: Panel and Divider start animating immediately along with the item
+        this._updateMonitorPanelVisibility(true);
+        this._updateMonitorDivider(true);
     }
 
     /**
      * Updates the main monitor panel visibility (hides if all items are hidden).
      */
-    private _updateMonitorPanelVisibility() {
+    private _updateMonitorPanelVisibility(_animate: boolean = true) {
         const monitorPanel = document.getElementById('system-monitor');
         if (!monitorPanel) return;
 
         const hiddenMonitors = this._state.getHiddenMonitors();
-        const totalMonitors = ['cpu', 'gpu', 'ram', 'vram', 'disk', 'network'];
-        const allHidden = totalMonitors.every((id) => hiddenMonitors.includes(id));
+        const allHidden = hiddenMonitors.length === 6; // cpu, gpu, ram, vram, disk, network
 
         if (allHidden) {
-            monitorPanel.style.opacity = '0';
-            monitorPanel.style.maxHeight = '0';
-            monitorPanel.style.overflow = 'hidden';
-            monitorPanel.style.pointerEvents = 'none';
-            monitorPanel.style.padding = '0';
-            monitorPanel.style.margin = '0';
-            monitorPanel.style.border = 'none';
+            monitorPanel.classList.add('adaptive-hidden');
         } else {
-            monitorPanel.style.opacity = '';
-            monitorPanel.style.maxHeight = '';
-            monitorPanel.style.overflow = '';
-            monitorPanel.style.pointerEvents = '';
-            monitorPanel.style.padding = '';
-            monitorPanel.style.margin = '';
-            monitorPanel.style.border = '';
+            monitorPanel.classList.remove('adaptive-hidden');
         }
     }
 
     /**
      * Updates the divider visibility in the monitor panel.
      */
-    private _updateMonitorDivider() {
+    private _updateMonitorDivider(animate: boolean = true) {
         const divider = document.querySelector('.sysmon-divider');
         if (!(divider instanceof HTMLElement)) return;
 
@@ -285,12 +274,26 @@ export class GeneralSettingsRenderer {
 
         const allAboveHidden = aboveItems.every((id) => hiddenMonitors.includes(id));
         const allBelowHidden = belowItems.every((id) => hiddenMonitors.includes(id));
+        const shouldHide = allAboveHidden || allBelowHidden;
 
-        // Hide divider if either all above OR all below are hidden
-        if (allAboveHidden || allBelowHidden) {
-            divider.style.display = 'none';
+        if (shouldHide) {
+            if (animate) {
+                divider.classList.add('hiding');
+                setTimeout(() => {
+                    divider.classList.add('hidden');
+                    divider.classList.remove('hiding');
+                }, 350);
+            } else {
+                divider.classList.add('hidden');
+            }
+        } else if (animate) {
+            divider.classList.add('hiding');
+            divider.classList.remove('hidden');
+            const _reflow = divider.offsetHeight;
+            if (_reflow) { /* no-op */ }
+            divider.classList.remove('hiding');
         } else {
-            divider.style.display = '';
+            divider.classList.remove('hidden');
         }
     }
 

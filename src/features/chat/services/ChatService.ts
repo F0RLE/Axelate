@@ -1,11 +1,11 @@
 import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';
 import { logger } from '@/infrastructure/logging/LoggerService';
-import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 export class ChatService {
     constructor(
-        private readonly _aiBridge: AIBridge,
+        private readonly _aiBridge: IAIBridge,
         private readonly _i18n: I18nService,
     ) {}
 

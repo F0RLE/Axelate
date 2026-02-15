@@ -34,7 +34,7 @@ impl SecureStorage {
         path.push("Configs");
 
         if !path.exists() {
-            fs::create_dir_all(&path).map_err(AppError::Io)?;
+            fs::create_dir_all(&path).map_err(|e| AppError::Io(e.to_string()))?;
         }
 
         path.push("secure.enc");
@@ -44,8 +44,10 @@ impl SecureStorage {
     /// Derives a 32-byte key from the machine UID and a static pepper.
     /// This binds the encryption to the current device.
     fn get_encryption_key() -> Result<[u8; 32], AppError> {
-        let machine_id = machine_uid::get()
-            .map_err(|e| AppError::External(format!("Failed to get machine ID: {e}")))?;
+        let machine_id = machine_uid::get().map_err(|e| AppError::External {
+            request_id: None,
+            message: format!("Failed to get machine ID: {e}"),
+        })?;
 
         // "Pepper" to ensure the key isn't just the raw ID
         let input = format!("AXELATE_SECURE_SALT_{machine_id}");
@@ -71,7 +73,8 @@ impl SecureStorage {
         data.keys.insert(service, value);
 
         // 3. Serialize to JSON
-        let json_bytes = serde_json::to_vec(&data).map_err(AppError::Serialization)?;
+        let json_bytes =
+            serde_json::to_vec(&data).map_err(|e| AppError::Serialization(e.to_string()))?;
 
         // 4. Encrypt
         let key_bytes = Self::get_encryption_key()?;
@@ -82,9 +85,13 @@ impl SecureStorage {
         rand::rng().fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
-        let ciphertext = cipher
-            .encrypt(nonce, json_bytes.as_ref())
-            .map_err(|e| AppError::External(format!("Encryption failure: {e}")))?;
+        let ciphertext =
+            cipher
+                .encrypt(nonce, json_bytes.as_ref())
+                .map_err(|e| AppError::External {
+                    request_id: None,
+                    message: format!("Encryption failure: {e}"),
+                })?;
 
         // 5. Save [Nonce + Ciphertext]
         let mut final_payload = Vec::new();
@@ -92,7 +99,7 @@ impl SecureStorage {
         final_payload.extend_from_slice(&ciphertext);
 
         let path = Self::get_store_path()?;
-        fs::write(&path, final_payload).map_err(AppError::Io)?;
+        fs::write(&path, final_payload).map_err(|e| AppError::Io(e.to_string()))?;
 
         Ok(())
     }
@@ -111,7 +118,7 @@ impl SecureStorage {
             });
         }
 
-        let file_content = fs::read(&path).map_err(AppError::Io)?;
+        let file_content = fs::read(&path).map_err(|e| AppError::Io(e.to_string()))?;
 
         if file_content.len() < 12 {
             return Err(AppError::Validation(
@@ -128,10 +135,13 @@ impl SecureStorage {
 
         let plaintext = cipher
             .decrypt(nonce, ciphertext)
-            .map_err(|_| AppError::External("Decryption failed".to_string()))?;
+            .map_err(|_| AppError::External {
+                request_id: None,
+                message: "Decryption failed".to_string(),
+            })?;
 
-        let data: SecureData =
-            serde_json::from_slice(&plaintext).map_err(AppError::Serialization)?;
+        let data: SecureData = serde_json::from_slice(&plaintext)
+            .map_err(|e| AppError::Serialization(e.to_string()))?;
 
         Ok(data)
     }

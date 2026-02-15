@@ -1,5 +1,5 @@
 import { logger } from '@/infrastructure/logging/LoggerService';
-import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { IBridge } from '@/shared/types/IBridge';
 
 export interface ILogEntry {
     timestamp: number;
@@ -12,12 +12,12 @@ export class DebugService {
     private logs: ILogEntry[] = [];
     private lastTimestamp = 0;
 
-    constructor(private readonly tauriProvider: TauriProvider) {}
+    constructor(private readonly bridge: IBridge) {}
 
     public async fetchLogs(): Promise<ILogEntry[]> {
         try {
-            if (this.tauriProvider.isTauri()) {
-                const logs = await this.tauriProvider.invoke<ILogEntry[]>('get_logs', {
+            if (this.bridge.isTauri()) {
+                const logs = await this.bridge.invoke<ILogEntry[]>('get_logs', {
                     since: this.lastTimestamp,
                 });
                 return this.processLogs(logs);
@@ -39,8 +39,8 @@ export class DebugService {
         this.logs = [];
         this.lastTimestamp = 0;
         try {
-            if (this.tauriProvider.isTauri()) {
-                await this.tauriProvider.invoke('clear_logs');
+            if (this.bridge.isTauri()) {
+                await this.bridge.invoke('clear_logs');
             } else {
                 await fetch('/api/logs/clear', { method: 'POST' });
             }

@@ -70,7 +70,7 @@ pub fn delete_module(module_id: &str) -> Result<(), AppError> {
 
     let module_path = MODULES_DIR.join(module_id);
     if module_path.exists() {
-        fs::remove_dir_all(&module_path).map_err(AppError::Io)?;
+        fs::remove_dir_all(&module_path).map_err(|e| AppError::Io(e.to_string()))?;
         crate::infrastructure::logging::logger::add_log(
             &format!("Module {module_id} deleted"),
             "Downloader",
@@ -160,15 +160,26 @@ impl UrlResolver {
                 .get(&main_url)
                 .send()
                 .await
-                .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
+                .map_err(|e| AppError::External {
+                    request_id: None,
+                    message: format!("Failed to connect: {e}"),
+                })?;
 
             if response.status() == reqwest::StatusCode::NOT_FOUND {
                 log::info!("main branch not found, trying master: {master_url}");
-                let _ = client
-                    .get(&master_url)
-                    .send()
-                    .await
-                    .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
+                let response_master =
+                    client
+                        .get(&master_url)
+                        .send()
+                        .await
+                        .map_err(|e| AppError::External {
+                            request_id: None,
+                            message: format!("Failed to connect: {e}"),
+                        })?;
+
+                if !response_master.status().is_success() {
+                    // Fallback to error handling logic
+                }
 
                 // If master also fails, we return master_url anyway?
                 // Original code implicitly returned the *response* of the last attempt.
@@ -208,9 +219,10 @@ impl NetworkClient {
             client_builder = client_builder.default_headers(headers);
         }
 
-        client_builder
-            .build()
-            .map_err(|e| AppError::External(format!("Client error: {e}")))
+        client_builder.build().map_err(|e| AppError::External {
+            request_id: None,
+            message: format!("Client error: {e}"),
+        })
     }
 
     /// Downloads content with progress reporting and rate limiting
@@ -225,33 +237,39 @@ impl NetworkClient {
             .get(url)
             .send()
             .await
-            .map_err(|e| AppError::External(format!("Failed to connect: {e}")))?;
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Failed to connect: {e}"),
+            })?;
 
         if !response.status().is_success() {
-            return Err(AppError::External(format!(
-                "Download failed: {}",
-                response.status()
-            )));
+            return Err(AppError::External {
+                request_id: None,
+                message: format!("Download failed: {}", response.status()),
+            });
         }
 
         let total_size = response.content_length().unwrap_or(0);
         let mut downloaded: u64 = 0;
         let mut stream = response.bytes_stream();
 
-        fs::create_dir_all(&*TEMP_DIR)?;
+        fs::create_dir_all(&*TEMP_DIR).map_err(|e| AppError::Io(e.to_string()))?;
 
-        let mut file = tokio::fs::File::create(dest_path)
-            .await
-            .map_err(AppError::Io)?;
+        let mut file = tokio::fs::File::create(dest_path).await?;
 
         let mut last_log_time = std::time::Instant::now();
 
         while let Some(item) = stream.next().await {
             let chunk_start = std::time::Instant::now();
-            let chunk = item.map_err(|e| AppError::External(format!("Stream error: {e}")))?;
+            let chunk = item.map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Stream error: {e}"),
+            })?;
             let chunk_len = chunk.len();
 
-            file.write_all(&chunk).await.map_err(AppError::Io)?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| AppError::Io(e.to_string()))?;
             downloaded += chunk_len as u64;
 
             // Rate Limiting Logic via global service
@@ -341,8 +359,14 @@ impl FileVerifier {
                 Ok::<String, String>(hex::encode(hasher.finalize()))
             })
             .await
-            .map_err(|e| AppError::Internal(e.to_string()))?
-            .map_err(AppError::Internal)?;
+            .map_err(|e| AppError::Internal {
+                request_id: None,
+                message: e.to_string(),
+            })?
+            .map_err(|e| AppError::Internal {
+                request_id: None,
+                message: e,
+            })?;
 
             if computed_hash.to_lowercase() != expected_hash.to_lowercase() {
                 return Err(AppError::Validation(format!(
@@ -368,7 +392,7 @@ impl ArchiveExtractor {
         if final_path.exists() {
             fs::remove_dir_all(&final_path).ok();
         }
-        fs::create_dir_all(&final_path).map_err(AppError::Io)?;
+        fs::create_dir_all(&final_path).map_err(|e| AppError::Io(e.to_string()))?;
 
         let app_handle = app.clone();
         let mid = module_id.to_string();
@@ -477,8 +501,14 @@ impl ArchiveExtractor {
             Ok::<(), String>(())
         })
         .await
-        .map_err(|e| AppError::Internal(format!("Blocking task failed: {e}")))?
-        .map_err(|e| AppError::Internal(format!("Extraction failed: {e}")))?;
+        .map_err(|e| AppError::Internal {
+            request_id: None,
+            message: format!("Blocking task failed: {e}"),
+        })?
+        .map_err(|e| AppError::Internal {
+            request_id: None,
+            message: format!("Extraction failed: {e}"),
+        })?;
 
         Ok(())
     }

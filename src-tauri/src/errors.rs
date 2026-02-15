@@ -10,7 +10,8 @@ use serde::Serialize;
 use thiserror::Error;
 
 /// Application-level errors
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, specta::Type)]
+#[serde(tag = "type", content = "payload")]
 pub enum AppError {
     /// Validation error (invalid input, malformed data)
     #[error("Validation error: {0}")]
@@ -26,34 +27,44 @@ pub enum AppError {
 
     /// File system I/O error
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(String),
 
     /// JSON serialization/deserialization error
     #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(String),
 
     /// Configuration loading or parsing error
     #[error("Configuration error: {0}")]
     Config(String),
 
     /// External service or API error
-    #[error("External error: {0}")]
-    External(String),
+    #[error("External error: {message}")]
+    External {
+        /// Unique request identifier for tracing
+        request_id: Option<String>,
+        /// error message
+        message: String,
+    },
 
     /// Internal server error (unexpected failures)
-    #[error("Internal error: {0}")]
-    Internal(String),
+    #[error("Internal error: {message}")]
+    Internal {
+        /// Unique request identifier for tracing
+        request_id: Option<String>,
+        /// error message
+        message: String,
+    },
 }
 
-// Manual implementation of specta::Type for AppError
-// This maps AppError to IpcError structure for TypeScript generation
-impl specta::Type for AppError {
-    fn inline(
-        type_map: &mut specta::TypeMap,
-        generics: specta::Generics<'_>,
-    ) -> specta::datatype::DataType {
-        // AppError serializes as IpcError, so we use IpcError's type
-        IpcError::inline(type_map, generics)
+impl From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::Serialization(err.to_string())
     }
 }
 
@@ -72,11 +83,11 @@ impl From<AppError> for IpcError {
             AppError::Validation(msg) => ("VALIDATION", msg.clone()),
             AppError::NotFound(msg) => ("NOT_FOUND", msg.clone()),
             AppError::PermissionDenied(msg) => ("PERMISSION_DENIED", msg.clone()),
-            AppError::Io(e) => ("IO_ERROR", e.to_string()),
-            AppError::Serialization(e) => ("SERIALIZATION", e.to_string()),
+            AppError::Io(msg) => ("IO_ERROR", msg.clone()),
+            AppError::Serialization(msg) => ("SERIALIZATION", msg.clone()),
             AppError::Config(msg) => ("CONFIG", msg.clone()),
-            AppError::External(msg) => ("EXTERNAL", msg.clone()),
-            AppError::Internal(msg) => ("INTERNAL", msg.clone()),
+            AppError::External { message, .. } => ("EXTERNAL", message.clone()),
+            AppError::Internal { message, .. } => ("INTERNAL", message.clone()),
         };
 
         Self {
@@ -91,27 +102,16 @@ impl Serialize for AppError {
     where
         S: serde::Serializer,
     {
+        // Use IpcError for wire serialization to match frontend expectations
         IpcError::from(self.clone()).serialize(serializer)
-    }
-}
-
-impl Clone for AppError {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Validation(s) => Self::Validation(s.clone()),
-            Self::NotFound(s) => Self::NotFound(s.clone()),
-            Self::PermissionDenied(s) => Self::PermissionDenied(s.clone()),
-            Self::Io(e) => Self::Internal(e.to_string()),
-            Self::Serialization(e) => Self::Internal(e.to_string()),
-            Self::Config(s) => Self::Config(s.clone()),
-            Self::External(s) => Self::External(s.clone()),
-            Self::Internal(s) => Self::Internal(s.clone()),
-        }
     }
 }
 
 impl From<tauri::Error> for AppError {
     fn from(err: tauri::Error) -> Self {
-        Self::Internal(err.to_string())
+        Self::Internal {
+            request_id: None,
+            message: err.to_string(),
+        }
     }
 }

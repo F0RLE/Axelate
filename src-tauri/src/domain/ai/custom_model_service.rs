@@ -20,19 +20,24 @@ impl CustomModelConfigRepository {
         if !path.exists() {
             return Ok(CustomModelConfig::default());
         }
-        let content = std::fs::read_to_string(&path).map_err(AppError::Io)?;
-        serde_json::from_str(&content).map_err(AppError::Serialization)
+
+        let content = std::fs::read_to_string(path).map_err(|e| AppError::Io(e.to_string()))?;
+        let config: CustomModelConfig =
+            serde_json::from_str(&content).map_err(|e| AppError::Serialization(e.to_string()))?;
+        Ok(config)
     }
 
+    /// Saves custom models to disk
     fn save(config: &CustomModelConfig) -> Result<(), AppError> {
+        let content = serde_json::to_string_pretty(&config)
+            .map_err(|e| AppError::Serialization(e.to_string()))?;
         let path = Self::get_path();
-        let content = serde_json::to_string_pretty(config).map_err(AppError::Serialization)?;
 
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(AppError::Io)?;
+            std::fs::create_dir_all(parent).map_err(|e| AppError::Io(e.to_string()))?;
         }
 
-        std::fs::write(path, content).map_err(AppError::Io)?;
+        std::fs::write(path, content).map_err(|e| AppError::Io(e.to_string()))?;
         Ok(())
     }
 }

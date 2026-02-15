@@ -184,12 +184,12 @@ pub fn save_window_settings(settings: &WindowSettings) -> Result<(), AppError> {
 
     // Ensure directory exists
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(AppError::Io)?;
+        fs::create_dir_all(parent)?;
     }
 
-    let content = serde_json::to_string_pretty(settings).map_err(AppError::Serialization)?;
-
-    fs::write(&path, content).map_err(AppError::Io)
+    let content = serde_json::to_string_pretty(settings)?;
+    fs::write(&path, content)?;
+    Ok(())
 }
 
 /// Update specific window properties

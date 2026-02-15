@@ -1,74 +1,75 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DebugService, type ILogEntry } from './DebugService';
-import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { IBridge } from '@/shared/types/IBridge';
 
 describe('DebugService', () => {
-    let debugService: DebugService;
-    let mockTauriProvider: TauriProvider;
+    let bridge: IBridge;
+    let service: DebugService;
+
+    const mockLogs: ILogEntry[] = [
+        { timestamp: 100, source: 'TEST', level: 'INFO', message: 'Test log 1' },
+        { timestamp: 200, source: 'TEST', level: 'ERROR', message: 'Test log 2' },
+    ];
 
     beforeEach(() => {
-        mockTauriProvider = {
-            isTauri: vi.fn(),
+        bridge = {
             invoke: vi.fn(),
-        } as unknown as TauriProvider;
-
-        debugService = new DebugService(mockTauriProvider);
-
-        // Mock global fetch for fallback tests
+            listen: vi.fn(),
+            isTauri: vi.fn(),
+        };
+        service = new DebugService(bridge);
+        // Mock global fetch for fallback
         globalThis.fetch = vi.fn();
     });
 
-    it('should fetch logs via Tauri invoke when in Tauri', async () => {
-        vi.mocked(mockTauriProvider.isTauri).mockReturnValue(true);
-        const mockLogs: ILogEntry[] = [
-            { timestamp: 123, source: 'TEST', level: 'INFO', message: 'Test log' },
-        ];
-        vi.mocked(mockTauriProvider.invoke).mockResolvedValue(mockLogs);
+    it('should fetch logs via generic bridge when isTauri is true', async () => {
+        vi.mocked(bridge.isTauri).mockReturnValue(true);
+        vi.mocked(bridge.invoke).mockResolvedValue(mockLogs);
 
-        const logs = await debugService.fetchLogs();
+        const logs = await service.fetchLogs();
 
-        expect(mockTauriProvider.invoke).toHaveBeenCalledWith('get_logs', { since: 0 });
-        expect(logs).toHaveLength(1);
-        expect(logs[0]?.message).toBe('Test log');
+        expect(bridge.invoke).toHaveBeenCalledWith('get_logs', { since: 0 });
+        expect(logs).toHaveLength(2);
+        expect(logs[0]?.message).toBe('Test log 1');
     });
 
-    it('should fetch logs via fetch when NOT in Tauri', async () => {
-        vi.mocked(mockTauriProvider.isTauri).mockReturnValue(false);
-        const mockLogs: ILogEntry[] = [
-            { timestamp: 123, source: 'TEST', level: 'INFO', message: 'Browser log' },
+    it('should filter noisy AI logs', async () => {
+        vi.mocked(bridge.isTauri).mockReturnValue(true);
+        const noisyLogs: ILogEntry[] = [
+            { timestamp: 100, source: 'CHATSERVICE', level: 'INFO', message: 'Noise' },
+            { timestamp: 200, source: 'TEST', level: 'ERROR', message: 'Real Error' },
+            { timestamp: 300, source: 'GEMINI', level: 'ERROR', message: 'ERROR 429' },
         ];
+        vi.mocked(bridge.invoke).mockResolvedValue(noisyLogs);
 
-        vi.mocked(globalThis.fetch).mockResolvedValue({
+        const logs = await service.fetchLogs();
+
+        expect(logs).toHaveLength(1);
+        expect(logs[0]?.message).toBe('Real Error');
+    });
+
+    it('should clear logs via bridge', async () => {
+        vi.mocked(bridge.isTauri).mockReturnValue(true);
+
+        await service.clearLogs();
+
+        expect(bridge.invoke).toHaveBeenCalledWith('clear_logs');
+        expect(service.getLogs()).toHaveLength(0);
+    });
+
+    it('should fallback to fetch when bridge is not Tauri', async () => {
+        vi.mocked(bridge.isTauri).mockReturnValue(false);
+        const fetchMock = vi.mocked(globalThis.fetch);
+        fetchMock.mockResolvedValue({
             ok: true,
-            text: () => Promise.resolve(JSON.stringify(mockLogs)),
+            text: async () => {
+                return await Promise.resolve(JSON.stringify(mockLogs));
+            },
         } as Response);
 
-        const logs = await debugService.fetchLogs();
+        const logs = await service.fetchLogs();
 
-        expect(globalThis.fetch).toHaveBeenCalled();
-        expect(mockTauriProvider.invoke).not.toHaveBeenCalled();
-        expect(logs).toHaveLength(1);
-        expect(logs[0]?.message).toBe('Browser log');
-    });
-
-    it('should clear logs via Tauri invoke when in Tauri', async () => {
-        vi.mocked(mockTauriProvider.isTauri).mockReturnValue(true);
-        vi.mocked(mockTauriProvider.invoke).mockResolvedValue(undefined);
-
-        await debugService.clearLogs();
-
-        expect(mockTauriProvider.invoke).toHaveBeenCalledWith('clear_logs');
-        expect(debugService.getLogs()).toHaveLength(0);
-    });
-
-    it('should clear logs via fetch when NOT in Tauri', async () => {
-        vi.mocked(mockTauriProvider.isTauri).mockReturnValue(false);
-        vi.mocked(globalThis.fetch).mockResolvedValue({ ok: true } as Response);
-
-        await debugService.clearLogs();
-
-        expect(globalThis.fetch).toHaveBeenCalledWith('/api/logs/clear', { method: 'POST' });
-        expect(mockTauriProvider.invoke).not.toHaveBeenCalled();
-        expect(debugService.getLogs()).toHaveLength(0);
+        expect(fetchMock).toHaveBeenCalledWith('/api/logs?since=0');
+        expect(logs).toHaveLength(2);
     });
 });

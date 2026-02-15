@@ -4,163 +4,291 @@
     "name": "GPT",
     "description": "Автономные агенты и глубокая логика.",
     "icon": "🤖",
-    "stats": { "speed": 9, "logic": 10, "creative": 10 },
     "type": "api",
-    "baseUrl": "https://api.openai.com/v1",
+    "baseUrl": "https://openrouter.ai/api/v1",
     "models": {
+      "gpt-5.3-spark": {
+        "name": "GPT-5.3 Spark",
+        "desc": "Ultra-low-latency coding/agent model (Codex variant optimized for real-time coding).",
+        "descKey": "ui.gpt.model.spark.desc",
+        "tier": "strong",
+        "releaseDate": "2026-02",
+        "contextWindow": 128000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 2.50,
+          "output_per_1m": 18.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 10, "logic": 10, "creative": 9 },
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "openai/gpt-5.3-codex-spark" }
+      },
+      "gpt-5.3-codex": {
+        "name": "GPT-5.3 Codex",
+        "desc": "High-throughput coding/agent model (GPT-5.3 family).",
+        "descKey": "ui.gpt.model.gpt53codex.desc",
+        "tier": "strong",
+        "releaseDate": "2026-02",
+        "contextWindow": 200000,
+        "maxOutputTokens": 8192,
+        "pricing": {
+          "input_per_1m": 2.00,
+          "output_per_1m": 15.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 8, "logic": 10, "creative": 9 },
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "openai/gpt-5.3-codex" }
+      },
       "gpt-5.2-pro": {
         "name": "GPT-5.2 Pro",
-        "desc": "Best model for autonomous agents",
+        "desc": "Best model for autonomous agents (previous stable).",
         "descKey": "ui.gpt.model.gpt52.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$1.75" },
-           { "tier": "Output", "note": "$14.00" }
-        ],
-        "stats": { "speed": 5, "logic": 10, "creative": 10 },
-        "apiModels": { "text": "gpt-5.2-2025-12-11" }
+        "tier": "strong",
+        "releaseDate": "2025-12",
+        "contextWindow": 128000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 1.75,
+          "output_per_1m": 14.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 6, "logic": 10, "creative": 10 },
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "openai/gpt-5.2-2025-12-11" }
       },
-      "gpt-5.2-standard": {
+      "gpt-5.2": {
         "name": "GPT-5.2",
-        "desc": "Balanced speed and intelligence",
-        "descKey": "ui.gpt.model.gpt52std.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$1.75" },
-           { "tier": "Output", "note": "$14.00" }
-        ],
-        "stats": { "speed": 7, "logic": 9, "creative": 9 },
-        "apiModels": { "text": "gpt-5.2-standard" }
+        "desc": "The best model for coding and agentic tasks across industries.",
+        "descKey": "ui.gpt.model.gpt52.desc",
+        "tier": "strong",
+        "releaseDate": "2025-12",
+        "contextWindow": 128000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 1.75,
+          "output_per_1m": 14.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 6, "logic": 10, "creative": 9 },
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "openai/gpt-5.2" }
       },
-
       "gpt-5-mini": {
         "name": "GPT-5 Mini",
-        "desc": "Fast and cost-effective",
+        "desc": "Fast and cost-effective.",
         "descKey": "ui.gpt.model.gpt5mini.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$0.15" },
-           { "tier": "Output", "note": "$0.60" }
-        ],
+        "tier": "weak",
+        "releaseDate": "2025-08",
+        "contextWindow": 128000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 0.15,
+          "output_per_1m": 0.60,
+          "currency": "USD"
+        },
         "stats": { "speed": 10, "logic": 5, "creative": 5 },
-        "apiModels": { "text": "gpt-5-mini-2025-08-07" }
+        "capabilities": {
+          "reasoning": false,
+          "streaming": true,
+          "functionCalling": false
+        },
+        "apiModels": { "text": "openai/gpt-5-mini-2025-08-07" }
+      },
+      "gpt-5-nano": {
+        "name": "GPT-5 Nano",
+        "desc": "Fastest, most cost-efficient version of GPT-5.",
+        "descKey": "ui.gpt.model.gpt5nano.desc",
+        "tier": "weak",
+        "releaseDate": "2025-08",
+        "contextWindow": 4000,
+        "maxOutputTokens": 1024,
+        "pricing": {
+          "input_per_1m": 0.05,
+          "output_per_1m": 0.40,
+          "currency": "USD"
+        },
+        "stats": { "speed": 10, "logic": 3, "creative": 3 },
+        "capabilities": {
+          "reasoning": false,
+          "streaming": true,
+          "functionCalling": false
+        },
+        "apiModels": { "text": "openai/gpt-5-nano-2025-08-07" }
       }
     },
     "modelAliases": {
       "gpt-5.1-thinking": "gpt-5.2-pro",
-      "gpt-4-turbo": "gpt-5.2-standard"
+      "gpt-4-turbo": "gpt-5.2-pro",
+      "gpt-codex-spark": "gpt-5.3-codex-spark"
     }
   },
   {
     "id": "claude",
     "name": "Claude",
     "description": "Продвинутый ИИ для анализа и творчества.",
-    "descKey": "ui.launcher.app.claude.desc",
     "icon": "✱",
-    "stats": { "speed": 8, "logic": 10, "creative": 10 },
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
     "models": {
-      "claude-4.5-opus": {
-        "name": "Claude 4.5 Opus",
-        "desc": "Unmatched intelligence (Nov 2025)",
-        "descKey": "ui.claude.model.45opus.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$5.00" },
-           { "tier": "Output", "note": "$25.00" }
-        ],
-        "stats": { "speed": 3, "logic": 10, "creative": 10 },
-        "apiModels": { "text": "anthropic/claude-4.5-opus" }
+      "claude-opus-4.6": {
+        "name": "Claude Opus 4.6",
+        "desc": "Latest Opus series with improved reliability and agentic performance.",
+        "descKey": "ui.claude.model.opus46.desc",
+        "tier": "strong",
+        "releaseDate": "2026-02",
+        "contextWindow": 200000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 5.00,
+          "output_per_1m": 25.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 4, "logic": 10, "creative": 10 },
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "anthropic/claude-opus-4.6" }
       },
-      "claude-4.5-sonnet": {
-        "name": "Claude 4.5 Sonnet",
-        "desc": "Hybrid reasoning (Sep 2025)",
+      "claude-sonnet-4.5": {
+        "name": "Claude Sonnet 4.5",
+        "desc": "High-quality coding/agent model (4.5 Sonnet).",
         "descKey": "ui.claude.model.45sonnet.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$3.00" },
-           { "tier": "Output", "note": "$15.00" }
-        ],
+        "tier": "medium",
+        "releaseDate": "2025-09",
+        "contextWindow": 200000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 3.00,
+          "output_per_1m": 15.00,
+          "currency": "USD"
+        },
         "stats": { "speed": 7, "logic": 9, "creative": 8 },
-        "apiModels": { "text": "claude-sonnet-4-5" }
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "anthropic/claude-sonnet-4.5" }
       },
-      "claude-4.5-haiku": {
-        "name": "Claude 4.5 Haiku",
-        "desc": "Lightning fast speed",
+      "claude-haiku-4.5": {
+        "name": "Claude Haiku 4.5",
+        "desc": "Low-latency option in the Claude 4.5 family.",
         "descKey": "ui.claude.model.haiku.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$1.00" },
-           { "tier": "Output", "note": "$5.00" }
-        ],
+        "tier": "weak",
+        "releaseDate": "2025-09",
+        "contextWindow": 200000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 1.00,
+          "output_per_1m": 5.00,
+          "currency": "USD"
+        },
         "stats": { "speed": 10, "logic": 6, "creative": 5 },
-        "apiModels": { "text": "anthropic/claude-4.5-haiku" }
+        "capabilities": {
+          "reasoning": false,
+          "streaming": true,
+          "functionCalling": false
+        },
+        "apiModels": { "text": "anthropic/claude-haiku-4.5" }
       }
     }
   },
   {
     "id": "gemini",
     "name": "Gemini",
-    "description": "Мультимодальность и огромный контекст.",
+    "description": "Мультимодальность и большой контекст.",
     "icon": "✨",
-    "stats": { "speed": 10, "logic": 9, "creative": 10 },
-    "type": "gemini",
-    "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
-    "models": {
-      "gemini-3-pro": {
-        "name": "Gemini 3 Pro",
-        "desc": "Advanced flagship reasoning",
-        "descKey": "ui.gemini.model.pro.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$2.00" },
-           { "tier": "Output", "note": "$12.00" }
-        ],
-        "stats": { "speed": 6, "logic": 10, "creative": 10 },
-        "apiModels": { "text": "gemini-3-pro-preview" }
-      },
-      "gemini-3-flash": {
-        "name": "Gemini 3 Flash",
-        "desc": "Ultra-fast multimodal agent",
-        "descKey": "ui.gemini.model.flash.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$0.50" },
-           { "tier": "Output", "note": "$3.00" }
-        ],
-        "stats": { "speed": 10, "logic": 9, "creative": 8 },
-        "apiModels": { "text": "gemini-3-flash-preview" }
-      }
-    },
-    "modelAliases": {
-      "gemini-1.5-pro": "gemini-3-pro",
-      "gemini-1.5-flash": "gemini-3-flash"
-    }
-  },
-  {
-    "id": "llama",
-    "name": "Llama",
-    "description": "Мощные открытые модели для локального и облачного использования.",
-    "descKey": "ui.launcher.app.llama.desc",
-    "icon": "🦙",
-    "stats": { "speed": 9, "logic": 9, "creative": 8 },
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
     "models": {
-      "llama-4-behemoth": {
-        "name": "Llama 4 Behemoth",
-        "desc": "Most powerful open model (2T)",
-        "descKey": "ui.llama.model.behemoth.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$2.00" },
-           { "tier": "Output", "note": "$6.00" }
-        ],
-        "stats": { "speed": 3, "logic": 9, "creative": 9 },
-        "apiModels": { "text": "meta-llama/llama-4-behemoth" }
+      "gemini-3-deep-think": {
+        "name": "Gemini 3 Deep Think",
+        "desc": "Specialized for science, research and engineering workflows.",
+        "descKey": "ui.gemini.model.deepthink.desc",
+        "tier": "strong",
+        "releaseDate": "2026-02",
+        "contextWindow": 1000000,
+        "maxOutputTokens": 65536,
+        "pricing": {
+          "input_per_1m": 2.50,
+          "output_per_1m": 15.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 5, "logic": 10, "creative": 9 },
+        "capabilities": {
+          "reasoning": true,
+          "vision": true,
+          "multimodal": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "google/gemini-3-deep-think" }
       },
-      "llama-4-scout": {
-        "name": "Llama 4 Scout",
-        "desc": "Efficient MoE model (109B)",
-        "descKey": "ui.llama.model.scout.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$0.70" },
-           { "tier": "Output", "note": "$1.40" }
-        ],
-        "stats": { "speed": 7, "logic": 7, "creative": 7 },
-        "apiModels": { "text": "meta-llama/llama-4-scout" }
+      "gemini-3-pro": {
+        "name": "Gemini 3 Pro",
+        "desc": "Flagship multimodal reasoning and agent model.",
+        "descKey": "ui.gemini.model.pro.desc",
+        "tier": "strong",
+        "releaseDate": "2025-12",
+        "contextWindow": 1000000,
+        "maxOutputTokens": 32768,
+        "pricing": {
+          "input_per_1m": 2.00,
+          "output_per_1m": 12.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 6, "logic": 10, "creative": 10 },
+        "capabilities": {
+          "reasoning": true,
+          "vision": true,
+          "multimodal": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "google/gemini-3-pro-preview" }
+      },
+      "gemini-3-flash": {
+        "name": "Gemini 3 Flash",
+        "desc": "Ultra-fast multimodal agent (low-latency).",
+        "descKey": "ui.gemini.model.flash.desc",
+        "tier": "medium",
+        "releaseDate": "2026-02",
+        "contextWindow": 1000000,
+        "maxOutputTokens": 8192,
+        "pricing": {
+          "input_per_1m": 0.50,
+          "output_per_1m": 3.00,
+          "currency": "USD"
+        },
+        "stats": { "speed": 10, "logic": 9, "creative": 8 },
+        "capabilities": {
+          "reasoning": true,
+          "vision": true,
+          "multimodal": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "google/gemini-3-flash-preview" }
       }
     }
   },
@@ -168,33 +296,51 @@
     "id": "deepseek",
     "name": "DeepSeek",
     "description": "Специализированные модели для программирования и математики.",
-    "descKey": "ui.launcher.app.deepseek.desc",
     "icon": "🧠",
-    "stats": { "speed": 10, "logic": 10, "creative": 8 },
     "type": "api",
-    "baseUrl": "https://api.deepseek.com",
+    "baseUrl": "https://openrouter.ai/api/v1",
     "models": {
       "deepseek-reasoner-v2": {
-        "name": "DeepSeek Reasoner",
-        "desc": "Chain of thought for highest accuracy",
+        "name": "DeepSeek Reasoner v2",
+        "desc": "Chain of thought for highest accuracy (reasoning-specialized).",
         "descKey": "ui.deepseek.model.reasoner.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$0.55" },
-           { "tier": "Output", "note": "$2.19" }
-        ],
+        "tier": "strong",
+        "releaseDate": "2026-01",
+        "contextWindow": 64000,
+        "maxOutputTokens": 8192,
+        "pricing": {
+          "input_per_1m": 0.55,
+          "output_per_1m": 2.19,
+          "currency": "USD"
+        },
         "stats": { "speed": 3, "logic": 10, "creative": 6 },
-        "apiModels": { "text": "deepseek-reasoner-v2" }
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "deepseek/deepseek-reasoner-v2" }
       },
       "deepseek-v4": {
         "name": "DeepSeek V4",
-        "desc": "SOTA in coding and math",
+        "desc": "Next-gen DeepSeek (expected 2026) — SOTA in code/math for cost-sensitive workloads.",
         "descKey": "ui.deepseek.model.v4.desc",
-        "pricing": [
-           { "tier": "Input", "note": "$0.14" },
-           { "tier": "Output", "note": "$0.28" }
-        ],
+        "tier": "medium",
+        "releaseDate": "2026-02",
+        "contextWindow": 128000,
+        "maxOutputTokens": 4096,
+        "pricing": {
+          "input_per_1m": 0.14,
+          "output_per_1m": 0.28,
+          "currency": "USD"
+        },
         "stats": { "speed": 9, "logic": 9, "creative": 6 },
-        "apiModels": { "text": "deepseek-v4" }
+        "capabilities": {
+          "reasoning": true,
+          "streaming": true,
+          "functionCalling": true
+        },
+        "apiModels": { "text": "deepseek/deepseek-v4" }
       }
     }
   }

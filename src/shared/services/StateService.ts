@@ -6,6 +6,7 @@
 import { type IBridge } from '@/shared/types/IBridge';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
+import type { IStateService } from '@/shared/types/IStateService';
 
 export interface IUIState {
     sidebar_collapsed: boolean;
@@ -45,7 +46,7 @@ const DEFAULT_UI_STATE: IUIState = {
     ai_session_id: null,
 };
 
-export class StateService {
+export class StateService implements IStateService {
     private _state: IUIState = { ...DEFAULT_UI_STATE };
     private _isDirty = false;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;

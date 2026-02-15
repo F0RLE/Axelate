@@ -18,6 +18,11 @@ export type MessageSource = 'chat' | 'service' | 'system';
 export type MessageHandler = (response: string, source: MessageSource) => void;
 
 /**
+ * Functional interface for streaming chunk consumption.
+ */
+export type IChunkHandler = (chunk: string) => void;
+
+/**
  * Discrete component of a multimodal message payload.
  */
 export type ChatContentPart =
@@ -105,10 +110,22 @@ export interface IAIModelStats {
  * Tiered pricing configuration for token-based resource distribution.
  */
 export interface IAIModelPricing {
-    tier: string;
-    note?: string;
-    in?: string;
-    out?: string;
+    input_per_1m?: number | null;
+    output_per_1m?: number | null;
+    currency?: string | null;
+    notes?: string | null;
+}
+
+/**
+ * Model capability flags
+ */
+export interface IAIModelCapabilities {
+    reasoning: boolean;
+    vision: boolean;
+    multimodal: boolean;
+    long_context: boolean;
+    streaming: boolean;
+    function_calling: boolean;
 }
 
 /**
@@ -118,11 +135,20 @@ export interface IAIModelData {
     name: string;
     desc: string;
     descKey?: string;
-    pricing?: IAIModelPricing[];
+
+    tier?: 'strong' | 'medium' | 'weak' | null;
+    modelSize?: string | null;
+    releaseDate?: string | null;
+    contextWindow?: number | null;
+    maxOutputTokens?: number | null;
+    deprecated?: boolean | null;
+
+    pricing?: IAIModelPricing | null;
+    capabilities?: IAIModelCapabilities | null;
     stats?: IAIModelStats;
     apiModels?: {
-        text?: string;
-        image?: string;
+        text?: string | null;
+        image?: string | null;
     };
 }
 

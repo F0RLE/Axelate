@@ -3,7 +3,7 @@
  * @description Utility functions for accessing AI provider data from global APP_DATA.
  */
 
-import type { IAICatalogApp, IAIModelData, IAIModelStats, IAIProviderData } from '../types/aiTypes';
+import type { IAICatalogApp, IAIModelData, IAIProviderData } from '../types/aiTypes';
 
 // ============================================================================
 // Global Access
@@ -102,19 +102,51 @@ export function getApiModelId(providerId: string, uiModelKey: string): string {
  * @param stats - Model performance metrics
  * @returns Aggregate power score
  */
-function _calculatePower(stats?: IAIModelStats): number {
-    return (stats?.logic ?? 0) + (stats?.creative ?? 0);
-}
 
 /**
  * Ranks models according to their computed performance indices in descending order.
+ * Deterministic hierarchy: Tier (Strong > Medium > Weak) -> Power Score (Logic + Creative) -> Release Date.
  *
  * @param models - Record of models to sort
  * @returns Array of sorted entries
  */
 export function sortModelsByPower(models: Record<string, IAIModelData>): [string, IAIModelData][] {
+    const tierPriority: Record<string, number> = {
+        strong: 3,
+        medium: 2,
+        weak: 1,
+    };
+
+    /**
+     * Converts a release date string (e.g. "2026-02") to a numeric timestamp for comparison.
+     */
+    const getTimestamp = (date?: string) => {
+        if (!date) return 0;
+        return new Date(date).getTime();
+    };
+
     return Object.entries(models).sort(([, modelA], [, modelB]) => {
-        return _calculatePower(modelB.stats) - _calculatePower(modelA.stats);
+        // 1. Tier Priority (Strong > Medium > Weak)
+        const tierA = modelA.tier?.toLowerCase() ?? 'weak';
+        const tierB = modelB.tier?.toLowerCase() ?? 'weak';
+        const tierDiff = (tierPriority[tierB] ?? 0) - (tierPriority[tierA] ?? 0);
+        if (tierDiff !== 0) return tierDiff;
+
+        // 2. Release Date (Newest > Oldest)
+        const dateDiff =
+            getTimestamp(modelB.releaseDate as string) - getTimestamp(modelA.releaseDate as string);
+        if (dateDiff !== 0) return dateDiff;
+
+        // 3. Power Score (Logic + Creative + Speed)
+        const statsA = modelA.stats ?? { logic: 0, creative: 0, speed: 0 };
+        const statsB = modelB.stats ?? { logic: 0, creative: 0, speed: 0 };
+        const powerA = (statsA.logic ?? 0) + (statsA.creative ?? 0) + (statsA.speed ?? 0);
+        const powerB = (statsB.logic ?? 0) + (statsB.creative ?? 0) + (statsB.speed ?? 0);
+        const powerDiff = powerB - powerA;
+        if (powerDiff !== 0) return powerDiff;
+
+        // 4. Alphabetical Fallback (A-Z)
+        return modelA.name.localeCompare(modelB.name);
     });
 }
 

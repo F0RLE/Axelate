@@ -9,7 +9,7 @@ pub fn get_ui_state() -> Result<UIState, AppError> {
         return Ok(UIState::default());
     }
 
-    let content = fs::read_to_string(&*FILE_UI_STATE).map_err(AppError::Io)?;
+    let content = fs::read_to_string(&*FILE_UI_STATE).map_err(|e| AppError::Io(e.to_string()))?;
     match serde_json::from_str(&content) {
         Ok(state) => Ok(state),
         Err(e) => {
@@ -22,8 +22,9 @@ pub fn get_ui_state() -> Result<UIState, AppError> {
 /// Save UI state to file
 pub fn save_ui_state(state: &UIState) -> Result<(), AppError> {
     if let Some(parent) = FILE_UI_STATE.parent() {
-        fs::create_dir_all(parent).map_err(AppError::Io)?;
+        fs::create_dir_all(parent).map_err(|e| AppError::Io(e.to_string()))?;
     }
-    let content = serde_json::to_string_pretty(state).map_err(AppError::Serialization)?;
-    fs::write(&*FILE_UI_STATE, content).map_err(AppError::Io)
+    let content =
+        serde_json::to_string_pretty(state).map_err(|e| AppError::Serialization(e.to_string()))?;
+    fs::write(&*FILE_UI_STATE, content).map_err(|e| AppError::Io(e.to_string()))
 }

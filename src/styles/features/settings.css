@@ -35,7 +35,7 @@
 
 .settings-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.5rem;
     align-items: stretch;
     margin-top: auto;
@@ -45,16 +45,45 @@
     animation: settingsGridFadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes settingsGridFadeIn {
-    0% {
-        opacity: 0;
-    }
-
-    100% {
-        opacity: 1;
-    }
+#settings-grid .module-card {
+    /* Standardize settings module card padding/layout */
+    display: flex;
+    flex-direction: column;
+    /* Remove padding overrides to match dashboard.css .module-card defaults (1.75rem) */
+    align-items: stretch; /* Stretch content to fill width */
+    text-align: center;
+    border: none; /* Remove border per user request */
 }
 
+#settings-grid .module-card:hover {
+    border-color: transparent; /* Ensure hover doesn't add it back */
+    background: var(--card-bg); /* Reset background to static state */
+    transform: translateY(-4px); /* Restored vertical lift per user request */
+    box-shadow: none; /* Reset shadow */
+    cursor: default; /* Cards are containers, not buttons */
+}
+
+#settings-grid .module-icon {
+    margin-bottom: 0.5rem;
+    align-self: center; /* keep icon centered */
+}
+
+#settings-grid .module-title {
+    align-self: center;
+    margin-bottom: 0.5rem;
+}
+
+#settings-grid .module-desc {
+    align-self: center;
+    margin-bottom: 1.5rem;
+    min-height: 2.6em; /* Ensure uniform height for vertical alignment */
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    opacity: 0.8;
+}
+
+/* --- Restored Navigation & Sidebar Styles --- */
 .settings-nav {
     display: flex;
     flex-direction: row;
@@ -99,9 +128,9 @@
 
 .settings-nav .nav-btn:hover {
     background: rgba(var(--primary-raw), 0.15);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(var(--primary-raw), 0.2);
-    border-color: rgba(var(--primary-raw), 0.3);
+    transform: translateY(-4px); /* Restored per user request */
+    box-shadow: none; /* Kept removed (flat) */
+    border: none;
     z-index: 10;
 }
 
@@ -114,14 +143,6 @@
 
 .settings-nav .nav-btn.active::before {
     display: none;
-}
-
-.settings-content {
-    max-width: 1200px;
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
-    gap: 1.5rem;
 }
 
 .settings-sidebar {
@@ -138,13 +159,6 @@
     overflow-y: auto;
 }
 
-.settings-sidebar-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-}
-
 .settings-sidebar-item {
     padding: 0.75rem;
     background: var(--bg-light);
@@ -153,36 +167,27 @@
     font-size: 0.8rem;
 }
 
-.settings-sidebar-item-title {
+.settings-sidebar-title {
+    font-size: 0.9rem;
     font-weight: 600;
-    margin-bottom: 0.25rem;
+    margin-bottom: 1rem;
     color: var(--text-primary);
-}
-
-.settings-sidebar-item-desc {
-    color: var(--text-muted);
-    font-size: 0.75rem;
-    line-height: 1.4;
 }
 
 @media (max-width: 1024px) {
     .settings-grid {
         grid-template-columns: 1fr !important;
     }
-
     .settings-nav {
-        position: static;
-        display: flex;
-        flex-direction: row;
-        overflow-x: auto;
-        margin-bottom: 1rem;
-    }
-
-    .settings-nav .nav-btn {
-        white-space: nowrap;
+         position: static;
+         display: flex;
+         flex-direction: row;
+         overflow-x: auto;
+         margin-bottom: 1rem;
     }
 }
 
+/* --- Restored Resizable Card & Section Styles --- */
 .settings-section {
     display: none;
     overflow: visible;
@@ -197,91 +202,10 @@
     animation: settingsSectionFadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-@keyframes settingsSectionFadeIn {
-    0% {
-        opacity: 0;
-    }
-
-    100% {
-        opacity: 1;
-    }
-}
-
-.settings-card {
-    background: var(--card-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg);
-    padding: 1.75rem;
-    margin-bottom: 1rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-    animation: cardSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-}
-
-.settings-card:nth-child(1) {
-    animation-delay: 0.1s;
-}
-
-.settings-card:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.settings-card:nth-child(3) {
-    animation-delay: 0.3s;
-}
-
-.settings-card:nth-child(4) {
-    animation-delay: 0.4s;
-}
-
-@keyframes cardSlideIn {
-    0% {
-        opacity: 0;
-    }
-
-    100% {
-        opacity: 1;
-    }
-}
-
-.settings-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--primary), transparent);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.card-title {
-    font-size: 1rem;
-    font-weight: 700;
-    margin-bottom: 1.25rem;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--text-primary);
-    letter-spacing: -0.01em;
-    position: relative;
-    padding-bottom: 0.75rem;
-}
-
-.card-title::after {
-    display: none;
-}
-
 .resizable-card {
     position: relative;
     cursor: default;
-    transition:
-        transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-resize-handle {
@@ -325,7 +249,7 @@
     background: rgba(255, 255, 255, 0.6);
 }
 
-body.resizing {
+body.resizing, body.resizing * {
     user-select: none !important;
     -webkit-user-select: none !important;
     -moz-user-select: none !important;
@@ -333,102 +257,64 @@ body.resizing {
     cursor: col-resize !important;
 }
 
-body.resizing * {
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    -moz-user-select: none !important;
-    -ms-user-select: none !important;
-}
-
-.resizable-card[data-card-width='half'] {
-    grid-column: span 1;
-}
-
-.resizable-card[data-card-width='full'] {
-    grid-column: 1 / -1;
-}
-
-.resizable-card.animating {
-    animation: cardResize 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
+.resizable-card[data-card-width='half'] { grid-column: span 1; }
+.resizable-card[data-card-width='full'] { grid-column: 1 / -1; }
+.resizable-card.animating { animation: cardResize 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
 
 @keyframes cardResize {
-    0% {
-        opacity: 0.95;
-        transform: scale(0.98);
-    }
+    0% { opacity: 0.95; transform: scale(0.98); }
+    50% { opacity: 0.9; transform: scale(1.01); }
+    100% { opacity: 1; transform: scale(1); }
+}
 
-    50% {
-        opacity: 0.9;
-        transform: scale(1.01);
-    }
+.nav-btn.hidden { display: none !important; }
+.nav-btn.hiding { animation: navHide 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; overflow: hidden; }
+.nav-btn.showing { animation: navShow 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; overflow: hidden; }
 
-    100% {
-        opacity: 1;
+@keyframes navHide {
+    from { 
+        opacity: 1; 
+        max-height: 50px; 
+        margin-bottom: 0.25rem; 
+        transform: scale(1);
+    }
+    to { 
+        opacity: 0; 
+        max-height: 0; 
+        margin-bottom: 0; 
+        transform: scale(0.95);
+    }
+}
+
+@keyframes navShow {
+    from { 
+        opacity: 0; 
+        max-height: 0; 
+        margin-bottom: 0; 
+        transform: scale(0.95);
+    }
+    to { 
+        opacity: 1; 
+        max-height: 50px; 
+        margin-bottom: 0.25rem; 
         transform: scale(1);
     }
 }
 
-.nav-btn.hidden {
-    display: none !important;
-}
+/* --- Toggle Grids (Launcher Style) --- */
 
-.nav-btn.hiding {
-    animation: slideOutUp 0.3s ease-out forwards;
-    overflow: hidden;
-}
-
-@keyframes slideOutUp {
-    from {
-        opacity: 1;
-        transform: translateX(0) scale(1);
-        max-height: 50px;
-        margin-bottom: 0.25rem;
-    }
-
-    to {
-        opacity: 0;
-        transform: translateX(-100%) scale(0.8);
-        max-height: 0;
-        margin-bottom: 0;
-        padding-top: 0;
-        padding-bottom: 0;
-        width: 0;
-    }
-}
-
-.nav-btn.showing {
-    animation: slideInDown 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-    overflow: hidden;
-}
-
-/* ============================================
-   MODERN CYBERPUNK TOGGLES
-   ============================================ */
-
-.settings-card .card-title {
-    font-size: 1.25rem;
-    margin-bottom: 1.5rem;
-}
-
-.settings-card .card-title > div:first-child {
-    width: 48px;
-    height: 48px;
-}
-
-.settings-card .card-title .icon {
-    width: 24px;
-    height: 24px;
-}
-
-.settings-card .card-title div[style*='font-size: 0.8rem'] {
-    opacity: 0.6;
+#taskbar-toggles {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem !important; /* Launcher standard gap */
+    width: 100%;
 }
 
 #monitor-toggles {
     display: grid !important;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem !important; /* Launcher standard gap */
+    width: 100%;
 }
 
 .monitor-toggle-btn {
@@ -436,18 +322,48 @@ body.resizing * {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    padding: 1.25rem 1rem;
+    gap: 0.75rem; /* Increased internal gap for larger tiles */
     padding: 1rem;
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* border: 1px solid rgba(255, 255, 255, 0.1); Removed per user request */
     outline: none;
-    border-radius: 12px;
+    border-radius: 16px; /* Slightly larger radius for larger tiles */
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    min-height: 100px;
+    min-height: 0;
+    width: 100%;
+    /* Removed max-width to let tiles fill space "Launcher Style" */
+    height: auto;
+    aspect-ratio: 1;
+    /* Premium Hover Effect */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    /* Entry Animation */
+    opacity: 0;
+    animation: toggleEntry 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* Staggered Entry Delays (up to 12 items) */
+.monitor-toggle-btn:nth-child(1) { animation-delay: 0.05s; }
+.monitor-toggle-btn:nth-child(2) { animation-delay: 0.1s; }
+.monitor-toggle-btn:nth-child(3) { animation-delay: 0.15s; }
+.monitor-toggle-btn:nth-child(4) { animation-delay: 0.2s; }
+.monitor-toggle-btn:nth-child(5) { animation-delay: 0.25s; }
+.monitor-toggle-btn:nth-child(6) { animation-delay: 0.3s; }
+.monitor-toggle-btn:nth-child(7) { animation-delay: 0.35s; }
+.monitor-toggle-btn:nth-child(8) { animation-delay: 0.4s; }
+.monitor-toggle-btn:nth-child(9) { animation-delay: 0.45s; }
+
+@keyframes toggleEntry {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .monitor-toggle-btn::before {
@@ -466,7 +382,15 @@ body.resizing * {
 }
 
 .monitor-toggle-btn:hover {
-    transform: translateY(-2px);
+    transform: translateY(-4px); /* Restored per user request */
+    /* border-color: rgba(var(--primary-raw), 0.4); Removed per user request */
+    box-shadow: none; /* Kept removed (flat) */
+    background: rgba(255, 255, 255, 0.08); /* Keep subtle background change but flat */
+}
+
+.monitor-toggle-btn:active {
+    transform: translateY(-2px) scale(0.96); /* Tactile click response */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .monitor-toggle-btn.active {
@@ -475,6 +399,8 @@ body.resizing * {
         rgba(var(--primary-raw), 0.3),
         rgba(var(--primary-alt-raw), 0.2)
     );
+    /* border-color: rgba(var(--primary-raw), 0.5); Removed per user request */
+    /* box-shadow: 0 0 20px rgba(var(--primary-raw), 0.3); Removed per user request */
 }
 
 .monitor-toggle-btn.active::before {
@@ -482,18 +408,27 @@ body.resizing * {
 }
 
 .monitor-toggle-btn .toggle-icon {
-    width: 32px;
-    height: 32px;
+    width: 40%; /* Responsive size (approx 48-64px depending on grid) */
+    height: auto;
+    aspect-ratio: 1;
     color: var(--text-muted);
     opacity: 0.4;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1;
+    pointer-events: none; /* Fix cursor disappearing on hover */
+}
+
+.monitor-toggle-btn .toggle-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 .monitor-toggle-btn.active .toggle-icon {
     color: #fff;
     opacity: 1;
     filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.8));
+    transform: scale(1.1); /* Pop effect */
 }
 
 .monitor-toggle-btn .toggle-label {
@@ -505,8 +440,9 @@ body.resizing * {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     z-index: 1;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     margin-top: 0.25rem;
+    pointer-events: none; /* Fix cursor disappearing on hover */
 }
 
 .monitor-toggle-btn.active .toggle-label {
@@ -514,114 +450,20 @@ body.resizing * {
     opacity: 1;
 }
 
-#taskbar-toggles {
-    display: grid !important;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1rem !important;
-}
 
-.taskbar-toggle-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 1.25rem 1rem;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-    min-height: 100px;
-    outline: none;
-}
-
-.taskbar-toggle-item::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        135deg,
-        rgba(var(--primary-raw), 0.2),
-        rgba(var(--primary-alt-raw), 0.15),
-        rgba(var(--accent-raw), 0.1)
-    );
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    border-radius: 12px;
-}
-
-.taskbar-toggle-item:hover {
-    transform: translateY(-2px);
-}
-
-.taskbar-toggle-item:active {
-    transform: translateY(-2px) scale(0.95);
-    transition: transform 0.1s;
-}
-
-.taskbar-toggle-item.active {
-    background: linear-gradient(
-        145deg,
-        rgba(var(--primary-raw), 0.3),
-        rgba(var(--primary-alt-raw), 0.2)
-    );
-}
-
-.taskbar-toggle-item.active::before {
-    opacity: 1;
-}
-
-.taskbar-toggle-item .toggle-icon {
-    width: 32px;
-    height: 32px;
-    color: var(--text-muted);
-    opacity: 0.4;
-    transition: all 0.3s ease;
-    z-index: 1;
-}
-
-.taskbar-toggle-item.active .toggle-icon {
-    color: #fff;
-    opacity: 1;
-    filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.8));
-}
-
-.taskbar-toggle-item .toggle-label {
-    font-family: var(--app-font-family);
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    opacity: 0.5;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    z-index: 1;
-    transition: all 0.3s ease;
-    margin-top: 0.25rem;
-    text-align: center;
-}
-
-.taskbar-toggle-item.active .toggle-label {
-    color: white;
-    opacity: 1;
-}
 
 @media (max-width: 600px) {
-    #monitor-toggles {
-        grid-template-columns: repeat(2, 1fr);
+    #monitor-toggles,
+    #taskbar-toggles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
 @media (max-width: 900px) {
-    .taskbar-toggle-item .toggle-label,
     .monitor-toggle-btn .toggle-label {
         display: none;
     }
 
-    .taskbar-toggle-item,
     .monitor-toggle-btn {
         min-height: 60px;
         padding: 0.75rem 0.5rem;
@@ -629,13 +471,11 @@ body.resizing * {
 }
 
 @media (max-width: 700px) {
-    .taskbar-toggle-item .toggle-icon,
     .monitor-toggle-btn .toggle-icon {
         width: 24px;
         height: 24px;
     }
 
-    .taskbar-toggle-item,
     .monitor-toggle-btn {
         min-height: 50px;
     }
@@ -648,7 +488,7 @@ body.resizing * {
     margin-top: 0.15rem;
 }
 
-#taskbar-toggles.compact .taskbar-toggle-item,
+#taskbar-toggles.compact .monitor-toggle-btn,
 #monitor-toggles.compact .monitor-toggle-btn {
     min-height: 50px;
     padding: 0.5rem;
@@ -854,7 +694,7 @@ body.resizing * {
     border-radius: 10px;
     cursor: pointer;
     transition: all 0.2s ease;
-    border: 1px solid transparent;
+    border: none; /* Removed border */
     color: var(--text-muted);
 }
 
@@ -865,7 +705,7 @@ body.resizing * {
 
 .module-nav-item.active {
     background: rgba(138, 43, 226, 0.15);
-    border-color: rgba(138, 43, 226, 0.3);
+    border: none;
     color: var(--primary-light, #a855f7);
 }
 
@@ -944,7 +784,7 @@ body.resizing * {
     padding: 1.5rem;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border-color);
+    border: none;
 }
 
 .ai-key-section label {
@@ -964,7 +804,7 @@ body.resizing * {
     flex: 1;
     padding: 0.75rem;
     border-radius: 8px;
-    border: 1px solid var(--border-color);
+    border: none; /* Removed border */
     background: rgba(0, 0, 0, 0.2);
     color: var(--text-primary);
     font-family: 'JetBrains Mono', monospace;
@@ -974,7 +814,7 @@ body.resizing * {
 .ai-check-btn {
     padding: 0 1rem;
     border-radius: 8px;
-    border: 1px solid var(--border-color);
+    border: none; /* Removed border */
     background: rgba(255, 255, 255, 0.05);
     cursor: pointer;
     color: var(--text-secondary);
@@ -1015,7 +855,7 @@ body.resizing * {
 
 .ai-model-card {
     background: rgba(255, 255, 255, 0.03);
-    border: 2px solid rgba(255, 255, 255, 0.05);
+    border: none;
     border-radius: 12px;
     padding: 1.25rem;
     cursor: pointer;
@@ -1070,7 +910,7 @@ body.resizing * {
     background: rgba(255, 255, 255, 0.02);
     border-radius: 16px;
     padding: 1.5rem;
-    border: 1px solid var(--border-color);
+    border: none;
 }
 
 .ai-stats-section h3 {
@@ -1123,19 +963,16 @@ body.resizing * {
 .thinking-option-card,
 .ai-model-card {
     transition: all 0.2s ease;
-    border: 1px solid var(--border-color);
+    border: none;
     background: transparent;
 }
 
-.thinking-option-card:hover,
-.ai-model-card:hover {
-    border-color: var(--primary-hover, #4a90e2);
-}
+
 
 .thinking-option-card.selected,
 .ai-model-card.selected {
     background: rgba(138, 43, 226, 0.15) !important;
-    border-color: var(--primary) !important;
+    border: none !important;
     color: var(--text-primary) !important;
 }
 

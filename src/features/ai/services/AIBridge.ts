@@ -3,6 +3,7 @@ import type {
     IBridgeResponse,
     MessageHandler,
     MessageSource,
+    IChunkHandler,
 } from '../types/aiTypes';
 import type { Core } from '@/app/init';
 import { constructChatRequest, createMultimodalContent } from '../utils/chatRequestUtils';
@@ -11,21 +12,22 @@ import { AIProviderManager } from './AIProviderManager';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import { AIChatTransport, type IChatTransport } from './AIChatTransport';
+import type { IAIBridge } from '../types/IAIBridge';
 
-export type { MessageSource, MessageHandler } from '../types/aiTypes';
-export type IChunkHandler = (chunk: string) => void;
+export type { MessageSource, MessageHandler, IChunkHandler } from '../types/aiTypes';
 
 /**
  * @class AIBridge
  * @description Controls AI provider orchestration and backend communication channels.
  * Implements architectural patterns from Section 36 of Axelate Standards.
  */
-export class AIBridge {
+export class AIBridge implements IAIBridge {
     private _core: Core | null = null;
     private readonly _unlisteners: (() => void)[] = [];
     private _initialized = false;
     private readonly _listeners = new Map<string, MessageHandler[]>();
     private readonly _chunkListeners = new Map<string, IChunkHandler[]>();
+    private readonly _thoughtListeners = new Map<string, IChunkHandler[]>();
     private readonly _transport: IChatTransport = new AIChatTransport();
     private readonly _manager: AIProviderManager = new AIProviderManager();
 
@@ -64,6 +66,17 @@ export class AIBridge {
                     this._broadcastChunk(payload);
                 });
                 this._unlisteners.push(unlistenChunk);
+
+                const unlistenThought = this._transport.onThought((payload: string) => {
+                    if (import.meta.env.DEV) {
+                        logger.debug(
+                            `[AIBridge] Thought chunk received (${String(payload.length)} chars)`,
+                        );
+                    }
+                    this._broadcastThought(payload);
+                });
+                this._unlisteners.push(unlistenThought);
+
                 logger.info('[AIBridge] Streaming active (IPC via Transport)');
             } else {
                 logger.info('[AIBridge] Web mode active (Mocks)');
@@ -110,6 +123,7 @@ export class AIBridge {
         this._manager.stopProvider();
         this._listeners.clear();
         this._chunkListeners.clear();
+        this._thoughtListeners.clear();
         this._showInfoToast('ui.ai.provider_stopped', `${activeName} terminated`);
     }
 
@@ -235,6 +249,17 @@ export class AIBridge {
         this._chunkListeners.delete(listenerId);
     }
 
+    public onThought(listenerId: string, handler: IChunkHandler): void {
+        if (!this._thoughtListeners.has(listenerId)) {
+            this._thoughtListeners.set(listenerId, []);
+        }
+        this._thoughtListeners.get(listenerId)?.push(handler);
+    }
+
+    public removeThoughtListener(listenerId: string): void {
+        this._thoughtListeners.delete(listenerId);
+    }
+
     private _broadcastResponse(response: string, source: MessageSource): void {
         this._listeners.forEach((handlers) => {
             handlers.forEach((handler) => {
@@ -245,6 +270,14 @@ export class AIBridge {
 
     private _broadcastChunk(chunk: string): void {
         this._chunkListeners.forEach((handlers) => {
+            handlers.forEach((handler) => {
+                handler(chunk);
+            });
+        });
+    }
+
+    private _broadcastThought(chunk: string): void {
+        this._thoughtListeners.forEach((handlers) => {
             handlers.forEach((handler) => {
                 handler(chunk);
             });

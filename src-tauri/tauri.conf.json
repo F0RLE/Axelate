@@ -5,7 +5,7 @@
     "version": "0.1.5",
     "identifier": "com.axelate",
     "build": {
-        "beforeDevCommand": "npm run dev",
+        "beforeDevCommand": "npm run dev --prefix src",
         "devUrl": "http://localhost:1420",
         "beforeBuildCommand": "npm run build --prefix src",
         "frontendDist": "../src/dist"

@@ -417,6 +417,16 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                     // Graceful shutdown
                     IS_QUITTING.store(true, Ordering::Relaxed);
                     system_monitor::stop_monitoring();
+
+                    // Force immediate save of all chat history before exit (Senior Refinement #4)
+                    if let Err(e) =
+                        crate::domain::ai::ai_service::ChatSessionManager::save_to_disk()
+                    {
+                        log::error!("Failed to save chat history during shutdown: {e:?}");
+                    } else {
+                        log::info!("AI history flushed successfully during shutdown.");
+                    }
+
                     app.exit(0);
                 }
                 _ => {}

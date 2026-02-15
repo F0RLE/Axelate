@@ -1,131 +1,133 @@
 $ErrorActionPreference = "Stop"
-$OutputEncoding = [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# Enhanced encoding compatibility for CI/CD
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Console]::OutputEncoding
 
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ROOT_DIR = Resolve-Path "$SCRIPT_DIR/../.."
+# Use .Path to get clean string
+$ROOT_DIR = (Resolve-Path "$SCRIPT_DIR/../..").Path 
 $SRC_DIR = Join-Path $ROOT_DIR "src"
 $TAURI_DIR = Join-Path $ROOT_DIR "src-tauri"
 
-function Write-Header {
-    param($Message)
-    Write-Host "`n=== $Message ===" -ForegroundColor Cyan
-}
+# Determine npm executable based on OS
+$NPM_EXEC = if ($IsWindows) { "npm.cmd" } else { "npm" }
+$CARGO_EXEC = "cargo"
 
-function Write-Step {
-    param($Message)
-    Write-Host "--> $Message" -ForegroundColor Yellow
-}
-
-function Write-Success {
-    param($Message)
-    Write-Host "[OK] $Message" -ForegroundColor Green
-}
-
-function Write-ErrorMsg {
-    param($Message)
-    Write-Host "[!!] $Message" -ForegroundColor Red
-}
+function Write-Header { param($Message) Write-Host "`n=== $Message ===" -ForegroundColor Cyan }
+function Write-Step { param($Message) Write-Host "--> $Message" -ForegroundColor Yellow }
+function Write-Success { param($Message) Write-Host "[OK] $Message" -ForegroundColor Green }
+function Write-ErrorMsg { param($Message) Write-Host "[!!] $Message" -ForegroundColor Red }
 
 function Exit-Error {
     param($Message)
     Write-ErrorMsg $Message
-    Write-Host "`nPress Enter to exit..." -ForegroundColor Gray
-    $null = Read-Host
+    if (-not $env:CI) {
+        # Don't wait for input if running in CI
+        Write-Host "`nPress Enter to exit..." -ForegroundColor Gray
+        $null = Read-Host
+    }
     exit 1
 }
 
 function Exec {
-    param($Command, $CmdArgs, $WorkDir)
-    Write-Host "> Executing: $Command $CmdArgs (in $WorkDir)" -ForegroundColor DarkGray
+    param(
+        [string]$Command,
+        [string[]]$CmdArgs,
+        [string]$WorkDir
+    )
+
+    if (-not (Test-Path $WorkDir)) {
+        Exit-Error "Directory not found: $WorkDir"
+    }
+
+    Write-Host "> Exec: $Command $CmdArgs" -ForegroundColor DarkGray
+    Write-Host "  Dir:  $WorkDir" -ForegroundColor DarkGray
     
     Push-Location $WorkDir
     try {
         & $Command $CmdArgs
         if ($LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code $LASTEXITCODE"
+            throw "Exit code: $LASTEXITCODE"
         }
     }
     catch {
-        Exit-Error "Command failed: $_"
+        Pop-Location # Return even on error
+        Exit-Error "Command '$Command' failed. $_"
     }
     Pop-Location
 }
 
 function Initialize-Environment {
-    Write-Step "Setting up environment..."
+    Write-Step "Checking environment..."
+
+    # 1. Check Rust/Cargo
+    if (-not (Get-Command $CARGO_EXEC -ErrorAction SilentlyContinue)) {
+        Exit-Error "Rust (cargo) is not installed or not in PATH."
+    }
+
+    # 2. Check Node.js/NPM
+    if (-not (Get-Command $NPM_EXEC -ErrorAction SilentlyContinue)) {
+        Exit-Error "Node.js (npm) is not installed or not in PATH."
+    }
     
-    # Check for RC.EXE (Resource Compiler) needed for Tauri
-    if (-not (Get-Command rc.exe -ErrorAction SilentlyContinue)) {
-        Write-Host "RC.EXE not found in PATH. Searching known locations..." -ForegroundColor Yellow
-        
-        $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
-        if (Test-Path $kitsRoot) {
-            # Find latest version
-            $latestVersion = Get-ChildItem $kitsRoot | Where-Object { $_.PSIsContainer -and $_.Name -match '^\d+\.' } | Sort-Object Name -Descending | Select-Object -First 1
+    # 3. Windows-specific: RC.EXE check
+    if ($IsWindows) {
+        if (-not (Get-Command rc.exe -ErrorAction SilentlyContinue)) {
+            Write-Host "RC.EXE not found. Searching Windows Kits..." -ForegroundColor Yellow
             
-            if ($latestVersion) {
-                $rcPath = Join-Path $latestVersion.FullName "x64"
-                if (Test-Path (Join-Path $rcPath "rc.exe")) {
-                    Write-Host "Found RC.EXE candidate at: $rcPath" -ForegroundColor DarkGray
-                    $env:PATH = "$rcPath;$env:PATH"
-                    
-                    # Verify execution
-                    try {
-                        & rc.exe /? > $null 2>&1
-                        if ($LASTEXITCODE -eq 0) {
-                            Write-Success "Added RC.EXE to PATH and verified execution"
-                        }
-                        else {
-                            Write-ErrorMsg "RC.EXE found but failed to execute (exit code $LASTEXITCODE)"
-                        }
+            $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+            if (Test-Path $kitsRoot) {
+                $latestVersion = Get-ChildItem $kitsRoot | 
+                Where-Object { $_.PSIsContainer -and $_.Name -match '^\d+\.' } | 
+                Sort-Object Name -Descending | 
+                Select-Object -First 1
+                
+                if ($latestVersion) {
+                    $rcPath = Join-Path $latestVersion.FullName "x64" # Assume x64
+                    if (Test-Path (Join-Path $rcPath "rc.exe")) {
+                        Write-Host "Found RC.EXE at: $rcPath" -ForegroundColor DarkGray
+                        $env:PATH = "$rcPath;$env:PATH"
                     }
-                    catch {
-                        Write-ErrorMsg "RC.EXE found but failed to execute: $_"
+                    else {
+                        Exit-Error "RC.EXE not found in $rcPath"
                     }
                 }
                 else {
-                    Write-ErrorMsg "RC.EXE not found in $rcPath"
+                    Exit-Error "No Windows Kits versions found."
                 }
+            }
+            else {
+                Write-Host "Windows Kits directory not found. Ensure 'C++ Build Tools' are installed." -ForegroundColor Red
+                # Proceeding with warning as it might build if previously set up
             }
         }
     }
-    else {
-        Write-Success "RC.EXE found in PATH"
-    }
 }
+
+# --- Main Execution ---
 
 Initialize-Environment
 
-Write-Header "Starting Full Project Verification (Axelate)"
+Write-Header "Axelate: Full Verification"
 
-# 1. Backend Verification
-Write-Step "Backend (Rust) Verification"
-Exec "cargo" @("fmt", "--", "--check") $TAURI_DIR
-Exec "cargo" @("clippy", "--", "-D", "warnings") $TAURI_DIR
-Exec "cargo" @("test") $TAURI_DIR
-Write-Success "Backend checks passed"
+# 1. Backend
+Write-Step "Backend (Rust)"
+Exec $CARGO_EXEC @("fmt", "--", "--check") $TAURI_DIR
+Exec $CARGO_EXEC @("clippy", "--", "-D", "warnings") $TAURI_DIR
+Exec $CARGO_EXEC @("test") $TAURI_DIR
+Write-Success "Backend Verified"
 
-# 2. Frontend Verification
-Write-Step "Frontend (TypeScript) Verification"
+# 2. Frontend
+Write-Step "Frontend (TypeScript)"
 
-# Typecheck (from src)
-Exec "npm.cmd" @("run", "typecheck") $SRC_DIR
+Exec $NPM_EXEC @("run", "typecheck") $SRC_DIR
+Exec $NPM_EXEC @("run", "lint") $SRC_DIR
+Exec $NPM_EXEC @("run", "format:check") $SRC_DIR
+Exec $NPM_EXEC @("run", "test") $SRC_DIR
 
-# Lint
-Exec "npm.cmd" @("run", "lint") $SRC_DIR
+Write-Step "Frontend Build & Size"
+Exec $NPM_EXEC @("run", "build") $SRC_DIR
+Exec $NPM_EXEC @("run", "check-size") $SRC_DIR
 
-# Format Check
-Exec "npm.cmd" @("run", "format:check") $SRC_DIR
-
-# Tests
-Exec "npm.cmd" @("run", "test") $SRC_DIR
-
-# Build & Size Check
-Write-Step "Frontend Build & Size Check"
-Exec "npm.cmd" @("run", "build") $SRC_DIR
-Exec "npm.cmd" @("run", "check-size") $SRC_DIR
-
-Write-Success "Frontend checks passed"
-
-Write-Header "All checks passed successfully! Ready for release."
+Write-Header "SUCCESS: Ready for release"
 exit 0

@@ -5,7 +5,7 @@
 
 import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types/coreTypes';
 import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
-import type { StateService } from '@/shared/services/StateService';
+import type { IStateService } from '@/shared/types/IStateService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 export class DownloadUI {
@@ -46,7 +46,7 @@ export class DownloadUI {
     private _boundHandleUpdate: ((e: Event) => void) | null = null;
 
     constructor(
-        private readonly _stateService: StateService,
+        private readonly _stateService: IStateService,
         private readonly _i18n: I18nService,
     ) {
         this.loadSettings();

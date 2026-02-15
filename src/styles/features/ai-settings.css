@@ -66,8 +66,7 @@
 }
 
 .ai-module-config h3 {
-    font-family:
-        var(--app-font-family);
+    font-family: var(--app-font-family);
     font-weight: 700;
     font-size: 1.1rem; /* Enforce uniform size */
     margin: 0;
@@ -164,7 +163,19 @@
     display: flex;
     justify-content: space-between;
     width: 100%; /* Stretch price row */
-    opacity: 0.7;
+    opacity: 0.8;
+}
+
+.price-tag {
+    white-space: nowrap;
+}
+
+.price-tag.free {
+    color: var(--success);
+    font-weight: 700;
+    width: 100%;
+    text-align: center;
+    letter-spacing: 0.5px;
 }
 
 .thinking-level-header {

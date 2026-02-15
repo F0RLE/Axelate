@@ -12,8 +12,8 @@ html {
     scroll-behavior: smooth;
     overflow: hidden;
     height: 100%;
-    /* Fluid Scaling: Min 12px, Ideal 14px + 0.4vw, Max 18px */
-    font-size: clamp(12px, 0.8rem + 0.4vw, 18px);
+    /* Fluid Scaling: Min 14px, Ideal 15px + 0.2vw, Max 20px */
+    font-size: clamp(14px, 15px + 0.2vw, 20px);
     background: var(--bg-dark); /* Moved from body */
 }
 

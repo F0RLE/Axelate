@@ -2,19 +2,29 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatService } from './ChatService';
-import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 describe('ChatService', () => {
     let chatService: ChatService;
-    let mockAIBridge: AIBridge;
+    let mockAIBridge: IAIBridge;
     let mockI18n: I18nService;
 
     beforeEach(() => {
         mockAIBridge = {
             isActive: vi.fn(),
             sendMessage: vi.fn(),
-        } as unknown as AIBridge;
+            // Mock other methods required by IAIBridge but not used in tests
+            getActiveProvider: vi.fn(),
+            startProvider: vi.fn(),
+            stopProvider: vi.fn(),
+            getHistory: vi.fn(),
+            getState: vi.fn(),
+            onMessage: vi.fn(),
+            removeListener: vi.fn(),
+            onChunk: vi.fn(),
+            removeChunkListener: vi.fn(),
+        } as unknown as IAIBridge;
 
         mockI18n = {
             t: vi.fn((key: string, def: string) => def || key),

@@ -1,16 +1,23 @@
-//! AI Service implementation for handling LLM provider communication.
+//! AI Service implementation for handling LLM provider communication via OpenRouter.
 //!
-//! This module provides the backend logic for interacting with various AI API providers
-//! (OpenAI, Gemini, etc.) and managing their lifecycle within the Axelate.
+//! This module provides the backend logic for interacting with AI models
+//! primarily through the OpenRouter API (which normalizes OpenAI, Gemini, Claude, etc.).
 
 use crate::models::config::ApiProvider;
+use async_trait::async_trait;
+use dashmap::DashMap;
 use futures_util::StreamExt;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{
+    Arc, LazyLock, Once,
+    atomic::{AtomicBool, Ordering},
+};
 use tauri::Emitter;
+use tokio::sync::mpsc;
+use tokio::time::timeout;
 
 // ==================================================================================
 // DTOs (Data Transfer Objects)
@@ -19,6 +26,9 @@ use tauri::Emitter;
 /// AI chat message with role and content
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
 pub struct ChatMessage {
+    /// Unique message identifier (UUID v4)
+    #[serde(default = "generate_uuid")]
+    pub id: String,
     /// Role ("user", "assistant", "system")
     pub role: String,
     /// Message content (text or structured data)
@@ -27,10 +37,25 @@ pub struct ChatMessage {
     pub thought_signature: Option<String>,
 }
 
+fn generate_uuid() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+/// Token usage statistics
+#[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
+pub struct TokenUsage {
+    /// Tokens in the prompt
+    pub prompt_tokens: u32,
+    /// Tokens in the completion
+    pub completion_tokens: u32,
+    /// Total tokens used
+    pub total_tokens: u32,
+}
+
 /// AI chat request parameters
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
 pub struct ChatRequest {
-    /// AI provider ("openai", "gemini", "local")
+    /// AI provider ("openai", "gemini", "local") - largely ignored now as we route via OpenRouter
     pub provider: String,
     /// Model identifier
     pub model: String,
@@ -47,6 +72,9 @@ pub struct ChatRequest {
 /// AI chat response
 #[derive(Debug, Serialize, Deserialize, Type)]
 pub struct ChatResponse {
+    /// Corresponding request identifier
+    #[serde(default = "generate_uuid")]
+    pub id: String,
     /// Whether request was successful
     pub ok: bool,
     /// AI reply content
@@ -57,6 +85,8 @@ pub struct ChatResponse {
     pub model: Option<String>,
     /// Thinking signature
     pub thought_signature: Option<String>,
+    /// Token usage metrics
+    pub usage: Option<TokenUsage>,
 }
 
 /// AI reply content
@@ -78,78 +108,171 @@ pub struct ChatSession {
 }
 
 // ==================================================================================
-// Session Management
+// Session Management (Scalable / DashMap)
 // ==================================================================================
 
 /// Manages persistence and retrieval of chat sessions
-struct ChatSessionManager;
+#[derive(Debug)]
+pub struct ChatSessionManager;
 
-/// Global storage for active sessions
-static SESSIONS: LazyLock<Mutex<HashMap<String, ChatSession>>> =
-    LazyLock::new(|| Mutex::new(ChatSessionManager::load_from_disk().unwrap_or_default()));
+/// Global storage for active sessions (DashMap for concurrency)
+static SESSIONS: LazyLock<DashMap<String, ChatSession>> =
+    LazyLock::new(|| ChatSessionManager::load_from_disk().unwrap_or_default());
+
+/// Dirty flag for IO debounce
+static DIRTY: AtomicBool = AtomicBool::new(false);
+/// Ensure background saver is only spawned once
+static SAVER_INIT: Once = Once::new();
 
 impl ChatSessionManager {
     /// Loads session history from disk
-    fn load_from_disk() -> Result<HashMap<String, ChatSession>, crate::errors::AppError> {
+    fn load_from_disk() -> Result<DashMap<String, ChatSession>, crate::errors::AppError> {
         let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
+        let tmp_path = path.with_extension("tmp");
+
+        // Atomic Crash Recovery (Senior Refinement #7)
+        // If tmp exists but real is missing, it means we crashed between remove and rename
+        if tmp_path.exists() && !path.exists() {
+            log::warn!(
+                "Detected crash/interruption during last save. Recovering history from .tmp..."
+            );
+            if let Err(e) = std::fs::rename(&tmp_path, path) {
+                log::error!("Crash recovery failed: {e}");
+            }
+        }
+
         if !path.exists() {
-            return Ok(HashMap::new());
+            return Ok(DashMap::new());
         }
 
         let content = std::fs::read_to_string(path)?;
-        let sessions: HashMap<String, ChatSession> =
-            serde_json::from_str(&content).map_err(|e| {
-                crate::errors::AppError::Internal(format!("Failed to parse chat history: {e}"))
+        let temp_map: HashMap<String, ChatSession> =
+            serde_json::from_str(&content).map_err(|e| crate::errors::AppError::Internal {
+                request_id: None,
+                message: format!("Failed to parse chat history: {e}"),
             })?;
 
-        Ok(sessions)
+        let dash_map = DashMap::new();
+        for (k, mut session) in temp_map {
+            // Migration Logic: Ensure every historical message has a UUID (Senior Refinement #5)
+            for msg in &mut session.history {
+                if msg.id.is_empty() || msg.id == "00000000-0000-0000-0000-000000000000" {
+                    msg.id = uuid::Uuid::new_v4().to_string();
+                }
+            }
+            dash_map.insert(k, session);
+        }
+
+        Ok(dash_map)
     }
 
-    /// Saves current sessions to disk
-    fn save_to_disk() -> Result<(), crate::errors::AppError> {
-        if let Ok(sessions) = SESSIONS.lock() {
-            let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
-            let content = serde_json::to_string_pretty(&*sessions).map_err(|e| {
-                crate::errors::AppError::Internal(format!("Failed to serialize chat history: {e}"))
-            })?;
-            std::fs::write(path, content)?;
+    /// Saves current sessions to disk (Atomic Write)
+    pub fn save_to_disk() -> Result<(), crate::errors::AppError> {
+        let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
+        let tmp_path = path.with_extension("tmp");
+
+        let snapshot: HashMap<String, ChatSession> = SESSIONS
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect();
+
+        let content = serde_json::to_string_pretty(&snapshot).map_err(|e| {
+            crate::errors::AppError::Internal {
+                request_id: None,
+                message: format!("Failed to serialize chat history: {e}"),
+            }
+        })?;
+
+        // 1. Write to temporary file
+        let mut file = std::fs::File::create(&tmp_path)?;
+        use std::io::Write;
+        file.write_all(content.as_bytes())?;
+
+        // 1.1 Persist buffers to physical disk (Senior Refinement #4)
+        file.sync_all()?;
+        // Close file handle before rename
+        drop(file);
+
+        // 2. Atomic Rename (Windows-safe: remove then rename if rename errors)
+        if let Err(e) = std::fs::rename(&tmp_path, path) {
+            log::warn!("Standard rename failed ({e}), attempting fallback for Windows locks...");
+            let _ = std::fs::remove_file(path);
+            std::fs::rename(&tmp_path, path)?;
         }
+
+        Ok(())
+    }
+
+    /// Ensures the background saver task is running
+    fn ensure_saver_running() {
+        SAVER_INIT.call_once(|| {
+            tokio::spawn(async move {
+                log::info!("Starting background chat session saver...");
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    if DIRTY.load(Ordering::Relaxed) {
+                        if let Err(e) = Self::save_to_disk() {
+                            log::error!("Failed to save chat history: {e}");
+                        } else {
+                            // Only clear dirty if save succeeded
+                            DIRTY.store(false, Ordering::Relaxed);
+                            log::debug!("Chat history saved to disk (debounced)");
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    /// Manually triggers a save to disk, bypassing the debounce timer
+    pub fn force_save() -> Result<(), crate::errors::AppError> {
+        Self::save_to_disk()?;
+        DIRTY.store(false, Ordering::Relaxed);
         Ok(())
     }
 
     /// Retrieves or creates a session, updating it with new user messages
     fn get_or_create_session(session_id: &str, new_messages: &[ChatMessage]) -> Vec<ChatMessage> {
-        if let Ok(mut sessions) = SESSIONS.lock() {
-            let session = sessions
-                .entry(session_id.to_string())
-                .or_insert_with(|| ChatSession {
-                    history: Vec::new(),
-                    last_updated: Self::current_timestamp(),
-                });
+        // Ensure saver is running on first write-access
+        Self::ensure_saver_running();
 
-            session.history.extend(new_messages.iter().cloned());
-            session.last_updated = Self::current_timestamp();
+        let mut entry = SESSIONS
+            .entry(session_id.to_string())
+            .or_insert_with(|| ChatSession {
+                history: Vec::new(),
+                last_updated: Self::current_timestamp(),
+            });
 
-            // Return full history
-            return session.history.clone();
-        }
-        // Fallback if lock fails (shouldn't happen)
-        new_messages.to_vec()
+        entry.history.extend(new_messages.iter().cloned());
+        entry.last_updated = Self::current_timestamp();
+
+        // Mark dirty
+        DIRTY.store(true, Ordering::Relaxed);
+
+        entry.history.clone()
     }
 
     /// Appends an assistant response to the session
-    fn append_response(session_id: &str, reply: &ChatReply, signature: Option<String>) {
-        if let Ok(mut sessions) = SESSIONS.lock()
-            && let Some(session) = sessions.get_mut(session_id)
-        {
+    fn append_response(
+        session_id: &str,
+        message_id: String,
+        reply: &ChatReply,
+        signature: Option<String>,
+    ) {
+        Self::ensure_saver_running();
+
+        if let Some(mut session) = SESSIONS.get_mut(session_id) {
             session.history.push(ChatMessage {
+                id: message_id,
                 role: reply.role.clone(),
                 content: serde_json::Value::String(reply.text.clone()),
                 thought_signature: signature,
             });
             session.last_updated = Self::current_timestamp();
+
+            // Mark dirty
+            DIRTY.store(true, Ordering::Relaxed);
         }
-        let _ = Self::save_to_disk();
     }
 
     fn current_timestamp() -> f64 {
@@ -162,9 +285,7 @@ impl ChatSessionManager {
 
 /// Retrieves chat history for a session
 pub fn get_chat_history(session_id: &str) -> Vec<ChatMessage> {
-    if let Ok(sessions) = SESSIONS.lock()
-        && let Some(session) = sessions.get(session_id)
-    {
+    if let Some(session) = SESSIONS.get(session_id) {
         return session.history.clone();
     }
     Vec::new()
@@ -172,53 +293,131 @@ pub fn get_chat_history(session_id: &str) -> Vec<ChatMessage> {
 
 /// Clears history for a session
 pub fn clear_chat_history(session_id: &str) {
-    if let Ok(mut sessions) = SESSIONS.lock() {
-        sessions.remove(session_id);
+    if SESSIONS.remove(session_id).is_some() {
+        // Force immediate save or mark dirty?
+        // Marking dirty is safer for debounce consistency
+        ChatSessionManager::ensure_saver_running();
+        DIRTY.store(true, Ordering::Relaxed);
     }
-    let _ = ChatSessionManager::save_to_disk();
+}
+
+/// Force immediate save of all chat history to disk (for shutdown or completion)
+pub fn force_save_history() -> Result<(), crate::errors::AppError> {
+    ChatSessionManager::force_save()
 }
 
 // ==================================================================================
-// AI Providers Abstraction
+// Traits & Abstractions
 // ==================================================================================
 
-/// Trait representing a generic AI provider
-trait AIProvider: Send + Sync {
-    /// Generates a streaming response
-    fn generate_stream(
+/// Typed events for AI streaming (Platform-level Protocol)
+#[derive(Debug)]
+pub enum StreamEvent {
+    /// A single text chunk for the chat conversation
+    ChatChunk {
+        /// ID of the message this chunk belongs to
+        message_id: String,
+        /// The text content
+        content: String,
+    },
+    /// A single thinking/reasoning chunk
+    ThoughtChunk {
+        /// ID of the message this chunk belongs to
+        message_id: String,
+        /// The reasoning content
+        content: String,
+    },
+    /// Stream termination event with final metadata
+    Done {
+        /// ID of the resulting message
+        message_id: String,
+        /// Final token usage (if provided by model)
+        usage: Option<TokenUsage>,
+    },
+}
+
+/// Abstraction for streaming AI output (Decouples UI from Infrastructure)
+pub trait StreamSink: Send + Sync {
+    /// Emit a stream event to the sink
+    fn emit(&self, event: StreamEvent);
+}
+
+/// Tauri-specific implementation of StreamSink using a bounded channel
+#[derive(Debug)]
+pub struct WindowSink {
+    tx: mpsc::Sender<StreamEvent>,
+}
+
+impl WindowSink {
+    /// Creates a new WindowSink with the provided channel sender
+    pub fn new(tx: mpsc::Sender<StreamEvent>) -> Self {
+        Self { tx }
+    }
+}
+
+impl StreamSink for WindowSink {
+    fn emit(&self, event: StreamEvent) {
+        // Use try_send to avoid blocking the provider if the UI consumer is slow.
+        // In a Production scenario, we might coalesce chunks or drop oldest if full.
+        if let Err(e) = self.tx.try_send(event) {
+            log::warn!("[Sink] Failed to send event (channel full or closed): {e}");
+        }
+    }
+}
+
+/// Core interface for AI providers
+#[async_trait]
+pub trait AiProvider: Send + Sync {
+    /// Generates a stream of responses for the given request
+    async fn generate_stream(
         &self,
-        window: tauri::Window,
-        request: ChatRequest,
-    ) -> impl std::future::Future<Output = Result<ChatResponse, crate::errors::AppError>> + Send;
+        request_id: String,
+        message_id: String,
+        req: ChatRequest,
+        sink: Arc<dyn StreamSink>,
+    ) -> Result<ChatResponse, crate::errors::AppError>;
 }
 
-/// OpenAI Provider Implementation
-struct OpenAIProvider {
+// ==================================================================================
+// AI Providers (OpenRouter Unified)
+// ==================================================================================
+
+/// OpenAI-Compatible Provider Implementation (OpenRouter)
+#[derive(Debug)]
+pub struct OpenAIProvider {
     base_url: String,
 }
 
 impl OpenAIProvider {
-    fn new(base_url: &str) -> Self {
+    /// Creates a new OpenAIProvider with the specified base URL
+    pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.to_string(),
         }
     }
 }
 
-impl AIProvider for OpenAIProvider {
+#[async_trait]
+impl AiProvider for OpenAIProvider {
     async fn generate_stream(
         &self,
-        window: tauri::Window,
+        request_id: String,
+        message_id: String,
         req: ChatRequest,
+        sink: Arc<dyn StreamSink>,
     ) -> Result<ChatResponse, crate::errors::AppError> {
         let api_key = req
             .api_key
             .clone()
             .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
+
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(60))
             .build()
-            .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+            .map_err(|e| crate::errors::AppError::External {
+                request_id: Some(request_id.clone()),
+                message: e.to_string(),
+            })?;
 
         let mut payload = serde_json::Map::new();
         payload.insert(
@@ -228,59 +427,88 @@ impl AIProvider for OpenAIProvider {
         payload.insert("messages".to_string(), serde_json::json!(req.messages));
         payload.insert("stream".to_string(), serde_json::Value::Bool(true));
 
-        // Thinking params
+        // Capability Based Routing
+        // Note: Real implementation would check `model.capabilities` here
+        // For now, we use the request's level but could refine based on provider-specific logic
         if let Some(level) = &req.thinking_level {
-            match level.as_str() {
-                "low" | "high" => {
-                    payload.insert(
-                        "reasoning_effort".to_string(),
-                        serde_json::Value::String(level.clone()),
-                    );
-                    let budget = if level == "high" { 16384 } else { 4096 };
-                    payload.insert(
-                        "thinking".to_string(),
-                        serde_json::json!({
-                            "type": "enabled",
-                            "budget_tokens": budget
-                        }),
-                    );
-                    payload.insert("max_tokens".to_string(), serde_json::json!(budget + 8192));
-                }
-                _ => {}
-            }
-        } else {
-            payload.insert("max_tokens".to_string(), serde_json::json!(8192));
+            payload.insert(
+                "reasoning_effort".to_string(),
+                serde_json::Value::String(level.clone()),
+            );
         }
+
+        payload.insert("max_tokens".to_string(), serde_json::json!(8192));
 
         let endpoint = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
 
-        let res = client
-            .post(&endpoint)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| crate::errors::AppError::External(format!("Request failed: {e}")))?;
+        let mut attempts = 0;
+        const MAX_RETRIES: u32 = 3;
+
+        let res: reqwest::Response = loop {
+            attempts += 1;
+            match client
+                .post(&endpoint)
+                .header("Authorization", format!("Bearer {api_key}"))
+                .header("Content-Type", "application/json")
+                .header("HTTP-Referer", "https://github.com/F0RLE/Axelate")
+                .header("X-Title", "Axelate")
+                .header("X-Request-Id", &request_id) // Propagation for tracing
+                .json(&payload)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        break resp; // Corrected break value for type inference
+                    }
+                    let status = resp.status();
+                    if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error())
+                        && attempts <= MAX_RETRIES
+                    {
+                        let wait_secs = 2u64.pow(attempts);
+                        tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+                        continue;
+                    }
+                    break resp; // Corrected break value
+                }
+                Err(e) => {
+                    if attempts <= MAX_RETRIES {
+                        let wait_secs = 2u64.pow(attempts);
+                        tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+                        continue;
+                    }
+                    return Err(crate::errors::AppError::External {
+                        request_id: Some(request_id),
+                        message: format!("Request failed: {e}"),
+                    });
+                }
+            }
+        };
 
         if !res.status().is_success() {
             let status = res.status();
             let error_text = res.text().await.unwrap_or_default();
             return Ok(ChatResponse {
+                id: message_id,
                 ok: false,
                 reply: None,
                 error: Some(format!("API Error {status}: {error_text}")),
                 model: Some(req.model),
                 thought_signature: None,
+                usage: None,
             });
         }
 
         let mut stream = res.bytes_stream();
         let mut full_content = String::new();
         let mut buffer = String::new();
+        let mut final_usage: Option<TokenUsage> = None;
 
         while let Some(item) = stream.next().await {
-            let chunk = item.map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+            let chunk = item.map_err(|e| crate::errors::AppError::External {
+                request_id: Some(request_id.clone()),
+                message: e.to_string(),
+            })?;
             let chunk_str = String::from_utf8_lossy(&chunk);
             buffer.push_str(&chunk_str);
 
@@ -294,38 +522,61 @@ impl AIProvider for OpenAIProvider {
                         break;
                     }
 
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
-                        && let Some(choices) = json.get("choices").and_then(|c| c.as_array())
-                        && let Some(choice) = choices.first()
-                    {
-                        let delta = choice.get("delta");
-                        // Reasoning extraction
-                        if let Some(reasoning) = delta
-                            .and_then(|d| d.get("reasoning_content"))
-                            .and_then(|v| v.as_str())
-                            .or_else(|| {
-                                delta
-                                    .and_then(|d| d.get("reasoning"))
-                                    .and_then(|v| v.as_str())
-                            })
-                        {
-                            let _ = window.emit("ai:thought:chunk", reasoning);
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                        // Extract usage if present in chunk
+                        if let Some(usage_val) = json.get("usage") {
+                            if let Ok(usage) =
+                                serde_json::from_value::<TokenUsage>(usage_val.clone())
+                            {
+                                final_usage = Some(usage);
+                            }
                         }
 
-                        // Content extraction
-                        if let Some(content) = delta
-                            .and_then(|d| d.get("content"))
-                            .and_then(|v| v.as_str())
+                        if let Some(choices) = json.get("choices").and_then(|c| c.as_array())
+                            && let Some(choice) = choices.first()
                         {
-                            full_content.push_str(content);
-                            let _ = window.emit("ai:chat:chunk", content);
+                            let delta = choice.get("delta");
+                            // Reasoning extraction
+                            if let Some(reasoning) = delta
+                                .and_then(|d| d.get("reasoning_content"))
+                                .and_then(|v| v.as_str())
+                                .or_else(|| {
+                                    delta
+                                        .and_then(|d| d.get("reasoning"))
+                                        .and_then(|v| v.as_str())
+                                })
+                            {
+                                sink.emit(StreamEvent::ThoughtChunk {
+                                    message_id: message_id.clone(),
+                                    content: reasoning.to_string(),
+                                });
+                            }
+
+                            // Content extraction
+                            if let Some(content) = delta
+                                .and_then(|d| d.get("content"))
+                                .and_then(|v| v.as_str())
+                            {
+                                full_content.push_str(content);
+                                sink.emit(StreamEvent::ChatChunk {
+                                    message_id: message_id.clone(),
+                                    content: content.to_string(),
+                                });
+                            }
                         }
                     }
                 }
             }
         }
 
+        // Final event
+        sink.emit(StreamEvent::Done {
+            message_id: message_id.clone(),
+            usage: final_usage.clone(),
+        });
+
         Ok(ChatResponse {
+            id: message_id,
             ok: true,
             reply: Some(ChatReply {
                 text: full_content,
@@ -334,202 +585,8 @@ impl AIProvider for OpenAIProvider {
             error: None,
             model: Some(req.model),
             thought_signature: None,
+            usage: final_usage,
         })
-    }
-}
-
-/// Gemini Provider Implementation
-struct GeminiProvider;
-
-impl AIProvider for GeminiProvider {
-    async fn generate_stream(
-        &self,
-        window: tauri::Window,
-        req: ChatRequest,
-    ) -> Result<ChatResponse, crate::errors::AppError> {
-        let api_key = req
-            .api_key
-            .clone()
-            .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
-            .build()
-            .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
-
-        // Prepare contents logic (extracted for clarity could be better but keeping inline for struct encapsulation)
-        let contents: Vec<serde_json::Value> = req.messages.iter().map(|msg| {
-            let role = if msg.role == "assistant" { "model" } else { "user" };
-            let mut parts_array: Vec<serde_json::Value> = match &msg.content {
-                serde_json::Value::String(text) => vec![serde_json::json!({ "text": text })],
-                serde_json::Value::Array(items) => items.iter().filter_map(|item| {
-                     let type_str = item.get("type").and_then(|t| t.as_str())?;
-                     match type_str {
-                         "text" => Some(serde_json::json!({ "text": item.get("text")?.as_str()? })),
-                         "image_url" => {
-                             let url = item.get("image_url")?.get("url")?.as_str()?;
-                             let (mime, data) = parse_data_uri(url)?;
-                             Some(serde_json::json!({ "inline_data": { "mime_type": mime, "data": data } }))
-                         }
-                         _ => None,
-                     }
-                }).collect(),
-                _ => vec![serde_json::json!({ "text": "" })],
-            };
-
-            if let Some(sig) = &msg.thought_signature
-                && let Some(obj) = parts_array.get_mut(0).and_then(|p| p.as_object_mut())
-            {
-                obj.insert("thoughtSignature".to_string(), serde_json::Value::String(sig.clone()));
-            }
-
-            serde_json::json!({ "role": role, "parts": parts_array })
-        }).collect();
-
-        let mut generation_config = serde_json::Map::new();
-        if let Some(level) = &req.thinking_level {
-            let mut thinking_config = serde_json::Map::new();
-            thinking_config.insert(
-                "thinkingLevel".to_string(),
-                serde_json::Value::String(level.clone()),
-            );
-            thinking_config.insert("includeThoughts".to_string(), serde_json::Value::Bool(true));
-            generation_config.insert(
-                "thinkingConfig".to_string(),
-                serde_json::Value::Object(thinking_config),
-            );
-        }
-
-        let payload =
-            serde_json::json!({ "contents": contents, "generationConfig": generation_config });
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?alt=sse&key={}",
-            req.model, api_key
-        );
-
-        let max_retries = 3;
-        let mut retry_count = 0;
-
-        loop {
-            let res = client
-                .post(&url)
-                .header("Content-Type", "application/json")
-                .json(&payload)
-                .send()
-                .await;
-
-            match res {
-                Ok(response) => {
-                    if !response.status().is_success() {
-                        let status = response.status();
-                        if status == reqwest::StatusCode::TOO_MANY_REQUESTS
-                            && retry_count < max_retries
-                        {
-                            let wait = std::time::Duration::from_secs(2u64.pow(retry_count + 1));
-                            let _ = window.emit("ai:status:retry", serde_json::json!({ "code": "GEMINI_QUOTA_RETRY", "wait_seconds": wait.as_secs() }).to_string());
-                            tokio::time::sleep(wait).await;
-                            retry_count += 1;
-                            continue;
-                        }
-                        let err_msg = if status == reqwest::StatusCode::FORBIDDEN
-                            || status == reqwest::StatusCode::UNAUTHORIZED
-                        {
-                            "ui.gemini.error.auth".to_string()
-                        } else if status == reqwest::StatusCode::SERVICE_UNAVAILABLE {
-                            "ui.gemini.error.unavailable".to_string()
-                        } else {
-                            response
-                                .text()
-                                .await
-                                .unwrap_or_else(|_| "Unknown error".to_string())
-                        };
-                        return Ok(ChatResponse {
-                            ok: false,
-                            reply: None,
-                            error: Some(err_msg),
-                            model: Some(req.model),
-                            thought_signature: None,
-                        });
-                    }
-
-                    let mut stream = response.bytes_stream();
-                    let mut full_content = String::new();
-                    let mut thought_signature = None;
-                    let mut buffer = String::new();
-
-                    while let Some(item) = stream.next().await {
-                        let chunk =
-                            item.map_err(|e| crate::errors::AppError::External(e.to_string()))?;
-                        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-                        while let Some(pos) = buffer.find('\n') {
-                            let line = buffer[..pos].trim().to_string();
-                            buffer.drain(..=pos);
-
-                            if line.starts_with("data: ") {
-                                let data = line.trim_start_matches("data: ");
-                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data)
-                                    && let Some(parts) = json
-                                        .get("candidates")
-                                        .and_then(|c| c.get(0))
-                                        .and_then(|c| c.get("content"))
-                                        .and_then(|c| c.get("parts"))
-                                        .and_then(|p| p.as_array())
-                                {
-                                    for part in parts {
-                                        let is_thought = part
-                                            .get("thought")
-                                            .and_then(serde_json::Value::as_bool)
-                                            .unwrap_or(false);
-                                        if is_thought {
-                                            if let Some(t) =
-                                                part.get("text").and_then(|v| v.as_str())
-                                            {
-                                                let _ = window.emit("ai:thought:chunk", t);
-                                            }
-                                        } else if let Some(t) =
-                                            part.get("thought").and_then(|v| v.as_str())
-                                        {
-                                            let _ = window.emit("ai:thought:chunk", t);
-                                        } else if let Some(t) =
-                                            part.get("text").and_then(|v| v.as_str())
-                                        {
-                                            full_content.push_str(t);
-                                            let _ = window.emit("ai:chat:chunk", t);
-                                        }
-
-                                        if let Some(sig) =
-                                            part.get("thoughtSignature").and_then(|s| s.as_str())
-                                        {
-                                            thought_signature = Some(sig.to_string());
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    return Ok(ChatResponse {
-                        ok: true,
-                        reply: Some(ChatReply {
-                            text: full_content,
-                            role: "model".to_string(),
-                        }),
-                        error: None,
-                        model: Some(req.model),
-                        thought_signature,
-                    });
-                }
-                Err(e) => {
-                    return Ok(ChatResponse {
-                        ok: false,
-                        reply: None,
-                        error: Some(format!("Request failed: {e}")),
-                        model: Some(req.model),
-                        thought_signature: None,
-                    });
-                }
-            }
-        }
     }
 }
 
@@ -537,33 +594,23 @@ impl AIProvider for GeminiProvider {
 // Service Orchestrator
 // ==================================================================================
 
-/// Dispatches a chat request to the appropriate AI provider.
+/// Dispatches a chat request to the OpenRouter provider.
 pub async fn process_chat_request(
     window: tauri::Window,
     request: ChatRequest,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     // 1. Session Management
+    // For saving, we use the messages passed in explicitly + get_or_create logic
     let mut messages_context = request.messages.clone();
     if let Some(sid) = &request.session_id {
+        // This implicitly starts the saver task if not running
         messages_context = ChatSessionManager::get_or_create_session(sid, &request.messages);
-        // Save just in case user added new messages
-        let _ = ChatSessionManager::save_to_disk();
     }
 
     // 2. Resolve Provider Configuration (URL, Models, etc)
-    let mut base_url = "https://api.openai.com/v1".to_string();
-    let mut provider_type = "openai".to_string();
+    // Default to OpenRouter
+    let mut base_url = "https://openrouter.ai/api/v1".to_string();
     let mut effective_model = request.model.clone();
-
-    // Standard provider resolution logic
-    match request.provider.as_str() {
-        "gemini" => provider_type = "gemini".to_string(),
-        "gpt" => {
-            provider_type = "openai".to_string();
-            base_url = "https://api.openai.com/v1".to_string();
-        }
-        _ => {}
-    }
 
     // Config lookup
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
@@ -572,7 +619,6 @@ pub async fn process_chat_request(
         && let Ok(providers) = serde_json::from_str::<Vec<ApiProvider>>(&content)
         && let Some(p) = providers.iter().find(|p| p.id == request.provider)
     {
-        provider_type = p.provider_type.clone();
         if let Some(url) = &p.base_url {
             base_url = url.clone();
         }
@@ -586,7 +632,7 @@ pub async fn process_chat_request(
         // Resolve proper model ID
         if let Some(models) = &p.models
             && let Some(def) = models.get(&effective_model)
-            && let Some(tm) = &def.text
+            && let Some(tm) = def.api_models.as_ref().and_then(|m| m.text.as_ref())
         {
             log::info!("Resolved API model ID: {effective_model} -> {tm}");
             effective_model = tm.clone();
@@ -619,23 +665,65 @@ pub async fn process_chat_request(
         ..request.clone()
     };
 
-    // 3. Dispatch to Provider
-    let response = match provider_type.as_str() {
-        "openai" => {
-            let provider = OpenAIProvider::new(&base_url);
-            provider.generate_stream(window, effective_request).await
+    // 3. Dispatch to Provider (Unified Trait Entry-point)
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let message_id = uuid::Uuid::new_v4().to_string();
+    log::info!(
+        "[AI] Starting request {} (msg {}) for model {}",
+        request_id,
+        message_id,
+        effective_request.model
+    );
+
+    // 3.1 Setup Bounded Infrastructure (mpsc)
+    let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
+    let sink = Arc::new(WindowSink::new(tx));
+    let provider = OpenAIProvider::new(&base_url);
+
+    // 3.2 Spawn Sink Processor (UI Bridge)
+    let window_for_task = window.clone();
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                StreamEvent::ChatChunk { content, .. } => {
+                    let _ = window_for_task.emit("ai:chat:chunk", content);
+                }
+                StreamEvent::ThoughtChunk { content, .. } => {
+                    let _ = window_for_task.emit("ai:thought:chunk", content);
+                }
+                StreamEvent::Done { .. } => {
+                    // UI can use this to clear "generating" state
+                    let _ = window_for_task.emit("ai:chat:done", ());
+                }
+            }
         }
-        "gemini" => {
-            let provider = GeminiProvider;
-            provider.generate_stream(window, effective_request).await
+    });
+
+    // 3.3 Execute with Service-Level Timeout
+    let response_res = timeout(
+        std::time::Duration::from_secs(90), // 90s global timeout
+        provider.generate_stream(
+            request_id.clone(),
+            message_id.clone(),
+            effective_request,
+            sink.clone(),
+        ),
+    )
+    .await;
+
+    let response = match response_res {
+        Ok(res) => res,
+        Err(_) => {
+            // Emit Done on timeout to prevent UI hang (Senior Refinement #1)
+            sink.emit(StreamEvent::Done {
+                message_id: message_id.clone(),
+                usage: None,
+            });
+            Err(crate::errors::AppError::Internal {
+                request_id: Some(request_id),
+                message: "AI Request timed out after 90 seconds.".to_string(),
+            })
         }
-        _ => Ok(ChatResponse {
-            ok: false,
-            reply: None,
-            error: Some(format!("Unknown provider type: {provider_type}")),
-            model: Some(request.model),
-            thought_signature: None,
-        }),
     };
 
     // 4. Save Response to History
@@ -644,7 +732,9 @@ pub async fn process_chat_request(
         && let Some(reply) = &res.reply
         && let Some(sid) = &request.session_id
     {
-        ChatSessionManager::append_response(sid, reply, res.thought_signature.clone());
+        ChatSessionManager::append_response(sid, message_id, reply, res.thought_signature.clone());
+        // Immediate flush after stream completion (Senior Refinement #3)
+        let _ = ChatSessionManager::force_save();
     }
 
     response
@@ -654,7 +744,7 @@ pub async fn process_chat_request(
 // Helpers
 // ==================================================================================
 
-/// Validates an API key against the specified provider.
+/// Validates an API key against OpenRouter (or generic OpenAI endpoint).
 pub async fn validate_api_key(
     provider: String,
     key: String,
@@ -662,43 +752,35 @@ pub async fn validate_api_key(
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
+        .map_err(|e| crate::errors::AppError::External {
+            request_id: None,
+            message: e.to_string(),
+        })?;
 
-    match provider.as_str() {
-        "openai" | "gpt" => {
-            let res = client
-                .get("https://api.openai.com/v1/models")
-                .header("Authorization", format!("Bearer {key}"))
-                .send()
-                .await
-                .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
-            Ok(res.status().is_success())
-        }
-        "gemini" => {
-            let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={key}");
-            let res = client
-                .get(&url)
-                .send()
-                .await
-                .map_err(|e| crate::errors::AppError::External(e.to_string()))?;
-            Ok(res.status().is_success())
-        }
-        _ => Ok(false),
-    }
-}
-
-fn parse_data_uri(uri: &str) -> Option<(String, String)> {
-    if !uri.starts_with("data:") {
-        return None;
-    }
-    let parts: Vec<&str> = uri.splitn(2, ',').collect();
-    if let [meta, data] = parts.as_slice() {
-        let mime_part = meta.strip_prefix("data:")?;
-        let mime = mime_part.split(';').next()?.to_string();
-        Some((mime, data.to_string()))
+    // OpenRouter / OpenAI Standard validation
+    // Try listing models, which is a cheap and standard way to check Auth
+    let url = if provider == "gemini" && !key.starts_with("sk-or-") {
+        // Fallback for legacy raw Gemini keys if user still tries to use them (though UI suggests OpenRouter)
+        format!("https://generativelanguage.googleapis.com/v1beta/models?key={key}")
     } else {
-        None
+        "https://openrouter.ai/api/v1/models".to_string()
+    };
+
+    let mut req = client.get(&url);
+
+    if !url.contains("key=") {
+        req = req.header("Authorization", format!("Bearer {key}"));
     }
+
+    let res = req
+        .send()
+        .await
+        .map_err(|e| crate::errors::AppError::External {
+            request_id: None,
+            message: e.to_string(),
+        })?;
+
+    Ok(res.status().is_success())
 }
 
 /// Counts tokens in text using tiktoken

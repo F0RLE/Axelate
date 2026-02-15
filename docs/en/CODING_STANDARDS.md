@@ -682,19 +682,22 @@ All hooks in `.github/.husky/`:
 | `pre-commit` | `npm run build` (tsc + vite) |
 | `commit-msg` | Commitlint validation |
 
-### 12.4. NPM Scripts
+## 12.4. NPM Scripts
 
 | Script | What it does |
 |--------|-------------|
+| `npm run dev` | **Start Dev**: Auto-formats code -> checks env -> starts app (`dev.ps1`) |
+| `npm run verify-all` | **Release Gate**: Full audit (format, lint, types, tests, rust check) |
 | `npm run build` | `tsc && vite build` — type-check + production bundle |
-| `npm run dev` | Vite dev server with HMR |
-| `npm run tauri:dev` | Full Tauri dev (frontend + Rust backend) |
+| `npm run tauri:dev` | Native Tauri dev (frontend + Rust backend) without auto-format argument |
 | `npm run tauri:build` | Production Tauri build |
-| `npm run release` | format → typecheck → lint → test → build → tauri build |
+| `npm run release` | **Release Flow**: `verify-all` -> build -> open folder (`release.ps1`) |
+| `npm run check-size` | Reports `dist/` folder size |
+| `npm run clean` | Deep clean of `target/`, `dist/`, and caches (`clear.ps1`) |
 | `npm run lint` | ESLint all files |
 | `npm run format` | Prettier auto-fix |
-| `npm run typecheck` | `tsc --noEmit` (type-check only) |
-| `npm run test` | Vitest run |
+
+> See [AUTOMATION.md](AUTOMATION.md) for detailed script documentation.
 
 ---
 
@@ -759,3 +762,33 @@ Leave files cleaner than found — but ≤15 lines cleanup per PR. Large refacto
 ```
 
 Root proxies all commands: `npm run build` → `cd src && npm run build`.
+
+---
+
+## 15. Scripting & Automation
+
+We use a **Robust PowerShell Pattern** for all DevOps scripts (`.github/scripts/`).
+Full documentation: [AUTOMATION.md](AUTOMATION.md).
+
+### 15.1. Core Rules
+
+1.  **Cross-Platform**: Must run on Windows (PowerShell 5.1/7) and Linux/macOS (PowerShell Core).
+    *   Use `/` for paths where possible.
+    *   Dynamic executable resolution (`npm` vs `npm.cmd`).
+2.  **Safety First**:
+    *   `Set-StrictMode -Version Latest`
+    *   `$ErrorActionPreference = 'Stop'`
+    *   `Initialize-Environment` check at start.
+3.  **No Silent Failures**: Every external command must be checked.
+4.  **UTF-8 Everywhere**: Force `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`.
+
+### 15.2. Verified Pipeline
+
+Before any commit, run:
+```powershell
+npm run verify-all
+```
+
+This enforces:
+- Frontend: Prettier, ESLint, TSC, Bundle Size
+- Backend: Rustfmt, Clippy, Cargo Test

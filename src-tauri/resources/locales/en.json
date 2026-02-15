@@ -67,6 +67,7 @@
   "ui.launcher.settings.toggle_chat": "Chat",
   "ui.launcher.settings.toggle_modules": "Modules",
   "ui.launcher.settings.toggle_downloads": "Downloads",
+  "ui.launcher.settings.toggle_settings": "Settings",
   "ui.launcher.settings.toggle_debug": "Console",
   "ui.launcher.settings.monitor_cpu": "CPU",
   "ui.launcher.settings.monitor_gpu": "GPU",
@@ -295,5 +296,11 @@
   "ui.settings.no_settings": "No additional settings required for this module.",
   "ui.settings.module_not_ready": "This module is not ready yet.",
   "ui.launcher.badge.cloud": "CLOUD",
-  "ui.launcher.badge.local": "LOCAL"
+  "ui.launcher.badge.local": "LOCAL",
+  "ui.gpt.model.spark.desc": "Ultra-low-latency coding/agent model (Codex variant)",
+  "ui.gpt.model.gpt53codex.desc": "High-throughput coding/agent model",
+  "ui.claude.model.claude45sonnet.desc": "Balanced Claude 3 model for most tasks",
+  "ui.claude.model.claude46opus.desc": "Most powerful Claude 3 model",
+  "ui.gemini.model.gemini3propreview.desc": "Google's latest multimodal reasoning model",
+  "ui.llama.model.maverick.desc": "Multimodal Llama 4 variant"
 }

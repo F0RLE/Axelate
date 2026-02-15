@@ -4,12 +4,12 @@
     "private": true,
     "description": "Root proxy for Axelate",
     "scripts": {
-        "dev": "cd src && npm run dev",
+        "dev": "powershell -ExecutionPolicy Bypass -File .\\.github\\scripts\\dev.ps1",
         "build": "cd src && npm run build",
         "clean": "cd src && npm run clean",
         "preview": "cd src && npm run preview",
-        "tauri:dev": "cd src && npm run tauri:dev",
-        "tauri:build": "cd src && npm run tauri:build",
+        "tauri:dev": "npx --prefix src tauri dev",
+        "tauri:build": "npx --prefix src tauri build",
         "release": "cd src && npm run release",
         "run": "start .\\src-tauri\\target\\x86_64-pc-windows-msvc\\release\\\"Axelate.exe\"",
         "lint": "cd src && npm run lint",
@@ -22,7 +22,8 @@
         "install-deps": "cd src && npm install",
         "update": "powershell -ExecutionPolicy Bypass -File .\\.github\\scripts\\update.ps1",
         "prepare": "husky",
-        "bump": "node src/scripts/bump-version.js"
+        "bump": "node src/scripts/bump-version.js",
+        "check-size": "node src/scripts/check-size.js"
     },
     "devDependencies": {
         "@commitlint/cli": "^20.3.1",

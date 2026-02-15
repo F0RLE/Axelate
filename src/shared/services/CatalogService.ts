@@ -85,7 +85,7 @@ export class CatalogService {
             const event = new CustomEvent('catalog-loaded');
             globalThis.dispatchEvent(event);
 
-            this._updateLegacySettings(validConfig.models);
+            this._updateLegacySettings(validConfig.apiProviders);
 
             logger.info(
                 `[CatalogService] Catalog initialized. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
@@ -167,13 +167,7 @@ export class CatalogService {
 
             const provider = config.apiProviders.find((p: ApiProvider) => p.id === app.id);
             if (provider) {
-                app.apiProviderData = { ...provider };
-            }
-
-            const modelsRecord = config.models;
-            if (isApi && modelsRecord[app.id] !== undefined) {
-                app.apiProviderData ??= { id: app.id, name: app.name };
-                app.apiProviderData['models'] = modelsRecord[app.id];
+                app.apiProviderData = { ...provider } as any;
             }
 
             const inst = installedMap.get(app.id.toLowerCase());
@@ -184,6 +178,9 @@ export class CatalogService {
 
         this._appData.ai.forEach(mergeAppSchema);
         this._appData.services.forEach(mergeAppSchema);
+
+        // Final sync for legacy components that expect a global model map
+        this._updateLegacySettings(config.apiProviders);
     }
 
     /**
@@ -253,12 +250,18 @@ export class CatalogService {
     /**
      * Updates legacy module settings from config.
      */
-    private _updateLegacySettings(models: unknown): void {
+    private _updateLegacySettings(apiProviders: ApiProvider[]): void {
         const win = globalThis as TGlobalWin;
-        const updateFn = win.updateModuleSettings; // Assuming this exists or add to IGlobalBridge?
-        if (typeof updateFn === 'function' && models !== undefined && models !== null) {
+        const updateFn = win.updateModuleSettings;
+        if (typeof updateFn === 'function') {
             try {
-                updateFn(models as Record<string, unknown>);
+                const models_map: Record<string, any> = {};
+                apiProviders.forEach((p) => {
+                    if (p.models) {
+                        models_map[p.id] = p.models;
+                    }
+                });
+                updateFn(models_map);
             } catch {
                 logger.warn('[CatalogService] Warning updating module settings');
             }

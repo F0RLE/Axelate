@@ -144,6 +144,52 @@ describe('TauriProvider', () => {
         });
     });
 
+    describe('getSecureKey', () => {
+        it('should return key when invoke succeeds', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce('secret-value');
+
+            const result = await provider.getSecureKey('openai_api');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('get_secure_key', {
+                service: 'openai_api',
+            });
+            expect(result).toBe('secret-value');
+        });
+
+        it('should return null when invoke fails', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Key not found'),
+            );
+
+            const result = await provider.getSecureKey('unknown_service');
+
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('saveSecureKey', () => {
+        it('should call save_secure_key with correct args', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(undefined);
+
+            await provider.saveSecureKey('openai_api', 'new-secret');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('save_secure_key', {
+                service: 'openai_api',
+                key: 'new-secret',
+            });
+        });
+
+        it('should rethrow errors', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Storage failure'),
+            );
+
+            await expect(provider.saveSecureKey('openai_api', 'key')).rejects.toThrow(
+                'Storage failure',
+            );
+        });
+    });
+
     describe('mock mode', () => {
         it('should work without Tauri and use mock invoke', async () => {
             const win = globalThis as unknown as Record<string, unknown>;

@@ -42,6 +42,16 @@ const ICONS = {
 
 type TranslateFunc = (key: string, fallback: string) => string;
 
+interface IAIModelPricing {
+    input_per_1m?: number;
+    output_per_1m?: number;
+    currency?: string;
+    tier?: string;
+    note?: string;
+    in?: number;
+    out?: number;
+}
+
 // IAISettingsGlobal removed as it's no longer used for strictness reasons
 
 /**
@@ -219,16 +229,7 @@ class AISettingsRenderer {
         isSelected: boolean,
         t: TranslateFunc,
     ): string {
-        const pricingHtml = (model.pricing ?? [])
-            .map(
-                (price) => `
-            <div class="price-row">
-                <span>${price.tier}</span>
-                <span>${price.note ?? `${String(price.in)} / ${String(price.out)}`}</span>
-            </div>
-        `,
-            )
-            .join('');
+        const pricingHtml = this._renderPricing(model.pricing);
 
         return `
             <div class="ai-model-card ${isSelected ? 'selected' : ''}" 
@@ -244,6 +245,84 @@ class AISettingsRenderer {
     }
 
     /**
+     * Renders pricing information safely.
+     * Delegates to specific handlers based on data structure.
+     */
+    private _renderPricing(pricing: unknown): string {
+        if (pricing === null || pricing === undefined) return '';
+
+        if (Array.isArray(pricing)) {
+            return this._renderLegacyPricing(pricing as IAIModelPricing[]);
+        }
+
+        if (typeof pricing === 'object') {
+            return this._renderNewPricing(pricing as IAIModelPricing);
+        }
+
+        return '';
+    }
+
+    /**
+     * Renders legacy array-based pricing.
+     */
+    private _renderLegacyPricing(pricing: IAIModelPricing[]): string {
+        return pricing
+            .map(
+                (price) => `
+            <div class="price-row">
+                <span>${price.tier ?? ''}</span>
+                <span>${price.note ?? `${String(price.in ?? 0)} / ${String(price.out ?? 0)}`}</span>
+            </div>
+        `,
+            )
+            .join('');
+    }
+
+    /**
+     * Renders new object-based pricing structure (IAIModelPricing).
+     */
+    private _renderNewPricing(pricing: IAIModelPricing): string {
+        let html = '';
+        const currency = pricing.currency ?? '$';
+        const displayCurrency = currency === 'USD' ? '$' : currency;
+        const separator = displayCurrency.length > 1 ? ' ' : '';
+
+        const inputCost = pricing.input_per_1m ?? 0;
+        const outputCost = pricing.output_per_1m ?? 0;
+        const isFree = inputCost === 0 && outputCost === 0;
+
+        if (isFree) {
+            html += `
+                <div class="price-row">
+                    <span class="price-tag free">Free</span>
+                </div>
+            `;
+        } else {
+            const inPrice =
+                pricing.input_per_1m === undefined
+                    ? null
+                    : `${displayCurrency}${separator}${String(pricing.input_per_1m)}`;
+
+            const outPrice =
+                pricing.output_per_1m === undefined
+                    ? null
+                    : `${displayCurrency}${separator}${String(pricing.output_per_1m)}`;
+
+            if (inPrice !== null && outPrice !== null) {
+                html += `
+                <div class="price-row">
+                    <span class="price-tag">In: ${inPrice}</span>
+                    <span class="price-tag">Out: ${outPrice}</span>
+                </div>
+            `;
+            }
+        }
+
+        // Removed notes/description as per user request
+        return html;
+    }
+
+    /**
      * Renders comparative model statistics with star heuristics.
      *
      * @param appId - AI Provider ID
@@ -254,30 +333,31 @@ class AISettingsRenderer {
         const modelData = getModelData(appId, modelKey);
         const stats = modelData?.stats;
 
-        if (!stats)
-            return `<div class="model-desc">${t('ui.settings.stats_unavailable', 'Stats unavailable')}</div>`;
+        if (stats) {
+            const thinkingLevel = localStorage.getItem(CACHE_KEYS.THINKING_LEVEL(appId)) ?? 'high';
 
-        const thinkingLevel = localStorage.getItem(CACHE_KEYS.THINKING_LEVEL(appId)) ?? 'high';
+            const adjustedLogic =
+                thinkingLevel === 'high' ? Math.min(10, (stats.logic || 0) + 2) : stats.logic || 0;
 
-        const adjustedLogic =
-            thinkingLevel === 'high' ? Math.min(10, (stats.logic || 0) + 2) : stats.logic || 0;
+            return `
+                <div class="ai-stats-grid">
+                    <div>
+                        <div class="stat-label" data-i18n="ui.gpt.stats.speed">${t('ui.gpt.stats.speed', 'Speed')}</div>
+                        <div>${this._renderStars(stats.speed)}</div>
+                    </div>
+                    <div>
+                        <div class="stat-label" data-i18n="ui.gpt.stats.logic">${t('ui.gpt.stats.logic', 'Logic')}</div>
+                        <div>${this._renderStars(adjustedLogic)}</div>
+                    </div>
+                    <div>
+                        <div class="stat-label" data-i18n="ui.gpt.stats.creative">${t('ui.gpt.stats.creative', 'Creative')}</div>
+                        <div>${this._renderStars(stats.creative)}</div>
+                    </div>
+                </div>
+            `;
+        }
 
-        return `
-            <div class="ai-stats-grid">
-                <div>
-                    <div class="stat-label" data-i18n="ui.gpt.stats.speed">${t('ui.gpt.stats.speed', 'Speed')}</div>
-                    <div>${this._renderStars(stats.speed)}</div>
-                </div>
-                <div>
-                    <div class="stat-label" data-i18n="ui.gpt.stats.logic">${t('ui.gpt.stats.logic', 'Logic')}</div>
-                    <div>${this._renderStars(adjustedLogic)}</div>
-                </div>
-                <div>
-                    <div class="stat-label" data-i18n="ui.gpt.stats.creative">${t('ui.gpt.stats.creative', 'Creative')}</div>
-                    <div>${this._renderStars(stats.creative)}</div>
-                </div>
-            </div>
-        `;
+        return `<div class="model-desc">${t('ui.settings.stats_unavailable', 'Stats unavailable')}</div>`;
     }
 
     /**

@@ -10,7 +10,7 @@ pub fn get_settings() -> Result<AppSettings, AppError> {
         return Ok(AppSettings::default());
     }
 
-    let content = fs::read_to_string(&*FILE_ENV).map_err(AppError::Io)?;
+    let content = fs::read_to_string(&*FILE_ENV).map_err(|e| AppError::Io(e.to_string()))?;
     let mut settings = AppSettings::default();
 
     for line in content.lines() {
@@ -39,7 +39,7 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), AppError> {
         settings.language, settings.theme, settings.use_gpu, settings.debug_mode
     );
 
-    fs::write(&*FILE_ENV, content).map_err(AppError::Io)
+    fs::write(&*FILE_ENV, content).map_err(|e| AppError::Io(e.to_string()))
 }
 
 /// Saves a single setting by key-value pair
@@ -74,14 +74,15 @@ pub fn get_gen_config() -> Result<Value, AppError> {
         }));
     }
 
-    let content = fs::read_to_string(&*FILE_GEN_CONFIG).map_err(AppError::Io)?;
-    serde_json::from_str(&content).map_err(AppError::Serialization)
+    let content = fs::read_to_string(&*FILE_GEN_CONFIG).map_err(|e| AppError::Io(e.to_string()))?;
+    serde_json::from_str(&content).map_err(|e| AppError::Serialization(e.to_string()))
 }
 
 /// Saves generation configuration to disk
 pub fn save_gen_config(config: &serde_json::Value) -> Result<(), AppError> {
-    let content = serde_json::to_string_pretty(config).map_err(AppError::Serialization)?;
-    fs::write(&*FILE_GEN_CONFIG, content).map_err(AppError::Io)
+    let content =
+        serde_json::to_string_pretty(config).map_err(|e| AppError::Serialization(e.to_string()))?;
+    fs::write(&*FILE_GEN_CONFIG, content).map_err(|e| AppError::Io(e.to_string()))
 }
 
 /// Get current language from settings, or detect from Windows if not set

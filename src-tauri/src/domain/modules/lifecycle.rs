@@ -90,7 +90,8 @@ impl ManifestLoader {
         if !manifest_path.exists() {
             return Err(AppError::NotFound("Manifest not found".to_string()));
         }
-        let content = std::fs::read_to_string(&manifest_path).map_err(AppError::Io)?;
-        serde_json::from_str(&content).map_err(AppError::Serialization)
+        let content =
+            std::fs::read_to_string(&manifest_path).map_err(|e| AppError::Io(e.to_string()))?;
+        serde_json::from_str(&content).map_err(|e| AppError::Serialization(e.to_string()))
     }
 }

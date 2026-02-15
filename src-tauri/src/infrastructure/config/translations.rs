@@ -6,7 +6,7 @@ use tauri::AppHandle;
 pub fn get_translations(_app: &AppHandle, lang: &str) -> Result<serde_json::Value, AppError> {
     let base_content = include_str!("../../../resources/locales/en.json");
     let mut translations: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_str(base_content).map_err(AppError::Serialization)?;
+        serde_json::from_str(base_content).map_err(|e| AppError::Serialization(e.to_string()))?;
 
     if lang != "en" {
         let target_content = match lang {

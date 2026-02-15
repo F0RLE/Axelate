@@ -130,15 +130,15 @@ Axelate/
 
 | Command | Description |
 | :--- | :--- |
-| `npm run tauri:dev` | Full Tauri dev mode (frontend + Rust backend) |
-| `npm run dev` | Vite only (no Tauri — frontend development) |
-| `npm run build` | `tsc && vite build` — type-check + production bundle |
-| `npm run tauri:build` | Production Tauri build |
-| `npm run release` | Full pipeline: format → typecheck → lint → test → build → tauri build |
+| `npm run dev` | **Start Dev Server** (Auto-formats code + Checks Env) |
+| `npm run verify-all` | **Release Gate** (Must pass before committing) |
+| `npm run tauri:dev` | Standard Tauri dev mode |
+| `npm run build` | Filtered production build |
+| `npm run release` | Full release pipeline (Verify + Build) |
+| `npm run check-size` | Audit bundle size |
 | `npm run test` | Run all tests (Vitest) |
 | `npm run lint` | ESLint check |
 | `npm run format` | Prettier auto-format |
-| `npm run typecheck` | `tsc --noEmit` type-check only |
 
 All commands run from project root. Root `package.json` proxies to `src/`.
 

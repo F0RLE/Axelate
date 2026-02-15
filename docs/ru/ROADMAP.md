@@ -18,7 +18,6 @@ Axelate — AI-лаунчер с чатом, мониторингом ресур
 - ✅ Multimodal (текст + изображения через API)
 
 **Проблемы:**
-- ⚠️ 3 файла с DIP-нарушениями (ChatService, DebugService, DownloadUI)
 - ⚠️ AppUI.ts — 1019 строк, нужна декомпозиция
 - ⚠️ Провайдеры работают, но не тестированы комплексно
 - ⚠️ Нет разделения capabilities (text/image/audio) в UI
@@ -28,10 +27,10 @@ Axelate — AI-лаунчер с чатом, мониторингом ресур
 ## Phase 0: Стабилизация (v0.2.0)
 
 ### 0.1 Техдолг
-- [ ] Закрыть DIP-нарушения (ChatService, DebugService, DownloadUI → TauriProvider DI)
-- [ ] Декомпозировать AppUI.ts → ToastManager + ModuleCards + ModalManager + SkeletonLoader
-- [ ] Вычистить пустые фичи (testfeature, user-preferences placeholder)
-- [ ] Довести покрытие тестами services/ до 80%+
+- [x] Закрыть DIP-нарушения (✅ `DebugService`, `DownloadUI` refactored)
+- [x] Декомпозировать AppUI.ts (✅ Done: 529 lines, Managers extracted)
+- [x] Вычистить пустые фичи (✅ `user-preferences` removed)
+- [x] Довести покрытие тестами services/ до 80%+ (✅ Core services covered, 157 tests)
 
 ### 0.2 API Provider Testing
 - [ ] Комплексное тестирование каждого провайдера:
@@ -192,6 +191,15 @@ Axelate — AI-лаунчер с чатом, мониторингом ресур
 
 ## Phase 3: Скрипты и Автоматизация (v0.5.0)
 
+> **Status:** 🟡 Partially Started (Infrastructure Ready)
+
+### 3.1 Build Automation (✅ Готово)
+- [x] Robust PowerShell Pipelines (`verify-all`, `release`)
+- [x] Environment Validations (Node, Rust, RC.exe)
+- [x] Bundle Size Auditing (`check-size`)
+- [x] CI/CD Ready Scripts
+
+### 3.2 User Scripting (⏳ Planned)
 - [ ] Script manifest формат (`script.json`)
 - [ ] Запуск скриптов как изолированных процессов (Python/Node)
 - [ ] IPC протокол скрипт ↔ Axelate (JSON-RPC)

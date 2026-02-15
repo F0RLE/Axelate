@@ -65,8 +65,10 @@ impl ProcessManager {
 
     /// Writes a PID to a file
     fn write_pid_file(path: &Path, pid: u32) -> Result<(), AppError> {
-        fs::write(path, pid.to_string())
-            .map_err(|e| AppError::Internal(format!("Failed to write PID file: {e}")))
+        fs::write(path, pid.to_string()).map_err(|e| AppError::Internal {
+            request_id: None,
+            message: format!("Failed to write PID file: {e}"),
+        })
     }
 
     /// Removes a PID file if it exists
@@ -93,7 +95,10 @@ impl ProcessManager {
         let child = cmd
             .current_dir(cwd)
             .spawn()
-            .map_err(|e| AppError::Internal(format!("Failed to spawn process: {e}")))?;
+            .map_err(|e| AppError::Internal {
+                request_id: None,
+                message: format!("Failed to spawn process: {e}"),
+            })?;
 
         Ok(child.id())
     }
@@ -115,13 +120,19 @@ impl ProcessManager {
         let output = cmd
             .current_dir(cwd)
             .output()
-            .map_err(|e| AppError::Internal(format!("Failed to launch command: {e}")))?;
+            .map_err(|e| AppError::Internal {
+                request_id: None,
+                message: format!("Failed to launch command: {e}"),
+            })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         if !output.status.success() {
-            return Err(AppError::Internal(format!("Script failed: {stderr}")));
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Script failed: {stderr}"),
+            });
         }
 
         Ok(stdout)
