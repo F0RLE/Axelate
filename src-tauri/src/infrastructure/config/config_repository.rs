@@ -33,8 +33,7 @@ impl FileConfigRepository {
         }
 
         Err(AppError::Config(format!(
-            "Config file '{}' not found in any expected location",
-            filename
+            "Config file '{filename}' not found in any expected location"
         )))
     }
 
@@ -42,15 +41,14 @@ impl FileConfigRepository {
         filename: &str,
         embedded: &str,
     ) -> Result<T, AppError> {
-        let content = match Self::get_config_path(filename) {
-            Ok(path) => std::fs::read_to_string(&path).unwrap_or_else(|e| {
+        let content = if let Ok(path) = Self::get_config_path(filename) {
+            std::fs::read_to_string(&path).unwrap_or_else(|e| {
                 log::warn!("Failed to read {filename} from disk, using embedded: {e}");
                 embedded.to_string()
-            }),
-            Err(_) => {
-                log::info!("{filename} not found on disk, using embedded.");
-                embedded.to_string()
-            }
+            })
+        } else {
+            log::info!("{filename} not found on disk, using embedded.");
+            embedded.to_string()
         };
 
         serde_json::from_str(&content)

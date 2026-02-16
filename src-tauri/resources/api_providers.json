@@ -2,14 +2,15 @@
   {
     "id": "gpt",
     "name": "GPT",
-    "description": "Автономные агенты и глубокая логика.",
+    "description": "Autonomous agents and deep logic.",
+    "descKey": "ui.provider.gpt.desc",
     "icon": "🤖",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
     "models": {
       "gpt-5.3-spark": {
         "name": "GPT-5.3 Spark",
-        "desc": "Ultra-low-latency coding/agent model (Codex variant optimized for real-time coding).",
+        "desc": "Ultra-low-latency coding and agents (Codex variant optimized for real-time).",
         "descKey": "ui.gpt.model.spark.desc",
         "tier": "strong",
         "releaseDate": "2026-02",
@@ -30,7 +31,7 @@
       },
       "gpt-5.3-codex": {
         "name": "GPT-5.3 Codex",
-        "desc": "High-throughput coding/agent model (GPT-5.3 family).",
+        "desc": "High-throughput for coding and agents.",
         "descKey": "ui.gpt.model.gpt53codex.desc",
         "tier": "strong",
         "releaseDate": "2026-02",
@@ -51,7 +52,7 @@
       },
       "gpt-5.2-pro": {
         "name": "GPT-5.2 Pro",
-        "desc": "Best model for autonomous agents (previous stable).",
+        "desc": "Best for autonomous agents (previous stable).",
         "descKey": "ui.gpt.model.gpt52.desc",
         "tier": "strong",
         "releaseDate": "2025-12",
@@ -72,7 +73,7 @@
       },
       "gpt-5.2": {
         "name": "GPT-5.2",
-        "desc": "The best model for coding and agentic tasks across industries.",
+        "desc": "The best for coding and agentic tasks across industries.",
         "descKey": "ui.gpt.model.gpt52.desc",
         "tier": "strong",
         "releaseDate": "2025-12",
@@ -143,7 +144,8 @@
   {
     "id": "claude",
     "name": "Claude",
-    "description": "Продвинутый ИИ для анализа и творчества.",
+    "description": "Advanced AI for analysis and creativity.",
+    "descKey": "ui.provider.claude.desc",
     "icon": "✱",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
@@ -171,7 +173,7 @@
       },
       "claude-sonnet-4.5": {
         "name": "Claude Sonnet 4.5",
-        "desc": "High-quality coding/agent model (4.5 Sonnet).",
+        "desc": "High-quality for coding and agents.",
         "descKey": "ui.claude.model.45sonnet.desc",
         "tier": "medium",
         "releaseDate": "2025-09",
@@ -216,7 +218,8 @@
   {
     "id": "gemini",
     "name": "Gemini",
-    "description": "Мультимодальность и большой контекст.",
+    "description": "Multimodality and massive context.",
+    "descKey": "ui.provider.gemini.desc",
     "icon": "✨",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
@@ -246,7 +249,7 @@
       },
       "gemini-3-pro": {
         "name": "Gemini 3 Pro",
-        "desc": "Flagship multimodal reasoning and agent model.",
+        "desc": "Flagship multimodal reasoning and agents.",
         "descKey": "ui.gemini.model.pro.desc",
         "tier": "strong",
         "releaseDate": "2025-12",
@@ -295,52 +298,32 @@
   {
     "id": "deepseek",
     "name": "DeepSeek",
-    "description": "Специализированные модели для программирования и математики.",
+    "description": "Specialized for coding and mathematics.",
+    "descKey": "ui.provider.deepseek.desc",
     "icon": "🧠",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
     "models": {
-      "deepseek-reasoner-v2": {
-        "name": "DeepSeek Reasoner v2",
-        "desc": "Chain of thought for highest accuracy (reasoning-specialized).",
-        "descKey": "ui.deepseek.model.reasoner.desc",
-        "tier": "strong",
+      "deepseek-v3.2": {
+        "name": "DeepSeek V3.2",
+        "desc": "Balanced mid-range for coding and logic.",
+        "descKey": "ui.deepseek.model.v32.desc",
+        "tier": "medium",
         "releaseDate": "2026-01",
         "contextWindow": 64000,
-        "maxOutputTokens": 8192,
-        "pricing": {
-          "input_per_1m": 0.55,
-          "output_per_1m": 2.19,
-          "currency": "USD"
-        },
-        "stats": { "speed": 3, "logic": 10, "creative": 6 },
-        "capabilities": {
-          "reasoning": true,
-          "streaming": true,
-          "functionCalling": true
-        },
-        "apiModels": { "text": "deepseek/deepseek-reasoner-v2" }
-      },
-      "deepseek-v4": {
-        "name": "DeepSeek V4",
-        "desc": "Next-gen DeepSeek (expected 2026) — SOTA in code/math for cost-sensitive workloads.",
-        "descKey": "ui.deepseek.model.v4.desc",
-        "tier": "medium",
-        "releaseDate": "2026-02",
-        "contextWindow": 128000,
         "maxOutputTokens": 4096,
         "pricing": {
-          "input_per_1m": 0.14,
-          "output_per_1m": 0.28,
+          "input_per_1m": 0.25,
+          "output_per_1m": 0.38,
           "currency": "USD"
         },
-        "stats": { "speed": 9, "logic": 9, "creative": 6 },
+        "stats": { "speed": 8, "logic": 8, "creative": 6 },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "deepseek/deepseek-v4" }
+        "apiModels": { "text": "deepseek/deepseek-v3.2" }
       }
     }
   }

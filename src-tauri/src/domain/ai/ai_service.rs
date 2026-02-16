@@ -7,6 +7,7 @@ use crate::models::config::ApiProvider;
 use async_trait::async_trait;
 use dashmap::DashMap;
 use futures_util::StreamExt;
+use rand::Rng;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -17,7 +18,6 @@ use std::sync::{
 };
 use tauri::Emitter;
 use tokio::sync::mpsc;
-use tokio::time::timeout;
 
 // ==================================================================================
 // DTOs (Data Transfer Objects)
@@ -63,8 +63,10 @@ pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     /// Optional API key
     pub api_key: Option<String>,
-    /// Thinking level ("low", "high", "minimal")
+    /// Thinking level ("low", "medium", "high")
     pub thinking_level: Option<String>,
+    /// Optional max output tokens
+    pub max_tokens: Option<u32>,
     /// Session identifier for history tracking
     pub session_id: Option<String>,
 }
@@ -350,7 +352,7 @@ pub struct WindowSink {
 
 impl WindowSink {
     /// Creates a new WindowSink with the provided channel sender
-    pub fn new(tx: mpsc::Sender<StreamEvent>) -> Self {
+    pub const fn new(tx: mpsc::Sender<StreamEvent>) -> Self {
         Self { tx }
     }
 }
@@ -382,14 +384,14 @@ pub trait AiProvider: Send + Sync {
 // AI Providers (OpenRouter Unified)
 // ==================================================================================
 
-/// OpenAI-Compatible Provider Implementation (OpenRouter)
+/// OpenRouter Unified Provider Implementation
 #[derive(Debug)]
-pub struct OpenAIProvider {
+pub struct OpenRouterProvider {
     base_url: String,
 }
 
-impl OpenAIProvider {
-    /// Creates a new OpenAIProvider with the specified base URL
+impl OpenRouterProvider {
+    /// Creates a new OpenRouterProvider with the specified base URL
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.to_string(),
@@ -398,7 +400,7 @@ impl OpenAIProvider {
 }
 
 #[async_trait]
-impl AiProvider for OpenAIProvider {
+impl AiProvider for OpenRouterProvider {
     async fn generate_stream(
         &self,
         request_id: String,
@@ -412,7 +414,6 @@ impl AiProvider for OpenAIProvider {
             .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
 
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
             .build()
             .map_err(|e| crate::errors::AppError::External {
                 request_id: Some(request_id.clone()),
@@ -437,7 +438,9 @@ impl AiProvider for OpenAIProvider {
             );
         }
 
-        payload.insert("max_tokens".to_string(), serde_json::json!(8192));
+        // Dynamic Max Tokens with hard limit fallback
+        let max_tokens = req.max_tokens.unwrap_or(8192);
+        payload.insert("max_tokens".to_string(), serde_json::json!(max_tokens));
 
         let endpoint = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
 
@@ -446,44 +449,64 @@ impl AiProvider for OpenAIProvider {
 
         let res: reqwest::Response = loop {
             attempts += 1;
-            match client
+
+            // Re-build request to avoid key ownership issues in loop?
+            // Actually client.post is fine, we just need the key.
+            let request_builder = client
                 .post(&endpoint)
                 .header("Authorization", format!("Bearer {api_key}"))
                 .header("Content-Type", "application/json")
                 .header("HTTP-Referer", "https://github.com/F0RLE/Axelate")
                 .header("X-Title", "Axelate")
-                .header("X-Request-Id", &request_id) // Propagation for tracing
-                .json(&payload)
-                .send()
-                .await
-            {
+                .header("X-Request-Id", &request_id)
+                .json(&payload);
+
+            // Memory Security: drop the local key copy after building the final attempt request if no more retries needed
+            // However, since we might retry, we can only drop it after the last possible use.
+            // A better way is to drop it inside the loop on success or final fail.
+            // But headers are created on .send().
+
+            match request_builder.send().await {
                 Ok(resp) => {
                     if resp.status().is_success() {
-                        break resp; // Corrected break value for type inference
+                        // Success - we can drop the key now (explicitly or via scope)
+                        break resp;
                     }
                     let status = resp.status();
                     if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error())
                         && attempts <= MAX_RETRIES
                     {
-                        let wait_secs = 2u64.pow(attempts);
-                        tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+                        // Jittered Exponential Backoff
+                        let base_wait = 2u64.pow(attempts);
+                        let jitter = rand::rng().random_range(0..500);
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            base_wait * 1000 + jitter,
+                        ))
+                        .await;
                         continue;
                     }
-                    break resp; // Corrected break value
+                    break resp;
                 }
                 Err(e) => {
                     if attempts <= MAX_RETRIES {
-                        let wait_secs = 2u64.pow(attempts);
-                        tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+                        let base_wait = 2u64.pow(attempts);
+                        let jitter = rand::rng().random_range(0..500);
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            base_wait * 1000 + jitter,
+                        ))
+                        .await;
                         continue;
                     }
                     return Err(crate::errors::AppError::External {
                         request_id: Some(request_id),
-                        message: format!("Request failed: {e}"),
+                        message: format!("Request failed after {MAX_RETRIES} attempts: {e}"),
                     });
                 }
             }
         };
+
+        // Final key drop to be safe (if not dropped by scope)
+        std::mem::drop(api_key);
 
         if !res.status().is_success() {
             let status = res.status();
@@ -504,12 +527,20 @@ impl AiProvider for OpenAIProvider {
         let mut buffer = String::new();
         let mut final_usage: Option<TokenUsage> = None;
 
-        while let Some(item) = stream.next().await {
+        'outer: while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| crate::errors::AppError::External {
                 request_id: Some(request_id.clone()),
                 message: e.to_string(),
             })?;
             let chunk_str = String::from_utf8_lossy(&chunk);
+
+            // Memory Safety: Prevent buffer overflow from malformed streams
+            if buffer.len() + chunk_str.len() > 1_024_024 {
+                // ~1MB Limit
+                log::error!("[AI] Stream buffer overflow protection triggered. Clearing buffer.");
+                buffer.clear();
+            }
+
             buffer.push_str(&chunk_str);
 
             while let Some(pos) = buffer.find('\n') {
@@ -519,17 +550,16 @@ impl AiProvider for OpenAIProvider {
                 if line.starts_with("data: ") {
                     let data = line.trim_start_matches("data: ");
                     if data == "[DONE]" {
-                        break;
+                        break 'outer;
                     }
 
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
                         // Extract usage if present in chunk
-                        if let Some(usage_val) = json.get("usage") {
-                            if let Ok(usage) =
+                        if let Some(usage_val) = json.get("usage")
+                            && let Ok(usage) =
                                 serde_json::from_value::<TokenUsage>(usage_val.clone())
-                            {
-                                final_usage = Some(usage);
-                            }
+                        {
+                            final_usage = Some(usage);
                         }
 
                         if let Some(choices) = json.get("choices").and_then(|c| c.as_array())
@@ -611,6 +641,7 @@ pub async fn process_chat_request(
     // Default to OpenRouter
     let mut base_url = "https://openrouter.ai/api/v1".to_string();
     let mut effective_model = request.model.clone();
+    let mut model_max_tokens: Option<u32> = None;
 
     // Config lookup
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
@@ -629,13 +660,15 @@ pub async fn process_chat_request(
             effective_model = target.clone();
         }
 
-        // Resolve proper model ID
+        // Resolve proper model ID and limits
         if let Some(models) = &p.models
             && let Some(def) = models.get(&effective_model)
-            && let Some(tm) = def.api_models.as_ref().and_then(|m| m.text.as_ref())
         {
-            log::info!("Resolved API model ID: {effective_model} -> {tm}");
-            effective_model = tm.clone();
+            model_max_tokens = def.max_output_tokens;
+            if let Some(tm) = def.api_models.as_ref().and_then(|m| m.text.as_ref()) {
+                log::info!("Resolved API model ID: {effective_model} -> {tm}");
+                effective_model = tm.clone();
+            }
         } else {
             // Check custom models
             let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
@@ -658,10 +691,18 @@ pub async fn process_chat_request(
         }
     }
 
+    // Dynamic Clamping
+    let clamped_max_tokens = match (request.max_tokens, model_max_tokens) {
+        (Some(req_limit), Some(mod_limit)) => Some(req_limit.min(mod_limit)),
+        (None, Some(mod_limit)) => Some(mod_limit),
+        (req_limit, None) => req_limit,
+    };
+
     // Update request with resolved context
     let effective_request = ChatRequest {
         messages: messages_context,
         model: effective_model,
+        max_tokens: clamped_max_tokens,
         ..request.clone()
     };
 
@@ -677,8 +718,13 @@ pub async fn process_chat_request(
 
     // 3.1 Setup Bounded Infrastructure (mpsc)
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
-    let sink = Arc::new(WindowSink::new(tx));
-    let provider = OpenAIProvider::new(&base_url);
+    let sink: Arc<dyn StreamSink> = Arc::new(WindowSink::new(tx));
+
+    // Strategy Selection (Currently OpenRouter Unified, but polymorphic ready)
+    let provider: Box<dyn AiProvider> = match request.provider.as_str() {
+        // "local" => Box::new(LocalProvider::new()), // Future
+        _ => Box::new(OpenRouterProvider::new(&base_url)),
+    };
 
     // 3.2 Spawn Sink Processor (UI Bridge)
     let window_for_task = window.clone();
@@ -689,41 +735,40 @@ pub async fn process_chat_request(
                     let _ = window_for_task.emit("ai:chat:chunk", content);
                 }
                 StreamEvent::ThoughtChunk { content, .. } => {
-                    let _ = window_for_task.emit("ai:thought:chunk", content);
+                    let _ = window_for_task.emit("ai:thought_chunk", content);
                 }
-                StreamEvent::Done { .. } => {
-                    // UI can use this to clear "generating" state
-                    let _ = window_for_task.emit("ai:chat:done", ());
+                StreamEvent::Done { usage, .. } => {
+                    let _ = window_for_task.emit("ai:chat:done", usage);
                 }
             }
         }
     });
 
-    // 3.3 Execute with Service-Level Timeout
-    let response_res = timeout(
-        std::time::Duration::from_secs(90), // 90s global timeout
+    // 3.3 Execute Lifecycle with 90s Service Timeout
+    let sink_clone = Arc::clone(&sink);
+    let response_res = tokio::time::timeout(
+        std::time::Duration::from_secs(90),
         provider.generate_stream(
             request_id.clone(),
             message_id.clone(),
             effective_request,
-            sink.clone(),
+            sink_clone,
         ),
     )
     .await;
 
-    let response = match response_res {
-        Ok(res) => res,
-        Err(_) => {
-            // Emit Done on timeout to prevent UI hang (Senior Refinement #1)
-            sink.emit(StreamEvent::Done {
-                message_id: message_id.clone(),
-                usage: None,
-            });
-            Err(crate::errors::AppError::Internal {
-                request_id: Some(request_id),
-                message: "AI Request timed out after 90 seconds.".to_string(),
-            })
-        }
+    let response = if let Ok(res) = response_res {
+        res
+    } else {
+        // Emit Done on timeout to prevent UI hang (Senior Refinement #1)
+        sink.emit(StreamEvent::Done {
+            message_id: message_id.clone(),
+            usage: None,
+        });
+        Err(crate::errors::AppError::Internal {
+            request_id: Some(request_id),
+            message: "AI Request timed out after 90 seconds.".to_string(),
+        })
     };
 
     // 4. Save Response to History
@@ -760,7 +805,7 @@ pub async fn validate_api_key(
     // OpenRouter / OpenAI Standard validation
     // Try listing models, which is a cheap and standard way to check Auth
     let url = if provider == "gemini" && !key.starts_with("sk-or-") {
-        // Fallback for legacy raw Gemini keys if user still tries to use them (though UI suggests OpenRouter)
+        // Fallback for legacy raw Gemini keys
         format!("https://generativelanguage.googleapis.com/v1beta/models?key={key}")
     } else {
         "https://openrouter.ai/api/v1/models".to_string()
@@ -772,6 +817,9 @@ pub async fn validate_api_key(
         req = req.header("Authorization", format!("Bearer {key}"));
     }
 
+    // Explicitly drop critical data reference after building request but before long await
+    std::mem::drop(key);
+
     let res = req
         .send()
         .await
@@ -780,7 +828,30 @@ pub async fn validate_api_key(
             message: e.to_string(),
         })?;
 
-    Ok(res.status().is_success())
+    if !res.status().is_success() {
+        return Ok(false);
+    }
+
+    // Advanced Validation: Check if the response contains actual model data
+    // (Rate limiting or empty auth might still return 200 with empty lists in some edge cases)
+    let body = res.json::<serde_json::Value>().await.map_err(|e| {
+        log::error!("[Validation] Failed to parse response JSON: {e}");
+        crate::errors::AppError::External {
+            request_id: None,
+            message: "Malformed API response during validation".to_string(),
+        }
+    })?;
+
+    if let Some(data) = body.get("data").and_then(|d| d.as_array()) {
+        return Ok(!data.is_empty());
+    }
+
+    // Legacy Gemini fallback or specific provider logic
+    if body.get("models").is_some() {
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 /// Counts tokens in text using tiktoken

@@ -120,8 +120,8 @@ export function sortModelsByPower(models: Record<string, IAIModelData>): [string
     /**
      * Converts a release date string (e.g. "2026-02") to a numeric timestamp for comparison.
      */
-    const getTimestamp = (date?: string) => {
-        if (!date) return 0;
+    const getTimestamp = (date?: string | null) => {
+        if (date === undefined || date === null || date === '') return 0;
         return new Date(date).getTime();
     };
 
@@ -140,8 +140,8 @@ export function sortModelsByPower(models: Record<string, IAIModelData>): [string
         // 3. Power Score (Logic + Creative + Speed)
         const statsA = modelA.stats ?? { logic: 0, creative: 0, speed: 0 };
         const statsB = modelB.stats ?? { logic: 0, creative: 0, speed: 0 };
-        const powerA = (statsA.logic ?? 0) + (statsA.creative ?? 0) + (statsA.speed ?? 0);
-        const powerB = (statsB.logic ?? 0) + (statsB.creative ?? 0) + (statsB.speed ?? 0);
+        const powerA = statsA.logic + statsA.creative + statsA.speed;
+        const powerB = statsB.logic + statsB.creative + statsB.speed;
         const powerDiff = powerB - powerA;
         if (powerDiff !== 0) return powerDiff;
 

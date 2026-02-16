@@ -949,9 +949,13 @@ messages: ChatMessage[];
  */
 api_key: string | null; 
 /**
- * Thinking level ("low", "high", "minimal")
+ * Thinking level ("low", "medium", "high")
  */
 thinking_level: string | null; 
+/**
+ * Optional max output tokens
+ */
+max_tokens: number | null; 
 /**
  * Session identifier for history tracking
  */

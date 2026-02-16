@@ -8,6 +8,8 @@ import { logger } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
 import type { IStateService } from '@/shared/types/IStateService';
 
+export type ThinkingLevel = 'low' | 'medium' | 'high';
+
 export interface IUIState {
     sidebar_collapsed: boolean;
     sidebar_width: number;
@@ -23,7 +25,7 @@ export interface IUIState {
     resolution_zoom: Record<string, number>;
     sound_enabled: boolean;
     // AI session & settings (Section 36)
-    ai_thinking_level: Record<string, 'low' | 'high' | 'minimal'>;
+    ai_thinking_level: Record<string, ThinkingLevel>;
     last_active_provider: string | null;
     ai_session_id: string | null;
 }
@@ -158,6 +160,22 @@ export class StateService implements IStateService {
      */
     public setSelectedAIModel(appId: string, modelKey: string): void {
         this._state.selected_ai_models[appId] = modelKey;
+        this._isDirty = true;
+        this._debouncedSave();
+    }
+
+    /**
+     * Returns the thinking level for a specific AI provider.
+     */
+    public getThinkingLevel(appId: string): 'low' | 'medium' | 'high' {
+        return this._state.ai_thinking_level[appId] ?? 'high';
+    }
+
+    /**
+     * Sets the thinking level for a specific AI provider.
+     */
+    public setThinkingLevel(appId: string, level: 'low' | 'medium' | 'high'): void {
+        this._state.ai_thinking_level[appId] = level;
         this._isDirty = true;
         this._debouncedSave();
     }

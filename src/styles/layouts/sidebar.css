@@ -308,8 +308,10 @@
 
 #sidebar.collapsed .nav-btn {
     justify-content: center;
-    padding: 1.25rem 0;
-    margin-bottom: 0;
+    padding: 0.75rem 0;
+    margin-bottom: 0.5rem;
+    height: 44px;
+    max-height: 44px;
 }
 
 #sidebar.collapsed .nav-btn svg {
@@ -445,8 +447,8 @@
         margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        background 0.2s ease, /* Faster hover */
-        border-color 0.2s ease,
+        background 0.2s ease,
+        /* Faster hover */ border-color 0.2s ease,
         box-shadow 0.2s ease,
         color 0.2s ease;
     height: 44px;
@@ -457,20 +459,16 @@
 .nav-btn.nav-item-hiding,
 .nav-btn.hidden {
     display: flex !important;
-    opacity: 0 !important;
-    height: 0 !important;
-    max-height: 0 !important;
-    margin-bottom: 0 !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    border: none !important;
+    opacity: 0;
+    height: 0;
+    max-height: 0;
+    margin-bottom: 0;
+    padding: 0;
+    border: none;
     pointer-events: none;
     transform: scale(0.95);
     overflow: hidden;
-    /* transition: height 0.3s, max-height 0.3s, opacity 0.3s !important; */
 }
-
-
 
 .nav-btn::before {
     display: none;
@@ -481,8 +479,7 @@
     background: rgba(138, 43, 226, 0.12);
     color: #ffffff;
     transform: translateX(4px);
-    border-color: rgba(138, 43, 226, 0.2);
-    box-shadow: 0 2px 8px rgba(138, 43, 226, 0.15);
+    border: none !important;
 }
 
 .nav-btn:active {
@@ -495,9 +492,9 @@
     background: rgba(138, 43, 226, 0.3);
     color: white;
     font-weight: 600;
-    box-shadow: 0 0 12px rgba(138, 43, 226, 0.25);
-    border-color: rgba(138, 43, 226, 0.5);
+    border: none;
     transform: translateX(2px);
+    box-shadow: none;
 }
 
 .nav-btn.active::after {
@@ -510,9 +507,7 @@
     height: 60%;
     background: var(--primary);
     border-radius: 0 3px 3px 0;
-    box-shadow: 0 0 8px rgba(138, 43, 226, 0.5);
     opacity: 1;
-    animation: navIndicatorPulse 2s ease-in-out infinite;
 }
 
 @keyframes navIndicatorPulse {
@@ -584,11 +579,11 @@
 /* --- SERVICE & SYSTEM CARDS --- */
 .card {
     background: var(--bg-med);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: none;
     border-radius: 16px;
     padding: 12px;
     font-family: var(--app-font-family);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    box-shadow: none;
 }
 
 /* Duplicates removed and merged above */
@@ -677,8 +672,7 @@
     background: var(--primary);
     color: white;
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(138, 43, 226, 0.3);
-    border-color: var(--primary);
+    border: none;
 }
 
 .btn-toggle-service:active {

@@ -22,6 +22,7 @@ import type { ISettingsUIContext } from './SettingsContext';
 import { createField } from './components/FieldFactory';
 import { CardResizer } from './components/CardResizer';
 import { type I18nUI } from '@/infrastructure/i18n/I18nUI';
+import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 
 type SettingValue = string | number | boolean | null;
 
@@ -83,8 +84,8 @@ export class SettingsUI {
         private readonly _service: SettingsService,
         private readonly _state: StateService,
         private readonly _i18nUI: I18nUI,
+        private readonly _tauri: TauriProvider,
     ) {
-        aiSettingsRenderer.init(_service, _state);
         this._generalRenderer = new GeneralSettingsRenderer(_state);
     }
 
@@ -92,7 +93,7 @@ export class SettingsUI {
      * Initializes the settings UI, renders components, and binds events.
      */
     public async init(): Promise<void> {
-        logger.info('[SettingsUI] Initializing...');
+        await aiSettingsRenderer.init(this._service, this._state, this._tauri);
 
         // 1. Setup Context
         const win = globalThis as TGlobalWin;
@@ -300,57 +301,6 @@ export class SettingsUI {
     }
 
     /**
-     * Renders quality and capability stats for an AI model.
-     */
-    private _renderAIModelStats(appId: string, modelKey: string): string {
-        const win = globalThis as unknown as TGlobalWin;
-        const catalog = win.APP_DATA.ai;
-        const app = catalog.find((a: IApp) => a.id === appId);
-        const providerData = app?.apiProviderData as
-            | {
-                  models?: Record<
-                      string,
-                      { stats: { speed: number; logic: number; creative: number } }
-                  >;
-              }
-            | undefined;
-        const providerDataModels = providerData?.models;
-        const stats =
-            providerDataModels !== undefined && modelKey !== ''
-                ? providerDataModels[modelKey]?.stats
-                : undefined;
-
-        if (!stats) return '<div class="model-desc">Stats unavailable</div>';
-
-        const renderStars = (count: number) => {
-            let s = '';
-            for (let i = 0; i < 5; i++) {
-                s += `<span style="color: ${i < count ? '#FFD700' : 'rgba(255,255,255,0.1)'}; font-size: 1.1rem;">★</span>`;
-            }
-            return s;
-        };
-
-        const t = this._context.t;
-
-        return `
-            <div class="ai-stats-grid">
-                <div>
-                    <div class="stat-label" data-i18n="ui.gpt.stats.speed">${t('ui.gpt.stats.speed', 'Speed')}</div>
-                    <div>${renderStars(stats.speed)}</div>
-                </div>
-                <div>
-                    <div class="stat-label" data-i18n="ui.gpt.stats.logic">${t('ui.gpt.stats.logic', 'Logic')}</div>
-                    <div>${renderStars(stats.logic)}</div>
-                </div>
-                <div>
-                    <div class="stat-label" data-i18n="ui.gpt.stats.creative">${t('ui.gpt.stats.creative', 'Creative')}</div>
-                    <div>${renderStars(stats.creative)}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
      * Toggles visibility of an API key input field.
      */
     public toggleModuleKeyVisibility(appId: string) {
@@ -422,29 +372,7 @@ export class SettingsUI {
      * Selects an AI model and re-renders stats.
      */
     public selectAIModel(appId: string, modelKey: string) {
-        this._state.setSelectedAIModel(appId, modelKey);
-
-        const grid = document.querySelector('.ai-models-grid');
-        grid?.querySelectorAll('.ai-model-card').forEach((card) => {
-            const cardElement = card as HTMLElement;
-            const cardModelKey = cardElement.dataset['modelKey'];
-            cardElement.classList.toggle('selected', cardModelKey === modelKey);
-        });
-
-        const statsArea = document.getElementById(`${appId}-model-stats`);
-        if (statsArea !== null) {
-            const t = this._context.t;
-            const win = globalThis as unknown as TGlobalWin;
-            const applyTranslations = win.applyTranslations as (() => void) | undefined;
-
-            statsArea.innerHTML = DOMPurify.sanitize(
-                `<h3>${t('ui.settings.model_stats', 'Model Stats')}</h3>${this._renderAIModelStats(appId, modelKey)}`,
-            );
-
-            if (typeof applyTranslations === 'function') {
-                applyTranslations();
-            }
-        }
+        aiSettingsRenderer.selectModel(appId, modelKey);
     }
 
     /**

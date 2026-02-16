@@ -97,7 +97,12 @@ export class Core {
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.state, this.soundService);
         this.downloadUI = new DownloadUI(this.state, this.i18n);
-        this.settingsUI = new SettingsUI(this.settingsService, this.state, this.i18nUI);
+        this.settingsUI = new SettingsUI(
+            this.settingsService,
+            this.state,
+            this.i18nUI,
+            this.tauriProvider,
+        );
         this.particles = new Particles();
         this.monitoringUI = new MonitoringUI(this.monitoringService);
         this.debugUI = new DebugUI(this.debugService);

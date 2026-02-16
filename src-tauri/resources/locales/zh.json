@@ -173,8 +173,6 @@
   "ui.llama.model.behemoth.desc": "Meta 最强大的开源模型",
   "ui.llama.model.scout.desc": "高效的 MoE 模型 (109B)",
   "ui.gpt.model.gpt52std.desc": "平衡速度与智慧",
-  "ui.deepseek.model.v4.desc": "编程和数学的 SOTA",
-  "ui.deepseek.model.reasoner.desc": "思维链实现最高精度",
   "ui.chat.error.auth": "错误：无效的 API 密钥。请在设置中检查。",
   "ui.chat.error.quota": "错误：配额不足或达到限制。请在 platform.openai.com 检查您的 OpenAI 账单详情。",
   "ui.chat.error.server": "错误：OpenAI 服务器错误。请稍后再试。",
@@ -216,9 +214,8 @@
   "ui.settings.gemini.thinking": "思考等级",
   "ui.settings.gemini.thinking_desc": "控制推理深度",
   "ui.settings.thinking.high": "高",
-  "ui.settings.thinking.high_desc": "最大推理能力",
+  "ui.settings.thinking.medium": "中等",
   "ui.settings.thinking.low": "低",
-  "ui.settings.thinking.low_desc": "快速且平衡",
   "ui.settings.gpt_api_key": "GPT API 密钥",
   "ui.settings.gemini_api_key": "Gemini API 密钥",
   "ui.settings.custom_model.prompt_id": "输入 {provider} 的模型 ID (例如 gpt-4o):",
@@ -290,5 +287,6 @@
   "ui.settings.no_settings": "此模块无需额外设置。",
   "ui.settings.module_not_ready": "此模块尚未就绪。",
   "ui.launcher.badge.cloud": "云端",
-  "ui.launcher.badge.local": "本地"
+  "ui.launcher.badge.local": "本地",
+  "ui.deepseek.model.v32.desc": "平衡的中型模型，具有改进的代码和逻辑能力。"
 }

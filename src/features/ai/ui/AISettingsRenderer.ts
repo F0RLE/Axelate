@@ -8,33 +8,23 @@ import DOMPurify from 'dompurify';
 
 import type { IApp } from '@/shared/types/coreTypes';
 import { type SettingsService } from '@/features/settings/services/SettingsService';
-import { type StateService } from '@/shared/services/StateService';
+import { type StateService, type ThinkingLevel } from '@/shared/services/StateService';
 import type { IAIModelData } from '../types/aiTypes';
-import { getModelData, getProviderData, sortModelsByPower } from '../utils/catalogHelpers';
+import { getModelData, sortModelsByPower } from '../utils/catalogHelpers';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 import { logger } from '@/infrastructure/logging/LoggerService';
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const CACHE_KEYS = {
-    SELECTED_MODEL: (appId: string) => `ai_${appId}_selected_model`,
-    GPU_LAYERS: 'ai_local_gpu_layers',
-    THREADS: 'ai_local_threads',
-    CONTEXT_SIZE: 'ai_local_context_size',
-    THINKING_LEVEL: (appId: string) => `ai_${appId}_thinking_level`,
-} as const;
+import { BaseComponent } from '@/shared/ui/BaseComponent';
+import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 
 const ICONS = {
     VISIBLE:
-        '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-    HIDDEN: '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>',
-    CHECK: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
-    X: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
+    HIDDEN: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>',
+    CHECK: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    X: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     SPINNER:
-        '<svg style="animation: spin 1s linear infinite; width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>',
-};
+        '<svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" style="opacity: 0.2;"></circle><path d="M4 12a8 8 0 0 1 8-8" style="opacity: 0.8;"></path></svg>',
+} as const;
 
 // ============================================================================
 // Types
@@ -57,36 +47,42 @@ interface IAIModelPricing {
 /**
  * @class AISettingsRenderer
  * @description Manages the lifecycle and rendering of AI-specific settings modules.
- * Implements the Singleton pattern as defined in Axelate Standards Section 16.1.
  */
-class AISettingsRenderer {
-    private readonly _unsubscribers: (() => void)[] = [];
-    private _initialized = false;
+class AISettingsRenderer extends BaseComponent {
     private _settingsService: SettingsService | null = null;
     private _stateService: StateService | null = null;
+    private _tauri: TauriProvider | null = null;
 
     constructor() {
-        // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>)['aiSettingsRenderer'] = this;
+        super();
     }
 
     /**
      * Idempotent initialization of the service.
-     * Required by Section 16.2 of Axelate Standards.
      *
      * @param settingsService - Global settings infrastructure service
      * @param stateService - UI state persistence service
+     * @param tauri - Tauri provider for IPC
      */
-    public init(settingsService: SettingsService, stateService: StateService): void {
-        if (this._initialized) {
-            logger.warn('[AISettingsRenderer] Already initialized');
-            return;
-        }
-
+    public override init(
+        settingsService: SettingsService,
+        stateService: StateService,
+        tauri: TauriProvider,
+    ): Promise<void> {
         this._settingsService = settingsService;
         this._stateService = stateService;
-        this._initialized = true;
+        this._tauri = tauri;
+        return super.init();
+    }
+
+    protected onInit(): void | Promise<void> {
         logger.debug('[AISettingsRenderer] Initialized');
+    }
+
+    protected onDestroy(): void {
+        this._settingsService = null;
+        this._stateService = null;
+        this._tauri = null;
     }
 
     /**
@@ -97,7 +93,7 @@ class AISettingsRenderer {
      * @sideeffect Modifies the DOM by injecting sanitized HTML
      */
     public async render(container: HTMLElement, app: IApp): Promise<void> {
-        if (!this._initialized) {
+        if (!this._isInit) {
             logger.error('[AISettingsRenderer] Not initialized. Call init() first.');
             return;
         }
@@ -133,13 +129,14 @@ class AISettingsRenderer {
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
                 <!-- Unified API & Models Settings -->
                 <div class="ai-settings-content">
+                    <!-- 1. API KEY SECTION (CLEAN) -->
                     <section class="ai-key-section centered" aria-labelledby="${appId}-api-title">
                         <div class="ai-content-panel">
                             <div class="settings-card-header-center">
                                 <h3 id="${appId}-api-title">🔑 <span data-i18n="ui.settings.api_key_label">${t('ui.settings.api_key_label', 'API Key')}</span></h3>
                             </div>
                             <div class="ai-key-input-row">
-                                <input type="password" id="${appId}-api-key-input" value="" placeholder="${t('ui.settings.enter_key_placeholder', 'Enter your API key here...')}" data-i18n-placeholder="ui.settings.enter_key_placeholder">
+                                <input type="password" id="${appId}-api-key-input" value="" placeholder="${t('ui.settings.enter_key_placeholder', 'Enter your API key here')}" data-i18n-placeholder="ui.settings.enter_key_placeholder">
                                 <button id="${appId}-key-toggle-btn" class="ai-icon-btn" aria-label="Toggle password visibility" data-i18n-aria-label="ui.settings.toggle_visibility">${ICONS.HIDDEN}</button>
                                 <button id="${appId}-key-check-btn" class="ai-check-btn" data-i18n="ui.gpt.key_check_btn">${t('ui.gpt.key_check_btn', 'Check')}</button>
                             </div>
@@ -147,9 +144,7 @@ class AISettingsRenderer {
                         </div>
                     </section>
 
-                    <div class="ai-divider"></div>
-
-                    <!-- MODELS SECTION (CENTERED HEADER) -->
+                    <!-- 2. MODELS SECTION (WINDOW) -->
                     <section class="ai-models-section" aria-labelledby="${appId}-models-title">
                         <div class="ai-content-panel">
                             <div class="settings-card-header-center">
@@ -164,36 +159,40 @@ class AISettingsRenderer {
                     ${
                         appId === 'gemini' || appId === 'claude' || appId === 'gpt'
                             ? (() => {
-                                  const savedLevel = localStorage.getItem(
-                                      CACHE_KEYS.THINKING_LEVEL(appId),
-                                  );
-                                  // Positive assertions to satisfy Section 35.1 and strict lints
+                                  const savedLevel = this._stateService?.getThinkingLevel(appId);
                                   const isLow = savedLevel === 'low';
-                                  const isHigh = savedLevel === 'high' || savedLevel === null;
+                                  const isMedium = savedLevel === 'medium';
+                                  const isHigh = savedLevel === 'high' || savedLevel === undefined;
 
                                   return `
+                        <!-- 3. THINKING LEVEL SECTION (WINDOW) -->
                         <section class="thinking-level-section" aria-labelledby="${appId}-thinking-title">
                             <div class="ai-content-panel">
                                 <div class="settings-card-header-center">
                                     <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
                                     <div class="thinking-level-desc" data-i18n="ui.settings.gemini.thinking_desc">${t('ui.settings.gemini.thinking_desc', 'Control reasoning depth')}</div>
                                 </div>
-                                <div id="${appId}-thinking-grid" class="thinking-grid" role="radiogroup" aria-label="Thinking Level">
-                                    <div class="thinking-option-card ${isHigh ? 'selected' : ''}" 
-                                        role="radio" 
-                                        aria-checked="${String(isHigh)}" 
-                                        tabindex="0"
-                                        data-value="high">
-                                        <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
-                                        <div class="thinking-option-subtitle" data-i18n="ui.settings.thinking.high_desc">${t('ui.settings.thinking.high_desc', 'Maximum Reasoning')}</div>
-                                    </div>
+                                <div id="${appId}-thinking-grid" class="thinking-grid three-col" role="radiogroup" aria-label="Thinking Level">
                                     <div class="thinking-option-card ${isLow ? 'selected' : ''}" 
                                         role="radio" 
                                         aria-checked="${String(isLow)}" 
                                         tabindex="0"
                                         data-value="low">
                                         <div class="thinking-option-title" data-i18n="ui.settings.thinking.low">${t('ui.settings.thinking.low', 'Low')}</div>
-                                        <div class="thinking-option-subtitle" data-i18n="ui.settings.thinking.low_desc">${t('ui.settings.thinking.low_desc', 'Fast & Balanced')}</div>
+                                    </div>
+                                    <div class="thinking-option-card ${isMedium ? 'selected' : ''}" 
+                                        role="radio" 
+                                        aria-checked="${String(isMedium)}" 
+                                        tabindex="0"
+                                        data-value="medium">
+                                        <div class="thinking-option-title" data-i18n="ui.settings.thinking.medium">${t('ui.settings.thinking.medium', 'Medium')}</div>
+                                    </div>
+                                    <div class="thinking-option-card ${isHigh ? 'selected' : ''}" 
+                                        role="radio" 
+                                        aria-checked="${String(isHigh)}" 
+                                        tabindex="0"
+                                        data-value="high">
+                                        <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
                                     </div>
                                 </div>
                             </div>
@@ -203,6 +202,7 @@ class AISettingsRenderer {
                             : ''
                     }
 
+                    <!-- 4. STATS SECTION (CLEAN) -->
                     <section id="${appId}-model-stats" class="ai-stats-section" aria-live="polite">
                         <div class="ai-content-panel">
                             <div class="settings-card-header-center">
@@ -216,7 +216,31 @@ class AISettingsRenderer {
         `;
         }
 
-        container.innerHTML = DOMPurify.sanitize(rawHtml);
+        container.innerHTML = DOMPurify.sanitize(rawHtml, {
+            USE_PROFILES: { html: true, svg: true },
+            ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g'],
+            ADD_ATTR: [
+                'viewBox',
+                'd',
+                'fill',
+                'stroke',
+                'stroke-width',
+                'cx',
+                'cy',
+                'r',
+                'stroke-linecap',
+                'stroke-linejoin',
+                'points',
+                'x1',
+                'y1',
+                'x2',
+                'y2',
+                'width',
+                'height',
+                'style',
+                'class',
+            ],
+        });
         await this._bindEvents(container, appId);
     }
 
@@ -237,8 +261,8 @@ class AISettingsRenderer {
                 aria-selected="${String(isSelected)}" 
                 tabindex="0"
                 data-model-key="${key}">
-                <div class="model-name">${DOMPurify.sanitize(model.name)}</div>
-                <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(t(model.descKey ?? '', model.desc))}</div>
+                <div class="model-name">${DOMPurify.sanitize(model.name, { USE_PROFILES: { html: true, svg: true } })}</div>
+                <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(t(model.descKey ?? '', model.desc), { USE_PROFILES: { html: true, svg: true } })}</div>
                 <div class="model-pricing">${pricingHtml}</div>
             </div>
         `;
@@ -334,10 +358,14 @@ class AISettingsRenderer {
         const stats = modelData?.stats;
 
         if (stats) {
-            const thinkingLevel = localStorage.getItem(CACHE_KEYS.THINKING_LEVEL(appId)) ?? 'high';
+            const thinkingLevel = this._stateService?.getThinkingLevel(appId) ?? 'high';
 
-            const adjustedLogic =
-                thinkingLevel === 'high' ? Math.min(10, (stats.logic || 0) + 2) : stats.logic || 0;
+            let adjustedLogic = stats.logic || 0;
+            if (thinkingLevel === 'high') {
+                adjustedLogic = Math.min(10, adjustedLogic + 2);
+            } else if (thinkingLevel === 'medium') {
+                adjustedLogic = Math.min(10, adjustedLogic + 1);
+            }
 
             return `
                 <div class="ai-stats-grid">
@@ -404,11 +432,8 @@ class AISettingsRenderer {
         if (input !== null && savedKey !== null && savedKey !== '') input.value = savedKey;
 
         const addListener = (element: Element | null, type: string, fn: EventListener): void => {
-            if (element !== null) {
-                element.addEventListener(type, fn);
-                this._unsubscribers.push(() => {
-                    element.removeEventListener(type, fn);
-                });
+            if (element !== null && this._abortController !== null) {
+                element.addEventListener(type, fn, { signal: this._abortController.signal });
             }
         };
 
@@ -447,11 +472,11 @@ class AISettingsRenderer {
             }
         };
 
-        container.addEventListener('click', handleModelSelection);
-        container.addEventListener('keydown', handleModelSelection);
-        this._unsubscribers.push(() => {
-            container.removeEventListener('click', handleModelSelection);
-            container.removeEventListener('keydown', handleModelSelection);
+        container.addEventListener('click', handleModelSelection, {
+            signal: this._abortController?.signal as AbortSignal,
+        });
+        container.addEventListener('keydown', handleModelSelection, {
+            signal: this._abortController?.signal as AbortSignal,
         });
 
         const thinkingGrid = container.querySelector(`#${appId}-thinking-grid`);
@@ -461,8 +486,8 @@ class AISettingsRenderer {
             );
 
             const updateThinking = (target: HTMLElement) => {
-                const val = target.dataset['value'] ?? 'high';
-                localStorage.setItem(CACHE_KEYS.THINKING_LEVEL(appId), val);
+                const val = (target.dataset['value'] as ThinkingLevel) ?? 'high';
+                this._stateService?.setThinkingLevel(appId, val);
 
                 buttons.forEach((b) => {
                     b.classList.remove('selected');
@@ -480,16 +505,23 @@ class AISettingsRenderer {
             };
 
             buttons.forEach((btn) => {
-                btn.addEventListener('click', (event) => {
-                    updateThinking(event.currentTarget as HTMLElement);
-                });
-                btn.addEventListener('keydown', (event) => {
-                    const keyEvent = event;
-                    if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
-                        event.preventDefault();
+                btn.addEventListener(
+                    'click',
+                    (event) => {
                         updateThinking(event.currentTarget as HTMLElement);
-                    }
-                });
+                    },
+                    { signal: this._abortController?.signal as AbortSignal },
+                );
+                btn.addEventListener(
+                    'keydown',
+                    (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            updateThinking(event.currentTarget as HTMLElement);
+                        }
+                    },
+                    { signal: this._abortController?.signal as AbortSignal },
+                );
             });
         }
 
@@ -524,8 +556,11 @@ class AISettingsRenderer {
      */
     public async checkKey(appId: string): Promise<void> {
         const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
-        const btn = document.getElementById(`${appId}-key-check-btn`);
+        const btn = document.getElementById(`${appId}-key-check-btn`) as HTMLButtonElement | null;
         if (input === null || btn === null) return;
+
+        // Rate limiting check
+        if (btn.disabled || btn.classList.contains('checking')) return;
 
         const t = this._getTranslator();
         const key = input.value.trim();
@@ -539,7 +574,8 @@ class AISettingsRenderer {
         const originalWidth = btn.offsetWidth;
         btn.style.width = `${String(originalWidth)}px`;
         btn.innerHTML = ICONS.SPINNER;
-        btn.style.pointerEvents = 'none';
+        btn.classList.add('checking');
+        btn.disabled = true;
 
         try {
             const isValid = await this._validateKey(appId, key);
@@ -555,33 +591,29 @@ class AISettingsRenderer {
             this._updateKeyButtonState(btn, 'error', ICONS.X);
             this._showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
         } finally {
+            // Enforcement of 3s cooldown before re-enabling
             setTimeout(() => {
-                btn.style.pointerEvents = 'auto';
+                btn.disabled = false;
                 btn.style.width = '';
-                btn.style.borderColor = 'var(--border-color)';
-                btn.style.color = 'var(--text-secondary)';
+                btn.classList.remove('success', 'error', 'checking');
                 btn.innerHTML = originalHtml;
             }, 3000);
         }
     }
 
     /**
-     * Performs a network probe to validate credentials.
+     * Performs a network probe to validate credentials via Rust backend.
      */
     private async _validateKey(appId: string, key: string): Promise<boolean> {
-        const providerData = getProviderData(appId);
+        if (!this._tauri) return false;
 
-        if (appId === 'gemini') {
-            const res = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
-            );
-            return res.ok;
+        try {
+            const provider = appId === 'gemini' ? 'gemini' : 'openai';
+            return await this._tauri.invoke<boolean>('validate_api_key', { provider, key });
+        } catch (error) {
+            logger.error('[AISettingsRenderer] Key validation failed:', error);
+            return false;
         }
-
-        const baseUrl = providerData?.baseUrl ?? 'https://api.openai.com/v1';
-        const url = baseUrl.endsWith('/v1') ? `${baseUrl}/models` : `${baseUrl}/v1/models`;
-        const res = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
-        return res.ok;
     }
 
     /**
@@ -592,9 +624,8 @@ class AISettingsRenderer {
         state: 'success' | 'error',
         icon: string,
     ): void {
-        const color = state === 'success' ? 'var(--success)' : 'var(--error)';
-        btn.style.borderColor = color;
-        btn.style.color = color;
+        btn.classList.remove('success', 'error', 'checking');
+        btn.classList.add(state);
         btn.innerHTML = icon;
     }
 
@@ -625,7 +656,31 @@ class AISettingsRenderer {
                     ${this.renderModelStats(appId, modelKey)}
                 </div>
             `;
-            statsArea.innerHTML = DOMPurify.sanitize(rawHtml);
+            statsArea.innerHTML = DOMPurify.sanitize(rawHtml, {
+                USE_PROFILES: { html: true, svg: true },
+                ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g'],
+                ADD_ATTR: [
+                    'viewBox',
+                    'd',
+                    'fill',
+                    'stroke',
+                    'stroke-width',
+                    'cx',
+                    'cy',
+                    'r',
+                    'stroke-linecap',
+                    'stroke-linejoin',
+                    'points',
+                    'x1',
+                    'y1',
+                    'x2',
+                    'y2',
+                    'width',
+                    'height',
+                    'style',
+                    'class',
+                ],
+            });
 
             const globalContext = globalThis as TGlobalWin;
             if (typeof globalContext.applyTranslations === 'function') {
@@ -638,12 +693,8 @@ class AISettingsRenderer {
      * Resets internal state and deactivates observers.
      * MANDATORY cleanup method required by Section 4.3.
      */
-    public destroy(): void {
-        this._unsubscribers.forEach((fn) => {
-            fn();
-        });
-        this._unsubscribers.length = 0;
-        this._initialized = false;
+    public override destroy(): void {
+        super.destroy();
     }
 
     /**

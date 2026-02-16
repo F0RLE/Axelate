@@ -3,20 +3,24 @@
 .ai-module-config {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1rem;
 }
 
 /* === SECTIONS & PANELS === */
 
 .ai-content-panel {
     background: var(--glass-surface);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
-    padding: 1.5rem;
+    padding: 1.25rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 100%;
+    box-sizing: border-box;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
 /* Sections behave as transparent containers for specific layout needs */
@@ -37,32 +41,25 @@
     margin-top: 0 !important;
 }
 
-/* Specific slim override for API Key section */
-.ai-key-section .ai-content-panel {
-    padding: 0.75rem 1.5rem;
+/* API Key Section Specifics - Now with glass panel inside */
+.ai-key-section {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
 }
 
 .ai-key-section .settings-card-header-center {
-    margin-bottom: 0;
-}
-
-.ai-key-section .ai-key-input-row {
-    margin: 0.75rem 0;
-}
-
-.ai-key-section .ai-key-input-row input {
-    height: 38px;
-    font-size: 0.9rem;
-}
-
-.ai-key-section .ai-icon-btn,
-.ai-key-section .ai-check-btn {
-    height: 38px;
+    margin-bottom: 0.5rem;
 }
 
 .ai-key-section .encryption-note {
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
+    margin-top: 1rem;
+    font-size: 0.82rem;
+    opacity: 0.6;
+    font-style: italic;
+    color: var(--text-muted);
 }
 
 .ai-module-config h3 {
@@ -111,7 +108,9 @@
 }
 
 .ai-model-card {
-    background: var(--glass-surface-hover);
+    background: var(--glass-surface);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-lg);
     padding: 1rem;
@@ -205,8 +204,10 @@
     cursor: pointer;
     padding: 0.75rem;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--glass-surface);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border);
     transition: all 0.3s ease;
     text-align: center;
     display: flex;
@@ -248,105 +249,158 @@
     pointer-events: none;
 }
 
-/* === KEY INPUT SECTION === */
-
+/* === API KEY SECTION (AXELATE PREMIUM V9 - NO DOUBLE BORDER) === */
 .ai-key-input-row {
     display: flex;
-    gap: 0;
-    width: 100%;
     align-items: center;
-    margin: 1rem 0;
+    width: 100%;
+    height: 48px;
     background: var(--glass-surface);
+    backdrop-filter: blur(4px);
     border: 1px solid var(--glass-border);
-    border-radius: var(--radius-lg);
-    padding: 2px;
-    transition:
-        border-color 0.3s ease,
-        box-shadow 0.3s ease;
-}
-
-.ai-module-config .ai-key-input-row input {
-    flex: 1;
-    height: 44px;
-    background: transparent !important;
-    background-image: none !important;
-    border: 0 none !important;
-    border-radius: 0;
-    outline: none !important;
-    -webkit-appearance: none;
-    appearance: none;
-    box-shadow: none !important;
-    padding: 0 1rem;
-    color: var(--text-primary);
-    font-family: var(--app-font-family) !important;
-    font-size: 0.85rem;
-    letter-spacing: 0.5px;
-}
-
-.ai-key-input-row input::placeholder {
-    font-family: var(--app-font-family) !important;
-    opacity: 0.5;
-    font-size: 0.8rem;
+    border-radius: 12px;
+    padding: 0 4px 0 16px;
+    transition: all 0.3s var(--ease-smooth);
+    box-sizing: border-box;
+    margin: 0.5rem 0;
+    gap: 8px;
+    overflow: hidden;
 }
 
 .ai-key-input-row:focus-within {
-    border-color: rgba(255, 255, 255, 0.4) !important;
-    box-shadow: none !important;
+    background: rgba(255, 255, 255, 0.05);
 }
 
-.ai-key-input-row input:focus {
-    outline: none !important;
+.ai-key-input-row input {
+    flex: 1;
+    min-width: 0;
+    background: transparent !important;
     border: none !important;
+    padding: 0;
+    color: var(--text-primary);
+    font-family: 'Monocraft', monospace !important;
+    font-size: 0.95rem;
+    height: 100%;
+    outline: none !important;
     box-shadow: none !important;
+    letter-spacing: 1px;
 }
 
-.ai-icon-btn,
-.ai-check-btn {
-    height: 44px;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-    padding: 0 1.25rem;
+.ai-key-input-row input::placeholder {
+    font-size: 0.85rem;
+    opacity: 0.35;
 }
 
 .ai-icon-btn {
-    width: 40px;
-    padding: 0;
+    width: 38px;
+    height: 38px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    background: var(--glass-surface-hover) !important;
+    backdrop-filter: blur(4px);
+    border: 1px solid var(--glass-border) !important;
+    color: white !important;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
     flex-shrink: 0;
-    opacity: 0.6;
-}
-
-.ai-check-btn {
-    font-weight: 700;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--primary-light);
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 0 10px 10px 0;
-    margin-left: 4px;
 }
 
 .ai-icon-btn:hover {
-    opacity: 1;
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1) !important;
+    transform: scale(1.05);
+    width: 20px !important;
+    height: 20px !important;
+    display: block !important;
+}
+
+/* Action Check Button - No Border */
+.ai-check-btn {
+    height: 40px;
+    padding: 0 1.5rem;
+    background: var(--primary);
+    border: none !important;
+    border-radius: 10px;
+    color: white;
+    font-family: 'Monocraft', monospace !important;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.25s var(--ease-smooth);
+    flex-shrink: 0;
+    box-shadow: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .ai-check-btn:hover {
-    background: rgba(138, 43, 226, 0.15);
-    color: white;
+    filter: brightness(1.1);
 }
 
-.ai-icon-btn:active,
-.ai-check-btn:active {
-    transform: scale(0.96);
+.ai-check-btn.checking {
+    opacity: 0.8;
+    cursor: wait;
+    filter: saturate(0.5);
 }
+
+.ai-check-btn.success {
+    background: var(--success) !important;
+    width: 60px !important;
+    padding: 0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 0 20px rgba(33, 136, 56, 0.4) !important;
+    animation: buttonSuccessPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.ai-check-btn.error {
+    background: var(--danger) !important;
+    width: 60px !important;
+    padding: 0 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 0 20px rgba(194, 33, 49, 0.4) !important;
+    animation: buttonErrorShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes buttonSuccessPop {
+    0% {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+    50% {
+        transform: scale(1.1);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes buttonErrorShake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-4px);
+    }
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+/* Consolidating and cleaning up global/shared AI buttons info if any */
+/* The below were identified as duplicates or need cleanup after redesign */
 
 /* === STATS & GRIDS === */
 

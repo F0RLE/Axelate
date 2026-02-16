@@ -35,10 +35,11 @@ export function constructChatRequest(
         model: string;
         apiKey: string | null;
         sessionId: string;
-        thinkingLevel: 'low' | 'high' | 'minimal';
+        thinkingLevel: 'low' | 'medium' | 'high';
+        maxTokens?: number | undefined;
     },
 ): IChatRequest {
-    const { providerId, model, apiKey, sessionId, thinkingLevel } = config;
+    const { providerId, model, apiKey, sessionId, thinkingLevel, maxTokens } = config;
     const modelId = getApiModelId(providerId, model);
 
     return {
@@ -54,6 +55,7 @@ export function constructChatRequest(
         session_id: sessionId,
         api_key: apiKey,
         thinking_level: thinkingLevel,
+        max_tokens: maxTokens,
         attachments,
     };
 }

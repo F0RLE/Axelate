@@ -50,6 +50,26 @@ function Initialize-Environment {
             $env:PATH = "${CargoBin}:$env:PATH"
         }
     }
+
+    # 4. Add Windows SDK (rc.exe) to PATH if missing (Senior Build Fix)
+    if ($IsWindows -and -not (Get-Command "rc.exe" -ErrorAction SilentlyContinue)) {
+        $KitsBase = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+        if (Test-Path $KitsBase) {
+            $LatestKit = Get-ChildItem $KitsBase | 
+                Where-Object { $_.PSIsContainer -and $_.Name -like "10.*" } | 
+                Sort-Object Name -Descending | 
+                Select-Object -First 1
+
+            if ($LatestKit) {
+                # Prefer x64 tools for 64-bit systems
+                $SDKBin = Join-Path $LatestKit.FullName "x64"
+                if (Test-Path $SDKBin) {
+                    $env:PATH = "$SDKBin;$env:PATH"
+                    Write-Step "Added Windows SDK to PATH: $SDKBin"
+                }
+            }
+        }
+    }
 }
 
 function Exec {

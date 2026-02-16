@@ -110,10 +110,15 @@ export class GeneralSettingsRenderer {
                 // Force reflow
                 const _reflow = navBtn.offsetHeight;
                 if (_reflow) {
-                    /* ensure it's "used" if needed, though _ prefix usually suffices */
+                    /* no-op */
                 }
-                // Animate in
-                navBtn.classList.remove('nav-item-hiding');
+
+                // Animate in using double rAF to guarantee transition start
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        navBtn.classList.remove('nav-item-hiding');
+                    });
+                });
             }
         } else {
             if (!hiddenItems.includes(pageId)) hiddenItems.push(pageId);
@@ -222,9 +227,16 @@ export class GeneralSettingsRenderer {
                 el.classList.remove('hidden');
                 // Force reflow
                 const _reflow = el.offsetHeight;
-                if (_reflow) { /* no-op */ }
-                // Remove hiding to trigger fade-in
-                el.classList.remove('hiding');
+                if (_reflow) {
+                    /* no-op */
+                }
+
+                // Animate in
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        el.classList.remove('hiding');
+                    });
+                });
             }
         } else {
             if (!hidden.includes(id)) hidden.push(id);
@@ -234,11 +246,11 @@ export class GeneralSettingsRenderer {
                 setTimeout(() => {
                     el.classList.add('hidden');
                     el.classList.remove('hiding');
-                }, 350); 
+                }, 350);
             }
         }
         this._state.setHiddenMonitors(hidden);
-        
+
         // Parallel update: Panel and Divider start animating immediately along with the item
         this._updateMonitorPanelVisibility(true);
         this._updateMonitorDivider(true);
@@ -290,8 +302,15 @@ export class GeneralSettingsRenderer {
             divider.classList.add('hiding');
             divider.classList.remove('hidden');
             const _reflow = divider.offsetHeight;
-            if (_reflow) { /* no-op */ }
-            divider.classList.remove('hiding');
+            if (_reflow) {
+                /* no-op */
+            }
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    divider.classList.remove('hiding');
+                });
+            });
         } else {
             divider.classList.remove('hidden');
         }

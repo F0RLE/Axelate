@@ -12,7 +12,7 @@ export abstract class BaseComponent {
     /**
      * Initializes the component and its dependencies.
      */
-    public async init(): Promise<void> {
+    public async init(..._args: any[]): Promise<void> {
         if (this._isInit) return;
         this._isInit = true;
         this._abortController = new AbortController();

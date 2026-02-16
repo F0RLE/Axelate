@@ -1,7 +1,7 @@
 import type { Core } from '@/app/init';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import type { StateService } from '@/shared/services/StateService';
-import { getMostPowerfulModel } from '../utils/catalogHelpers';
+import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
 
 export class AIProviderManager {
     private _core: Core | null = null;
@@ -11,6 +11,12 @@ export class AIProviderManager {
 
     // Session Management
     private _sessionId: string = 'default';
+
+    // Optional properties for AI requests
+    public thinking_level?: 'low' | 'medium' | 'high';
+    public max_tokens?: number;
+    public attachments?: { name: string; type: string; data_base64: string }[];
+    public session_id?: string;
 
     public setCore(core: Core): void {
         this._core = core;
@@ -98,6 +104,12 @@ export class AIProviderManager {
 
     public get sessionId(): string {
         return this._sessionId;
+    }
+
+    public get maxOutputTokens(): number | undefined {
+        if (this._activeProviderId === null) return undefined;
+        const modelData = getModelData(this._activeProviderId, this._model);
+        return modelData?.maxOutputTokens ?? undefined;
     }
 
     public getProviderDisplayName(id: string): string {

@@ -157,7 +157,6 @@ export class TauriProvider implements IBridge {
                 version: '1.0.0',
                 catalog: { ai: [], services: [], stars: [] },
                 apiProviders: [],
-                models: { gpt: {}, gemini: {} },
             } satisfies Bindings.AppConfig,
             get_modules: [] satisfies Bindings.Module[],
             get_app_bootstrap_data: null,

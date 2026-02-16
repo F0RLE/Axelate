@@ -167,7 +167,7 @@ export class CatalogService {
 
             const provider = config.apiProviders.find((p: ApiProvider) => p.id === app.id);
             if (provider) {
-                app.apiProviderData = { ...provider } as any;
+                app.apiProviderData = provider as unknown as Record<string, unknown>;
             }
 
             const inst = installedMap.get(app.id.toLowerCase());
@@ -255,7 +255,7 @@ export class CatalogService {
         const updateFn = win.updateModuleSettings;
         if (typeof updateFn === 'function') {
             try {
-                const models_map: Record<string, any> = {};
+                const models_map: Record<string, unknown> = {};
                 apiProviders.forEach((p) => {
                     if (p.models) {
                         models_map[p.id] = p.models;

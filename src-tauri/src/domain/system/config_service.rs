@@ -46,16 +46,15 @@ impl ConfigService {
             );
 
             // Add endpoint field if relevant to the provider type
-            if let Some(p_type) = &provider.provider_type {
-                use crate::models::config::ProviderType::*;
-                if matches!(p_type, OpenaiCompatible | Api) {
-                    if let Some(base_url) = &provider.base_url {
-                        config_schema.insert(
-                            "endpoint".to_string(),
-                            Self::text_field("Endpoint URL", Some(base_url), true),
-                        );
-                    }
-                }
+            use crate::models::config::ProviderType::{Api, OpenaiCompatible};
+            if let Some(p_type) = &provider.provider_type
+                && matches!(p_type, OpenaiCompatible | Api)
+                && let Some(base_url) = &provider.base_url
+            {
+                config_schema.insert(
+                    "endpoint".to_string(),
+                    Self::text_field("Endpoint URL", Some(base_url), true),
+                );
             }
 
             ai_catalog.push(ModuleItem {

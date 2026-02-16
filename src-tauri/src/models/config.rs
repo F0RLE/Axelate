@@ -43,7 +43,7 @@ bitflags! {
         /// Supports native streaming of delta tokens
         const STREAMING = 0b10000;
         /// Supports structured function or tool calls
-        const FUNCTION_CALLING = 0b100000;
+        const FUNCTION_CALLING = 0b10_0000;
     }
 }
 

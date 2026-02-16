@@ -184,7 +184,8 @@ export class AIBridge implements IAIBridge {
                 model: this._manager.model,
                 apiKey: this._manager.apiKey,
                 sessionId: this._manager.sessionId,
-                thinkingLevel: thinkingLevel as 'low' | 'high' | 'minimal',
+                thinkingLevel: thinkingLevel as 'low' | 'medium' | 'high',
+                maxTokens: this._manager.maxOutputTokens,
             });
             const response = await this._transport.send(request);
 
