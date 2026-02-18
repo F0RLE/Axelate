@@ -4,7 +4,7 @@
 # ==============================================================================
 [package]
 name          = "axelate"
-version       = "0.1.5"
+version       = "0.1.0"
 description   = "Axelate: Universal hub for pro-grade images and text."
 authors       = ["F0RLE"]
 edition       = "2024"
