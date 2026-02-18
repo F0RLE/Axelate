@@ -1,0 +1,74 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (frontend)
+        run: |
+          cd src
+          npm install
+
+      - name: Install dependencies (backend)
+        run: |
+          # Tauri CLI is typically needed, or we use npm run tauri
+          # npm install handled it
+          echo "Dependencies installed"
+
+      - name: Build App
+        run: |
+          cd src
+          npm run tauri:build
+
+      - name: Create Release Branch content
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release_artifact
+          # Try to find the bundle first (Installer)
+          $installer = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+
+          if ($installer) {
+              Write-Host "Found Installer: $($installer.Name)"
+              Copy-Item -Path $installer.FullName -Destination "release_artifact/"
+          } else {
+              # Fallback to raw exe
+              $exe = Get-ChildItem -Path "src-tauri/target/release" -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Axelate*" } | Select-Object -First 1
+              if ($exe) {
+                   Write-Host "Found Raw EXE: $($exe.Name)"
+                   Copy-Item -Path $exe.FullName -Destination "release_artifact/"
+              } else {
+                   Write-Host "Error: No executable found in target/release or bundles."
+                   Get-ChildItem -Path "src-tauri/target" -Recurse
+                   exit 1
+              }
+          }
+
+      - name: Push to Release Branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./release_artifact
+          publish_branch: release
+          commit_message: "Deploy release ${{ github.ref_name }}"
+          force_orphan: true # Keeps the branch clean with only the latest exe
+

@@ -1,0 +1,101 @@
+name: Strict CI
+
+on:
+  push:
+    branches: ["beta", "alpha"]
+  pull_request:
+    branches: ["beta", "alpha"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-frontend:
+    name: Frontend Strict Check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install Dependencies
+        run: |
+          cd src
+          npm ci
+
+      - name: Strict Linting
+        run: |
+          cd src
+          npm run lint
+
+      - name: Check Formatting
+        run: |
+          cd src
+          npm run format:check
+
+      - name: Type Check & Build
+        run: |
+          cd src
+          npm run build
+        # 'npm run build' runs 'tsc && vite build', so this enforces type safety
+
+      - name: Check Bundle Size
+        run: |
+          cd src
+          npm run check-size
+
+      - name: Run Frontend Tests
+        run: |
+          cd src
+          npm run test
+
+      - name: Security Audit (npm)
+        run: |
+          cd src
+          npm audit --audit-level=moderate
+        continue-on-error: true  # Don't fail CI, but report issues
+
+  check-backend:
+    name: Backend Strict Check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install Backend Dependencies
+        run: |
+          # Tauri CLI needed for some build scripts?
+          # Usually cargo handles crate dependencies automatically.
+          echo "Ready to build"
+
+      - name: Clippy (Strict Linting)
+        run: |
+          cd src-tauri
+          cargo clippy -- -D warnings
+        # Fails if there are any warnings
+
+      - name: Run Tests
+        run: |
+          cd src-tauri
+          cargo test --verbose
+
+      - name: Security Audit (Rust)
+        run: |
+          cargo install cargo-audit --quiet
+          cd src-tauri
+          cargo audit
+        continue-on-error: true  # Don't fail CI, but report issues

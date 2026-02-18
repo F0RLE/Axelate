@@ -1,0 +1,40 @@
+[
+  {
+    "id": "axelate-localai",
+    "nameKey": "ui.launcher.app.axelate_localai.name",
+    "descKey": "ui.launcher.app.axelate_localai.desc",
+    "name": "Axelate AI",
+    "desc": "Universal hub for pro-grade images and text.",
+    "icon": "🌌",
+    "type": "local",
+    "repoUrl": "https://github.com/F0RLE/Axelate_LocalAI_module",
+    "expectedHash": "49008d7ec98b99e30e0840b531526efbaa5fc8362ed07a07cdf41194200b8161",
+    "version": "1.0.0",
+    "configSchema": {
+      "endpoint": {
+        "type": "text",
+        "label": "LocalAI Endpoint",
+        "default": "http://localhost:8080/v1",
+        "required": true
+      },
+      "model": {
+        "type": "text",
+        "label": "Model Name",
+        "default": "phi-3",
+        "required": true
+      }
+    }
+  },
+  {
+    "id": "axelate-telegram-bot",
+    "nameKey": "ui.launcher.app.axelate_telegram.name",
+    "descKey": "ui.launcher.app.axelate_telegram.desc",
+    "name": "Telegram Bot",
+    "desc": "LLM rewriting, image gen, channel posting.",
+    "icon": "🤖",
+    "type": "service",
+    "repoUrl": "https://github.com/F0RLE/Axelate-tg-bot-module",
+    "expectedHash": "",
+    "version": "1.0.0"
+  }
+]

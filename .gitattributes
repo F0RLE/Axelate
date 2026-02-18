@@ -1,0 +1,46 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# ─────────────────────────────────────────────────────────────────────
+# Language Overrides
+# ─────────────────────────────────────────────────────────────────────
+*.ts       text eol=lf
+*.tsx      text eol=lf
+*.js       text eol=lf
+*.jsx      text eol=lf
+*.json     text eol=lf
+*.css      text eol=lf
+*.scss     text eol=lf
+*.html     text eol=lf
+*.md       text eol=lf
+*.rs       text eol=lf
+*.toml     text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+
+# ─────────────────────────────────────────────────────────────────────
+# Binary Files
+# ─────────────────────────────────────────────────────────────────────
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.gif      binary
+*.ico      binary
+*.svg      text
+*.ttf      binary
+*.otf      binary
+*.woff     binary
+*.woff2    binary
+*.eot      binary
+*.exe      binary
+*.dll      binary
+*.so       binary
+*.dylib    binary
+
+# ─────────────────────────────────────────────────────────────────────
+# Linguist Overrides
+# ─────────────────────────────────────────────────────────────────────
+docs/**    linguist-documentation
+scripts/** linguist-vendored
+assets/**  linguist-vendored
+

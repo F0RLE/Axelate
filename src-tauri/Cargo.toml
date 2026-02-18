@@ -1,0 +1,161 @@
+# ==============================================================================
+#  AXELATE PROJECT MANIFEST
+#  High-Performance Local AI Launcher & Marketplace Environment
+# ==============================================================================
+[package]
+name          = "axelate"
+version       = "0.1.0"
+description   = "Axelate: Universal hub for pro-grade images and text."
+authors       = ["F0RLE"]
+edition       = "2024"
+rust-version  = "1.93.0"
+license       = "Proprietary"
+repository    = "https://github.com/F0RLE/Axelate"
+homepage      = "https://github.com/F0RLE/Axelate"
+keywords      = ["tauri", "gui", "system", "ai", "privacy"]
+categories    = ["gui", "system-programming"]
+publish       = false
+default-run   = "Axelate"
+
+# --- Artifacts ---
+[lib]
+name = "axelate_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "Axelate"
+path = "src/main.rs"
+
+# ==============================================================================
+#  DEPENDENCIES
+# ==============================================================================
+
+# --- Tauri Ecosystem (UI & Runtime) ---
+[dependencies.tauri]
+version  = "2.9.5"
+features = ["image-ico", "image-png", "tray-icon"]
+
+[dependencies]
+tauri-plugin-shell             = "2.3.4"
+tauri-plugin-dialog            = "2.2.0"
+tauri-plugin-fs                = "2.2.0"
+tauri-plugin-single-instance   = "2.3.7"
+tauri-plugin-global-shortcut   = "2.3.1"
+tauri-plugin-clipboard-manager = "2.3.2"
+
+# --- Frontend Bridge (Types & Serialization) ---
+specta           = { version = "2.0.0-rc.20", features = ["derive", "serde", "serde_json"] }
+tauri-specta     = { version = "2.0.0-rc.20", features = ["typescript", "derive"] }
+specta-typescript = "0.0.7"
+serde            = { version = "1.0.228",     features = ["derive"] }
+serde_json       = "1.0.149"
+
+# --- Async Core & Networking (The Server) ---
+tokio        = { version = "1.49.0", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
+reqwest      = { version = "0.13.1", features = ["json", "stream", "native-tls", "gzip"], default-features = false }
+axum         = { version = "0.8.8",  features = ["macros", "ws"] }
+tower-http   = { version = "0.6.8",  features = ["fs", "cors", "trace"] }
+futures-util = "0.3.31"
+
+# --- System, Hardware & Low Level ---
+sysinfo      = "0.38.0"
+nvml-wrapper = "0.11.0" # NVIDIA Management Library
+wmi          = "0.18.0" # Windows Management Instrumentation
+machine-uid  = "0.5.4"  # Hardware ID generation
+dirs         = "6.0.0"
+once_cell    = "1.21.3"
+thiserror    = "2.0.18"
+
+windows-sys = { version = "0.61.2", features = [
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_System_Registry",
+    "Win32_UI_WindowsAndMessaging"
+] }
+
+# --- Cryptography & Security (DRM Layer) ---
+aes-gcm = "0.10.3"
+sha2    = "0.10.9"
+rand    = "0.9.2"
+base64  = "0.22.1"
+hex     = "0.4.3"
+
+# --- AI & Logic Utilities ---
+tiktoken-rs = "0.9.1" # Token counting
+chrono      = { version = "0.4.43", features = ["serde"] }
+zip         = "7.2.0"
+tempfile    = "3.24.0"
+log         = "0.4.29"
+env_logger  = "0.11.8"
+dashmap = "6.1.0"
+uuid = { version = "1.21.0", features = ["v4", "serde"] }
+bitflags = { version = "2.11.0", features = ["serde"] }
+async-trait = "0.1.89"
+
+# --- Build Time ---
+[build-dependencies]
+tauri-build = { version = "2.5.3", features = [] }
+
+# ==============================================================================
+#  OPTIMIZATION PROFILES (The 0.7 MB Magic)
+# ==============================================================================
+[profile.release]
+codegen-units   = 1       # Maximum optimization (slower build, faster binary)
+lto             = true    # Link Time Optimization (monolithic build)
+opt-level       = "z"     # Optimize for size
+panic           = "abort" # Remove panic unwinding (smaller binary)
+strip           = true    # Remove debug symbols
+incremental     = false   # Disable incremental build for cleaner release
+overflow-checks = true    # Security over speed (critical for finance/crypto)
+
+# ==============================================================================
+#  PATCHES (Experimental / Custom Forks)
+# ==============================================================================
+# [patch.crates-io]
+# wry = { git = "https://github.com/F0RLE/wry.git", branch = "feat/webview2-default-allow" }
+
+# ==============================================================================
+#  CODE QUALITY & LINTS (Zero Tolerance Policy)
+# ==============================================================================
+[lints.rust]
+unsafe_code                   = "deny"
+missing_docs                  = "warn"
+missing_debug_implementations = "warn"
+future_incompatible           = { level = "deny", priority = -1 }
+nonstandard_style             = { level = "deny", priority = -1 }
+rust_2018_idioms              = { level = "deny", priority = -1 }
+rust_2021_compatibility       = { level = "deny", priority = -1 }
+
+[lints.clippy]
+# -- Strictness Level --
+pedantic = { level = "warn", priority = -1 }
+nursery  = { level = "warn", priority = -1 }
+
+# -- Critical Denials (Safety) --
+unwrap_used   = "deny"
+expect_used   = "deny"
+panic         = "deny"
+todo          = "deny"
+unimplemented = "deny"
+dbg_macro     = "deny"
+
+# -- Warnings (Clean Code) --
+indexing_slicing                   = "warn"
+unreachable                        = "warn"
+use_debug                          = "warn"
+print_stdout                       = "warn"
+print_stderr                       = "warn"
+clone_on_ref_ptr                   = "deny"
+expl_impl_clone_on_copy            = "deny"
+if_not_else                        = "warn"
+implicit_clone                     = "warn"
+match_same_arms                    = "warn"
+needless_pass_by_value             = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned      = "warn"
+string_add_assign                  = "warn"
+type_repetition_in_bounds          = "warn"
+unnecessary_wraps                  = "warn"
+used_underscore_binding            = "warn"

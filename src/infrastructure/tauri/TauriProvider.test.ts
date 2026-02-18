@@ -1,0 +1,211 @@
+import { vi, describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest';
+
+// 1. Setup mocks BEFORE imports
+vi.mock('@tauri-apps/api/core', () => ({
+    invoke: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+    listen: vi.fn(),
+}));
+
+// 2. Import mocked versions to verify calls
+import { invoke as mockedTauriInvoke } from '@tauri-apps/api/core';
+import { listen as mockedTauriListen } from '@tauri-apps/api/event';
+
+// Full Tauri structure that TauriProvider expects (for globalThis fallback tests)
+const tauriMock = {
+    core: {
+        invoke: mockedTauriInvoke,
+    },
+    event: {
+        listen: mockedTauriListen,
+    },
+};
+
+// Must set BEFORE import
+(globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
+
+// Helper implementation for listen that calls callback immediately
+function createListenWithPayload(payload: unknown) {
+    return (_: unknown, internalCb: (e: { payload: unknown }) => void) => {
+        internalCb({ payload });
+        return Promise.resolve(() => {
+            /* no-op */
+        });
+    };
+}
+
+import { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+
+describe('TauriProvider', () => {
+    let provider: TauriProvider;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Ensure Tauri is set
+        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
+        provider = new TauriProvider();
+    });
+
+    afterEach(() => {
+        // Restore Tauri
+        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
+    });
+
+    describe('constructor', () => {
+        it('should detect Tauri environment', () => {
+            expect(provider.isTauri()).toBe(true);
+        });
+    });
+
+    describe('isTauri', () => {
+        it('should return true when __TAURI__ is present', () => {
+            expect(provider.isTauri()).toBe(true);
+        });
+
+        it('should return false when __TAURI__ is missing', () => {
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['__TAURI__'];
+            delete win['__TAURI_INTERNALS__'];
+
+            const webProvider = new TauriProvider();
+            expect(webProvider.isTauri()).toBe(false);
+        });
+    });
+
+    describe('invoke', () => {
+        it('should call Tauri invoke with command and args', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce({ success: true });
+
+            const result = await provider.invoke('test_command', { param: 'value' });
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('test_command', { param: 'value' });
+            expect(result).toEqual({ success: true });
+        });
+
+        it('should handle invoke errors', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Command failed'),
+            );
+
+            await expect(provider.invoke('failing_command')).rejects.toThrow('Command failed');
+        });
+
+        it('should rethrow set_focus errors', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(new Error('Focus error'));
+
+            await expect(provider.invoke('set_focus')).rejects.toThrow('Focus error');
+        });
+
+        it('should pass empty object as default args', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(null);
+
+            await provider.invoke('simple_command');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('simple_command', {});
+        });
+    });
+
+    describe('listen', () => {
+        it('should subscribe to Tauri events', async () => {
+            const callback = vi.fn();
+            (mockedTauriListen as unknown as Mock).mockResolvedValueOnce(() => {
+                /* no-op */
+            });
+
+            await provider.listen('test:event', callback);
+
+            expect(mockedTauriListen).toHaveBeenCalledWith('test:event', expect.any(Function));
+        });
+
+        it('should return unsubscribe function', async () => {
+            const unsubscribeFn = vi.fn();
+            (mockedTauriListen as unknown as Mock).mockResolvedValueOnce(unsubscribeFn);
+
+            const unsubscribe = await provider.listen('test:event', () => {
+                /* no-op */
+            });
+
+            expect(typeof unsubscribe).toBe('function');
+        });
+
+        it('should pass payload to callback', async () => {
+            const callback = vi.fn();
+
+            // Use module-level helper
+            (mockedTauriListen as unknown as Mock).mockImplementationOnce(
+                createListenWithPayload({ data: 'test' }),
+            );
+
+            await provider.listen('test:event', callback);
+
+            expect(callback).toHaveBeenCalledWith({ data: 'test' });
+        });
+    });
+
+    describe('getSecureKey', () => {
+        it('should return key when invoke succeeds', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce('secret-value');
+
+            const result = await provider.getSecureKey('openai_api');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('get_secure_key', {
+                service: 'openai_api',
+            });
+            expect(result).toBe('secret-value');
+        });
+
+        it('should return null when invoke fails', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Key not found'),
+            );
+
+            const result = await provider.getSecureKey('unknown_service');
+
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('saveSecureKey', () => {
+        it('should call save_secure_key with correct args', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(undefined);
+
+            await provider.saveSecureKey('openai_api', 'new-secret');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('save_secure_key', {
+                service: 'openai_api',
+                key: 'new-secret',
+            });
+        });
+
+        it('should rethrow errors', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Storage failure'),
+            );
+
+            await expect(provider.saveSecureKey('openai_api', 'key')).rejects.toThrow(
+                'Storage failure',
+            );
+        });
+    });
+
+    describe('mock mode', () => {
+        it('should work without Tauri and use mock invoke', async () => {
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['__TAURI__'];
+
+            const webProvider = new TauriProvider();
+            expect(webProvider.isTauri()).toBe(false);
+
+            // Mock invoke should return mock data
+            const result = await webProvider.invoke('get_settings');
+            expect(result).toEqual({
+                language: 'en',
+                theme: 'dark',
+                use_gpu: true,
+                debug_mode: false,
+            });
+        });
+    });
+});

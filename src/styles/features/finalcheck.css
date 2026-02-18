@@ -1,0 +1,8 @@
+/* FinalCheck Feature Styles */
+.finalcheck-root {
+    padding: var(--spacing-lg);
+}
+
+.finalcheck-container {
+    animation: fadeIn var(--transition-normal) ease-out;
+}

@@ -1,0 +1,325 @@
+﻿/* App Header (Glass Panel) */
+#app-header {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: var(--sidebar-width, 280px);
+    height: 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1rem;
+    padding-right: 0;
+    z-index: 900;
+
+    /* Liquid Glass Effect */
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+
+    /* Glossy gradient + extreme transparency */
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.02) 0%,
+        rgba(255, 255, 255, 0) 50%,
+        rgba(0, 0, 0, 0.04) 100%
+    );
+
+    /* Depth and Edges */
+    box-shadow:
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+        /* Top highlight */ inset 0 -1px 0 0 rgba(255, 255, 255, 0.02);
+    /* Bottom subtle rim */
+
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    /* Subtle border */
+    transition: none;
+    -webkit-app-region: drag;
+}
+
+body.snapping #app-header {
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Top Right Controls (now inside header) */
+.top-controls {
+    display: flex;
+    gap: 0;
+    height: 100%;
+    align-self: stretch;
+    -webkit-app-region: no-drag !important;
+    z-index: 10000;
+    pointer-events: auto !important;
+
+    /* Adjustable Positioning */
+    position: relative;
+    transform: translate(var(--win-controls-x, 0px), var(--win-controls-y, 0px));
+}
+
+.window-control-btn {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 100%;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--text-secondary);
+    -webkit-app-region: no-drag !important;
+    position: relative;
+    z-index: 10;
+    pointer-events: auto !important;
+}
+
+.window-control-btn svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    stroke: currentColor;
+    fill: none;
+    pointer-events: none;
+    display: block;
+}
+
+.window-control-btn:hover {
+    background: transparent !important;
+    color: var(--warning) !important;
+    transform: scale(1.1);
+}
+
+.window-control-btn:active {
+    background: rgba(var(--primary-raw), 0.1) !important;
+    transform: scale(0.95);
+}
+
+.close-btn {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Removed rounding as per user request */
+    border-radius: 0 !important;
+    overflow: hidden;
+}
+
+.close-btn:hover {
+    background: transparent !important;
+    color: var(--danger) !important;
+    transform: rotate(90deg) scale(1.1);
+}
+
+.close-btn:active {
+    background: rgba(var(--danger-raw), 0.1) !important;
+    color: var(--danger) !important;
+    transform: rotate(90deg) scale(0.9);
+}
+
+/* When maximized, the close button hits the screen edge, so it should be square */
+body.maximized .close-btn {
+    border-radius: 0 !important;
+}
+
+/* Header Groups */
+.header-left-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Language Switcher - Slide Out Redesign (now inside header) */
+.lang-switcher-root {
+    position: relative;
+    /* Changed from fixed */
+    top: auto;
+    left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    /* Align left */
+    z-index: 1000;
+    -webkit-app-region: no-drag;
+    /* Buttons must be clickable */
+}
+
+.sound-toggle-btn {
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.3s var(--ease-smooth);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    -webkit-app-region: no-drag;
+
+    /* Squircle Shape - matching lang-btn */
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.sound-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-primary);
+}
+
+.sound-toggle-btn:active {
+    transform: scale(0.96);
+}
+
+.sound-toggle-btn svg {
+    width: 22px !important;
+    height: 22px !important;
+    stroke: currentColor;
+    fill: none;
+    pointer-events: none;
+}
+
+.sound-toggle-btn.muted {
+    opacity: 0.5;
+}
+
+.sound-toggle-btn.muted:hover {
+    opacity: 0.8;
+}
+
+/* Removed specific body.snapping rule for lang-switcher as parent handles it */
+
+.lang-menu-items {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 0.5rem;
+
+    /* Animation State: Hidden */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(0);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Layout */
+    position: absolute;
+    left: 100%;
+    top: 0;
+    height: 100%;
+    white-space: nowrap;
+}
+
+.lang-menu-items.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+}
+
+/* Common Button Styles */
+.lang-btn {
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.3s var(--ease-smooth);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    -webkit-app-region: no-drag;
+
+    /* Squircle Shape */
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.lang-btn:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-primary);
+}
+
+.lang-btn:active {
+    transform: scale(0.96);
+}
+
+.lang-btn .flag-icon,
+.lang-btn svg,
+.lang-btn span {
+    cursor: pointer;
+    pointer-events: none;
+}
+
+/* Main Trigger Button specific styles */
+.current-lang-trigger {
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.current-lang-trigger:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.lang-btn .flag-icon {
+    margin: 0;
+    display: block;
+    width: 28px;
+    height: 21px;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Flag icons (SVG, avoids OS emoji font issues showing GB/RU as text) */
+.flag-icon {
+    width: 30px;
+    height: 22.5px;
+    border-radius: 5px;
+    overflow: hidden;
+    display: inline-block;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    flex-shrink: 0;
+}
+
+.flag-gb {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 30'%3E%3Crect width='50' height='30' fill='%23012169'/%3E%3Cpath d='M0 0 L50 30 M50 0 L0 30' stroke='%23FFFFFF' stroke-width='6'/%3E%3Cpath d='M0 0 L50 30 M50 0 L0 30' stroke='%23C8102E' stroke-width='4'/%3E%3Cpath d='M25 0 V30 M0 15 H50' stroke='%23FFFFFF' stroke-width='10'/%3E%3Cpath d='M25 0 V30 M0 15 H50' stroke='%23C8102E' stroke-width='6'/%3E%3C/svg%3E");
+}
+
+.flag-ru {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 3 2'%3E%3Crect width='3' height='0.6667' y='0' fill='%23FFFFFF'/%3E%3Crect width='3' height='0.6667' y='0.6667' fill='%230039A6'/%3E%3Crect width='3' height='0.6667' y='1.3333' fill='%23D52B1E'/%3E%3C/svg%3E");
+}
+
+.flag-cn {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 600'%3E%3Crect width='900' height='600' fill='%23DE2910'/%3E%3Cpath d='M128.4 122.9L161.9 226l-87.7-63.7h108.4L94.7 226l33.7-103.1z' fill='%23FFDE00'/%3E%3Cg transform='translate(300 120)'%3E%3Cpath d='M30.6 6.6L45.4 39 12 21.8h41.4L18.6 39 33.4 6.7z' fill='%23FFDE00' transform='rotate(23)'/%3E%3C/g%3E%3Cg transform='translate(360 210)'%3E%3Cpath d='M30.6 6.6L45.4 39 12 21.8h41.4L18.6 39 33.4 6.7z' fill='%23FFDE00' transform='rotate(46)'/%3E%3C/g%3E%3Cg transform='translate(360 330)'%3E%3Cpath d='M30.6 6.6L45.4 39 12 21.8h41.4L18.6 39 33.4 6.7z' fill='%23FFDE00' transform='rotate(70)'/%3E%3C/g%3E%3Cg transform='translate(300 420)'%3E%3Cpath d='M30.6 6.6L45.4 39 12 21.8h41.4L18.6 39 33.4 6.7z' fill='%23FFDE00' transform='rotate(93)'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.lang-option .flag-icon {
+    margin: 0;
+    display: block !important;
+}
+
+.lang-dropdown-btn .flag-icon {
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 24px !important;
+    height: 18px !important;
+}
+
+.lang-dropdown-btn[data-lang='en'] .flag-gb {
+    display: inline-block !important;
+}
+
+.lang-dropdown-btn[data-lang='ru'] .flag-ru {
+    display: inline-block !important;
+}
+
+.lang-dropdown-btn[data-lang='zh'] .flag-cn {
+    display: inline-block !important;
+}

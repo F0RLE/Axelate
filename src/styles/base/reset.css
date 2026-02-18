@@ -1,0 +1,56 @@
+﻿/* Base Reset & Body Styles */
+* {
+    box-sizing: border-box;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    cursor: default; /* Visual feedback */
+}
+
+/* Globally disable text selection on everything */
+
+html {
+    scroll-behavior: smooth;
+    overflow: hidden;
+    height: 100%;
+    /* Fluid Scaling: Min 14px, Ideal 15px + 0.2vw, Max 20px */
+    font-size: clamp(14px, 15px + 0.2vw, 20px);
+    background: var(--bg-dark); /* Moved from body */
+}
+
+body {
+    font-family: var(--app-font-family);
+    background: transparent; /* Allow particles (z-index -1) to show through */
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-size: 14px;
+    box-sizing: border-box;
+    opacity: 1;
+    /* Changed for splash screen handling */
+    transition: opacity 0.5s ease-in;
+}
+
+/* Globals moved to top */
+
+/* Re-enable for inputs and text areas */
+input,
+textarea,
+[contenteditable] {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    cursor: text;
+}
+
+/* Global Utilities */
+.hidden {
+    display: none !important;
+}
+
+.visible {
+    opacity: 1 !important;
+    visibility: visible !important;
+}
