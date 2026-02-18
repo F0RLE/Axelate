@@ -1576,7 +1576,15 @@ network: NetworkStats;
 /**
  * Current process ID
  */
-pid: number }
+pid: number; 
+/**
+ * CPU usage of the current process (0-100)
+ */
+appCpu: number; 
+/**
+ * Memory used by the current process (bytes)
+ */
+appMemory: number }
 /**
  * Screen thresholds for warnings
  */

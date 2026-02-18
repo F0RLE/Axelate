@@ -721,10 +721,7 @@ pub async fn process_chat_request(
     let sink: Arc<dyn StreamSink> = Arc::new(WindowSink::new(tx));
 
     // Strategy Selection (Currently OpenRouter Unified, but polymorphic ready)
-    let provider: Box<dyn AiProvider> = match request.provider.as_str() {
-        // "local" => Box::new(LocalProvider::new()), // Future
-        _ => Box::new(OpenRouterProvider::new(&base_url)),
-    };
+    let provider: Box<dyn AiProvider> = Box::new(OpenRouterProvider::new(&base_url));
 
     // 3.2 Spawn Sink Processor (UI Bridge)
     let window_for_task = window.clone();

@@ -74,7 +74,7 @@ async fn health_handler() -> Json<Value> {
 
 async fn stats_handler() -> Json<SystemStats> {
     // No logging here to prevent spamming logs every second
-    let stats = system_monitor::get_stats();
+    let stats = system_monitor::get_stats().await;
     Json(stats)
 }
 
@@ -172,7 +172,7 @@ async fn translations_handler(Query(params): Query<LangQuery>) -> Json<Value> {
     clippy::cast_precision_loss
 )]
 async fn gpu_info_handler() -> Json<Value> {
-    let stats = system_monitor::get_stats();
+    let stats = system_monitor::get_stats().await;
 
     if let Some(gpu) = stats.gpu {
         // Convert Bytes to MB

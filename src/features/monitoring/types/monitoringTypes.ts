@@ -51,6 +51,8 @@ export interface ISystemStats {
     disk: IDiskStats;
     network: INetworkStats;
     pid: number;
+    appCpu: number;
+    appMemory: number;
 }
 
 export type StatsCallback = (stats: ISystemStats) => void;

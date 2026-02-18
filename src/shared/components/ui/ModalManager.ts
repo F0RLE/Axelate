@@ -44,6 +44,10 @@ export class ModalManager {
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
 
+        // Add smooth hiding for main content
+        const container = document.querySelector('.models-container');
+        if (container !== null) container.classList.add('content-hidden');
+
         // Close on overlay click
         const closeOnOverlay = (e: MouseEvent): void => {
             if (e.target === modal) {
@@ -58,7 +62,13 @@ export class ModalManager {
         const modal = document.getElementById('app-selection-modal');
         if (modal !== null) {
             modal.classList.add('hidden');
-            modal.style.display = 'none';
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
+
+            // Restore main content visibility
+            const container = document.querySelector('.models-container');
+            if (container !== null) container.classList.remove('content-hidden');
         }
     }
 

@@ -30,6 +30,8 @@ describe('MonitoringService', () => {
             activityPercent: 5,
         },
         pid: 1234,
+        appCpu: 2.5,
+        appMemory: 50 * 1024 * 1024,
     };
 
     beforeEach(() => {

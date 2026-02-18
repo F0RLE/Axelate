@@ -182,6 +182,8 @@ export class TauriProvider implements IBridge {
                     activityPercent: 0,
                 },
                 pid: 1234,
+                appCpu: 0,
+                appMemory: 0,
             } satisfies Bindings.SystemStats,
             validate_api_key: true,
             save_setting: true,

@@ -66,11 +66,11 @@ body.snapping #app-header {
     justify-content: center;
     width: 48px;
     height: 100%;
-    transition: background 0.2s var(--ease-smooth);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     color: var(--text-secondary);
     -webkit-app-region: no-drag !important;
     position: relative;
-    z-index: 10000;
+    z-index: 10;
     pointer-events: auto !important;
 }
 
@@ -86,16 +86,16 @@ body.snapping #app-header {
 .window-control-btn:hover {
     background: transparent !important;
     color: var(--warning) !important;
+    transform: scale(1.1);
 }
 
 .window-control-btn:active {
     background: rgba(var(--primary-raw), 0.1) !important;
+    transform: scale(0.95);
 }
 
 .close-btn {
-    transition:
-        background 0.2s var(--ease-smooth),
-        color 0.2s var(--ease-smooth);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     /* Removed rounding as per user request */
     border-radius: 0 !important;
     overflow: hidden;
@@ -104,11 +104,13 @@ body.snapping #app-header {
 .close-btn:hover {
     background: transparent !important;
     color: var(--danger) !important;
+    transform: rotate(90deg) scale(1.1);
 }
 
 .close-btn:active {
     background: rgba(var(--danger-raw), 0.1) !important;
     color: var(--danger) !important;
+    transform: rotate(90deg) scale(0.9);
 }
 
 /* When maximized, the close button hits the screen edge, so it should be square */

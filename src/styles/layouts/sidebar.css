@@ -11,7 +11,7 @@
     /* Improved border rendering to avoid subpixel gaps */
     box-shadow: var(--sidebar-shadow);
     border-right: none;
-    padding: 1.5rem 1rem;
+    padding: 1.25rem 1rem 1.5rem 1rem; /* Slightly more space at top */
     flex-shrink: 0;
     min-width: 80px;
     max-width: 500px;
@@ -33,16 +33,21 @@
 .logo-area {
     display: grid;
     place-items: center;
-    margin-bottom: 0.2rem; /* Tight gap matching request */
+    margin-top: 0; /* Resetting negative margin */
+    margin-bottom: 0.2rem;
     text-align: center;
     -webkit-app-region: no-drag;
-    padding-top: 0;
     cursor: pointer;
     border-radius: 12px;
     position: relative;
     background: transparent;
     border: none;
     width: 100%;
+    overflow: visible;
+    padding: 0;
+    transition:
+        background 0.2s ease,
+        transform 0.2s ease;
 }
 
 .logo-icon-wrapper {
@@ -125,39 +130,51 @@
 .sidebar-logo-icon {
     /* grid-area handled by wrapper */
     display: block;
-    width: 54px;
-    height: 54px;
+    width: 52px; /* Reduced for better fit in 80px sidebar */
+    height: 52px;
     margin: 0 auto;
     cursor: pointer;
     transition:
         opacity 0.3s var(--ease-smooth),
         transform 0.3s var(--ease-smooth);
     transform: scale(1);
-    animation: logoContainerFloat 4s ease-in-out infinite;
-    will-change: transform;
+    animation: logoIconVitality 4.5s ease-in-out infinite;
+    will-change: transform, filter;
 }
 
-@keyframes logoContainerFloat {
+@keyframes logoIconVitality {
     0%,
     100% {
-        transform: scale(1) translateY(0);
-        filter: drop-shadow(0 0 8px rgba(var(--primary-raw), 0.5));
+        transform: translateY(0) scale(1);
+        filter: drop-shadow(0 0 8px rgba(var(--primary-raw), 0.3))
+            drop-shadow(0 0 15px rgba(var(--primary-raw), 0.1));
     }
 
     50% {
-        transform: scale(1) translateY(-5px);
-        filter: drop-shadow(0 0 15px rgba(var(--primary-raw), 0.8));
+        transform: translateY(-8px) scale(1.05);
+        filter: drop-shadow(0 0 15px rgba(var(--primary-raw), 0.5))
+            drop-shadow(0 0 30px rgba(var(--primary-raw), 0.2));
     }
 }
 
-/* Ensure it shows when collapsed - usually handled by #sidebar.collapsed rule further down or in JS toggling class on wrapper?
-   Actually the rule is likely: #sidebar.collapsed .sidebar-logo-icon { display: block; }
-   found elsewhere. But here we define base style. */
+@keyframes logoTextFloat {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+#sidebar:not(.collapsed) .logo-icon-wrapper {
+    display: none !important;
+}
 
 .sidebar-logo-icon svg {
     width: 100%;
     height: 100%;
-    filter: drop-shadow(0 0 8px rgba(var(--primary-raw), 0.5));
+    filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.2));
     /* Add animation here for when it becomes visible */
     animation: logoPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     cursor: pointer;
@@ -185,7 +202,7 @@
 .sidebar-title-wrapper {
     grid-area: 1 / 1; /* Overlay */
     width: 100%;
-    overflow: hidden;
+    overflow: visible; /* Changed from hidden to allow floating animation range */
     transition:
         opacity 0.3s var(--ease-smooth),
         transform 0.3s var(--ease-smooth),
@@ -193,15 +210,15 @@
     text-align: center;
     cursor: pointer;
     opacity: 1;
-    max-height: 60px; /* Reduced for 0.9rem font to prevent late snap */
+    max-height: 80px; /* Increased from 60px to accommodate larger font + float */
     visibility: visible;
     z-index: 10;
 }
 
 .app-title {
     font-weight: 400; /* Standard weight for Monocraft compatibility */
-    font-size: 2.3rem;
-    will-change: transform;
+    font-size: 2.6rem; /* Increased from 2.3rem */
+    will-change: transform, background-position;
     background: linear-gradient(
         90deg,
         var(--primary),
@@ -220,7 +237,20 @@
     white-space: nowrap;
     line-height: normal;
     font-family: var(--app-font-family) !important; /* Force brand font */
-    text-shadow: 0 0 12px rgba(var(--primary-raw), 0.4); /* Premium glow */
+    /* Glow restored as multi-layered drop-shadow in iconGlowFloat */
+    display: inline-block; /* Required for transform animations */
+    animation:
+        logoTextFloat 4.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite,
+        textGradientShift 8s linear infinite;
+}
+
+@keyframes textGradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 200% 50%;
+    }
 }
 
 /* Collapsed Sidebar State */
@@ -284,10 +314,7 @@
 }
 
 #sidebar.collapsed .sidebar-title-wrapper {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(-5px);
+    display: none !important;
 }
 
 #sidebar.collapsed .app-title {
@@ -299,10 +326,14 @@
     opacity: 1 !important;
     visibility: visible !important;
     pointer-events: auto;
+    justify-content: center;
+    align-items: center;
+    height: 60px; /* Explicit height for compact button area */
 }
 
+/* Hover highlight removed as per request */
+
 #sidebar.collapsed .sidebar-logo-icon {
-    transform: scale(1);
     display: block;
 }
 

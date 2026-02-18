@@ -58,7 +58,7 @@ describe('chatRequestUtils', () => {
                 model: 'llama-4-maverick',
                 apiKey: null,
                 sessionId: 'session-local',
-                thinkingLevel: 'minimal' as const,
+                thinkingLevel: 'low' as const,
             };
 
             const request = constructChatRequest(mockMessage, [], config);

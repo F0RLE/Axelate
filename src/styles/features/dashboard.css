@@ -174,7 +174,18 @@
     display: flex;
     flex-direction: column;
     gap: 3rem;
+    transition:
+        opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: opacity, transform;
     animation: modelsPageFadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* State when model selection or settings is open */
+.models-container.content-hidden {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+    pointer-events: none;
 }
 
 @keyframes modelsPageFadeIn {
@@ -872,7 +883,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 10;
 }
 
@@ -880,10 +891,11 @@
     background: transparent !important;
     color: var(--danger) !important;
     box-shadow: none !important;
+    transform: rotate(90deg) scale(1.1);
 }
 
 .app-close-btn:active {
-    transform: scale(0.95);
+    transform: rotate(90deg) scale(0.9);
 }
 
 .app-close-btn svg {
@@ -1027,16 +1039,16 @@
     margin-bottom: 0px !important;
     cursor: pointer;
 
-    /* Fixed height to eliminate "Visual Noise" and anchor the bottom line */
-    height: 90px !important;
-    min-height: 90px !important;
-    /* Truncate text instead of scroll */
-    overflow: hidden !important;
-    text-overflow: ellipsis;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 4; /* Fits ~90px at 1.4 line-height */
-    line-clamp: 4;
-    -webkit-box-orient: vertical;
+    /* Fixed height removed to allow full text display */
+    height: auto !important;
+    min-height: auto !important;
+    /* Show full text instead of truncation */
+    overflow: visible !important;
+    text-overflow: clip;
+    display: block !important;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+    -webkit-box-orient: horizontal;
     text-align: center;
 }
 

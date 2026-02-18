@@ -486,7 +486,7 @@ class AISettingsRenderer extends BaseComponent {
             );
 
             const updateThinking = (target: HTMLElement) => {
-                const val = (target.dataset['value'] as ThinkingLevel) ?? 'high';
+                const val = (target.dataset['value'] ?? 'high') as ThinkingLevel;
                 this._stateService?.setThinkingLevel(appId, val);
 
                 buttons.forEach((b) => {

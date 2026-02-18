@@ -14,15 +14,15 @@ use crate::models::SystemStats;
 #[tauri::command]
 #[specta::specta]
 /// Retrieves real-time system statistics (CPU, RAM, GPU, disk, network)
-pub fn get_system_stats() -> Result<SystemStats, AppError> {
-    Ok(system_monitor::get_stats())
+pub async fn get_system_stats() -> Result<SystemStats, AppError> {
+    Ok(system_monitor::get_stats().await)
 }
 
 #[tauri::command]
 #[specta::specta]
 /// Retrieves GPU model name or indicates if no GPU is present
-pub fn get_gpu_info() -> Result<String, AppError> {
-    let stats = system_monitor::get_stats();
+pub async fn get_gpu_info() -> Result<String, AppError> {
+    let stats = system_monitor::get_stats().await;
     match stats.gpu {
         Some(gpu) => Ok(gpu.name),
         None => Ok("No Dedicated GPU Detected".to_string()),

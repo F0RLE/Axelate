@@ -12,7 +12,7 @@ export abstract class BaseComponent {
     /**
      * Initializes the component and its dependencies.
      */
-    public async init(..._args: any[]): Promise<void> {
+    public async init(..._args: unknown[]): Promise<void> {
         if (this._isInit) return;
         this._isInit = true;
         this._abortController = new AbortController();
@@ -59,10 +59,14 @@ export abstract class BaseComponent {
      * Cached element lookup by ID.
      */
     protected getElement<T extends HTMLElement>(id: string): T | null {
-        if (!this._elementCache.has(id)) {
-            this._elementCache.set(id, document.getElementById(id));
+        const cached = this._elementCache.get(id);
+        if (cached !== undefined) return cached as T | null;
+
+        const el = document.getElementById(id);
+        if (el) {
+            this._elementCache.set(id, el);
         }
-        return this._elementCache.get(id) as T | null;
+        return el as T | null;
     }
 
     /**

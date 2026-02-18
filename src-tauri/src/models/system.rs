@@ -2,7 +2,7 @@ use serde::Serialize;
 use specta::Type;
 
 /// Complete system statistics snapshot
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemStats {
     /// CPU usage and information
@@ -19,10 +19,14 @@ pub struct SystemStats {
     pub network: NetworkStats,
     /// Current process ID
     pub pid: u32,
+    /// CPU usage of the current process (0-100)
+    pub app_cpu: f32,
+    /// Memory used by the current process (bytes)
+    pub app_memory: f64,
 }
 
 /// GPU (Graphics Processing Unit) statistics
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct GpuStats {
     /// GPU usage percentage (0-100)
@@ -38,7 +42,7 @@ pub struct GpuStats {
 }
 
 /// VRAM (Video RAM) statistics
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct VramStats {
     /// VRAM usage percentage (0-100)
@@ -50,7 +54,7 @@ pub struct VramStats {
 }
 
 /// CPU (Central Processing Unit) statistics
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CpuStats {
     /// CPU usage percentage (0-100)
@@ -62,7 +66,7 @@ pub struct CpuStats {
 }
 
 /// RAM (Random Access Memory) statistics
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RamStats {
     /// RAM usage percentage (0-100)
@@ -76,7 +80,7 @@ pub struct RamStats {
 }
 
 /// Disk I/O (Input/Output) statistics
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DiskStats {
     /// Read speed (bytes/sec)
@@ -94,7 +98,7 @@ pub struct DiskStats {
 }
 
 /// Network I/O statistics
-#[derive(Debug, Clone, Serialize, Type)]
+#[derive(Debug, Clone, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkStats {
     /// Download speed (bytes/sec)

@@ -5,9 +5,18 @@ import type { ISystemStats } from '../types/monitoringTypes';
 export class MonitoringUI extends BaseComponent {
     private readonly _boundUpdateUI = this.updateUI.bind(this);
 
-    // Cache for numerical state to avoid string parsing in animations
+    // Performance Caching
     private readonly _lastValues = new Map<HTMLElement, number>();
     private readonly _activeTweens = new Map<HTMLElement, number>();
+    private readonly _nodeCache = new Map<
+        HTMLElement,
+        { main?: HTMLElement; sub?: HTMLElement; bar?: HTMLElement }
+    >();
+    private _lastRenderTime = 0;
+    private readonly _RENDER_THROTTLE_MS = 100; // ~10fps UI updates
+
+    // Frontend EMA for smooth graphs
+    private readonly _emaState = new Map<string, number>();
 
     constructor(private readonly service: MonitoringService) {
         super();
@@ -24,6 +33,8 @@ export class MonitoringUI extends BaseComponent {
     protected onDestroy(): void {
         this.service.unsubscribe(this._boundUpdateUI);
         this._lastValues.clear();
+        this._nodeCache.clear();
+        this._emaState.clear();
 
         // Cancel any active animations
         for (const tweenId of this._activeTweens.values()) {
@@ -33,6 +44,11 @@ export class MonitoringUI extends BaseComponent {
     }
 
     private updateUI(stats: ISystemStats) {
+        // UI Throttling
+        const now = performance.now();
+        if (now - this._lastRenderTime < this._RENDER_THROTTLE_MS) return;
+        this._lastRenderTime = now;
+
         this._updateNetwork(stats);
         this._updateDisk(stats);
         this._updateCPU(stats);
@@ -42,78 +58,61 @@ export class MonitoringUI extends BaseComponent {
     }
 
     private _updateNetwork(stats: ISystemStats) {
-        if (!this.isVisible('network-status')) return;
+        const el = this.getElement('network-status');
+        if (!el || !this.isVisible('network-status')) return;
 
-        const downRate = stats.network.downloadRate;
-        const upRate = stats.network.uploadRate;
-        const netPeak = Math.max(downRate, upRate) / (1024 * 1024);
+        const cache = this._getCachedNodes(el, 'network-progress');
 
-        const networkStatusEl = this.getElement('network-status');
-        const networkProgressEl = this.getElement('network-progress');
+        const { val1, val2, unit } = this._formatSmartRate(
+            stats.network.downloadRate,
+            stats.network.uploadRate,
+        );
+        let compactUnit = unit;
+        if (unit === 'MB/s') compactUnit = 'M/s';
+        else if (unit === 'GB/s') compactUnit = 'G/s';
 
-        if (networkStatusEl) {
-            const { val1, val2, unit } = this._formatSmartRate(downRate, upRate);
-            let compactUnit = unit;
-            if (unit === 'MB/s') compactUnit = 'M/s';
-            else if (unit === 'GB/s') compactUnit = 'G/s';
-
-            this._setValueWithSecondary(networkStatusEl, `↓${val1}·↑${val2}`, compactUnit);
-        }
-
-        if (networkProgressEl) {
-            const netPercent = Math.min(100, (netPeak / 10) * 100);
-            networkProgressEl.style.width = `${Math.max(0, netPercent).toString()}%`;
-            this._setProgressColor(networkProgressEl, netPercent);
-            networkProgressEl.classList.toggle('pulse', netPercent > 5);
-        }
+        this._updateText(el, `↓${val1}·↑${val2}`, compactUnit);
+        this._updateProgressBar(cache.bar, stats.network.activityPercent, true);
     }
 
     private _updateDisk(stats: ISystemStats) {
-        if (!this.isVisible('disk-usage')) return;
+        const el = this.getElement('disk-usage');
+        if (!el || !this.isVisible('disk-usage')) return;
 
-        const readRate = stats.disk.readRate;
-        const writeRate = stats.disk.writeRate;
+        const cache = this._getCachedNodes(el, 'disk-progress');
 
-        const diskUsageEl = this.getElement('disk-usage');
-        const diskProgressEl = this.getElement('disk-progress');
+        const { val1, val2, unit } = this._formatSmartRate(
+            stats.disk.readRate,
+            stats.disk.writeRate,
+        );
+        let compactUnit = unit;
+        if (unit === 'MB/s') compactUnit = 'M/s';
+        else if (unit === 'GB/s') compactUnit = 'G/s';
 
-        if (diskUsageEl) {
-            const { val1, val2, unit } = this._formatSmartRate(readRate, writeRate);
-            let compactUnit = unit;
-            if (unit === 'MB/s') compactUnit = 'M/s';
-            else if (unit === 'GB/s') compactUnit = 'G/s';
-
-            this._setValueWithSecondary(diskUsageEl, `R${val1}·W${val2}`, compactUnit);
-            diskUsageEl.title = `Usage: ${stats.disk.utilization.toFixed(1)}%`;
-        }
-
-        if (diskProgressEl) {
-            const activity = stats.disk.activityPercent;
-            diskProgressEl.style.width = `${Math.max(0, Math.min(100, activity)).toString()}%`;
-            this._setProgressColor(diskProgressEl, activity);
-            diskProgressEl.classList.toggle('pulse', activity > 5);
-        }
+        this._updateText(el, `R${val1}·W${val2}`, compactUnit);
+        el.title = `Usage: ${stats.disk.utilization.toFixed(1)}%`;
+        this._updateProgressBar(cache.bar, stats.disk.activityPercent, true);
     }
 
     private _animateMainValue(el: HTMLElement, targetVal: number, decimals = 0, suffix = '') {
-        const targetNode = el.querySelector('.main-val') ?? el;
-        if (!(targetNode instanceof HTMLElement)) return;
+        const { main } = this._getCachedNodes(el);
+        const targetNode = main ?? el;
 
         const start = this._lastValues.get(targetNode) ?? 0;
-        if (Math.abs(start - targetVal) < 0.1) {
-            targetNode.textContent = `${targetVal.toFixed(decimals)}${suffix}`;
+        // Skip micro-animations and redundant updates
+        if (Math.abs(start - targetVal) < (decimals === 0 ? 0.5 : 0.05)) {
+            const text = `${targetVal.toFixed(decimals)}${suffix}`;
+            if (targetNode.textContent !== text) targetNode.textContent = text;
             this._lastValues.set(targetNode, targetVal);
             return;
         }
 
-        if (this._activeTweens.has(targetNode)) {
-            const frameId = this._activeTweens.get(targetNode);
-            if (frameId !== undefined) {
-                cancelAnimationFrame(frameId);
-            }
+        const activeTween = this._activeTweens.get(targetNode);
+        if (activeTween !== undefined) {
+            cancelAnimationFrame(activeTween);
         }
 
-        const duration = 400; // Snapper animation (400ms)
+        const duration = 400;
         const startTime = performance.now();
 
         const tick = (now: number) => {
@@ -129,7 +128,6 @@ export class MonitoringUI extends BaseComponent {
             } else {
                 this._activeTweens.delete(targetNode);
                 this._lastValues.set(targetNode, targetVal);
-                targetNode.textContent = `${targetVal.toFixed(decimals)}${suffix}`;
             }
         };
 
@@ -137,96 +135,112 @@ export class MonitoringUI extends BaseComponent {
     }
 
     private _updateCPU(stats: ISystemStats) {
-        if (!this.isVisible('cpu-percent')) return;
-        const cpuPercentEl = this.getElement('cpu-percent');
-        const cpuProgressEl = this.getElement('cpu-progress');
+        const el = this.getElement('cpu-percent');
+        if (!el || !this.isVisible('cpu-percent')) return;
 
-        if (cpuPercentEl) this._animateMainValue(cpuPercentEl, stats.cpu.percent, 0); // Removed suffix
-        if (cpuProgressEl) {
-            cpuProgressEl.style.width = `${Math.max(0, Math.min(100, stats.cpu.percent)).toString()}%`;
-            this._setProgressColor(cpuProgressEl, stats.cpu.percent);
-        }
+        const cache = this._getCachedNodes(el, 'cpu-progress');
+        this._animateMainValue(el, stats.cpu.percent, 0);
+        this._updateProgressBar(cache.bar, stats.cpu.percent);
     }
 
     private _updateRAM(stats: ISystemStats) {
-        if (!this.isVisible('ram-percent')) return;
-        const ramPercentEl = this.getElement('ram-percent');
-        const ramProgressEl = this.getElement('ram-progress');
+        const el = this.getElement('ram-percent');
+        if (!el || !this.isVisible('ram-percent')) return;
 
-        if (ramPercentEl) {
-            this._setValueWithSecondary(
-                ramPercentEl,
-                stats.ram.usedGb.toFixed(1),
-                `/${stats.ram.totalGb.toFixed(0)}G`,
-            );
-            this._animateMainValue(ramPercentEl, stats.ram.usedGb, 1);
-        }
-        if (ramProgressEl) {
-            ramProgressEl.style.width = `${Math.max(0, Math.min(100, stats.ram.percent)).toString()}%`;
-            this._setProgressColor(ramProgressEl, stats.ram.percent);
-        }
+        const cache = this._getCachedNodes(el, 'ram-progress');
+
+        // Update secondary text once per throttle cycle
+        const subText = `/${stats.ram.totalGb.toFixed(0)}G`;
+        if (cache.sub && cache.sub.textContent !== subText) cache.sub.textContent = subText;
+
+        this._animateMainValue(el, stats.ram.usedGb, 1);
+        this._updateProgressBar(cache.bar, stats.ram.percent);
     }
 
     private _updateGPU(stats: ISystemStats) {
-        if (!this.isVisible('gpu-util')) return;
-        const gpuUtilEl = this.getElement('gpu-util');
-        const gpuProgressEl = this.getElement('gpu-progress');
+        const el = this.getElement('gpu-util');
+        if (!el || !this.isVisible('gpu-util')) return;
 
-        if (gpuUtilEl) this._animateMainValue(gpuUtilEl, stats.gpu?.usage ?? 0, 0);
-        if (gpuProgressEl) {
-            const usage = stats.gpu?.usage ?? 0;
-            gpuProgressEl.style.width = `${Math.max(0, Math.min(100, usage)).toString()}%`;
-            this._setProgressColor(gpuProgressEl, usage);
-        }
+        const cache = this._getCachedNodes(el, 'gpu-progress');
+        const rawUsage = stats.gpu?.usage ?? 0;
+
+        // Frontend EMA for silky smooth graph
+        const ema = this._ema('gpu', rawUsage, 0.3);
+
+        this._animateMainValue(el, rawUsage, 0);
+        this._updateProgressBar(cache.bar, ema);
     }
 
     private _updateVRAM(stats: ISystemStats) {
-        if (!this.isVisible('gpu-memory')) return;
-        const vramEl = this.getElement('gpu-memory');
-        const vramProgressEl = this.getElement('vram-progress');
+        const el = this.getElement('gpu-memory');
+        if (!el || !this.isVisible('gpu-memory')) return;
 
-        if (vramEl) {
-            const vramUsed = stats.vram?.usedGb ?? 0;
-            const vramTotal = stats.vram?.totalGb ?? 0;
-            this._setValueWithSecondary(vramEl, vramUsed.toFixed(1), `/${vramTotal.toFixed(0)}G`);
-            this._animateMainValue(vramEl, vramUsed, 1);
-        }
-        if (vramProgressEl) {
-            const vramUsed = stats.vram?.usedGb ?? 0;
-            const vramTotal = stats.vram?.totalGb ?? 0;
-            const percent = vramTotal > 0 ? (vramUsed / vramTotal) * 100 : 0;
-            vramProgressEl.style.width = `${Math.max(0, Math.min(100, percent)).toString()}%`;
-            this._setProgressColor(vramProgressEl, percent);
+        const cache = this._getCachedNodes(el, 'vram-progress');
+        const vramUsed = stats.vram?.usedGb ?? 0;
+        const vramTotal = stats.vram?.totalGb ?? 0;
+        const percent = vramTotal > 0 ? (vramUsed / vramTotal) * 100 : 0;
+
+        const subText = `/${vramTotal.toFixed(0)}G`;
+        if (cache.sub && cache.sub.textContent !== subText) cache.sub.textContent = subText;
+
+        this._animateMainValue(el, vramUsed, 1);
+        this._updateProgressBar(cache.bar, this._ema('vram', percent, 0.3));
+    }
+
+    private _getCachedNodes(
+        container: HTMLElement,
+        barId?: string,
+    ): { main?: HTMLElement; sub?: HTMLElement; bar?: HTMLElement } {
+        const cached = this._nodeCache.get(container);
+        // If we have a cache and we don't need a bar, or we have the bar, return it
+        if (cached !== undefined && (barId === undefined || cached.bar !== undefined))
+            return cached;
+
+        const mainNode = container.querySelector('.main-val');
+        const subNode = container.querySelector('.sysmon-value-sub');
+        const barNode = barId !== undefined && barId !== '' ? this.getElement(barId) : undefined;
+
+        const newCache: { main?: HTMLElement; sub?: HTMLElement; bar?: HTMLElement } = {};
+        if (mainNode instanceof HTMLElement) newCache.main = mainNode;
+        if (subNode instanceof HTMLElement) newCache.sub = subNode;
+        if (barNode instanceof HTMLElement) newCache.bar = barNode;
+
+        this._nodeCache.set(container, newCache);
+        return newCache;
+    }
+
+    private _updateText(container: HTMLElement, primary: string, secondary?: string) {
+        const cache = this._getCachedNodes(container);
+        const mainNode = cache.main ?? container;
+        if (mainNode.textContent !== primary) mainNode.textContent = primary;
+
+        if (secondary !== undefined && secondary !== '' && cache.sub !== undefined) {
+            if (cache.sub.textContent !== secondary) cache.sub.textContent = secondary;
         }
     }
 
-    private _setValueWithSecondary(el: HTMLElement, primaryText: string, secondaryText: string) {
-        let main = el.querySelector('.main-val');
-        if (!(main instanceof HTMLElement)) {
-            el.innerHTML = '';
-            main = document.createElement('span');
-            main.className = 'main-val';
-            el.appendChild(main);
-        }
-        if (main.textContent !== primaryText) main.textContent = primaryText;
+    private _updateProgressBar(bar: HTMLElement | undefined, percent: number, isActivity = false) {
+        if (!bar) return;
+        const p = Math.max(0, Math.min(100, percent));
 
-        let sub = el.querySelector('.sysmon-value-sub');
-        if (secondaryText) {
-            if (!(sub instanceof HTMLElement)) {
-                sub = document.createElement('span');
-                sub.className = 'sysmon-value-sub';
-                el.appendChild(sub);
-            }
-            if (sub.textContent !== secondaryText) sub.textContent = secondaryText;
-        } else if (sub) {
-            sub.remove();
+        // GPU Friendly: Use transform instead of width
+        bar.style.transform = `scaleX(${p / 100})`;
+
+        bar.classList.toggle('high', p >= 85);
+        bar.classList.toggle('medium', p >= 70 && p < 85);
+        bar.classList.toggle('low', p < 70);
+        bar.classList.toggle('critical', p >= 95); // Peak glow
+
+        if (isActivity) {
+            bar.classList.toggle('pulse', p > 5);
         }
     }
 
-    private _setProgressColor(el: HTMLElement, percent: number) {
-        el.classList.toggle('high', percent >= 85);
-        el.classList.toggle('medium', percent >= 70 && percent < 85);
-        el.classList.toggle('low', percent < 70);
+    private _ema(key: string, current: number, alpha: number): number {
+        const prev = this._emaState.get(key) ?? current;
+        const next = prev * (1 - alpha) + current * alpha;
+        this._emaState.set(key, next);
+        return next;
     }
 
     private _formatSmartRate(b1: number, b2: number): { val1: string; val2: string; unit: string } {

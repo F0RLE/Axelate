@@ -170,6 +170,10 @@ export class SettingsUI {
             setTimeout(() => {
                 modal.style.display = 'none';
             }, 300); // match transition
+
+            // Restore main content visibility
+            const container = document.querySelector('.models-container');
+            if (container !== null) container.classList.remove('content-hidden');
         }
     }
 
@@ -527,6 +531,10 @@ export class SettingsUI {
         // modal-backdrop: just remove hidden class, CSS handles animation
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
+
+        // Add smooth hiding for main content
+        const modelsContainer = document.querySelector('.models-container');
+        if (modelsContainer !== null) modelsContainer.classList.add('content-hidden');
 
         // Close logic
         const closeBtn = document.getElementById('close-module-settings-btn');
