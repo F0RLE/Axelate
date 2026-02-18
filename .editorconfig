@@ -1,9 +1,8 @@
-# EditorConfig helps maintain consistent coding styles
-# https://editorconfig.org
+# Axelate - .editorconfig
 
 root = true
 
-# All files
+# Global defaults
 [*]
 charset = utf-8
 indent_style = space
@@ -12,34 +11,23 @@ end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-# YAML, TOML - use 2 spaces
-[*.{yml,yaml,toml}]
+# Configuration files (JSON, TOML) - TOML uses 2 spaces
+[*.toml]
 indent_size = 2
 
-# JSON - project uses 4 spaces (matches Prettier tabWidth)
 [*.json]
 indent_size = 4
 
-# JavaScript, TypeScript, CSS - maintain 4 spaces (Axelate style)
-[*.{js,jsx,ts,tsx,css,scss,html}]
+# Core stack (TS, Rust, CSS, HTML)
+[*.{ts,rs,css,html,js}]
 indent_size = 4
 
-# Rust
-[*.rs]
-indent_style = space
-indent_size = 4
-
-# Markdown (allow trailing spaces for line breaks)
+# Documentation
 [*.md]
 trim_trailing_whitespace = false
 indent_size = 2
 
-# PowerShell
+# Scripts
 [*.ps1]
-indent_size = 4
 charset = utf-8-bom
-
-# Batch scripts
-[*.{cmd,bat}]
-end_of_line = crlf
-indent_style = tab
+indent_size = 4

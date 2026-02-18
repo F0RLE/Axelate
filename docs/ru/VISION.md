@@ -1,6 +1,6 @@
 # 🪐 Axelate: The Secure Trust Layer for AI
 
-> **Status:** Active Development (v0.1.x)  
+> **Status:** Active Development (v0.1.5)  
 > **Target:** Windows, macOS (planned), Linux (planned)  
 > **Motto:** "Steam для AI — производительность системной утилиты, безопасность банковского уровня."
 

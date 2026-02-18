@@ -1,71 +1,16 @@
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║  Axelate - .gitignore                                            ║
-# ║  Stack: Rust + Tauri v2 + Vite + Vanilla JS                      ║
-# ╚══════════════════════════════════════════════════════════════════╝
+# Axelate - .gitignore
 
-# ─────────────────────────────────────────────────────────────────────
-# Rust / Tauri / Backend
-# ─────────────────────────────────────────────────────────────────────
-**/target/
+# Dependencies & Build
+src/node_modules/
+src/dist/
+src/coverage/
+src/.vite/
+src/*.tsbuildinfo
+src-tauri/target/
 src-tauri/gen/
 src-tauri/check_output.txt
-**/*.rs.bk
 
-# Note: Cargo.lock IS tracked for applications (reproducible builds)
-# Cargo.lock
-
-# ─────────────────────────────────────────────────────────────────────
-# Node.js / Frontend
-# ─────────────────────────────────────────────────────────────────────
-node_modules/
-**/dist/
-.vite/
-pnpm-lock.yaml
-yarn.lock
-
-# Ignore root package-lock (we use src/package.json)
-/package-lock.json
-
-# Allow src/package-lock.json
-!src/package-lock.json
-
-# ─────────────────────────────────────────────────────────────────────
-# Logs
-# ─────────────────────────────────────────────────────────────────────
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-*.log
-error.log
-
-# ─────────────────────────────────────────────────────────────────────
-# Testing & Linting
-# ─────────────────────────────────────────────────────────────────────
-coverage/
-.vitest/
-.eslintcache
-.stylelintcache
-.prettiercache
-*.tsbuildinfo
-
-# ─────────────────────────────────────────────────────────────────────
-# Environment & Secrets (CRITICAL)
-# ─────────────────────────────────────────────────────────────────────
-.env
-.env.local
-.env.*.local
-**/.env
-*.pem
-*.key
-*.pfx
-*.cer
-*.crt
-!**/.env.example
-
-# ─────────────────────────────────────────────────────────────────────
-# IDE / Editors
-# ─────────────────────────────────────────────────────────────────────
+# IDEs
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
@@ -75,55 +20,17 @@ coverage/
 .vs/
 *.swp
 *.swo
-*~
-*.sublime-workspace
-*.sublime-project
 
-# ─────────────────────────────────────────────────────────────────────
-# Operating System
-# ─────────────────────────────────────────────────────────────────────
-.DS_Store
-.AppleDouble
-.LSOverride
+# Environment & Logs
+.env
+.env.*
+!**/.env.example
+*.log
+
+# System
 Thumbs.db
-ehthumbs.db
 Desktop.ini
-$RECYCLE.BIN/
-*.lnk
 
-# ─────────────────────────────────────────────────────────────────────
-# Build & Release Artifacts
-# ─────────────────────────────────────────────────────────────────────
-release/
-build/
-*.exe
-*.msi
-*.pdb
-*.dmg
-*.app
-*.deb
-*.rpm
-*.AppImage
-
-# ─────────────────────────────────────────────────────────────────────
-# Temporary Files
-# ─────────────────────────────────────────────────────────────────────
-*.tmp
-*.temp
-*.bak
-*.cache
-
-# ─────────────────────────────────────────────────────────────────────
-# Application Data
-# ─────────────────────────────────────────────────────────────────────
+# Application
 AxelateData/
 data/
-
-# ─────────────────────────────────────────────────────────────────────
-# AI / Agent tools
-# ─────────────────────────────────────────────────────────────────────
-.gemini/
-.agent/
-.turbo/
-.cache/
-backup/

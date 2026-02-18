@@ -1,46 +1,28 @@
-# Auto-detect text files and normalize line endings to LF
+# Axelate - .gitattributes
+
+# Force LF for all text files (KISS + consistent builds)
 * text=auto eol=lf
 
-# ─────────────────────────────────────────────────────────────────────
-# Language Overrides
-# ─────────────────────────────────────────────────────────────────────
-*.ts       text eol=lf
-*.tsx      text eol=lf
-*.js       text eol=lf
-*.jsx      text eol=lf
-*.json     text eol=lf
-*.css      text eol=lf
-*.scss     text eol=lf
-*.html     text eol=lf
-*.md       text eol=lf
-*.rs       text eol=lf
-*.toml     text eol=lf
-*.yml      text eol=lf
-*.yaml     text eol=lf
+# Explicit text files
+*.ts    text eol=lf
+*.rs    text eol=lf
+*.toml  text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.js    text eol=lf
+*.ps1   text eol=lf
+*.svg   text eol=lf
 
-# ─────────────────────────────────────────────────────────────────────
-# Binary Files
-# ─────────────────────────────────────────────────────────────────────
-*.png      binary
-*.jpg      binary
-*.jpeg     binary
-*.gif      binary
-*.ico      binary
-*.svg      text
-*.ttf      binary
-*.otf      binary
-*.woff     binary
-*.woff2    binary
-*.eot      binary
-*.exe      binary
-*.dll      binary
-*.so       binary
-*.dylib    binary
+# Binary files
+*.png   binary
+*.ico   binary
+*.woff2 binary
+*.exe   binary
+*.dll   binary
 
-# ─────────────────────────────────────────────────────────────────────
-# Linguist Overrides
-# ─────────────────────────────────────────────────────────────────────
+# Linguist (GitHub) classification
 docs/**    linguist-documentation
 scripts/** linguist-vendored
 assets/**  linguist-vendored
-

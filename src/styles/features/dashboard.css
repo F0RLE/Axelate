@@ -1207,7 +1207,7 @@
     height: 28px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 14px; /* Pill shape standard */
+    border-radius: var(--radius-md); /* Pill shape standard */
     display: flex;
     align-items: center;
     gap: 0;
@@ -1242,7 +1242,7 @@
     align-items: center;
     gap: 0;
     height: 28px;
-    border-radius: 14px !important; /* Pill shape, NOT circle */
+    border-radius: var(--radius-md) !important; /* Pill shape, NOT circle */
     padding: 0 8px; /* Padding for icon */
     max-width: 28px;
     overflow: hidden;
@@ -1270,7 +1270,7 @@
     align-items: center;
     gap: 0;
     height: 28px;
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     padding: 0 8px;
     max-width: 28px;
     overflow: hidden;
@@ -1350,7 +1350,7 @@
 
     /* Sizing & Shape */
     height: 32px;
-    border-radius: 16px; /* Circle pill */
+    border-radius: var(--radius-md); /* Circle pill */
     padding: 0; /* Remove padding, let badge-icon define the shape */
     max-width: 32px; /* Collapsed */
     overflow: hidden;
@@ -1655,7 +1655,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     background: rgba(30, 30, 35, 0.6);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    border-radius: 16px;
+    border-radius: var(--radius-md);
 
     cursor: pointer;
     pointer-events: auto;
@@ -1720,7 +1720,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     max-width: 32px !important; /* Start collapsed as circle */
     height: 32px;
     padding: 0 !important; /* No padding initially for center alignment */
-    border-radius: 16px !important;
+    border-radius: var(--radius-md) !important;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
@@ -1827,7 +1827,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     background: rgba(30, 30, 35, 0.6);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    border-radius: 16px;
+    border-radius: var(--radius-md);
 
     cursor: default;
     overflow: hidden;
@@ -1911,7 +1911,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     background: rgba(30, 30, 35, 0.6);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    border-radius: 16px;
+    border-radius: var(--radius-md);
 
     cursor: pointer;
     pointer-events: auto;

@@ -25,6 +25,7 @@
 │   └── ⚙️ dependabot.yml
 ├── 📁 docs
 │   ├── 📁 en
+│   │   ├── 📝 AUTOMATION.md
 │   │   ├── 📝 CODING_STANDARDS.md
 │   │   ├── 📝 FileTree.md
 │   │   ├── 📝 architecture.md
@@ -43,8 +44,8 @@
 │   │   └── 📄 router.ts
 │   ├── 📁 assets
 │   │   ├── 📁 fonts
-│   │   │   ├── 📄 Cubic_11.ttf
-│   │   │   └── 📄 Monocraft.otf
+│   │   │   ├── 📄 Cubic_11.woff2
+│   │   │   └── 📄 Monocraft.woff2
 │   │   ├── 📄 icons.ts
 │   │   └── 📄 logos.ts
 │   ├── 📁 features
@@ -53,13 +54,18 @@
 │   │   │   │   └── 📄 AIProvider.ts
 │   │   │   ├── 📁 services
 │   │   │   │   ├── 📄 AIBridge.test.ts
-│   │   │   │   └── 📄 AIBridge.ts
+│   │   │   │   ├── 📄 AIBridge.ts
+│   │   │   │   ├── 📄 AIChatTransport.ts
+│   │   │   │   └── 📄 AIProviderManager.ts
 │   │   │   ├── 📁 types
+│   │   │   │   ├── 📄 IAIBridge.ts
 │   │   │   │   └── 📄 aiTypes.ts
 │   │   │   ├── 📁 ui
 │   │   │   │   └── 📄 AISettingsRenderer.ts
 │   │   │   ├── 📁 utils
-│   │   │   │   └── 📄 catalogHelpers.ts
+│   │   │   │   ├── 📄 catalogHelpers.ts
+│   │   │   │   ├── 📄 chatRequestUtils.test.ts
+│   │   │   │   └── 📄 chatRequestUtils.ts
 │   │   │   └── 📄 index.ts
 │   │   ├── 📁 chat
 │   │   │   ├── 📁 services
@@ -92,55 +98,41 @@
 │   │   │   ├── 📁 types
 │   │   │   │   └── 📄 downloaderTypes.ts
 │   │   │   ├── 📁 ui
+│   │   │   │   ├── 📄 DownloadUI.test.ts
 │   │   │   │   └── 📄 DownloadUI.ts
-│   │   │   └── 📄 index.ts
-│   │   ├── 📁 finalcheck
-│   │   │   ├── 📁 services
-│   │   │   ├── 📁 types
-│   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 FinalCheckUI.ts
 │   │   │   └── 📄 index.ts
 │   │   ├── 📁 monitoring
 │   │   │   ├── 📁 services
+│   │   │   │   ├── 📄 MonitoringService.test.ts
 │   │   │   │   └── 📄 MonitoringService.ts
 │   │   │   ├── 📁 types
 │   │   │   │   └── 📄 monitoringTypes.ts
 │   │   │   ├── 📁 ui
 │   │   │   │   └── 📄 MonitoringUI.ts
 │   │   │   └── 📄 index.ts
-│   │   ├── 📁 settings
-│   │   │   ├── 📁 services
-│   │   │   │   └── 📄 SettingsService.ts
-│   │   │   ├── 📁 ui
-│   │   │   │   ├── 📁 components
-│   │   │   │   │   ├── 📄 CardResizer.ts
-│   │   │   │   │   ├── 📄 FieldFactory.ts
-│   │   │   │   │   ├── 📄 ISettingField.ts
-│   │   │   │   │   ├── 📄 NumberField.ts
-│   │   │   │   │   ├── 📄 SelectField.ts
-│   │   │   │   │   ├── 📄 TextField.ts
-│   │   │   │   │   └── 📄 ToggleField.ts
-│   │   │   │   ├── 📄 GeneralSettingsRenderer.ts
-│   │   │   │   ├── 📄 SettingsContext.ts
-│   │   │   │   └── 📄 SettingsUI.ts
-│   │   │   └── 📄 index.ts
-│   │   ├── 📁 testfeature
-│   │   │   ├── 📁 services
-│   │   │   ├── 📁 types
-│   │   │   ├── 📁 ui
-│   │   │   │   └── 📄 TestFeatureUI.ts
-│   │   │   └── 📄 index.ts
-│   │   └── 📁 user-preferences
+│   │   └── 📁 settings
 │   │       ├── 📁 services
-│   │       ├── 📁 types
+│   │       │   └── 📄 SettingsService.ts
 │   │       ├── 📁 ui
-│   │       │   └── 📄 UserPreferencesUI.ts
+│   │       │   ├── 📁 components
+│   │       │   │   ├── 📄 CardResizer.ts
+│   │       │   │   ├── 📄 FieldFactory.ts
+│   │       │   │   ├── 📄 ISettingField.ts
+│   │       │   │   ├── 📄 NumberField.ts
+│   │       │   │   ├── 📄 SelectField.ts
+│   │       │   │   ├── 📄 TextField.ts
+│   │       │   │   └── 📄 ToggleField.ts
+│   │       │   ├── 📄 GeneralSettingsRenderer.ts
+│   │       │   ├── 📄 SettingsContext.ts
+│   │       │   └── 📄 SettingsUI.ts
 │   │       └── 📄 index.ts
 │   ├── 📁 infrastructure
 │   │   ├── 📁 i18n
 │   │   │   ├── 📄 I18nService.test.ts
 │   │   │   ├── 📄 I18nService.ts
 │   │   │   └── 📄 I18nUI.ts
+│   │   ├── 📁 logging
+│   │   │   └── 📄 LoggerService.ts
 │   │   ├── 📁 navigation
 │   │   │   ├── 📄 NavigationService.test.ts
 │   │   │   ├── 📄 NavigationService.ts
@@ -158,7 +150,8 @@
 │   ├── 📁 scripts
 │   │   ├── 📄 analyze-lint-v2.cjs
 │   │   ├── 📄 bump-version.js
-│   │   └── 📄 check-size.js
+│   │   ├── 📄 check-size.js
+│   │   └── 📄 convert-font.js
 │   ├── 📁 shared
 │   │   ├── 📁 api
 │   │   │   ├── 📄 invoke.ts
@@ -181,7 +174,6 @@
 │   │   │   ├── 📄 ErrorHandler.ts
 │   │   │   ├── 📄 EventBus.test.ts
 │   │   │   ├── 📄 EventBus.ts
-│   │   │   ├── 📄 LoggerService.ts
 │   │   │   ├── 📄 ModulePlatformService.ts
 │   │   │   ├── 📄 ModuleService.test.ts
 │   │   │   ├── 📄 ModuleService.ts
@@ -193,6 +185,7 @@
 │   │   │   └── 📄 templateLoader.test.ts
 │   │   ├── 📁 types
 │   │   │   ├── 📄 IBridge.ts
+│   │   │   ├── 📄 IStateService.ts
 │   │   │   ├── 📄 bindings.ts
 │   │   │   ├── 📄 coreTypes.ts
 │   │   │   ├── 📄 global.d.ts
@@ -236,10 +229,6 @@
 │   │   │   └── 🎨 toasts.css
 │   │   ├── 📁 tokens
 │   │   └── 🎨 main.css
-│   ├── 📁 templates
-│   │   ├── 📁 components
-│   │   ├── 📁 modals
-│   │   └── 📁 pages
 │   ├── 📁 test
 │   │   ├── 📄 setup.test.ts
 │   │   └── 📄 setup.ts
@@ -247,6 +236,7 @@
 │   ├── ⚙️ .prettierrc
 │   ├── 📄 eslint.config.js
 │   ├── 🌐 index.html
+│   ├── ⚙️ package-lock.json
 │   ├── ⚙️ package.json
 │   ├── ⚙️ tsconfig.json
 │   ├── 📄 vite-env.d.ts
@@ -254,22 +244,29 @@
 ├── 📁 src-tauri
 │   ├── 📁 capabilities
 │   │   └── ⚙️ default.json
+│   ├── 📁 gen
+│   │   └── 📁 schemas
+│   │       ├── ⚙️ acl-manifests.json
+│   │       ├── ⚙️ capabilities.json
+│   │       ├── ⚙️ desktop-schema.json
+│   │       └── ⚙️ windows-schema.json
 │   ├── 📁 icons
 │   │   ├── 📄 icon.ico
 │   │   ├── 🖼️ icon.png
 │   │   └── 🖼️ icon.svg
 │   ├── 📁 resources
 │   │   ├── 📁 config
-│   │   │   └── ⚙️ defaults.json
+│   │   │   ├── ⚙️ app.json
+│   │   │   └── ⚙️ local_modules.json
 │   │   ├── 📁 locales
 │   │   │   ├── ⚙️ en.json
 │   │   │   ├── ⚙️ ru.json
 │   │   │   └── ⚙️ zh.json
-│   │   ├── 📁 modules
 │   │   ├── 📁 tools
 │   │   └── ⚙️ api_providers.json
 │   ├── 📁 src
 │   │   ├── 📁 api
+│   │   ├── 📁 bin
 │   │   │   ├── 📁 ai
 │   │   │   │   └── 🦀 mod.rs
 │   │   │   ├── 📁 license
@@ -305,11 +302,15 @@
 │   │   │   │   ├── 🦀 types.rs
 │   │   │   │   └── 🦀 verifier.rs
 │   │   │   ├── 📁 modules
-│   │   │   │   ├── 🦀 controller.rs
+│   │   │   │   ├── 📁 controller
+│   │   │   │   │   ├── 🦀 lifecycle.rs
+│   │   │   │   │   ├── 🦀 mod.rs
+│   │   │   │   │   └── 🦀 process.rs
 │   │   │   │   ├── 🦀 downloader.rs
 │   │   │   │   ├── 🦀 lifecycle.rs
 │   │   │   │   └── 🦀 mod.rs
 │   │   │   ├── 📁 monitoring
+│   │   │   │   ├── 🦀 gpu_collector.rs
 │   │   │   │   ├── 🦀 health.rs
 │   │   │   │   ├── 🦀 mod.rs
 │   │   │   │   └── 🦀 system_monitor.rs

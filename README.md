@@ -25,7 +25,7 @@
     <a href="docs/en/architecture.md"><img src="https://img.shields.io/badge/Documentation-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
   </p>
   <p>
-    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.3-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
+    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.5-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
     &nbsp;
     <img src="https://img.shields.io/badge/Status-Public_Beta-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
   </p>
@@ -34,7 +34,7 @@
 </div>
 
 > [!IMPORTANT]
-> **Axelate is currently in Public Beta (v0.1.3 / 0.1.x).**
+> **Axelate is currently in Public Beta (v0.1.5 / 0.1.x).**
 >
 > This is pre-release software. Features may be experimental, and APIs are subject to change without notice. No stable release is currently available.
 
