@@ -8,14 +8,29 @@ import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 // No local types needed, using global.d.ts
 
 export class TauriProvider implements IBridge {
+    private _isTauriDetected: boolean | null = null;
+
     constructor() {
-        if (this.isTauri()) {
-            logger.info('[TauriProvider] Connected');
+        // Trigger background handshake
+        void this._performHandshake();
+    }
+
+    private async _performHandshake(): Promise<void> {
+        try {
+            // Priority Check: Try to call a safe, neutral command
+            await this._performInvoke('get_health', {});
+            this._isTauriDetected = true;
+            logger.info('[TauriProvider] IPC Handshake successful');
+        } catch {
+            this._isTauriDetected = false;
+            logger.warn('[TauriProvider] Handshake failed, operating in Mock mode');
         }
     }
 
     public isTauri(): boolean {
-        // Dynamic check to handle injection timing
+        // Fallback to static check if handshake not yet complete or failed
+        if (this._isTauriDetected !== null) return this._isTauriDetected;
+
         const win = globalThis as unknown as TGlobalWin;
         return '__TAURI_INTERNALS__' in win || '__TAURI__' in win;
     }

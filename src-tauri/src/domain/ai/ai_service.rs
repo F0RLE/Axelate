@@ -213,12 +213,20 @@ impl ChatSessionManager {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     if DIRTY.load(Ordering::Relaxed) {
-                        if let Err(e) = Self::save_to_disk() {
-                            log::error!("Failed to save chat history: {e}");
-                        } else {
-                            // Only clear dirty if save succeeded
-                            DIRTY.store(false, Ordering::Relaxed);
-                            log::debug!("Chat history saved to disk (debounced)");
+                        // Use spawn_blocking for IO to avoid blocking worker threads
+                        let save_res = tokio::task::spawn_blocking(Self::save_to_disk).await;
+
+                        match save_res {
+                            Ok(Ok(())) => {
+                                DIRTY.store(false, Ordering::Relaxed);
+                                log::debug!("Chat history saved to disk (debounced)");
+                            }
+                            Ok(Err(e)) => {
+                                log::error!("Failed to save chat history: {e}");
+                            }
+                            Err(e) => {
+                                log::error!("Saver task join error: {e}");
+                            }
                         }
                     }
                 }
@@ -227,8 +235,14 @@ impl ChatSessionManager {
     }
 
     /// Manually triggers a save to disk, bypassing the debounce timer
-    pub fn force_save() -> Result<(), crate::errors::AppError> {
-        Self::save_to_disk()?;
+    pub async fn force_save() -> Result<(), crate::errors::AppError> {
+        tokio::task::spawn_blocking(Self::save_to_disk)
+            .await
+            .map_err(|e| crate::errors::AppError::Internal {
+                request_id: None,
+                message: format!("Blocking task failed: {e}"),
+            })??;
+
         DIRTY.store(false, Ordering::Relaxed);
         Ok(())
     }
@@ -304,8 +318,8 @@ pub fn clear_chat_history(session_id: &str) {
 }
 
 /// Force immediate save of all chat history to disk (for shutdown or completion)
-pub fn force_save_history() -> Result<(), crate::errors::AppError> {
-    ChatSessionManager::force_save()
+pub async fn force_save_history() -> Result<(), crate::errors::AppError> {
+    ChatSessionManager::force_save().await
 }
 
 // ==================================================================================
@@ -776,7 +790,7 @@ pub async fn process_chat_request(
     {
         ChatSessionManager::append_response(sid, message_id, reply, res.thought_signature.clone());
         // Immediate flush after stream completion (Senior Refinement #3)
-        let _ = ChatSessionManager::force_save();
+        let _ = ChatSessionManager::force_save().await;
     }
 
     response

@@ -44,7 +44,6 @@ impl GpuCollector {
             .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
             .ok();
 
-        #[allow(clippy::cast_precision_loss)]
         let gpu_stats = Some(GpuStats {
             usage: utilization.map_or(0, |u| u.gpu),
             memory_used: memory.as_ref().map_or(0.0, |m| m.used as f64),
@@ -53,10 +52,9 @@ impl GpuCollector {
             name,
         });
 
-        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
         let vram_stats = memory.map(|m| {
-            let used_gb = (m.used as f64 / 1_073_741_824.0) as f32;
-            let total_gb = (m.total as f64 / 1_073_741_824.0) as f32;
+            let used_gb = m.used as f32 / 1_073_741_824.0;
+            let total_gb = m.total as f32 / 1_073_741_824.0;
             VramStats {
                 percent: if total_gb > 0.0 {
                     (used_gb / total_gb) * 100.0

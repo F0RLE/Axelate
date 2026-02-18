@@ -97,7 +97,7 @@ impl From<AppError> for IpcError {
     }
 }
 
-impl Serialize for AppError {
+impl serde::Serialize for AppError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -107,11 +107,76 @@ impl Serialize for AppError {
     }
 }
 
+impl axum::response::IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        let (status, code, message) = match &self {
+            Self::Validation(msg) => (
+                axum::http::StatusCode::BAD_REQUEST,
+                "VALIDATION",
+                msg.clone(),
+            ),
+            Self::NotFound(msg) => (axum::http::StatusCode::NOT_FOUND, "NOT_FOUND", msg.clone()),
+            Self::PermissionDenied(msg) => (
+                axum::http::StatusCode::FORBIDDEN,
+                "PERMISSION_DENIED",
+                msg.clone(),
+            ),
+            Self::Io(msg) => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "IO_ERROR",
+                msg.clone(),
+            ),
+            Self::Serialization(msg) => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "SERIALIZATION",
+                msg.clone(),
+            ),
+            Self::Config(msg) => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "CONFIG",
+                msg.clone(),
+            ),
+            Self::External { message, .. } => (
+                axum::http::StatusCode::BAD_GATEWAY,
+                "EXTERNAL",
+                message.clone(),
+            ),
+            Self::Internal { message, .. } => (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL",
+                message.clone(),
+            ),
+        };
+
+        let body = axum::Json(serde_json::json!({
+            "code": code,
+            "message": message,
+        }));
+
+        (status, body).into_response()
+    }
+}
+
 impl From<tauri::Error> for AppError {
     fn from(err: tauri::Error) -> Self {
         Self::Internal {
             request_id: None,
             message: err.to_string(),
+        }
+    }
+}
+
+impl From<zip::result::ZipError> for AppError {
+    fn from(err: zip::result::ZipError) -> Self {
+        Self::Io(format!("Archive error: {err}"))
+    }
+}
+
+impl From<reqwest::Error> for AppError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::External {
+            request_id: None,
+            message: format!("Network error: {err}"),
         }
     }
 }

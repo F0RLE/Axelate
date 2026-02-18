@@ -51,7 +51,7 @@ serde            = { version = "1.0.228",     features = ["derive"] }
 serde_json       = "1.0.149"
 
 # --- Async Core & Networking (The Server) ---
-tokio        = { version = "1.49.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio        = { version = "1.49.0", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
 reqwest      = { version = "0.13.1", features = ["json", "stream", "native-tls", "gzip"], default-features = false }
 axum         = { version = "0.8.8",  features = ["macros", "ws"] }
 tower-http   = { version = "0.6.8",  features = ["fs", "cors", "trace"] }

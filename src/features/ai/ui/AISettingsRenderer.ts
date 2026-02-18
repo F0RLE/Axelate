@@ -52,6 +52,7 @@ class AISettingsRenderer extends BaseComponent {
     private _settingsService: SettingsService | null = null;
     private _stateService: StateService | null = null;
     private _tauri: TauriProvider | null = null;
+    private _checkTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor() {
         super();
@@ -83,6 +84,11 @@ class AISettingsRenderer extends BaseComponent {
         this._settingsService = null;
         this._stateService = null;
         this._tauri = null;
+
+        if (this._checkTimeout !== null) {
+            clearTimeout(this._checkTimeout);
+            this._checkTimeout = null;
+        }
     }
 
     /**
@@ -428,8 +434,7 @@ class AISettingsRenderer extends BaseComponent {
         const input = container.querySelector<HTMLInputElement>(`#${appId}-api-key-input`);
 
         const savedKey = await this._settingsService.getSecureKey(appId);
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (input !== null && savedKey !== null && savedKey !== '') input.value = savedKey;
+        if (input !== null && (savedKey ?? '') !== '') input.value = savedKey ?? '';
 
         const addListener = (element: Element | null, type: string, fn: EventListener): void => {
             if (element !== null && this._abortController !== null) {
@@ -592,7 +597,10 @@ class AISettingsRenderer extends BaseComponent {
             this._showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
         } finally {
             // Enforcement of 3s cooldown before re-enabling
-            setTimeout(() => {
+            this._checkTimeout = setTimeout(() => {
+                this._checkTimeout = null;
+                if (!document.body.contains(btn)) return; // Don't update if removed from DOM
+
                 btn.disabled = false;
                 btn.style.width = '';
                 btn.classList.remove('success', 'error', 'checking');

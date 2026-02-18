@@ -99,7 +99,21 @@ impl SecureStorage {
         final_payload.extend_from_slice(&ciphertext);
 
         let path = Self::get_store_path()?;
-        fs::write(&path, final_payload).map_err(|e| AppError::Io(e.to_string()))?;
+        let tmp_path = path.with_extension("tmp");
+
+        // Atomic write pattern
+        let mut file = fs::File::create(&tmp_path).map_err(|e| AppError::Io(e.to_string()))?;
+        use std::io::Write;
+        file.write_all(&final_payload)
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        file.sync_all().map_err(|e| AppError::Io(e.to_string()))?;
+        drop(file);
+
+        if let Err(e) = fs::rename(&tmp_path, &path) {
+            log::warn!("Standard rename failed ({e}), attempting fallback for Windows locks...");
+            let _ = fs::remove_file(&path);
+            fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
+        }
 
         Ok(())
     }
@@ -112,6 +126,14 @@ impl SecureStorage {
 
     fn load_data() -> Result<SecureData, AppError> {
         let path = Self::get_store_path()?;
+        let tmp_path = path.with_extension("tmp");
+
+        // Crash recovery: if main file is missing but .tmp exists, it means we crashed between remove and rename
+        if tmp_path.exists() && !path.exists() {
+            log::warn!("Detected crash during last secure storage save. Recovering...");
+            fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
+        }
+
         if !path.exists() {
             return Ok(SecureData {
                 keys: HashMap::new(),

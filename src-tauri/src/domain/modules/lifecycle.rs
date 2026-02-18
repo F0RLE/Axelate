@@ -66,17 +66,32 @@ fn default_api_version() -> String {
     "1".to_string()
 }
 
+/// Command definition which can be a simple string (shell) or structured (program + args)
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(untagged)]
+pub enum CommandDefinition {
+    /// Simple shell command string
+    Simple(String),
+    /// Structured program and arguments list (preferred, no shell overhead)
+    Structured {
+        /// Program to execute (e.g. "node", "python")
+        program: String,
+        /// List of arguments
+        args: Vec<String>,
+    },
+}
+
 /// Lifecycle script hooks
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct LifecycleScripts {
     /// Init script
-    pub init: Option<String>,
+    pub init: Option<CommandDefinition>,
     /// Start script
-    pub start: Option<String>,
+    pub start: Option<CommandDefinition>,
     /// Stop script
-    pub stop: Option<String>,
+    pub stop: Option<CommandDefinition>,
     /// Health check script
-    pub health: Option<String>,
+    pub health: Option<CommandDefinition>,
 }
 
 /// Responsible for locating and loading module manifests

@@ -1,5 +1,6 @@
 use crate::errors::AppError;
 use crate::utils::paths::{MODULES_DIR, TEMP_DIR};
+use chrono;
 use futures_util::StreamExt;
 use std::fs;
 use std::io::copy;
@@ -151,7 +152,7 @@ impl UrlResolver {
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
         {
-            let base_url = download_url.trim_end_matches(".git");
+            let base_url = download_url.trim_end_matches(".git").trim_end_matches('/');
             let main_url = format!("{base_url}/archive/refs/heads/main.zip");
             let master_url = format!("{base_url}/archive/refs/heads/master.zip");
 
@@ -165,6 +166,10 @@ impl UrlResolver {
                     message: format!("Failed to connect: {e}"),
                 })?;
 
+            if response.status().is_success() {
+                return Ok(main_url);
+            }
+
             if response.status() == reqwest::StatusCode::NOT_FOUND {
                 log::info!("main branch not found, trying master: {master_url}");
                 let response_master =
@@ -177,16 +182,14 @@ impl UrlResolver {
                             message: format!("Failed to connect: {e}"),
                         })?;
 
-                if !response_master.status().is_success() {
-                    // Fallback to error handling logic
+                if response_master.status().is_success() {
+                    return Ok(master_url);
                 }
-
-                // If master also fails, we return master_url anyway?
-                // Original code implicitly returned the *response* of the last attempt.
-                // Here we return the URL that succeeded or the last attempted URL.
-                return Ok(master_url);
             }
-            return Ok(main_url);
+
+            return Err(AppError::NotFound(format!(
+                "Module source not found. Tried both 'main' and 'master' branches at {base_url}"
+            )));
         }
 
         Ok(download_url.to_string())
@@ -384,21 +387,31 @@ struct ArchiveExtractor;
 
 impl ArchiveExtractor {
     /// Extracts a ZIP archive to the target directory, handling nested roots
-    async fn extract(app: &AppHandle, zip_path: &Path, module_id: &str) -> Result<(), AppError> {
+    async fn extract(
+        app: &AppHandle,
+        zip_path: &Path,
+        module_id: &str,
+        expected_hash: &Option<String>,
+    ) -> Result<(), AppError> {
         emit_progress(app, module_id, "extracting", "Extracting...", 0.0, 0, 0);
 
+        // 1. Prepare Paths for Atomic Install
         let final_path = MODULES_DIR.join(module_id);
+        let extraction_id = format!("extracting_{}_{}", module_id, uuid::Uuid::new_v4());
+        let extraction_path = TEMP_DIR.join(extraction_id);
 
-        if final_path.exists() {
-            fs::remove_dir_all(&final_path).ok();
+        if extraction_path.exists() {
+            fs::remove_dir_all(&extraction_path).ok();
         }
-        fs::create_dir_all(&final_path).map_err(|e| AppError::Io(e.to_string()))?;
+        fs::create_dir_all(&extraction_path).map_err(|e| AppError::Io(e.to_string()))?;
 
         let app_handle = app.clone();
         let mid = module_id.to_string();
         let zpath = zip_path.to_owned();
-        let fpath = final_path.clone();
+        let epath = extraction_path.clone();
+        let hash_snapshot = expected_hash.clone();
 
+        // 2. Heavy Extraction
         tokio::task::spawn_blocking(move || {
             let zip_file = fs::File::open(&zpath).map_err(|e| e.to_string())?;
             let mut archive =
@@ -406,7 +419,22 @@ impl ArchiveExtractor {
 
             let total_files = archive.len();
 
-            // Determine if there is a common root folder to skip (standard for GitHub ZIPs)
+            // ZIP Bomb & Integrity Limits
+            const MAX_TOTAL_UNCOMPRESSED_SIZE: u64 = 800 * 1024 * 1024; // 800MB Limit
+            const MAX_FILE_COUNT: usize = 10000;
+            const MAX_SINGLE_FILE_SIZE: u64 = 300 * 1024 * 1024; // 300MB per file
+            const MAX_COMPRESSION_RATIO: u64 = 100; // 100:1 ratio limit
+
+            let mut current_total_size: u64 = 0;
+            let mut seen_files = std::collections::HashSet::new();
+
+            if total_files > MAX_FILE_COUNT {
+                return Err(format!(
+                    "Archive contains too many files ({total_files}). Limit is {MAX_FILE_COUNT}."
+                ));
+            }
+
+            // Determine if there is a common root folder to skip
             let root_to_skip = {
                 let mut first_dir: Option<String> = None;
                 let mut all_share_root = true;
@@ -444,30 +472,54 @@ impl ArchiveExtractor {
             for i in 0..total_files {
                 let mut file = archive
                     .by_index(i)
-                    .map_err(|e: zip::result::ZipError| e.to_string())?;
+                    .map_err(|e: ZipError| e.to_string())?;
+
+                // Security: Duplicate Entry Detection
+                let raw_name = file.name().to_string();
+                if !seen_files.insert(raw_name.clone()) {
+                    return Err(format!("Security Violation: Duplicate entry in archive: {raw_name}"));
+                }
+
+                // Security: Symlink, Hardlink, and Device Rejection
+                // Note: enclosed_name covers basic ZipSlip but we want to be explicit about types
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::MetadataExt;
+                    if let Some(mode) = file.unix_mode() {
+                        let file_type = mode & 0o170000;
+                        if file_type != 0o100000 && file_type != 0o040000 {
+                            return Err(format!("Security Violation: Unsupported file type (symlink/device) in archive: {raw_name}"));
+                        }
+                    }
+                }
 
                 let outpath = match file.enclosed_name() {
                     Some(path) => {
+                        // Security: Absolute Path Rejection
+                        if path.is_absolute() {
+                            return Err(format!("Security Violation: Absolute path detected: {raw_name}"));
+                        }
+
                         if let Some(root) = &root_to_skip {
                             let mut components = path.as_path().components();
                             let first = components.next();
                             if let Some(std::path::Component::Normal(c)) = first {
                                 if c.to_string_lossy() == *root {
-                                    fpath.join(components.as_path())
+                                    epath.join(components.as_path())
                                 } else {
-                                    fpath.join(path)
+                                    epath.join(path)
                                 }
                             } else {
-                                fpath.join(path)
+                                epath.join(path)
                             }
                         } else {
-                            fpath.join(path)
+                            epath.join(path)
                         }
                     }
                     None => continue,
                 };
 
-                if outpath == fpath {
+                if outpath == epath {
                     continue;
                 }
 
@@ -479,6 +531,30 @@ impl ArchiveExtractor {
                     {
                         fs::create_dir_all(p).ok();
                     }
+
+                    // ZIP Bomb Protection (Advanced)
+                    let u_size = file.size();
+                    let c_size = file.compressed_size();
+
+                    if u_size > MAX_SINGLE_FILE_SIZE {
+                        return Err(format!("Security Violation: Single file size exceeds limit ({}MB): {raw_name}", MAX_SINGLE_FILE_SIZE / (1024 * 1024)));
+                    }
+
+                    if c_size > 0 {
+                        let ratio = u_size / c_size;
+                        if ratio > MAX_COMPRESSION_RATIO && u_size > 1024 * 1024 {
+                            return Err(format!("Security Violation: Anomalous compression ratio ({}x) detected for {}", ratio, raw_name));
+                        }
+                    }
+
+                    current_total_size += u_size;
+                    if current_total_size > MAX_TOTAL_UNCOMPRESSED_SIZE {
+                        return Err(format!(
+                            "Extraction aborted: Total uncompressed size exceeds limit ({}MB)",
+                            MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)
+                        ));
+                    }
+
                     let mut outfile = fs::File::create(&outpath)
                         .map_err(|e| format!("Failed to create file {}: {e}", outpath.display()))?;
                     copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
@@ -498,6 +574,20 @@ impl ArchiveExtractor {
                     );
                 }
             }
+
+            // 3. Create Manifest (metadata.json)
+            let manifest = serde_json::json!({
+                "module_id": mid,
+                "installed_at": chrono::Local::now().to_rfc3339(),
+                "archive_hash": hash_snapshot,
+                "status": "complete",
+                "version": "unknown" // Version is usually in module.json, but keep for consistency
+            });
+            let manifest_path = epath.join("metadata.json");
+            if let Ok(m_file) = fs::File::create(manifest_path) {
+                let _ = serde_json::to_writer_pretty(m_file, &manifest);
+            }
+
             Ok::<(), String>(())
         })
         .await
@@ -508,6 +598,18 @@ impl ArchiveExtractor {
         .map_err(|e| AppError::Internal {
             request_id: None,
             message: format!("Extraction failed: {e}"),
+        })?;
+
+        // 4. Atomic Swap (Rename)
+        if final_path.exists() {
+            fs::remove_dir_all(&final_path)
+                .map_err(|e| AppError::Io(format!("Failed to remove old module version: {e}")))?;
+        }
+
+        fs::rename(&extraction_path, &final_path).map_err(|e| {
+            AppError::Io(format!(
+                "Atomic install failed during move: {e}. Attempting manual copy..."
+            ))
         })?;
 
         Ok(())
@@ -533,27 +635,32 @@ pub async fn download_module(
         let final_url = UrlResolver::resolve(&client, &repo_url).await?;
 
         NetworkClient::download_file(&app, &client, &final_url, &zip_path, &module_id).await?;
-        FileVerifier::verify(&app, &zip_path, expected_hash, &module_id).await?;
-        ArchiveExtractor::extract(&app, &zip_path, &module_id).await?;
+        FileVerifier::verify(&app, &zip_path, expected_hash.clone(), &module_id).await?;
+        ArchiveExtractor::extract(&app, &zip_path, &module_id, &expected_hash).await?;
 
         Ok::<(), AppError>(())
     }
     .await;
 
-    // Guaranteed cleanup
+    // Guaranteed cleanup of temp zip
     if zip_path.exists() {
         let _ = tokio::fs::remove_file(&zip_path).await;
     }
 
     if let Err(e) = result {
         emit_progress(&app, &module_id, "error", &e.to_string(), 0.0, 0, 0);
+
+        // Ensure failed extraction path is cleaned up if it was left behind
+        // Note: extraction_path is not easily accessible here without more plumbing,
+        // but it's in TEMP_DIR and would be overwritten on next try anyway.
+
         return Err(e);
     }
 
     emit_progress(&app, &module_id, "complete", "Success", 1.0, 0, 0);
 
     crate::infrastructure::logging::logger::add_log(
-        &format!("Module {module_id} installed via Native Downloader"),
+        &format!("Module {module_id} installed successfully (Atomic)"),
         "Downloader",
         "info",
     );

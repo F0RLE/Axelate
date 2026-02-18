@@ -32,7 +32,7 @@ pub async fn get_app_bootstrap_data(window: Window) -> Result<BootstrapData, App
     let ui_state = ui_state::get_ui_state().unwrap_or_default();
     let window_config = window_settings::get_window_config();
     let system_language = settings::get_language();
-    let modules = module_controller::get_all_modules();
+    let modules = module_controller::get_all_modules().await;
 
     // Determine initial zoom level based on monitor resolution
     let mut initial_zoom = ui_state.zoom_level;

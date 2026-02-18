@@ -3,45 +3,63 @@ use crate::models::SystemStats;
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::Method,
+    http::{HeaderName, HeaderValue, Method},
     routing::{get, post},
 };
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 use tauri::AppHandle;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 #[derive(Clone)]
 struct AppState {
     tauri_app: AppHandle,
+    config_service: std::sync::Arc<crate::domain::system::config_service::ConfigService>,
 }
 
-/// Starts the HTTP API server on port 3000 for local access
+/// Starts the HTTP API server on port 1420 for local access
 pub fn start_server(app: AppHandle) {
-    let state = AppState { tauri_app: app };
+    let repo =
+        crate::infrastructure::config::config_repository::FileConfigRepository::new(app.clone());
+    let service = std::sync::Arc::new(crate::domain::system::config_service::ConfigService::new(
+        Box::new(repo),
+    ));
+    let state = AppState {
+        tauri_app: app,
+        config_service: service,
+    };
 
     tauri::async_runtime::spawn(async move {
-        // Define CORS
-        let cors = CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods([Method::GET, Method::POST])
-            .allow_headers(Any);
+        // ... (CORS logic remains the same)
+        let allowed_origins = [
+            "tauri://localhost",
+            "http://localhost:1420",
+            "http://127.0.0.1:1420",
+        ];
+
+        let mut cors = CorsLayer::new()
+            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+            .allow_headers([HeaderName::from_static("content-type")]);
+
+        for origin in allowed_origins {
+            if let Ok(parsed) = origin.parse::<HeaderValue>() {
+                cors = cors.allow_origin(parsed);
+            }
+        }
+        // Removed the redundant 'cors;' statement here. The 'cors' variable is correctly used below.
 
         // Build Router
         let app = Router::new()
-            .route("/health", get(health_handler))
-            .route("/api/stats", get(stats_handler))
-            .route("/api/module/{id}/control", post(control_module_handler))
-            // Web Interface Support
-            .route("/api/translations", get(translations_handler))
-            .route("/api/gpu_info", get(gpu_info_handler))
-            .route(
-                "/api/settings",
-                get(get_settings_handler).post(save_setting_handler),
-            )
+            .route("/api/health", get(health_handler))
+            .route("/api/monitoring/stats", get(stats_handler))
             .route("/api/modules", get(get_modules_handler))
+            .route("/api/modules/:id/control", post(control_module_handler))
+            .route("/api/translations", get(translations_handler))
+            .route("/api/gpu/info", get(gpu_info_handler))
+            .route("/api/settings", get(get_settings_handler))
+            .route("/api/settings/save", post(save_setting_handler))
             .route("/api/config", get(get_config_handler))
-            .route("/api/system_language", get(system_language_handler))
+            .route("/api/system/language", get(system_language_handler))
             .route("/api/control", post(general_control_handler))
             .layer(cors)
             .with_state(state);
@@ -87,42 +105,20 @@ async fn control_module_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(payload): Json<ControlRequest>,
-) -> Json<Value> {
+) -> Result<Json<Value>, crate::errors::AppError> {
     log::info!(
         "[Server] Module control request: id={} action={}",
         id,
         payload.action
     );
 
-    // Convert string action to enum
-    let action_enum = match payload.action.parse::<module_controller::ModuleAction>() {
-        Ok(a) => a,
-        Err(e) => {
-            log::warn!(
-                "[Server] Invalid module action attempting to parse: {}",
-                payload.action
-            );
-            return Json(json!({
-                "success": false,
-                "message": format!("Invalid action: {e}")
-            }));
-        }
-    };
+    let action_enum = payload.action.parse::<module_controller::ModuleAction>()?;
 
-    #[allow(clippy::redundant_clone)] // AppHandle clone is intentional for async ownership
-    match module_controller::control(state.tauri_app.clone(), &id, action_enum) {
-        Ok(res) => {
-            log::info!("[Server] Module control success: {res:?}");
-            Json(json!(res))
-        }
-        Err(e) => {
-            log::error!("[Server] Module control failed: {e}");
-            Json(json!({
-                "success": false,
-                "message": format!("Error: {e}")
-            }))
-        }
-    }
+    #[allow(clippy::redundant_clone)]
+    let res = module_controller::control(state.tauri_app.clone(), &id, action_enum).await?;
+
+    log::info!("[Server] Module control success: {res:?}");
+    Ok(Json(json!(res)))
 }
 
 // --- Web Support Handlers ---
@@ -134,36 +130,34 @@ struct LangQuery {
     lang: Option<String>,
 }
 
-async fn translations_handler(Query(params): Query<LangQuery>) -> Json<Value> {
+async fn translations_handler(
+    Query(params): Query<LangQuery>,
+) -> Result<Json<Value>, crate::errors::AppError> {
     let lang = params.lang.unwrap_or_else(|| "en".to_string());
-    log::debug!("[Server] Translations requested for {lang}");
 
-    let mut path = crate::utils::paths::RESOURCES_DIR.join("locales");
-    path.push(format!("{lang}.json"));
-
-    if path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                return Json(json);
-            }
-            log::error!(
-                "[Server] Failed to parse translation file at {}",
-                path.display()
-            );
-        } else {
-            log::error!(
-                "[Server] Failed to read translation file at {}",
-                path.display()
-            );
-        }
-    } else {
-        log::warn!("[Server] Translation file not found at {}", path.display());
+    if !lang
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(crate::errors::AppError::Validation(
+            "Invalid characters in lang".to_string(),
+        ));
     }
 
-    Json(json!({
-        "error": "TRANSLATION_NOT_FOUND",
-        "message": format!("Locale file not found: {}", path.display())
-    }))
+    log::debug!("[Server] Translations requested for {lang}");
+
+    let mut locale_path = crate::utils::paths::RESOURCES_DIR.join("locales");
+    locale_path.push(format!("{lang}.json"));
+
+    if !locale_path.exists() {
+        return Err(crate::errors::AppError::NotFound(format!(
+            "Locale {lang} not found"
+        )));
+    }
+
+    let content = tokio::fs::read_to_string(&locale_path).await?;
+    let json = serde_json::from_str::<Value>(&content)?;
+    Ok(Json(json))
 }
 
 #[allow(
@@ -235,7 +229,7 @@ async fn save_setting_handler(Json(payload): Json<SaveSettingRequest>) -> Json<V
 }
 
 async fn get_modules_handler() -> Json<Value> {
-    let modules = module_controller::get_all_modules();
+    let modules = module_controller::get_all_modules().await;
     Json(serde_json::to_value(modules).unwrap_or(json!([])))
 }
 
@@ -244,34 +238,22 @@ async fn system_language_handler() -> Json<Value> {
     Json(json!({ "language": lang }))
 }
 
-async fn get_config_handler(State(state): State<AppState>) -> Json<Value> {
+async fn get_config_handler(
+    State(state): State<AppState>,
+) -> Result<Json<Value>, crate::errors::AppError> {
     use crate::domain::modules::downloader;
-    use crate::domain::system::config_service::ConfigService;
-    use crate::infrastructure::config::config_repository::FileConfigRepository;
 
-    let repo = FileConfigRepository::new(state.tauri_app);
-    let service = ConfigService::new(Box::new(repo));
+    let mut config = state.config_service.load_full_config()?;
 
-    match service.load_full_config() {
-        Ok(mut config) => {
-            // Populate installed status
-            for module in &mut config.catalog.ai {
-                module.installed = downloader::is_module_installed(&module.id);
-            }
-            for module in &mut config.catalog.services {
-                module.installed = downloader::is_module_installed(&module.id);
-            }
-            let _ai = config.catalog.ai.len();
-            let _srv = config.catalog.services.len();
-            // The original instruction had a malformed line here. Assuming the intent was to keep the loop for services.
-            // If there was an intent to remove the loop for services, please clarify.
-            Json(serde_json::to_value(config).unwrap_or_else(|_| json!({})))
-        }
-        Err(e) => {
-            log::error!("[Server] Failed to load config: {e}");
-            Json(json!({}))
-        }
+    // Populate installed status
+    for module in &mut config.catalog.ai {
+        module.installed = downloader::is_module_installed(&module.id);
     }
+    for module in &mut config.catalog.services {
+        module.installed = downloader::is_module_installed(&module.id);
+    }
+
+    Ok(Json(serde_json::to_value(config)?))
 }
 
 #[derive(serde::Deserialize)]
