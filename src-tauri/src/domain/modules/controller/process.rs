@@ -14,13 +14,17 @@ pub fn is_running(pid: usize) -> bool {
 
         #[allow(unsafe_code)]
         unsafe {
-            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid as u32);
-            if handle == std::ptr::null_mut() {
+            let handle = OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION,
+                FALSE,
+                u32::try_from(pid).unwrap_or(u32::MAX),
+            );
+            if handle.is_null() {
                 return false;
             }
 
             let mut exit_code = 0u32;
-            let success = GetExitCodeProcess(handle, &mut exit_code);
+            let success = GetExitCodeProcess(handle, &raw mut exit_code);
             CloseHandle(handle);
 
             success != FALSE && exit_code == STILL_ACTIVE
@@ -44,13 +48,13 @@ pub fn is_running(pid: usize) -> bool {
 }
 
 /// Helper to convert usize PID to platform-specific PID type
-pub fn to_native_pid(pid: usize) -> Option<NonZeroUsize> {
+pub const fn to_native_pid(pid: usize) -> Option<NonZeroUsize> {
     NonZeroUsize::new(pid)
 }
 
 /// Kills an orphan process (one not in our registry) using OS-level APIs.
 /// Includes an existence check to avoid killing recycled PIDs.
-pub async fn kill_orphan(pid: usize) -> Result<String, String> {
+pub fn kill_orphan(pid: usize) -> Result<String, String> {
     if !is_running(pid) {
         return Ok(format!("Process {pid} already exited, skip kill"));
     }
@@ -66,8 +70,12 @@ pub async fn kill_orphan(pid: usize) -> Result<String, String> {
 
         #[allow(unsafe_code)]
         unsafe {
-            let handle = OpenProcess(PROCESS_TERMINATE, FALSE, pid as u32);
-            if handle == std::ptr::null_mut() {
+            let handle = OpenProcess(
+                PROCESS_TERMINATE,
+                FALSE,
+                u32::try_from(pid).unwrap_or(u32::MAX),
+            );
+            if handle.is_null() {
                 return Err(format!(
                     "Failed to open process {pid}: error {}",
                     GetLastError()

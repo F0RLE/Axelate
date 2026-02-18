@@ -73,33 +73,35 @@ function Initialize-Environment {
     # 3. Windows-specific: RC.EXE check
     if ($IsWindows) {
         if (-not (Get-Command rc.exe -ErrorAction SilentlyContinue)) {
-            Write-Host "RC.EXE not found. Searching Windows Kits..." -ForegroundColor Yellow
+            Write-Host "RC.EXE not found in current PATH. Searching Windows Kits..." -ForegroundColor Yellow
             
-            $kitsRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
-            if (Test-Path $kitsRoot) {
-                $latestVersion = Get-ChildItem $kitsRoot | 
-                Where-Object { $_.PSIsContainer -and $_.Name -match '^\d+\.' } | 
-                Sort-Object Name -Descending | 
-                Select-Object -First 1
-                
-                if ($latestVersion) {
-                    $rcPath = Join-Path $latestVersion.FullName "x64" # Assume x64
-                    if (Test-Path (Join-Path $rcPath "rc.exe")) {
-                        Write-Host "Found RC.EXE at: $rcPath" -ForegroundColor DarkGray
-                        $env:PATH = "$rcPath;$env:PATH"
-                    }
-                    else {
-                        Exit-Error "RC.EXE not found in $rcPath"
+            $kitsRoots = @(
+                "${env:ProgramFiles(x86)}\Windows Kits\10\bin",
+                "${env:ProgramFiles}\Windows Kits\10\bin"
+            )
+
+            foreach ($kitsRoot in $kitsRoots) {
+                if (Test-Path $kitsRoot) {
+                    $versions = Get-ChildItem $kitsRoot | 
+                        Where-Object { $_.PSIsContainer -and $_.Name -match '^\d+\.' } | 
+                        Sort-Object Name -Descending
+                    
+                    foreach ($ver in $versions) {
+                        # Try x64 then x86
+                        foreach ($arch in @("x64", "x86")) {
+                            $rcPath = Join-Path $ver.FullName $arch
+                            if (Test-Path (Join-Path $rcPath "rc.exe")) {
+                                Write-Host "Found RC.EXE at: $rcPath" -ForegroundColor DarkGray
+                                # Add to PATH and also set it for the process
+                                $env:PATH = "$rcPath;$env:PATH"
+                                return # Found it!
+                            }
+                        }
                     }
                 }
-                else {
-                    Exit-Error "No Windows Kits versions found."
-                }
             }
-            else {
-                Write-Host "Windows Kits directory not found. Ensure 'C++ Build Tools' are installed." -ForegroundColor Red
-                # Proceeding with warning as it might build if previously set up
-            }
+            Write-ErrorMsg "RC.EXE could not be located. High-level build might fail."
+            Write-Host "Please ensure 'Windows 10/11 SDK' and 'C++ Build Tools' are installed via VS Installer." -ForegroundColor Gray
         }
     }
 }

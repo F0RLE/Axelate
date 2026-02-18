@@ -19,7 +19,7 @@ pub struct LifecycleExecutor<'a> {
 
 impl<'a> LifecycleExecutor<'a> {
     /// Creates a new lifecycle executor for a specific module.
-    pub fn new(controller: &'a Controller, module_id: String, module_path: &'a Path) -> Self {
+    pub const fn new(controller: &'a Controller, module_id: String, module_path: &'a Path) -> Self {
         Self {
             controller,
             module_id,
@@ -62,15 +62,15 @@ impl<'a> LifecycleExecutor<'a> {
         let log_path = self.module_path.join("runtime.log");
 
         // Simple log capping: if file > 10MB, truncate it
-        if let Ok(metadata) = std::fs::metadata(&log_path) {
-            if metadata.len() > 10 * 1024 * 1024 {
-                log::info!(
-                    "Truncating large runtime.log ({} bytes) for {}",
-                    metadata.len(),
-                    self.module_id
-                );
-                let _ = std::fs::remove_file(&log_path);
-            }
+        if let Ok(metadata) = std::fs::metadata(&log_path)
+            && metadata.len() > 10 * 1024 * 1024
+        {
+            log::info!(
+                "Truncating large runtime.log ({} bytes) for {module_id}",
+                metadata.len(),
+                module_id = self.module_id
+            );
+            let _ = std::fs::remove_file(&log_path);
         }
 
         let log_file = OpenOptions::new()
@@ -132,10 +132,7 @@ impl<'a> LifecycleExecutor<'a> {
             // will actually get to handle the child and cleanup.
             if let Some((_, mut child_entry)) = controller_registry.remove(&module_id) {
                 let _ = child_entry.wait().await;
-                log::info!(
-                    "Module {} exited naturally and was cleaned up from registry",
-                    module_id
-                );
+                log::info!("Module {module_id} exited naturally and was cleaned up from registry");
             }
         });
 
@@ -207,11 +204,11 @@ impl<'a> LifecycleExecutor<'a> {
                     self.module_id
                 );
                 let pid_file = self.module_path.join("module.pid");
-                if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-                    if let Ok(pid) = pid_str.trim().parse::<usize>() {
-                        // Safe kill_orphan now includes existence check
-                        let _ = crate::domain::modules::controller::process::kill_orphan(pid).await;
-                    }
+                if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
+                    && let Ok(pid) = pid_str.trim().parse::<usize>()
+                {
+                    // Safe kill_orphan now includes existence check
+                    let _ = crate::domain::modules::controller::process::kill_orphan(pid);
                 }
             }
             tokio::time::sleep(Duration::from_millis(500)).await;

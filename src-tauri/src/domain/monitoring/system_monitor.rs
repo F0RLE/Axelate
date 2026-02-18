@@ -195,6 +195,7 @@ impl SystemMonitor {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn collect_stats(&mut self) -> SystemStats {
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_update).as_secs_f64();
@@ -243,6 +244,7 @@ impl SystemMonitor {
         let total_memory = self.system.sys.total_memory() as f64;
         let avail = self.system.sys.available_memory() as f64;
         let used_memory = total_memory - avail;
+        #[allow(clippy::cast_possible_truncation)]
         let ram_percent = if total_memory > 0.0 {
             ((used_memory / total_memory) * 100.0) as f32
         } else {
@@ -258,9 +260,13 @@ impl SystemMonitor {
         }
 
         if self.last_net_recv > 0 && elapsed > 0.0 {
-            self.cached_down_rate =
-                (total_recv.saturating_sub(self.last_net_recv) as f64) / elapsed;
-            self.cached_up_rate = (total_sent.saturating_sub(self.last_net_sent) as f64) / elapsed;
+            #[allow(clippy::cast_precision_loss)]
+            let down_delta = total_recv.saturating_sub(self.last_net_recv) as f64;
+            self.cached_down_rate = down_delta / elapsed;
+
+            #[allow(clippy::cast_precision_loss)]
+            let up_delta = total_sent.saturating_sub(self.last_net_sent) as f64;
+            self.cached_up_rate = up_delta / elapsed;
         }
         self.last_net_recv = total_recv;
         self.last_net_sent = total_sent;
@@ -271,10 +277,13 @@ impl SystemMonitor {
             let disk_elapsed = self.last_disk_update.elapsed().as_secs_f64();
 
             if self.last_disk_read_total > 0 && disk_elapsed > 0.0 {
-                self.cached_read_rate =
-                    (total_read.saturating_sub(self.last_disk_read_total)) as f64 / disk_elapsed;
-                self.cached_write_rate =
-                    (total_write.saturating_sub(self.last_disk_write_total)) as f64 / disk_elapsed;
+                #[allow(clippy::cast_precision_loss)]
+                let read_delta = total_read.saturating_sub(self.last_disk_read_total) as f64;
+                self.cached_read_rate = read_delta / disk_elapsed;
+
+                #[allow(clippy::cast_precision_loss)]
+                let write_delta = total_write.saturating_sub(self.last_disk_write_total) as f64;
+                self.cached_write_rate = write_delta / disk_elapsed;
             }
 
             self.last_disk_read_total = total_read;
@@ -297,7 +306,10 @@ impl SystemMonitor {
         if let Some(gpu) = &mut gpu_stats_final {
             let usage_f32 = gpu.usage as f32;
             self.gpu_load_ema = self.gpu_load_ema.mul_add(0.7, usage_f32 * 0.3);
-            gpu.usage = self.gpu_load_ema.round() as u32;
+
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let smoothed_usage = self.gpu_load_ema.round() as u32;
+            gpu.usage = smoothed_usage;
         }
 
         if let Some(vram) = vram_stats
@@ -326,12 +338,16 @@ impl SystemMonitor {
             self.max_net_speed_mb = total_net_speed_mb;
         }
 
+        #[allow(clippy::cast_possible_truncation)]
         let disk_activity_percent =
             ((total_disk_speed_mb / self.max_disk_speed_mb) * 100.0).min(100.0) as f32;
+
+        #[allow(clippy::cast_possible_truncation)]
         let net_activity_percent =
             ((total_net_speed_mb / self.max_net_speed_mb) * 100.0).min(100.0) as f32;
 
         self.last_update = now;
+        #[allow(clippy::cast_possible_truncation)]
         let bytes_to_gb = |b: f64| (b / 1_073_741_824.0) as f32;
 
         SystemStats {
@@ -352,7 +368,9 @@ impl SystemMonitor {
                 read_rate: self.cached_read_rate,
                 write_rate: self.cached_write_rate,
                 utilization: if total_disk_space > 0 {
-                    (total_disk_used as f64 / total_disk_space as f64 * 100.0) as f32
+                    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+                    let util = (total_disk_used as f64 / total_disk_space as f64 * 100.0) as f32;
+                    util
                 } else {
                     0.0
                 },

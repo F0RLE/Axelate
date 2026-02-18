@@ -46,14 +46,18 @@ impl GpuCollector {
 
         let gpu_stats = Some(GpuStats {
             usage: utilization.map_or(0, |u| u.gpu),
+            #[allow(clippy::cast_precision_loss)]
             memory_used: memory.as_ref().map_or(0.0, |m| m.used as f64),
+            #[allow(clippy::cast_precision_loss)]
             memory_total: memory.as_ref().map_or(0.0, |m| m.total as f64),
             temp: temp.unwrap_or(0),
             name,
         });
 
         let vram_stats = memory.map(|m| {
+            #[allow(clippy::cast_precision_loss)]
             let used_gb = m.used as f32 / 1_073_741_824.0;
+            #[allow(clippy::cast_precision_loss)]
             let total_gb = m.total as f32 / 1_073_741_824.0;
             VramStats {
                 percent: if total_gb > 0.0 {

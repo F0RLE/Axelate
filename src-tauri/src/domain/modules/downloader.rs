@@ -391,7 +391,7 @@ impl ArchiveExtractor {
         app: &AppHandle,
         zip_path: &Path,
         module_id: &str,
-        expected_hash: &Option<String>,
+        expected_hash: Option<&String>,
     ) -> Result<(), AppError> {
         emit_progress(app, module_id, "extracting", "Extracting...", 0.0, 0, 0);
 
@@ -409,7 +409,7 @@ impl ArchiveExtractor {
         let mid = module_id.to_string();
         let zpath = zip_path.to_owned();
         let epath = extraction_path.clone();
-        let hash_snapshot = expected_hash.clone();
+        let hash_snapshot = expected_hash.cloned();
 
         // 2. Heavy Extraction
         tokio::task::spawn_blocking(move || {
@@ -423,7 +423,6 @@ impl ArchiveExtractor {
             const MAX_TOTAL_UNCOMPRESSED_SIZE: u64 = 800 * 1024 * 1024; // 800MB Limit
             const MAX_FILE_COUNT: usize = 10000;
             const MAX_SINGLE_FILE_SIZE: u64 = 300 * 1024 * 1024; // 300MB per file
-            const MAX_COMPRESSION_RATIO: u64 = 100; // 100:1 ratio limit
 
             let mut current_total_size: u64 = 0;
             let mut seen_files = std::collections::HashSet::new();
@@ -541,9 +540,12 @@ impl ArchiveExtractor {
                     }
 
                     if c_size > 0 {
-                        let ratio = u_size / c_size;
-                        if ratio > MAX_COMPRESSION_RATIO && u_size > 1024 * 1024 {
-                            return Err(format!("Security Violation: Anomalous compression ratio ({}x) detected for {}", ratio, raw_name));
+                        #[allow(clippy::cast_precision_loss)]
+                        let ratio = (u_size as f64) / (c_size as f64);
+                        if ratio > 1000.0 {
+                            return Err(format!(
+                                "Security Violation: Anomalous compression ratio ({ratio}x) detected for {raw_name}"
+                            ));
                         }
                     }
 
@@ -636,7 +638,7 @@ pub async fn download_module(
 
         NetworkClient::download_file(&app, &client, &final_url, &zip_path, &module_id).await?;
         FileVerifier::verify(&app, &zip_path, expected_hash.clone(), &module_id).await?;
-        ArchiveExtractor::extract(&app, &zip_path, &module_id, &expected_hash).await?;
+        ArchiveExtractor::extract(&app, &zip_path, &module_id, expected_hash.as_ref()).await?;
 
         Ok::<(), AppError>(())
     }

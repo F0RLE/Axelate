@@ -2,7 +2,6 @@ use crate::domain::modules::{downloader, lifecycle as module_lifecycle};
 use crate::errors::AppError;
 use crate::models::{ControlResponse, Module};
 use dashmap::DashMap;
-use once_cell::sync::Lazy;
 use std::path::Path;
 use std::str::FromStr;
 use tauri::AppHandle;
@@ -17,12 +16,19 @@ pub mod process;
 pub use self::lifecycle::LifecycleExecutor;
 
 /// In-memory registry for active child processes.
-static PROCESS_REGISTRY: Lazy<DashMap<String, Child>> = Lazy::new(DashMap::new);
+static PROCESS_REGISTRY: std::sync::LazyLock<DashMap<String, Child>> =
+    std::sync::LazyLock::new(DashMap::new);
 
 /// High-level API for module control
 #[derive(Debug)]
 pub struct Controller {
     pub(crate) registry: &'static DashMap<String, Child>,
+}
+
+impl Default for Controller {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Controller {
@@ -36,24 +42,21 @@ impl Controller {
     /// Checks if a module is currently running (checking memory first, then PID file fallback)
     pub async fn is_running(&self, module_id: &str, module_path: &Path) -> bool {
         // 1. Check in-memory registry
-        if let Some(child) = self.registry.get(module_id) {
-            if let Some(pid) = child.id() {
-                if process::is_running(pid as usize) {
-                    return true;
-                }
-            }
+        if let Some(child) = self.registry.get(module_id)
+            && let Some(pid) = child.id()
+            && process::is_running(pid as usize)
+        {
+            return true;
         }
 
         // 2. Fallback to PID file (e.g. if app restarted but module stayed alive)
         let pid_file = module_path.join("module.pid");
-        if pid_file.exists() {
-            if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-                if let Ok(pid) = pid_str.trim().parse::<usize>() {
-                    if process::is_running(pid) {
-                        return true;
-                    }
-                }
-            }
+        if pid_file.exists()
+            && let Ok(pid_str) = fs::read_to_string(&pid_file).await
+            && let Ok(pid) = pid_str.trim().parse::<usize>()
+            && process::is_running(pid)
+        {
+            return true;
         }
 
         false
@@ -181,10 +184,10 @@ pub async fn control(
             let _ = executor.stop(&manifest).await;
         } else {
             let pid_file = module_path.join("module.pid");
-            if let Ok(pid_str) = std::fs::read_to_string(&pid_file) {
-                if let Ok(pid) = pid_str.trim().parse::<usize>() {
-                    let _ = process::kill_orphan(pid).await;
-                }
+            if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
+                && let Ok(pid) = pid_str.trim().parse::<usize>()
+            {
+                let _ = process::kill_orphan(pid);
             }
         }
         downloader::delete_module(module_id)?;
@@ -206,7 +209,7 @@ pub async fn control(
         ModuleAction::Start => executor.start(&manifest).await,
         ModuleAction::Stop => Ok(executor.stop(&manifest).await),
         ModuleAction::Restart => {
-            log::info!("Restarting module: {}", module_id);
+            log::info!("Restarting module: {module_id}");
             let _ = executor.stop(&manifest).await;
 
             // Wait for it to actually die (up to 5s) with survival check
@@ -215,9 +218,7 @@ pub async fn control(
                 if !controller.is_running(module_id, &module_path).await {
                     terminated = true;
                     log::info!(
-                        "Module {} terminated after {} attempts during restart",
-                        module_id,
-                        attempt
+                        "Module {module_id} terminated after {attempt} attempts during restart"
                     );
                     break;
                 }

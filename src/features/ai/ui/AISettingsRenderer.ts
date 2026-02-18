@@ -434,7 +434,7 @@ class AISettingsRenderer extends BaseComponent {
         const input = container.querySelector<HTMLInputElement>(`#${appId}-api-key-input`);
 
         const savedKey = await this._settingsService.getSecureKey(appId);
-        if (input !== null && (savedKey ?? '') !== '') input.value = savedKey ?? '';
+        if (input !== null && savedKey !== '') input.value = savedKey;
 
         const addListener = (element: Element | null, type: string, fn: EventListener): void => {
             if (element !== null && this._abortController !== null) {
