@@ -30,7 +30,7 @@
         "eslint": "^9.18.0",
         "eslint-config-prettier": "^10.1.8",
         "husky": "^9.1.7",
-        "jsdom": "^27.4.0",
+        "jsdom": "^28.1.0",
         "prettier": "^3.8.1",
         "terser": "^5.46.0",
         "typescript": "^5.9.3",
