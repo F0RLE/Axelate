@@ -16,6 +16,7 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { SoundService } from '@/shared/services/SoundService';
+import { eventBus } from '@/shared/services/EventBus';
 
 export class ChatController {
     private readonly _service: ChatService;
@@ -80,6 +81,18 @@ export class ChatController {
 
         // Listen for language changes to update greeting in real-time
         globalThis.addEventListener('lang:changed', () => {
+            this._randomizeGreeting(this._currentGreetingIndex);
+        });
+
+        // Refresh greeting on tab change to Chat
+        eventBus.on('page:change', (data) => {
+            if (data.pageId === 'chat') {
+                this._randomizeGreeting();
+            }
+        });
+
+        // Ensure greeting is localized when translations are loaded
+        eventBus.on('i18n:translations:loaded', () => {
             this._randomizeGreeting(this._currentGreetingIndex);
         });
     }
@@ -573,10 +586,21 @@ export class ChatController {
                 this._currentGreetingIndex = ((array[0] ?? 0) % 50) + 1;
             }
 
-            el.textContent = this._i18n.t(
+            const translation = this._i18n.t(
                 `ui.chat.greeting.${String(this._currentGreetingIndex)}`,
-                'How can I help you today?',
+                '',
             );
+
+            // If translation is missing or i18n not ready, use a safe default
+            // but don't overwrite if we already have something and are just retrying
+            if (translation === '' || translation === `ui.chat.greeting.${String(this._currentGreetingIndex)}`) {
+                if (el.textContent === '' || el.textContent === 'How can I help you today?') {
+                    el.textContent = 'How can I help you today?';
+                }
+                return;
+            }
+
+            el.textContent = translation;
         }
     }
     /**
