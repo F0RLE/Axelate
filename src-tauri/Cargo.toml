@@ -85,7 +85,7 @@ hex     = "0.4.3"
 # --- AI & Logic Utilities ---
 tiktoken-rs = "0.9.1" # Token counting
 chrono      = { version = "0.4.43", features = ["serde"] }
-zip         = "7.2.0"
+zip         = "8.1.0"
 tempfile    = "3.24.0"
 log         = "0.4.29"
 env_logger  = "0.11.8"
