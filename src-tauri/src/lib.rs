@@ -54,11 +54,15 @@ use api::{
 // Import necessary services for run() and create_main_window()
 use domain::ai::custom_model_service;
 use domain::monitoring::system_monitor;
-use infrastructure::filesystem::file_service;
 use infrastructure::{
-    config::{ui_state as infra_ui_state, window_settings as infra_window_settings},
+    config::{
+        settings::SettingsService, ui_state as infra_ui_state, ui_state::UiStateService,
+        window_settings as infra_window_settings, window_settings::WindowSettingsService,
+    },
+    filesystem::{file_service, local_file_service::LocalFileService},
     http::server,
     logging::logger,
+    persistence::json_store::JsonStore,
 };
 
 #[cfg(debug_assertions)]
@@ -164,7 +168,7 @@ fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
     match builder.build() {
         Ok(window) => {
             // 4. Apply zoom and maximized state
-            let ui_settings = infra_ui_state::get_ui_state().unwrap_or_default();
+            let ui_settings = infra_ui_state::get_ui_state_sync();
             let mut zoom = ui_settings.zoom_level;
 
             // Try to detect monitor resolution and apply specific zoom early
@@ -272,6 +276,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
 #[allow(unsafe_code)]
 #[allow(clippy::large_stack_frames)]
 /// Main entry point for the Tauri application
+#[allow(clippy::print_stderr)]
 pub fn run() {
     // 1. Mandatory Environment Validation (WebView2 & Internet)
     {
@@ -286,8 +291,12 @@ pub fn run() {
         validator.validate();
     }
 
-    // Initialize logging
-    logger::init_global_logger().ok();
+    // Initialize tracing
+    if let Err(e) = logger::init_global_logger() {
+        eprintln!("Failed to initialize logger: {e}");
+    }
+
+    tracing::debug!("Initializing Axelate...");
 
     setup_webview2_cache();
     let tauri_builder = tauri::Builder::default()
@@ -308,7 +317,7 @@ pub fn run() {
             } else {
                 create_main_window(app);
             }
-            log::info!("Single instance lock: Second instance launch attempt detected.");
+            tracing::info!("Single instance lock: Second instance launch attempt detected.");
         }));
 
     let builder = create_specta_builder();
@@ -326,20 +335,35 @@ pub fn run() {
     match tauri_builder
         .invoke_handler(builder.invoke_handler())
         .setup(|app| {
+            // --- Dependency Injection System ---
+            let file_service: std::sync::Arc<dyn crate::domain::filesystem::service::FileService> =
+                std::sync::Arc::new(LocalFileService::new());
+            let json_store = JsonStore::new(std::sync::Arc::clone(&file_service));
+
+            let settings_service = SettingsService::new(json_store.clone());
+            let ui_state_service = UiStateService::new(json_store.clone());
+            let window_settings_service = WindowSettingsService::new(json_store.clone());
+
+            app.manage(file_service);
+            app.manage(json_store);
+            app.manage(settings_service.clone());
+            app.manage(ui_state_service);
+            app.manage(window_settings_service);
+            app.manage(crate::domain::modules::downloader::DownloaderService::new());
+
             crate::utils::paths::init_filesystem().ok();
 
             // Start system monitoring with events
-            // Polling reduced to 2000ms (2s) to save CPU
             system_monitor::start_monitoring(app.handle().clone(), 2000);
 
             #[cfg(desktop)]
             setup_global_shortcut(app)?;
 
             // Start HTTP Server
-            server::start_server(app.handle().clone());
+            server::start_server(app.handle().clone(), settings_service);
 
             setup_system_tray(app)?;
-            log::info!("✅ Setup complete");
+            tracing::info!("Axelate is ready");
             Ok(())
         })
         .on_window_event(|_window, event| {
@@ -418,14 +442,17 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                     IS_QUITTING.store(true, Ordering::Relaxed);
                     system_monitor::stop_monitoring();
 
-                    // Force immediate save of all chat history before exit (Senior Refinement #4)
-                    if let Err(e) =
-                        crate::domain::ai::ai_service::ChatSessionManager::save_to_disk()
-                    {
-                        log::error!("Failed to save chat history during shutdown: {e:?}");
-                    } else {
-                        log::info!("AI history flushed successfully during shutdown.");
-                    }
+                    // Force immediate save of all chat history before exit in a background thread
+                    // to prevent hanging the tray menu UI while writing to disk.
+                    std::thread::spawn(|| {
+                        if let Err(e) =
+                            crate::domain::ai::ai_service::ChatSessionManager::save_to_disk()
+                        {
+                            log::error!("Failed to save chat history during shutdown: {e:?}");
+                        } else {
+                            log::info!("AI history flushed successfully during shutdown.");
+                        }
+                    });
 
                     app.exit(0);
                 }

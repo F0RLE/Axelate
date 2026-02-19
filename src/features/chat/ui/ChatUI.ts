@@ -29,12 +29,24 @@ export class ChatUI {
     private readonly _messagesContainer: HTMLElement | null;
     private readonly _chatContainer: HTMLElement | null;
     private readonly _attachmentsContainer: HTMLElement | null;
+    private readonly _chatInput: HTMLTextAreaElement | null;
+    private readonly _clearBtn: HTMLElement | null;
+    private readonly _attachBtn: HTMLElement | null;
+    private readonly _voiceBtn: HTMLElement | null;
+    private readonly _sendBtn: HTMLElement | null;
+    private readonly _tokenCount: HTMLElement | null;
     private readonly _typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor() {
         this._messagesContainer = document.getElementById('chat-messages');
         this._chatContainer = document.getElementById('chat-container');
         this._attachmentsContainer = document.getElementById('chat-attachments');
+        this._chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+        this._clearBtn = document.getElementById('clear-chat-btn');
+        this._attachBtn = document.getElementById('chat-attach-btn');
+        this._voiceBtn = document.getElementById('chat-voice-btn');
+        this._sendBtn = document.getElementById('chat-send-btn');
+        this._tokenCount = document.getElementById('chat-token-count');
 
         // Configure marked renderer for code blocks
         const renderer = new marked.Renderer();
@@ -723,6 +735,46 @@ export class ChatUI {
             } else {
                 // Browser fallback
                 window.open(url, '_blank');
+            }
+        }
+    }
+
+    /**
+     * Refreshes all localized static strings in the Chat UI.
+     */
+    public refreshTranslations(): void {
+        const win = globalThis as TGlobalWin;
+        const t = win.t;
+        if (typeof t !== 'function') return;
+
+        // 1. Chat input placeholder
+        if (this._chatInput) {
+            const placeholderKey = this._chatInput.dataset['i18nPlaceholder'];
+            if (placeholderKey !== undefined) {
+                this._chatInput.placeholder = t(placeholderKey, 'Ask something...');
+            }
+        }
+
+        // 2. Button titles
+        if (this._clearBtn) {
+            const clearTitleKey =
+                this._clearBtn.dataset['i18nTitle'] ?? 'ui.launcher.web.chat_clear_title';
+            this._clearBtn.title = t(clearTitleKey, 'Clear Chat');
+            const clearText = this._clearBtn.querySelector('.chat-clear-text');
+            if (clearText) {
+                clearText.textContent = t('ui.launcher.web.chat_clear', 'Clear Chat');
+            }
+        }
+
+        if (this._attachBtn) this._attachBtn.title = t('ui.launcher.web.attach', 'Attach');
+        if (this._voiceBtn) this._voiceBtn.title = t('ui.launcher.web.voice', 'Voice');
+        if (this._sendBtn) this._sendBtn.title = t('ui.launcher.web.send', 'Send');
+
+        // 3. Token count (if visible)
+        if (this._tokenCount?.classList.contains('visible') === true) {
+            const count = Number.parseInt(this._tokenCount.textContent || '0', 10);
+            if (!Number.isNaN(count)) {
+                this.updateTokenCount(count);
             }
         }
     }

@@ -15,10 +15,14 @@ use tower_http::cors::CorsLayer;
 struct AppState {
     tauri_app: AppHandle,
     config_service: std::sync::Arc<crate::domain::system::config_service::ConfigService>,
+    settings_service: crate::infrastructure::config::settings::SettingsService,
 }
 
-/// Starts the HTTP API server on port 1420 for local access
-pub fn start_server(app: AppHandle) {
+/// Starts the HTTP API server on port 3000 for local access
+pub fn start_server(
+    app: AppHandle,
+    settings_service: crate::infrastructure::config::settings::SettingsService,
+) {
     let repo =
         crate::infrastructure::config::config_repository::FileConfigRepository::new(app.clone());
     let service = std::sync::Arc::new(crate::domain::system::config_service::ConfigService::new(
@@ -27,6 +31,7 @@ pub fn start_server(app: AppHandle) {
     let state = AppState {
         tauri_app: app,
         config_service: service,
+        settings_service,
     };
 
     tauri::async_runtime::spawn(async move {
@@ -66,18 +71,18 @@ pub fn start_server(app: AppHandle) {
 
         // Bind to 127.0.0.1 for local access only initially (safer & less firewall issues)
         let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-        log::debug!("[Server] HTTP Server listening on http://{addr}");
+        tracing::debug!("[Server] HTTP Server listening on http://{addr}");
 
         // SAFETY: Binding to a port might fail if occupied, but inside tokio::spawn
         // we can't easily propagate errors up. We log and exit the thread.
         match tokio::net::TcpListener::bind(addr).await {
             Ok(listener) => {
                 if let Err(e) = axum::serve(listener, app).await {
-                    log::error!("[Server] Fatal error serving HTTP: {e}");
+                    tracing::error!("[Server] Fatal error serving HTTP: {e}");
                 }
             }
             Err(e) => {
-                log::error!("[Server] Failed to bind to port 3000: {e}");
+                tracing::error!("[Server] Failed to bind to port 3000: {e}");
             }
         }
     });
@@ -86,7 +91,7 @@ pub fn start_server(app: AppHandle) {
 // Handlers
 
 async fn health_handler() -> Json<Value> {
-    log::debug!("[Server] Health check requested");
+    tracing::debug!("[Server] Health check requested");
     Json(json!({ "status": "ok", "version": "0.1.3" }))
 }
 
@@ -144,7 +149,7 @@ async fn translations_handler(
         ));
     }
 
-    log::debug!("[Server] Translations requested for {lang}");
+    tracing::debug!("[Server] Translations requested for {lang}");
 
     let mut locale_path = crate::utils::paths::RESOURCES_DIR.join("locales");
     locale_path.push(format!("{lang}.json"));
@@ -200,11 +205,11 @@ async fn gpu_info_handler() -> Json<Value> {
 // Reuse infrastructure settings instead of duplicate persistence
 use crate::infrastructure::config::settings as infra_settings;
 
-async fn get_settings_handler() -> Json<Value> {
-    match infra_settings::get_settings() {
+async fn get_settings_handler(State(state): State<AppState>) -> Json<Value> {
+    match state.settings_service.get_settings().await {
         Ok(settings) => Json(serde_json::to_value(settings).unwrap_or_else(|_| json!({}))),
         Err(e) => {
-            log::error!("[Server] Failed to load settings: {e}");
+            tracing::error!("[Server] Failed to load settings: {e}");
             Json(json!({}))
         }
     }
@@ -216,13 +221,20 @@ struct SaveSettingRequest {
     value: String,
 }
 
-async fn save_setting_handler(Json(payload): Json<SaveSettingRequest>) -> Json<Value> {
-    log::info!("[Server] Save setting: {} = {}", payload.key, payload.value);
+async fn save_setting_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<SaveSettingRequest>,
+) -> Json<Value> {
+    tracing::info!("[Server] Save setting: {} = {}", payload.key, payload.value);
 
-    match infra_settings::save_setting(&payload.key, &payload.value) {
+    match state
+        .settings_service
+        .save_setting(&payload.key, &payload.value)
+        .await
+    {
         Ok(()) => Json(json!({ "success": true })),
         Err(e) => {
-            log::error!("[Server] Failed to save setting: {e}");
+            tracing::error!("[Server] Failed to save setting: {e}");
             Json(json!({ "success": false, "message": e.to_string() }))
         }
     }
@@ -234,7 +246,7 @@ async fn get_modules_handler() -> Json<Value> {
 }
 
 async fn system_language_handler() -> Json<Value> {
-    let lang = infra_settings::get_language();
+    let lang = infra_settings::get_language_sync();
     Json(json!({ "language": lang }))
 }
 
@@ -263,7 +275,7 @@ struct GeneralControlRequest {
 }
 
 async fn general_control_handler(Json(payload): Json<GeneralControlRequest>) -> Json<Value> {
-    log::info!(
+    tracing::info!(
         "[Server] General control: {} {}",
         payload.action,
         payload.service

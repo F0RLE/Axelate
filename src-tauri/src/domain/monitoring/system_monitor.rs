@@ -96,44 +96,49 @@ impl SystemWrap {
 pub fn start_monitoring(app: AppHandle, interval_ms: u64) {
     INTERVAL_MS.store(interval_ms, Ordering::Relaxed);
 
-    // Ensure only one monitor is running
-    stop_monitoring();
-
-    let handle = tauri::async_runtime::spawn(async move {
-        let mut monitor = SystemMonitor::new();
-        monitor.system.refresh_all();
-
-        // Initial stats for immediate availability
-        let stats = monitor.collect_stats();
-        if let Ok(mut cache) = LATEST_STATS.try_write() {
-            *cache = stats;
-        }
-
-        loop {
-            let current_interval = INTERVAL_MS.load(Ordering::Relaxed);
-            tokio::time::sleep(Duration::from_millis(current_interval)).await;
-
-            if IS_PAUSED.load(Ordering::Relaxed) {
-                continue;
-            }
-
-            // Expert: sysinfo collection is efficient enough to run directly in the task
-            // without spawn_blocking if interval is >= 500ms and we don't hold global locks.
-            let stats = monitor.collect_stats();
-
-            // Broadcast stats
-            {
-                let mut cache = LATEST_STATS.write().await;
-                *cache = stats.clone();
-            }
-            let _ = app.emit("system_stats", stats);
-        }
-    });
-
-    // Store handle asynchronously for management
+    // Expert: Consolidate handle management into a single async block to prevent
+    // race conditions between multiple start/stop calls.
     tauri::async_runtime::spawn(async move {
-        let mut h = MONITOR_HANDLE.write().await;
-        *h = Some(handle);
+        // 1. Acquire write lock to manage handle life cycle
+        let mut handle_guard = MONITOR_HANDLE.write().await;
+
+        // 2. Stop existing task if any
+        if let Some(old_handle) = handle_guard.take() {
+            old_handle.abort();
+        }
+
+        // 3. Start the new monitoring loop
+        let loop_handle = tauri::async_runtime::spawn(async move {
+            let mut monitor = SystemMonitor::new();
+            monitor.system.refresh_all();
+
+            // Initial stats for immediate availability
+            let stats = monitor.collect_stats();
+            if let Ok(mut cache) = LATEST_STATS.try_write() {
+                *cache = stats;
+            }
+
+            loop {
+                let current_interval = INTERVAL_MS.load(Ordering::Relaxed);
+                tokio::time::sleep(Duration::from_millis(current_interval)).await;
+
+                if IS_PAUSED.load(Ordering::Relaxed) {
+                    continue;
+                }
+
+                let stats = monitor.collect_stats();
+
+                // Broadcast stats
+                {
+                    let mut cache = LATEST_STATS.write().await;
+                    *cache = stats.clone();
+                }
+                let _ = app.emit("system_stats", stats);
+            }
+        });
+
+        // 4. Store the new handle while still holding the lock
+        *handle_guard = Some(loop_handle);
     });
 }
 

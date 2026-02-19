@@ -58,42 +58,28 @@ export class ChatController {
             });
         }
 
-        // Randomize Greeting
-        const globalContext = globalThis as TGlobalWin;
-        if (typeof globalContext.randomizeChatGreeting === 'function') {
-            (globalContext.randomizeChatGreeting as () => void)();
-        } else {
-            this._randomizeGreeting();
-            // Retry after i18n loads (Core splash timeout is ~1.5s)
-            setTimeout(() => {
-                this._randomizeGreeting();
-            }, 500);
-            setTimeout(() => {
-                this._randomizeGreeting();
-            }, 1500);
-            setTimeout(() => {
-                this._randomizeGreeting();
-            }, 3000);
-        }
+        // Initialize Greeting (Event listeners below will handle updates)
+        this._randomizeGreeting();
 
         // Load Persistence History
         void this._loadHistory();
 
-        // Listen for language changes to update greeting in real-time
-        globalThis.addEventListener('lang:changed', () => {
-            this._randomizeGreeting(this._currentGreetingIndex);
-        });
-
-        // Refresh greeting on tab change to Chat
+        // Listen for language changes to update greeting and UI in real-time
         eventBus.on('page:change', (data) => {
             if (data.pageId === 'chat') {
                 this._randomizeGreeting();
+                this._ui.refreshTranslations();
             }
         });
 
-        // Ensure greeting is localized when translations are loaded
         eventBus.on('i18n:translations:loaded', () => {
             this._randomizeGreeting(this._currentGreetingIndex);
+            this._ui.refreshTranslations();
+        });
+
+        globalThis.addEventListener('lang:changed', () => {
+            this._randomizeGreeting(this._currentGreetingIndex);
+            this._ui.refreshTranslations();
         });
     }
 
@@ -593,7 +579,10 @@ export class ChatController {
 
             // If translation is missing or i18n not ready, use a safe default
             // but don't overwrite if we already have something and are just retrying
-            if (translation === '' || translation === `ui.chat.greeting.${String(this._currentGreetingIndex)}`) {
+            if (
+                translation === '' ||
+                translation === `ui.chat.greeting.${String(this._currentGreetingIndex)}`
+            ) {
                 if (el.textContent === '' || el.textContent === 'How can I help you today?') {
                     el.textContent = 'How can I help you today?';
                 }

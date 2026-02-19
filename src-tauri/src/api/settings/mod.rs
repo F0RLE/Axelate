@@ -14,28 +14,37 @@ use crate::models::AppSettings;
 #[tauri::command]
 #[specta::specta]
 /// Retrieves application settings (theme, language, GPU, debug)
-pub async fn get_settings() -> Result<AppSettings, AppError> {
-    settings::get_settings()
+pub async fn get_settings(
+    settings_service: tauri::State<'_, settings::SettingsService>,
+) -> Result<AppSettings, AppError> {
+    settings_service.get_settings().await
 }
 
 #[tauri::command]
 #[specta::specta]
 /// Saves application settings
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned types for serialization
-pub async fn save_settings(settings: AppSettings) -> Result<(), AppError> {
-    settings::save_settings(&settings)
+pub async fn save_settings(
+    settings_service: tauri::State<'_, settings::SettingsService>,
+    settings: AppSettings,
+) -> Result<(), AppError> {
+    settings_service.save_settings(&settings).await
 }
 
 #[tauri::command]
 #[specta::specta]
 /// Saves a single setting by key-value pair
-pub async fn save_setting(key: String, value: String) -> Result<(), AppError> {
-    settings::save_setting(&key, &value)
+pub async fn save_setting(
+    settings_service: tauri::State<'_, settings::SettingsService>,
+    key: String,
+    value: String,
+) -> Result<(), AppError> {
+    settings_service.save_setting(&key, &value).await
 }
 
 #[tauri::command]
 #[specta::specta]
 /// Detects and returns the current system language code
 pub fn get_system_language() -> Result<String, AppError> {
-    Ok(settings::get_language())
+    Ok(settings::get_language_sync())
 }

@@ -7,11 +7,12 @@ use tauri::AppHandle;
 /// Downloads and verifies a module from a Git repository
 pub async fn download_module(
     app: AppHandle,
+    downloader: tauri::State<'_, downloader::DownloaderService>,
     module_id: String,
     repo_url: String,
     expected_hash: Option<String>,
 ) -> Result<(), AppError> {
-    downloader::download_module(app, module_id, repo_url, expected_hash).await
+    downloader::download_module(app, &downloader, module_id, repo_url, expected_hash).await
 }
 
 #[tauri::command]
@@ -35,8 +36,8 @@ pub fn get_module_path(module_id: &str) -> Result<String, AppError> {
 #[tauri::command]
 #[specta::specta]
 /// Deletes a module from local storage
-pub fn delete_module(module_id: &str) -> Result<(), AppError> {
-    downloader::delete_module(module_id)
+pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
+    downloader::delete_module(module_id).await
 }
 
 #[tauri::command]
@@ -69,6 +70,11 @@ pub async fn list_module_files(module_id: &str) -> Result<Vec<String>, AppError>
 #[tauri::command]
 #[specta::specta]
 /// Configures download bandwidth limits
-pub fn set_download_settings(enabled: bool, max_speed: u32) {
-    downloader::DOWNLOADER.set_limit(enabled, max_speed);
+#[allow(clippy::needless_pass_by_value)]
+pub fn set_download_settings(
+    downloader: tauri::State<'_, downloader::DownloaderService>,
+    enabled: bool,
+    max_speed: u32,
+) {
+    downloader.set_limit(enabled, max_speed);
 }

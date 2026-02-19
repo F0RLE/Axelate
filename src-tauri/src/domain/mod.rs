@@ -1,5 +1,7 @@
 /// AI domain logic
 pub mod ai;
+/// Filesystem domain logic
+pub mod filesystem;
 /// License domain logic
 pub mod license;
 /// Module domain logic

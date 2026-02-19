@@ -1,30 +1,32 @@
 use crate::errors::AppError;
+use crate::infrastructure::persistence::json_store::JsonStore;
 use crate::models::UIState;
 use crate::utils::paths::FILE_UI_STATE;
-use std::fs;
 
-/// Get UI state from file, or return defaults
-pub fn get_ui_state() -> Result<UIState, AppError> {
-    if !FILE_UI_STATE.exists() {
-        return Ok(UIState::default());
+/// Service for managing UI state with DI support.
+#[derive(Debug, Clone)]
+pub struct UiStateService {
+    json_store: JsonStore,
+}
+
+impl UiStateService {
+    /// Creates a new `UiStateService`.
+    pub const fn new(json_store: JsonStore) -> Self {
+        Self { json_store }
     }
 
-    let content = fs::read_to_string(&*FILE_UI_STATE).map_err(|e| AppError::Io(e.to_string()))?;
-    match serde_json::from_str(&content) {
-        Ok(state) => Ok(state),
-        Err(e) => {
-            log::warn!("Failed to parse UI state, resetting to defaults: {e}");
-            Ok(UIState::default())
-        }
+    /// Get UI state from file, or return defaults (Async version for runtime)
+    pub async fn get_ui_state(&self) -> Result<UIState, AppError> {
+        self.json_store.load_async(&FILE_UI_STATE).await
+    }
+
+    /// Save UI state to file
+    pub async fn save_ui_state(&self, state: &UIState) -> Result<(), AppError> {
+        self.json_store.save_async(&FILE_UI_STATE, state).await
     }
 }
 
-/// Save UI state to file
-pub fn save_ui_state(state: &UIState) -> Result<(), AppError> {
-    if let Some(parent) = FILE_UI_STATE.parent() {
-        fs::create_dir_all(parent).map_err(|e| AppError::Io(e.to_string()))?;
-    }
-    let content =
-        serde_json::to_string_pretty(state).map_err(|e| AppError::Serialization(e.to_string()))?;
-    fs::write(&*FILE_UI_STATE, content).map_err(|e| AppError::Io(e.to_string()))
+/// Get UI state from file synchronously (For startup/bootstrap only)
+pub fn get_ui_state_sync() -> UIState {
+    JsonStore::load_sync(&FILE_UI_STATE).unwrap_or_default()
 }

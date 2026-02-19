@@ -124,6 +124,58 @@ impl SecureStorage {
         Ok(data.keys.get(service).cloned())
     }
 
+    /// Removes an encrypted key from secure storage
+    pub fn remove_key(service: &str) -> Result<(), AppError> {
+        let mut data = Self::load_data().unwrap_or_else(|_| SecureData {
+            keys: HashMap::new(),
+        });
+
+        if data.keys.remove(service).is_some() {
+            // Re-use save logic (private helper would be better but keeping it simple for now)
+            let json_bytes =
+                serde_json::to_vec(&data).map_err(|e| AppError::Serialization(e.to_string()))?;
+
+            let key_bytes = Self::get_encryption_key()?;
+            let cipher = Aes256Gcm::new(&key_bytes.into());
+
+            let mut nonce_bytes = [0u8; 12];
+            rand::rng().fill_bytes(&mut nonce_bytes);
+            let nonce = Nonce::from_slice(&nonce_bytes);
+
+            let ciphertext =
+                cipher
+                    .encrypt(nonce, json_bytes.as_ref())
+                    .map_err(|e| AppError::External {
+                        request_id: None,
+                        message: format!("Encryption failure: {e}"),
+                    })?;
+
+            let mut final_payload = Vec::new();
+            final_payload.extend_from_slice(&nonce_bytes);
+            final_payload.extend_from_slice(&ciphertext);
+
+            let path = Self::get_store_path()?;
+            let tmp_path = path.with_extension("tmp");
+
+            let mut file = fs::File::create(&tmp_path).map_err(|e| AppError::Io(e.to_string()))?;
+            use std::io::Write;
+            file.write_all(&final_payload)
+                .map_err(|e| AppError::Io(e.to_string()))?;
+            file.sync_all().map_err(|e| AppError::Io(e.to_string()))?;
+            drop(file);
+
+            if let Err(e) = fs::rename(&tmp_path, &path) {
+                log::warn!(
+                    "Standard rename failed ({e}), attempting fallback for Windows locks..."
+                );
+                let _ = fs::remove_file(&path);
+                fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
+            }
+        }
+
+        Ok(())
+    }
+
     fn load_data() -> Result<SecureData, AppError> {
         let path = Self::get_store_path()?;
         let tmp_path = path.with_extension("tmp");

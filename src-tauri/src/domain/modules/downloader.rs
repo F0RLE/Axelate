@@ -66,12 +66,14 @@ pub fn is_module_installed(module_id: &str) -> bool {
 }
 
 /// Deletes a module from disk
-pub fn delete_module(module_id: &str) -> Result<(), AppError> {
+pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
     validate_module_id(module_id)?;
 
     let module_path = MODULES_DIR.join(module_id);
     if module_path.exists() {
-        fs::remove_dir_all(&module_path).map_err(|e| AppError::Io(e.to_string()))?;
+        tokio::fs::remove_dir_all(&module_path)
+            .await
+            .map_err(|e| AppError::Io(e.to_string()))?;
         crate::infrastructure::logging::logger::add_log(
             &format!("Module {module_id} deleted"),
             "Downloader",
@@ -101,9 +103,12 @@ struct DownloaderSettings {
     max_speed_bytes: u64, // Bytes per second
 }
 
-impl Default for DownloaderService {
+impl Default for DownloaderSettings {
     fn default() -> Self {
-        Self::new()
+        Self {
+            limit_enabled: false,
+            max_speed_bytes: 5 * 1024 * 1024, // Default 5MB/s
+        }
     }
 }
 
@@ -111,19 +116,24 @@ impl DownloaderService {
     /// Creates a new downloader service instance
     pub fn new() -> Self {
         Self {
-            settings: Arc::new(Mutex::new(DownloaderSettings {
-                limit_enabled: false,
-                max_speed_bytes: 5 * 1024 * 1024, // Default 5MB/s
-            })),
+            settings: Arc::new(Mutex::new(DownloaderSettings::default())),
         }
     }
+}
 
+impl Default for DownloaderService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DownloaderService {
     /// Sets download speed limit
     pub fn set_limit(&self, enabled: bool, max_speed_mb: u32) {
         if let Ok(mut settings) = self.settings.lock() {
             settings.limit_enabled = enabled;
             settings.max_speed_bytes = u64::from(max_speed_mb) * 1024 * 1024;
-            log::info!("Download limit set: enabled={enabled}, speed={max_speed_mb}MB/s");
+            tracing::info!("Download limit set: enabled={enabled}, speed={max_speed_mb}MB/s");
         }
     }
 
@@ -156,7 +166,7 @@ impl UrlResolver {
             let main_url = format!("{base_url}/archive/refs/heads/main.zip");
             let master_url = format!("{base_url}/archive/refs/heads/master.zip");
 
-            log::info!("Trying to download from: {main_url}");
+            tracing::info!("Trying to download from: {main_url}");
             let response = client
                 .get(&main_url)
                 .send()
@@ -171,7 +181,7 @@ impl UrlResolver {
             }
 
             if response.status() == reqwest::StatusCode::NOT_FOUND {
-                log::info!("main branch not found, trying master: {master_url}");
+                tracing::info!("main branch not found, trying master: {master_url}");
                 let response_master =
                     client
                         .get(&master_url)
@@ -209,7 +219,7 @@ impl NetworkClient {
         if let Some(license) = crate::domain::license::storage::load_license()
             && !license.key.is_empty()
         {
-            log::info!("Injecting license key for module download: {module_id}");
+            tracing::info!("Injecting license key for module download: {module_id}");
             let mut headers = reqwest::header::HeaderMap::new();
             if let Ok(auth_val) =
                 reqwest::header::HeaderValue::from_str(&format!("Bearer {}", license.key))
@@ -231,6 +241,7 @@ impl NetworkClient {
     /// Downloads content with progress reporting and rate limiting
     async fn download_file(
         app: &AppHandle,
+        downloader: &DownloaderService,
         client: &reqwest::Client,
         url: &str,
         dest_path: &Path,
@@ -253,7 +264,7 @@ impl NetworkClient {
         }
 
         let total_size = response.content_length().unwrap_or(0);
-        let mut downloaded: u64 = 0;
+        let mut bytes_downloaded: u64 = 0;
         let mut stream = response.bytes_stream();
 
         fs::create_dir_all(&*TEMP_DIR).map_err(|e| AppError::Io(e.to_string()))?;
@@ -273,10 +284,10 @@ impl NetworkClient {
             file.write_all(&chunk)
                 .await
                 .map_err(|e| AppError::Io(e.to_string()))?;
-            downloaded += chunk_len as u64;
+            bytes_downloaded += chunk_len as u64;
 
-            // Rate Limiting Logic via global service
-            let (limit_enabled, max_speed_bytes) = DOWNLOADER.get_settings();
+            // Rate Limiting Logic via injected service
+            let (limit_enabled, max_speed_bytes) = downloader.get_settings();
             if limit_enabled && max_speed_bytes > 0 {
                 let ideal_duration_micros =
                     (chunk_len as u128 * 1_000_000) / u128::from(max_speed_bytes);
@@ -296,14 +307,14 @@ impl NetworkClient {
             if total_size > 0 && last_log_time.elapsed().as_millis() > 100 {
                 last_log_time = std::time::Instant::now();
                 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let progress = (downloaded as f64 / total_size as f64) as f32;
+                let progress = (bytes_downloaded as f64 / total_size as f64) as f32;
                 emit_progress(
                     app,
                     module_id,
                     "downloading",
                     "Downloading...",
                     progress,
-                    downloaded,
+                    bytes_downloaded,
                     total_size,
                 );
             }
@@ -621,6 +632,7 @@ impl ArchiveExtractor {
 /// Downloads and extracts a module from a remote repository
 pub async fn download_module(
     app: AppHandle,
+    downloader: &DownloaderService,
     module_id: String,
     repo_url: String,
     expected_hash: Option<String>,
@@ -636,7 +648,8 @@ pub async fn download_module(
         let client = NetworkClient::build_client(&module_id)?;
         let final_url = UrlResolver::resolve(&client, &repo_url).await?;
 
-        NetworkClient::download_file(&app, &client, &final_url, &zip_path, &module_id).await?;
+        NetworkClient::download_file(&app, downloader, &client, &final_url, &zip_path, &module_id)
+            .await?;
         FileVerifier::verify(&app, &zip_path, expected_hash.clone(), &module_id).await?;
         ArchiveExtractor::extract(&app, &zip_path, &module_id, expected_hash.as_ref()).await?;
 

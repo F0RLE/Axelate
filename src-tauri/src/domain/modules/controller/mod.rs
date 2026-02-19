@@ -190,7 +190,7 @@ pub async fn control(
                 let _ = process::kill_orphan(pid);
             }
         }
-        downloader::delete_module(module_id)?;
+        downloader::delete_module(module_id).await?;
         return Ok(ControlResponse {
             success: true,
             message: format!("Module {module_id} uninstalled successfully"),

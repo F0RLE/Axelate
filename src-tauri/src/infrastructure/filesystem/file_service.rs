@@ -54,7 +54,9 @@ pub async fn process_file_content(name: String, data: Vec<u8>) -> Result<Process
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
     {
-        return process_zip(name, data);
+        return tokio::task::spawn_blocking(move || process_zip(name, data))
+            .await
+            .map_err(|e| format!("ZIP processing task failed: {e}"))?;
     }
 
     // 2. Check if text file

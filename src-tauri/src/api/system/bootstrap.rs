@@ -26,12 +26,15 @@ pub struct BootstrapData {
 #[tauri::command]
 #[specta::specta]
 /// Retrieves all application state and configuration during app startup
-pub async fn get_app_bootstrap_data(window: Window) -> Result<BootstrapData, AppError> {
-    log::info!("[Bootstrap] Collecting application data...");
+pub async fn get_app_bootstrap_data(
+    window: Window,
+    ui_service: tauri::State<'_, ui_state::UiStateService>,
+) -> Result<BootstrapData, AppError> {
+    tracing::debug!("[Bootstrap] Collecting application data...");
 
-    let ui_state = ui_state::get_ui_state().unwrap_or_default();
+    let ui_state = ui_service.get_ui_state().await.unwrap_or_default();
     let window_config = window_settings::get_window_config();
-    let system_language = settings::get_language();
+    let system_language = settings::get_language_sync();
     let modules = module_controller::get_all_modules().await;
 
     // Determine initial zoom level based on monitor resolution

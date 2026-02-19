@@ -1,91 +1,165 @@
-// Window settings persistence service
-// Saves and restores window size, position, and zoom level
-
 use crate::errors::AppError;
+use crate::infrastructure::persistence::json_store::JsonStore;
 use crate::utils::paths::CONFIG_DIR;
 use serde::{Deserialize, Serialize};
-use std::fs;
+use specta::Type;
 use std::path::PathBuf;
 
 /// Scaling constants
-/// Baseline height for scaling calculations
+/// Baseline height for scaling calculations.
 pub const SCALING_BASELINE_HEIGHT: f64 = 600.0;
-/// Minimum allowed zoom level
+/// Minimum allowed zoom level.
 pub const SCALING_MIN_ZOOM: f64 = 0.5;
-/// Maximum allowed zoom level
+/// Maximum allowed zoom level.
 pub const SCALING_MAX_ZOOM: f64 = 3.0;
 
 /// Breakpoints and Thresholds
-/// Compact breakpoint width
+/// Compact breakpoint width.
 pub const BP_COMPACT: u32 = 600;
-/// Medium breakpoint width
+/// Medium breakpoint width.
 pub const BP_MEDIUM: u32 = 900;
-/// Large breakpoint width
+/// Large breakpoint width.
 pub const BP_LARGE: u32 = 1200;
 
-/// Warning threshold width
+/// Threshold for showing layout warnings (width).
 pub const THRESHOLD_WARNING_WIDTH: u32 = 800;
-/// Warning threshold height
+/// Threshold for showing layout warnings (height).
 pub const THRESHOLD_WARNING_HEIGHT: u32 = 600;
 
-/// Small screen width threshold
+/// Threshold for considering a screen "small" (width).
 pub const THRESHOLD_SMALL_SCREEN_WIDTH: u32 = 1400;
-/// Small screen height threshold
+/// Threshold for considering a screen "small" (height).
 pub const THRESHOLD_SMALL_SCREEN_HEIGHT: u32 = 900;
-/// Portrait mode height threshold
+/// Threshold for portrait orientation (height).
 pub const THRESHOLD_PORTRAIT_HEIGHT: u32 = 1000;
-/// Portrait mode minimum width
+/// Minimum width for portrait orientation consideration.
 pub const THRESHOLD_PORTRAIT_MIN_WIDTH: u32 = 700;
 
-use specta::Type;
-
-/// Window configuration for the frontend
+/// Overall window configuration combining breakpoints and thresholds.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowConfig {
-    /// Responsive breakpoints
+    /// Breakpoint settings.
     pub breakpoints: Breakpoints,
-    /// Screen thresholds
+    /// Threshold settings.
     pub thresholds: Thresholds,
 }
 
-/// Responsive breakpoints for layout
+/// Breakpoints configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Breakpoints {
-    /// Compact width
+    /// Width for compact layout.
     pub compact: u32,
-    /// Medium width
+    /// Width for medium layout.
     pub medium: u32,
-    /// Large width
+    /// Width for large layout.
     pub large: u32,
 }
 
-/// Screen thresholds for warnings
+/// Thresholds configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Thresholds {
-    /// Warning width
+    /// Warning threshold width.
     pub warning_width: u32,
-    /// Warning height
+    /// Warning threshold height.
     pub warning_height: u32,
-    /// Small screen width
+    /// Small screen threshold width.
     pub small_screen_width: u32,
-    /// Small screen height
+    /// Small screen threshold height.
     pub small_screen_height: u32,
 }
 
-/// Window policy response
+/// Layout policy based on screen size and current window dimensions.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowPolicy {
-    /// Whether screen is small
+    /// True if the screen is considered "small" (mobile/tablet/small laptop).
     pub is_small_screen: bool,
-    /// Whether to show size warning
+    /// True if a layout warning should be shown.
     pub show_warning: bool,
 }
 
-/// Returns window configuration with breakpoints and thresholds
+/// Persistent window state.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct WindowSettings {
+    /// Window width.
+    pub width: u32,
+    /// Window height.
+    pub height: u32,
+    /// Horizontal screen position.
+    pub x: Option<i32>,
+    /// Vertical screen position.
+    pub y: Option<i32>,
+    /// True if the window is maximized.
+    pub maximized: bool,
+}
+
+impl Default for WindowSettings {
+    fn default() -> Self {
+        Self {
+            width: 1400,
+            height: 900,
+            x: None,
+            y: None,
+            maximized: false,
+        }
+    }
+}
+
+/// Service for managing window settings with DI support.
+#[derive(Debug, Clone)]
+pub struct WindowSettingsService {
+    json_store: JsonStore,
+}
+
+impl WindowSettingsService {
+    /// Creates a new `WindowSettingsService`.
+    pub const fn new(json_store: JsonStore) -> Self {
+        Self { json_store }
+    }
+
+    /// Loads window settings from file
+    pub async fn get_window_settings(&self) -> Result<WindowSettings, AppError> {
+        self.json_store.load_async(&settings_file()).await
+    }
+
+    /// Save window settings to file
+    pub async fn save_window_settings(&self, settings: &WindowSettings) -> Result<(), AppError> {
+        self.json_store.save_async(&settings_file(), settings).await
+    }
+
+    /// Update specific window properties
+    pub async fn update_window_size(&self, width: u32, height: u32) -> Result<(), AppError> {
+        let mut settings = self.get_window_settings().await?;
+        settings.width = width;
+        settings.height = height;
+        self.save_window_settings(&settings).await
+    }
+
+    /// Updates the window position in settings.
+    pub async fn update_window_position(&self, x: i32, y: i32) -> Result<(), AppError> {
+        let mut settings = self.get_window_settings().await?;
+        settings.x = Some(x);
+        settings.y = Some(y);
+        self.save_window_settings(&settings).await
+    }
+
+    /// Updates the window maximized state in settings.
+    pub async fn update_maximized_state(&self, maximized: bool) -> Result<(), AppError> {
+        let mut settings = self.get_window_settings().await?;
+        settings.maximized = maximized;
+        self.save_window_settings(&settings).await
+    }
+}
+
+/// Helper functions
+fn settings_file() -> PathBuf {
+    CONFIG_DIR.join("window-settings.json")
+}
+
+/// Retrieves the current global window configuration.
 pub const fn get_window_config() -> WindowConfig {
     WindowConfig {
         breakpoints: Breakpoints {
@@ -102,7 +176,7 @@ pub const fn get_window_config() -> WindowConfig {
     }
 }
 
-/// Calculates window policy based on screen and window dimensions
+/// Calculates the window layout policy based on screen and window dimensions.
 pub const fn calculate_window_policy(
     screen_w: u32,
     screen_h: u32,
@@ -124,93 +198,14 @@ pub const fn calculate_window_policy(
     }
 }
 
-/// Calculates the adaptive zoom level based on screen height.
-/// 600px height is considered 100% (1.0).
+/// Calculates an adaptive zoom level based on the screen height.
 pub fn calculate_adaptive_zoom(height: u32) -> f64 {
     let effective_height = height.min(900);
     let zoom = f64::from(effective_height) / SCALING_BASELINE_HEIGHT;
     zoom.clamp(SCALING_MIN_ZOOM, SCALING_MAX_ZOOM)
 }
 
-/// Window settings structure
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct WindowSettings {
-    /// Window width
-    pub width: u32,
-    /// Window height
-    pub height: u32,
-    /// Window X position
-    pub x: Option<i32>,
-    /// Window Y position
-    pub y: Option<i32>,
-    /// Whether window is maximized
-    pub maximized: bool,
-}
-
-impl Default for WindowSettings {
-    fn default() -> Self {
-        Self {
-            width: 1400,
-            height: 900,
-            x: None,
-            y: None,
-            maximized: false,
-        }
-    }
-}
-
-/// Returns path to window settings file
-fn settings_file() -> PathBuf {
-    CONFIG_DIR.join("window-settings.json")
-}
-
-/// Loads window settings from file
+/// Synchronously loads window settings from disk.
 pub fn load_window_settings() -> WindowSettings {
-    let path = settings_file();
-
-    if !path.exists() {
-        return WindowSettings::default();
-    }
-
-    fs::read_to_string(&path).map_or_else(
-        |_| WindowSettings::default(),
-        |content| serde_json::from_str(&content).unwrap_or_default(),
-    )
-}
-
-/// Save window settings to file
-pub fn save_window_settings(settings: &WindowSettings) -> Result<(), AppError> {
-    let path = settings_file();
-
-    // Ensure directory exists
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    let content = serde_json::to_string_pretty(settings)?;
-    fs::write(&path, content)?;
-    Ok(())
-}
-
-/// Update specific window properties
-pub fn update_window_size(width: u32, height: u32) -> Result<(), AppError> {
-    let mut settings = load_window_settings();
-    settings.width = width;
-    settings.height = height;
-    save_window_settings(&settings)
-}
-
-/// Updates the window position in settings
-pub fn update_window_position(x: i32, y: i32) -> Result<(), AppError> {
-    let mut settings = load_window_settings();
-    settings.x = Some(x);
-    settings.y = Some(y);
-    save_window_settings(&settings)
-}
-
-/// Updates the window maximized state in settings
-pub fn update_maximized_state(maximized: bool) -> Result<(), AppError> {
-    let mut settings = load_window_settings();
-    settings.maximized = maximized;
-    save_window_settings(&settings)
+    JsonStore::load_sync(&settings_file()).unwrap_or_default()
 }

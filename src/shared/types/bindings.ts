@@ -475,8 +475,13 @@ async getWindowConfig() : Promise<WindowConfig> {
 /**
  * Calculates window layout policy based on screen size and zoom
  */
-async getWindowPolicy() : Promise<WindowPolicy> {
-    return await TAURI_INVOKE("get_window_policy");
+async getWindowPolicy() : Promise<Result<WindowPolicy, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_window_policy") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 },
 /**
  * Retrieves persisted UI state (sidebar, zoom, selected modules)
@@ -881,19 +886,19 @@ modules: Module[];
  */
 initialZoom: number }
 /**
- * Responsive breakpoints for layout
+ * Breakpoints configuration.
  */
 export type Breakpoints = { 
 /**
- * Compact width
+ * Width for compact layout.
  */
 compact: number; 
 /**
- * Medium width
+ * Width for medium layout.
  */
 medium: number; 
 /**
- * Large width
+ * Width for large layout.
  */
 large: number }
 /**
@@ -1586,23 +1591,23 @@ appCpu: number;
  */
 appMemory: number }
 /**
- * Screen thresholds for warnings
+ * Thresholds configuration.
  */
 export type Thresholds = { 
 /**
- * Warning width
+ * Warning threshold width.
  */
 warningWidth: number; 
 /**
- * Warning height
+ * Warning threshold height.
  */
 warningHeight: number; 
 /**
- * Small screen width
+ * Small screen threshold width.
  */
 smallScreenWidth: number; 
 /**
- * Small screen height
+ * Small screen threshold height.
  */
 smallScreenHeight: number }
 /**
@@ -1695,51 +1700,51 @@ usedGb: number;
  */
 totalGb: number }
 /**
- * Window configuration for the frontend
+ * Overall window configuration combining breakpoints and thresholds.
  */
 export type WindowConfig = { 
 /**
- * Responsive breakpoints
+ * Breakpoint settings.
  */
 breakpoints: Breakpoints; 
 /**
- * Screen thresholds
+ * Threshold settings.
  */
 thresholds: Thresholds }
 /**
- * Window policy response
+ * Layout policy based on screen size and current window dimensions.
  */
 export type WindowPolicy = { 
 /**
- * Whether screen is small
+ * True if the screen is considered "small" (mobile/tablet/small laptop).
  */
 isSmallScreen: boolean; 
 /**
- * Whether to show size warning
+ * True if a layout warning should be shown.
  */
 showWarning: boolean }
 /**
- * Window settings structure
+ * Persistent window state.
  */
 export type WindowSettings = { 
 /**
- * Window width
+ * Window width.
  */
 width: number; 
 /**
- * Window height
+ * Window height.
  */
 height: number; 
 /**
- * Window X position
+ * Horizontal screen position.
  */
 x: number | null; 
 /**
- * Window Y position
+ * Vertical screen position.
  */
 y: number | null; 
 /**
- * Whether window is maximized
+ * True if the window is maximized.
  */
 maximized: boolean }
 
