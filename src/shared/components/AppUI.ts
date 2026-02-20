@@ -145,10 +145,8 @@ export class AppUI {
 
         this._selectedApps.delete(category);
 
-        const win = globalThis as TGlobalWin;
-        if (win.uiState !== undefined) {
-            win.uiState.removeSelectedModule(category);
-        }
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- uiState is a runtime global, may not be set during teardown
+        (globalThis as TGlobalWin).uiState?.removeSelectedModule(category);
     }
 
     // --- Toast System ---

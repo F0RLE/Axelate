@@ -26,6 +26,8 @@
 
 /// API Layer (Tauri Commands)
 pub mod api;
+/// App-level window management and system tray setup
+pub mod app;
 /// Domain Layer (Business Logic)
 pub mod domain;
 /// Error types and conversions for the application
@@ -37,11 +39,10 @@ pub mod models;
 /// Utility functions for paths, process management, and Windows APIs
 pub mod utils;
 
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 // Re-export API modules to match the flat structure expected by collect_commands!
-// Use 'as' or nested imports to bring them into scope with the same names as before
 use api::{
     ai, license,
     modules::{self, downloader},
@@ -51,13 +52,21 @@ use api::{
     window,
 };
 
+// Import app-level helpers
+use app::{
+    IS_QUITTING,
+    tray::setup_system_tray,
+    window::{
+        create_main_window, setup_global_shortcut, setup_webview2_cache, show_and_focus_window,
+    },
+};
+
 // Import necessary services for run() and create_main_window()
 use domain::ai::custom_model_service;
 use domain::monitoring::system_monitor;
 use infrastructure::{
     config::{
-        settings::SettingsService, ui_state as infra_ui_state, ui_state::UiStateService,
-        window_settings as infra_window_settings, window_settings::WindowSettingsService,
+        settings::SettingsService, ui_state::UiStateService, window_settings::WindowSettingsService,
     },
     filesystem::{file_service, local_file_service::LocalFileService},
     http::server,
@@ -67,146 +76,9 @@ use infrastructure::{
 
 #[cfg(debug_assertions)]
 use specta_typescript::Typescript;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{
-    Manager,
-    menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-};
+use std::sync::atomic::Ordering;
+use tauri::Manager;
 use tauri_specta::{Builder, collect_commands};
-
-static IS_QUITTING: AtomicBool = AtomicBool::new(false);
-
-/// Shows, unminimizes, and focuses an existing window.
-fn show_and_focus_window(window: &tauri::WebviewWindow) {
-    let _ = window.unminimize();
-    let _ = window.show();
-    let _ = window.set_focus();
-}
-
-/// Configures the WebView2 user data folder to isolate cache.
-#[allow(unsafe_code)]
-fn setup_webview2_cache() {
-    if let Ok(app_data) = std::env::var("APPDATA") {
-        let mut path = std::path::PathBuf::from(app_data);
-        path.push("AxelateData");
-        path.push("Cache");
-        path.push("com.axelate");
-        if let Err(e) = std::fs::create_dir_all(&path) {
-            log::error!("Failed to create custom data directory: {e}");
-        } else if !path.as_os_str().is_empty() {
-            unsafe {
-                std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
-            }
-        }
-    }
-}
-
-/// Registers the Ctrl+Space global shortcut for window toggling.
-#[cfg(desktop)]
-fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri_plugin_global_shortcut::{Code, Modifiers, ShortcutState};
-
-    app.handle().plugin(
-        tauri_plugin_global_shortcut::Builder::new()
-            .with_shortcut("Ctrl+Space")?
-            .with_handler(move |app, shortcut, event| {
-                if event.state == ShortcutState::Pressed
-                    && shortcut.matches(Modifiers::CONTROL, Code::Space)
-                {
-                    if let Some(window) = app.get_webview_window("main") {
-                        log::info!("Ctrl+Space pressed. Toggling existing window.");
-                        let is_visible = window.is_visible().unwrap_or(false);
-                        let is_focused = window.is_focused().unwrap_or(false);
-
-                        if is_visible && is_focused {
-                            let _ = window.minimize();
-                            system_monitor::set_paused(true);
-                            crate::utils::memory::trim_memory();
-                        } else {
-                            show_and_focus_window(&window);
-                            system_monitor::set_paused(false);
-                        }
-                    } else {
-                        log::debug!("Ctrl+Space pressed but WebView is dead. Ignoring.");
-                    }
-                }
-            })
-            .build(),
-    )?;
-    Ok(())
-}
-
-/// Orchestrates the creation or restoration of the primary application window.
-///
-/// Retrieves serialized window state to preserve user context across sessions.
-fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
-    // 1. Check if window already exists
-    if let Some(window) = app.get_webview_window("main") {
-        return Some(window);
-    }
-
-    // 2. Load saved settings for "cold start" restoration
-    let settings = infra_window_settings::load_window_settings();
-
-    // 3. Create the window
-    let mut builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
-            .title("Axelate (Beta)")
-            .resizable(true)
-            .fullscreen(false)
-            .transparent(false)
-            .visible(false) // Start invisible to avoid flicker while moving/resizing
-            .decorations(false) // Custom titlebar
-            .inner_size(f64::from(settings.width), f64::from(settings.height));
-
-    // Restore position if valid
-    if let (Some(x), Some(y)) = (settings.x, settings.y) {
-        builder = builder.position(f64::from(x), f64::from(y));
-    }
-
-    // Attempt to build
-    match builder.build() {
-        Ok(window) => {
-            // 4. Apply zoom and maximized state
-            let ui_settings = infra_ui_state::get_ui_state_sync();
-            let mut zoom = ui_settings.zoom_level;
-
-            // Try to detect monitor resolution and apply specific zoom early
-            if let Ok(Some(monitor)) = window.primary_monitor() {
-                let scale_factor = monitor.scale_factor();
-                let size = monitor.size().to_logical::<u32>(scale_factor);
-                let res_key = format!("{}x{}", size.width, size.height);
-                if let Some(&res_zoom) = ui_settings.resolution_zoom.get(&res_key) {
-                    zoom = res_zoom;
-                    log::debug!("Applying saved resolution zoom: {zoom} for {res_key}");
-                } else {
-                    zoom = infra_window_settings::calculate_adaptive_zoom(size.height);
-                    log::debug!("Applying default resolution zoom: {zoom} for {res_key}");
-                }
-            }
-
-            if (zoom - 1.0).abs() > f64::EPSILON {
-                let _ = window.set_zoom(zoom);
-            }
-
-            if settings.maximized {
-                let _ = window.maximize();
-            }
-
-            // Defer window visibility until frontend initialization signals readiness
-            // to mitigate visual artifacts (white flash) during WebView rehydration.
-            system_monitor::set_paused(false);
-
-            // let _ = window.show(); // Removed to prevent flicker
-            let _ = window.set_focus();
-            Some(window)
-        }
-        Err(e) => {
-            log::error!("Failed to create main window: {e}");
-            None
-        }
-    }
-}
 
 /// Creates and configures the Specta builder with all application commands.
 pub fn create_specta_builder() -> Builder<tauri::Wry> {
@@ -327,7 +199,7 @@ pub fn run() {
         .export(
             Typescript::default()
                 .header("// @ts-nocheck\n/* eslint-disable */\n// This file was generated by [tauri-specta](https://github.com/oscartbeaumont/tauri-specta).\n// Do not edit this file manually, as it will be overwritten.\n"),
-            "../src/shared/types/bindings.ts", // Updated path to shared types!
+            "../src/shared/types/bindings.ts",
         )
         .map_err(|e| log::error!("Failed to export typescript bindings: {e}"))
         .ok();
@@ -370,20 +242,12 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 system_monitor::set_paused(true);
                 crate::utils::memory::trim_memory();
-                // Allow window to close (Destroy WebView)
-                // But do NOT exit the app.
-                #[cfg(not(target_os = "macos"))]
-                {
-                    // Window closes naturally.
-                    // To prevent app exit, we rely on .run() behavior below.
-                }
             }
         })
         .build(tauri::generate_context!())
     {
         Ok(app) => app.run(|_app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                // Prevent exit when all windows are closed, UNLESS we are explicitly quitting
                 log::info!(
                     "Received RunEvent::ExitRequested. IS_QUITTING: {}",
                     IS_QUITTING.load(Ordering::Relaxed)
@@ -401,76 +265,4 @@ pub fn run() {
             std::process::exit(1);
         }
     }
-}
-
-/// Setup system tray icon with menu
-fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    // Create menu items
-    let show_item = MenuItem::with_id(app, "show", "Open", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-
-    // Create menu
-    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
-
-    // Build tray icon
-    let icon = app
-        .default_window_icon()
-        .ok_or("System must have a default window icon configured in tauri.conf.json")?
-        .clone();
-
-    let _tray = TrayIconBuilder::new()
-        .icon(icon)
-        .tooltip("Axelate")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "show" => {
-                    // Check if window exists first to determine "Show" strategy
-                    if let Some(window) = app.get_webview_window("main") {
-                        show_and_focus_window(&window);
-                        system_monitor::set_paused(false);
-                    } else {
-                        // Does not exist: Create it.
-                        // It will show ITSELF when the frontend is ready (to avoid white flash).
-                        create_main_window(app);
-                        // create_main_window already handles monitoring resume
-                    }
-                }
-                "quit" => {
-                    // Graceful shutdown
-                    IS_QUITTING.store(true, Ordering::Relaxed);
-                    system_monitor::stop_monitoring();
-
-                    // Force immediate save of all chat history before exit in a background thread
-                    // to prevent hanging the tray menu UI while writing to disk.
-                    std::thread::spawn(|| {
-                        if let Err(e) =
-                            crate::domain::ai::ai_service::ChatSessionManager::save_to_disk()
-                        {
-                            log::error!("Failed to save chat history during shutdown: {e:?}");
-                        } else {
-                            log::info!("AI history flushed successfully during shutdown.");
-                        }
-                    });
-
-                    app.exit(0);
-                }
-                _ => {}
-            }
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    show_and_focus_window(&window);
-                    system_monitor::set_paused(false);
-                } else {
-                    create_main_window(app);
-                }
-            }
-        })
-        .build(app)?;
-
-    Ok(())
 }

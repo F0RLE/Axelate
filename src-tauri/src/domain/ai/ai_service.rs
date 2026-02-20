@@ -1,638 +1,20 @@
-//! AI Service implementation for handling LLM provider communication via OpenRouter.
+//! AI Service implementation — Service Orchestrator
 //!
-//! This module provides the backend logic for interacting with AI models
-//! primarily through the OpenRouter API (which normalizes OpenAI, Gemini, Claude, etc.).
+//! Orchestrates chat requests: resolves provider config, dispatches via the
+//! `AiProvider` trait, and bridges streaming events to the Tauri window.
+//!
+//! DTOs → [`types`] · Session management → [`session`] · Streaming → [`streaming`]
 
 use crate::models::config::ApiProvider;
-use async_trait::async_trait;
-use dashmap::DashMap;
-use futures_util::StreamExt;
-use rand::Rng;
-use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
-use specta::Type;
-use std::collections::HashMap;
-use std::sync::{
-    Arc, LazyLock, Once,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::mpsc;
 
-// ==================================================================================
-// DTOs (Data Transfer Objects)
-// ==================================================================================
-
-/// AI chat message with role and content
-#[derive(Debug, Serialize, Deserialize, Clone, Type)]
-pub struct ChatMessage {
-    /// Unique message identifier (UUID v4)
-    #[serde(default = "generate_uuid")]
-    pub id: String,
-    /// Role ("user", "assistant", "system")
-    pub role: String,
-    /// Message content (text or structured data)
-    pub content: serde_json::Value,
-    /// Optional signature for extended thinking
-    pub thought_signature: Option<String>,
-}
-
-fn generate_uuid() -> String {
-    uuid::Uuid::new_v4().to_string()
-}
-
-/// Token usage statistics
-#[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
-pub struct TokenUsage {
-    /// Tokens in the prompt
-    pub prompt_tokens: u32,
-    /// Tokens in the completion
-    pub completion_tokens: u32,
-    /// Total tokens used
-    pub total_tokens: u32,
-}
-
-/// AI chat request parameters
-#[derive(Debug, Serialize, Deserialize, Clone, Type)]
-pub struct ChatRequest {
-    /// AI provider ("openai", "gemini", "local") - largely ignored now as we route via OpenRouter
-    pub provider: String,
-    /// Model identifier
-    pub model: String,
-    /// Chat history and new message
-    pub messages: Vec<ChatMessage>,
-    /// Optional API key
-    pub api_key: Option<String>,
-    /// Thinking level ("low", "medium", "high")
-    pub thinking_level: Option<String>,
-    /// Optional max output tokens
-    pub max_tokens: Option<u32>,
-    /// Session identifier for history tracking
-    pub session_id: Option<String>,
-}
-
-/// AI chat response
-#[derive(Debug, Serialize, Deserialize, Type)]
-pub struct ChatResponse {
-    /// Corresponding request identifier
-    #[serde(default = "generate_uuid")]
-    pub id: String,
-    /// Whether request was successful
-    pub ok: bool,
-    /// AI reply content
-    pub reply: Option<ChatReply>,
-    /// Error message if failed
-    pub error: Option<String>,
-    /// Model used
-    pub model: Option<String>,
-    /// Thinking signature
-    pub thought_signature: Option<String>,
-    /// Token usage metrics
-    pub usage: Option<TokenUsage>,
-}
-
-/// AI reply content
-#[derive(Debug, Serialize, Deserialize, Type)]
-pub struct ChatReply {
-    /// Reply text
-    pub text: String,
-    /// Role (typically "assistant")
-    pub role: String,
-}
-
-/// Chat session with message history
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct ChatSession {
-    /// Message history
-    pub history: Vec<ChatMessage>,
-    /// Last modification time (Unix timestamp)
-    pub last_updated: f64,
-}
-
-// ==================================================================================
-// Session Management (Scalable / DashMap)
-// ==================================================================================
-
-/// Manages persistence and retrieval of chat sessions
-#[derive(Debug)]
-pub struct ChatSessionManager;
-
-/// Global storage for active sessions (DashMap for concurrency)
-static SESSIONS: LazyLock<DashMap<String, ChatSession>> =
-    LazyLock::new(|| ChatSessionManager::load_from_disk().unwrap_or_default());
-
-/// Dirty flag for IO debounce
-static DIRTY: AtomicBool = AtomicBool::new(false);
-/// Ensure background saver is only spawned once
-static SAVER_INIT: Once = Once::new();
-
-impl ChatSessionManager {
-    /// Loads session history from disk
-    fn load_from_disk() -> Result<DashMap<String, ChatSession>, crate::errors::AppError> {
-        let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
-        let tmp_path = path.with_extension("tmp");
-
-        // Atomic Crash Recovery (Senior Refinement #7)
-        // If tmp exists but real is missing, it means we crashed between remove and rename
-        if tmp_path.exists() && !path.exists() {
-            log::warn!(
-                "Detected crash/interruption during last save. Recovering history from .tmp..."
-            );
-            if let Err(e) = std::fs::rename(&tmp_path, path) {
-                log::error!("Crash recovery failed: {e}");
-            }
-        }
-
-        if !path.exists() {
-            return Ok(DashMap::new());
-        }
-
-        let content = std::fs::read_to_string(path)?;
-        let temp_map: HashMap<String, ChatSession> =
-            serde_json::from_str(&content).map_err(|e| crate::errors::AppError::Internal {
-                request_id: None,
-                message: format!("Failed to parse chat history: {e}"),
-            })?;
-
-        let dash_map = DashMap::new();
-        for (k, mut session) in temp_map {
-            // Migration Logic: Ensure every historical message has a UUID (Senior Refinement #5)
-            for msg in &mut session.history {
-                if msg.id.is_empty() || msg.id == "00000000-0000-0000-0000-000000000000" {
-                    msg.id = uuid::Uuid::new_v4().to_string();
-                }
-            }
-            dash_map.insert(k, session);
-        }
-
-        Ok(dash_map)
-    }
-
-    /// Saves current sessions to disk (Atomic Write)
-    pub fn save_to_disk() -> Result<(), crate::errors::AppError> {
-        let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
-        let tmp_path = path.with_extension("tmp");
-
-        let snapshot: HashMap<String, ChatSession> = SESSIONS
-            .iter()
-            .map(|entry| (entry.key().clone(), entry.value().clone()))
-            .collect();
-
-        let content = serde_json::to_string_pretty(&snapshot).map_err(|e| {
-            crate::errors::AppError::Internal {
-                request_id: None,
-                message: format!("Failed to serialize chat history: {e}"),
-            }
-        })?;
-
-        // 1. Write to temporary file
-        let mut file = std::fs::File::create(&tmp_path)?;
-        use std::io::Write;
-        file.write_all(content.as_bytes())?;
-
-        // 1.1 Persist buffers to physical disk (Senior Refinement #4)
-        file.sync_all()?;
-        // Close file handle before rename
-        drop(file);
-
-        // 2. Atomic Rename (Windows-safe: remove then rename if rename errors)
-        if let Err(e) = std::fs::rename(&tmp_path, path) {
-            log::warn!("Standard rename failed ({e}), attempting fallback for Windows locks...");
-            let _ = std::fs::remove_file(path);
-            std::fs::rename(&tmp_path, path)?;
-        }
-
-        Ok(())
-    }
-
-    /// Ensures the background saver task is running
-    fn ensure_saver_running() {
-        SAVER_INIT.call_once(|| {
-            tokio::spawn(async move {
-                log::info!("Starting background chat session saver...");
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    if DIRTY.load(Ordering::Relaxed) {
-                        // Use spawn_blocking for IO to avoid blocking worker threads
-                        let save_res = tokio::task::spawn_blocking(Self::save_to_disk).await;
-
-                        match save_res {
-                            Ok(Ok(())) => {
-                                DIRTY.store(false, Ordering::Relaxed);
-                                log::debug!("Chat history saved to disk (debounced)");
-                            }
-                            Ok(Err(e)) => {
-                                log::error!("Failed to save chat history: {e}");
-                            }
-                            Err(e) => {
-                                log::error!("Saver task join error: {e}");
-                            }
-                        }
-                    }
-                }
-            });
-        });
-    }
-
-    /// Manually triggers a save to disk, bypassing the debounce timer
-    pub async fn force_save() -> Result<(), crate::errors::AppError> {
-        tokio::task::spawn_blocking(Self::save_to_disk)
-            .await
-            .map_err(|e| crate::errors::AppError::Internal {
-                request_id: None,
-                message: format!("Blocking task failed: {e}"),
-            })??;
-
-        DIRTY.store(false, Ordering::Relaxed);
-        Ok(())
-    }
-
-    /// Retrieves or creates a session, updating it with new user messages
-    fn get_or_create_session(session_id: &str, new_messages: &[ChatMessage]) -> Vec<ChatMessage> {
-        // Ensure saver is running on first write-access
-        Self::ensure_saver_running();
-
-        let mut entry = SESSIONS
-            .entry(session_id.to_string())
-            .or_insert_with(|| ChatSession {
-                history: Vec::new(),
-                last_updated: Self::current_timestamp(),
-            });
-
-        entry.history.extend(new_messages.iter().cloned());
-        entry.last_updated = Self::current_timestamp();
-
-        // Mark dirty
-        DIRTY.store(true, Ordering::Relaxed);
-
-        entry.history.clone()
-    }
-
-    /// Appends an assistant response to the session
-    fn append_response(
-        session_id: &str,
-        message_id: String,
-        reply: &ChatReply,
-        signature: Option<String>,
-    ) {
-        Self::ensure_saver_running();
-
-        if let Some(mut session) = SESSIONS.get_mut(session_id) {
-            session.history.push(ChatMessage {
-                id: message_id,
-                role: reply.role.clone(),
-                content: serde_json::Value::String(reply.text.clone()),
-                thought_signature: signature,
-            });
-            session.last_updated = Self::current_timestamp();
-
-            // Mark dirty
-            DIRTY.store(true, Ordering::Relaxed);
-        }
-    }
-
-    fn current_timestamp() -> f64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs_f64()
-    }
-}
-
-/// Retrieves chat history for a session
-pub fn get_chat_history(session_id: &str) -> Vec<ChatMessage> {
-    if let Some(session) = SESSIONS.get(session_id) {
-        return session.history.clone();
-    }
-    Vec::new()
-}
-
-/// Clears history for a session
-pub fn clear_chat_history(session_id: &str) {
-    if SESSIONS.remove(session_id).is_some() {
-        // Force immediate save or mark dirty?
-        // Marking dirty is safer for debounce consistency
-        ChatSessionManager::ensure_saver_running();
-        DIRTY.store(true, Ordering::Relaxed);
-    }
-}
-
-/// Force immediate save of all chat history to disk (for shutdown or completion)
-pub async fn force_save_history() -> Result<(), crate::errors::AppError> {
-    ChatSessionManager::force_save().await
-}
-
-// ==================================================================================
-// Traits & Abstractions
-// ==================================================================================
-
-/// Typed events for AI streaming (Platform-level Protocol)
-#[derive(Debug)]
-pub enum StreamEvent {
-    /// A single text chunk for the chat conversation
-    ChatChunk {
-        /// ID of the message this chunk belongs to
-        message_id: String,
-        /// The text content
-        content: String,
-    },
-    /// A single thinking/reasoning chunk
-    ThoughtChunk {
-        /// ID of the message this chunk belongs to
-        message_id: String,
-        /// The reasoning content
-        content: String,
-    },
-    /// Stream termination event with final metadata
-    Done {
-        /// ID of the resulting message
-        message_id: String,
-        /// Final token usage (if provided by model)
-        usage: Option<TokenUsage>,
-    },
-}
-
-/// Abstraction for streaming AI output (Decouples UI from Infrastructure)
-pub trait StreamSink: Send + Sync {
-    /// Emit a stream event to the sink
-    fn emit(&self, event: StreamEvent);
-}
-
-/// Tauri-specific implementation of StreamSink using a bounded channel
-#[derive(Debug)]
-pub struct WindowSink {
-    tx: mpsc::Sender<StreamEvent>,
-}
-
-impl WindowSink {
-    /// Creates a new WindowSink with the provided channel sender
-    pub const fn new(tx: mpsc::Sender<StreamEvent>) -> Self {
-        Self { tx }
-    }
-}
-
-impl StreamSink for WindowSink {
-    fn emit(&self, event: StreamEvent) {
-        // Use try_send to avoid blocking the provider if the UI consumer is slow.
-        // In a Production scenario, we might coalesce chunks or drop oldest if full.
-        if let Err(e) = self.tx.try_send(event) {
-            log::warn!("[Sink] Failed to send event (channel full or closed): {e}");
-        }
-    }
-}
-
-/// Core interface for AI providers
-#[async_trait]
-pub trait AiProvider: Send + Sync {
-    /// Generates a stream of responses for the given request
-    async fn generate_stream(
-        &self,
-        request_id: String,
-        message_id: String,
-        req: ChatRequest,
-        sink: Arc<dyn StreamSink>,
-    ) -> Result<ChatResponse, crate::errors::AppError>;
-}
-
-// ==================================================================================
-// AI Providers (OpenRouter Unified)
-// ==================================================================================
-
-/// OpenRouter Unified Provider Implementation
-#[derive(Debug)]
-pub struct OpenRouterProvider {
-    base_url: String,
-}
-
-impl OpenRouterProvider {
-    /// Creates a new OpenRouterProvider with the specified base URL
-    pub fn new(base_url: &str) -> Self {
-        Self {
-            base_url: base_url.to_string(),
-        }
-    }
-}
-
-#[async_trait]
-impl AiProvider for OpenRouterProvider {
-    async fn generate_stream(
-        &self,
-        request_id: String,
-        message_id: String,
-        req: ChatRequest,
-        sink: Arc<dyn StreamSink>,
-    ) -> Result<ChatResponse, crate::errors::AppError> {
-        let api_key = req
-            .api_key
-            .clone()
-            .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
-
-        let client = Client::builder()
-            .build()
-            .map_err(|e| crate::errors::AppError::External {
-                request_id: Some(request_id.clone()),
-                message: e.to_string(),
-            })?;
-
-        let mut payload = serde_json::Map::new();
-        payload.insert(
-            "model".to_string(),
-            serde_json::Value::String(req.model.clone()),
-        );
-        payload.insert("messages".to_string(), serde_json::json!(req.messages));
-        payload.insert("stream".to_string(), serde_json::Value::Bool(true));
-
-        // Capability Based Routing
-        // Note: Real implementation would check `model.capabilities` here
-        // For now, we use the request's level but could refine based on provider-specific logic
-        if let Some(level) = &req.thinking_level {
-            payload.insert(
-                "reasoning_effort".to_string(),
-                serde_json::Value::String(level.clone()),
-            );
-        }
-
-        // Dynamic Max Tokens with hard limit fallback
-        let max_tokens = req.max_tokens.unwrap_or(8192);
-        payload.insert("max_tokens".to_string(), serde_json::json!(max_tokens));
-
-        let endpoint = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-
-        let mut attempts = 0;
-        const MAX_RETRIES: u32 = 3;
-
-        let res: reqwest::Response = loop {
-            attempts += 1;
-
-            // Re-build request to avoid key ownership issues in loop?
-            // Actually client.post is fine, we just need the key.
-            let request_builder = client
-                .post(&endpoint)
-                .header("Authorization", format!("Bearer {api_key}"))
-                .header("Content-Type", "application/json")
-                .header("HTTP-Referer", "https://github.com/F0RLE/Axelate")
-                .header("X-Title", "Axelate")
-                .header("X-Request-Id", &request_id)
-                .json(&payload);
-
-            // Memory Security: drop the local key copy after building the final attempt request if no more retries needed
-            // However, since we might retry, we can only drop it after the last possible use.
-            // A better way is to drop it inside the loop on success or final fail.
-            // But headers are created on .send().
-
-            match request_builder.send().await {
-                Ok(resp) => {
-                    if resp.status().is_success() {
-                        // Success - we can drop the key now (explicitly or via scope)
-                        break resp;
-                    }
-                    let status = resp.status();
-                    if (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error())
-                        && attempts <= MAX_RETRIES
-                    {
-                        // Jittered Exponential Backoff
-                        let base_wait = 2u64.pow(attempts);
-                        let jitter = rand::rng().random_range(0..500);
-                        tokio::time::sleep(std::time::Duration::from_millis(
-                            base_wait * 1000 + jitter,
-                        ))
-                        .await;
-                        continue;
-                    }
-                    break resp;
-                }
-                Err(e) => {
-                    if attempts <= MAX_RETRIES {
-                        let base_wait = 2u64.pow(attempts);
-                        let jitter = rand::rng().random_range(0..500);
-                        tokio::time::sleep(std::time::Duration::from_millis(
-                            base_wait * 1000 + jitter,
-                        ))
-                        .await;
-                        continue;
-                    }
-                    return Err(crate::errors::AppError::External {
-                        request_id: Some(request_id),
-                        message: format!("Request failed after {MAX_RETRIES} attempts: {e}"),
-                    });
-                }
-            }
-        };
-
-        // Final key drop to be safe (if not dropped by scope)
-        std::mem::drop(api_key);
-
-        if !res.status().is_success() {
-            let status = res.status();
-            let error_text = res.text().await.unwrap_or_default();
-            return Ok(ChatResponse {
-                id: message_id,
-                ok: false,
-                reply: None,
-                error: Some(format!("API Error {status}: {error_text}")),
-                model: Some(req.model),
-                thought_signature: None,
-                usage: None,
-            });
-        }
-
-        let mut stream = res.bytes_stream();
-        let mut full_content = String::new();
-        let mut buffer = String::new();
-        let mut final_usage: Option<TokenUsage> = None;
-
-        'outer: while let Some(item) = stream.next().await {
-            let chunk = item.map_err(|e| crate::errors::AppError::External {
-                request_id: Some(request_id.clone()),
-                message: e.to_string(),
-            })?;
-            let chunk_str = String::from_utf8_lossy(&chunk);
-
-            // Memory Safety: Prevent buffer overflow from malformed streams
-            if buffer.len() + chunk_str.len() > 1_024_024 {
-                // ~1MB Limit
-                log::error!("[AI] Stream buffer overflow protection triggered. Clearing buffer.");
-                buffer.clear();
-            }
-
-            buffer.push_str(&chunk_str);
-
-            while let Some(pos) = buffer.find('\n') {
-                let line = buffer[..pos].trim().to_string();
-                buffer.drain(..=pos);
-
-                if line.starts_with("data: ") {
-                    let data = line.trim_start_matches("data: ");
-                    if data == "[DONE]" {
-                        break 'outer;
-                    }
-
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                        // Extract usage if present in chunk
-                        if let Some(usage_val) = json.get("usage")
-                            && let Ok(usage) =
-                                serde_json::from_value::<TokenUsage>(usage_val.clone())
-                        {
-                            final_usage = Some(usage);
-                        }
-
-                        if let Some(choices) = json.get("choices").and_then(|c| c.as_array())
-                            && let Some(choice) = choices.first()
-                        {
-                            let delta = choice.get("delta");
-                            // Reasoning extraction
-                            if let Some(reasoning) = delta
-                                .and_then(|d| d.get("reasoning_content"))
-                                .and_then(|v| v.as_str())
-                                .or_else(|| {
-                                    delta
-                                        .and_then(|d| d.get("reasoning"))
-                                        .and_then(|v| v.as_str())
-                                })
-                            {
-                                sink.emit(StreamEvent::ThoughtChunk {
-                                    message_id: message_id.clone(),
-                                    content: reasoning.to_string(),
-                                });
-                            }
-
-                            // Content extraction
-                            if let Some(content) = delta
-                                .and_then(|d| d.get("content"))
-                                .and_then(|v| v.as_str())
-                            {
-                                full_content.push_str(content);
-                                sink.emit(StreamEvent::ChatChunk {
-                                    message_id: message_id.clone(),
-                                    content: content.to_string(),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Final event
-        sink.emit(StreamEvent::Done {
-            message_id: message_id.clone(),
-            usage: final_usage.clone(),
-        });
-
-        Ok(ChatResponse {
-            id: message_id,
-            ok: true,
-            reply: Some(ChatReply {
-                text: full_content,
-                role: "assistant".to_string(),
-            }),
-            error: None,
-            model: Some(req.model),
-            thought_signature: None,
-            usage: final_usage,
-        })
-    }
-}
+use super::session::ChatSessionManager;
+use super::streaming::{AiProvider, OpenRouterProvider, StreamEvent, WindowSink};
+pub use super::types::{
+    ChatMessage, ChatReply, ChatRequest, ChatResponse, ChatSession, TokenUsage,
+};
 
 // ==================================================================================
 // Service Orchestrator
@@ -644,20 +26,16 @@ pub async fn process_chat_request(
     request: ChatRequest,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     // 1. Session Management
-    // For saving, we use the messages passed in explicitly + get_or_create logic
     let mut messages_context = request.messages.clone();
     if let Some(sid) = &request.session_id {
-        // This implicitly starts the saver task if not running
         messages_context = ChatSessionManager::get_or_create_session(sid, &request.messages);
     }
 
-    // 2. Resolve Provider Configuration (URL, Models, etc)
-    // Default to OpenRouter
+    // 2. Resolve Provider Configuration
     let mut base_url = "https://openrouter.ai/api/v1".to_string();
     let mut effective_model = request.model.clone();
     let mut model_max_tokens: Option<u32> = None;
 
-    // Config lookup
     let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
     if providers_path.exists()
         && let Ok(content) = std::fs::read_to_string(&providers_path)
@@ -712,7 +90,6 @@ pub async fn process_chat_request(
         (req_limit, None) => req_limit,
     };
 
-    // Update request with resolved context
     let effective_request = ChatRequest {
         messages: messages_context,
         model: effective_model,
@@ -720,7 +97,7 @@ pub async fn process_chat_request(
         ..request.clone()
     };
 
-    // 3. Dispatch to Provider (Unified Trait Entry-point)
+    // 3. Dispatch to Provider
     let request_id = uuid::Uuid::new_v4().to_string();
     let message_id = uuid::Uuid::new_v4().to_string();
     log::info!(
@@ -730,11 +107,10 @@ pub async fn process_chat_request(
         effective_request.model
     );
 
-    // 3.1 Setup Bounded Infrastructure (mpsc)
+    // 3.1 Setup Bounded Channel
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
-    let sink: Arc<dyn StreamSink> = Arc::new(WindowSink::new(tx));
+    let sink: Arc<dyn super::streaming::StreamSink> = Arc::new(WindowSink::new(tx));
 
-    // Strategy Selection (Currently OpenRouter Unified, but polymorphic ready)
     let provider: Box<dyn AiProvider> = Box::new(OpenRouterProvider::new(&base_url));
 
     // 3.2 Spawn Sink Processor (UI Bridge)
@@ -755,7 +131,7 @@ pub async fn process_chat_request(
         }
     });
 
-    // 3.3 Execute Lifecycle with 90s Service Timeout
+    // 3.3 Execute with 90s Timeout
     let sink_clone = Arc::clone(&sink);
     let response_res = tokio::time::timeout(
         std::time::Duration::from_secs(90),
@@ -771,7 +147,7 @@ pub async fn process_chat_request(
     let response = if let Ok(res) = response_res {
         res
     } else {
-        // Emit Done on timeout to prevent UI hang (Senior Refinement #1)
+        // Emit Done on timeout to prevent UI hang
         sink.emit(StreamEvent::Done {
             message_id: message_id.clone(),
             usage: None,
@@ -789,7 +165,7 @@ pub async fn process_chat_request(
         && let Some(sid) = &request.session_id
     {
         ChatSessionManager::append_response(sid, message_id, reply, res.thought_signature.clone());
-        // Immediate flush after stream completion (Senior Refinement #3)
+        // Immediate flush after stream completion
         let _ = ChatSessionManager::force_save().await;
     }
 
@@ -805,7 +181,7 @@ pub async fn validate_api_key(
     provider: String,
     key: String,
 ) -> Result<bool, crate::errors::AppError> {
-    let client = Client::builder()
+    let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|e| crate::errors::AppError::External {
@@ -814,7 +190,6 @@ pub async fn validate_api_key(
         })?;
 
     // OpenRouter / OpenAI Standard validation
-    // Try listing models, which is a cheap and standard way to check Auth
     let url = if provider == "gemini" && !key.starts_with("sk-or-") {
         // Fallback for legacy raw Gemini keys
         format!("https://generativelanguage.googleapis.com/v1beta/models?key={key}")
@@ -828,7 +203,7 @@ pub async fn validate_api_key(
         req = req.header("Authorization", format!("Bearer {key}"));
     }
 
-    // Explicitly drop critical data reference after building request but before long await
+    // Explicitly drop key after building request
     std::mem::drop(key);
 
     let res = req
@@ -843,8 +218,6 @@ pub async fn validate_api_key(
         return Ok(false);
     }
 
-    // Advanced Validation: Check if the response contains actual model data
-    // (Rate limiting or empty auth might still return 200 with empty lists in some edge cases)
     let body = res.json::<serde_json::Value>().await.map_err(|e| {
         log::error!("[Validation] Failed to parse response JSON: {e}");
         crate::errors::AppError::External {
@@ -857,7 +230,7 @@ pub async fn validate_api_key(
         return Ok(!data.is_empty());
     }
 
-    // Legacy Gemini fallback or specific provider logic
+    // Legacy Gemini fallback
     if body.get("models").is_some() {
         return Ok(true);
     }
@@ -878,4 +251,46 @@ pub fn count_tokens(text: &str, model: Option<&str>) -> Result<usize, String> {
     };
 
     Ok(bpe.encode_with_special_tokens(text).len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_count_tokens_basic() {
+        // cl100k_base tokenizer: "Hello world" → typically 2 tokens
+        let count = count_tokens("Hello world", None).expect("count_tokens should not fail");
+        assert!(count > 0, "Should count at least 1 token");
+        assert!(
+            count < 10,
+            "Should not count more than 10 tokens for 2 words"
+        );
+    }
+
+    #[test]
+    fn test_count_tokens_empty() {
+        let count = count_tokens("", None).expect("count_tokens empty should not fail");
+        assert_eq!(count, 0, "Empty string should produce 0 tokens");
+    }
+
+    #[test]
+    fn test_count_tokens_with_model_fallback() {
+        // Unknown model should fall back to cl100k_base without error
+        let count = count_tokens(
+            "Testing an unknown model tokenizer",
+            Some("unknown-model-xyz"),
+        )
+        .expect("Should fall back to cl100k_base");
+        assert!(count > 0);
+    }
+
+    #[test]
+    fn test_count_tokens_longer_text() {
+        let text = "The quick brown fox jumps over the lazy dog";
+        let count = count_tokens(text, None).expect("count_tokens longer text");
+        // 9 words, likely 9-11 tokens with cl100k_base
+        assert!(count >= 9, "Should produce at least 9 tokens for 9 words");
+        assert!(count <= 15, "Should not wildly over-count 9 words");
+    }
 }

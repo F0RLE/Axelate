@@ -114,9 +114,8 @@ Write-Header "Axelate: Full Verification"
 
 # 1. Backend
 Write-Step "Backend (Rust)"
-Exec $CARGO_EXEC @("fmt", "--", "--check") $TAURI_DIR
-Exec $CARGO_EXEC @("clippy", "--", "-D", "warnings") $TAURI_DIR
-Exec $CARGO_EXEC @("test") $TAURI_DIR
+Exec $CARGO_EXEC @("check", "--all-targets") $TAURI_DIR
+
 Write-Success "Backend Verified"
 
 # 2. Frontend

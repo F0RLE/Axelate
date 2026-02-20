@@ -1,4 +1,7 @@
-use crate::domain::ai::ai_service::{self, ChatRequest, ChatResponse};
+use crate::domain::ai::{
+    self, ai_service,
+    ai_service::{ChatRequest, ChatResponse},
+};
 use crate::errors::AppError;
 use tauri::Window;
 
@@ -23,15 +26,15 @@ pub async fn validate_api_key(provider: String, key: String) -> Result<bool, App
 #[specta::specta]
 /// Clears chat history for a specific session
 pub fn clear_chat_history(session_id: &str) -> Result<(), AppError> {
-    ai_service::clear_chat_history(session_id);
+    ai::clear_chat_history(session_id);
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 /// Retrieves chat history for a specific session
-pub fn get_chat_history(session_id: &str) -> Result<Vec<ai_service::ChatMessage>, AppError> {
-    Ok(ai_service::get_chat_history(session_id))
+pub fn get_chat_history(session_id: &str) -> Result<Vec<ai::ChatMessage>, AppError> {
+    Ok(ai::get_chat_history(session_id))
 }
 
 #[tauri::command]
