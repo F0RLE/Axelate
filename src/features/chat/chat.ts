@@ -518,9 +518,9 @@ export class ChatController {
 
         if (isRecording) {
             this._playVoiceSound(true);
-            if (voiceBtn) voiceBtn.style.color = 'var(--danger)';
+            if (voiceBtn) voiceBtn.classList.add('is-recording');
         } else if (voiceBtn) {
-            voiceBtn.style.color = '';
+            voiceBtn.classList.remove('is-recording');
         }
 
         this._setVoicePlaceholder(isRecording, chatInput);

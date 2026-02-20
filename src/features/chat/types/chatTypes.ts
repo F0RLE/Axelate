@@ -83,6 +83,8 @@ export interface ISpeechRecognitionInstance {
     onstart: (() => void) | null;
     /** Callback for recognition results */
     onresult: ((_event: ISpeechRecognitionEvent) => void) | null;
+    /** Callback for when recognition errors occur */
+    onerror: ((_event: any) => void) | null;
     /** Callback for when recognition ends */
     onend: (() => void) | null;
     /** Start recognizing */

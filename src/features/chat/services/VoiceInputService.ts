@@ -92,7 +92,20 @@ export class VoiceInputService {
                 }
             };
 
+            recognition.onerror = (event: any) => {
+                logger.error(`[VoiceInputService] Recognition error: ${event.error}`);
+                if (this._isRecording) {
+                    this.stop();
+                }
+            };
+
             recognition.start();
+
+            // Assume recording started successfully if no immediate error was thrown
+            // WebView2 sometimes delays or drops the onstart event.
+            this._isRecording = true;
+            this._onStateChange?.(true);
+
             return true;
         } catch (e) {
             logger.error(`[VoiceInputService] Error starting recognition: ${String(e)}`);

@@ -116,8 +116,8 @@ overflow-checks = true    # Security over speed (critical for finance/crypto)
 # ==============================================================================
 #  PATCHES (Experimental / Custom Forks)
 # ==============================================================================
-# [patch.crates-io]
-# wry = { git = "https://github.com/F0RLE/wry.git", branch = "feat/webview2-default-allow" }
+[patch.crates-io]
+wry = { git = "https://github.com/F0RLE/wry.git", branch = "feat/webview2-default-allow" }
 
 # ==============================================================================
 #  CODE QUALITY & LINTS (Zero Tolerance Policy)
