@@ -171,9 +171,17 @@ export class SettingsUI {
                 modal.style.display = 'none';
             }, 300); // match transition
 
-            // Restore main content visibility
-            const container = document.querySelector('.models-container');
-            if (container !== null) container.classList.remove('content-hidden');
+            // Restore UI visibility
+            document.body.classList.remove('settings-modal-open');
+            const sidebar = document.getElementById('sidebar');
+            const header = document.getElementById('app-header');
+            const modelsContainer = document.querySelector('.models-container');
+            const pages = document.querySelectorAll('.page');
+
+            if (sidebar) sidebar.classList.remove('content-hidden');
+            if (header) header.classList.remove('content-hidden');
+            if (modelsContainer) modelsContainer.classList.remove('content-hidden');
+            pages.forEach((p) => p.classList.remove('content-hidden'));
         }
     }
 
@@ -532,9 +540,22 @@ export class SettingsUI {
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
 
-        // Add smooth hiding for main content
+        // Single window requirement: Hide all background UI elements
+        const win = globalThis as TGlobalWin;
+        if (typeof win.closeAppSelection === 'function') {
+            win.closeAppSelection();
+        }
+
+        document.body.classList.add('settings-modal-open');
+        const sidebar = document.getElementById('sidebar');
+        const header = document.getElementById('app-header');
+        const pages = document.querySelectorAll('.page');
         const modelsContainer = document.querySelector('.models-container');
-        if (modelsContainer !== null) modelsContainer.classList.add('content-hidden');
+
+        if (sidebar) sidebar.classList.add('content-hidden');
+        if (header) header.classList.add('content-hidden');
+        if (modelsContainer) modelsContainer.classList.add('content-hidden');
+        pages.forEach((p) => p.classList.add('content-hidden'));
 
         // Close logic
         const closeBtn = document.getElementById('close-module-settings-btn');

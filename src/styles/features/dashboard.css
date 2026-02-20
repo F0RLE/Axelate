@@ -481,6 +481,12 @@
     position: relative;
     z-index: 2;
     cursor: pointer; /* Ensure children maintain pointer */
+    pointer-events: none; /* Let events pass through to card */
+}
+
+.model-card-premium .model-card-action,
+.model-card-premium .card-action-corner {
+    pointer-events: auto !important; /* Re-enable for interactive elements */
 }
 
 .model-icon-wrapper {
@@ -1380,6 +1386,14 @@
 /* Ensure all elements in the card show pointer */
 .app-card * {
     cursor: pointer;
+    pointer-events: none; /* Let events pass through to card */
+}
+
+.app-card .app-card-overlay,
+.app-card .app-delete-badge,
+.app-card .app-type-badge,
+.app-card .card-action-corner {
+    pointer-events: auto !important; /* Re-enable for interactive elements */
 }
 
 .app-type-badge:hover {
@@ -1508,7 +1522,7 @@
     border-color: var(--glass-border) !important;
     transform: translateY(-4px) !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-    cursor: default;
+    cursor: pointer !important;
 }
 
 /* --- Empty Module Card Style (no module chosen yet) --- */

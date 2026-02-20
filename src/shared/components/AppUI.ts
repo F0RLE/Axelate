@@ -59,6 +59,7 @@ export class AppUI {
     private readonly _cardRenderer: ModuleCardRenderer;
     private readonly _skeletonManager: SkeletonManager;
     private readonly _platformService: ModulePlatformService;
+    private readonly _selectedApps = new Map<string, IApp>();
 
     constructor(platformService: ModulePlatformService) {
         this._platformService = platformService;
@@ -79,6 +80,75 @@ export class AppUI {
                 this.closeAppSelection();
             }
         });
+
+        this._initDashboardCardListeners();
+    }
+
+    /**
+     * Initializes permanent listeners for dashboard cards to handle interactions safely.
+     */
+    private _initDashboardCardListeners(): void {
+        const cards = [
+            { id: 'ai-module-card', category: 'ai' },
+            { id: 'services-module-card', category: 'services' },
+        ];
+
+        cards.forEach(({ id, category }) => {
+            const card = document.getElementById(id);
+            if (card === null) return;
+
+            // Right-click (Context Menu) - Open Settings
+            card.addEventListener('contextmenu', (e) => {
+                if (!card.classList.contains('selected')) return;
+
+                const app = this._selectedApps.get(category);
+                if (app === undefined) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+
+                logger.info(`[AppUI] Right-click settings for ${category}:`, app.id);
+                const win = globalThis as TGlobalWin;
+                if (typeof win.openModuleSettings === 'function') {
+                    win.openModuleSettings(app);
+                }
+            });
+
+            // Mouse Down - Catch Middle Click
+            card.addEventListener('mousedown', (e) => {
+                if (!card.classList.contains('selected')) return;
+
+                // 1 = Middle Button
+                if (e.button === 1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    logger.info(`[AppUI] Middle-click close for ${category}`);
+                    this._deselectModule(card, category);
+                }
+                // 2 = Right Button (Just stop propagation to prevent interference)
+                else if (e.button === 2) {
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                }
+            });
+        });
+    }
+
+    /**
+     * Deselects a module and returns the card to its empty state.
+     */
+    private _deselectModule(card: HTMLElement, category: string): void {
+        card.innerHTML = card.dataset['originalHtml'] ?? '';
+        card.classList.remove('selected', 'allow-context-menu');
+        card.classList.add('empty');
+
+        this._selectedApps.delete(category);
+
+        const win = globalThis as TGlobalWin;
+        if (win.uiState !== undefined) {
+            win.uiState.removeSelectedModule(category);
+        }
     }
 
     // --- Toast System ---
@@ -180,7 +250,7 @@ export class AppUI {
             this._cardRenderer.updateCardAttributes(cardLike, app);
 
             cardLike.classList.remove('empty');
-            cardLike.classList.add('selected');
+            cardLike.classList.add('selected', 'allow-context-menu');
 
             // We still need local content update here as it's specific to dashboard cards,
             // but we can reuse renderer helpers if needed. For now, keep as is or refactor later.
@@ -190,6 +260,9 @@ export class AppUI {
 
             this._configureActionBtn(cardLike, app);
             this._refreshCardActions(cardLike, app, category);
+
+            // Update persistent state for listeners
+            this._selectedApps.set(category, app);
         } else {
             logger.warn(`[AppUI] Could not find module card: ${cardId}`);
         }

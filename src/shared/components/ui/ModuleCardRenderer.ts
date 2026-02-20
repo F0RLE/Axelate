@@ -52,7 +52,7 @@ export class ModuleCardRenderer {
         onClick: (e: MouseEvent, app: IApp) => void,
     ): HTMLElement {
         const card = document.createElement('div');
-        card.className = 'app-card';
+        card.className = 'app-card allow-context-menu';
         card.dataset['appId'] = app.id;
 
         const isApi = this._isApiModule(app);
@@ -89,6 +89,34 @@ export class ModuleCardRenderer {
         );
 
         card.onclick = (e) => onClick(e, app);
+
+        // Isolated Right-click support (capturing to bypass other listeners)
+        card.addEventListener(
+            'contextmenu',
+            (e: MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                logger.info('[ModuleCardRenderer] Isolated right-click on module card:', app.id);
+                const win = globalThis as TGlobalWin;
+                if (typeof win.openModuleSettings === 'function') {
+                    win.openModuleSettings(app);
+                }
+            },
+            { capture: true },
+        );
+
+        // Prevent right-click from triggering mousedown/click logic elsewhere
+        card.addEventListener(
+            'mousedown',
+            (e: MouseEvent) => {
+                if (e.button === 2) {
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                }
+            },
+            { capture: true },
+        );
 
         // Self-Correction: Async check for installation status to handle race conditions (Restored from AppUI history)
         if (!isInstalled && !isApi) {

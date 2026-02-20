@@ -94,6 +94,10 @@ export class WindowUI {
         document.addEventListener(
             'contextmenu',
             (e) => {
+                const target = e.target as HTMLElement;
+                if (target.closest('.allow-context-menu')) {
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
             },
