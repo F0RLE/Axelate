@@ -22,7 +22,7 @@ jobs:
           node-version: "22"
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
       - name: Install dependencies (frontend)
         run: |
@@ -64,7 +64,7 @@ jobs:
           }
 
       - name: Push to Release Branch
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@e9c66a37f080288a11235e32cbe2dc5fb3a679cc # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./release_artifact

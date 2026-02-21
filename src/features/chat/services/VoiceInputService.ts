@@ -3,7 +3,11 @@
  * @description Handles speech recognition for chat input using the Web Speech API
  */
 
-import type { ISpeechRecognitionEvent, ISpeechRecognitionInstance } from '../types/chatTypes';
+import type {
+    ISpeechRecognitionEvent,
+    ISpeechRecognitionErrorEvent,
+    ISpeechRecognitionInstance,
+} from '../types/chatTypes';
 import { logger } from '@/infrastructure/logging/LoggerService';
 
 export type VoiceResultCallback = (text: string) => void;
@@ -92,7 +96,7 @@ export class VoiceInputService {
                 }
             };
 
-            recognition.onerror = (event: any) => {
+            recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
                 logger.error(`[VoiceInputService] Recognition error: ${event.error}`);
                 if (this._isRecording) {
                     this.stop();

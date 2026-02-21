@@ -142,8 +142,12 @@ pub fn init_global_logger() -> Result<(), String> {
     std::mem::forget(guard);
 
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive(tracing_subscriber::filter::LevelFilter::INFO.into()))
+        .with(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing_subscriber::filter::LevelFilter::INFO.into())
+                .add_directive("tao=error".parse().unwrap())
+                .add_directive("wry=error".parse().unwrap()),
+        )
         .with(tracing_subscriber::fmt::layer()) // Stdout
         .with(tracing_subscriber::fmt::layer().with_writer(non_blocking)) // File
         .with(FrontendLayer) // UI Store

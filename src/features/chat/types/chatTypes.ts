@@ -70,6 +70,16 @@ export interface ISpeechRecognitionEvent {
 }
 
 /**
+ * Event emitted by the Web Speech API on error
+ */
+export interface ISpeechRecognitionErrorEvent {
+    /** The error code or message */
+    error: string;
+    /** Optional detailed message */
+    message?: string;
+}
+
+/**
  * Interface for Web Speech API SpeechRecognition instance
  */
 export interface ISpeechRecognitionInstance {
@@ -84,7 +94,7 @@ export interface ISpeechRecognitionInstance {
     /** Callback for recognition results */
     onresult: ((_event: ISpeechRecognitionEvent) => void) | null;
     /** Callback for when recognition errors occur */
-    onerror: ((_event: any) => void) | null;
+    onerror: ((_event: ISpeechRecognitionErrorEvent) => void) | null;
     /** Callback for when recognition ends */
     onend: (() => void) | null;
     /** Start recognizing */
