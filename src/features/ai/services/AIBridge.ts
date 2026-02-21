@@ -214,10 +214,7 @@ export class AIBridge implements IAIBridge {
         response: IBridgeResponse,
         source: MessageSource,
     ): IBridgeResponse {
-        const g = globalThis as Record<string, unknown>;
-        if (typeof g['randomizeChatGreeting'] === 'function') {
-            (g['randomizeChatGreeting'] as () => void)();
-        }
+        this._core?.chatController.randomizeGreeting();
 
         if (response.ok && typeof response.text === 'string' && response.text !== '') {
             this._broadcastResponse(response.text, source);

@@ -65,7 +65,7 @@ impl StreamSink for WindowSink {
     fn emit(&self, event: StreamEvent) {
         // Use try_send to avoid blocking the provider if the UI consumer is slow.
         if let Err(e) = self.tx.try_send(event) {
-            log::warn!("[Sink] Failed to send event (channel full or closed): {e}");
+            tracing::warn!("[Sink] Failed to send event (channel full or closed): {e}");
         }
     }
 }
@@ -230,7 +230,9 @@ impl AiProvider for OpenRouterProvider {
 
             // Memory Safety: Prevent buffer overflow from malformed streams (~1MB limit)
             if buffer.len() + chunk_str.len() > 1_024_024 {
-                log::error!("[AI] Stream buffer overflow protection triggered. Clearing buffer.");
+                tracing::error!(
+                    "[AI] Stream buffer overflow protection triggered. Clearing buffer."
+                );
                 buffer.clear();
             }
 

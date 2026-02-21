@@ -51,22 +51,22 @@ function Initialize-Environment {
         }
     }
 
-    # 4. Add Windows SDK (rc.exe) to PATH if missing (Senior Build Fix)
+    # 4. Add Windows SDK (rc.exe) to PATH if missing
     if ($IsWindows -and -not (Get-Command "rc.exe" -ErrorAction SilentlyContinue)) {
         $KitsBase = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
         if (Test-Path $KitsBase) {
-            $LatestKit = Get-ChildItem $KitsBase | 
-                Where-Object { $_.PSIsContainer -and $_.Name -like "10.*" } | 
-                Sort-Object Name -Descending | 
+            # SDK installs as bin\<version>\x64 — find latest versioned folder
+            $RcExe = Get-ChildItem $KitsBase -Recurse -Filter "rc.exe" -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match "\\x64\\" } |
+                Sort-Object FullName -Descending |
                 Select-Object -First 1
 
-            if ($LatestKit) {
-                # Prefer x64 tools for 64-bit systems
-                $SDKBin = Join-Path $LatestKit.FullName "x64"
-                if (Test-Path $SDKBin) {
-                    $env:PATH = "$SDKBin;$env:PATH"
-                    Write-Step "Added Windows SDK to PATH: $SDKBin"
-                }
+            if ($RcExe) {
+                $SDKBin = $RcExe.DirectoryName
+                $env:PATH = "$SDKBin;$env:PATH"
+                Write-Step "Added Windows SDK to PATH: $SDKBin"
+            } else {
+                Write-ErrorMsg "rc.exe not found in Windows Kits. Install Windows 10/11 SDK via VS Installer."
             }
         }
     }

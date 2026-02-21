@@ -128,18 +128,13 @@ pub fn clear_logs() {
 }
 
 /// Initializes the global tracing subscriber
-pub fn init_global_logger() -> Result<(), String> {
+pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuard, String> {
     let log_dir = get_log_dir()?;
     std::fs::create_dir_all(&log_dir).map_err(|e| e.to_string())?;
 
     // Create file appender (rolling daily)
     let file_appender = tracing_appender::rolling::daily(&log_dir, "axelate.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
-
-    // Note: _guard must be kept alive, but in Tauri/Axum we usually want static leakage or
-    // managing it in the main loop. For simplicity, we'll let it leak for now as it's a global logger.
-    // In production Rust, you'd store it in a global or AppState.
-    std::mem::forget(guard);
 
     let mut filter = tracing_subscriber::EnvFilter::from_default_env()
         .add_directive(tracing_subscriber::filter::LevelFilter::INFO.into());
@@ -158,5 +153,5 @@ pub fn init_global_logger() -> Result<(), String> {
         .with(FrontendLayer) // UI Store
         .init();
 
-    Ok(())
+    Ok(guard)
 }

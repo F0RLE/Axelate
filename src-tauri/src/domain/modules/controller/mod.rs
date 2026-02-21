@@ -209,7 +209,7 @@ pub async fn control(
         ModuleAction::Start => executor.start(&manifest).await,
         ModuleAction::Stop => Ok(executor.stop(&manifest).await),
         ModuleAction::Restart => {
-            log::info!("Restarting module: {module_id}");
+            tracing::info!("Restarting module: {module_id}");
             let _ = executor.stop(&manifest).await;
 
             // Wait for it to actually die (up to 5s) with survival check
@@ -217,7 +217,7 @@ pub async fn control(
             for attempt in 0..20 {
                 if !controller.is_running(module_id, &module_path).await {
                     terminated = true;
-                    log::info!(
+                    tracing::info!(
                         "Module {module_id} terminated after {attempt} attempts during restart"
                     );
                     break;

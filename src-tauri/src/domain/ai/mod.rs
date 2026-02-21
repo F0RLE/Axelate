@@ -14,5 +14,5 @@ pub use ai_service::{
     ChatMessage, ChatReply, ChatRequest, ChatResponse, ChatSession, TokenUsage, count_tokens,
     process_chat_request, validate_api_key,
 };
-pub use session::{ChatSessionManager, clear_chat_history, force_save_history, get_chat_history};
+pub use session::ChatSessionManager;
 pub use streaming::{AiProvider, OpenRouterProvider, StreamEvent, StreamSink, WindowSink};

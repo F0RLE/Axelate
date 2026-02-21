@@ -65,7 +65,7 @@ impl<'a> LifecycleExecutor<'a> {
         if let Ok(metadata) = std::fs::metadata(&log_path)
             && metadata.len() > 10 * 1024 * 1024
         {
-            log::info!(
+            tracing::info!(
                 "Truncating large runtime.log ({} bytes) for {module_id}",
                 metadata.len(),
                 module_id = self.module_id
@@ -132,7 +132,9 @@ impl<'a> LifecycleExecutor<'a> {
             // will actually get to handle the child and cleanup.
             if let Some((_, mut child_entry)) = controller_registry.remove(&module_id) {
                 let _ = child_entry.wait().await;
-                log::info!("Module {module_id} exited naturally and was cleaned up from registry");
+                tracing::info!(
+                    "Module {module_id} exited naturally and was cleaned up from registry"
+                );
             }
         });
 
@@ -140,7 +142,7 @@ impl<'a> LifecycleExecutor<'a> {
         let pid_file = self.module_path.join("module.pid");
         let temp_pid_file = self.module_path.join("module.pid.tmp");
         if let Err(e) = std::fs::write(&temp_pid_file, pid.to_string()) {
-            log::error!("Failed to write temp PID file: {e}");
+            tracing::error!("Failed to write temp PID file: {e}");
         } else {
             let _ = std::fs::rename(temp_pid_file, pid_file);
         }
@@ -154,7 +156,7 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Gracefully stops a module with escalation
     pub async fn stop(&self, manifest: &ModuleManifest) -> ControlResponse {
-        log::info!("Stopping module: {}", self.module_id);
+        tracing::info!("Stopping module: {}", self.module_id);
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
@@ -179,7 +181,7 @@ impl<'a> LifecycleExecutor<'a> {
 
             // Wait with timeout
             if timeout(Duration::from_secs(5), child.wait()).await.is_err() {
-                log::warn!("Module {} stop timed out, forcing kill", self.module_id);
+                tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
                 let _ = child.kill().await;
             }
         }
@@ -191,7 +193,7 @@ impl<'a> LifecycleExecutor<'a> {
                 .is_running(&self.module_id, self.module_path)
                 .await
             {
-                log::info!(
+                tracing::info!(
                     "Module {} successfully stopped after {} attempts",
                     self.module_id,
                     attempt
@@ -199,7 +201,7 @@ impl<'a> LifecycleExecutor<'a> {
                 break;
             }
             if attempt == 9 {
-                log::error!(
+                tracing::error!(
                     "Module {} still running after escalation, final force kill",
                     self.module_id
                 );

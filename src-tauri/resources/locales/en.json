@@ -189,6 +189,7 @@
   "ui.chat.error.auth": "Error: Invalid API Key. Please check the key in settings.",
   "ui.chat.error.quota": "Error: Insufficient quota or limit reached. Please check your OpenAI billing details at platform.openai.com.",
   "ui.chat.error.server": "Error: OpenAI Server Error. Please try again later.",
+  "ui.chat.voice_not_supported": "Voice input is not supported.",
   "ui.launcher.web.chat_error_prefix": "Error: ",
   "ui.gemini.error.auth": "Error 403: Invalid Gemini API Key. (model: {model})",
   "ui.gemini.error.quota": "Error 429: You have exceeded the quota for Gemini API usage. We are retrying the request, please wait or try again later.",

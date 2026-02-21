@@ -189,7 +189,7 @@ fn cleanup_old_logs() -> Result<(), AppError> {
     let to_remove = log_files.len() - MAX_LOG_FILES;
     for entry in log_files.into_iter().take(to_remove) {
         if let Err(e) = fs::remove_file(entry.path()) {
-            log::warn!(
+            tracing::warn!(
                 "Failed to remove old log file {}: {e}",
                 entry.path().display()
             );

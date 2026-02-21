@@ -118,7 +118,6 @@ declare global {
     }
 
     var catalogService: ICatalogService;
-    var randomizeChatGreeting: () => void;
     var core: unknown;
     var control: (_action: string, _service: string) => Promise<boolean>;
     var controlModule: (_id: string, _action: string) => Promise<boolean>;
@@ -137,11 +136,8 @@ declare global {
     var saveGeminiKey: (_key: string) => Promise<void>;
     var checkGPTKey: () => Promise<boolean>;
     var checkGeminiKey: () => Promise<boolean>;
-    var clearChat: () => void;
-    var pickChatFiles: () => void;
-    var toggleVoiceInput: () => void;
+    var checkGeminiKey: () => Promise<boolean>;
     var clearLogs: () => Promise<void>;
-    var sendChat: () => void;
 
     // --- AxelateAPI & Tauri ---
     var axelateAPI: AxelateAPIInterface;
@@ -288,9 +284,6 @@ declare global {
         initEmojiFlags: typeof initEmojiFlags;
         updateLangButtons: typeof updateLangButtons;
         setLogView: typeof setLogView;
-        clearChat: typeof clearChat;
-        pickChatFiles: typeof pickChatFiles;
-        toggleVoiceInput: typeof toggleVoiceInput;
         sendChat: typeof sendChat;
         selectLangInModal: typeof selectLangInModal;
         confirmLanguage: typeof confirmLanguage;
@@ -302,7 +295,6 @@ declare global {
         updateSpeedDisplay: typeof updateSpeedDisplay;
         catalogService: typeof catalogService;
         getCatalogCategory: typeof getCatalogCategory;
-        randomizeChatGreeting: typeof randomizeChatGreeting;
         __TAURI_INTERNALS__: typeof __TAURI_INTERNALS__;
     }
 }

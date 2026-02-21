@@ -189,22 +189,17 @@ export class EventHandler {
     }
 
     private _initChatPage(): void {
-        const win = globalThis as TGlobalWin;
         this._addListener(document.getElementById('clear-chat-btn'), 'click', () => {
-            const clearChat = win.clearChat;
-            if (typeof clearChat === 'function') clearChat();
+            this._core.chatController.clearChat();
         });
         this._addListener(document.getElementById('chat-attach-btn'), 'click', () => {
-            const pickChatFiles = win.pickChatFiles;
-            if (typeof pickChatFiles === 'function') pickChatFiles();
+            void this._core.chatController.pickChatFiles();
         });
         this._addListener(document.getElementById('chat-voice-btn'), 'click', () => {
-            const toggleVoiceInput = win.toggleVoiceInput;
-            if (typeof toggleVoiceInput === 'function') toggleVoiceInput();
+            this._core.chatController.toggleVoiceInput();
         });
         this._addListener(document.getElementById('chat-send-btn'), 'click', () => {
-            const sendChat = win.sendChat;
-            if (typeof sendChat === 'function') sendChat();
+            void this._core.chatController.sendChat();
         });
     }
 

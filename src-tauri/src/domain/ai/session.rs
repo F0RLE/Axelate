@@ -6,39 +6,43 @@
 use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::{
-    LazyLock, Once,
+    Arc,
     atomic::{AtomicBool, Ordering},
 };
 
 use super::types::{ChatMessage, ChatReply, ChatSession};
 
-/// Global storage for active sessions (DashMap for concurrency)
-static SESSIONS: LazyLock<DashMap<String, ChatSession>> =
-    LazyLock::new(|| ChatSessionManager::load_from_disk().unwrap_or_default());
-
-/// Dirty flag for IO debounce
-static DIRTY: AtomicBool = AtomicBool::new(false);
-/// Ensure background saver is only spawned once
-static SAVER_INIT: Once = Once::new();
-
-/// Manages persistence and retrieval of chat sessions
-#[derive(Debug)]
-pub struct ChatSessionManager;
+/// Manages persistence and retrieval of chat sessions.
+///
+/// Designed for DI via `app.manage(Arc::new(ChatSessionManager::new()))`.
+/// No global statics — each instance owns its state.
+#[derive(Debug, Clone)]
+pub struct ChatSessionManager {
+    sessions: Arc<DashMap<String, ChatSession>>,
+    dirty: Arc<AtomicBool>,
+}
 
 impl ChatSessionManager {
-    /// Loads session history from disk
+    /// Creates a new manager and loads existing sessions from disk.
+    /// Call [`start_saver`] after the Tokio runtime is ready.
+    pub fn new() -> Self {
+        Self {
+            sessions: Arc::new(Self::load_from_disk().unwrap_or_default()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    // ── Disk I/O ──────────────────────────────────────────────────────────────
+
     fn load_from_disk() -> Result<DashMap<String, ChatSession>, crate::errors::AppError> {
         let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
         let tmp_path = path.with_extension("tmp");
 
-        // Atomic Crash Recovery:
-        // If tmp exists but real is missing, we crashed between remove and rename
+        // Crash recovery: if .tmp exists but the real file doesn't, we crashed mid-rename
         if tmp_path.exists() && !path.exists() {
-            log::warn!(
-                "Detected crash/interruption during last save. Recovering history from .tmp..."
-            );
+            tracing::warn!("Detected crash during last save. Recovering from .tmp...");
             if let Err(e) = std::fs::rename(&tmp_path, path) {
-                log::error!("Crash recovery failed: {e}");
+                tracing::error!("Crash recovery failed: {e}");
             }
         }
 
@@ -53,29 +57,24 @@ impl ChatSessionManager {
                 message: format!("Failed to parse chat history: {e}"),
             })?;
 
-        let dash_map = DashMap::new();
+        let map = DashMap::new();
         for (k, mut session) in temp_map {
-            // Migration: Ensure every historical message has a UUID
+            // Migration: ensure every message has a UUID
             for msg in &mut session.history {
                 if msg.id.is_empty() || msg.id == "00000000-0000-0000-0000-000000000000" {
                     msg.id = uuid::Uuid::new_v4().to_string();
                 }
             }
-            dash_map.insert(k, session);
+            map.insert(k, session);
         }
-
-        Ok(dash_map)
+        Ok(map)
     }
 
-    /// Saves current sessions to disk (Atomic Write)
-    pub fn save_to_disk() -> Result<(), crate::errors::AppError> {
+    fn flush_snapshot(
+        snapshot: HashMap<String, ChatSession>,
+    ) -> Result<(), crate::errors::AppError> {
         let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
         let tmp_path = path.with_extension("tmp");
-
-        let snapshot: HashMap<String, ChatSession> = SESSIONS
-            .iter()
-            .map(|entry| (entry.key().clone(), entry.value().clone()))
-            .collect();
 
         let content = serde_json::to_string_pretty(&snapshot).map_err(|e| {
             crate::errors::AppError::Internal {
@@ -84,19 +83,14 @@ impl ChatSessionManager {
             }
         })?;
 
-        // 1. Write to temporary file
         let mut file = std::fs::File::create(&tmp_path)?;
         use std::io::Write;
         file.write_all(content.as_bytes())?;
-
-        // 1.1 Persist buffers to physical disk
         file.sync_all()?;
-        // Close file handle before rename
         drop(file);
 
-        // 2. Atomic Rename (Windows-safe: remove then rename if rename errors)
         if let Err(e) = std::fs::rename(&tmp_path, path) {
-            log::warn!("Standard rename failed ({e}), attempting fallback for Windows locks...");
+            tracing::warn!("Rename failed ({e}), using fallback for Windows locks...");
             let _ = std::fs::remove_file(path);
             std::fs::rename(&tmp_path, path)?;
         }
@@ -104,82 +98,93 @@ impl ChatSessionManager {
         Ok(())
     }
 
-    /// Ensures the background saver task is running
-    pub(super) fn ensure_saver_running() {
-        SAVER_INIT.call_once(|| {
-            tokio::spawn(async move {
-                log::info!("Starting background chat session saver...");
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    if DIRTY.load(Ordering::Relaxed) {
-                        // Use spawn_blocking for IO to avoid blocking worker threads
-                        let save_res = tokio::task::spawn_blocking(Self::save_to_disk).await;
+    fn take_snapshot(&self) -> HashMap<String, ChatSession> {
+        self.sessions
+            .iter()
+            .map(|e| (e.key().clone(), e.value().clone()))
+            .collect()
+    }
 
-                        match save_res {
-                            Ok(Ok(())) => {
-                                DIRTY.store(false, Ordering::Relaxed);
-                                log::debug!("Chat history saved to disk (debounced)");
-                            }
-                            Ok(Err(e)) => {
-                                log::error!("Failed to save chat history: {e}");
-                            }
-                            Err(e) => {
-                                log::error!("Saver task join error: {e}");
-                            }
+    // ── Background saver ──────────────────────────────────────────────────────
+
+    /// Starts the background debounced saver.
+    /// Must be called after the Tokio runtime has been initialized (e.g. inside Tauri `setup`).
+    pub fn start_saver(&self) {
+        let sessions = Arc::clone(&self.sessions);
+        let dirty = Arc::clone(&self.dirty);
+
+        tauri::async_runtime::spawn(async move {
+            tracing::info!("Background chat session saver started.");
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                if dirty.load(Ordering::Relaxed) {
+                    let snapshot: HashMap<String, ChatSession> = sessions
+                        .iter()
+                        .map(|e| (e.key().clone(), e.value().clone()))
+                        .collect();
+
+                    match tokio::task::spawn_blocking(|| Self::flush_snapshot(snapshot)).await {
+                        Ok(Ok(())) => {
+                            dirty.store(false, Ordering::Relaxed);
+                            tracing::debug!("Chat history saved to disk.");
                         }
+                        Ok(Err(e)) => tracing::error!("Failed to save chat history: {e}"),
+                        Err(e) => tracing::error!("Saver task join error: {e}"),
                     }
                 }
-            });
+            }
         });
     }
 
-    /// Manually triggers a save to disk, bypassing the debounce timer
-    pub async fn force_save() -> Result<(), crate::errors::AppError> {
-        tokio::task::spawn_blocking(Self::save_to_disk)
+    // ── Public API ────────────────────────────────────────────────────────────
+
+    /// Immediately saves all sessions to disk, bypassing the debounce timer.
+    pub async fn force_save(&self) -> Result<(), crate::errors::AppError> {
+        let snapshot = self.take_snapshot();
+        tokio::task::spawn_blocking(|| Self::flush_snapshot(snapshot))
             .await
             .map_err(|e| crate::errors::AppError::Internal {
                 request_id: None,
                 message: format!("Blocking task failed: {e}"),
             })??;
-
-        DIRTY.store(false, Ordering::Relaxed);
+        self.dirty.store(false, Ordering::Relaxed);
         Ok(())
     }
 
-    /// Retrieves or creates a session, updating it with new user messages
-    pub(super) fn get_or_create_session(
+    /// Synchronous save — intended for use in Tauri shutdown hooks (called from a blocking context).
+    pub fn save_to_disk(&self) -> Result<(), crate::errors::AppError> {
+        Self::flush_snapshot(self.take_snapshot())
+    }
+
+    /// Returns the full history for a session, creating it if necessary.
+    pub fn get_or_create_session(
+        &self,
         session_id: &str,
         new_messages: &[ChatMessage],
     ) -> Vec<ChatMessage> {
-        // Ensure saver is running on first write-access
-        Self::ensure_saver_running();
-
-        let mut entry = SESSIONS
+        let mut entry = self
+            .sessions
             .entry(session_id.to_string())
             .or_insert_with(|| ChatSession {
                 history: Vec::new(),
                 last_updated: Self::current_timestamp(),
             });
 
-        entry.history.extend(new_messages.iter().cloned());
+        entry.history.extend_from_slice(new_messages);
         entry.last_updated = Self::current_timestamp();
-
-        // Mark dirty
-        DIRTY.store(true, Ordering::Relaxed);
-
+        self.dirty.store(true, Ordering::Relaxed);
         entry.history.clone()
     }
 
-    /// Appends an assistant response to the session
-    pub(super) fn append_response(
+    /// Appends an assistant reply to an existing session.
+    pub fn append_response(
+        &self,
         session_id: &str,
         message_id: String,
         reply: &ChatReply,
         signature: Option<String>,
     ) {
-        Self::ensure_saver_running();
-
-        if let Some(mut session) = SESSIONS.get_mut(session_id) {
+        if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.history.push(ChatMessage {
                 id: message_id,
                 role: reply.role.clone(),
@@ -187,13 +192,27 @@ impl ChatSessionManager {
                 thought_signature: signature,
             });
             session.last_updated = Self::current_timestamp();
-
-            // Mark dirty
-            DIRTY.store(true, Ordering::Relaxed);
+            self.dirty.store(true, Ordering::Relaxed);
         }
     }
 
-    fn current_timestamp() -> f64 {
+    /// Returns the history for a session, or an empty Vec if it doesn't exist.
+    pub fn get_chat_history(&self, session_id: &str) -> Vec<ChatMessage> {
+        self.sessions
+            .get(session_id)
+            .map(|s| s.history.clone())
+            .unwrap_or_default()
+    }
+
+    /// Removes a session and marks dirty.
+    pub fn clear_chat_history(&self, session_id: &str) {
+        if self.sessions.remove(session_id).is_some() {
+            self.dirty.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Returns the current UNIX timestamp in seconds (used for `last_updated` fields).
+    pub fn current_timestamp() -> f64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -201,25 +220,10 @@ impl ChatSessionManager {
     }
 }
 
-/// Retrieves chat history for a session
-pub fn get_chat_history(session_id: &str) -> Vec<ChatMessage> {
-    if let Some(session) = SESSIONS.get(session_id) {
-        return session.history.clone();
+impl Default for ChatSessionManager {
+    fn default() -> Self {
+        Self::new()
     }
-    Vec::new()
-}
-
-/// Clears history for a session
-pub fn clear_chat_history(session_id: &str) {
-    if SESSIONS.remove(session_id).is_some() {
-        ChatSessionManager::ensure_saver_running();
-        DIRTY.store(true, Ordering::Relaxed);
-    }
-}
-
-/// Force immediate save of all chat history to disk (for shutdown or completion)
-pub async fn force_save_history() -> Result<(), crate::errors::AppError> {
-    ChatSessionManager::force_save().await
 }
 
 #[cfg(test)]
@@ -234,7 +238,50 @@ mod tests {
     }
 
     #[test]
+    fn test_get_or_create_session_in_memory() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        };
+
+        let msg = ChatMessage {
+            id: "msg-1".to_string(),
+            role: "user".to_string(),
+            content: serde_json::Value::String("hello".to_string()),
+            thought_signature: None,
+        };
+
+        let history = manager.get_or_create_session("session-1", &[msg.clone()]);
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].id, "msg-1");
+        assert!(manager.dirty.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_clear_chat_history_in_memory() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        };
+
+        let msg = ChatMessage {
+            id: "msg-1".to_string(),
+            role: "user".to_string(),
+            content: serde_json::Value::String("hello".to_string()),
+            thought_signature: None,
+        };
+        manager.get_or_create_session("session-1", &[msg]);
+        manager.dirty.store(false, Ordering::Relaxed);
+
+        manager.clear_chat_history("session-1");
+        assert!(manager.get_chat_history("session-1").is_empty());
+        assert!(manager.dirty.load(Ordering::Relaxed));
+    }
+
+    #[test]
     fn test_chat_session_serialization() {
+        use super::super::types::ChatSession;
+
         let session = ChatSession {
             history: vec![ChatMessage {
                 id: "test-id".to_string(),
@@ -253,6 +300,8 @@ mod tests {
 
     #[test]
     fn test_chat_session_deserialization() {
+        use super::super::types::ChatSession;
+
         let json = r#"{
             "history": [{
                 "id": "abc-123",

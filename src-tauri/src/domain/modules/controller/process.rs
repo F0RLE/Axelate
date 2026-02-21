@@ -59,7 +59,7 @@ pub fn kill_orphan(pid: usize) -> Result<String, String> {
         return Ok(format!("Process {pid} already exited, skip kill"));
     }
 
-    log::info!("Killing orphan process PID: {pid}");
+    tracing::info!("Killing orphan process PID: {pid}");
 
     #[cfg(target_os = "windows")]
     {
@@ -107,3 +107,4 @@ pub fn kill_orphan(pid: usize) -> Result<String, String> {
         }
     }
 }
+

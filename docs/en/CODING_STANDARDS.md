@@ -582,7 +582,7 @@ logger.error('[SettingsService] Failed to load:', error);
 Rules:
 - Use `logger` — not raw `console.*` (ESLint warns)
 - Never log secrets (API keys, tokens)
-- Backend: `log` + `env_logger` crates, same semantics
+- Backend: `tracing::` macros (`tracing::info!`, `tracing::error!`, etc.), same semantics
 
 ---
 
@@ -682,7 +682,7 @@ All hooks in `.github/.husky/`:
 | `pre-commit` | `npm run build` (tsc + vite) |
 | `commit-msg` | Commitlint validation |
 
-## 12.4. NPM Scripts
+### 12.4. NPM Scripts
 
 | Script | What it does |
 |--------|-------------|

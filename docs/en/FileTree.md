@@ -12,6 +12,7 @@
 │   │   ├── 📄 clear.ps1
 │   │   ├── 📄 dev.ps1
 │   │   ├── 📄 release.ps1
+│   │   ├── 📄 sync-deps.ps1
 │   │   ├── 📄 update.ps1
 │   │   └── 📄 verify-all.ps1
 │   ├── 📁 workflows
@@ -34,8 +35,6 @@
 │   │   ├── 📝 ROADMAP.md
 │   │   └── 📝 VISION.md
 │   └── 📁 zn
-├── 📁 scripts
-│   └── 📄 scaffold-ui.js
 ├── 📁 src
 │   ├── 📁 app
 │   │   ├── 📄 bridge.ts
@@ -244,12 +243,6 @@
 ├── 📁 src-tauri
 │   ├── 📁 capabilities
 │   │   └── ⚙️ default.json
-│   ├── 📁 gen
-│   │   └── 📁 schemas
-│   │       ├── ⚙️ acl-manifests.json
-│   │       ├── ⚙️ capabilities.json
-│   │       ├── ⚙️ desktop-schema.json
-│   │       └── ⚙️ windows-schema.json
 │   ├── 📁 icons
 │   │   ├── 📄 icon.ico
 │   │   ├── 🖼️ icon.png
@@ -266,7 +259,6 @@
 │   │   └── ⚙️ api_providers.json
 │   ├── 📁 src
 │   │   ├── 📁 api
-│   │   ├── 📁 bin
 │   │   │   ├── 📁 ai
 │   │   │   │   └── 🦀 mod.rs
 │   │   │   ├── 📁 license
@@ -291,11 +283,21 @@
 │   │   │   ├── 📁 window
 │   │   │   │   └── 🦀 mod.rs
 │   │   │   └── 🦀 mod.rs
+│   │   ├── 📁 app
+│   │   │   ├── 🦀 mod.rs
+│   │   │   ├── 🦀 tray.rs
+│   │   │   └── 🦀 window.rs
 │   │   ├── 📁 domain
 │   │   │   ├── 📁 ai
 │   │   │   │   ├── 🦀 ai_service.rs
 │   │   │   │   ├── 🦀 custom_model_service.rs
-│   │   │   │   └── 🦀 mod.rs
+│   │   │   │   ├── 🦀 mod.rs
+│   │   │   │   ├── 🦀 session.rs
+│   │   │   │   ├── 🦀 streaming.rs
+│   │   │   │   └── 🦀 types.rs
+│   │   │   ├── 📁 filesystem
+│   │   │   │   ├── 🦀 mod.rs
+│   │   │   │   └── 🦀 service.rs
 │   │   │   ├── 📁 license
 │   │   │   │   ├── 🦀 mod.rs
 │   │   │   │   ├── 🦀 storage.rs
@@ -334,12 +336,16 @@
 │   │   │   │   └── 🦀 secure_storage.rs
 │   │   │   ├── 📁 filesystem
 │   │   │   │   ├── 🦀 file_service.rs
+│   │   │   │   ├── 🦀 local_file_service.rs
 │   │   │   │   └── 🦀 mod.rs
 │   │   │   ├── 📁 http
 │   │   │   │   ├── 🦀 mod.rs
 │   │   │   │   └── 🦀 server.rs
 │   │   │   ├── 📁 logging
 │   │   │   │   ├── 🦀 logger.rs
+│   │   │   │   └── 🦀 mod.rs
+│   │   │   ├── 📁 persistence
+│   │   │   │   ├── 🦀 json_store.rs
 │   │   │   │   └── 🦀 mod.rs
 │   │   │   ├── 📁 system
 │   │   │   │   ├── 🦀 mod.rs

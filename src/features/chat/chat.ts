@@ -43,7 +43,6 @@ export class ChatController {
             logger.error(`[Chat] UI init failed: ${String(err)}`);
         });
         this._bindEvents();
-        this._exposeGlobals();
 
         // Initial UI State - Link Link Handler to UI
         chatFileHandler.setUpdateCallback((files, onRemove) => {
@@ -59,7 +58,7 @@ export class ChatController {
         }
 
         // Initialize Greeting (Event listeners below will handle updates)
-        this._randomizeGreeting();
+        this.randomizeGreeting();
 
         // Load Persistence History
         void this._loadHistory();
@@ -67,18 +66,18 @@ export class ChatController {
         // Listen for language changes to update greeting and UI in real-time
         eventBus.on('page:change', (data) => {
             if (data.pageId === 'chat') {
-                this._randomizeGreeting();
+                this.randomizeGreeting();
                 this._ui.refreshTranslations();
             }
         });
 
         eventBus.on('i18n:translations:loaded', () => {
-            this._randomizeGreeting(this._currentGreetingIndex);
+            this.randomizeGreeting(this._currentGreetingIndex);
             this._ui.refreshTranslations();
         });
 
         globalThis.addEventListener('lang:changed', () => {
-            this._randomizeGreeting(this._currentGreetingIndex);
+            this.randomizeGreeting(this._currentGreetingIndex);
             this._ui.refreshTranslations();
         });
     }
@@ -154,31 +153,7 @@ export class ChatController {
         }
     }
 
-    /**
-     * Exposes controller methods to global scope for legacy support.
-     */
-    private _exposeGlobals(): void {
-        const g = globalThis as unknown as Record<string, unknown>;
-        g['sendChat'] = () => {
-            void this.sendChat();
-        };
-        g['pickChatFiles'] = () => {
-            void this.pickChatFiles();
-        };
-        g['toggleVoiceInput'] = () => {
-            this.toggleVoiceInput();
-        };
-        g['stopVoiceRecording'] = () => {
-            this.stopVoiceRecording();
-        };
-        g['clearChat'] = () => {
-            this.clearChat();
-        };
-        // Expose randomizeChatGreeting so global logic can call it (e.g. from init.ts or events)
-        g['randomizeChatGreeting'] = (idx?: number) => {
-            this._randomizeGreeting(idx);
-        };
-    }
+    // _exposeGlobals removed as part of EventBus refactoring
 
     // --- Actions ---
 
@@ -560,7 +535,7 @@ export class ChatController {
     /**
      * Randomizes the chat greeting.
      */
-    private _randomizeGreeting(forceIndex?: number): void {
+    public randomizeGreeting(forceIndex?: number): void {
         const el = document.getElementById('chat-header-question');
         if (el) {
             // Use forced index if provided, otherwise random new one

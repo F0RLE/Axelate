@@ -92,7 +92,7 @@ pub fn start_server(
 
 async fn health_handler() -> Json<Value> {
     tracing::debug!("[Server] Health check requested");
-    Json(json!({ "status": "ok", "version": "0.1.3" }))
+    Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))
 }
 
 async fn stats_handler() -> Json<SystemStats> {
@@ -111,7 +111,7 @@ async fn control_module_handler(
     Path(id): Path<String>,
     Json(payload): Json<ControlRequest>,
 ) -> Result<Json<Value>, crate::errors::AppError> {
-    log::info!(
+    tracing::info!(
         "[Server] Module control request: id={} action={}",
         id,
         payload.action
@@ -122,7 +122,7 @@ async fn control_module_handler(
     #[allow(clippy::redundant_clone)]
     let res = module_controller::control(state.tauri_app.clone(), &id, action_enum).await?;
 
-    log::info!("[Server] Module control success: {res:?}");
+    tracing::info!("[Server] Module control success: {res:?}");
     Ok(Json(json!(res)))
 }
 

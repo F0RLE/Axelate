@@ -43,11 +43,11 @@ impl FileConfigRepository {
     ) -> Result<T, AppError> {
         let content = if let Ok(path) = Self::get_config_path(filename) {
             std::fs::read_to_string(&path).unwrap_or_else(|e| {
-                log::warn!("Failed to read {filename} from disk, using embedded: {e}");
+                tracing::warn!("Failed to read {filename} from disk, using embedded: {e}");
                 embedded.to_string()
             })
         } else {
-            log::info!("{filename} not found on disk, using embedded.");
+            tracing::info!("{filename} not found on disk, using embedded.");
             embedded.to_string()
         };
 

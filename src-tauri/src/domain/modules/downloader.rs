@@ -336,7 +336,7 @@ impl FileVerifier {
     ) -> Result<(), AppError> {
         if let Some(expected_hash) = expected_hash {
             if expected_hash.trim().is_empty() {
-                log::warn!(
+                tracing::warn!(
                     "Skipping integrity check for {module_id} because expected_hash is empty"
                 );
                 return Ok(());
@@ -388,7 +388,7 @@ impl FileVerifier {
                 )));
             }
 
-            log::info!("Integrity verified for {module_id}");
+            tracing::info!("Integrity verified for {module_id}");
         }
         Ok(())
     }

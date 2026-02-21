@@ -176,6 +176,7 @@
   "ui.chat.error.auth": "错误：无效的 API 密钥。请在设置中检查。",
   "ui.chat.error.quota": "错误：配额不足或达到限制。请在 platform.openai.com 检查您的 OpenAI 账单详情。",
   "ui.chat.error.server": "错误：OpenAI 服务器错误。请稍后再试。",
+  "ui.chat.voice_not_supported": "此浏览器不支持语音输入。",
   "ui.launcher.web.chat_error_prefix": "错误: ",
   "ui.gemini.error.auth": "错误 403：无效的 Gemini API 密钥。(模型: {model})",
   "ui.gemini.error.quota": "错误 429：您已超出 Gemini API 的配额。我们正在重试请求，请稍候或稍后再试。",

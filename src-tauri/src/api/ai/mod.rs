@@ -1,9 +1,10 @@
 use crate::domain::ai::{
-    self, ai_service,
+    self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
 };
 use crate::errors::AppError;
-use tauri::Window;
+use std::sync::Arc;
+use tauri::{State, Window};
 
 #[tauri::command]
 #[specta::specta]
@@ -11,8 +12,9 @@ use tauri::Window;
 pub async fn send_chat_message(
     window: Window,
     request: ChatRequest,
+    sessions: State<'_, Arc<ChatSessionManager>>,
 ) -> Result<ChatResponse, AppError> {
-    ai_service::process_chat_request(window, request).await
+    ai_service::process_chat_request(window, request, &sessions).await
 }
 
 #[tauri::command]
@@ -25,16 +27,22 @@ pub async fn validate_api_key(provider: String, key: String) -> Result<bool, App
 #[tauri::command]
 #[specta::specta]
 /// Clears chat history for a specific session
-pub fn clear_chat_history(session_id: &str) -> Result<(), AppError> {
-    ai::clear_chat_history(session_id);
+pub fn clear_chat_history(
+    session_id: &str,
+    sessions: State<'_, Arc<ChatSessionManager>>,
+) -> Result<(), AppError> {
+    sessions.clear_chat_history(session_id);
     Ok(())
 }
 
 #[tauri::command]
 #[specta::specta]
 /// Retrieves chat history for a specific session
-pub fn get_chat_history(session_id: &str) -> Result<Vec<ai::ChatMessage>, AppError> {
-    Ok(ai::get_chat_history(session_id))
+pub fn get_chat_history(
+    session_id: &str,
+    sessions: State<'_, Arc<ChatSessionManager>>,
+) -> Result<Vec<ai::ChatMessage>, AppError> {
+    Ok(sessions.get_chat_history(session_id))
 }
 
 #[tauri::command]

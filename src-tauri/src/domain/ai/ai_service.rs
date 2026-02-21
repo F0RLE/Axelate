@@ -24,11 +24,12 @@ pub use super::types::{
 pub async fn process_chat_request(
     window: tauri::Window,
     request: ChatRequest,
+    sessions: &ChatSessionManager,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     // 1. Session Management
     let mut messages_context = request.messages.clone();
     if let Some(sid) = &request.session_id {
-        messages_context = ChatSessionManager::get_or_create_session(sid, &request.messages);
+        messages_context = sessions.get_or_create_session(sid, &request.messages);
     }
 
     // 2. Resolve Provider Configuration
@@ -48,7 +49,7 @@ pub async fn process_chat_request(
 
         // Resolve aliases
         if let Some(target) = p.model_aliases.as_ref().and_then(|m| m.get(&request.model)) {
-            log::info!("Resolved model alias: {} -> {}", request.model, target);
+            tracing::info!("Resolved model alias: {} -> {}", request.model, target);
             effective_model = target.clone();
         }
 
@@ -58,7 +59,7 @@ pub async fn process_chat_request(
         {
             model_max_tokens = def.max_output_tokens;
             if let Some(tm) = def.api_models.as_ref().and_then(|m| m.text.as_ref()) {
-                log::info!("Resolved API model ID: {effective_model} -> {tm}");
+                tracing::info!("Resolved API model ID: {effective_model} -> {tm}");
                 effective_model = tm.clone();
             }
         } else {
@@ -73,7 +74,7 @@ pub async fn process_chat_request(
                     .iter()
                     .find(|m| m.id == effective_model && m.provider_id == request.provider)
             {
-                log::info!(
+                tracing::info!(
                     "Resolved Custom Model: {} -> {}",
                     effective_model,
                     custom.base_model_id
@@ -100,7 +101,7 @@ pub async fn process_chat_request(
     // 3. Dispatch to Provider
     let request_id = uuid::Uuid::new_v4().to_string();
     let message_id = uuid::Uuid::new_v4().to_string();
-    log::info!(
+    tracing::info!(
         "[AI] Starting request {} (msg {}) for model {}",
         request_id,
         message_id,
@@ -164,9 +165,9 @@ pub async fn process_chat_request(
         && let Some(reply) = &res.reply
         && let Some(sid) = &request.session_id
     {
-        ChatSessionManager::append_response(sid, message_id, reply, res.thought_signature.clone());
+        sessions.append_response(sid, message_id, reply, res.thought_signature.clone());
         // Immediate flush after stream completion
-        let _ = ChatSessionManager::force_save().await;
+        let _ = sessions.force_save().await;
     }
 
     response
@@ -219,7 +220,7 @@ pub async fn validate_api_key(
     }
 
     let body = res.json::<serde_json::Value>().await.map_err(|e| {
-        log::error!("[Validation] Failed to parse response JSON: {e}");
+        tracing::error!("[Validation] Failed to parse response JSON: {e}");
         crate::errors::AppError::External {
             request_id: None,
             message: "Malformed API response during validation".to_string(),

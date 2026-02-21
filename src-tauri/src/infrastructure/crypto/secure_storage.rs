@@ -62,25 +62,14 @@ impl SecureStorage {
         Ok(key)
     }
 
-    /// Saves an encrypted key to secure storage
-    pub fn save_key(service: String, value: String) -> Result<(), AppError> {
-        // 1. Load existing data
-        let mut data = Self::load_data().unwrap_or_else(|_| SecureData {
-            keys: HashMap::new(),
-        });
-
-        // 2. Update map
-        data.keys.insert(service, value);
-
-        // 3. Serialize to JSON
+    /// Encrypts `data` and atomically writes it to the store path.
+    fn encrypt_and_save(data: &SecureData) -> Result<(), AppError> {
         let json_bytes =
-            serde_json::to_vec(&data).map_err(|e| AppError::Serialization(e.to_string()))?;
+            serde_json::to_vec(data).map_err(|e| AppError::Serialization(e.to_string()))?;
 
-        // 4. Encrypt
         let key_bytes = Self::get_encryption_key()?;
         let cipher = Aes256Gcm::new(&key_bytes.into());
 
-        // 96-bit nonce (random)
         let mut nonce_bytes = [0u8; 12];
         rand::rng().fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -93,29 +82,36 @@ impl SecureStorage {
                     message: format!("Encryption failure: {e}"),
                 })?;
 
-        // 5. Save [Nonce + Ciphertext]
-        let mut final_payload = Vec::new();
-        final_payload.extend_from_slice(&nonce_bytes);
-        final_payload.extend_from_slice(&ciphertext);
+        let mut payload = Vec::with_capacity(12 + ciphertext.len());
+        payload.extend_from_slice(&nonce_bytes);
+        payload.extend_from_slice(&ciphertext);
 
         let path = Self::get_store_path()?;
         let tmp_path = path.with_extension("tmp");
 
-        // Atomic write pattern
         let mut file = fs::File::create(&tmp_path).map_err(|e| AppError::Io(e.to_string()))?;
         use std::io::Write;
-        file.write_all(&final_payload)
+        file.write_all(&payload)
             .map_err(|e| AppError::Io(e.to_string()))?;
         file.sync_all().map_err(|e| AppError::Io(e.to_string()))?;
         drop(file);
 
         if let Err(e) = fs::rename(&tmp_path, &path) {
-            log::warn!("Standard rename failed ({e}), attempting fallback for Windows locks...");
+            tracing::warn!("Rename failed ({e}), using fallback for Windows locks...");
             let _ = fs::remove_file(&path);
             fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
         }
 
         Ok(())
+    }
+
+    /// Saves an encrypted key to secure storage
+    pub fn save_key(service: String, value: String) -> Result<(), AppError> {
+        let mut data = Self::load_data().unwrap_or_else(|_| SecureData {
+            keys: HashMap::new(),
+        });
+        data.keys.insert(service, value);
+        Self::encrypt_and_save(&data)
     }
 
     /// Retrieves an encrypted key from secure storage
@@ -129,50 +125,9 @@ impl SecureStorage {
         let mut data = Self::load_data().unwrap_or_else(|_| SecureData {
             keys: HashMap::new(),
         });
-
         if data.keys.remove(service).is_some() {
-            // Re-use save logic (private helper would be better but keeping it simple for now)
-            let json_bytes =
-                serde_json::to_vec(&data).map_err(|e| AppError::Serialization(e.to_string()))?;
-
-            let key_bytes = Self::get_encryption_key()?;
-            let cipher = Aes256Gcm::new(&key_bytes.into());
-
-            let mut nonce_bytes = [0u8; 12];
-            rand::rng().fill_bytes(&mut nonce_bytes);
-            let nonce = Nonce::from_slice(&nonce_bytes);
-
-            let ciphertext =
-                cipher
-                    .encrypt(nonce, json_bytes.as_ref())
-                    .map_err(|e| AppError::External {
-                        request_id: None,
-                        message: format!("Encryption failure: {e}"),
-                    })?;
-
-            let mut final_payload = Vec::new();
-            final_payload.extend_from_slice(&nonce_bytes);
-            final_payload.extend_from_slice(&ciphertext);
-
-            let path = Self::get_store_path()?;
-            let tmp_path = path.with_extension("tmp");
-
-            let mut file = fs::File::create(&tmp_path).map_err(|e| AppError::Io(e.to_string()))?;
-            use std::io::Write;
-            file.write_all(&final_payload)
-                .map_err(|e| AppError::Io(e.to_string()))?;
-            file.sync_all().map_err(|e| AppError::Io(e.to_string()))?;
-            drop(file);
-
-            if let Err(e) = fs::rename(&tmp_path, &path) {
-                log::warn!(
-                    "Standard rename failed ({e}), attempting fallback for Windows locks..."
-                );
-                let _ = fs::remove_file(&path);
-                fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
-            }
+            Self::encrypt_and_save(&data)?;
         }
-
         Ok(())
     }
 
@@ -182,7 +137,7 @@ impl SecureStorage {
 
         // Crash recovery: if main file is missing but .tmp exists, it means we crashed between remove and rename
         if tmp_path.exists() && !path.exists() {
-            log::warn!("Detected crash during last secure storage save. Recovering...");
+            tracing::warn!("Detected crash during last secure storage save. Recovering...");
             fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
         }
 

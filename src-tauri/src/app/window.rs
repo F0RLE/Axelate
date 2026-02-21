@@ -29,7 +29,7 @@ pub fn setup_webview2_cache() {
         path.push("Cache");
         path.push("com.axelate");
         if let Err(e) = std::fs::create_dir_all(&path) {
-            log::error!("Failed to create custom data directory: {e}");
+            tracing::error!("Failed to create custom data directory: {e}");
         } else if !path.as_os_str().is_empty() {
             unsafe {
                 std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
@@ -51,7 +51,7 @@ pub fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error:
                     && shortcut.matches(Modifiers::CONTROL, Code::Space)
                 {
                     if let Some(window) = app.get_webview_window("main") {
-                        log::info!("Ctrl+Space pressed. Toggling existing window.");
+                        tracing::info!("Ctrl+Space pressed. Toggling existing window.");
                         let is_visible: bool = window.is_visible().unwrap_or(false);
                         let is_focused: bool = window.is_focused().unwrap_or(false);
 
@@ -64,7 +64,7 @@ pub fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error:
                             system_monitor::set_paused(false);
                         }
                     } else {
-                        log::debug!("Ctrl+Space pressed but WebView is dead. Ignoring.");
+                        tracing::debug!("Ctrl+Space pressed but WebView is dead. Ignoring.");
                     }
                 }
             })
@@ -118,10 +118,10 @@ pub fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow
                 let res_key = format!("{}x{}", size.width, size.height);
                 if let Some(&res_zoom) = ui_settings.resolution_zoom.get(&res_key) {
                     zoom = res_zoom;
-                    log::debug!("Applying saved resolution zoom: {zoom} for {res_key}");
+                    tracing::debug!("Applying saved resolution zoom: {zoom} for {res_key}");
                 } else {
                     zoom = infra_window_settings::calculate_adaptive_zoom(size.height);
-                    log::debug!("Applying default resolution zoom: {zoom} for {res_key}");
+                    tracing::debug!("Applying default resolution zoom: {zoom} for {res_key}");
                 }
             }
 
@@ -138,7 +138,7 @@ pub fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow
             Some(window)
         }
         Err(e) => {
-            log::error!("Failed to create main window: {e}");
+            tracing::error!("Failed to create main window: {e}");
             None
         }
     }
