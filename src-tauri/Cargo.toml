@@ -55,7 +55,7 @@ tokio        = { version = "1.49.0", features = ["rt-multi-thread", "macros", "t
 reqwest      = { version = "0.13.1", features = ["json", "stream", "native-tls", "gzip"], default-features = false }
 axum         = { version = "0.8.8",  features = ["macros", "ws"] }
 tower-http   = { version = "0.6.8",  features = ["fs", "cors", "trace"] }
-futures-util = "0.3.31"
+futures-util = "0.3.32"
 
 # --- System, Hardware & Low Level ---
 sysinfo      = "0.38.0"
