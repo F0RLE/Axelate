@@ -63,12 +63,11 @@ jobs:
               }
           }
 
-      - name: Push to Release Branch
-        uses: peaceiris/actions-gh-pages@e9c66a37f080288a11235e32cbe2dc5fb3a679cc # v4
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./release_artifact
-          publish_branch: release
-          commit_message: "Deploy release ${{ github.ref_name }}"
-          force_orphan: true # Keeps the branch clean with only the latest exe
+          files: release_artifact/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
