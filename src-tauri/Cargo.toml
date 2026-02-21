@@ -58,7 +58,7 @@ tower-http   = { version = "0.6.8",  features = ["fs", "cors", "trace"] }
 futures-util = "0.3.32"
 
 # --- System, Hardware & Low Level ---
-sysinfo      = "0.38.0"
+sysinfo      = "0.38.2"
 nvml-wrapper = "0.11.0" # NVIDIA Management Library
 wmi          = "0.18.0" # Windows Management Instrumentation
 machine-uid  = "0.5.4"  # Hardware ID generation
