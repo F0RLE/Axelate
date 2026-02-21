@@ -42,6 +42,7 @@ pub fn detect_system_language() -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::print_stdout)]
     use super::*;
 
     #[test]
@@ -50,6 +51,6 @@ mod tests {
         // Should return a valid language code
         assert!(!lang.is_empty());
         assert!(lang.len() == 2);
-        println!("Detected system language: {}", lang);
+        println!("Detected system language: {lang}");
     }
 }

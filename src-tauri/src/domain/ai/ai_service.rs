@@ -255,6 +255,7 @@ pub fn count_tokens(text: &str, model: Option<&str>) -> Result<usize, String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
 
     #[test]

@@ -224,6 +224,7 @@ pub async fn force_save_history() -> Result<(), crate::errors::AppError> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
 
     #[test]

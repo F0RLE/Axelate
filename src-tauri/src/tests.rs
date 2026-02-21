@@ -3,7 +3,8 @@
 //! Run with: cargo test
 
 #[cfg(test)]
-mod tests {
+mod app_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
     use crate::models::AppSettings;
 
     /// Test default settings values
@@ -107,7 +108,7 @@ mod tests {
     /// Development utility: Regenerates TypeScript bindings
     /// Run with: cargo test tests::export_bindings -- --ignored
     #[test]
-    #[ignore]
+    #[ignore = "Manual development utility"]
     fn export_bindings() {
         use specta_typescript::Typescript;
         let builder = crate::create_specta_builder();

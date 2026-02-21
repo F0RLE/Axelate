@@ -223,6 +223,7 @@ impl SecureStorage {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::redundant_clone)]
     use super::*;
     use tempfile::tempdir;
 

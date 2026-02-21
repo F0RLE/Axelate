@@ -141,13 +141,18 @@ pub fn init_global_logger() -> Result<(), String> {
     // In production Rust, you'd store it in a global or AppState.
     std::mem::forget(guard);
 
+    let mut filter = tracing_subscriber::EnvFilter::from_default_env()
+        .add_directive(tracing_subscriber::filter::LevelFilter::INFO.into());
+
+    if let Ok(dir) = "tao=error".parse() {
+        filter = filter.add_directive(dir);
+    }
+    if let Ok(dir) = "wry=error".parse() {
+        filter = filter.add_directive(dir);
+    }
+
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing_subscriber::filter::LevelFilter::INFO.into())
-                .add_directive("tao=error".parse().unwrap())
-                .add_directive("wry=error".parse().unwrap()),
-        )
+        .with(filter)
         .with(tracing_subscriber::fmt::layer()) // Stdout
         .with(tracing_subscriber::fmt::layer().with_writer(non_blocking)) // File
         .with(FrontendLayer) // UI Store
