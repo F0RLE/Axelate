@@ -58,7 +58,7 @@ pub fn start_server(
             .route("/api/health", get(health_handler))
             .route("/api/monitoring/stats", get(stats_handler))
             .route("/api/modules", get(get_modules_handler))
-            .route("/api/modules/:id/control", post(control_module_handler))
+            .route("/api/modules/{id}/control", post(control_module_handler))
             .route("/api/translations", get(translations_handler))
             .route("/api/gpu/info", get(gpu_info_handler))
             .route("/api/settings", get(get_settings_handler))
