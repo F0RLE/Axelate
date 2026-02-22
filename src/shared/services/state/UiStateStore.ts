@@ -94,11 +94,11 @@ export class UiStateStore {
     public updateNestedState<K extends keyof IUIState>(
         key: K,
         nestedKey: string,
-        value: any,
+        value: unknown,
         markDirty = true,
     ): void {
-        // @ts-expect-error - dynamic indexing is safe here due to bounded types
-        this._state[key][nestedKey] = value;
+        const target = this._state[key] as Record<string, unknown>;
+        target[nestedKey] = value;
         if (markDirty) {
             this._isDirty = true;
             this._debouncedSave();
@@ -110,8 +110,8 @@ export class UiStateStore {
         nestedKey: string,
         markDirty = true,
     ): void {
-        // @ts-expect-error
-        delete this._state[key][nestedKey];
+        const target = this._state[key] as Record<string, unknown>;
+        delete target[nestedKey];
         if (markDirty) {
             this._isDirty = true;
             this._debouncedSave();

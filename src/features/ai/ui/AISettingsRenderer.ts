@@ -107,7 +107,7 @@ class AISettingsRenderer extends BaseComponent {
 
         const appId = app.id;
         const providerData = app.apiProviderData ?? {};
-        const models = (providerData['models'] as IAIModelData[]) ?? [];
+        const models = (providerData['models'] as IAIModelData[] | undefined) ?? [];
 
         const firstModel = models.length > 0 ? models[0] : undefined;
         const defaultModelId = firstModel ? firstModel.id : '';
@@ -375,17 +375,26 @@ class AISettingsRenderer extends BaseComponent {
 
             return `
                 <div class="ai-stats-grid">
-                    <div>
-                        <div class="stat-label" data-i18n="ui.gpt.stats.speed">${t('ui.gpt.stats.speed', 'Speed')}</div>
-                        <div>${this._renderStars(stats.speed)}</div>
+                    <div class="stat-item">
+                        <div class="stat-header">
+                            <span class="stat-icon-wrapper">⚡</span>
+                            <div class="stat-label" data-i18n="ui.gpt.stats.speed">${t('ui.gpt.stats.speed', 'Speed')}</div>
+                        </div>
+                        <div class="stat-stars">${this._renderStars(stats.speed)}</div>
                     </div>
-                    <div>
-                        <div class="stat-label" data-i18n="ui.gpt.stats.logic">${t('ui.gpt.stats.logic', 'Logic')}</div>
-                        <div>${this._renderStars(adjustedLogic)}</div>
+                    <div class="stat-item">
+                        <div class="stat-header">
+                            <span class="stat-icon-wrapper">🧠</span>
+                            <div class="stat-label" data-i18n="ui.gpt.stats.logic">${t('ui.gpt.stats.logic', 'Logic')}</div>
+                        </div>
+                        <div class="stat-stars">${this._renderStars(adjustedLogic)}</div>
                     </div>
-                    <div>
-                        <div class="stat-label" data-i18n="ui.gpt.stats.creative">${t('ui.gpt.stats.creative', 'Creative')}</div>
-                        <div>${this._renderStars(stats.creative)}</div>
+                    <div class="stat-item">
+                        <div class="stat-header">
+                            <span class="stat-icon-wrapper">🎨</span>
+                            <div class="stat-label" data-i18n="ui.gpt.stats.creative">${t('ui.gpt.stats.creative', 'Creative')}</div>
+                        </div>
+                        <div class="stat-stars">${this._renderStars(stats.creative)}</div>
                     </div>
                 </div>
             `;
@@ -406,17 +415,17 @@ class AISettingsRenderer extends BaseComponent {
             const thresholdHalf = i * 2 + 1;
 
             let className = 'star-icon';
-            let color = 'rgba(255,255,255,0.1)';
+            let style = '';
 
             if (count >= thresholdFull) {
-                color = '#FFD700';
+                className += ' full';
             } else if (count >= thresholdHalf) {
                 className += ' half';
-                color = 'transparent';
+            } else {
+                className += ' empty';
             }
 
-            const styleAttr = className.includes('half') ? '' : `style="color: ${color};"`;
-            starsHtml += `<span class="${className}" ${styleAttr}>★</span>`;
+            starsHtml += `<span class="${className}" ${style}>★</span>`;
         }
         return starsHtml;
     }

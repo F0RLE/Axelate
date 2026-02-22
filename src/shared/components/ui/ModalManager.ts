@@ -125,9 +125,12 @@ export class ModalManager {
         const t = (key: string, defaultText: string) =>
             typeof win.t === 'function' ? win.t(key, defaultText) : defaultText;
 
-        sidebar.classList.remove('hidden');
+        const modalContent = document.querySelector('#app-selection-modal .app-modal');
 
         if (category === 'ai') {
+            sidebar.classList.remove('hidden');
+            if (modalContent) modalContent.classList.add('with-sidebar');
+
             iconContainer.innerHTML = '';
             iconContainer.style.display = 'none';
 
@@ -204,27 +207,9 @@ export class ModalManager {
             // Initial UI state
             updateFilterUI();
         } else {
-            iconContainer.innerHTML =
-                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
-            iconContainer.style.display = 'flex';
-
-            const titleKey = 'ui.launcher.modules.modal.services_sidebar_title';
-            const descKey = 'ui.launcher.modules.modal.services_sidebar_desc';
-            const defaultTitle = 'Bots & Services';
-            const defaultDesc =
-                'Connect external services and manage autonomous bots acting on your behalf.';
-
-            titleEl.textContent = t(titleKey, defaultTitle);
-            titleEl.dataset['i18n'] = titleKey;
-            titleEl.style.display = 'block';
-
-            descEl.textContent = t(descKey, defaultDesc);
-            descEl.dataset['i18n'] = descKey;
-            descEl.style.display = 'block';
-
-            // Clear actions for services
-            actionsEl.innerHTML = '';
-            actionsEl.style.display = 'none';
+            // Hide the sidebar completely for Services/Bots
+            sidebar.classList.add('hidden');
+            if (modalContent) modalContent.classList.remove('with-sidebar');
         }
     }
 

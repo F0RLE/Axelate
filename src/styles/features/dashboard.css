@@ -650,7 +650,7 @@
     padding: 1rem 4rem !important; /* Much larger padding for a prominent look */
     font-size: 1.15rem !important; /* Larger font size */
     font-weight: 700 !important;
-    border-radius: 14px !important; /* Slightly more rounded for premium feel */
+    border-radius: 16px !important; /* Match the rounded rectangle of text/image cards */
     min-width: 220px !important; /* Ensure it's wide enough even with short text */
 
     background: var(--primary) !important;
@@ -747,6 +747,13 @@
     opacity: 1;
     pointer-events: auto; /* Block clicks to content behind */
     transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth left-edge transition matching sidebar animation */
+body.snapping .modal-backdrop {
+    transition:
+        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal-backdrop.hidden {
@@ -923,10 +930,22 @@
 }
 
 .app-modal-main {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    /* Do not shrink when sidebar expands */
+    flex-shrink: 0;
+    /* Lock the width to the exact size of the modal minus the collapsed sidebar */
+    width: calc(100% - 68px - 1.5rem); 
+    /* The 100% refers to the modal body (which is fixed to the viewport/max width). 
+       When the sidebar expands, this container will overflow the modal body and get cleanly clipped. */
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* When there is no sidebar, fill the entire modal uniformly */
+.app-modal:not(.with-sidebar) .app-modal-main {
+    flex-shrink: 1;
+    width: 100%;
+    transition: none;
 }
 
 .app-modal-sidebar {
@@ -1082,13 +1101,18 @@
     min-height: 0;
 }
 
+/* Restore left padding when sidebar is hidden/removed */
+.app-modal:not(.with-sidebar) .app-grid {
+    padding-left: 2rem;
+}
+
 /* App Card Styles */
 /* High specificity to ensure ALL cards have the exact same height for grid uniformity */
 #app-grid .app-card,
 .app-grid .app-card {
     background: rgba(255, 255, 255, 0.03) !important;
     border: 1px solid rgba(255, 255, 255, 0.05) !important;
-    border-radius: 16px !important;
+    border-radius: 12px !important; /* Unified squircle rounding */
     padding: 1.5rem 1.25rem !important;
     display: flex !important;
     flex-direction: column !important;
@@ -1173,7 +1197,7 @@
 .app-icon-wrapper {
     width: 70px; /* Slightly smaller for density */
     height: 70px;
-    border-radius: 16px;
+    border-radius: 12px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
     display: flex;
     align-items: center;
@@ -1306,7 +1330,7 @@
     transition:
         opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
         backdrop-filter 0.4s ease;
-    border-radius: 16px;
+    border-radius: 12px;
 }
 
 .app-card:not(.selected):hover .app-card-overlay {
@@ -1329,7 +1353,7 @@
     padding: 0.75rem 2.2rem !important; /* Smaller, better proportions */
     font-size: 1rem !important;
     font-weight: 700 !important;
-    border-radius: 30px !important; /* Pill shape */
+    border-radius: 12px !important; /* Match Text/Image category filters (squircle) */
 
     background: var(--primary) !important;
     color: white !important;
@@ -1767,7 +1791,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     margin-top: 12px;
     background: linear-gradient(135deg, var(--primary), #9b59b6);
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     color: white;
     font-weight: 600;
     font-size: 0.9rem;

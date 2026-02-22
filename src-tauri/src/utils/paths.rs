@@ -111,8 +111,8 @@ pub static RESOURCES_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     PathBuf::from("src-tauri").join("resources")
 });
 
-/// Application cache directory (`AxelateData/Cache`)
-pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("Cache"));
+/// Application cache directory (`AxelateData/System/Cache`)
+pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Cache"));
 
 /// Path to env file (`AxelateData/User/Configs/.env`)
 pub static FILE_ENV: LazyLock<PathBuf> = LazyLock::new(|| CONFIG_DIR.join(".env"));

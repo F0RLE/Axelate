@@ -318,13 +318,13 @@
         "id": "gemini-3-deep-think"
       },
       {
-        "name": "Gemini 3 Pro",
-        "desc": "Flagship multimodal reasoning and agents.",
-        "descKey": "ui.gemini.model.pro.desc",
+        "name": "Gemini 3.1 Pro Preview",
+        "desc": "Google's frontier reasoning model for advanced coding and agents. Features improved agentic reliability, long-horizon stability, and a new medium thinking level.",
+        "descKey": "ui.gemini.model.v31pro.desc",
         "tier": "strong",
-        "releaseDate": "2025-12",
-        "contextWindow": 1000000,
-        "maxOutputTokens": 32768,
+        "releaseDate": "2026-02",
+        "contextWindow": 1048576,
+        "maxOutputTokens": 65536,
         "pricing": {
           "input_per_1m": 2,
           "output_per_1m": 12,
@@ -343,9 +343,9 @@
           "functionCalling": true
         },
         "apiModels": {
-          "text": "google/gemini-3-pro-preview"
+          "text": "google/gemini-3.1-pro-preview"
         },
-        "id": "gemini-3-pro"
+        "id": "gemini-3.1-pro"
       },
       {
         "name": "Gemini 3 Flash",

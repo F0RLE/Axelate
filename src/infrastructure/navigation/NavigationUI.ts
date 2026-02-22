@@ -42,14 +42,14 @@ export class NavigationUI {
 
                 // 2. Otherwise do normal history back
                 const backPageId = this._service.goBack();
-                if (backPageId) {
+                if (backPageId !== undefined && backPageId !== '') {
                     void this.showPage(backPageId, null, false, true);
                 }
             } else if (e.button === 4) {
                 // Forward button
                 e.preventDefault();
                 const forwardPageId = this._service.goForward();
-                if (forwardPageId) {
+                if (forwardPageId !== undefined && forwardPageId !== '') {
                     void this.showPage(forwardPageId, null, false, true);
                 }
             }

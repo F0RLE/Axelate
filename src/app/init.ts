@@ -108,7 +108,7 @@ export class Core {
         this.windowUI = new WindowUI(this.windowService, this.uiSettings, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.uiSettings, this.soundService);
-        this.downloadUI = new DownloadUI(this.downloadSettings as any, this.i18n);
+        this.downloadUI = new DownloadUI(this.downloadSettings, this.i18n);
         this.settingsUI = new SettingsUI(
             this.settingsService,
             this.uiSettings,
