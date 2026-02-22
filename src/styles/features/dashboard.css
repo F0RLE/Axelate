@@ -764,8 +764,8 @@
 
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 20px;
-    width: 90%;
-    max-width: 1000px;
+    width: 95%;
+    max-width: 1100px;
     /* Increased height constraint to prevent squeezing */
     max-height: calc((100vh / var(--app-zoom, 1)) - (120px / var(--app-zoom, 1)));
 
@@ -911,11 +911,171 @@
     fill: none;
     pointer-events: none;
 }
+.app-modal-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    overflow: hidden;
+}
 
+.app-modal.with-sidebar {
+    flex-direction: row;
+}
+
+.app-modal-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.app-modal-sidebar {
+    width: 68px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2.5rem 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    border-top-left-radius: 20px;
+    border-bottom-left-radius: 20px;
+    text-align: center;
+    transition:
+        width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+        background 0.3s;
+    z-index: 50;
+    margin-right: 1.5rem; /* Separate sidebar from the main content grid */
+}
+
+.app-modal-sidebar:hover {
+    width: var(--sidebar-expanded-width, 220px);
+    background: rgba(15, 15, 20, 0.9);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+}
+
+.app-modal-sidebar.hidden {
+    display: none !important;
+}
+
+.sidebar-icon-container {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-icon-container svg {
+    width: 32px;
+    height: 32px;
+    color: var(--text-primary);
+}
+
+.sidebar-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.5rem 0;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.sidebar-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.sidebar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 1.5rem;
+    width: 100%;
+    align-items: center;
+}
+
+/* Category Filter Buttons */
+.category-filter-btn {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    background: transparent;
+    border: none;
+    border-radius: 12px;
+    width: 44px; /* Default width based on icon only */
+    height: 44px;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    color: var(--text-secondary);
+    user-select: none;
+    overflow: hidden;
+    position: relative;
+}
+
+.app-modal-sidebar:hover .category-filter-btn {
+    width: var(--filter-btn-expanded-width, 180px); /* Expanded width to fit text dynamically */
+    padding: 0 16px;
+}
+
+.category-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.category-filter-btn.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.category-filter-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.category-filter-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2.2px;
+}
+
+.category-filter-btn span {
+    font-size: 0.95rem;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    white-space: nowrap;
+    position: absolute;
+    left: 44px;
+}
+
+.app-modal-sidebar:hover .category-filter-btn span {
+    opacity: 1;
+    transform: translateX(0);
+}
 .app-grid {
-    padding: 2rem;
+    padding: 2rem 2rem 2rem 0; /* Removed left padding since sidebar has margin */
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 1.5rem;
     overflow-y: auto;
     flex: 1;
@@ -936,8 +1096,8 @@
     justify-content: flex-start !important;
     text-align: center !important;
 
-    /* Maximum tight height to eliminate voids while keeping grid alignment */
-    height: 320px !important;
+    /* Allowing height to grow naturally with text while maintaining a base baseline */
+    height: auto !important;
     min-height: 320px !important;
     flex-shrink: 0 !important;
     position: relative !important;
@@ -1038,7 +1198,7 @@
 }
 
 .app-card-desc {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
     line-height: 1.4;
     margin-top: 0.75rem !important;
@@ -1048,7 +1208,7 @@
     /* Fixed height removed to allow full text display */
     height: auto !important;
     min-height: auto !important;
-    /* Show full text instead of truncation */
+    /* Show full text without truncation */
     overflow: visible !important;
     text-overflow: clip;
     display: block !important;
@@ -1475,12 +1635,12 @@
 /* Hover states */
 .app-type-badge.api:hover {
     background: rgba(52, 152, 219, 0.15); /* Slightly more subtle */
-    color: #5dade2 !important; /* Lighter blue for contrast on dark */
+    color: var(--text-primary) !important; /* Fast contrast fix */
 }
 
 .app-type-badge.local:hover {
     background: rgba(46, 204, 113, 0.15);
-    color: #58d68d !important; /* Lighter green for contrast on dark */
+    color: var(--text-primary) !important; /* Fast contrast fix */
 }
 .app-type-badge.local.not-installed:hover {
     background: rgba(30, 30, 35, 0.95); /* Dark background like delete */

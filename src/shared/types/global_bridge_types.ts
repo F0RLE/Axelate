@@ -1,5 +1,5 @@
 import type { IApp, ICatalogData, IModuleDownloadState, ITauriInstance } from './coreTypes';
-import type { IUIState } from '../services/StateService';
+import type { IUIState } from '../services/state/UiStateStore';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { CatalogService } from '../services/CatalogService';
 import type { errorHandler } from '../services/ErrorHandler';

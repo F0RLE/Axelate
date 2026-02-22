@@ -1,6 +1,5 @@
 import type { Core } from '@/app/init';
 import { logger } from '@/infrastructure/logging/LoggerService';
-import type { StateService } from '@/shared/services/StateService';
 import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
 
 export class AIProviderManager {
@@ -34,7 +33,7 @@ export class AIProviderManager {
 
         // Sync UI state
         if (this._core) {
-            (this._core.state as unknown as StateService).set('ai_session_id', sid);
+            this._core.aiSettings.setAiSessionId(sid);
         }
     }
 
@@ -63,9 +62,8 @@ export class AIProviderManager {
 
             // Persist state
             if (this._core) {
-                const state = this._core.state as unknown as StateService;
-                state.setSelectedAIModel(providerId, model);
-                state.set('last_active_provider', providerId);
+                this._core.aiSettings.setSelectedAIModel(providerId, model);
+                this._core.aiSettings.setLastActiveProvider(providerId);
             }
 
             return true;
@@ -143,7 +141,7 @@ export class AIProviderManager {
 
     private _getPersistedModel(providerId: string): string | null {
         if (!this._core) return null;
-        return (this._core.state as unknown as StateService).getSelectedAIModel(providerId) ?? null;
+        return this._core.aiSettings.getSelectedAIModel(providerId) ?? null;
     }
 
     private _getDefaultModel(providerId: string): string {

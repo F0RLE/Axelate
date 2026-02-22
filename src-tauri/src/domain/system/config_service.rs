@@ -100,4 +100,11 @@ impl ConfigService {
             },
         })
     }
+
+    /// Loads custom user-created models configuration
+    pub fn load_custom_models(
+        &self,
+    ) -> Result<crate::models::custom_models::CustomModelConfig, AppError> {
+        self.repo.load_custom_models()
+    }
 }

@@ -7,8 +7,8 @@
     "icon": "🤖",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
-    "models": {
-      "gpt-5.3-spark": {
+    "models": [
+      {
         "name": "GPT-5.3 Spark",
         "desc": "Ultra-low-latency coding and agents (Codex variant optimized for real-time).",
         "descKey": "ui.gpt.model.spark.desc",
@@ -17,19 +17,26 @@
         "contextWindow": 128000,
         "maxOutputTokens": 4096,
         "pricing": {
-          "input_per_1m": 2.50,
-          "output_per_1m": 18.00,
+          "input_per_1m": 2.5,
+          "output_per_1m": 18,
           "currency": "USD"
         },
-        "stats": { "speed": 10, "logic": 10, "creative": 9 },
+        "stats": {
+          "speed": 10,
+          "logic": 10,
+          "creative": 9
+        },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "openai/gpt-5.3-codex-spark" }
+        "apiModels": {
+          "text": "openai/gpt-5.3-codex-spark"
+        },
+        "id": "gpt-5.3-spark"
       },
-      "gpt-5.3-codex": {
+      {
         "name": "GPT-5.3 Codex",
         "desc": "High-throughput for coding and agents.",
         "descKey": "ui.gpt.model.gpt53codex.desc",
@@ -38,19 +45,26 @@
         "contextWindow": 200000,
         "maxOutputTokens": 8192,
         "pricing": {
-          "input_per_1m": 2.00,
-          "output_per_1m": 15.00,
+          "input_per_1m": 2,
+          "output_per_1m": 15,
           "currency": "USD"
         },
-        "stats": { "speed": 8, "logic": 10, "creative": 9 },
+        "stats": {
+          "speed": 8,
+          "logic": 10,
+          "creative": 9
+        },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "openai/gpt-5.3-codex" }
+        "apiModels": {
+          "text": "openai/gpt-5.3-codex"
+        },
+        "id": "gpt-5.3-codex"
       },
-      "gpt-5.2-pro": {
+      {
         "name": "GPT-5.2 Pro",
         "desc": "Best for autonomous agents (previous stable).",
         "descKey": "ui.gpt.model.gpt52.desc",
@@ -60,18 +74,25 @@
         "maxOutputTokens": 4096,
         "pricing": {
           "input_per_1m": 1.75,
-          "output_per_1m": 14.00,
+          "output_per_1m": 14,
           "currency": "USD"
         },
-        "stats": { "speed": 6, "logic": 10, "creative": 10 },
+        "stats": {
+          "speed": 6,
+          "logic": 10,
+          "creative": 10
+        },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "openai/gpt-5.2-2025-12-11" }
+        "apiModels": {
+          "text": "openai/gpt-5.2-2025-12-11"
+        },
+        "id": "gpt-5.2-pro"
       },
-      "gpt-5.2": {
+      {
         "name": "GPT-5.2",
         "desc": "The best for coding and agentic tasks across industries.",
         "descKey": "ui.gpt.model.gpt52.desc",
@@ -81,18 +102,25 @@
         "maxOutputTokens": 4096,
         "pricing": {
           "input_per_1m": 1.75,
-          "output_per_1m": 14.00,
+          "output_per_1m": 14,
           "currency": "USD"
         },
-        "stats": { "speed": 6, "logic": 10, "creative": 9 },
+        "stats": {
+          "speed": 6,
+          "logic": 10,
+          "creative": 9
+        },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "openai/gpt-5.2" }
+        "apiModels": {
+          "text": "openai/gpt-5.2"
+        },
+        "id": "gpt-5.2"
       },
-      "gpt-5-mini": {
+      {
         "name": "GPT-5 Mini",
         "desc": "Fast and cost-effective.",
         "descKey": "ui.gpt.model.gpt5mini.desc",
@@ -102,18 +130,25 @@
         "maxOutputTokens": 4096,
         "pricing": {
           "input_per_1m": 0.15,
-          "output_per_1m": 0.60,
+          "output_per_1m": 0.6,
           "currency": "USD"
         },
-        "stats": { "speed": 10, "logic": 5, "creative": 5 },
+        "stats": {
+          "speed": 10,
+          "logic": 5,
+          "creative": 5
+        },
         "capabilities": {
           "reasoning": false,
           "streaming": true,
           "functionCalling": false
         },
-        "apiModels": { "text": "openai/gpt-5-mini-2025-08-07" }
+        "apiModels": {
+          "text": "openai/gpt-5-mini-2025-08-07"
+        },
+        "id": "gpt-5-mini"
       },
-      "gpt-5-nano": {
+      {
         "name": "GPT-5 Nano",
         "desc": "Fastest, most cost-efficient version of GPT-5.",
         "descKey": "ui.gpt.model.gpt5nano.desc",
@@ -123,18 +158,25 @@
         "maxOutputTokens": 1024,
         "pricing": {
           "input_per_1m": 0.05,
-          "output_per_1m": 0.40,
+          "output_per_1m": 0.4,
           "currency": "USD"
         },
-        "stats": { "speed": 10, "logic": 3, "creative": 3 },
+        "stats": {
+          "speed": 10,
+          "logic": 3,
+          "creative": 3
+        },
         "capabilities": {
           "reasoning": false,
           "streaming": true,
           "functionCalling": false
         },
-        "apiModels": { "text": "openai/gpt-5-nano-2025-08-07" }
+        "apiModels": {
+          "text": "openai/gpt-5-nano-2025-08-07"
+        },
+        "id": "gpt-5-nano"
       }
-    },
+    ],
     "modelAliases": {
       "gpt-5.1-thinking": "gpt-5.2-pro",
       "gpt-4-turbo": "gpt-5.2-pro",
@@ -149,8 +191,8 @@
     "icon": "✱",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
-    "models": {
-      "claude-opus-4.6": {
+    "models": [
+      {
         "name": "Claude Opus 4.6",
         "desc": "Latest Opus series with improved reliability and agentic performance.",
         "descKey": "ui.claude.model.opus46.desc",
@@ -159,19 +201,26 @@
         "contextWindow": 200000,
         "maxOutputTokens": 4096,
         "pricing": {
-          "input_per_1m": 5.00,
-          "output_per_1m": 25.00,
+          "input_per_1m": 5,
+          "output_per_1m": 25,
           "currency": "USD"
         },
-        "stats": { "speed": 4, "logic": 10, "creative": 10 },
+        "stats": {
+          "speed": 4,
+          "logic": 10,
+          "creative": 10
+        },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "anthropic/claude-opus-4.6" }
+        "apiModels": {
+          "text": "anthropic/claude-opus-4.6"
+        },
+        "id": "claude-opus-4.6"
       },
-      "claude-sonnet-4.5": {
+      {
         "name": "Claude Sonnet 4.5",
         "desc": "High-quality for coding and agents.",
         "descKey": "ui.claude.model.45sonnet.desc",
@@ -180,19 +229,26 @@
         "contextWindow": 200000,
         "maxOutputTokens": 4096,
         "pricing": {
-          "input_per_1m": 3.00,
-          "output_per_1m": 15.00,
+          "input_per_1m": 3,
+          "output_per_1m": 15,
           "currency": "USD"
         },
-        "stats": { "speed": 7, "logic": 9, "creative": 8 },
+        "stats": {
+          "speed": 7,
+          "logic": 9,
+          "creative": 8
+        },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "anthropic/claude-sonnet-4.5" }
+        "apiModels": {
+          "text": "anthropic/claude-sonnet-4.5"
+        },
+        "id": "claude-sonnet-4.5"
       },
-      "claude-haiku-4.5": {
+      {
         "name": "Claude Haiku 4.5",
         "desc": "Low-latency option in the Claude 4.5 family.",
         "descKey": "ui.claude.model.haiku.desc",
@@ -201,19 +257,26 @@
         "contextWindow": 200000,
         "maxOutputTokens": 4096,
         "pricing": {
-          "input_per_1m": 1.00,
-          "output_per_1m": 5.00,
+          "input_per_1m": 1,
+          "output_per_1m": 5,
           "currency": "USD"
         },
-        "stats": { "speed": 10, "logic": 6, "creative": 5 },
+        "stats": {
+          "speed": 10,
+          "logic": 6,
+          "creative": 5
+        },
         "capabilities": {
           "reasoning": false,
           "streaming": true,
           "functionCalling": false
         },
-        "apiModels": { "text": "anthropic/claude-haiku-4.5" }
+        "apiModels": {
+          "text": "anthropic/claude-haiku-4.5"
+        },
+        "id": "claude-haiku-4.5"
       }
-    }
+    ]
   },
   {
     "id": "gemini",
@@ -223,8 +286,8 @@
     "icon": "✨",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
-    "models": {
-      "gemini-3-deep-think": {
+    "models": [
+      {
         "name": "Gemini 3 Deep Think",
         "desc": "Specialized for science, research and engineering workflows.",
         "descKey": "ui.gemini.model.deepthink.desc",
@@ -233,11 +296,15 @@
         "contextWindow": 1000000,
         "maxOutputTokens": 65536,
         "pricing": {
-          "input_per_1m": 2.50,
-          "output_per_1m": 15.00,
+          "input_per_1m": 2.5,
+          "output_per_1m": 15,
           "currency": "USD"
         },
-        "stats": { "speed": 5, "logic": 10, "creative": 9 },
+        "stats": {
+          "speed": 5,
+          "logic": 10,
+          "creative": 9
+        },
         "capabilities": {
           "reasoning": true,
           "vision": true,
@@ -245,9 +312,12 @@
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "google/gemini-3-deep-think" }
+        "apiModels": {
+          "text": "google/gemini-3-deep-think"
+        },
+        "id": "gemini-3-deep-think"
       },
-      "gemini-3-pro": {
+      {
         "name": "Gemini 3 Pro",
         "desc": "Flagship multimodal reasoning and agents.",
         "descKey": "ui.gemini.model.pro.desc",
@@ -256,11 +326,15 @@
         "contextWindow": 1000000,
         "maxOutputTokens": 32768,
         "pricing": {
-          "input_per_1m": 2.00,
-          "output_per_1m": 12.00,
+          "input_per_1m": 2,
+          "output_per_1m": 12,
           "currency": "USD"
         },
-        "stats": { "speed": 6, "logic": 10, "creative": 10 },
+        "stats": {
+          "speed": 6,
+          "logic": 10,
+          "creative": 10
+        },
         "capabilities": {
           "reasoning": true,
           "vision": true,
@@ -268,9 +342,12 @@
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "google/gemini-3-pro-preview" }
+        "apiModels": {
+          "text": "google/gemini-3-pro-preview"
+        },
+        "id": "gemini-3-pro"
       },
-      "gemini-3-flash": {
+      {
         "name": "Gemini 3 Flash",
         "desc": "Ultra-fast multimodal agent (low-latency).",
         "descKey": "ui.gemini.model.flash.desc",
@@ -279,11 +356,15 @@
         "contextWindow": 1000000,
         "maxOutputTokens": 8192,
         "pricing": {
-          "input_per_1m": 0.50,
-          "output_per_1m": 3.00,
+          "input_per_1m": 0.5,
+          "output_per_1m": 3,
           "currency": "USD"
         },
-        "stats": { "speed": 10, "logic": 9, "creative": 8 },
+        "stats": {
+          "speed": 10,
+          "logic": 9,
+          "creative": 8
+        },
         "capabilities": {
           "reasoning": true,
           "vision": true,
@@ -291,9 +372,12 @@
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "google/gemini-3-flash-preview" }
+        "apiModels": {
+          "text": "google/gemini-3-flash-preview"
+        },
+        "id": "gemini-3-flash"
       }
-    }
+    ]
   },
   {
     "id": "deepseek",
@@ -303,8 +387,8 @@
     "icon": "🧠",
     "type": "api",
     "baseUrl": "https://openrouter.ai/api/v1",
-    "models": {
-      "deepseek-v3.2": {
+    "models": [
+      {
         "name": "DeepSeek V3.2",
         "desc": "Balanced mid-range for coding and logic.",
         "descKey": "ui.deepseek.model.v32.desc",
@@ -317,14 +401,21 @@
           "output_per_1m": 0.38,
           "currency": "USD"
         },
-        "stats": { "speed": 8, "logic": 8, "creative": 6 },
+        "stats": {
+          "speed": 8,
+          "logic": 8,
+          "creative": 6
+        },
         "capabilities": {
           "reasoning": true,
           "streaming": true,
           "functionCalling": true
         },
-        "apiModels": { "text": "deepseek/deepseek-v3.2" }
+        "apiModels": {
+          "text": "deepseek/deepseek-v3.2"
+        },
+        "id": "deepseek-v3.2"
       }
-    }
+    ]
   }
 ]

@@ -3,12 +3,12 @@
  * @description Specialized renderer for general application settings (taskbar, monitor, etc.)
  */
 
-import { type StateService } from '@/shared/services/StateService';
+import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import type { ISettingsUIContext } from './SettingsContext';
 
 export class GeneralSettingsRenderer {
-    constructor(private readonly _state: StateService) {}
+    constructor(private readonly _uiSettings: UISettingsService) {}
 
     /**
      * Initializes the general settings renderer.
@@ -46,7 +46,7 @@ export class GeneralSettingsRenderer {
             { id: 'downloads', label: 'Downloads', icon: '#icon-download' },
         ];
 
-        const hiddenItems = this._state.getHiddenNavItems();
+        const hiddenItems = this._uiSettings.getHiddenNavItems();
 
         const html = navItems
             .map((item) => {
@@ -97,7 +97,7 @@ export class GeneralSettingsRenderer {
      * Toggles a sidebar navigation item visibility.
      */
     public toggleNavItem(pageId: string, enabled: boolean) {
-        const hiddenItems = this._state.getHiddenNavItems();
+        const hiddenItems = this._uiSettings.getHiddenNavItems();
         const navBtn = document.querySelector(`#sidebar .nav-btn[data-page="${pageId}"]`);
 
         if (enabled) {
@@ -133,7 +133,7 @@ export class GeneralSettingsRenderer {
                 }, 350); // Match CSS transition (300ms) + buffer
             }
         }
-        this._state.setHiddenNavItems(hiddenItems);
+        this._uiSettings.setHiddenNavItems(hiddenItems);
     }
 
     /**
@@ -163,7 +163,7 @@ export class GeneralSettingsRenderer {
             { id: 'network', label: 'Network', icon: '#icon-network' },
         ];
 
-        const hiddenMonitors = this._state.getHiddenMonitors();
+        const hiddenMonitors = this._uiSettings.getHiddenMonitors();
 
         const { t } = context;
 
@@ -215,7 +215,7 @@ export class GeneralSettingsRenderer {
      * Toggles a system monitor visibility.
      */
     public toggleMonitorItem(id: string, enabled: boolean) {
-        const hidden = this._state.getHiddenMonitors();
+        const hidden = this._uiSettings.getHiddenMonitors();
         const el = document.querySelector(`#system-monitor .sysmon-stat[data-monitor-id="${id}"]`);
 
         if (enabled) {
@@ -249,7 +249,7 @@ export class GeneralSettingsRenderer {
                 }, 350);
             }
         }
-        this._state.setHiddenMonitors(hidden);
+        this._uiSettings.setHiddenMonitors(hidden);
 
         // Parallel update: Panel and Divider start animating immediately along with the item
         this._updateMonitorPanelVisibility(true);
@@ -263,7 +263,7 @@ export class GeneralSettingsRenderer {
         const monitorPanel = document.getElementById('system-monitor');
         if (!monitorPanel) return;
 
-        const hiddenMonitors = this._state.getHiddenMonitors();
+        const hiddenMonitors = this._uiSettings.getHiddenMonitors();
         const allHidden = hiddenMonitors.length === 6; // cpu, gpu, ram, vram, disk, network
 
         if (allHidden) {
@@ -280,7 +280,7 @@ export class GeneralSettingsRenderer {
         const divider = document.querySelector('.sysmon-divider');
         if (!(divider instanceof HTMLElement)) return;
 
-        const hiddenMonitors = this._state.getHiddenMonitors();
+        const hiddenMonitors = this._uiSettings.getHiddenMonitors();
         const aboveItems = ['cpu', 'gpu', 'ram', 'vram'];
         const belowItems = ['disk', 'network'];
 

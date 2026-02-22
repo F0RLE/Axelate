@@ -15,6 +15,9 @@ import { type SoundService } from '@/shared/services/SoundService';
 import { logger } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationUI {
+    private _mouseUpHandler: ((e: MouseEvent) => void) | null = null;
+    private _keyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+
     constructor(
         private readonly _service: NavigationService,
         private readonly _sounds?: SoundService,
@@ -26,13 +29,57 @@ export class NavigationUI {
      */
     public init(): void {
         logger.debug('[NavigationUI] Navigation initialized (pure service mode).');
+
+        // Bind global mouse navigation (Button 3 = Back, Button 4 = Forward)
+        this._mouseUpHandler = (e: MouseEvent) => {
+            if (e.button === 3) {
+                // Back button
+                e.preventDefault();
+                // 1. Check if there are any contextual back actions (modals, dropdowns)
+                if (this._service.popBackAction()) {
+                    return; // Action consumed
+                }
+
+                // 2. Otherwise do normal history back
+                const backPageId = this._service.goBack();
+                if (backPageId) {
+                    void this.showPage(backPageId, null, false, true);
+                }
+            } else if (e.button === 4) {
+                // Forward button
+                e.preventDefault();
+                const forwardPageId = this._service.goForward();
+                if (forwardPageId) {
+                    void this.showPage(forwardPageId, null, false, true);
+                }
+            }
+        };
+
+        // Bind global keyboard shortcuts (Escape = Back)
+        this._keyDownHandler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (this._service.popBackAction()) {
+                    e.preventDefault();
+                }
+            }
+        };
+
+        globalThis.addEventListener('mouseup', this._mouseUpHandler);
+        globalThis.addEventListener('keydown', this._keyDownHandler);
     }
 
     /**
      * Cleanup listeners.
      */
     public destroy(): void {
-        // No internal listeners to clean up (delegated to EventHandler)
+        if (this._mouseUpHandler) {
+            globalThis.removeEventListener('mouseup', this._mouseUpHandler);
+            this._mouseUpHandler = null;
+        }
+        if (this._keyDownHandler) {
+            globalThis.removeEventListener('keydown', this._keyDownHandler);
+            this._keyDownHandler = null;
+        }
     }
 
     /**
@@ -41,9 +88,15 @@ export class NavigationUI {
      * @param pageId - Target page identifier
      * @param btn - Optional button element that triggered the navigation
      * @param silent - If true, prevents sound effects
+     * @param isHistoryNav - If true, prevents pushing onto the history stack again
      */
-    public showPage(pageId: string, btn: HTMLElement | null = null, silent = false): Promise<void> {
-        logger.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn });
+    public showPage(
+        pageId: string,
+        btn: HTMLElement | null = null,
+        silent = false,
+        isHistoryNav = false,
+    ): Promise<void> {
+        logger.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn, isHistoryNav });
         const previousPageId = this._service.getCurrentPage();
 
         // 1. Play Sound
@@ -74,7 +127,7 @@ export class NavigationUI {
 
         if (target) {
             target.classList.add('active');
-            this._service.setCurrentPage(pageId);
+            this._service.setCurrentPage(pageId, isHistoryNav);
         } else {
             logger.warn(`[NavigationUI] Page not found: ${pageId}`);
         }

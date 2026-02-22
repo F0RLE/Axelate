@@ -17,7 +17,11 @@ import { templateLoader } from '@/shared/services/TemplateLoader';
 import type { IApp, IBootstrapData } from '@/shared/types/coreTypes';
 import { GlobalBridge } from './bridge';
 import { EventHandler } from './events';
-import { StateService } from '@/shared/services/StateService';
+import { UiStateStore } from '@/shared/services/state/UiStateStore';
+import { UISettingsService } from '@/shared/services/ui/UISettingsService';
+import { AISettingsService } from '@/shared/services/ai/AISettingsService';
+import { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
+import { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import { Particles } from '@/shared/components/Particles';
 import { MonitoringService } from '@/features/monitoring/services/MonitoringService';
 import { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
@@ -39,7 +43,11 @@ export class Core {
     public readonly catalog: CatalogService;
     public readonly navigation: NavigationService;
     public readonly soundService: SoundService;
-    public readonly state: StateService;
+    public readonly stateStore: UiStateStore;
+    public readonly uiSettings: UISettingsService;
+    public readonly aiSettings: AISettingsService;
+    public readonly downloadSettings: DownloadSettingsService;
+    public readonly moduleSettings: ModuleSettingsService;
     public readonly particles: Particles;
     public readonly monitoringService: MonitoringService;
     public readonly monitoringUI: MonitoringUI;
@@ -71,7 +79,11 @@ export class Core {
         this.logger.info(`AXELATE v${__APP_VERSION__}`);
 
         // 2. Init Core Services
-        this.state = new StateService(this.tauriProvider);
+        this.stateStore = new UiStateStore(this.tauriProvider);
+        this.uiSettings = new UISettingsService(this.stateStore);
+        this.aiSettings = new AISettingsService(this.stateStore);
+        this.downloadSettings = new DownloadSettingsService(this.stateStore, this.tauriProvider);
+        this.moduleSettings = new ModuleSettingsService(this.stateStore);
         this.moduleService = new ModuleService(this.tauriProvider);
         this.modulePlatformService = new ModulePlatformService(() => this.moduleService);
         this.windowService = new WindowService(this.tauriProvider);
@@ -83,8 +95,8 @@ export class Core {
 
         // Inject StateService into WindowService (Dependency Injection) to ensure zoom sync
         // works immediately, avoiding startup race conditions.
-        this.windowService.setStateService(this.state);
-        this.navigation.setStateService(this.state);
+        this.windowService.setUISettingsService(this.uiSettings);
+        this.navigation.setUISettingsService(this.uiSettings);
 
         this.monitoringService = new MonitoringService(this.tauriProvider);
         this.debugService = new DebugService(this.tauriProvider);
@@ -93,13 +105,14 @@ export class Core {
         // 3. Init UI Handlers
         this.appUI = new AppUI(this.modulePlatformService);
         this.i18nUI = new I18nUI(this.i18n);
-        this.windowUI = new WindowUI(this.windowService, this.state, this.soundService);
+        this.windowUI = new WindowUI(this.windowService, this.uiSettings, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
-        this.sidebarUI = new SidebarUI(this.state, this.soundService);
-        this.downloadUI = new DownloadUI(this.state, this.i18n);
+        this.sidebarUI = new SidebarUI(this.uiSettings, this.soundService);
+        this.downloadUI = new DownloadUI(this.downloadSettings as any, this.i18n);
         this.settingsUI = new SettingsUI(
             this.settingsService,
-            this.state,
+            this.uiSettings,
+            this.aiSettings,
             this.i18nUI,
             this.tauriProvider,
         );
@@ -147,12 +160,12 @@ export class Core {
             });
 
             if (bootstrapData === null) {
-                await Promise.all([this.state.loadState(), templateLoadPromise]);
+                await Promise.all([this.stateStore.loadState(), templateLoadPromise]);
                 await this.windowService.init();
                 this.windowUI.init();
                 await this.i18n.init();
             } else {
-                this.state.setState(bootstrapData.uiState);
+                this.stateStore.setState(bootstrapData.uiState);
                 try {
                     await this.windowService.init(
                         bootstrapData.windowConfig,
@@ -168,7 +181,7 @@ export class Core {
 
             this.i18nUI.applyTranslations();
             const win = globalThis as unknown as Window;
-            win.uiState = this.state as unknown as Window['uiState'];
+            win.uiState = this.stateStore as unknown as Window['uiState'];
 
             this.navigation.refreshFromUiState();
             const currentPage = this.navigation.getCurrentPage();
@@ -253,7 +266,7 @@ export class Core {
      */
     private _restoreSelectedModules(): void {
         this.logger.debug('[Core] Restoring selected modules...');
-        const selected = this.state.getState().selected_modules;
+        const selected = this.moduleSettings.getSelectedModules();
 
         for (const category of ['ai', 'services']) {
             const catSelection = selected[category];

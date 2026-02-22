@@ -8,9 +8,10 @@ import DOMPurify from 'dompurify';
 
 import type { IApp } from '@/shared/types/coreTypes';
 import { type SettingsService } from '@/features/settings/services/SettingsService';
-import { type StateService, type ThinkingLevel } from '@/shared/services/StateService';
+import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
+import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { IAIModelData } from '../types/aiTypes';
-import { getModelData, sortModelsByPower } from '../utils/catalogHelpers';
+import { getModelData } from '../utils/catalogHelpers';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
@@ -50,7 +51,7 @@ interface IAIModelPricing {
  */
 class AISettingsRenderer extends BaseComponent {
     private _settingsService: SettingsService | null = null;
-    private _stateService: StateService | null = null;
+    private _aiSettings: AISettingsService | null = null;
     private _tauri: TauriProvider | null = null;
     private _checkTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,11 +68,11 @@ class AISettingsRenderer extends BaseComponent {
      */
     public override init(
         settingsService: SettingsService,
-        stateService: StateService,
+        aiSettings: AISettingsService,
         tauri: TauriProvider,
     ): Promise<void> {
         this._settingsService = settingsService;
-        this._stateService = stateService;
+        this._aiSettings = aiSettings;
         this._tauri = tauri;
         return super.init();
     }
@@ -82,7 +83,7 @@ class AISettingsRenderer extends BaseComponent {
 
     protected onDestroy(): void {
         this._settingsService = null;
-        this._stateService = null;
+        this._aiSettings = null;
         this._tauri = null;
 
         if (this._checkTimeout !== null) {
@@ -106,12 +107,11 @@ class AISettingsRenderer extends BaseComponent {
 
         const appId = app.id;
         const providerData = app.apiProviderData ?? {};
-        const models = providerData['models'] as Record<string, IAIModelData> | undefined;
-        const sortedModels = sortModelsByPower(models ?? {});
+        const models = (providerData['models'] as IAIModelData[]) ?? [];
 
-        const firstModel = sortedModels.length > 0 ? sortedModels[0] : undefined;
-        const defaultModelId = firstModel ? firstModel[0] : '';
-        const savedModel = this._stateService?.getSelectedAIModel(appId) ?? defaultModelId;
+        const firstModel = models.length > 0 ? models[0] : undefined;
+        const defaultModelId = firstModel ? firstModel.id : '';
+        const savedModel = this._aiSettings?.getSelectedAIModel(appId) ?? defaultModelId;
         const t = this._getTranslator();
 
         const isCleanApp =
@@ -157,7 +157,7 @@ class AISettingsRenderer extends BaseComponent {
                                 <h3 id="${appId}-models-title">🤖 <span data-i18n="ui.settings.select_model">${t('ui.settings.select_model', 'Select Model')}</span></h3>
                             </div>
                             <div class="ai-models-grid" role="listbox" aria-label="Available Models">
-                                ${sortedModels.map(([key, model]) => this._renderModelCard(key, model, savedModel === key, t)).join('')}
+                                ${models.map((model) => this._renderModelCard(model.id, model, savedModel === model.id, t)).join('')}
                             </div>
                         </div>
                     </section>
@@ -165,7 +165,7 @@ class AISettingsRenderer extends BaseComponent {
                     ${
                         appId === 'gemini' || appId === 'claude' || appId === 'gpt'
                             ? (() => {
-                                  const savedLevel = this._stateService?.getThinkingLevel(appId);
+                                  const savedLevel = this._aiSettings?.getThinkingLevel(appId);
                                   const isLow = savedLevel === 'low';
                                   const isMedium = savedLevel === 'medium';
                                   const isHigh = savedLevel === 'high' || savedLevel === undefined;
@@ -364,7 +364,7 @@ class AISettingsRenderer extends BaseComponent {
         const stats = modelData?.stats;
 
         if (stats) {
-            const thinkingLevel = this._stateService?.getThinkingLevel(appId) ?? 'high';
+            const thinkingLevel = this._aiSettings?.getThinkingLevel(appId) ?? 'high';
 
             let adjustedLogic = stats.logic || 0;
             if (thinkingLevel === 'high') {
@@ -492,7 +492,7 @@ class AISettingsRenderer extends BaseComponent {
 
             const updateThinking = (target: HTMLElement) => {
                 const val = (target.dataset['value'] ?? 'high') as ThinkingLevel;
-                this._stateService?.setThinkingLevel(appId, val);
+                this._aiSettings?.setThinkingLevel(appId, val);
 
                 buttons.forEach((b) => {
                     b.classList.remove('selected');
@@ -503,7 +503,7 @@ class AISettingsRenderer extends BaseComponent {
 
                 target.setAttribute('aria-checked', 'true');
 
-                const savedModel = this._stateService?.getSelectedAIModel(appId) ?? '';
+                const savedModel = this._aiSettings?.getSelectedAIModel(appId) ?? '';
                 if (savedModel !== '') {
                     this.selectModel(appId, savedModel);
                 }
@@ -645,7 +645,7 @@ class AISettingsRenderer extends BaseComponent {
      * @sideeffect Updates local storage and refreshes stats DOM segments
      */
     public selectModel(appId: string, modelKey: string): void {
-        this._stateService?.setSelectedAIModel(appId, modelKey);
+        this._aiSettings?.setSelectedAIModel(appId, modelKey);
 
         const grid = document.querySelector('.ai-models-grid');
         grid?.querySelectorAll('.ai-model-card').forEach((card) => {

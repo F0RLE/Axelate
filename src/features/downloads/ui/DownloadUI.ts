@@ -5,7 +5,7 @@
 
 import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types/coreTypes';
 import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
-import type { IStateService } from '@/shared/types/IStateService';
+import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 export class DownloadUI {
@@ -46,7 +46,7 @@ export class DownloadUI {
     private _boundHandleUpdate: ((e: Event) => void) | null = null;
 
     constructor(
-        private readonly _stateService: IStateService,
+        private readonly _downloadSettings: DownloadSettingsService,
         private readonly _i18n: I18nService,
     ) {
         this.loadSettings();
@@ -321,7 +321,7 @@ export class DownloadUI {
      * Loads download settings from UI state.
      */
     public loadSettings(): void {
-        this._settings = this._stateService.getDownloadSettings();
+        this._settings = this._downloadSettings.getDownloadSettings();
     }
 
     /**
@@ -346,7 +346,7 @@ export class DownloadUI {
 
             toggle.style.background = toggle.checked ? 'var(--primary)' : 'var(--bg-light)';
 
-            this._stateService.setDownloadSettings(
+            this._downloadSettings.setDownloadSettings(
                 this._settings.limitEnabled,
                 this._settings.maxSpeed,
             );

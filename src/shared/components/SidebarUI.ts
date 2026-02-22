@@ -1,5 +1,5 @@
 import { BaseComponent } from '../ui/BaseComponent';
-import { type StateService } from '../services/StateService';
+import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { mountLogos } from '@/assets/logos';
@@ -10,7 +10,7 @@ export class SidebarUI extends BaseComponent {
     private _snappingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor(
-        private readonly _state: StateService,
+        private readonly _state: UISettingsService,
         private readonly _soundService?: SoundService,
     ) {
         super();

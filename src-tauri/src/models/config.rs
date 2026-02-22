@@ -130,6 +130,8 @@ pub enum ModelTier {
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AiModel {
+    /// Model ID (moved from dict key)
+    pub id: String,
     /// Localization key for description
     #[serde(default)]
     pub desc_key: String,
@@ -259,7 +261,7 @@ pub struct ApiProvider {
     pub api_key_env: Option<String>,
     /// Available models configuration
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub models: Option<std::collections::HashMap<String, AiModel>>,
+    pub models: Option<Vec<AiModel>>,
     /// Model aliases (UI name → API ID mappings)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_aliases: Option<std::collections::HashMap<String, String>>,

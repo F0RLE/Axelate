@@ -31,10 +31,8 @@ export {
     getModelsFromProvider,
     getModelData,
     getApiModelId,
-    sortModelsByPower,
     getMostPowerfulModel,
     getSelectedModel,
-    mapProviderToBackend,
 } from './utils/catalogHelpers';
 
 // UI Components

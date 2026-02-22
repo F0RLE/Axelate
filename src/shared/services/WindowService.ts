@@ -203,7 +203,7 @@ export class WindowService {
 
     // --- Zoom ---
 
-    private _stateService: {
+    private _uiSettingsService: {
         setZoomLevel: (z: number) => void;
         getZoomLevel: () => number;
         getResolutionZoom: (k: string) => number | undefined;
@@ -211,15 +211,15 @@ export class WindowService {
     } | null = null;
 
     /**
-     * Injects the StateService dependency.
+     * Injects the UISettingsService dependency.
      */
-    public setStateService(stateService: {
+    public setUISettingsService(uiSettingsService: {
         setZoomLevel: (z: number) => void;
         getZoomLevel: () => number;
         getResolutionZoom: (k: string) => number | undefined;
         setResolutionZoom: (k: string, z: number) => void;
     }): void {
-        this._stateService = stateService;
+        this._uiSettingsService = uiSettingsService;
     }
 
     /**
@@ -248,10 +248,10 @@ export class WindowService {
             document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
         }
 
-        // Sync with StateService (DI) for frontend reactivity
-        if (this._stateService !== null) {
-            this._stateService.setZoomLevel(this._currentZoom);
-            this._stateService.setResolutionZoom(
+        // Sync with UISettingsService (DI) for frontend reactivity
+        if (this._uiSettingsService !== null) {
+            this._uiSettingsService.setZoomLevel(this._currentZoom);
+            this._uiSettingsService.setResolutionZoom(
                 `${window.screen.width.toString()}x${window.screen.height.toString()}`,
                 this._currentZoom,
             );

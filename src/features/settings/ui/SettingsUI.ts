@@ -15,7 +15,8 @@ import { eventBus } from '@/shared/services/EventBus';
 import { aiSettingsRenderer } from '@/features/ai/ui/AISettingsRenderer';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { type SettingsService } from '../services/SettingsService';
-import { type StateService } from '@/shared/services/StateService';
+import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
+import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { IApp, IConfigField } from '@/shared/types/coreTypes';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
 import type { ISettingsUIContext } from './SettingsContext';
@@ -82,18 +83,19 @@ export class SettingsUI {
 
     constructor(
         private readonly _service: SettingsService,
-        private readonly _state: StateService,
+        private readonly _uiSettings: UISettingsService,
+        private readonly _aiSettings: AISettingsService,
         private readonly _i18nUI: I18nUI,
         private readonly _tauri: TauriProvider,
     ) {
-        this._generalRenderer = new GeneralSettingsRenderer(_state);
+        this._generalRenderer = new GeneralSettingsRenderer(_uiSettings);
     }
 
     /**
      * Initializes the settings UI, renders components, and binds events.
      */
     public async init(): Promise<void> {
-        await aiSettingsRenderer.init(this._service, this._state, this._tauri);
+        await aiSettingsRenderer.init(this._service, this._aiSettings, this._tauri);
 
         // 1. Setup Context
         const win = globalThis as TGlobalWin;
@@ -142,7 +144,7 @@ export class SettingsUI {
         this._bindEvents();
 
         this._resizer = new CardResizer((id: string, w: string) => {
-            this._state.setCardWidth(id, w);
+            this._uiSettings.setCardWidth(id, w);
         });
         this._resizer.init();
 
@@ -451,7 +453,7 @@ export class SettingsUI {
     // --- Card Resizing ---
 
     private _loadCardWidths() {
-        const widths = this._state.getCardWidths();
+        const widths = this._uiSettings.getCardWidths();
         Object.keys(widths).forEach((id) => {
             const card = document.querySelector(`.resizable-card[data-card-id="${id}"]`);
             const width = widths[id];
@@ -468,7 +470,7 @@ export class SettingsUI {
 
         card.dataset['cardWidth'] = width;
         const id = card.dataset['cardId'];
-        if (id !== undefined) this._state.setCardWidth(id, width);
+        if (id !== undefined) this._uiSettings.setCardWidth(id, width);
 
         const buttons = card.querySelectorAll<HTMLElement>('.btn');
         buttons.forEach((b) => {

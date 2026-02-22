@@ -2,6 +2,7 @@ use crate::domain::ai::{
     self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
 };
+use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
 use std::sync::Arc;
 use tauri::{State, Window};
@@ -13,8 +14,9 @@ pub async fn send_chat_message(
     window: Window,
     request: ChatRequest,
     sessions: State<'_, Arc<ChatSessionManager>>,
+    config_service: State<'_, Arc<ConfigService>>,
 ) -> Result<ChatResponse, AppError> {
-    ai_service::process_chat_request(window, request, &sessions).await
+    ai_service::process_chat_request(window, request, &sessions, &config_service).await
 }
 
 #[tauri::command]

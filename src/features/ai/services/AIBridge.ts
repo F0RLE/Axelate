@@ -7,7 +7,6 @@ import type {
 } from '../types/aiTypes';
 import type { Core } from '@/app/init';
 import { constructChatRequest, createMultimodalContent } from '../utils/chatRequestUtils';
-import type { StateService } from '@/shared/services/StateService';
 import { AIProviderManager } from './AIProviderManager';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
@@ -173,10 +172,7 @@ export class AIBridge implements IAIBridge {
             // Get thinking level from state instead of localStorage
             let thinkingLevel = 'high';
             if (this._core) {
-                const levels = (this._core.state as unknown as StateService).get(
-                    'ai_thinking_level',
-                ) as Record<string, string>;
-                thinkingLevel = levels[providerId] ?? 'high';
+                thinkingLevel = this._core.aiSettings.getThinkingLevel(providerId);
             }
 
             const request = constructChatRequest(newMessage, attachments, {

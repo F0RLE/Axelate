@@ -3,7 +3,7 @@
  * @description Centralized type definitions for the Core module
  */
 
-import type { IUIState } from '../services/StateService';
+import type { IUIState } from '../services/state/UiStateStore';
 import type { IWindowConfig } from '../services/WindowService';
 
 /**

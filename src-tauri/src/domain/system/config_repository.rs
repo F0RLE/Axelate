@@ -11,4 +11,9 @@ pub trait ConfigRepository: std::fmt::Debug + Send + Sync {
 
     /// Loads the list of local modules.
     fn load_local_modules(&self) -> Result<Vec<ModuleItem>, AppError>;
+
+    /// Loads custom models
+    fn load_custom_models(
+        &self,
+    ) -> Result<crate::models::custom_models::CustomModelConfig, AppError>;
 }

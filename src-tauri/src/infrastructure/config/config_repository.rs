@@ -77,4 +77,18 @@ impl ConfigRepository for FileConfigRepository {
             include_str!("../../../resources/config/local_modules.json"),
         )
     }
+
+    fn load_custom_models(
+        &self,
+    ) -> Result<crate::models::custom_models::CustomModelConfig, AppError> {
+        let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
+        if custom_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&custom_path) {
+                if let Ok(config) = serde_json::from_str(&content) {
+                    return Ok(config);
+                }
+            }
+        }
+        Ok(crate::models::custom_models::CustomModelConfig::default())
+    }
 }

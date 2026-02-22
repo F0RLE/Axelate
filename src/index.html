@@ -173,7 +173,7 @@
         <script type="module" src="assets/logos.ts"></script>
 
         <!-- Sidebar Placeholder (Loaded dynamically via TemplateLoader) -->
-        <aside id="sidebar" class="fade-in-init"></aside>
+        <aside id="sidebar" class="fade-in-init" aria-label="Main Navigation"></aside>
 
         <!-- App Header (Glass Panel) -->
         <header
@@ -767,22 +767,32 @@
 
             <!-- App Selection Modal (Moved here for proper positioning) -->
             <div id="app-selection-modal" class="modal-backdrop hidden">
-                <div class="app-modal">
-                    <div class="app-modal-header">
-                        <h2 id="app-modal-title" class="app-modal-title">
-                            Select App
-                        </h2>
-                        <button
-                            id="close-app-selection-btn"
-                            class="app-close-btn"
-                        >
-                            <svg class="icon">
-                                <use href="#icon-close"></use>
-                            </svg>
-                        </button>
-                    </div>
-                    <div id="app-modal-list" class="app-grid">
-                        <!-- Apps will be injected here -->
+                <div class="app-modal with-sidebar">
+                    <aside class="app-modal-sidebar" id="app-modal-sidebar" aria-label="Modal Sidebar">
+                        <div class="sidebar-icon-container" id="app-modal-sidebar-icon"></div>
+                        <h3 class="sidebar-title" id="app-modal-sidebar-title" data-i18n="ui.launcher.modules.modal.ai_sidebar_title">Title Placeholder</h3>
+                        <div class="sidebar-desc" id="app-modal-sidebar-desc" data-i18n="ui.launcher.modules.modal.ai_sidebar_desc"></div>
+                        <div class="sidebar-actions" id="app-modal-sidebar-actions"></div>
+                    </aside>
+                    <div class="app-modal-main">
+                        <div class="app-modal-header">
+                            <h2 id="app-modal-title" class="app-modal-title">
+                                Select App
+                            </h2>
+                            <button
+                                id="close-app-selection-btn"
+                                class="app-close-btn"
+                            >
+                                <svg class="icon">
+                                    <use href="#icon-close"></use>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="app-modal-body">
+                            <div id="app-modal-list" class="app-grid">
+                                <!-- Apps will be injected here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

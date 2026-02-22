@@ -5,7 +5,7 @@
 
 import { type WindowService } from '../services/WindowService';
 import type { TGlobalWin } from '../types/global_bridge_types';
-import { type StateService } from '../services/StateService';
+import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
 import { logger } from '@/infrastructure/logging/LoggerService';
 
@@ -30,7 +30,7 @@ export class WindowUI {
 
     constructor(
         private readonly _service: WindowService,
-        private readonly _state: StateService,
+        private readonly _state: UISettingsService,
         private readonly _sound: SoundService,
     ) {}
 

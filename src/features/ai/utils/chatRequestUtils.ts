@@ -1,5 +1,5 @@
 import type { ChatContent, IChatMessage, IChatRequest, ChatContentPart } from '../types/aiTypes';
-import { getApiModelId, mapProviderToBackend } from '../utils/catalogHelpers';
+import { getApiModelId } from '../utils/catalogHelpers';
 
 /**
  * Creates a multimodal content object from text and attachments.
@@ -43,7 +43,7 @@ export function constructChatRequest(
     const modelId = getApiModelId(providerId, model);
 
     return {
-        provider: mapProviderToBackend(providerId),
+        provider: providerId,
         model: modelId,
         messages: [
             {

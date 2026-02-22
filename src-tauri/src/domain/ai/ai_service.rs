@@ -5,7 +5,6 @@
 //!
 //! DTOs → [`types`] · Session management → [`session`] · Streaming → [`streaming`]
 
-use crate::models::config::ApiProvider;
 use std::sync::Arc;
 use tauri::Emitter;
 use tokio::sync::mpsc;
@@ -25,6 +24,7 @@ pub async fn process_chat_request(
     window: tauri::Window,
     request: ChatRequest,
     sessions: &ChatSessionManager,
+    config_service: &crate::domain::system::config_service::ConfigService,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     // 1. Session Management
     let mut messages_context = request.messages.clone();
@@ -37,50 +37,48 @@ pub async fn process_chat_request(
     let mut effective_model = request.model.clone();
     let mut model_max_tokens: Option<u32> = None;
 
-    let providers_path = crate::utils::paths::RESOURCES_DIR.join("api_providers.json");
-    if providers_path.exists()
-        && let Ok(content) = std::fs::read_to_string(&providers_path)
-        && let Ok(providers) = serde_json::from_str::<Vec<ApiProvider>>(&content)
-        && let Some(p) = providers.iter().find(|p| p.id == request.provider)
-    {
-        if let Some(url) = &p.base_url {
-            base_url = url.clone();
-        }
-
-        // Resolve aliases
-        if let Some(target) = p.model_aliases.as_ref().and_then(|m| m.get(&request.model)) {
-            tracing::info!("Resolved model alias: {} -> {}", request.model, target);
-            effective_model = target.clone();
-        }
-
-        // Resolve proper model ID and limits
-        if let Some(models) = &p.models
-            && let Some(def) = models.get(&effective_model)
+    if let Ok(config) = config_service.load_full_config() {
+        if let Some(p) = config
+            .api_providers
+            .iter()
+            .find(|p| p.id == request.provider)
         {
-            model_max_tokens = def.max_output_tokens;
-            if let Some(tm) = def.api_models.as_ref().and_then(|m| m.text.as_ref()) {
-                tracing::info!("Resolved API model ID: {effective_model} -> {tm}");
-                effective_model = tm.clone();
+            if let Some(url) = &p.base_url {
+                base_url = url.clone();
             }
-        } else {
-            // Check custom models
-            let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
-            if custom_path.exists()
-                && let Ok(c) = std::fs::read_to_string(&custom_path)
-                && let Ok(cc) =
-                    serde_json::from_str::<crate::models::custom_models::CustomModelConfig>(&c)
-                && let Some(custom) = cc
-                    .models
-                    .iter()
-                    .find(|m| m.id == effective_model && m.provider_id == request.provider)
-            {
-                tracing::info!(
-                    "Resolved Custom Model: {} -> {}",
-                    effective_model,
-                    custom.base_model_id
-                );
-                effective_model = custom.base_model_id.clone();
+
+            // Resolve aliases
+            if let Some(target) = p.model_aliases.as_ref().and_then(|m| m.get(&request.model)) {
+                tracing::info!("Resolved model alias: {} -> {}", request.model, target);
+                effective_model = target.clone();
             }
+
+            // Resolve proper model ID and limits
+            if let Some(models) = &p.models {
+                if let Some(def) = models.iter().find(|m| m.id == effective_model) {
+                    model_max_tokens = def.max_output_tokens;
+                    if let Some(tm) = def.api_models.as_ref().and_then(|m| m.text.as_ref()) {
+                        tracing::info!("Resolved API model ID: {effective_model} -> {tm}");
+                        effective_model = tm.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    // Check custom models
+    if let Ok(cc) = config_service.load_custom_models() {
+        if let Some(custom) = cc
+            .models
+            .iter()
+            .find(|m| m.id == effective_model && m.provider_id == request.provider)
+        {
+            tracing::info!(
+                "Resolved Custom Model: {} -> {}",
+                effective_model,
+                custom.base_model_id
+            );
+            effective_model = custom.base_model_id.clone();
         }
     }
 

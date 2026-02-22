@@ -155,11 +155,19 @@ fn setup_dependencies(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Er
     let ui_state_service = UiStateService::new(json_store.clone());
     let window_settings_service = WindowSettingsService::new(json_store.clone());
 
+    let config_repo = crate::infrastructure::config::config_repository::FileConfigRepository::new(
+        app.handle().clone(),
+    );
+    let config_service = std::sync::Arc::new(
+        crate::domain::system::config_service::ConfigService::new(Box::new(config_repo)),
+    );
+
     app.manage(file_service);
     app.manage(json_store);
     app.manage(settings_service.clone());
     app.manage(ui_state_service);
     app.manage(window_settings_service);
+    app.manage(config_service.clone());
     app.manage(crate::domain::modules::downloader::DownloaderService::new());
     let sessions = std::sync::Arc::new(ChatSessionManager::new());
     sessions.start_saver();

@@ -8,7 +8,7 @@ use axum::{
 };
 use serde_json::{Value, json};
 use std::net::SocketAddr;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tower_http::cors::CorsLayer;
 
 #[derive(Clone)]
@@ -23,14 +23,14 @@ pub fn start_server(
     app: AppHandle,
     settings_service: crate::infrastructure::config::settings::SettingsService,
 ) {
-    let repo =
-        crate::infrastructure::config::config_repository::FileConfigRepository::new(app.clone());
-    let service = std::sync::Arc::new(crate::domain::system::config_service::ConfigService::new(
-        Box::new(repo),
-    ));
+    let config_service = app
+        .state::<std::sync::Arc<crate::domain::system::config_service::ConfigService>>()
+        .inner()
+        .clone();
+
     let state = AppState {
         tauri_app: app,
-        config_service: service,
+        config_service,
         settings_service,
     };
 

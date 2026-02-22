@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DownloadUI } from './DownloadUI';
-import type { IStateService } from '@/shared/types/IStateService';
+import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 describe('DownloadUI', () => {
-    let stateService: IStateService;
+    let downloadSettings: DownloadSettingsService;
     let i18nService: I18nService;
     let ui: DownloadUI;
 
@@ -44,20 +44,20 @@ describe('DownloadUI', () => {
         const oldSlider = document.querySelector('div#download-speed-slider');
         if (oldSlider) oldSlider.remove();
 
-        stateService = {
+        downloadSettings = {
             getDownloadSettings: vi.fn().mockReturnValue({ limitEnabled: false, maxSpeed: 50 }),
             setDownloadSettings: vi.fn(),
-        };
+        } as unknown as DownloadSettingsService;
 
         i18nService = {
             t: vi.fn((key: string, def?: string) => def ?? key),
         } as unknown as I18nService;
 
-        ui = new DownloadUI(stateService, i18nService);
+        ui = new DownloadUI(downloadSettings, i18nService);
     });
 
     it('should initialize and load settings', () => {
-        expect(stateService.getDownloadSettings).toHaveBeenCalled();
+        expect(downloadSettings.getDownloadSettings).toHaveBeenCalled();
     });
 
     it('should render download progress correctly', () => {
@@ -99,6 +99,6 @@ describe('DownloadUI', () => {
 
         ui.saveSettings();
 
-        expect(stateService.setDownloadSettings).toHaveBeenCalledWith(true, 100);
+        expect(downloadSettings.setDownloadSettings).toHaveBeenCalledWith(true, 100);
     });
 });

@@ -133,6 +133,7 @@ export interface IAIModelCapabilities {
  * Definitive metadata schema for individual model variants.
  */
 export interface IAIModelData {
+    id: string;
     name: string;
     desc: string;
     descKey?: string;
@@ -164,7 +165,7 @@ export interface IAIProviderData {
     type: 'api' | 'local';
     baseUrl?: string;
     stats?: IAIModelStats;
-    models: Record<string, IAIModelData>;
+    models: IAIModelData[];
 }
 
 // ============================================================================

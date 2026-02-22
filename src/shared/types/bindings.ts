@@ -654,6 +654,10 @@ async processFileContent(name: string, data: number[]) : Promise<Result<Processe
  */
 export type AiModel = { 
 /**
+ * Model ID (moved from dict key)
+ */
+id: string; 
+/**
  * Localization key for description
  */
 descKey?: string; 
@@ -756,7 +760,7 @@ apiKeyEnv?: string | null;
 /**
  * Available models configuration
  */
-models?: { [key in string]: AiModel } | null; 
+models?: AiModel[] | null; 
 /**
  * Model aliases (UI name → API ID mappings)
  */
