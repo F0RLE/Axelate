@@ -28,6 +28,7 @@ pub async fn validate_api_key(provider: String, key: String) -> Result<bool, App
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
 /// Clears chat history for a specific session
 pub fn clear_chat_history(
     session_id: &str,
@@ -39,6 +40,7 @@ pub fn clear_chat_history(
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
 /// Retrieves chat history for a specific session
 pub fn get_chat_history(
     session_id: &str,

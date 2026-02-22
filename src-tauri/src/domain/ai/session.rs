@@ -71,7 +71,7 @@ impl ChatSessionManager {
     }
 
     fn flush_snapshot(
-        snapshot: HashMap<String, ChatSession>,
+        snapshot: &HashMap<String, ChatSession>,
     ) -> Result<(), crate::errors::AppError> {
         let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
         let tmp_path = path.with_extension("tmp");
@@ -123,7 +123,8 @@ impl ChatSessionManager {
                         .map(|e| (e.key().clone(), e.value().clone()))
                         .collect();
 
-                    match tokio::task::spawn_blocking(|| Self::flush_snapshot(snapshot)).await {
+                    match tokio::task::spawn_blocking(move || Self::flush_snapshot(&snapshot)).await
+                    {
                         Ok(Ok(())) => {
                             dirty.store(false, Ordering::Relaxed);
                             tracing::debug!("Chat history saved to disk.");
@@ -141,7 +142,7 @@ impl ChatSessionManager {
     /// Immediately saves all sessions to disk, bypassing the debounce timer.
     pub async fn force_save(&self) -> Result<(), crate::errors::AppError> {
         let snapshot = self.take_snapshot();
-        tokio::task::spawn_blocking(|| Self::flush_snapshot(snapshot))
+        tokio::task::spawn_blocking(move || Self::flush_snapshot(&snapshot))
             .await
             .map_err(|e| crate::errors::AppError::Internal {
                 request_id: None,
@@ -153,7 +154,7 @@ impl ChatSessionManager {
 
     /// Synchronous save — intended for use in Tauri shutdown hooks (called from a blocking context).
     pub fn save_to_disk(&self) -> Result<(), crate::errors::AppError> {
-        Self::flush_snapshot(self.take_snapshot())
+        Self::flush_snapshot(&self.take_snapshot())
     }
 
     /// Returns the full history for a session, creating it if necessary.

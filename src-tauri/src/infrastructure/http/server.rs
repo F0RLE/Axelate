@@ -23,10 +23,10 @@ pub fn start_server(
     app: AppHandle,
     settings_service: crate::infrastructure::config::settings::SettingsService,
 ) {
-    let config_service = app
-        .state::<std::sync::Arc<crate::domain::system::config_service::ConfigService>>()
-        .inner()
-        .clone();
+    let config_service = std::sync::Arc::clone(
+        app.state::<std::sync::Arc<crate::domain::system::config_service::ConfigService>>()
+            .inner(),
+    );
 
     let state = AppState {
         tauri_app: app,
