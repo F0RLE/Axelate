@@ -18,9 +18,9 @@
 
   <!-- Navigation Bar -->
   <p>
-    <a href="docs/translations/README_RU.md"><img src="https://img.shields.io/badge/Russian-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Russian"/></a>
+    <a href="docs/ru/ROADMAP.md"><img src="https://img.shields.io/badge/Russian-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Russian"/></a>
     &nbsp;
-    <a href="docs/translations/README_CN.md"><img src="https://img.shields.io/badge/Chinese-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Chinese"/></a>
+    <a href="docs/zh/README_CN.md"><img src="https://img.shields.io/badge/Chinese-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Chinese"/></a>
     &nbsp;
     <a href="docs/en/architecture.md"><img src="https://img.shields.io/badge/Documentation-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
   </p>
