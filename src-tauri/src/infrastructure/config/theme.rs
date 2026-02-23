@@ -1,7 +1,8 @@
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
-/// Returns the application's theme color palette
-pub fn get_theme_colors() -> HashMap<String, String> {
+/// Lazily initialized theme color palette (created once, reused forever).
+static THEME_COLORS: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
     let mut colors = HashMap::new();
 
     // Backgrounds
@@ -42,4 +43,9 @@ pub fn get_theme_colors() -> HashMap<String, String> {
     colors.insert("card_bg".to_string(), "#1a1920".to_string());
 
     colors
+});
+
+/// Returns the application's theme color palette
+pub fn get_theme_colors() -> HashMap<String, String> {
+    THEME_COLORS.clone()
 }

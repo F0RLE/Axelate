@@ -46,20 +46,17 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
                     IS_QUITTING.store(true, Ordering::Relaxed);
                     system_monitor::stop_monitoring();
 
-                    // Force immediate save of all chat history before exit.
+                    // Synchronous flush before exit to guarantee history is not lost.
+                    // A background thread would be killed by app.exit(0) before it finishes.
                     let sessions_arc = app
                         .try_state::<std::sync::Arc<crate::domain::ai::ChatSessionManager>>()
                         .map(|s| std::sync::Arc::clone(&*s));
                     if let Some(sessions) = sessions_arc {
-                        std::thread::spawn(move || {
-                            if let Err(e) = sessions.save_to_disk() {
-                                tracing::error!(
-                                    "Failed to save chat history during shutdown: {e:?}"
-                                );
-                            } else {
-                                tracing::info!("AI history flushed successfully during shutdown.");
-                            }
-                        });
+                        if let Err(e) = sessions.save_to_disk() {
+                            tracing::error!("Failed to save chat history during shutdown: {e:?}");
+                        } else {
+                            tracing::info!("AI history flushed successfully during shutdown.");
+                        }
                     }
 
                     app.exit(0);

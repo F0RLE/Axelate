@@ -23,12 +23,27 @@ pub struct ChatSessionManager {
 }
 
 impl ChatSessionManager {
-    /// Creates a new manager and loads existing sessions from disk.
-    /// Call [`start_saver`] after the Tokio runtime is ready.
+    /// Creates an empty manager. Call [`load_history`] to populate from disk,
+    /// then [`start_saver`] to begin background persistence.
     pub fn new() -> Self {
         Self {
-            sessions: Arc::new(Self::load_from_disk().unwrap_or_default()),
+            sessions: Arc::new(DashMap::new()),
             dirty: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Loads persisted chat sessions from disk (non-blocking).
+    /// Safe to call after the Tokio runtime is available.
+    pub async fn load_history(&self) {
+        match tokio::task::spawn_blocking(Self::load_from_disk).await {
+            Ok(Ok(map)) => {
+                for (k, v) in map {
+                    self.sessions.insert(k, v);
+                }
+                tracing::info!("Loaded {} chat sessions from disk.", self.sessions.len());
+            }
+            Ok(Err(e)) => tracing::error!("Failed to load chat history: {e}"),
+            Err(e) => tracing::error!("Chat history load task panicked: {e}"),
         }
     }
 

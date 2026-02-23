@@ -1,9 +1,10 @@
 use crate::errors::AppError;
-// use serde::de::Error as _; // Import trait for .custom() - Removed as unused
-use tauri::AppHandle;
 
-/// Retrieves translation strings for the specified language
-pub fn get_translations(_app: &AppHandle, lang: &str) -> Result<serde_json::Value, AppError> {
+/// Retrieves translation strings for the specified language.
+///
+/// Falls back to English for unknown languages. Logs a warning if a
+/// translation file fails to parse.
+pub fn get_translations(lang: &str) -> Result<serde_json::Value, AppError> {
     let base_content = include_str!("../../../resources/locales/en.json");
     let mut translations: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(base_content).map_err(|e| AppError::Serialization(e.to_string()))?;
@@ -15,24 +16,21 @@ pub fn get_translations(_app: &AppHandle, lang: &str) -> Result<serde_json::Valu
             _ => None,
         };
 
-        if let Some(content) = target_content
-            && let Ok(target_json) = serde_json::from_str::<serde_json::Value>(content)
-            && let Some(target_map) = target_json.as_object()
-        {
-            for (k, v) in target_map {
-                translations.insert(k.clone(), v.clone());
+        if let Some(content) = target_content {
+            match serde_json::from_str::<serde_json::Value>(content) {
+                Ok(target_json) => {
+                    if let Some(target_map) = target_json.as_object() {
+                        for (k, v) in target_map {
+                            translations.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse {lang} translations, using English: {e}");
+                }
             }
         }
     }
 
     Ok(serde_json::Value::Object(translations))
-}
-
-/// Returns the path to locales directory
-pub fn get_locales_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
-    use tauri::Manager;
-    app.path()
-        .resource_dir()
-        .unwrap_or_default()
-        .join("resources/locales")
 }

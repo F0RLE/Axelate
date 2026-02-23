@@ -275,8 +275,8 @@ struct GeneralControlRequest {
 }
 
 async fn general_control_handler(Json(payload): Json<GeneralControlRequest>) -> Json<Value> {
-    tracing::info!(
-        "[Server] General control: {} {}",
+    tracing::warn!(
+        "[Server] general_control_handler is a stub — action='{}' service='{}' was ignored.",
         payload.action,
         payload.service
     );

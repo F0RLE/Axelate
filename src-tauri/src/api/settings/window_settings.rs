@@ -54,7 +54,7 @@ pub async fn save_zoom_level(
     ui_service: tauri::State<'_, ui_state::UiStateService>,
     zoom: f64,
 ) -> Result<(), AppError> {
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let mut state = ui_service.get_ui_state().await?;
     state.zoom_level = zoom;
     ui_service.save_ui_state(&state).await
 }
@@ -71,7 +71,7 @@ pub async fn set_webview_zoom(
     window.set_zoom(zoom)?;
 
     // Save to UI State (Global and Per-Resolution)
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let mut state = ui_service.get_ui_state().await?;
     state.zoom_level = zoom;
 
     // Determine current resolution to save per-resolution zoom
@@ -94,7 +94,7 @@ pub async fn get_resolution_zoom(
     window: tauri::Window,
     ui_service: tauri::State<'_, ui_state::UiStateService>,
 ) -> Result<f64, AppError> {
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let mut state = ui_service.get_ui_state().await?;
 
     let (res_key, screen_height) = if let Ok(Some(monitor)) = window.primary_monitor() {
         let scale_factor = monitor.scale_factor();

@@ -1,6 +1,5 @@
 use serde::Serialize;
 use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::Subscriber;
@@ -75,13 +74,8 @@ impl tracing::field::Visit for LogVisitor {
     }
 }
 
-fn get_log_dir() -> Result<PathBuf, String> {
-    let app_data =
-        std::env::var("APPDATA").map_err(|_| "Could not find APPDATA directory".to_string())?;
-    let mut path = PathBuf::from(app_data);
-    path.push("AxelateData");
-    path.push("Logs");
-    Ok(path)
+fn get_log_dir() -> Result<std::path::PathBuf, String> {
+    Ok(crate::utils::paths::LOG_DIR.to_path_buf())
 }
 
 /// Adds a log entry to in-memory store

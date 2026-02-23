@@ -1,8 +1,9 @@
 # sync-deps.ps1
 # Helper script to pull latest changes from main and update all dependencies locally.
 
-Write-Host "Fetching latest changes from remote..." -ForegroundColor Cyan
-git pull origin main
+$currentBranch = git branch --show-current
+Write-Host "Pulling latest changes from origin/$currentBranch..." -ForegroundColor Cyan
+git pull origin $currentBranch
 
 Write-Host "`nUpdating frontend dependencies (npm)..." -ForegroundColor Cyan
 Push-Location src

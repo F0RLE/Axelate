@@ -105,10 +105,11 @@ mod app_tests {
         );
     }
 
-    /// Development utility: Regenerates TypeScript bindings
-    /// Run with: cargo test tests::export_bindings -- --ignored
+    /// Development utility: Regenerates TypeScript bindings.
+    /// NOTE: This test cannot run due to a Windows comctl32 v6 DLL issue in test binaries.
+    /// Use instead: `cargo run --bin export-bindings`
     #[test]
-    #[ignore = "Manual development utility"]
+    #[ignore = "Use `cargo run --bin export-bindings` instead"]
     fn export_bindings() {
         use specta_typescript::Typescript;
         let builder = crate::create_specta_builder();

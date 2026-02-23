@@ -202,9 +202,6 @@ pub async fn validate_api_key(
         req = req.header("Authorization", format!("Bearer {key}"));
     }
 
-    // Explicitly drop key after building request
-    std::mem::drop(key);
-
     let res = req
         .send()
         .await

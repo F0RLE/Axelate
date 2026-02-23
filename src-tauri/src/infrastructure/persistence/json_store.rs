@@ -47,6 +47,8 @@ impl JsonStore {
     }
 
     /// Loads a JSON file asynchronously (Preferred for runtime).
+    ///
+    /// Returns `Default` only when the file is missing. Parse errors are propagated.
     pub async fn load_async<T>(&self, path: &Path) -> Result<T, AppError>
     where
         T: for<'de> Deserialize<'de> + Default + Serialize + Sync,
@@ -57,16 +59,9 @@ impl JsonStore {
 
         let content = self.file_service.read_to_string(path).await?;
 
-        match serde_json::from_str(&content) {
-            Ok(data) => Ok(data),
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to parse JSON at {}, resetting to defaults: {e}",
-                    path.display()
-                );
-                Ok(T::default())
-            }
-        }
+        serde_json::from_str(&content).map_err(|e| {
+            AppError::Serialization(format!("Failed to parse {}: {e}", path.display()))
+        })
     }
 
     /// Saves a data structure to a JSON file asynchronously

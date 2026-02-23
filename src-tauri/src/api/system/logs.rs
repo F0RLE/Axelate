@@ -23,11 +23,41 @@ pub fn add_log(msg: &str, source: &str, level: &str) -> Result<(), AppError> {
     logs::add_log(msg, source, level);
     Ok(())
 }
+
+/// Frontend log level
+#[derive(Debug, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    /// Informational message
+    Info,
+    /// Warning message
+    Warn,
+    /// Error message
+    Error,
+    /// Debug message
+    Debug,
+    /// Trace message
+    Trace,
+}
+
+impl LogLevel {
+    /// Returns the string representation for the logging backend.
+    const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+        }
+    }
+}
+
 /// Batch log entry from frontend
 #[derive(Debug, serde::Deserialize, specta::Type)]
 pub struct BatchLogEntry {
-    /// Log level ("info", "warn", "error")
-    pub level: String,
+    /// Log level
+    pub level: LogLevel,
     /// Log message content
     pub message: String,
 }
@@ -37,7 +67,7 @@ pub struct BatchLogEntry {
 /// Adds multiple log entries in batch from frontend
 pub fn log_batch(logs: Vec<BatchLogEntry>) -> Result<(), AppError> {
     for log in logs {
-        logs::add_log(&log.message, "Frontend", &log.level);
+        logs::add_log(&log.message, "Frontend", log.level.as_str());
     }
     Ok(())
 }

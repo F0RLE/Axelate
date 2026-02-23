@@ -5,6 +5,7 @@ use futures_util::StreamExt;
 use std::fs;
 use std::io::copy;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 use zip::ZipArchive;
@@ -84,12 +85,6 @@ pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
         Err(AppError::NotFound("Module not found".to_string()))
     }
 }
-
-use std::sync::LazyLock;
-use std::sync::{Arc, Mutex};
-
-/// Global downloader service instance
-pub static DOWNLOADER: LazyLock<DownloaderService> = LazyLock::new(DownloaderService::new);
 
 /// Downloader service for managing module downloads
 #[derive(Debug)]
@@ -710,8 +705,10 @@ pub fn check_module_installed(module_id: &str) -> bool {
     is_module_installed(module_id)
 }
 
-/// Lists files in a module directory (stub)
-pub fn list_module_files(_module_id: String) -> Result<Vec<String>, AppError> {
-    // Basic stub or implementation
+/// Lists files in a module directory
+///
+/// TODO: Not yet implemented — returns empty list.
+pub fn list_module_files(module_id: String) -> Result<Vec<String>, AppError> {
+    tracing::warn!("[Downloader] list_module_files('{module_id}') is not yet implemented.");
     Ok(vec![])
 }

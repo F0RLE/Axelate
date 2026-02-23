@@ -3,7 +3,7 @@ use crate::infrastructure::crypto::secure_storage::SecureStorage;
 
 #[tauri::command]
 #[specta::specta]
-/// Saves anAPI key securely to system credential storage
+/// Saves an API key securely to system credential storage
 pub async fn save_secure_key(service: String, key: String) -> Result<(), AppError> {
     SecureStorage::save_key(service, key)
 }

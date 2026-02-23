@@ -1,5 +1,3 @@
-use std::num::NonZeroUsize;
-
 /// Checks if a process is running using lightweight OS-level APIs.
 pub fn is_running(pid: usize) -> bool {
     #[cfg(target_os = "windows")]
@@ -45,11 +43,6 @@ pub fn is_running(pid: usize) -> bool {
             std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
         }
     }
-}
-
-/// Helper to convert usize PID to platform-specific PID type
-pub const fn to_native_pid(pid: usize) -> Option<NonZeroUsize> {
-    NonZeroUsize::new(pid)
 }
 
 /// Kills an orphan process (one not in our registry) using OS-level APIs.
@@ -107,4 +100,3 @@ pub fn kill_orphan(pid: usize) -> Result<String, String> {
         }
     }
 }
-

@@ -95,13 +95,22 @@ pub trait AiProvider: Send + Sync {
 #[derive(Debug)]
 pub struct OpenRouterProvider {
     base_url: String,
+    /// Shared HTTP client — created once, reuses connection pool and Keep-Alive
+    client: Client,
 }
 
 impl OpenRouterProvider {
-    /// Creates a new OpenRouterProvider with the specified base URL
+    /// Creates a new OpenRouterProvider with the specified base URL.
+    ///
+    /// # Panics
+    /// Panics if the underlying TLS backend cannot be initialized (extremely rare).
     pub fn new(base_url: &str) -> Self {
+        let client = Client::builder()
+            .build()
+            .expect("Failed to build reqwest client — TLS backend unavailable");
         Self {
             base_url: base_url.to_string(),
+            client,
         }
     }
 }
@@ -120,12 +129,7 @@ impl AiProvider for OpenRouterProvider {
             .clone()
             .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
 
-        let client = Client::builder()
-            .build()
-            .map_err(|e| crate::errors::AppError::External {
-                request_id: Some(request_id.clone()),
-                message: e.to_string(),
-            })?;
+        let client = &self.client;
 
         let mut payload = serde_json::Map::new();
         payload.insert(
@@ -199,9 +203,6 @@ impl AiProvider for OpenRouterProvider {
             }
         };
 
-        // Final key drop to be safe
-        std::mem::drop(api_key);
-
         if !res.status().is_success() {
             let status = res.status();
             let error_text = res.text().await.unwrap_or_default();
@@ -228,12 +229,15 @@ impl AiProvider for OpenRouterProvider {
             })?;
             let chunk_str = String::from_utf8_lossy(&chunk);
 
-            // Memory Safety: Prevent buffer overflow from malformed streams (~1MB limit)
+            // Safety: hard limit against malformed / infinite streams (~1 MB).
+            // We return an error rather than silently discarding buffered data,
+            // which would produce a truncated, misleading response.
             if buffer.len() + chunk_str.len() > 1_024_024 {
-                tracing::error!(
-                    "[AI] Stream buffer overflow protection triggered. Clearing buffer."
-                );
-                buffer.clear();
+                return Err(crate::errors::AppError::External {
+                    request_id: Some(request_id.clone()),
+                    message: "AI stream exceeded 1 MB buffer limit — response too large."
+                        .to_string(),
+                });
             }
 
             buffer.push_str(&chunk_str);

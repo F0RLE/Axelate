@@ -415,7 +415,7 @@ class AISettingsRenderer extends BaseComponent {
             const thresholdHalf = i * 2 + 1;
 
             let className = 'star-icon';
-            let style = '';
+            const style = '';
 
             if (count >= thresholdFull) {
                 className += ' full';

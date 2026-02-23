@@ -29,15 +29,6 @@ pub fn detect_system_language() -> String {
     {
         "en".to_string()
     }
-
-    #[cfg(not(windows))]
-    {
-        // Fallback for non-Windows platforms
-        std::env::var("LANG")
-            .ok()
-            .and_then(|lang| lang.split('_').next().map(|s| s.to_lowercase()))
-            .unwrap_or_else(|| "en".to_string())
-    }
 }
 
 #[cfg(test)]

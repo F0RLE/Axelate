@@ -1,7 +1,7 @@
 use crate::domain::system::config_repository::ConfigRepository;
 use crate::errors::AppError;
-use crate::models::config::{AppConfig, ModuleItem};
-use crate::models::modules::ConfigField;
+use crate::models::config::{AppConfig, ModuleItem, ModuleType};
+use crate::models::modules::{ConfigField, FieldType};
 use std::collections::HashMap;
 
 /// Service for orchestrating configuration loading and merging.
@@ -19,7 +19,7 @@ impl ConfigService {
     /// Helper to create a standard text configuration field.
     fn text_field(label: &str, default: Option<&str>, required: bool) -> ConfigField {
         ConfigField {
-            field_type: "text".to_string(),
+            field_type: FieldType::Text,
             label: label.to_string(),
             default: default.map(|s| serde_json::Value::String(s.to_string())),
             required,
@@ -70,7 +70,7 @@ impl ConfigService {
                     .clone()
                     .unwrap_or_else(|| "Cloud AI Provider".to_string()),
                 icon: provider.icon.clone().unwrap_or_else(|| "cloud".to_string()),
-                type_name: "api".to_string(),
+                type_name: ModuleType::Api,
                 repo_url: None,
                 expected_hash: None,
                 installed: true,
@@ -83,7 +83,7 @@ impl ConfigService {
 
         // 2. Add Local Modules (Distribute by type)
         for item in local_modules {
-            if item.type_name == "service" {
+            if item.type_name == ModuleType::Service {
                 service_catalog.push(item);
             } else {
                 ai_catalog.push(item);

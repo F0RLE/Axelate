@@ -38,6 +38,13 @@ const mockCore = {
         setSelectedAIModel: vi.fn(),
         getSelectedAIModel: vi.fn(),
     },
+    aiSettings: {
+        setAiSessionId: vi.fn(),
+        setSelectedAIModel: vi.fn(),
+        getSelectedAIModel: vi.fn(),
+        setLastActiveProvider: vi.fn(),
+        getThinkingLevel: vi.fn().mockReturnValue('high'),
+    },
 };
 
 // Mock showToast

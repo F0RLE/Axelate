@@ -1,6 +1,6 @@
 use crate::domain::modules::{downloader, lifecycle as module_lifecycle};
 use crate::errors::AppError;
-use crate::models::{ControlResponse, Module};
+use crate::models::{ControlResponse, Module, ModuleCategory, ModuleStatus};
 use dashmap::DashMap;
 use std::path::Path;
 use std::str::FromStr;
@@ -129,9 +129,9 @@ pub async fn get_all_modules() -> Vec<Module> {
                     };
 
                 let status = if controller.is_running(&id, &path).await {
-                    "running".to_string()
+                    ModuleStatus::Running
                 } else {
-                    "stopped".to_string()
+                    ModuleStatus::Stopped
                 };
 
                 modules.push(Module {
@@ -140,7 +140,7 @@ pub async fn get_all_modules() -> Vec<Module> {
                     description: String::new(),
                     version,
                     author: String::new(),
-                    category: "service".to_string(),
+                    category: ModuleCategory::Service,
                     icon: String::new(),
                     path: path.to_string_lossy().to_string(),
                     installed: true,
@@ -158,13 +158,13 @@ pub async fn get_all_modules() -> Vec<Module> {
 }
 
 /// Gets the runtime status of a specific module.
-pub async fn get_module_status(module_id: &str) -> String {
+pub async fn get_module_status(module_id: &str) -> ModuleStatus {
     let controller = Controller::new();
     let module_path = downloader::get_module_path(module_id);
     if controller.is_running(module_id, &module_path).await {
-        "running".to_string()
+        ModuleStatus::Running
     } else {
-        "stopped".to_string()
+        ModuleStatus::Stopped
     }
 }
 
@@ -234,10 +234,10 @@ pub async fn control(
 
             executor.start(&manifest).await
         }
-        _ => Ok(ControlResponse {
-            success: false,
-            message: "Not implemented".to_string(),
-            status: None,
-        }),
+        ModuleAction::Install | ModuleAction::Update => Err(AppError::Validation(format!(
+            "Action '{action:?}' is not yet implemented for module '{module_id}'"
+        ))),
+        // Handled by early-return guard before this match
+        ModuleAction::Uninstall => unreachable!("Uninstall handled before match"),
     }
 }

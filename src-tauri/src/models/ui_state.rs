@@ -48,8 +48,7 @@ pub struct UIState {
     pub selected_ai_models: std::collections::HashMap<String, String>,
     /// Last visited page ID
     pub last_page: Option<String>,
-    /// Per-resolution zoom levels ("WxH" -> value)
-    /// Per-resolution zoom levels (e.g., "1920x1080" -> 1.2)
+    /// Per-resolution zoom levels (e.g., "1920x1080" → 1.2)
     pub resolution_zoom: std::collections::HashMap<String, f64>,
     /// Sound effects enabled state
     pub sound_enabled: bool,

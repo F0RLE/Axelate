@@ -171,10 +171,13 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     app.manage(config_service);
     app.manage(crate::domain::modules::downloader::DownloaderService::new());
     let sessions = std::sync::Arc::new(ChatSessionManager::new());
+    tauri::async_runtime::block_on(sessions.load_history());
     sessions.start_saver();
     app.manage(sessions);
 
-    crate::utils::paths::init_filesystem().ok();
+    if let Err(e) = crate::utils::paths::init_filesystem() {
+        tracing::error!("Failed to initialize filesystem directories: {e}");
+    }
 
     system_monitor::start_monitoring(app.handle().clone(), 2000);
 
@@ -224,6 +227,9 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 show_and_focus_window(&window);
+                // WORKAROUND: On Windows, `SetForegroundWindow` fails if the calling
+                // process is not the foreground app. Briefly toggling always-on-top
+                // forces the window to the foreground reliably.
                 #[cfg(target_os = "windows")]
                 {
                     let _ = window.set_always_on_top(true);

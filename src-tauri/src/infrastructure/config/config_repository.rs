@@ -82,13 +82,11 @@ impl ConfigRepository for FileConfigRepository {
         &self,
     ) -> Result<crate::models::custom_models::CustomModelConfig, AppError> {
         let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
-        if custom_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&custom_path) {
-                if let Ok(config) = serde_json::from_str(&content) {
-                    return Ok(config);
-                }
-            }
+        if !custom_path.exists() {
+            return Ok(crate::models::custom_models::CustomModelConfig::default());
         }
-        Ok(crate::models::custom_models::CustomModelConfig::default())
+        let content =
+            std::fs::read_to_string(&custom_path).map_err(|e| AppError::Io(e.to_string()))?;
+        serde_json::from_str(&content).map_err(|e| AppError::Serialization(e.to_string()))
     }
 }

@@ -1,7 +1,7 @@
 use crate::domain::modules::controller::Controller;
 use crate::domain::modules::lifecycle::{CommandDefinition, ModuleManifest};
 use crate::errors::AppError;
-use crate::models::ControlResponse;
+use crate::models::{ControlResponse, ModuleStatus};
 use std::fs::OpenOptions;
 use std::path::Path;
 use std::process::Stdio;
@@ -35,7 +35,7 @@ impl<'a> LifecycleExecutor<'a> {
             return Ok(ControlResponse {
                 success: true,
                 message: "Module is already in registry (starting or running)".to_string(),
-                status: Some("running".to_string()),
+                status: Some(ModuleStatus::Running),
             });
         }
 
@@ -47,7 +47,7 @@ impl<'a> LifecycleExecutor<'a> {
             return Ok(ControlResponse {
                 success: true,
                 message: "Module is already running (PID file)".to_string(),
-                status: Some("running".to_string()),
+                status: Some(ModuleStatus::Running),
             });
         }
 
@@ -83,27 +83,7 @@ impl<'a> LifecycleExecutor<'a> {
             })?;
 
         // 4. Spawn process
-        let mut builder = match start_cmd {
-            CommandDefinition::Simple(script) => {
-                #[cfg(target_os = "windows")]
-                {
-                    let mut c = Command::new("cmd");
-                    c.args(["/C", &script]);
-                    c
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    let mut c = Command::new("sh");
-                    c.args(["-c", &script]);
-                    c
-                }
-            }
-            CommandDefinition::Structured { program, args } => {
-                let mut c = Command::new(program);
-                c.args(args);
-                c
-            }
-        };
+        let mut builder = Self::build_command(start_cmd);
 
         builder
             .current_dir(self.module_path)
@@ -150,7 +130,7 @@ impl<'a> LifecycleExecutor<'a> {
         Ok(ControlResponse {
             success: true,
             message: format!("Started process with PID {pid}"),
-            status: Some("running".to_string()),
+            status: Some(ModuleStatus::Running),
         })
     }
 
@@ -222,7 +202,7 @@ impl<'a> LifecycleExecutor<'a> {
         ControlResponse {
             success: true,
             message: format!("Module {} stopped", self.module_id),
-            status: Some("stopped".to_string()),
+            status: Some(ModuleStatus::Stopped),
         }
     }
 
@@ -231,7 +211,31 @@ impl<'a> LifecycleExecutor<'a> {
         cmd: CommandDefinition,
         limit: Duration,
     ) -> Result<String, AppError> {
-        let mut builder = match cmd {
+        let mut builder = Self::build_command(cmd);
+        builder.current_dir(self.module_path);
+
+        match timeout(limit, builder.output()).await {
+            Ok(Ok(output)) => {
+                if output.status.success() {
+                    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+                } else {
+                    Err(AppError::Internal {
+                        request_id: None,
+                        message: String::from_utf8_lossy(&output.stderr).to_string(),
+                    })
+                }
+            }
+            Ok(Err(e)) => Err(AppError::Io(e.to_string())),
+            Err(_) => Err(AppError::Internal {
+                request_id: None,
+                message: "Command timed out".to_string(),
+            }),
+        }
+    }
+
+    /// Builds a platform-appropriate `tokio::process::Command` from a manifest definition.
+    fn build_command(cmd: CommandDefinition) -> Command {
+        match cmd {
             CommandDefinition::Simple(script) => {
                 #[cfg(target_os = "windows")]
                 {
@@ -251,26 +255,6 @@ impl<'a> LifecycleExecutor<'a> {
                 c.args(args);
                 c
             }
-        };
-
-        builder.current_dir(self.module_path);
-
-        match timeout(limit, builder.output()).await {
-            Ok(Ok(output)) => {
-                if output.status.success() {
-                    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-                } else {
-                    Err(AppError::Internal {
-                        request_id: None,
-                        message: String::from_utf8_lossy(&output.stderr).to_string(),
-                    })
-                }
-            }
-            Ok(Err(e)) => Err(AppError::Io(e.to_string())),
-            Err(_) => Err(AppError::Internal {
-                request_id: None,
-                message: "Command timed out".to_string(),
-            }),
         }
     }
 }

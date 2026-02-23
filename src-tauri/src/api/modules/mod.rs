@@ -3,20 +3,31 @@ pub mod downloader;
 
 use crate::domain::modules::controller::{self as module_controller, ModuleAction};
 use crate::errors::AppError;
-use crate::models::{ControlRequest, ControlResponse, Module};
+use crate::models::{ControlRequest, ControlResponse, Module, ModuleStatus};
 use tauri::AppHandle;
 
 /// Module launch response indicating how to handle the module
 #[derive(Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct LaunchResponse {
-    /// Action type ("`start_local`" or "navigate")
-    pub action: String,
+    /// How to handle the launch
+    pub action: LaunchAction,
     /// Page to navigate to
     pub page: Option<String>,
     /// Provider identifier
     pub provider: Option<String>,
     /// Optional status message
     pub message: Option<String>,
+}
+
+/// How a module launch should be handled
+#[derive(Debug, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum LaunchAction {
+    /// Start a local module process
+    StartLocal,
+    /// Navigate to a page (API module)
+    Navigate,
 }
 
 #[tauri::command]
@@ -29,7 +40,7 @@ pub async fn get_modules() -> Result<Vec<Module>, AppError> {
 #[tauri::command]
 #[specta::specta]
 /// Retrieves runtime status of a specific module
-pub async fn get_module_status(module_id: String) -> Result<String, AppError> {
+pub async fn get_module_status(module_id: String) -> Result<ModuleStatus, AppError> {
     Ok(module_controller::get_module_status(&module_id).await)
 }
 
@@ -41,7 +52,7 @@ pub async fn launch_module(module_id: String) -> Result<LaunchResponse, AppError
     let module_path = crate::domain::modules::downloader::get_module_path(&module_id);
     if module_path.exists() && module_path.is_dir() {
         return Ok(LaunchResponse {
-            action: "start_local".to_string(),
+            action: LaunchAction::StartLocal,
             page: None,
             provider: None,
             message: Some(format!("Starting local module: {module_id}")),
@@ -56,7 +67,7 @@ pub async fn launch_module(module_id: String) -> Result<LaunchResponse, AppError
     // but the user asked for max extensibility.
 
     Ok(LaunchResponse {
-        action: "navigate".to_string(),
+        action: LaunchAction::Navigate,
         page: Some("chat".to_string()),
         provider: Some(module_id),
         message: None,

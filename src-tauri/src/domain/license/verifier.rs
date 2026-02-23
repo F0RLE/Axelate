@@ -2,16 +2,14 @@ use super::storage;
 use super::types::{LicenseInfo, LicenseStatus};
 use crate::errors::AppError;
 
-/// Verifies current license status
+/// Verifies current license status.
+///
+/// Currently returns [`LicenseStatus::Enterprise`] unconditionally while
+/// the licensing system is disabled.
+// TODO: re-enable when licensing is implemented:
+//   storage::load_license().map_or(LicenseStatus::Free, |info| verify_license_info(&info))
 pub const fn verify() -> LicenseStatus {
-    // TEMPORARY: Licensing disabled as per user request
     LicenseStatus::Enterprise
-    /*
-    match storage::load_license() {
-        Some(info) => verify_license_info(&info),
-        None => LicenseStatus::Free,
-    }
-    */
 }
 
 /// Verifies a license info object

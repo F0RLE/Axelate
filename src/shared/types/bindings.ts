@@ -238,7 +238,7 @@ async controlModule(request: ControlRequest) : Promise<Result<ControlResponse, A
 /**
  * Retrieves runtime status of a specific module
  */
-async getModuleStatus(moduleId: string) : Promise<Result<string, AppError>> {
+async getModuleStatus(moduleId: string) : Promise<Result<ModuleStatus, AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_module_status", { moduleId }) };
 } catch (e) {
@@ -517,7 +517,7 @@ async getAppBootstrapData() : Promise<Result<BootstrapData, AppError>> {
 }
 },
 /**
- * Saves anAPI key securely to system credential storage
+ * Saves an API key securely to system credential storage
  */
 async saveSecureKey(service: string, key: string) : Promise<Result<null, AppError>> {
     try {
@@ -585,7 +585,7 @@ async getChatHistory(sessionId: string) : Promise<Result<ChatMessage[], AppError
 /**
  * Counts tokens in text for the specified model
  */
-async countTokens(text: string, model: string | null) : Promise<Result<number, string>> {
+async countTokens(text: string, model: string | null) : Promise<Result<number, AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("count_tokens", { text, model }) };
 } catch (e) {
@@ -858,9 +858,9 @@ debug_mode: boolean }
  */
 export type BatchLogEntry = { 
 /**
- * Log level ("info", "warn", "error")
+ * Log level
  */
-level: string; 
+level: LogLevel; 
 /**
  * Log message content
  */
@@ -1022,9 +1022,9 @@ stars: string[] }
  */
 export type ConfigField = { 
 /**
- * Field type ("text", "password", "select", "checkbox")
+ * Field type
  */
-fieldType: string; 
+fieldType: FieldType; 
 /**
  * Display label in UI
  */
@@ -1038,7 +1038,7 @@ default: JsonValue | null;
  */
 required: boolean; 
 /**
- * Available options for "select" type
+ * Available options for select type
  */
 options: string[] | null }
 /**
@@ -1068,7 +1068,7 @@ message: string;
 /**
  * Current module status after operation
  */
-status: string | null }
+status: ModuleStatus | null }
 /**
  * CPU (Central Processing Unit) statistics
  */
@@ -1138,6 +1138,34 @@ usedGb: number;
  */
 activityPercent: number }
 /**
+ * Configuration field type for module settings UI
+ */
+export type FieldType = 
+/**
+ * Single-line text input
+ */
+"text" | 
+/**
+ * Masked password input
+ */
+"password" | 
+/**
+ * Dropdown selection
+ */
+"select" | 
+/**
+ * Boolean checkbox
+ */
+"checkbox" | 
+/**
+ * Native boolean type
+ */
+"boolean" | 
+/**
+ * Numeric input
+ */
+"number"
+/**
  * GPU (Graphics Processing Unit) statistics
  */
 export type GpuStats = { 
@@ -1163,13 +1191,25 @@ temp: number;
 name: string }
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue }
 /**
+ * How a module launch should be handled
+ */
+export type LaunchAction = 
+/**
+ * Start a local module process
+ */
+"start_local" | 
+/**
+ * Navigate to a page (API module)
+ */
+"navigate"
+/**
  * Module launch response indicating how to handle the module
  */
 export type LaunchResponse = { 
 /**
- * Action type ("`start_local`" or "navigate")
+ * How to handle the launch
  */
-action: string; 
+action: LaunchAction; 
 /**
  * Page to navigate to
  */
@@ -1238,6 +1278,30 @@ level: string;
  * Log message
  */
 message: string }
+/**
+ * Frontend log level
+ */
+export type LogLevel = 
+/**
+ * Informational message
+ */
+"info" | 
+/**
+ * Warning message
+ */
+"warn" | 
+/**
+ * Error message
+ */
+"error" | 
+/**
+ * Debug message
+ */
+"debug" | 
+/**
+ * Trace message
+ */
+"trace"
 /**
  * Model capability flags (JSON Compatible)
  */
@@ -1323,9 +1387,9 @@ version: string;
  */
 author: string; 
 /**
- * Category ("ai" or "service")
+ * Module category (AI or service)
  */
-category: string; 
+category: ModuleCategory; 
 /**
  * Icon/emoji for UI display
  */
@@ -1347,9 +1411,9 @@ local: boolean;
  */
 enabled: boolean; 
 /**
- * Current runtime status ("running", "stopped", "error")
+ * Current runtime status
  */
-status: string | null; 
+status: ModuleStatus | null; 
 /**
  * Whether module can be deleted by user
  */
@@ -1362,6 +1426,18 @@ config: { [key in string]: JsonValue };
  * Configuration schema definition
  */
 configSchema: { [key in string]: ConfigField } | null }
+/**
+ * Module category
+ */
+export type ModuleCategory = 
+/**
+ * AI/LLM provider module
+ */
+"ai" | 
+/**
+ * Background service module
+ */
+"service"
 /**
  * Catalog item for downloadable modules
  */
@@ -1391,9 +1467,9 @@ desc: string;
  */
 icon: string; 
 /**
- * Module type ("ai" or "service")
+ * Module type
  */
-type: string; 
+type: ModuleType; 
 /**
  * GitHub repository URL
  */
@@ -1406,6 +1482,38 @@ expectedHash: string | null;
  * Semantic version (e.g., "1.0.0")
  */
 version?: string }
+/**
+ * Runtime status of a module
+ */
+export type ModuleStatus = 
+/**
+ * Module process is active
+ */
+"running" | 
+/**
+ * Module process is not active
+ */
+"stopped" | 
+/**
+ * Module encountered an error
+ */
+"error"
+/**
+ * Module type classification
+ */
+export type ModuleType = 
+/**
+ * AI/LLM provider
+ */
+"api" | 
+/**
+ * Locally installed module
+ */
+"local" | 
+/**
+ * Background service
+ */
+"service"
 /**
  * Network I/O statistics
  */
@@ -1679,8 +1787,7 @@ selected_ai_models: { [key in string]: string };
  */
 last_page: string | null; 
 /**
- * Per-resolution zoom levels ("WxH" -> value)
- * Per-resolution zoom levels (e.g., "1920x1080" -> 1.2)
+ * Per-resolution zoom levels (e.g., "1920x1080" → 1.2)
  */
 resolution_zoom: { [key in string]: number }; 
 /**

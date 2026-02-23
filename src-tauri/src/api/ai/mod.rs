@@ -53,11 +53,23 @@ pub fn get_chat_history(
 #[specta::specta]
 /// Counts tokens in text for the specified model
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned types for serialization
-pub async fn count_tokens(text: String, model: Option<String>) -> Result<u32, String> {
+pub async fn count_tokens(text: String, model: Option<String>) -> Result<u32, AppError> {
     tokio::task::spawn_blocking(move || {
         ai_service::count_tokens(&text, model.as_deref())
-            .and_then(|c| u32::try_from(c).map_err(|_| "token count overflow".to_string()))
+            .map_err(|e| AppError::Internal {
+                request_id: None,
+                message: e,
+            })
+            .and_then(|c| {
+                u32::try_from(c).map_err(|_| AppError::Internal {
+                    request_id: None,
+                    message: "Token count overflow".to_string(),
+                })
+            })
     })
     .await
-    .map_err(|e| format!("Task joined with error: {e}"))?
+    .map_err(|e| AppError::Internal {
+        request_id: None,
+        message: format!("Token count task failed: {e}"),
+    })?
 }

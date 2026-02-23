@@ -29,7 +29,7 @@ impl SettingsService {
         let mut settings = AppSettings::default();
 
         for line in content.lines() {
-            let parts: Vec<&str> = line.split('=').collect();
+            let parts: Vec<&str> = line.splitn(2, '=').collect();
             if let [key, value] = parts.as_slice() {
                 let key = key.trim();
                 let value = value.trim();
@@ -100,7 +100,7 @@ pub fn get_language_sync() -> String {
             .map(|content| {
                 let mut s = AppSettings::default();
                 for line in content.lines() {
-                    let parts: Vec<&str> = line.split('=').collect();
+                    let parts: Vec<&str> = line.splitn(2, '=').collect();
                     match parts.as_slice() {
                         [key, value] if key.trim() == "LANGUAGE" => {
                             s.language = value.trim().to_string();

@@ -31,6 +31,7 @@ pub struct PricingConfig {
 bitflags! {
     /// Internal representation of model capabilities for bitwise logic
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[allow(dead_code)]
     pub struct CapabilityFlags: u32 {
         /// Supports reasoning/thinking steps (e.g., DeepSeek R1, OpenAI o1)
         const REASONING = 0b0001;
@@ -69,37 +70,6 @@ pub struct ModelCapabilities {
     /// Supports function/tool calling
     #[serde(default)]
     pub function_calling: bool,
-}
-
-impl ModelCapabilities {
-    /// Converts to bitflags for optimized logic
-    pub fn to_flags(&self) -> CapabilityFlags {
-        let mut flags = CapabilityFlags::empty();
-        if self.reasoning {
-            flags.insert(CapabilityFlags::REASONING);
-        }
-        if self.vision {
-            flags.insert(CapabilityFlags::VISION);
-        }
-        if self.multimodal {
-            flags.insert(CapabilityFlags::MULTIMODAL);
-        }
-        if self.long_context {
-            flags.insert(CapabilityFlags::LONG_CONTEXT);
-        }
-        if self.streaming {
-            flags.insert(CapabilityFlags::STREAMING);
-        }
-        if self.function_calling {
-            flags.insert(CapabilityFlags::FUNCTION_CALLING);
-        }
-        flags
-    }
-
-    /// Check if a specific capability is present
-    pub fn contains(&self, flag: CapabilityFlags) -> bool {
-        self.to_flags().contains(flag)
-    }
 }
 
 /// Performance characteristics of an AI model (0-10 scale)
@@ -165,6 +135,18 @@ pub struct AiModel {
     pub api_models: Option<ApiModelConfig>,
 }
 
+/// Module type classification
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum ModuleType {
+    /// AI/LLM provider
+    Api,
+    /// Locally installed module
+    Local,
+    /// Background service
+    Service,
+}
+
 /// Catalog item for downloadable modules
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
 #[serde(rename_all = "camelCase")]
@@ -181,9 +163,9 @@ pub struct ModuleItem {
     pub desc: String,
     /// Icon/emoji
     pub icon: String,
-    /// Module type ("ai" or "service")
+    /// Module type
     #[serde(rename = "type")]
-    pub type_name: String,
+    pub type_name: ModuleType,
     /// GitHub repository URL
     pub repo_url: Option<String>,
     /// SHA-256 hash for integrity verification
