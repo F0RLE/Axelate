@@ -107,7 +107,7 @@ tauri-build = { version = "2.5.3", features = [] }
 [profile.release]
 codegen-units   = 1       # Maximum optimization (slower build, faster binary)
 lto             = true    # Link Time Optimization (monolithic build)
-opt-level       = "z"     # Optimize for size
+opt-level       = "s"     # Optimize for size with better perf than "z"
 panic           = "abort" # Remove panic unwinding (smaller binary)
 strip           = true    # Remove debug symbols
 incremental     = false   # Disable incremental build for cleaner release

@@ -673,12 +673,12 @@ export class ChatUI {
         const t = (globalThis as TGlobalWin).t;
         const label = t('ui.launcher.web.copied', 'Copied!');
 
-        btn.innerHTML = `
+        btn.innerHTML = DOMPurify.sanitize(`
             <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
                 <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
             <span style="color: var(--success);">${label}</span>
-        `;
+        `);
 
         setTimeout(() => {
             btn.innerHTML = originalHtml;

@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
 export const renderSimpleFeature = (
@@ -9,5 +10,5 @@ export const renderSimpleFeature = (
     const win = globalThis as TGlobalWin;
     const title = typeof win.t === 'function' ? win.t(titleKey, fallbackTitle) : fallbackTitle;
 
-    root.innerHTML = `<div class="${className}"><h1>${title}</h1></div>`;
+    root.innerHTML = DOMPurify.sanitize(`<div class="${className}"><h1>${title}</h1></div>`);
 };

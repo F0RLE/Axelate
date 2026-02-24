@@ -2,6 +2,7 @@ import type { IApp } from '../../types/coreTypes';
 import type { TGlobalWin } from '../../types/global_bridge_types';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { NavigationService } from '@/infrastructure/navigation/NavigationService';
+import DOMPurify from 'dompurify';
 import { type ModuleCardRenderer } from './ModuleCardRenderer';
 
 /**
@@ -145,7 +146,7 @@ export class ModalManager {
             const textBtnKey = 'ui.launcher.modules.modal.filter_text';
             const imageBtnKey = 'ui.launcher.modules.modal.filter_image';
 
-            actionsEl.innerHTML = `
+            actionsEl.innerHTML = DOMPurify.sanitize(`
                 <div class="category-filter-btn" id="filter-text-btn" role="button" aria-label="Filter Text">
                     <div class="category-filter-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>
@@ -158,7 +159,7 @@ export class ModalManager {
                     </div>
                     <span data-i18n="${imageBtnKey}">${t(imageBtnKey, 'Image')}</span>
                 </div>
-            `;
+            `);
             actionsEl.style.display = 'flex';
 
             // Bind filter events
@@ -228,12 +229,12 @@ export class ModalManager {
         const sorted = this._getSortedApps(filteredApps);
 
         if (sorted.length === 0) {
-            listEl.innerHTML = `
+            listEl.innerHTML = DOMPurify.sanitize(`
                 <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 0; color: var(--text-muted); opacity: 0.7;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
                     <span data-i18n="ui.launcher.modules.modal.no_apps_filter" style="font-size: 1.1rem;">No applications found for this type</span>
                 </div>
-            `;
+            `);
             return;
         }
 

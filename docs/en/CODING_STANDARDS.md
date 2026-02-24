@@ -1,7 +1,7 @@
 # Axelate Engineering Standards
 
-**Version:** 4.0.0  
-**Last Updated:** 2026-02-13  
+**Version:** 4.2.0  
+**Last Updated:** 2026-02-24  
 **Status:** MANDATORY
 
 > This document is the single source of truth for all engineering decisions. Every config value listed here is extracted from the actual project files. If this document and a config file disagree — the config file is authoritative; update this document.
@@ -298,7 +298,7 @@ All lint levels configured in `Cargo.toml` — never via `#[allow]` attributes (
 ```toml
 codegen-units   = 1       # Single codegen unit (maximum opt, slower compile)
 lto             = true    # Link-Time Optimization (monolithic build)
-opt-level       = "z"     # Optimize for binary size
+opt-level       = "s"     # Optimize for size with better perf than "z"
 panic           = "abort" # No unwinding — instant crash (smaller binary)
 strip           = true    # Remove debug symbols + metadata
 incremental     = false   # Clean release (no stale artifacts)
@@ -443,7 +443,7 @@ async loadSettings() {
 
 ### 4.2. Component Lifecycle
 
-UI classes extend `BaseComponent`:
+UI classes extend `BaseComponent`. Async data views extend `AsyncView<T>`:
 
 ```typescript
 export abstract class BaseComponent {
@@ -453,6 +453,12 @@ export abstract class BaseComponent {
     protected abstract onInit(): void | Promise<void>;
     protected abstract onDestroy(): void;
     protected getElement<T>(id: string): T | null;  // Cached DOM lookup
+}
+
+// AsyncView renders through DOMPurify.sanitize() automatically
+export abstract class AsyncView<T> extends BaseComponent {
+    protected abstract fetchData(): Promise<T>;
+    protected abstract renderReady(data: T): string;  // Sanitized by render()
 }
 ```
 
@@ -469,6 +475,13 @@ export abstract class BaseComponent {
 | Injection | No `eval()`, `Function()`, or inline scripts (blocked by CSP) |
 | Templates | `TemplateLoader` auto-sanitizes with DOMPurify allow-lists |
 
+**innerHTML rule applies everywhere**, including:
+- `renderSimpleFeature()` — i18n strings must be sanitized
+- `ModalManager` — SVG template literals must be sanitized
+- `GeneralSettingsRenderer` — generated toggle HTML must be sanitized
+- `ErrorHandler` — error message toasts must be sanitized (no manual `escapeHtml`)
+- `SettingsUI` ICONS — pre-sanitize in constructor, not at each assignment site
+
 ### 4.4. Async Rules
 
 - All top-level promises: `.catch()` or `void` prefix
@@ -484,6 +497,7 @@ export abstract class BaseComponent {
 ```
 1. TauriProvider           ← native bridge (first, everything depends on it)
 2. LoggerService           ← logging (needed by everything below)
+   └─ logger.setTransport()  ← wire Tauri invoke path (§4.1, avoids raw __TAURI__)
 3. StateService            ← persisted UI state
 4. ModuleService, WindowService, I18nService, CatalogService
 5. NavigationService       ← routing
@@ -506,12 +520,12 @@ this.monitoringUI = new MonitoringUI(this.monitoringService);
 
 | Service | Export | Reason |
 |---------|--------|--------|
-| `EventBus` | `eventBus` | Global pub/sub backbone |
+| `EventBus` | `eventBus` (singleton) + `EventBus` (class) | Global pub/sub backbone. Class exported for DI testability |
 | `LoggerService` | `logger` | Runs before DI is ready |
 | `ErrorHandler` | `errorHandler` | Must catch errors from boot |
 | `TemplateLoader` | `templateLoader` | Shared HTML loading/caching |
 
-New services: prefer constructor DI over singletons.
+New services: prefer constructor DI over singletons. For `EventBus`, prefer injecting via constructor when testing is a concern.
 
 ---
 

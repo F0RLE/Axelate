@@ -28,6 +28,8 @@ export class LoggerService {
     // Flag to prevent recursive logging loops during interception
     private _isInternalLog = false;
     private _initialized = false;
+    /** Injected after TauriProvider is ready — avoids direct __TAURI__ access. */
+    private _transport: ((logs: { level: string; message: string }[]) => Promise<void>) | null = null;
 
     constructor() {
         // Capture original methods before overriding
@@ -35,6 +37,16 @@ export class LoggerService {
         this._originalConsoleWarn = console.warn.bind(console);
         this._originalConsoleLog = console.log.bind(console);
         this._originalConsoleDebug = console.debug.bind(console);
+    }
+
+    /**
+     * Injects the Tauri transport after TauriProvider is initialized.
+     * Decouples LoggerService from direct __TAURI__ access (§4.1).
+     */
+    public setTransport(
+        fn: (logs: { level: string; message: string }[]) => Promise<void>,
+    ): void {
+        this._transport = fn;
     }
 
     /**
@@ -249,20 +261,19 @@ export class LoggerService {
         this._buffer = [];
 
         try {
-            // Use Tauri invoke if available
-            const g = globalThis as unknown as {
-                __TAURI__?: { core: { invoke: (cmd: string, args: unknown) => Promise<void> } };
-            };
-
-            if (g.__TAURI__?.core) {
-                await g.__TAURI__.core.invoke('log_batch', {
-                    logs: logs.map((l) => ({ level: l.level, message: l.message })),
-                });
+            if (this._transport) {
+                // Use injected transport (TauriProvider path — preferred)
+                await this._transport(logs.map((l) => ({ level: l.level, message: l.message })));
             } else {
-                // Fallback for browser dev mode - just print to original console if needed,
-                // but we already did that via interceptors or direct calls.
-                // We'll skip the fetch() call as it assumes a specific HTTP backend which might not exist in Tauri context.
-                // If you have a specific HTTP endpoint, restore it here.
+                // Fallback: direct __TAURI__ access during early boot before setTransport() is called
+                const g = globalThis as unknown as {
+                    __TAURI__?: { core: { invoke: (cmd: string, args: unknown) => Promise<void> } };
+                };
+                if (g.__TAURI__?.core) {
+                    await g.__TAURI__.core.invoke('log_batch', {
+                        logs: logs.map((l) => ({ level: l.level, message: l.message })),
+                    });
+                }
             }
         } catch (e) {
             this._originalConsoleError('Log batch sync failed:', e);

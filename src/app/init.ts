@@ -75,6 +75,10 @@ export class Core {
         this.tauriProvider = new TauriProvider();
         this.logger = logger;
         this.logger.init();
+        // Wire transport so logger uses TauriProvider instead of raw __TAURI__ (§4.1)
+        this.logger.setTransport((logs) =>
+            this.tauriProvider.invoke('log_batch', { logs }),
+        );
 
         this.logger.info(`AXELATE v${__APP_VERSION__}`);
 

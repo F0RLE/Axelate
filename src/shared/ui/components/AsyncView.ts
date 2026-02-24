@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { BaseComponent } from '../BaseComponent';
 
 /**
@@ -47,11 +48,11 @@ export abstract class AsyncView<T> extends BaseComponent {
         if (!container) return;
 
         if (this._isLoading) {
-            container.innerHTML = this.renderLoading();
+            container.innerHTML = DOMPurify.sanitize(this.renderLoading());
         } else if (this._error) {
-            container.innerHTML = this.renderError(this._error);
+            container.innerHTML = DOMPurify.sanitize(this.renderError(this._error));
         } else if (this._data !== null) {
-            container.innerHTML = this.renderReady(this._data);
+            container.innerHTML = DOMPurify.sanitize(this.renderReady(this._data));
         }
     }
 

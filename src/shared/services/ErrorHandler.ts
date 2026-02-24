@@ -3,6 +3,7 @@
  * @description Global error boundary and management service for catching and logging application errors
  */
 
+import DOMPurify from 'dompurify';
 import { eventBus } from './EventBus';
 import type { TGlobalWin } from '../types/global_bridge_types';
 
@@ -138,7 +139,7 @@ class ErrorHandler {
 
         const toast = document.createElement('div');
         toast.className = 'toast toast-error';
-        toast.innerHTML = `
+        toast.innerHTML = DOMPurify.sanitize(`
             <div class="toast-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -148,9 +149,9 @@ class ErrorHandler {
             </div>
             <div class="toast-content">
                 <div class="toast-title">Error</div>
-                <div class="toast-message">${this._escapeHtml(message)}</div>
+                <div class="toast-message">${message}</div>
             </div>
-        `;
+        `);
 
         toastContainer.appendChild(toast);
 
@@ -217,14 +218,6 @@ class ErrorHandler {
         };
     }
 
-    /**
-     * Safely escapes HTML content for display.
-     */
-    private _escapeHtml(text: string): string {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
 }
 
 // Singleton export

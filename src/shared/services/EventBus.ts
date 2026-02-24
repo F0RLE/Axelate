@@ -72,7 +72,7 @@ export type EventHandler<T = unknown> = (_data: T) => void;
  * Implementation of the global event bus.
  * Provides type-safe subscription and publication of events.
  */
-class EventBus {
+export class EventBus {
     private readonly _listeners = new Map<string, Set<EventHandler>>();
     private readonly _onceListeners = new Map<string, Set<EventHandler>>();
 

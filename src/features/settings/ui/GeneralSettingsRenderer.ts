@@ -5,6 +5,7 @@
 
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { logger } from '@/infrastructure/logging/LoggerService';
+import DOMPurify from 'dompurify';
 import type { ISettingsUIContext } from './SettingsContext';
 
 export class GeneralSettingsRenderer {
@@ -64,7 +65,7 @@ export class GeneralSettingsRenderer {
             })
             .join('');
 
-        container.innerHTML = html;
+        container.innerHTML = DOMPurify.sanitize(html);
 
         container.addEventListener('click', (e) => {
             const target = e.target;
@@ -183,7 +184,7 @@ export class GeneralSettingsRenderer {
             })
             .join('');
 
-        container.innerHTML = html;
+        container.innerHTML = DOMPurify.sanitize(html);
 
         container.addEventListener('click', (e) => {
             const target = e.target;

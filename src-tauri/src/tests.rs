@@ -121,3 +121,138 @@ mod app_tests {
             .expect("Failed to export typescript bindings");
     }
 }
+
+#[cfg(test)]
+mod error_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+    use crate::errors::{AppError, IpcError};
+
+    /// Test AppError::Validation → IpcError mapping
+    #[test]
+    fn test_validation_error_to_ipc() {
+        let err = AppError::Validation("invalid input".to_string());
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "VALIDATION");
+        assert_eq!(ipc.message, "invalid input");
+    }
+
+    /// Test AppError::NotFound → IpcError mapping
+    #[test]
+    fn test_not_found_error_to_ipc() {
+        let err = AppError::NotFound("settings.json".to_string());
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "NOT_FOUND");
+        assert_eq!(ipc.message, "settings.json");
+    }
+
+    /// Test AppError::PermissionDenied → IpcError mapping
+    #[test]
+    fn test_permission_denied_error_to_ipc() {
+        let err = AppError::PermissionDenied("admin required".to_string());
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "PERMISSION_DENIED");
+        assert_eq!(ipc.message, "admin required");
+    }
+
+    /// Test AppError::Io → IpcError mapping
+    #[test]
+    fn test_io_error_to_ipc() {
+        let err = AppError::Io("disk full".to_string());
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "IO_ERROR");
+        assert_eq!(ipc.message, "disk full");
+    }
+
+    /// Test AppError::Serialization → IpcError mapping
+    #[test]
+    fn test_serialization_error_to_ipc() {
+        let err = AppError::Serialization("invalid JSON".to_string());
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "SERIALIZATION");
+        assert_eq!(ipc.message, "invalid JSON");
+    }
+
+    /// Test AppError::Config → IpcError mapping
+    #[test]
+    fn test_config_error_to_ipc() {
+        let err = AppError::Config("missing field".to_string());
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "CONFIG");
+        assert_eq!(ipc.message, "missing field");
+    }
+
+    /// Test AppError::External → IpcError mapping (with request_id)
+    #[test]
+    fn test_external_error_to_ipc() {
+        let err = AppError::External {
+            request_id: Some("req-123".to_string()),
+            message: "API timeout".to_string(),
+        };
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "EXTERNAL");
+        assert_eq!(ipc.message, "API timeout");
+    }
+
+    /// Test AppError::Internal → IpcError mapping (without request_id)
+    #[test]
+    fn test_internal_error_to_ipc() {
+        let err = AppError::Internal {
+            request_id: None,
+            message: "unexpected state".to_string(),
+        };
+        let ipc: IpcError = err.into();
+        assert_eq!(ipc.code, "INTERNAL");
+        assert_eq!(ipc.message, "unexpected state");
+    }
+
+    /// Test std::io::Error → AppError conversion
+    #[test]
+    fn test_io_std_error_to_app_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file missing");
+        let app_err: AppError = io_err.into();
+        assert!(matches!(app_err, AppError::Io(_)));
+        assert!(app_err.to_string().contains("file missing"));
+    }
+
+    /// Test serde_json::Error → AppError conversion
+    #[test]
+    fn test_serde_json_error_to_app_error() {
+        let result: Result<serde_json::Value, _> = serde_json::from_str("{invalid}");
+        let serde_err = result.unwrap_err();
+        let app_err: AppError = serde_err.into();
+        assert!(matches!(app_err, AppError::Serialization(_)));
+    }
+
+    /// Test Display trait for all variants
+    #[test]
+    fn test_app_error_display() {
+        assert_eq!(
+            AppError::Validation("bad".to_string()).to_string(),
+            "Validation error: bad"
+        );
+        assert_eq!(
+            AppError::NotFound("x".to_string()).to_string(),
+            "Not found: x"
+        );
+        assert_eq!(
+            AppError::Io("fail".to_string()).to_string(),
+            "IO error: fail"
+        );
+        assert_eq!(
+            AppError::External {
+                request_id: None,
+                message: "down".to_string()
+            }
+            .to_string(),
+            "External error: down"
+        );
+        assert_eq!(
+            AppError::Internal {
+                request_id: Some("r1".to_string()),
+                message: "boom".to_string()
+            }
+            .to_string(),
+            "Internal error: boom"
+        );
+    }
+}
