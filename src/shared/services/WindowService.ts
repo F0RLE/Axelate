@@ -5,6 +5,7 @@
 
 import { type IBridge } from '@/shared/types/IBridge';
 import { logger } from '@/infrastructure/logging/LoggerService';
+import { eventBus } from '@/shared/services/EventBus';
 
 interface IWindowGlobal {
     windowService?: WindowService;
@@ -59,7 +60,15 @@ export class WindowService {
     private _saveWindowTimer: ReturnType<typeof setTimeout> | null = null;
     private _config: IWindowConfig | null = null;
 
-    constructor(private readonly _bridge: IBridge) {}
+    constructor(
+        private readonly _bridge: IBridge,
+        private readonly _uiSettingsService: {
+            setZoomLevel: (z: number) => void;
+            getZoomLevel: () => number;
+            getResolutionZoom: (k: string) => number | undefined;
+            setResolutionZoom: (k: string, z: number) => void;
+        } | null = null,
+    ) {}
 
     /**
      * Initializes the window service by retrieving the current zoom level from the host.
@@ -203,24 +212,7 @@ export class WindowService {
 
     // --- Zoom ---
 
-    private _uiSettingsService: {
-        setZoomLevel: (z: number) => void;
-        getZoomLevel: () => number;
-        getResolutionZoom: (k: string) => number | undefined;
-        setResolutionZoom: (k: string, z: number) => void;
-    } | null = null;
-
-    /**
-     * Injects the UISettingsService dependency.
-     */
-    public setUISettingsService(uiSettingsService: {
-        setZoomLevel: (z: number) => void;
-        getZoomLevel: () => number;
-        getResolutionZoom: (k: string) => number | undefined;
-        setResolutionZoom: (k: string, z: number) => void;
-    }): void {
-        this._uiSettingsService = uiSettingsService;
-    }
+    // --- Zoom ---
 
     /**
      * Sets the webview zoom level.
@@ -388,8 +380,7 @@ export class WindowService {
      */
     private _toggleMonitorPanel(visible: boolean): void {
         logger.info(`[WindowService] toggleMonitorPanel: ${String(visible)}`);
-        const event = new CustomEvent('monitor:toggle', { detail: { visible } });
-        globalThis.dispatchEvent(event);
+        eventBus.emit('window:monitor:toggle', { visible });
     }
 
     // --- Persistence ---

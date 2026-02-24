@@ -5,6 +5,7 @@
 
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { type IBridge } from '@/shared/types/IBridge';
+import { eventBus } from '@/shared/services/EventBus';
 
 export class I18nService {
     private _translations: Record<string, string> = {};
@@ -62,13 +63,13 @@ export class I18nService {
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => {
                     reject(new Error('Timeout'));
-                }, 1000),
+                }, 10000), // Increased from 1s to 10s to prevent race conditions during cold boot
             );
             const res = (await Promise.race([invokePromise, timeoutPromise])) as string | undefined;
 
             if (res !== undefined && res !== 'unknown') return res;
         } catch {
-            logger.warn('[I18n] Native system language check failed or timed out');
+            logger.warn('[I18n] Native system language check failed or timed out (10s)');
         }
         return null;
     }
@@ -108,8 +109,8 @@ export class I18nService {
                 logger.error(String(e));
             });
 
-            // Notify UI of language change
-            globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
+            // Notify UI of language change securely using standard EventBus
+            eventBus.emit('i18n:language:changed', { lang });
             logger.info(`[I18n] Language changed to ${lang}, event dispatched`);
         } catch (e) {
             logger.error(`[I18n] Failed to load translations for ${lang}`, e);
@@ -119,6 +120,10 @@ export class I18nService {
                 try {
                     this._translations = await this._fetchTranslations('en');
                     this._currentLang = 'en';
+                    document.documentElement.lang = 'en'; // Fix: Ensure DOM lang is updated on fallback
+                    
+                    eventBus.emit('i18n:language:changed', { lang: 'en' });
+                    logger.info(`[I18n] Language fell back to en, event dispatched`);
                 } catch (err) {
                     logger.error('[I18n] Critical: Failed to load fallback English', err);
                 }

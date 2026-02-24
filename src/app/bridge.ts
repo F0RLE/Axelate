@@ -96,7 +96,12 @@ export class GlobalBridge {
         win.openAppSelection = (category: string) => {
             const cat = category.toLowerCase();
             const catalog = this._core.catalog.getCatalog();
-            const apps = cat === 'ai' ? catalog.ai : cat === 'services' ? catalog.services : [];
+            let apps: IApp[] = [];
+            if (cat === 'ai') {
+                apps = catalog.ai;
+            } else if (cat === 'services') {
+                apps = catalog.services;
+            }
             this._core.logger.info(
                 `[GlobalBridge] openAppSelection requested for ${cat}. Found ${String(apps.length)} apps. (keys: ${Object.keys(catalog).join(', ')})`,
             );
@@ -146,8 +151,8 @@ export class GlobalBridge {
                     this._core.logger.error('[GlobalBridge] Launch module failed:', err);
                 }
             } else {
-                const apiModules = ['gpt', 'gemini', 'claude', 'mistral', 'axelate-localai'];
-                if (apiModules.includes(id)) {
+                const app = this._core.catalog.getAppById(id);
+                if (app?.category === 'ai') {
                     localStorage.setItem('selected_ai_provider', id);
                 }
             }
@@ -185,7 +190,12 @@ export class GlobalBridge {
         g.getCatalogCategory = (cat: string) => {
             const lowCat = cat.toLowerCase();
             const catalog = this._core.catalog.getCatalog();
-            return lowCat === 'ai' ? catalog.ai : lowCat === 'services' ? catalog.services : [];
+            if (lowCat === 'ai') {
+                return catalog.ai;
+            } else if (lowCat === 'services') {
+                return catalog.services;
+            }
+            return [];
         };
     }
 
@@ -285,8 +295,14 @@ export class GlobalBridge {
      */
     private async _handleChatRequest(init?: RequestInit): Promise<Response> {
         try {
-            const bodyStr = typeof init?.body === 'string' ? init.body : '{}';
-            const body = JSON.parse(bodyStr) as Record<string, unknown>;
+            let body: Record<string, unknown> = {};
+            if (typeof init?.body === 'string') {
+                try {
+                    body = JSON.parse(init.body) as Record<string, unknown>;
+                } catch (e) {
+                    this._core.logger.warn(`[GlobalBridge] Failed to parse chat request body: ${String(e)}`);
+                }
+            }
             const provider =
                 (body['provider'] as string | undefined) ??
                 localStorage.getItem('selected_ai_provider') ??

@@ -6,6 +6,8 @@
 /**
  * Global application event map and payloads.
  */
+import type { IModuleDownloadState } from '../types/coreTypes';
+
 export interface IEventBusEvents {
     // Navigation
     /** Emitted when an application page changes. */
@@ -17,7 +19,7 @@ export interface IEventBusEvents {
     /** Emitted when a module download begins. */
     'module:download:start': { moduleId: string; url: string };
     /** Emitted with progress updates for an active download. */
-    'module:download:progress': { moduleId: string; percent: number };
+    'module:download:progress': IModuleDownloadState;
     /** Emitted when a module has been successfully downloaded and extracted. */
     'module:download:complete': { moduleId: string };
     /** Emitted if a module download or extraction fails. */

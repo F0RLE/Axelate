@@ -13,6 +13,8 @@ interface IMonitoringGlobal {
     };
     clearInterval: (id: unknown) => void;
     setInterval: (cb: () => void, ms: number) => ReturnType<typeof setTimeout>;
+    clearTimeout: (id: unknown) => void;
+    setTimeout: (cb: () => void, ms: number) => ReturnType<typeof setTimeout>;
 }
 
 export class MonitoringService {
@@ -79,8 +81,8 @@ export class MonitoringService {
         }
         if (this.pollingInterval) {
             const g = globalThis as unknown as IMonitoringGlobal;
-            if (typeof g.clearInterval === 'function') {
-                g.clearInterval(this.pollingInterval);
+            if (typeof g.clearTimeout === 'function') {
+                g.clearTimeout(this.pollingInterval);
             }
             this.pollingInterval = null;
         }
@@ -118,20 +120,21 @@ export class MonitoringService {
         if (this.pollingInterval) return;
 
         const g = globalThis as IMonitoringGlobal;
-        this.pollingInterval = g.setInterval(() => {
-            void (async () => {
-                try {
-                    const res = await fetch('/api/stats');
-                    if (res.ok) {
-                        const stats = (await res.json()) as ISystemStats;
-                        this.notifyListeners(stats);
-                        return;
-                    }
-                } catch (e) {
-                    logger.warn('[MonitoringService] Poll failed', e);
+        const poll = async () => {
+            try {
+                const res = await fetch('/api/stats');
+                if (res.ok) {
+                    const stats = (await res.json()) as ISystemStats;
+                    this.notifyListeners(stats);
                 }
-                // Fallback to mock removed for quality assurance
-            })();
-        }, 1000);
+            } catch (e) {
+                logger.warn('[MonitoringService] Poll failed', e);
+            }
+            if (this.isListening) {
+                this.pollingInterval = g.setTimeout(() => { void poll(); }, 1000);
+            }
+        };
+
+        this.pollingInterval = g.setTimeout(() => { void poll(); }, 1000);
     }
 }

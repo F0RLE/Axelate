@@ -342,16 +342,18 @@ export class ChatController {
         if (!isAIActive) {
             const text = input ? input.value.trim() : '';
             if (text !== '') this._ui.appendMessage('user', text);
-            setTimeout(() => {
-                this._ui.appendMessage(
-                    'assistant',
-                    this._i18n.t(
-                        'ui.ai.no_provider',
-                        'No AI module running. Please launch a module first.',
-                    ),
-                    { error: true },
-                );
-            }, 500);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    this._ui.appendMessage(
+                        'assistant',
+                        this._i18n.t(
+                            'ui.ai.no_provider',
+                            'No AI module running. Please launch a module first.',
+                        ),
+                        { error: true },
+                    );
+                });
+            });
             if (input) input.value = '';
             return false;
         }

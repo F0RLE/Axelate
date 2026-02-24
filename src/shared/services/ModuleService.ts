@@ -5,6 +5,7 @@
 
 import { type IBridge } from '@/shared/types/IBridge';
 import { logger } from '@/infrastructure/logging/LoggerService';
+import { eventBus } from '@/shared/services/EventBus';
 import type { IModuleDownloadState } from '../types/coreTypes';
 import type { TGlobalWin } from '../types/global_bridge_types';
 import { commands } from '../types/bindings';
@@ -59,9 +60,8 @@ export class ModuleService {
 
             this._broadcastState(payload.module_id);
 
-            // Dispatch custom event for UI components that don't use this service directly
-            const event = new CustomEvent('download-progress-update', { detail: payload });
-            globalThis.dispatchEvent(event);
+            // Dispatch event for UI components using standard event bus
+            eventBus.emit('module:download:progress', payload as unknown as IModuleDownloadState);
         });
     }
 

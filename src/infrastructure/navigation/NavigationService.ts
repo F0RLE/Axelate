@@ -14,17 +14,12 @@ export class NavigationService {
     private readonly _actionStack: { id: string; action: () => void }[] = [];
     private _currentIndex = -1;
     private static _instance: NavigationService | undefined;
-    private _uiSettingsService: UISettingsService | null = null;
 
-    private constructor() {
+    private constructor(private readonly _uiSettingsService: UISettingsService | null = null) {
         if (NavigationService._instance !== undefined) {
             logger.warn('[NavigationService] Instance already exists!');
         }
         NavigationService._instance = this;
-    }
-
-    public setUISettingsService(uiSettingsService: UISettingsService): void {
-        this._uiSettingsService = uiSettingsService;
     }
 
     /**
@@ -78,9 +73,10 @@ export class NavigationService {
 
     /**
      * Returns the singleton instance of NavigationService.
+     * Note: during boot, UISettingsService must be injected.
      */
-    public static getInstance(): NavigationService {
-        NavigationService._instance ??= new NavigationService();
+    public static getInstance(uiSettingsService?: UISettingsService): NavigationService {
+        NavigationService._instance ??= new NavigationService(uiSettingsService ?? null);
         return NavigationService._instance;
     }
 

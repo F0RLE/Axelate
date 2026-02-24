@@ -7,6 +7,7 @@ import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types
 import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
 import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import { eventBus } from '@/shared/services/EventBus';
 
 export class DownloadUI {
     private _settings: DownloadSettings = {
@@ -43,7 +44,7 @@ export class DownloadUI {
         SD_MODEL_URL_FIELD: 'field-sd-model-url',
     };
 
-    private _boundHandleUpdate: ((e: Event) => void) | null = null;
+    private _boundHandleUpdate: (() => void) | null = null;
 
     constructor(
         private readonly _downloadSettings: DownloadSettingsService,
@@ -66,7 +67,7 @@ export class DownloadUI {
      */
     public destroy(): void {
         if (this._boundHandleUpdate) {
-            globalThis.removeEventListener('download-progress-update', this._boundHandleUpdate);
+            this._boundHandleUpdate();
             this._boundHandleUpdate = null;
         }
     }
@@ -295,8 +296,7 @@ export class DownloadUI {
         if (mainCard !== null) mainCard.classList.add('hidden');
         if (emptyText !== null) emptyText.classList.remove('hidden');
 
-        this._boundHandleUpdate = (e: Event) => {
-            const payload = (e as CustomEvent).detail as ModuleDownloadState;
+        this._boundHandleUpdate = eventBus.on('module:download:progress', (payload: ModuleDownloadState) => {
             this.renderDownloadsProgress({
                 percent: payload.progress * 100,
                 downloaded: payload.downloaded ?? 0,
@@ -312,9 +312,7 @@ export class DownloadUI {
                         ? (payload.error as string) || 'Unknown error'
                         : null,
             });
-        };
-
-        globalThis.addEventListener('download-progress-update', this._boundHandleUpdate);
+        });
     }
 
     /**

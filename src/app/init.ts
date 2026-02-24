@@ -84,19 +84,15 @@ export class Core {
         this.aiSettings = new AISettingsService(this.stateStore);
         this.downloadSettings = new DownloadSettingsService(this.stateStore, this.tauriProvider);
         this.moduleSettings = new ModuleSettingsService(this.stateStore);
+        
         this.moduleService = new ModuleService(this.tauriProvider);
         this.modulePlatformService = new ModulePlatformService(() => this.moduleService);
-        this.windowService = new WindowService(this.tauriProvider);
+        this.windowService = new WindowService(this.tauriProvider, this.uiSettings);
         this.i18n = new I18nService(this.tauriProvider);
         this.catalog = new CatalogService(this.tauriProvider);
-        this.navigation = NavigationService.getInstance();
+        this.navigation = NavigationService.getInstance(this.uiSettings);
         this.soundService = new SoundService();
         templateLoader.init();
-
-        // Inject StateService into WindowService (Dependency Injection) to ensure zoom sync
-        // works immediately, avoiding startup race conditions.
-        this.windowService.setUISettingsService(this.uiSettings);
-        this.navigation.setUISettingsService(this.uiSettings);
 
         this.monitoringService = new MonitoringService(this.tauriProvider);
         this.debugService = new DebugService(this.tauriProvider);
