@@ -163,16 +163,19 @@ class AISettingsRenderer extends BaseComponent {
                     </section>
 
                     ${
-                        appId === 'gemini' || appId === 'claude' || appId === 'gpt'
+                        appId === 'gemini' || appId === 'claude' || appId === 'gpt' || appId === 'deepseek'
                             ? (() => {
                                   const savedLevel = this._aiSettings?.getThinkingLevel(appId);
                                   const isLow = savedLevel === 'low';
                                   const isMedium = savedLevel === 'medium';
                                   const isHigh = savedLevel === 'high' || savedLevel === undefined;
+                                  
+                                  const selectedModelData = models.find(m => m.id === savedModel);
+                                  const hasReasoning = selectedModelData?.capabilities?.reasoning === true;
 
                                   return `
                         <!-- 3. THINKING LEVEL SECTION (WINDOW) -->
-                        <section class="thinking-level-section" aria-labelledby="${appId}-thinking-title">
+                        <section class="thinking-level-section" aria-labelledby="${appId}-thinking-title" style="display: ${hasReasoning ? 'block' : 'none'};">
                             <div class="ai-content-panel">
                                 <div class="settings-card-header-center">
                                     <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
@@ -541,7 +544,7 @@ class AISettingsRenderer extends BaseComponent {
 
         const globalContext = globalThis as TGlobalWin;
         if (typeof globalContext.applyTranslations === 'function') {
-            (globalContext.applyTranslations as () => void)();
+            globalContext.applyTranslations();
         }
     }
 
@@ -662,6 +665,13 @@ class AISettingsRenderer extends BaseComponent {
             card.classList.toggle('selected', cardKey === modelKey);
         });
 
+        const modelData = getModelData(appId, modelKey);
+        const hasReasoning = modelData?.capabilities?.reasoning === true;
+        const thinkingSection = document.querySelector<HTMLElement>('.thinking-level-section');
+        if (thinkingSection) {
+            thinkingSection.style.display = hasReasoning ? 'block' : 'none';
+        }
+
         const statsArea = document.getElementById(`${appId}-model-stats`);
         if (statsArea !== null) {
             const t = this._getTranslator();
@@ -701,7 +711,7 @@ class AISettingsRenderer extends BaseComponent {
 
             const globalContext = globalThis as TGlobalWin;
             if (typeof globalContext.applyTranslations === 'function') {
-                (globalContext.applyTranslations as () => void)();
+                globalContext.applyTranslations();
             }
         }
     }

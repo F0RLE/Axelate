@@ -243,8 +243,8 @@
 }
 
 .ai-model-card.selected .price-tag.free {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.2); /* Darken slightly for better contrast */
+    border-color: rgba(0, 0, 0, 0.1);
     color: #ffffff;
 }
 
@@ -395,9 +395,9 @@
 
 /* Action Check Button - No Border */
 .ai-check-btn {
-    height: 40px;
+    height: 38px;
     padding: 0 1.5rem;
-    background: var(--primary);
+    background: var(--primary) !important;
     border: none !important;
     border-radius: 12px;
     color: white;
@@ -416,7 +416,8 @@
 }
 
 .ai-check-btn:hover {
-    filter: brightness(1.1);
+    filter: brightness(1.2);
+    transform: scale(1.02);
 }
 
 .ai-check-btn.checking {
@@ -427,6 +428,7 @@
 
 .ai-check-btn.success {
     background: var(--success) !important;
+    border-color: var(--success) !important;
     width: 60px !important;
     padding: 0 !important;
     border-radius: 12px !important;
@@ -436,6 +438,7 @@
 
 .ai-check-btn.error {
     background: var(--danger) !important;
+    border-color: var(--danger) !important;
     width: 60px !important;
     padding: 0 !important;
     border-radius: 12px !important;

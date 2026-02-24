@@ -733,13 +733,23 @@
     right: 0;
     bottom: 0;
 
+    /* Reset native <dialog> styles */
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    color: var(--text-primary) !important;
+
     /* Standard transparent overlay style (matches .modal-overlay) */
-    background: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.05) !important; /* Force transparent background */
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 
     z-index: 800; /* Below header (900) so window controls are clickable */
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
 
@@ -747,6 +757,13 @@
     opacity: 1;
     pointer-events: auto; /* Block clicks to content behind */
     transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Reset the native browser backdrop injected behind the dialog */
+.modal-backdrop::backdrop {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 /* Smooth left-edge transition matching sidebar animation */
@@ -769,10 +786,10 @@ body.snapping .modal-backdrop {
     backdrop-filter: blur(16px) saturate(120%);
     -webkit-backdrop-filter: blur(16px) saturate(120%);
 
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.05); /* Soft border like before */
     border-radius: 20px;
-    width: 95%;
-    max-width: 1100px;
+    width: 95%; /* Make it take more space */
+    max-width: 1300px; /* Increase max width for spacing */
     /* Increased height constraint to prevent squeezing */
     max-height: calc((100vh / var(--app-zoom, 1)) - (120px / var(--app-zoom, 1)));
 
@@ -865,13 +882,15 @@ body.snapping .modal-backdrop {
     justify-content: center;
     align-items: center;
     position: relative;
-    height: 40px;
+    min-height: 52px;
+    height: 52px;
     flex-shrink: 0;
 }
 
 .app-modal-title {
     font-size: 1.15rem;
     font-weight: 700;
+    font-family: 'Monocraft', monospace; /* Applying pixel font to title */
     color: var(--text-primary);
     margin: 0;
     text-align: center;
@@ -890,8 +909,8 @@ body.snapping .modal-backdrop {
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    width: 48px;
-    height: 40px;
+    width: 52px;
+    height: 52px;
     padding: 0;
     display: flex;
     align-items: center;
@@ -926,19 +945,18 @@ body.snapping .modal-backdrop {
 }
 
 .app-modal.with-sidebar {
-    flex-direction: row;
+    flex-direction: column;
 }
 
 .app-modal-main {
     display: flex;
     flex-direction: column;
-    /* Do not shrink when sidebar expands */
-    flex-shrink: 0;
-    /* Lock the width to the exact size of the modal minus the collapsed sidebar */
-    width: calc(100% - 68px - 1.5rem); 
-    /* The 100% refers to the modal body (which is fixed to the viewport/max width). 
-       When the sidebar expands, this container will overflow the modal body and get cleanly clipped. */
-    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    flex-shrink: 1;
+    flex-grow: 1; /* Take up remaining space */
+    width: 100%;
+    min-height: 0; /* Important for flex scrolling inside */
+    transition: none;
+    order: 1; /* Appears above sidebar */
 }
 
 /* When there is no sidebar, fill the entire modal uniformly */
@@ -949,30 +967,27 @@ body.snapping .modal-backdrop {
 }
 
 .app-modal-sidebar {
-    width: 68px;
+    width: 100%;
     flex-shrink: 0;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    padding: 2.5rem 0;
+    justify-content: center;
+    padding: 0.75rem 2rem; /* Thinner padding */
+    height: 60px; /* Force a consistent small height */
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
-    border-top-left-radius: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
+    border-right: none;
+    border-top-left-radius: 0;
     text-align: center;
-    transition:
-        width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
-        background 0.3s;
     z-index: 50;
-    margin-right: 1.5rem; /* Separate sidebar from the main content grid */
-}
-
-.app-modal-sidebar:hover {
-    width: var(--sidebar-expanded-width, 220px);
-    background: rgba(15, 15, 20, 0.9);
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    margin-right: 0; /* Separate sidebar from the main content grid */
+    gap: 1.5rem;
+    order: 2; /* Appears below main content */
 }
 
 .app-modal-sidebar.hidden {
@@ -980,45 +995,31 @@ body.snapping .modal-backdrop {
 }
 
 .sidebar-icon-container {
-    width: 64px;
-    height: 64px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 1.25rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: none; /* Hide in bottom bar */
 }
 
 .sidebar-icon-container svg {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     color: var(--text-primary);
 }
 
 .sidebar-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0 0 0.5rem 0;
-    line-height: 1.2;
-    word-break: break-word;
+    display: none;
 }
 
 .sidebar-desc {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    line-height: 1.4;
+    display: none;
 }
 
 .sidebar-actions {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 12px;
-    margin-top: 1.5rem;
-    width: 100%;
+    margin-top: 0;
+    width: auto;
     align-items: center;
+    justify-content: center;
 }
 
 /* Category Filter Buttons */
@@ -1026,14 +1027,14 @@ body.snapping .modal-backdrop {
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: flex-start;
-    gap: 12px;
+    justify-content: center; /* Center the icon */
+    gap: 0; /* Remove gap since there's no text */
     background: transparent;
     border: none;
     border-radius: 12px;
-    width: 44px; /* Default width based on icon only */
-    height: 44px;
-    padding: 0;
+    width: 40px; /* Force small square/circle button for icon only */
+    height: 40px;
+    padding: 0; /* Remove horizontal padding */
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     color: var(--text-secondary);
@@ -1042,10 +1043,7 @@ body.snapping .modal-backdrop {
     position: relative;
 }
 
-.app-modal-sidebar:hover .category-filter-btn {
-    width: var(--filter-btn-expanded-width, 180px); /* Expanded width to fit text dynamically */
-    padding: 0 16px;
-}
+/* Hover width expansion removed for bottom bar layout */
 
 .category-filter-btn:hover {
     background: rgba(255, 255, 255, 0.05);
@@ -1063,12 +1061,9 @@ body.snapping .modal-backdrop {
     align-items: center;
     justify-content: center;
     opacity: 0.8;
-    width: 44px;
-    height: 44px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
-    position: absolute;
-    left: 0;
-    top: 0;
 }
 
 .category-filter-icon svg {
@@ -1078,21 +1073,13 @@ body.snapping .modal-backdrop {
 }
 
 .category-filter-btn span {
-    font-size: 0.95rem;
-    opacity: 0;
-    transform: translateX(-10px);
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    white-space: nowrap;
-    position: absolute;
-    left: 44px;
+    display: none; /* Hide the text completely */
 }
 
-.app-modal-sidebar:hover .category-filter-btn span {
-    opacity: 1;
-    transform: translateX(0);
-}
+/* removed hover expansion logic for span */
+
 .app-grid {
-    padding: 2rem 2rem 2rem 0; /* Removed left padding since sidebar has margin */
+    padding: 1.5rem 1.5rem; /* Restored left padding since bottom bar layout */
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
     gap: 1.5rem;

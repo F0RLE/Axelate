@@ -217,7 +217,6 @@ class ErrorHandler {
             }
         };
     }
-
 }
 
 // Singleton export

@@ -139,7 +139,7 @@ export class AppUI {
      * Deselects a module and returns the card to its empty state.
      */
     private _deselectModule(card: HTMLElement, category: string): void {
-        card.innerHTML = card.dataset['originalHtml'] ?? '';
+        card.innerHTML = DOMPurify.sanitize(card.dataset['originalHtml'] ?? '', this._purifyConfig);
         card.classList.remove('selected', 'allow-context-menu');
         card.classList.add('empty');
 
@@ -266,6 +266,38 @@ export class AppUI {
         }
     }
 
+    /**
+     * Clears a specific module card on the dashboard, restoring its default SVG and textual state.
+     * @param {string} category - The module category.
+     */
+    public clearModuleCard(category: string): void {
+        const cardId = category === 'ai' ? 'ai-module-card' : 'services-module-card';
+        const cardLike = document.getElementById(cardId);
+
+        if (cardLike instanceof HTMLElement) {
+            const currentApp = this._selectedApps.get(category);
+            if (currentApp) {
+                this._stopPreviousModule(cardLike, currentApp);
+                this._selectedApps.delete(category);
+            }
+
+            // Restore styling classes
+            cardLike.classList.remove('selected', 'allow-context-menu', 'has-download', 'has-launch');
+            cardLike.classList.add('empty');
+
+            // Remove dataset attributes
+            delete cardLike.dataset['currentModule'];
+            delete cardLike.dataset['currentModuleName'];
+
+            // Restore original HTML (which includes the default 
+            // SVG icon + default title/description for the category)
+            const originalHtml = cardLike.dataset['originalHtml'];
+            if (originalHtml) {
+                cardLike.innerHTML = originalHtml;
+            }
+        }
+    }
+
     // --- Private Helper Methods ---
 
     // _getSortedApps removed (delegated to ModalManager)
@@ -343,6 +375,12 @@ export class AppUI {
         try {
             await this._platformService.delete(app);
             app.installed = false;
+            
+            // Clear from dashboard if it was the currently selected app
+            if (this._selectedApps.get(category)?.id === app.id) {
+                this.clearModuleCard(category);
+            }
+            
             // Refresh logic remains in UI for now (Phase 1 can refactor this)
             const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(category);
             this.openAppSelection(category, allApps);
@@ -625,7 +663,10 @@ export class AppUI {
         );
         closeBtn.onclick = (e): void => {
             e.stopImmediatePropagation();
-            card.innerHTML = card.dataset['originalHtml'] ?? '';
+            card.innerHTML = DOMPurify.sanitize(
+                card.dataset['originalHtml'] ?? '',
+                this._purifyConfig,
+            );
             card.classList.remove('selected');
             card.classList.add('empty');
 

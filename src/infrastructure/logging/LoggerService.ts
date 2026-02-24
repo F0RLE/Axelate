@@ -29,7 +29,8 @@ export class LoggerService {
     private _isInternalLog = false;
     private _initialized = false;
     /** Injected after TauriProvider is ready — avoids direct __TAURI__ access. */
-    private _transport: ((logs: { level: string; message: string }[]) => Promise<void>) | null = null;
+    private _transport: ((logs: { level: string; message: string }[]) => Promise<void>) | null =
+        null;
 
     constructor() {
         // Capture original methods before overriding
@@ -43,9 +44,7 @@ export class LoggerService {
      * Injects the Tauri transport after TauriProvider is initialized.
      * Decouples LoggerService from direct __TAURI__ access (§4.1).
      */
-    public setTransport(
-        fn: (logs: { level: string; message: string }[]) => Promise<void>,
-    ): void {
+    public setTransport(fn: (logs: { level: string; message: string }[]) => Promise<void>): void {
         this._transport = fn;
     }
 

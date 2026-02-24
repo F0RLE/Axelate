@@ -2,7 +2,6 @@ import type { IApp } from '../../types/coreTypes';
 import type { TGlobalWin } from '../../types/global_bridge_types';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { NavigationService } from '@/infrastructure/navigation/NavigationService';
-import DOMPurify from 'dompurify';
 import { type ModuleCardRenderer } from './ModuleCardRenderer';
 
 /**
@@ -29,7 +28,7 @@ export class ModalManager {
     // --- App Selection Modal ---
 
     public openAppSelection(category: string, apps: IApp[]): void {
-        const modal = document.getElementById('app-selection-modal');
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
         const listEl = document.getElementById('app-modal-list');
 
         logger.info(
@@ -49,7 +48,7 @@ export class ModalManager {
         this._populateAppList(listEl, apps, category);
 
         modal.classList.remove('hidden');
-        modal.style.display = 'flex';
+        modal.showModal();
 
         // Calculate needed width for any language dynamically
         this._updateDynamicSidebarWidth();
@@ -59,9 +58,15 @@ export class ModalManager {
         if (container !== null) container.classList.add('content-hidden');
 
         // Register back action for mouse/keyboard global navigation
-        NavigationService.getInstance().pushBackAction('app-selection-modal', () => {
-            this.closeAppSelection();
-        });
+        NavigationService.getInstance().pushBackAction(
+            'app-selection-modal',
+            () => {
+                this.closeAppSelection();
+            },
+            () => {
+                this.openAppSelection(category, apps);
+            },
+        );
 
         // Close on overlay click
         const closeOnOverlay = (e: MouseEvent): void => {
@@ -75,17 +80,17 @@ export class ModalManager {
 
     public closeAppSelection(): void {
         NavigationService.getInstance().removeBackAction('app-selection-modal');
-        const modal = document.getElementById('app-selection-modal');
-        if (modal !== null) {
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
+        if (modal) {
+            if (modal.open) {
+                modal.close();
+            }
             modal.classList.add('hidden');
-            setTimeout(() => {
-                modal.style.display = 'none';
-            }, 300);
-
-            // Restore main content visibility
-            const container = document.querySelector('.models-container');
-            if (container !== null) container.classList.remove('content-hidden');
         }
+
+        // Restore main content visibility
+        const container = document.querySelector('.models-container');
+        if (container !== null) container.classList.remove('content-hidden');
     }
 
     public refreshCurrentSelection(): void {
@@ -142,76 +147,126 @@ export class ModalManager {
             descEl.textContent = '';
             descEl.style.display = 'none';
 
-            // Inject simple static buttons
-            const textBtnKey = 'ui.launcher.modules.modal.filter_text';
-            const imageBtnKey = 'ui.launcher.modules.modal.filter_image';
-
-            actionsEl.innerHTML = DOMPurify.sanitize(`
-                <div class="category-filter-btn" id="filter-text-btn" role="button" aria-label="Filter Text">
-                    <div class="category-filter-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>
-                    </div>
-                    <span data-i18n="${textBtnKey}">${t(textBtnKey, 'Text')}</span>
-                </div>
-                <div class="category-filter-btn" id="filter-image-btn" role="button" aria-label="Filter Image">
-                    <div class="category-filter-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                    </div>
-                    <span data-i18n="${imageBtnKey}">${t(imageBtnKey, 'Image')}</span>
-                </div>
-            `);
-            actionsEl.style.display = 'flex';
-
-            // Bind filter events
-            const textBtn = document.getElementById('filter-text-btn');
-            const imageBtn = document.getElementById('filter-image-btn');
-
-            const updateFilterUI = () => {
-                if (textBtn) textBtn.classList.toggle('active', this._currentFilter === 'text');
-                if (imageBtn) imageBtn.classList.toggle('active', this._currentFilter === 'image');
-            };
-
-            const applyFilter = (filterType: 'text' | 'image') => {
-                if (this._currentFilter === filterType) return;
-                this._currentFilter = filterType;
-                updateFilterUI();
-
-                const listEl = document.getElementById('app-modal-list');
-                if (listEl) {
-                    // Smooth fade out
-                    listEl.style.transition =
-                        'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
-                    listEl.style.opacity = '0';
-                    listEl.style.transform = 'translateY(8px)';
-
-                    setTimeout(() => {
-                        this._populateAppList(listEl, this._currentApps, category);
-
-                        // Force reflow
-                        listEl.getBoundingClientRect();
-
-                        // Smooth fade in
-                        listEl.style.opacity = '1';
-                        listEl.style.transform = 'translateY(0)';
-                    }, 200);
-                }
-            };
-
-            if (textBtn) {
-                textBtn.addEventListener('click', () => applyFilter('text'));
-            }
-
-            if (imageBtn) {
-                imageBtn.addEventListener('click', () => applyFilter('image'));
-            }
-
-            // Initial UI state
-            updateFilterUI();
+            this._injectFilterButtons(actionsEl, t);
+            this._bindFilterEvents(category);
         } else {
             // Hide the sidebar completely for Services/Bots
             sidebar.classList.add('hidden');
             if (modalContent) modalContent.classList.remove('with-sidebar');
         }
+    }
+
+    private _injectFilterButtons(actionsEl: HTMLElement, t: (key: string, defaultText: string) => string): void {
+        const textBtnKey = 'ui.launcher.modules.modal.filter_text';
+        const imageBtnKey = 'ui.launcher.modules.modal.filter_image';
+
+        const filterContainer = document.createDocumentFragment();
+        const btnTemplate = document.getElementById(
+            'tpl-modal-filter-btn',
+        ) as HTMLTemplateElement | null;
+
+        if (btnTemplate) {
+            this._appendFilterButton(
+                filterContainer,
+                btnTemplate,
+                'filter-text-btn',
+                'Filter Text',
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>`,
+                textBtnKey,
+                t(textBtnKey, 'Text')
+            );
+
+            this._appendFilterButton(
+                filterContainer,
+                btnTemplate,
+                'filter-image-btn',
+                'Filter Image',
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`,
+                imageBtnKey,
+                t(imageBtnKey, 'Image')
+            );
+        }
+
+        actionsEl.innerHTML = '';
+        actionsEl.appendChild(filterContainer);
+        actionsEl.style.display = 'flex';
+    }
+
+    private _appendFilterButton(
+        container: DocumentFragment,
+        template: HTMLTemplateElement,
+        id: string,
+        ariaLabel: string,
+        svgContent: string,
+        i18nKey: string,
+        text: string
+    ): void {
+        const clone = template.content.cloneNode(true) as DocumentFragment;
+        const btn = clone.querySelector('.category-filter-btn');
+        if (!btn) return;
+        
+        btn.id = id;
+        btn.setAttribute('aria-label', ariaLabel);
+        
+        const icon = btn.querySelector('.category-filter-icon');
+        if (icon) icon.innerHTML = svgContent;
+        
+        const span = btn.querySelector('span');
+        if (span) {
+            span.dataset['i18n'] = i18nKey;
+            span.textContent = text;
+        }
+        
+        container.appendChild(clone);
+    }
+
+    private _bindFilterEvents(category: string): void {
+        const textBtn = document.getElementById('filter-text-btn');
+        const imageBtn = document.getElementById('filter-image-btn');
+
+        const updateFilterUI = () => {
+            if (textBtn) textBtn.classList.toggle('active', this._currentFilter === 'text');
+            if (imageBtn) imageBtn.classList.toggle('active', this._currentFilter === 'image');
+        };
+
+        const applyFilter = (filterType: 'text' | 'image') => {
+            if (this._currentFilter === filterType) return;
+            this._currentFilter = filterType;
+            updateFilterUI();
+
+            const listEl = document.getElementById('app-modal-list');
+            if (listEl) {
+                // Smooth fade out
+                listEl.style.transition =
+                    'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+                listEl.style.opacity = '0';
+                listEl.style.transform = 'translateY(8px)';
+
+                setTimeout(() => {
+                    this._populateAppList(listEl, this._currentApps, category);
+
+                    // Force reflow
+                    listEl.getBoundingClientRect();
+
+                    // Smooth fade in
+                    listEl.style.opacity = '1';
+                    listEl.style.transform = 'translateY(0)';
+                }, 200);
+            }
+        };
+
+        // Ensure listeners are not duplicated if called multiple times
+        // A robust way mapping to simple clicks
+        if (textBtn) {
+            textBtn.onclick = () => applyFilter('text');
+        }
+
+        if (imageBtn) {
+            imageBtn.onclick = () => applyFilter('image');
+        }
+
+        // Initial UI state
+        updateFilterUI();
     }
 
     private _populateAppList(listEl: HTMLElement, apps: IApp[], category: string): void {
@@ -229,12 +284,25 @@ export class ModalManager {
         const sorted = this._getSortedApps(filteredApps);
 
         if (sorted.length === 0) {
-            listEl.innerHTML = DOMPurify.sanitize(`
-                <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 0; color: var(--text-muted); opacity: 0.7;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                    <span data-i18n="ui.launcher.modules.modal.no_apps_filter" style="font-size: 1.1rem;">No applications found for this type</span>
-                </div>
-            `);
+            const template = document.getElementById(
+                'tpl-empty-state-module',
+            ) as HTMLTemplateElement | null;
+            if (template) {
+                const clone = template.content.cloneNode(true) as DocumentFragment;
+                const span = clone.querySelector('span');
+                if (span) {
+                    span.dataset['i18n'] = 'ui.launcher.modules.modal.no_apps_filter';
+                    const win = globalThis as TGlobalWin;
+                    span.textContent =
+                        typeof win.t === 'function'
+                            ? win.t(
+                                  'ui.launcher.modules.modal.no_apps_filter',
+                                  'No applications found for this type',
+                              )
+                            : 'No applications found for this type';
+                }
+                listEl.appendChild(clone);
+            }
             return;
         }
 

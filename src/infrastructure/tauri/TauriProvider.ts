@@ -87,8 +87,10 @@ export class TauriProvider implements IBridge {
     private _isTest(): boolean {
         const g = globalThis as Record<string, unknown>;
         return (
-            import.meta.env.MODE === 'test' ||
-            process.env['NODE_ENV'] === 'test' ||
+            (typeof import.meta !== 'undefined' &&
+                import.meta.env &&
+                import.meta.env.MODE === 'test') ||
+            (typeof process !== 'undefined' && process.env && process.env['NODE_ENV'] === 'test') ||
             g['vi'] !== undefined ||
             g['expect'] !== undefined
         );

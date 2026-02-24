@@ -48,6 +48,13 @@ export class NavigationUI {
             } else if (e.button === 4) {
                 // Forward button
                 e.preventDefault();
+                
+                // 1. Check if there are any contextual forward actions (modals)
+                if (this._service.popForwardAction()) {
+                    return; // Action consumed
+                }
+                
+                // 2. Otherwise do normal forward
                 const forwardPageId = this._service.goForward();
                 if (forwardPageId !== undefined && forwardPageId !== '') {
                     void this.showPage(forwardPageId, null, false, true);

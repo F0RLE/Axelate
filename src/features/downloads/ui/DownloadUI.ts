@@ -7,6 +7,7 @@ import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types
 import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
 import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import { NavigationService } from '@/infrastructure/navigation/NavigationService';
 
 export class DownloadUI {
     private _settings: DownloadSettings = {
@@ -375,7 +376,9 @@ export class DownloadUI {
      */
     public openSettings(): void {
         this.loadSettings();
-        const overlay = document.getElementById(DownloadUI.SELECTORS.OVERLAY);
+        const overlay = document.getElementById(
+            DownloadUI.SELECTORS.OVERLAY,
+        ) as HTMLDialogElement | null;
         const toggle = document.getElementById(
             DownloadUI.SELECTORS.TOGGLE,
         ) as HTMLInputElement | null;
@@ -396,9 +399,17 @@ export class DownloadUI {
             controls.style.opacity = this._settings.limitEnabled ? '1' : '0.5';
             controls.style.pointerEvents = this._settings.limitEnabled ? 'auto' : 'none';
         }
-        if (overlay !== null) {
-            overlay.classList.remove('hidden');
-            overlay.classList.add('show');
+        if (overlay) {
+            NavigationService.getInstance().pushBackAction(
+                'download-settings-overlay',
+                () => {
+                    this.closeSettings();
+                },
+                () => {
+                    this.openSettings();
+                },
+            );
+            overlay.showModal();
         }
     }
 
@@ -406,8 +417,11 @@ export class DownloadUI {
      * Closes the download settings overlay.
      */
     public closeSettings(): void {
-        const overlay = document.getElementById(DownloadUI.SELECTORS.OVERLAY);
-        if (overlay) overlay.classList.remove('show');
+        NavigationService.getInstance().removeBackAction('download-settings-overlay');
+        const overlay = document.getElementById(
+            DownloadUI.SELECTORS.OVERLAY,
+        ) as HTMLDialogElement | null;
+        if (overlay?.open) overlay.close();
     }
 
     /**

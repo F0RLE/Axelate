@@ -137,8 +137,10 @@ impl AiProvider for OpenRouterProvider {
 
         if let Some(level) = &req.thinking_level {
             payload.insert(
-                "reasoning_effort".to_string(),
-                serde_json::Value::String(level.clone()),
+                "reasoning".to_string(),
+                serde_json::json!({
+                    "effort": level
+                }),
             );
         }
 

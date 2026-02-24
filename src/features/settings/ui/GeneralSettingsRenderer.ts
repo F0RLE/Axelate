@@ -5,7 +5,6 @@
 
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { logger } from '@/infrastructure/logging/LoggerService';
-import DOMPurify from 'dompurify';
 import type { ISettingsUIContext } from './SettingsContext';
 
 export class GeneralSettingsRenderer {
@@ -49,23 +48,44 @@ export class GeneralSettingsRenderer {
 
         const hiddenItems = this._uiSettings.getHiddenNavItems();
 
-        const html = navItems
-            .map((item) => {
-                const labelKey = `ui.launcher.settings.toggle_${item.id}`;
-                return `
-                <button class="monitor-toggle-btn ${hiddenItems.includes(item.id) ? '' : 'active'}"
-                     data-page-id="${item.id}"
-                     >
-                    <svg class="toggle-icon">
-                        <use href="${item.icon}"></use>
-                    </svg>
-                    <span class="toggle-label" data-i18n="${labelKey}">${t(labelKey, item.label)}</span>
-                </button>
-            `;
-            })
-            .join('');
+        const template = document.getElementById(
+            'tpl-taskbar-toggle',
+        ) as HTMLTemplateElement | null;
+        if (!template) {
+            logger.error('[GeneralSettingsRenderer] template #tpl-taskbar-toggle not found');
+            return;
+        }
 
-        container.innerHTML = DOMPurify.sanitize(html);
+        const fragment = document.createDocumentFragment();
+
+        navItems.forEach((item) => {
+            const labelKey = `ui.launcher.settings.toggle_${item.id}`;
+            const clone = template.content.cloneNode(true) as DocumentFragment;
+
+            const btn = clone.querySelector('.monitor-toggle-btn');
+            if (btn instanceof HTMLElement) {
+                if (hiddenItems.includes(item.id)) {
+                    btn.classList.remove('active');
+                }
+                btn.dataset['pageId'] = item.id;
+            }
+
+            const useEl = clone.querySelector('use');
+            if (useEl) {
+                useEl.setAttribute('href', item.icon);
+            }
+
+            const labelEl = clone.querySelector('.toggle-label');
+            if (labelEl instanceof HTMLElement) {
+                labelEl.dataset['i18n'] = labelKey;
+                labelEl.textContent = t(labelKey, item.label);
+            }
+
+            fragment.appendChild(clone);
+        });
+
+        container.innerHTML = '';
+        container.appendChild(fragment);
 
         container.addEventListener('click', (e) => {
             const target = e.target;
@@ -168,23 +188,44 @@ export class GeneralSettingsRenderer {
 
         const { t } = context;
 
-        const html = monitorItems
-            .map((item) => {
-                const labelKey = `ui.launcher.settings.monitor_${item.id}`;
-                return `
-                <button class="monitor-toggle-btn ${hiddenMonitors.includes(item.id) ? '' : 'active'}"
-                        data-monitor-id="${item.id}"
-                        >
-                    <svg class="toggle-icon">
-                        <use href="${item.icon}"></use>
-                    </svg>
-                    <span class="toggle-label" data-i18n="${labelKey}">${t(labelKey, item.label)}</span>
-                </button>
-            `;
-            })
-            .join('');
+        const template = document.getElementById(
+            'tpl-monitor-toggle',
+        ) as HTMLTemplateElement | null;
+        if (!template) {
+            logger.error('[GeneralSettingsRenderer] template #tpl-monitor-toggle not found');
+            return;
+        }
 
-        container.innerHTML = DOMPurify.sanitize(html);
+        const fragment = document.createDocumentFragment();
+
+        monitorItems.forEach((item) => {
+            const labelKey = `ui.launcher.settings.monitor_${item.id}`;
+            const clone = template.content.cloneNode(true) as DocumentFragment;
+
+            const btn = clone.querySelector('.monitor-toggle-btn');
+            if (btn instanceof HTMLElement) {
+                if (hiddenMonitors.includes(item.id)) {
+                    btn.classList.remove('active');
+                }
+                btn.dataset['monitorId'] = item.id;
+            }
+
+            const useEl = clone.querySelector('use');
+            if (useEl) {
+                useEl.setAttribute('href', item.icon);
+            }
+
+            const labelEl = clone.querySelector('.toggle-label');
+            if (labelEl instanceof HTMLElement) {
+                labelEl.dataset['i18n'] = labelKey;
+                labelEl.textContent = t(labelKey, item.label);
+            }
+
+            fragment.appendChild(clone);
+        });
+
+        container.innerHTML = '';
+        container.appendChild(fragment);
 
         container.addEventListener('click', (e) => {
             const target = e.target;

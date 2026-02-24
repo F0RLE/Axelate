@@ -65,28 +65,70 @@ export class ModuleCardRenderer {
         const downloadText =
             typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
 
-        card.innerHTML = DOMPurify.sanitize(
-            `
-            ${this._getAppDeleteBadgeHtml(isApi, isInstalled)}
-            ${this._getAppTypeBadgeHtml(isApi, isInstalled)}
-            <div class="app-icon-wrapper">${app.icon ?? '❓'}</div>
-            <div class="app-card-title">${this._getAppName(app)}</div>
-            <div class="app-card-desc">${this._getAppDesc(app)}</div>
-            ${this._getAppStatusHtml(isApi, isInstalled)}
-            ${
-                !isInstalled && !isApi
-                    ? `
-                <div class="app-card-overlay">
-                    <div class="app-status download-btn centered">
-                        ${downloadText}
-                    </div>
-                </div>
-            `
-                    : ''
+        const template = document.getElementById('tpl-module-card') as HTMLTemplateElement | null;
+        if (!template) {
+            logger.error('[ModuleCardRenderer] template #tpl-module-card not found');
+            return card;
+        }
+
+        const clone = template.content.cloneNode(true) as DocumentFragment;
+
+        // Add Delete Badge if applicable
+        const deleteBadgeHtml = this._getAppDeleteBadgeHtml(isApi, isInstalled);
+        if (deleteBadgeHtml) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = DOMPurify.sanitize(deleteBadgeHtml, this._purifyConfig);
+            if (tempDiv.firstElementChild) {
+                clone.insertBefore(tempDiv.firstElementChild, clone.firstChild);
             }
-        `,
-            this._purifyConfig,
-        );
+        }
+
+        // Add Type Badge
+        const typeBadgeHtml = this._getAppTypeBadgeHtml(isApi, isInstalled);
+        if (typeBadgeHtml) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = DOMPurify.sanitize(typeBadgeHtml, this._purifyConfig);
+            if (tempDiv.firstElementChild) {
+                // Insert after delete badge if it exists, or at start
+                const iconWrapper = clone.querySelector('.app-icon-wrapper');
+                if (iconWrapper) {
+                    clone.insertBefore(tempDiv.firstElementChild, iconWrapper);
+                }
+            }
+        }
+
+        const iconWrapper = clone.querySelector('.app-icon-wrapper');
+        if (iconWrapper)
+            iconWrapper.innerHTML = DOMPurify.sanitize(app.icon || '❓', this._purifyConfig);
+
+        const titleEl = clone.querySelector('.app-card-title');
+        if (titleEl) titleEl.textContent = this._getAppName(app);
+
+        const descEl = clone.querySelector('.app-card-desc');
+        if (descEl) descEl.textContent = this._getAppDesc(app);
+
+        // Status HTML
+        const statusHtml = this._getAppStatusHtml(isApi, isInstalled);
+        if (statusHtml) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = DOMPurify.sanitize(statusHtml, this._purifyConfig);
+            if (tempDiv.firstElementChild) {
+                clone.appendChild(tempDiv.firstElementChild);
+            }
+        }
+
+        // Overlay
+        if (!isInstalled && !isApi) {
+            const overlay = document.createElement('div');
+            overlay.className = 'app-card-overlay';
+            const btn = document.createElement('div');
+            btn.className = 'app-status download-btn centered';
+            btn.textContent = downloadText;
+            overlay.appendChild(btn);
+            clone.appendChild(overlay);
+        }
+
+        card.appendChild(clone);
 
         card.onclick = (e) => onClick(e, app);
 
@@ -97,6 +139,13 @@ export class ModuleCardRenderer {
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
+                
+                // Do not allow opening settings for non-installed modules
+                if (!isInstalled && !isApi) {
+                    logger.debug(`[ModuleCardRenderer] Ignored right-click on uninstalled module: ${app.id}`);
+                    return;
+                }
+
                 logger.info('[ModuleCardRenderer] Isolated right-click on module card:', app.id);
                 const win = globalThis as TGlobalWin;
                 if (typeof win.openModuleSettings === 'function') {
@@ -179,7 +228,7 @@ export class ModuleCardRenderer {
         if (iconWrapper === null) return;
 
         iconWrapper.innerHTML = DOMPurify.sanitize(
-            `<div>${app.icon ?? '📦'}</div>`,
+            `<div>${app.icon || '📦'}</div>`,
             this._purifyConfig,
         );
     }

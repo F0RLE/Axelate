@@ -14,17 +14,17 @@
         "descKey": "ui.gpt.model.spark.desc",
         "tier": "strong",
         "releaseDate": "2026-02",
-        "contextWindow": 128000,
+        "contextWindow": 131072,
         "maxOutputTokens": 4096,
         "pricing": {
           "input_per_1m": 2.5,
-          "output_per_1m": 18,
+          "output_per_1m": 10,
           "currency": "USD"
         },
         "stats": {
           "speed": 10,
-          "logic": 10,
-          "creative": 9
+          "logic": 7,
+          "creative": 7
         },
         "capabilities": {
           "reasoning": true,
@@ -42,17 +42,17 @@
         "descKey": "ui.gpt.model.gpt53codex.desc",
         "tier": "strong",
         "releaseDate": "2026-02",
-        "contextWindow": 200000,
+        "contextWindow": 131072,
         "maxOutputTokens": 8192,
         "pricing": {
-          "input_per_1m": 2,
-          "output_per_1m": 15,
+          "input_per_1m": 2.5,
+          "output_per_1m": 10,
           "currency": "USD"
         },
         "stats": {
           "speed": 8,
-          "logic": 10,
-          "creative": 9
+          "logic": 9,
+          "creative": 4
         },
         "capabilities": {
           "reasoning": true,
@@ -65,68 +65,12 @@
         "id": "gpt-5.3-codex"
       },
       {
-        "name": "GPT-5.2 Pro",
-        "desc": "Best for autonomous agents (previous stable).",
-        "descKey": "ui.gpt.model.gpt52.desc",
-        "tier": "strong",
-        "releaseDate": "2025-12",
-        "contextWindow": 128000,
-        "maxOutputTokens": 4096,
-        "pricing": {
-          "input_per_1m": 1.75,
-          "output_per_1m": 14,
-          "currency": "USD"
-        },
-        "stats": {
-          "speed": 6,
-          "logic": 10,
-          "creative": 10
-        },
-        "capabilities": {
-          "reasoning": true,
-          "streaming": true,
-          "functionCalling": true
-        },
-        "apiModels": {
-          "text": "openai/gpt-5.2-2025-12-11"
-        },
-        "id": "gpt-5.2-pro"
-      },
-      {
-        "name": "GPT-5.2",
-        "desc": "The best for coding and agentic tasks across industries.",
-        "descKey": "ui.gpt.model.gpt52.desc",
-        "tier": "strong",
-        "releaseDate": "2025-12",
-        "contextWindow": 128000,
-        "maxOutputTokens": 4096,
-        "pricing": {
-          "input_per_1m": 1.75,
-          "output_per_1m": 14,
-          "currency": "USD"
-        },
-        "stats": {
-          "speed": 6,
-          "logic": 10,
-          "creative": 9
-        },
-        "capabilities": {
-          "reasoning": true,
-          "streaming": true,
-          "functionCalling": true
-        },
-        "apiModels": {
-          "text": "openai/gpt-5.2"
-        },
-        "id": "gpt-5.2"
-      },
-      {
         "name": "GPT-5 Mini",
         "desc": "Fast and cost-effective.",
         "descKey": "ui.gpt.model.gpt5mini.desc",
         "tier": "weak",
         "releaseDate": "2025-08",
-        "contextWindow": 128000,
+        "contextWindow": 131072,
         "maxOutputTokens": 4096,
         "pricing": {
           "input_per_1m": 0.15,
@@ -154,7 +98,7 @@
         "descKey": "ui.gpt.model.gpt5nano.desc",
         "tier": "weak",
         "releaseDate": "2025-08",
-        "contextWindow": 4000,
+        "contextWindow": 4096,
         "maxOutputTokens": 1024,
         "pricing": {
           "input_per_1m": 0.05,
@@ -178,9 +122,7 @@
       }
     ],
     "modelAliases": {
-      "gpt-5.1-thinking": "gpt-5.2-pro",
-      "gpt-4-turbo": "gpt-5.2-pro",
-      "gpt-codex-spark": "gpt-5.3-codex-spark"
+      "gpt-codex-spark": "gpt-5.3-spark"
     }
   },
   {
@@ -198,8 +140,8 @@
         "descKey": "ui.claude.model.opus46.desc",
         "tier": "strong",
         "releaseDate": "2026-02",
-        "contextWindow": 200000,
-        "maxOutputTokens": 4096,
+        "contextWindow": 1048576,
+        "maxOutputTokens": 8192,
         "pricing": {
           "input_per_1m": 5,
           "output_per_1m": 25,
@@ -221,20 +163,20 @@
         "id": "claude-opus-4.6"
       },
       {
-        "name": "Claude Sonnet 4.5",
-        "desc": "High-quality for coding and agents.",
-        "descKey": "ui.claude.model.45sonnet.desc",
+        "name": "Claude Sonnet 4.6",
+        "desc": "High-quality for coding and agents with massive context.",
+        "descKey": "ui.claude.model.46sonnet.desc",
         "tier": "medium",
-        "releaseDate": "2025-09",
-        "contextWindow": 200000,
-        "maxOutputTokens": 4096,
+        "releaseDate": "2026-02",
+        "contextWindow": 1048576,
+        "maxOutputTokens": 8192,
         "pricing": {
           "input_per_1m": 3,
           "output_per_1m": 15,
           "currency": "USD"
         },
         "stats": {
-          "speed": 7,
+          "speed": 8,
           "logic": 9,
           "creative": 8
         },
@@ -244,9 +186,9 @@
           "functionCalling": true
         },
         "apiModels": {
-          "text": "anthropic/claude-sonnet-4.5"
+          "text": "anthropic/claude-sonnet-4.6"
         },
-        "id": "claude-sonnet-4.5"
+        "id": "claude-sonnet-4.6"
       },
       {
         "name": "Claude Haiku 4.5",
@@ -288,38 +230,8 @@
     "baseUrl": "https://openrouter.ai/api/v1",
     "models": [
       {
-        "name": "Gemini 3 Deep Think",
-        "desc": "Specialized for science, research and engineering workflows.",
-        "descKey": "ui.gemini.model.deepthink.desc",
-        "tier": "strong",
-        "releaseDate": "2026-02",
-        "contextWindow": 1000000,
-        "maxOutputTokens": 65536,
-        "pricing": {
-          "input_per_1m": 2.5,
-          "output_per_1m": 15,
-          "currency": "USD"
-        },
-        "stats": {
-          "speed": 5,
-          "logic": 10,
-          "creative": 9
-        },
-        "capabilities": {
-          "reasoning": true,
-          "vision": true,
-          "multimodal": true,
-          "streaming": true,
-          "functionCalling": true
-        },
-        "apiModels": {
-          "text": "google/gemini-3-deep-think"
-        },
-        "id": "gemini-3-deep-think"
-      },
-      {
         "name": "Gemini 3.1 Pro Preview",
-        "desc": "Google's frontier reasoning model for advanced coding and agents. Features improved agentic reliability, long-horizon stability, and a new medium thinking level.",
+        "desc": "Google's frontier reasoning model for advanced coding and agents.",
         "descKey": "ui.gemini.model.v31pro.desc",
         "tier": "strong",
         "releaseDate": "2026-02",
@@ -353,7 +265,7 @@
         "descKey": "ui.gemini.model.flash.desc",
         "tier": "medium",
         "releaseDate": "2026-02",
-        "contextWindow": 1000000,
+        "contextWindow": 1048576,
         "maxOutputTokens": 8192,
         "pricing": {
           "input_per_1m": 0.5,
@@ -362,11 +274,11 @@
         },
         "stats": {
           "speed": 10,
-          "logic": 9,
+          "logic": 8,
           "creative": 8
         },
         "capabilities": {
-          "reasoning": true,
+          "reasoning": false,
           "vision": true,
           "multimodal": true,
           "streaming": true,
@@ -394,17 +306,17 @@
         "descKey": "ui.deepseek.model.v32.desc",
         "tier": "medium",
         "releaseDate": "2026-01",
-        "contextWindow": 64000,
-        "maxOutputTokens": 4096,
+        "contextWindow": 131072,
+        "maxOutputTokens": 65536,
         "pricing": {
-          "input_per_1m": 0.25,
+          "input_per_1m": 0.26,
           "output_per_1m": 0.38,
           "currency": "USD"
         },
         "stats": {
-          "speed": 8,
-          "logic": 8,
-          "creative": 6
+          "speed": 9,
+          "logic": 9,
+          "creative": 5
         },
         "capabilities": {
           "reasoning": true,

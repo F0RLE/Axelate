@@ -766,7 +766,7 @@
             </div>
 
             <!-- App Selection Modal (Moved here for proper positioning) -->
-            <div id="app-selection-modal" class="modal-backdrop hidden">
+            <dialog id="app-selection-modal" class="modal-backdrop hidden">
                 <div class="app-modal with-sidebar">
                     <aside class="app-modal-sidebar" id="app-modal-sidebar" aria-label="Modal Sidebar">
                         <div class="sidebar-icon-container" id="app-modal-sidebar-icon"></div>
@@ -795,10 +795,10 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </dialog>
 
-            <!-- Module Settings Modal (inside main for proper positioning) -->
-            <div
+        <!-- Module Settings Modal (inside main for proper positioning) -->
+            <dialog
                 id="module-settings-modal"
                 class="modal-backdrop hidden"
             >
@@ -832,10 +832,10 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </dialog>
         </main>
 
-        <div id="lang-modal" class="modal-overlay hidden">
+        <dialog id="lang-modal" class="modal-overlay hidden">
             <div class="modal">
                 <div
                     class="modal-title"
@@ -898,13 +898,13 @@
                     Confirm
                 </button>
             </div>
-        </div>
+        </dialog>
 
         <!-- Module Settings Modal -->
 
 
         <!-- Close Confirmation Modal -->
-        <div
+        <dialog
             id="close-confirm-modal"
             class="modal-overlay hidden"
         >
@@ -939,10 +939,10 @@
                     </button>
                 </div>
             </div>
-        </div>
+        </dialog>
 
         <!-- Download Settings Modal -->
-        <div
+        <dialog
             id="download-settings-overlay"
             class="modal-overlay hidden"
         >
@@ -1015,7 +1015,7 @@
                     </button>
                 </div>
             </div>
-        </div>
+        </dialog>
 
 
 
@@ -1074,6 +1074,48 @@
             </div>
         </div>
 
+
+        <template id="tpl-taskbar-toggle">
+            <button class="monitor-toggle-btn active">
+                <svg class="toggle-icon">
+                    <use href=""></use>
+                </svg>
+                <span class="toggle-label" data-i18n=""></span>
+            </button>
+        </template>
+
+        <template id="tpl-monitor-toggle">
+            <button class="monitor-toggle-btn active">
+                <svg class="toggle-icon">
+                    <use href=""></use>
+                </svg>
+                <span class="toggle-label" data-i18n=""></span>
+            </button>
+        </template>
+
+        <template id="tpl-modal-filter-btn">
+            <button class="category-filter-btn" aria-label="Filter Button">
+                <div class="category-filter-icon"></div>
+                <span data-i18n=""></span>
+            </button>
+        </template>
+
+        <template id="tpl-empty-state-module">
+            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 0; color: var(--text-muted); opacity: 0.7;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                <span data-i18n="" style="font-size: 1.1rem;"></span>
+            </div>
+        </template>
+
+        <template id="tpl-module-card">
+            <!-- Delete Badge Placeholder -->
+            <!-- Type Badge Placeholder -->
+            <div class="app-icon-wrapper"></div>
+            <div class="app-card-title"></div>
+            <div class="app-card-desc"></div>
+            <!-- Status Html Placeholder -->
+            <!-- Overlay Placeholder -->
+        </template>
 
     </body>
 </html>
