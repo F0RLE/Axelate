@@ -9,7 +9,7 @@ import type { AppConfig, ModuleItem, ApiProvider } from '@/shared/types/bindings
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
@@ -23,11 +23,11 @@ export class CatalogService {
      * Initializes global access patterns only where necessary.
      */
     private _initGlobalExposures(): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
 
         // KISS: Use dev-only global for debugging
         if (import.meta.env.DEV) {
-            (win as TGlobalWin & { __DEV_CATALOG?: CatalogService }).__DEV_CATALOG = this;
+            (win as unknown as Record<string, unknown>)['__DEV_CATALOG'] = this;
         }
 
         // Sync with global APP_DATA for downstream components
@@ -251,7 +251,7 @@ export class CatalogService {
      * Updates legacy module settings from config.
      */
     private _updateLegacySettings(apiProviders: ApiProvider[]): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const updateFn = win.updateModuleSettings;
         if (typeof updateFn === 'function') {
             try {

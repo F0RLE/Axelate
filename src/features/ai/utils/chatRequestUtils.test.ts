@@ -42,12 +42,13 @@ describe('chatRequestUtils', () => {
             const request = constructChatRequest(mockMessage, [], config);
 
             expect(request).toEqual({
-                provider: 'openai', // mapped from 'gpt'
+                provider: 'gpt',
                 model: 'gpt-5.2',
                 messages: [{ role: 'user', content: 'Hello', thought_signature: undefined }],
                 session_id: 'session-1',
                 api_key: 'sk-123',
                 thinking_level: 'high',
+                max_tokens: undefined,
                 attachments: [],
             });
         });

@@ -2,9 +2,11 @@ use crate::errors::AppError;
 use crate::utils::paths::{MODULES_DIR, TEMP_DIR};
 use chrono;
 use futures_util::StreamExt;
+use std::collections::HashMap;
 use std::fs;
 use std::io::copy;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 use zip::ZipArchive;
@@ -95,6 +97,7 @@ pub static DOWNLOADER: LazyLock<DownloaderService> = LazyLock::new(DownloaderSer
 #[derive(Debug)]
 pub struct DownloaderService {
     settings: Arc<Mutex<DownloaderSettings>>,
+    cancel_tokens: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -117,6 +120,7 @@ impl DownloaderService {
     pub fn new() -> Self {
         Self {
             settings: Arc::new(Mutex::new(DownloaderSettings::default())),
+            cancel_tokens: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -146,6 +150,34 @@ impl DownloaderService {
                 u32::try_from(speed_mb).unwrap_or(u32::MAX),
             )
         })
+    }
+
+    /// Creates a cancellation token for a module download and returns it
+    pub fn request_token(&self, module_id: &str) -> Arc<AtomicBool> {
+        let token = Arc::new(AtomicBool::new(false));
+        if let Ok(mut tokens) = self.cancel_tokens.lock() {
+            tokens.insert(module_id.to_string(), Arc::clone(&token));
+        }
+        token
+    }
+
+    /// Signals cancellation for a specific module download
+    pub fn cancel(&self, module_id: &str) -> bool {
+        if let Ok(tokens) = self.cancel_tokens.lock() {
+            if let Some(token) = tokens.get(module_id) {
+                token.store(true, Ordering::Relaxed);
+                tracing::info!("Cancellation requested for module: {module_id}");
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Removes a cancellation token (cleanup after download finishes)
+    pub fn remove_token(&self, module_id: &str) {
+        if let Ok(mut tokens) = self.cancel_tokens.lock() {
+            tokens.remove(module_id);
+        }
     }
 }
 
@@ -238,7 +270,7 @@ impl NetworkClient {
         })
     }
 
-    /// Downloads content with progress reporting and rate limiting
+    /// Downloads content with progress reporting, rate limiting, and cancellation support
     async fn download_file(
         app: &AppHandle,
         downloader: &DownloaderService,
@@ -246,6 +278,7 @@ impl NetworkClient {
         url: &str,
         dest_path: &Path,
         module_id: &str,
+        cancel_token: &AtomicBool,
     ) -> Result<(), AppError> {
         let response = client
             .get(url)
@@ -274,6 +307,12 @@ impl NetworkClient {
         let mut last_log_time = std::time::Instant::now();
 
         while let Some(item) = stream.next().await {
+            // Check cancellation
+            if cancel_token.load(Ordering::Relaxed) {
+                tracing::info!("Download cancelled for module: {module_id}");
+                return Err(AppError::Validation("Download cancelled".to_string()));
+            }
+
             let chunk_start = std::time::Instant::now();
             let chunk = item.map_err(|e| AppError::External {
                 request_id: None,
@@ -304,10 +343,14 @@ impl NetworkClient {
                 }
             }
 
-            if total_size > 0 && last_log_time.elapsed().as_millis() > 100 {
+            if last_log_time.elapsed().as_millis() > 100 {
                 last_log_time = std::time::Instant::now();
                 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let progress = (bytes_downloaded as f64 / total_size as f64) as f32;
+                let progress = if total_size > 0 {
+                    (bytes_downloaded as f64 / total_size as f64) as f32
+                } else {
+                    -1.0
+                };
                 emit_progress(
                     app,
                     module_id,
@@ -640,6 +683,7 @@ pub async fn download_module(
     validate_module_id(&module_id)?;
 
     let zip_path = TEMP_DIR.join(format!("{module_id}.zip.tmp"));
+    let cancel_token = downloader.request_token(&module_id);
 
     // Orchestrate components
     let result = async {
@@ -648,8 +692,16 @@ pub async fn download_module(
         let client = NetworkClient::build_client(&module_id)?;
         let final_url = UrlResolver::resolve(&client, &repo_url).await?;
 
-        NetworkClient::download_file(&app, downloader, &client, &final_url, &zip_path, &module_id)
-            .await?;
+        NetworkClient::download_file(
+            &app,
+            downloader,
+            &client,
+            &final_url,
+            &zip_path,
+            &module_id,
+            &cancel_token,
+        )
+        .await?;
         FileVerifier::verify(&app, &zip_path, expected_hash.clone(), &module_id).await?;
         ArchiveExtractor::extract(&app, &zip_path, &module_id, expected_hash.as_ref()).await?;
 
@@ -657,18 +709,21 @@ pub async fn download_module(
     }
     .await;
 
+    // Always cleanup token
+    downloader.remove_token(&module_id);
+
     // Guaranteed cleanup of temp zip
     if zip_path.exists() {
         let _ = tokio::fs::remove_file(&zip_path).await;
     }
 
     if let Err(e) = result {
-        emit_progress(&app, &module_id, "error", &e.to_string(), 0.0, 0, 0);
-
-        // Ensure failed extraction path is cleaned up if it was left behind
-        // Note: extraction_path is not easily accessible here without more plumbing,
-        // but it's in TEMP_DIR and would be overwritten on next try anyway.
-
+        let status = if e.to_string().contains("cancelled") {
+            "cancelled"
+        } else {
+            "error"
+        };
+        emit_progress(&app, &module_id, status, &e.to_string(), 0.0, 0, 0);
         return Err(e);
     }
 

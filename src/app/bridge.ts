@@ -5,7 +5,7 @@
 
 import type { Core } from './init';
 import type { IApp } from '@/shared/types/coreTypes';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 /**
  * GlobalBridge handles the exposure of core services to the global window object.
@@ -96,9 +96,19 @@ export class GlobalBridge {
         win.openAppSelection = (category: string) => {
             const cat = category.toLowerCase();
             const catalog = this._core.catalog.getCatalog();
-            const apps = cat === 'ai' ? catalog.ai : cat === 'services' ? catalog.services : [];
+
+            // Map compound keys (ai_text, ai_image) to the same AI catalog
+            let apps: IApp[];
+            if (cat === 'ai' || cat === 'ai_text' || cat === 'ai_image') {
+                apps = catalog.ai;
+            } else if (cat === 'services') {
+                apps = catalog.services;
+            } else {
+                apps = [];
+            }
+
             this._core.logger.info(
-                `[GlobalBridge] openAppSelection requested for ${cat}. Found ${String(apps.length)} apps. (keys: ${Object.keys(catalog).join(', ')})`,
+                `[GlobalBridge] openAppSelection requested for ${cat}. Found ${String(apps.length)} apps.`,
             );
             this._core.appUI.openAppSelection(cat, apps);
         };
@@ -108,7 +118,7 @@ export class GlobalBridge {
 
         win.selectApp = (category: string, app: IApp): Promise<void> => {
             this._core.appUI.updateModuleCard(category, app);
-            const uiState = (win as TGlobalWin).uiState;
+            const uiState = getGlobalWin().uiState;
             if (typeof uiState.setSelectedModule === 'function') {
                 uiState.setSelectedModule(category, {
                     id: app.id,
@@ -126,6 +136,11 @@ export class GlobalBridge {
         // App Launching
         win.launchApp = async (id: string): Promise<void> => {
             this._core.logger.debug(`[GlobalBridge] Launching App: ${id}`);
+
+            // Activate the AI provider so isActive() returns true
+            const { aiBridge } = await import('@/features/ai/services/AIBridge');
+            await aiBridge.startProvider(id);
+
             if (this._core.tauriProvider.isTauri()) {
                 try {
                     const result = await this._core.tauriProvider.invoke<{
@@ -181,11 +196,13 @@ export class GlobalBridge {
         };
 
         // Ensure getCatalogCategory is available and robust
-        const g = globalThis as TGlobalWin;
+        const g = getGlobalWin();
         g.getCatalogCategory = (cat: string) => {
             const lowCat = cat.toLowerCase();
             const catalog = this._core.catalog.getCatalog();
-            return lowCat === 'ai' ? catalog.ai : lowCat === 'services' ? catalog.services : [];
+            if (lowCat === 'ai' || lowCat === 'ai_text' || lowCat === 'ai_image') return catalog.ai;
+            if (lowCat === 'services') return catalog.services;
+            return [];
         };
     }
 

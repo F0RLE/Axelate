@@ -228,6 +228,7 @@ body.launcher-blur .modal {
     padding: 0.6rem 1.25rem;
     border-radius: 12px;
     border: none;
+    font-family: var(--app-font-family);
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;

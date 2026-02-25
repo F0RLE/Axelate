@@ -1,5 +1,5 @@
 import type { IApp } from '../types/coreTypes';
-import type { TGlobalWin } from '../types/global_bridge_types';
+import { getGlobalWin } from '../utils/globalAccessor';
 import DOMPurify from 'dompurify';
 import { eventBus } from '../services/EventBus';
 import { logger } from '@/infrastructure/logging/LoggerService';
@@ -109,7 +109,7 @@ export class AppUI {
                 e.stopImmediatePropagation();
 
                 logger.info(`[AppUI] Right-click settings for ${category}:`, app.id);
-                const win = globalThis as TGlobalWin;
+                const win = getGlobalWin();
                 if (typeof win.openModuleSettings === 'function') {
                     win.openModuleSettings(app);
                 }
@@ -146,7 +146,7 @@ export class AppUI {
         this._selectedApps.delete(category);
 
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- uiState is a runtime global, may not be set during teardown
-        (globalThis as TGlobalWin).uiState?.removeSelectedModule(category);
+        getGlobalWin().uiState?.removeSelectedModule(category);
     }
 
     // --- Toast System ---
@@ -179,7 +179,7 @@ export class AppUI {
             feedback = document.createElement('div');
             feedback.className = 'action-feedback';
             feedback.id = 'action-feedback';
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             feedback.innerHTML = DOMPurify.sanitize(win.t('ui.feedback', ''), this._purifyConfig);
             document.body.appendChild(feedback);
         }
@@ -227,7 +227,7 @@ export class AppUI {
      * @param {IApp[]} apps - List of apps to display.
      */
     public openAppSelection(category: string, apps: IApp[]): void {
-        this._modalManager.openAppSelection(category, apps);
+        this._modalManager.openAppSelection(category, apps, this._selectedApps.get(category)?.id);
     }
 
     public closeAppSelection(): void {
@@ -240,7 +240,7 @@ export class AppUI {
      * @param {IApp} app - The app data.
      */
     public updateModuleCard(category: string, app: IApp): void {
-        const cardId = category === 'ai' ? 'ai-module-card' : 'services-module-card';
+        const cardId = this._categoryToCardId(category);
         const cardLike = document.getElementById(cardId);
 
         if (cardLike instanceof HTMLElement) {
@@ -271,7 +271,7 @@ export class AppUI {
      * @param {string} category - The module category.
      */
     public clearModuleCard(category: string): void {
-        const cardId = category === 'ai' ? 'ai-module-card' : 'services-module-card';
+        const cardId = this._categoryToCardId(category);
         const cardLike = document.getElementById(cardId);
 
         if (cardLike instanceof HTMLElement) {
@@ -282,17 +282,22 @@ export class AppUI {
             }
 
             // Restore styling classes
-            cardLike.classList.remove('selected', 'allow-context-menu', 'has-download', 'has-launch');
+            cardLike.classList.remove(
+                'selected',
+                'allow-context-menu',
+                'has-download',
+                'has-launch',
+            );
             cardLike.classList.add('empty');
 
             // Remove dataset attributes
             delete cardLike.dataset['currentModule'];
             delete cardLike.dataset['currentModuleName'];
 
-            // Restore original HTML (which includes the default 
+            // Restore original HTML (which includes the default
             // SVG icon + default title/description for the category)
             const originalHtml = cardLike.dataset['originalHtml'];
-            if (originalHtml) {
+            if (originalHtml !== undefined && originalHtml !== '') {
                 cardLike.innerHTML = originalHtml;
             }
         }
@@ -323,7 +328,8 @@ export class AppUI {
     private async _tryDownloadAction(e: MouseEvent, app: IApp, category: string): Promise<boolean> {
         const target = e.target as HTMLElement;
         const downloadBtn = target.closest('.download-btn');
-        const overlay = target.closest('.app-card-overlay');
+        const overlay =
+            target.closest('.app-card-overlay') ?? target.closest('.app-card-hover-actions');
         const isApi = this._platformService.isApiModule(app);
 
         if (!isApi && app.installed !== true) {
@@ -362,25 +368,46 @@ export class AppUI {
     }
 
     private _performSelectionAction(category: string, app: IApp): void {
-        const win = globalThis as TGlobalWin;
-        if (typeof win.selectApp === 'function') {
-            (win.selectApp as (cat: string, app: IApp) => void)(category, app);
-            this.closeAppSelection();
+        const win = getGlobalWin();
+        const alreadySelected = this._selectedApps.get(category)?.id === app.id;
+
+        if (alreadySelected) {
+            // Deselect: clear dashboard card and remove from tracked selection
+            this.clearModuleCard(category);
+            this._modalManager.updateSelection(null);
+        } else {
+            // Select: update dashboard card
+            if (typeof win.selectApp === 'function') {
+                (win.selectApp as (cat: string, app: IApp) => void)(category, app);
+            }
+            this._modalManager.updateSelection(app.id);
+
+            // Auto-launch the selected module
+            if (typeof win.launchApp === 'function') {
+                void (win.launchApp as (id: string) => Promise<void>)(app.id);
+            }
         }
+    }
+
+    /**
+     * Maps a category key to the corresponding dashboard card element ID.
+     */
+    private _categoryToCardId(category: string): string {
+        return category === 'ai' ? 'ai-module-card' : 'services-module-card';
     }
 
     private async _handleDeleteModule(app: IApp, category: string): Promise<void> {
         logger.info('[AppUI] Remove module clicked:', app.id);
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         try {
             await this._platformService.delete(app);
             app.installed = false;
-            
+
             // Clear from dashboard if it was the currently selected app
             if (this._selectedApps.get(category)?.id === app.id) {
                 this.clearModuleCard(category);
             }
-            
+
             // Refresh logic remains in UI for now (Phase 1 can refactor this)
             const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(category);
             this.openAppSelection(category, allApps);
@@ -392,47 +419,78 @@ export class AppUI {
                 : 'ui.launcher.web.delete_model_error';
             const fallback = msg === 'ui.launcher.web.delete_model_error' ? 'Delete error' : msg;
 
-            const g = globalThis as TGlobalWin;
+            const g = getGlobalWin();
             this.showToast(typeof g.t === 'function' ? g.t(msg, fallback) : fallback, 'error');
         }
     }
 
     private async _handleDownloadModule(
         app: IApp,
-        category: string,
+        _category: string,
         btn: HTMLElement | null,
     ): Promise<void> {
         logger.info('[AppUI] Download module clicked:', app.id);
         if (btn !== null) {
-            btn.classList.add('downloading');
+            btn.classList.add('downloading', 'indeterminate');
+            btn.innerHTML = `<div class="btn-content"><span class="stop-square-icon" title="Cancel"></span><span class="download-pct">0%</span></div>`;
+            btn.style.setProperty('--download-progress', '0%');
             btn.style.pointerEvents = 'none';
+        }
+
+        // Poll for progress updates (same pattern as _handleDownloadClick)
+        let progressInterval: ReturnType<typeof setInterval> | undefined;
+        if (btn !== null) {
+            progressInterval = setInterval(() => {
+                if (!btn.classList.contains('downloading')) {
+                    clearInterval(progressInterval);
+                    return;
+                }
+                this._applyProgressToBtn(btn, app.id);
+            }, 100);
         }
 
         try {
             await this._platformService.download(app);
-
-            // Refresh modal to show immediate state change if possible
-            // Legacy UI refresh logic
-            const win = globalThis as TGlobalWin;
-            const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(category);
-            // Small delay to let backend start emitting events
-            setTimeout(() => {
-                this.openAppSelection(category, allApps);
-            }, 100);
+            if (progressInterval !== undefined) clearInterval(progressInterval);
+            this._onModalDownloadSuccess(btn, app);
         } catch (err: unknown) {
-            logger.error('[AppUI] Download error:', err);
-            if (btn !== null) {
-                btn.classList.remove('downloading');
-                btn.style.pointerEvents = 'auto';
-            }
-            const error = err as Error;
-            const msg = error.message.startsWith('ui.')
-                ? error.message
-                : 'ui.launcher.web.download_error';
-            const fallback = msg === 'ui.launcher.web.download_error' ? 'Download failed' : msg;
-            const win = globalThis as TGlobalWin;
-            this.showToast(typeof win.t === 'function' ? win.t(msg, fallback) : fallback, 'error');
+            if (progressInterval !== undefined) clearInterval(progressInterval);
+            this._onModalDownloadError(btn, err);
         }
+    }
+
+    private _onModalDownloadSuccess(btn: HTMLElement | null, app: IApp): void {
+        app.installed = true;
+        if (btn !== null) {
+            btn.classList.remove('downloading', 'indeterminate');
+            btn.style.removeProperty('--download-progress');
+            btn.style.pointerEvents = 'auto';
+        }
+
+        const card =
+            btn?.closest<HTMLElement>('.model-card-premium') ??
+            btn?.closest<HTMLElement>('.app-card');
+        if (card instanceof HTMLElement) {
+            this._markCardAsInstalled(card, app);
+        }
+
+        this._modalManager.refreshCurrentSelection();
+    }
+
+    private _onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
+        logger.error('[AppUI] Download error:', err);
+        if (btn !== null) {
+            btn.classList.remove('downloading', 'indeterminate');
+            btn.style.removeProperty('--download-progress');
+            btn.style.pointerEvents = 'auto';
+        }
+        const error = err as Error;
+        const msg = error.message.startsWith('ui.')
+            ? error.message
+            : 'ui.launcher.web.download_error';
+        const fallback = msg === 'ui.launcher.web.download_error' ? 'Download failed' : msg;
+        const win = getGlobalWin();
+        this.showToast(typeof win.t === 'function' ? win.t(msg, fallback) : fallback, 'error');
     }
 
     private _stopPreviousModule(card: HTMLElement, app: IApp): void {
@@ -484,7 +542,7 @@ export class AppUI {
             // If local, we might want to show toast.
             // For now, let's keep the toast here as UI feedback.
             if (!this._platformService.isApiModule(partialApp)) {
-                const win = globalThis as TGlobalWin;
+                const win = getGlobalWin();
                 if (typeof win.showToast === 'function') {
                     win.showToast(
                         typeof win.t === 'function'
@@ -538,7 +596,7 @@ export class AppUI {
         }
 
         actionBtn.style.display = 'block';
-        const g = globalThis as TGlobalWin;
+        const g = getGlobalWin();
         actionBtn.textContent =
             typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
         actionBtn.classList.remove('active-module-btn');
@@ -558,30 +616,97 @@ export class AppUI {
     ): Promise<void> {
         e.stopImmediatePropagation();
         e.preventDefault();
-        logger.info('Download module clicked (card):', app.id);
 
+        // If currently downloading, clicking cancels the download
+        if (actionBtn.classList.contains('downloading')) {
+            logger.info('[AppUI] Cancelling download for:', app.id);
+            void this._platformService.cancelDownload(app.id);
+            this._setDownloadReady(actionBtn);
+            return;
+        }
+
+        logger.info('[AppUI] Download module clicked (card):', app.id);
         this._setDownloadLoading(actionBtn);
+
+        // Polling fallback to guarantee UI updates even if events drop
+        const progressInterval = setInterval(() => {
+            if (!actionBtn.classList.contains('downloading')) {
+                clearInterval(progressInterval);
+                return;
+            }
+            this._applyProgressToBtn(actionBtn, app.id);
+        }, 100);
 
         try {
             await this._platformService.download(app);
-            this._onDownloadSuccess(actionBtn, app);
-        } catch (err) {
-            this._onDownloadError(actionBtn, app, err);
+            clearInterval(progressInterval);
+
+            // Only fire success if the user hasn't reset the UI
+            if (actionBtn.classList.contains('downloading')) {
+                this._onDownloadSuccess(actionBtn, app);
+                // Refresh modal so the card shows installed/select state
+                this._modalManager.refreshCurrentSelection();
+            }
+        } catch (err: unknown) {
+            clearInterval(progressInterval);
+            if (actionBtn.classList.contains('downloading')) {
+                this._onDownloadError(actionBtn, app, err);
+            }
         }
     }
 
     private _setDownloadLoading(btn: HTMLElement): void {
-        const win = globalThis as TGlobalWin;
-        btn.textContent =
-            typeof win.t === 'function'
-                ? win.t('ui.launcher.module.downloading', 'Downloading...')
-                : 'Downloading...';
-        btn.style.pointerEvents = 'none';
+        btn.classList.add('downloading', 'indeterminate');
+        btn.innerHTML = `<div class="btn-content"><span class="stop-square-icon" title="Cancel"></span><span class="download-pct">0%</span></div>`;
+        btn.style.setProperty('--download-progress', '0%');
+    }
+
+    private _updateDownloadBtnContent(btn: HTMLElement, pct: number, status?: string): void {
+        const pctEl = btn.querySelector('.download-pct');
+        if (pctEl) {
+            if (status === 'extracting') {
+                const win = getGlobalWin();
+                pctEl.textContent =
+                    typeof win.t === 'function'
+                        ? win.t('ui.downloads.status.extracting', 'Extracting')
+                        : 'Extracting';
+            } else {
+                pctEl.textContent = pct < 0 ? '...' : `${pct.toString()}%`;
+            }
+        }
+    }
+
+    /**
+     * Reads moduleDownloadState for a given module and applies progress to a button.
+     * Shared between _handleDownloadModule and _handleDownloadClick polling intervals.
+     */
+    private _applyProgressToBtn(btn: HTMLElement, moduleId: string): void {
+        const stateObj = getGlobalWin().moduleDownloadState;
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (stateObj === undefined) return;
+        const modState = stateObj[moduleId];
+        if (modState === undefined) return;
+
+        if (modState.status === 'extracting') {
+            btn.classList.add('indeterminate');
+            btn.style.removeProperty('--download-progress');
+            this._updateDownloadBtnContent(btn, -1, 'extracting');
+        } else if (modState.progress < 0) {
+            btn.classList.add('indeterminate');
+            btn.style.removeProperty('--download-progress');
+            this._updateDownloadBtnContent(btn, -1);
+        } else {
+            btn.classList.remove('indeterminate');
+            const pct = Math.round(modState.progress * 100);
+            btn.style.setProperty('--download-progress', `${pct.toString()}%`);
+            this._updateDownloadBtnContent(btn, pct);
+        }
     }
 
     private _setDownloadReady(btn: HTMLElement): void {
-        const win = globalThis as TGlobalWin;
-        btn.style.pointerEvents = 'auto';
+        const win = getGlobalWin();
+        btn.classList.remove('downloading', 'indeterminate');
+        btn.style.removeProperty('--download-progress');
         btn.textContent =
             typeof win.t === 'function'
                 ? win.t('ui.launcher.module.download', 'Download')
@@ -589,14 +714,6 @@ export class AppUI {
     }
 
     private _onDownloadSuccess(actionBtn: HTMLElement, app: IApp): void {
-        const win = globalThis as TGlobalWin;
-        if (typeof win.showToast === 'function')
-            win.showToast(
-                typeof win.t === 'function'
-                    ? win.t('ui.launcher.web.module_downloaded', 'Module downloaded!')
-                    : 'Module downloaded!',
-                'success',
-            );
         app.installed = true;
 
         let card = actionBtn.closest('.model-card-premium');
@@ -609,7 +726,7 @@ export class AppUI {
 
     private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown): void {
         logger.error('Download error:', err);
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         win.showToast(
             typeof win.t === 'function'
                 ? win.t('ui.launcher.web.download_error', 'Download failed')
@@ -622,7 +739,7 @@ export class AppUI {
     private _addSettingsBtn(card: HTMLElement, app: IApp): void {
         const settingsBtn = document.createElement('div');
         settingsBtn.className = 'module-action-badge left settings';
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         settingsBtn.innerHTML = DOMPurify.sanitize(
             `
             <div class="badge-icon"><span style="font-size: 1.1rem;">⚙️</span></div>
@@ -634,7 +751,7 @@ export class AppUI {
             e.stopPropagation();
             e.stopImmediatePropagation();
             logger.info('[AppUI] Settings button clicked (event) for:', app.id);
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             if (typeof win.openModuleSettings === 'function') win.openModuleSettings(app);
             else logger.error('[AppUI] globalThis.openModuleSettings is undefined'); // Suppress loop below if needed
         });
@@ -648,7 +765,7 @@ export class AppUI {
     private _addCloseBtn(card: HTMLElement, category: string): void {
         const closeBtn = document.createElement('div');
         closeBtn.className = 'module-action-badge right close';
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         closeBtn.innerHTML = DOMPurify.sanitize(
             `
             <div class="badge-icon">
@@ -670,7 +787,7 @@ export class AppUI {
             card.classList.remove('selected');
             card.classList.add('empty');
 
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             win.uiState.removeSelectedModule(category);
         };
         card.appendChild(closeBtn);

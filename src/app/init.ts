@@ -111,6 +111,9 @@ export class Core {
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.uiSettings, this.soundService);
         this.downloadUI = new DownloadUI(this.downloadSettings, this.i18n);
+        this.downloadUI.setOnCancel((moduleId: string) => {
+            void this.modulePlatformService.cancelDownload(moduleId);
+        });
         this.settingsUI = new SettingsUI(
             this.settingsService,
             this.uiSettings,
@@ -271,15 +274,35 @@ export class Core {
         const selected = this.moduleSettings.getSelectedModules();
 
         for (const category of ['ai', 'services']) {
-            const catSelection = selected[category];
-            if (catSelection !== undefined) {
-                const savedAppId = catSelection.id ?? '';
-                const list = globalThis.getCatalogCategory(category);
-                const fullApp = list.find((a: IApp) => a.id === savedAppId);
+            this._restoreCategorySelection(category, selected[category]);
+        }
+    }
 
-                if (fullApp !== undefined) {
-                    this.appUI.updateModuleCard(category, fullApp);
-                }
+    private _restoreCategorySelection(
+        category: string,
+        catSelection: { id?: string; version?: string } | undefined,
+    ): void {
+        if (catSelection === undefined) return;
+
+        let savedAppId = catSelection.id ?? '';
+
+        // Fallback to last active provider if no currently active module is recorded
+        if (category === 'ai' && savedAppId === '') {
+            savedAppId = this.aiSettings.getLastActiveProvider() ?? '';
+        }
+
+        if (savedAppId === '') return;
+
+        const list = globalThis.getCatalogCategory(category);
+        const fullApp = list.find((a: IApp) => a.id === savedAppId);
+
+        if (fullApp !== undefined) {
+            this.appUI.updateModuleCard(category, fullApp);
+
+            // Auto-start AI provider if it's the AI module
+            if (category === 'ai') {
+                this.logger.info(`[Core] Auto-starting saved AI provider: ${savedAppId}`);
+                void aiBridge.startProvider(savedAppId);
             }
         }
     }

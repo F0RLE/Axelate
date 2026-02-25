@@ -1,5 +1,5 @@
 import type { IApp } from '../../types/coreTypes';
-import type { TGlobalWin } from '../../types/global_bridge_types';
+import { getGlobalWin } from '../../utils/globalAccessor';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import { type ModuleCardRenderer } from './ModuleCardRenderer';
@@ -13,6 +13,7 @@ export class ModalManager {
     private _currentCategory: string | null = null;
     private _currentApps: IApp[] = [];
     private _currentFilter: 'text' | 'image' = 'text';
+    private _currentSelectedAppId: string | null = null;
 
     // Callback for app interactions (Download, Delete, Select)
     private readonly _onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void;
@@ -27,7 +28,7 @@ export class ModalManager {
 
     // --- App Selection Modal ---
 
-    public openAppSelection(category: string, apps: IApp[]): void {
+    public openAppSelection(category: string, apps: IApp[], selectedAppId?: string): void {
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
         const listEl = document.getElementById('app-modal-list');
 
@@ -39,13 +40,23 @@ export class ModalManager {
 
         this._currentCategory = category;
         this._currentApps = apps;
+        this._currentSelectedAppId = selectedAppId ?? null;
 
         // Reset filter when opening new category
         this._currentFilter = 'text';
 
         this._updateAppModalTitle(category);
-        this._updateSidebar(category);
-        this._populateAppList(listEl, apps, category);
+
+        // Extract the raw catalog category and auto-set the filter
+        const rawCategory = category.startsWith('ai') ? 'ai' : category;
+        if (category === 'ai_text') {
+            this._currentFilter = 'text';
+        } else if (category === 'ai_image') {
+            this._currentFilter = 'image';
+        }
+
+        this._updateSidebar(rawCategory, category);
+        this._populateAppList(listEl, apps, category, this._currentSelectedAppId);
 
         modal.classList.remove('hidden');
         modal.showModal();
@@ -97,7 +108,11 @@ export class ModalManager {
         if (this._currentCategory !== null && this._currentApps.length > 0) {
             const modal = document.getElementById('app-selection-modal');
             if (modal !== null && !modal.classList.contains('hidden')) {
-                this.openAppSelection(this._currentCategory, this._currentApps);
+                this.openAppSelection(
+                    this._currentCategory,
+                    this._currentApps,
+                    this._currentSelectedAppId ?? undefined,
+                );
             }
         }
     }
@@ -108,17 +123,31 @@ export class ModalManager {
         const titleEl = document.getElementById('app-modal-title');
         if (titleEl === null) return;
 
-        const key =
-            category === 'ai'
-                ? 'ui.launcher.modules.modal.ai_title'
-                : 'ui.launcher.modules.modal.services_title';
-        const defaultText = category === 'ai' ? 'Select AI Module' : 'Select Service';
-        const win = globalThis as TGlobalWin;
-
+        const { key, defaultText } = this._getModalTitleInfo(category);
+        const win = getGlobalWin();
         titleEl.textContent = typeof win.t === 'function' ? win.t(key, defaultText) : defaultText;
     }
 
-    private _updateSidebar(category: string): void {
+    private _getModalTitleInfo(category: string): { key: string; defaultText: string } {
+        if (category === 'ai' || category === 'ai_text') {
+            return {
+                key: 'ui.launcher.modules.modal.ai_title',
+                defaultText: 'Select AI Module',
+            };
+        }
+        if (category === 'ai_image') {
+            return {
+                key: 'ui.launcher.modules.modal.ai_image_title',
+                defaultText: 'Select Image AI',
+            };
+        }
+        return {
+            key: 'ui.launcher.modules.modal.services_title',
+            defaultText: 'Select Service',
+        };
+    }
+
+    private _updateSidebar(rawCategory: string, compoundCategory: string): void {
         const sidebar = document.getElementById('app-modal-sidebar');
         const iconContainer = document.getElementById('app-modal-sidebar-icon');
         const titleEl = document.getElementById('app-modal-sidebar-title');
@@ -127,13 +156,13 @@ export class ModalManager {
 
         if (!sidebar || !iconContainer || !titleEl || !descEl || !actionsEl) return;
 
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const t = (key: string, defaultText: string) =>
             typeof win.t === 'function' ? win.t(key, defaultText) : defaultText;
 
         const modalContent = document.querySelector('#app-selection-modal .app-modal');
 
-        if (category === 'ai') {
+        if (rawCategory === 'ai') {
             sidebar.classList.remove('hidden');
             if (modalContent) modalContent.classList.add('with-sidebar');
 
@@ -148,7 +177,8 @@ export class ModalManager {
             descEl.style.display = 'none';
 
             this._injectFilterButtons(actionsEl, t);
-            this._bindFilterEvents(category);
+            this._bindFilterEvents(compoundCategory);
+            this._hideIrrelevantFilterTab(compoundCategory);
         } else {
             // Hide the sidebar completely for Services/Bots
             sidebar.classList.add('hidden');
@@ -156,7 +186,20 @@ export class ModalManager {
         }
     }
 
-    private _injectFilterButtons(actionsEl: HTMLElement, t: (key: string, defaultText: string) => string): void {
+    private _hideIrrelevantFilterTab(compoundCategory: string): void {
+        if (compoundCategory === 'ai_text') {
+            const imgBtn = document.getElementById('filter-image-btn');
+            if (imgBtn) imgBtn.style.display = 'none';
+        } else if (compoundCategory === 'ai_image') {
+            const txtBtn = document.getElementById('filter-text-btn');
+            if (txtBtn) txtBtn.style.display = 'none';
+        }
+    }
+
+    private _injectFilterButtons(
+        actionsEl: HTMLElement,
+        t: (key: string, defaultText: string) => string,
+    ): void {
         const textBtnKey = 'ui.launcher.modules.modal.filter_text';
         const imageBtnKey = 'ui.launcher.modules.modal.filter_image';
 
@@ -173,7 +216,7 @@ export class ModalManager {
                 'Filter Text',
                 `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>`,
                 textBtnKey,
-                t(textBtnKey, 'Text')
+                t(textBtnKey, 'Text'),
             );
 
             this._appendFilterButton(
@@ -183,7 +226,7 @@ export class ModalManager {
                 'Filter Image',
                 `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`,
                 imageBtnKey,
-                t(imageBtnKey, 'Image')
+                t(imageBtnKey, 'Image'),
             );
         }
 
@@ -199,24 +242,24 @@ export class ModalManager {
         ariaLabel: string,
         svgContent: string,
         i18nKey: string,
-        text: string
+        text: string,
     ): void {
         const clone = template.content.cloneNode(true) as DocumentFragment;
         const btn = clone.querySelector('.category-filter-btn');
         if (!btn) return;
-        
+
         btn.id = id;
         btn.setAttribute('aria-label', ariaLabel);
-        
+
         const icon = btn.querySelector('.category-filter-icon');
         if (icon) icon.innerHTML = svgContent;
-        
+
         const span = btn.querySelector('span');
         if (span) {
             span.dataset['i18n'] = i18nKey;
             span.textContent = text;
         }
-        
+
         container.appendChild(clone);
     }
 
@@ -243,7 +286,12 @@ export class ModalManager {
                 listEl.style.transform = 'translateY(8px)';
 
                 setTimeout(() => {
-                    this._populateAppList(listEl, this._currentApps, category);
+                    this._populateAppList(
+                        listEl,
+                        this._currentApps,
+                        category,
+                        this._currentSelectedAppId,
+                    );
 
                     // Force reflow
                     listEl.getBoundingClientRect();
@@ -269,7 +317,12 @@ export class ModalManager {
         updateFilterUI();
     }
 
-    private _populateAppList(listEl: HTMLElement, apps: IApp[], category: string): void {
+    private _populateAppList(
+        listEl: HTMLElement,
+        apps: IApp[],
+        category: string,
+        selectedAppId: string | null,
+    ): void {
         listEl.innerHTML = '';
 
         let filteredApps = apps;
@@ -292,7 +345,7 @@ export class ModalManager {
                 const span = clone.querySelector('span');
                 if (span) {
                     span.dataset['i18n'] = 'ui.launcher.modules.modal.no_apps_filter';
-                    const win = globalThis as TGlobalWin;
+                    const win = getGlobalWin();
                     span.textContent =
                         typeof win.t === 'function'
                             ? win.t(
@@ -307,11 +360,68 @@ export class ModalManager {
         }
 
         sorted.forEach((app) => {
-            const card = this._cardRenderer.createCard(app, category, (e, a) =>
+            const isSelected = selectedAppId !== null && app.id === selectedAppId;
+            const card = this._cardRenderer.createCard(app, category, isSelected, (e, a) =>
                 this._onAppInteraction(e, a, category),
             );
             listEl.appendChild(card);
         });
+    }
+
+    /**
+     * Updates visual selection state of cards in-place without full re-render.
+     * Smoothly transitions the Select/Remove button on affected cards.
+     */
+    public updateSelection(appId: string | null): void {
+        const previousId = this._currentSelectedAppId;
+        this._currentSelectedAppId = appId;
+
+        const listEl = document.getElementById('app-modal-list');
+        if (listEl === null) return;
+
+        const cards = listEl.querySelectorAll<HTMLElement>('.app-card');
+        cards.forEach((card) => {
+            const cardAppId = card.dataset['appId'] ?? '';
+
+            if (cardAppId === previousId && cardAppId !== appId) {
+                // Was selected, now deselected
+                card.classList.remove('selected');
+                this._transitionButton(card, false);
+            } else if (cardAppId === appId && cardAppId !== previousId) {
+                // Becoming selected
+                card.classList.add('selected');
+                this._transitionButton(card, true);
+            }
+        });
+    }
+
+    private _transitionButton(card: HTMLElement, isSelected: boolean): void {
+        const btn = card.querySelector<HTMLButtonElement>('.app-card-hover-actions button');
+        if (btn === null) return;
+
+        const win = getGlobalWin();
+
+        // Phase 1: fade out
+        btn.style.transition = 'opacity 0.15s ease';
+        btn.style.opacity = '0';
+
+        setTimeout(() => {
+            // Phase 2: swap class & text while invisible
+            if (isSelected) {
+                btn.className = 'modal-btn modal-btn-secondary';
+                const key = 'ui.launcher.modules.modal.btn_remove';
+                btn.dataset['i18n'] = key;
+                btn.textContent = typeof win.t === 'function' ? win.t(key, 'Remove') : 'Remove';
+            } else {
+                btn.className = 'modal-btn modal-btn-primary';
+                const key = 'ui.launcher.modules.modal.btn_select';
+                btn.dataset['i18n'] = key;
+                btn.textContent = typeof win.t === 'function' ? win.t(key, 'Select') : 'Select';
+            }
+
+            // Phase 3: fade in
+            btn.style.opacity = '1';
+        }, 150);
     }
 
     private _getSortedApps(apps: IApp[]): IApp[] {

@@ -101,6 +101,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         downloader::delete_module,
         downloader::list_module_files,
         downloader::set_download_settings,
+        downloader::cancel_download,
         system::get_system_stats,
         system::get_gpu_info,
         system::set_monitoring_paused,

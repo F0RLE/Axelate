@@ -29,14 +29,20 @@ const mockCore = {
             await mockInvoke('save_secure_key', { service: key, key: val });
         }),
     },
+    aiSettings: {
+        setAiSessionId: vi.fn(),
+        setSelectedAIModel: vi.fn(),
+        setLastActiveProvider: vi.fn(),
+        getSelectedAIModel: vi.fn(),
+        getLastActiveProvider: vi.fn(),
+        getThinkingLevel: vi.fn().mockReturnValue('high'),
+    },
     state: {
         get: vi.fn((key: string) => {
             if (key === 'ai_thinking_level') return {};
             return null;
         }),
         set: vi.fn(),
-        setSelectedAIModel: vi.fn(),
-        getSelectedAIModel: vi.fn(),
     },
 };
 

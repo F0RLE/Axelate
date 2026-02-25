@@ -10,7 +10,8 @@
  */
 
 import DOMPurify from 'dompurify';
-import { type IGlobalBridge, type TGlobalWin } from '@/shared/types/global_bridge_types';
+import { type IGlobalBridge } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { eventBus } from '@/shared/services/EventBus';
 import { aiSettingsRenderer } from '@/features/ai/ui/AISettingsRenderer';
 import { logger } from '@/infrastructure/logging/LoggerService';
@@ -120,7 +121,7 @@ export class SettingsUI {
         await aiSettingsRenderer.init(this._service, this._aiSettings, this._tauri);
 
         // 1. Setup Context
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         this._context = {
             t: win.t ?? ((_: string, d?: string) => d ?? ''),
             showToast:
@@ -578,7 +579,7 @@ export class SettingsUI {
                 SettingsUI.close();
             },
             () => {
-                const win = globalThis as TGlobalWin;
+                const win = getGlobalWin();
                 if (typeof win.openModuleSettings === 'function') {
                     win.openModuleSettings(app);
                 }
@@ -587,7 +588,7 @@ export class SettingsUI {
         modal.showModal();
 
         // Single window requirement: Hide all background UI elements
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         if (typeof win.closeAppSelection === 'function') {
             win.closeAppSelection();
         }

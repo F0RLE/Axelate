@@ -42,15 +42,26 @@ export class DownloadUI {
         MODAL_DOWNLOADED: 'download-downloaded',
         MODAL_TOTAL: 'download-total',
         SD_MODEL_URL_FIELD: 'field-sd-model-url',
+        DYNAMIC_LIST: 'downloads-dynamic-list',
     };
 
     private _boundHandleUpdate: ((e: Event) => void) | null = null;
+    /** Tracks active downloads keyed by module_id */
+    private readonly _activeDownloads = new Map<string, ModuleDownloadState>();
+    private _onCancel: ((moduleId: string) => void) | null = null;
 
     constructor(
         private readonly _downloadSettings: DownloadSettingsService,
         private readonly _i18n: I18nService,
     ) {
         this.loadSettings();
+    }
+
+    /**
+     * Sets the cancel callback (injected after construction to avoid circular deps).
+     */
+    public setOnCancel(cb: (moduleId: string) => void): void {
+        this._onCancel = cb;
     }
 
     /**
@@ -176,8 +187,19 @@ export class DownloadUI {
     ): void {
         const { percent, speed, downloaded, total, label, hasActive } = state;
 
-        if (els.bar) els.bar.style.width = `${String(Math.min(percent, 100))}%`;
-        if (els.text) els.text.textContent = `${percent.toFixed(1)}%`;
+        if (percent < 0) {
+            if (els.bar) {
+                els.bar.style.width = '100%';
+                els.bar.classList.add('indeterminate-bar');
+            }
+            if (els.text) els.text.textContent = '--%';
+        } else {
+            if (els.bar) {
+                els.bar.style.width = `${String(Math.min(percent, 100))}%`;
+                els.bar.classList.remove('indeterminate-bar');
+            }
+            if (els.text) els.text.textContent = `${percent.toFixed(1)}%`;
+        }
 
         this._updateMetaStats(els, speed, downloaded, total);
         this._updateLabel(els.labelEl, label, hasActive);
@@ -296,13 +318,41 @@ export class DownloadUI {
         if (mainCard !== null) mainCard.classList.add('hidden');
         if (emptyText !== null) emptyText.classList.remove('hidden');
 
+        // Ensure the dynamic list container exists
+        this._ensureDynamicList();
+
         this._boundHandleUpdate = (e: Event) => {
-            const payload = (e as CustomEvent).detail as ModuleDownloadState;
+            const payload = (e as CustomEvent).detail as ModuleDownloadState & {
+                module_id?: string;
+            };
+            const moduleId = payload.module_id ?? '';
+            if (moduleId === '') return;
+
+            // Update active downloads map
+            if (
+                payload.status === 'complete' ||
+                payload.status === 'error' ||
+                (payload.status as string) === 'cancelled'
+            ) {
+                // Remove after a short delay so the user sees the final state
+                setTimeout(() => {
+                    this._activeDownloads.delete(moduleId);
+                    this._renderDynamicList();
+                }, 2000);
+                // Still update with terminal state briefly
+                this._activeDownloads.set(moduleId, payload);
+            } else {
+                this._activeDownloads.set(moduleId, payload);
+            }
+
+            this._renderDynamicList();
+
+            // Also update legacy single-card UI for backward compat
             this.renderDownloadsProgress({
                 percent: payload.progress * 100,
                 downloaded: payload.downloaded ?? 0,
                 total: payload.total ?? 0,
-                label: payload.message ?? '',
+                label: payload.message ?? moduleId,
                 hasActive:
                     payload.status === 'downloading' ||
                     payload.status === 'connecting' ||
@@ -421,7 +471,7 @@ export class DownloadUI {
         const overlay = document.getElementById(
             DownloadUI.SELECTORS.OVERLAY,
         ) as HTMLDialogElement | null;
-        if (overlay?.open) overlay.close();
+        if (overlay?.open === true) overlay.close();
     }
 
     /**
@@ -449,6 +499,224 @@ export class DownloadUI {
         if (modal) {
             modal.classList.add('hidden');
             modal.classList.remove('show');
+        }
+    }
+
+    // ─── Dynamic Multi-Download List ───────────────────────────
+
+    /**
+     * Creates the dynamic list container inside the downloads body if it doesn't already exist.
+     */
+    private _ensureDynamicList(): void {
+        if (document.getElementById(DownloadUI.SELECTORS.DYNAMIC_LIST)) return;
+
+        const body = document.getElementById(DownloadUI.SELECTORS.BODY);
+        if (!body) return;
+
+        const list = document.createElement('div');
+        list.id = DownloadUI.SELECTORS.DYNAMIC_LIST;
+        list.className = 'downloads-dynamic-list';
+        body.prepend(list);
+    }
+
+    /**
+     * Patches the dynamic download list in-place — avoids re-creating
+     * the entire DOM on every progress tick so cards don't flash.
+     */
+    private _renderDynamicList(): void {
+        const list = document.getElementById(DownloadUI.SELECTORS.DYNAMIC_LIST);
+        if (!list) return;
+
+        const emptyText = document.getElementById(DownloadUI.SELECTORS.EMPTY_TEXT);
+        const mainCard = document.getElementById(DownloadUI.SELECTORS.MAIN_CARD);
+
+        if (this._activeDownloads.size === 0) {
+            list.innerHTML = '';
+            if (emptyText) emptyText.classList.remove('hidden');
+            if (mainCard) mainCard.style.display = 'none';
+            return;
+        }
+
+        // Hide empty text and legacy card when dynamic list is shown
+        if (emptyText) emptyText.classList.add('hidden');
+        if (mainCard) mainCard.style.display = 'none';
+
+        // Remove cards whose downloads are no longer tracked
+        const existingCards = list.querySelectorAll<HTMLElement>('.download-item-card');
+        for (const card of existingCards) {
+            const mid = card.dataset['moduleId'] ?? '';
+            if (!this._activeDownloads.has(mid)) {
+                card.remove();
+            }
+        }
+
+        // Add or update cards
+        for (const [moduleId, state] of this._activeDownloads) {
+            const existing = list.querySelector<HTMLElement>(
+                `.download-item-card[data-module-id="${moduleId}"]`,
+            );
+            if (existing) {
+                this._patchCard(existing, state);
+            } else {
+                list.appendChild(this._renderSingleCard(moduleId, state));
+            }
+        }
+    }
+
+    /**
+     * Updates an existing card's dynamic content without recreating it.
+     */
+    private _patchCard(card: HTMLElement, state: ModuleDownloadState): void {
+        const pct = state.progress < 0 ? -1 : Math.round(state.progress * 100);
+        const pctText = pct < 0 ? '--' : `${String(pct)}%`;
+
+        this._patchProgressBar(card, pct);
+
+        const pctEl = card.querySelector('.downloads-progress-percent');
+        if (pctEl) pctEl.textContent = pctText;
+
+        this._patchStatusPill(card, state.status);
+
+        // Stats
+        const downloaded = state.downloaded ?? 0;
+        const total = state.total ?? 0;
+        const statValues = card.querySelectorAll('.downloads-stat-value');
+        if (statValues[0]) statValues[0].textContent = this._formatBytes(downloaded);
+        if (statValues[1]) statValues[1].textContent = total > 0 ? this._formatBytes(total) : '--';
+
+        // Message
+        const itemLabel = card.querySelector('.downloads-item-label');
+        if (itemLabel !== null && state.message !== undefined && state.message !== '') {
+            itemLabel.textContent = state.message;
+        }
+    }
+
+    private _patchProgressBar(card: HTMLElement, pct: number): void {
+        const bar = card.querySelector<HTMLElement>('.downloads-bar-inner');
+        if (!bar) return;
+        if (pct < 0) {
+            bar.classList.add('indeterminate-bar');
+            bar.style.width = '100%';
+        } else {
+            bar.classList.remove('indeterminate-bar');
+            bar.style.width = `${String(Math.min(pct, 100))}%`;
+        }
+    }
+
+    private _patchStatusPill(card: HTMLElement, status: string): void {
+        const pill = card.querySelector('.downloads-status-pill');
+        if (!pill) return;
+        pill.textContent = this._statusLabel(status);
+        pill.className = 'downloads-status-pill';
+        if (status === 'complete') pill.classList.add('completed');
+        else if (status === 'error') pill.classList.add('error');
+        else pill.classList.add('active');
+    }
+
+    /**
+     * Creates a single download card element.
+     */
+    private _renderSingleCard(moduleId: string, state: ModuleDownloadState): HTMLElement {
+        const card = document.createElement('div');
+        card.className = 'downloads-card-main download-item-card';
+        card.dataset['moduleId'] = moduleId;
+
+        const pct = state.progress < 0 ? -1 : Math.round(state.progress * 100);
+        const pctText = pct < 0 ? '--' : `${String(pct)}%`;
+        const downloaded = state.downloaded ?? 0;
+        const total = state.total ?? 0;
+        const speed = 0; // Speed is not tracked per-module in current state, left for future
+
+        const statusText = this._statusLabel(state.status);
+        let statusClass = 'active';
+        if (state.status === 'complete') statusClass = 'completed';
+        else if (state.status === 'error') statusClass = 'error';
+
+        const isCancellable =
+            state.status === 'downloading' ||
+            state.status === 'connecting' ||
+            state.status === 'extracting';
+
+        card.innerHTML = `
+            <div class="downloads-card-header">
+                <div class="downloads-meta-section">
+                    <div class="downloads-icon-wrapper">
+                        <svg class="icon downloads-file-icon"><use href="#icon-folder"></use></svg>
+                    </div>
+                    <div class="downloads-meta-content">
+                        <div class="downloads-label">${moduleId}</div>
+                        <div class="downloads-item-label">${state.message ?? moduleId}</div>
+                    </div>
+                </div>
+                <div class="downloads-card-actions">
+                    <div class="downloads-status-pill ${statusClass}">${statusText}</div>
+                    ${isCancellable ? '<button class="download-cancel-btn" title="Cancel"><span class="stop-square-icon"></span></button>' : ''}
+                </div>
+            </div>
+            <div class="downloads-progress-section">
+                <div class="downloads-progress-header">
+                    <span class="downloads-progress-label">${this._i18n.t('ui.launcher.web.progress', 'Progress')}</span>
+                    <span class="downloads-progress-percent">${pctText}</span>
+                </div>
+                <div class="downloads-bar-outer">
+                    <div class="downloads-bar-inner ${pct < 0 ? 'indeterminate-bar' : ''}" style="width: ${pct < 0 ? '100' : String(Math.min(pct, 100))}%"></div>
+                </div>
+            </div>
+            <div class="downloads-stats-grid">
+                <div class="downloads-stat-item">
+                    <div class="downloads-stat-label">
+                        <svg class="icon icon-sm"><use href="#icon-download"></use></svg>
+                        <span>${this._i18n.t('ui.launcher.web.downloaded', 'Downloaded')}</span>
+                    </div>
+                    <div class="downloads-stat-value">${this._formatBytes(downloaded)}</div>
+                </div>
+                <div class="downloads-stat-item">
+                    <div class="downloads-stat-label">
+                        <svg class="icon icon-sm"><use href="#icon-folder"></use></svg>
+                        <span>${this._i18n.t('ui.launcher.web.total', 'Total')}</span>
+                    </div>
+                    <div class="downloads-stat-value">${total > 0 ? this._formatBytes(total) : '--'}</div>
+                </div>
+                <div class="downloads-stat-item">
+                    <div class="downloads-stat-label">
+                        <svg class="icon icon-sm"><use href="#icon-network"></use></svg>
+                        <span>${this._i18n.t('ui.launcher.web.speed', 'Speed')}</span>
+                    </div>
+                    <div class="downloads-stat-value">${this._formatSpeed(speed)}</div>
+                </div>
+            </div>
+        `;
+
+        // Wire cancel button
+        if (isCancellable) {
+            const cancelBtn = card.querySelector('.download-cancel-btn');
+            cancelBtn?.addEventListener('click', () => {
+                this._onCancel?.(moduleId);
+            });
+        }
+
+        return card;
+    }
+
+    /**
+     * Maps backend status string to a localized label.
+     */
+    private _statusLabel(status: string): string {
+        switch (status) {
+            case 'connecting':
+                return this._i18n.t('ui.downloads.status.connecting', 'Connecting');
+            case 'downloading':
+                return this._i18n.t('ui.downloads.status.in_progress', 'Downloading');
+            case 'extracting':
+                return this._i18n.t('ui.downloads.status.extracting', 'Extracting');
+            case 'complete':
+                return this._i18n.t('ui.downloads.status.completed', 'Completed');
+            case 'error':
+                return this._i18n.t('ui.downloads.status.error', 'Error');
+            case 'cancelled':
+                return this._i18n.t('ui.downloads.status.cancelled', 'Cancelled');
+            default:
+                return this._i18n.t('ui.downloads.status.waiting', 'Waiting');
         }
     }
 }

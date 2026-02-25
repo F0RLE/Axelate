@@ -76,6 +76,15 @@ export class ModulePlatformService {
     }
 
     /**
+     * Cancels an in-progress download for a module.
+     * @param moduleId The ID of the module to cancel downloading.
+     */
+    public async cancelDownload(moduleId: string): Promise<boolean> {
+        logger.info(`[ModulePlatformService] Cancelling download: ${moduleId}`);
+        return await this._moduleService.cancelDownload(moduleId);
+    }
+
+    /**
      * Checks if an app is an API-based module.
      */
     public isApiModule(app: IApp): boolean {

@@ -554,8 +554,7 @@
                     </div>
 
                     <div class="models-grid">
-                        <!-- Image Generation -->
-                        <!-- AI (Unified) -->
+                        <!-- AI Module -->
                         <div
                             id="ai-module-card"
                             class="model-card-premium ai empty"
@@ -1022,10 +1021,10 @@
 
         <script type="module" src="./app/init.ts"></script>
 
-        <!-- Global Width Warnings -->
-        <div
-            id="modules-width-warning"
-            class="width-warning hidden"
+        <!-- Global Width Warning Overlay (Native Dialog) -->
+        <dialog
+            id="global-width-warning"
+            class="width-warning"
         >
             <div class="width-warning-content">
                 <div class="width-warning-inner">
@@ -1033,11 +1032,12 @@
                     <span
                         class="warning-text"
                         data-i18n="ui.launcher.web.expand_window"
-                        >Expand the window to see all modules</span
                     >
+                        Expand window to see normal interface display
+                    </span>
                     <div class="zoom-hint">
-                        <div class="zoom-icons">
-                            <div class="ctrl-key">CTRL</div>
+                        <div class="zoom-icons" style="font-family: 'Monocraft', monospace;">
+                            <div class="ctrl-key" style="font-family: 'Monocraft', monospace;">CTRL</div>
                             <span class="zoom-plus-icon">+</span>
                             <div class="mouse-icon">
                                 <div class="wheel"></div>
@@ -1046,33 +1046,7 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-
-        <div
-            id="settings-width-warning"
-            class="width-warning hidden"
-        >
-            <div class="width-warning-content">
-                <div class="width-warning-inner">
-                    <span class="warning-icon">⚠️</span>
-                    <span
-                        class="warning-text"
-                        data-i18n="ui.launcher.web.expand_window"
-                        >Expand window to see normal interface display</span
-                    >
-                    <div class="zoom-hint">
-                        <div class="zoom-icons">
-                            <div class="ctrl-key">CTRL</div>
-                            <span class="zoom-plus-icon">+</span>
-                            <div class="mouse-icon">
-                                <div class="wheel"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        </dialog>
 
 
         <template id="tpl-taskbar-toggle">

@@ -200,31 +200,65 @@
 }
 
 /* Width Warning Overlay */
-.width-warning.hidden {
-    display: none !important;
-}
-
 .width-warning {
+    /* Reset native dialog border/padding */
+    padding: 0;
+    margin: 0;
+    border: none;
+
+    /* Force full screen overlay coverage */
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    background: rgba(8, 8, 10, 0.96) !important;
-    backdrop-filter: blur(35px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(35px) saturate(180%) !important;
-    display: flex;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: hidden;
+
+    /* Semi-transparent blur to keep text readable while showcasing the background animation */
+    background: rgba(8, 8, 10, 0.35) !important;
+    backdrop-filter: blur(8px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+
+    /* Hide by default, native dialog logic */
+    display: none !important;
     align-items: center;
     justify-content: center;
+
+    /* Ensure no interaction underneath just in case, though modal does this */
     z-index: 999999 !important;
     animation: fadeInOverlay 0.4s ease;
     zoom: calc(1 / var(--app-zoom, 1));
 }
 
+.width-warning[open] {
+    display: flex !important;
+}
+
+.width-warning::backdrop {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
 .width-warning.closing {
     animation: fadeOutOverlay 0.5s ease forwards;
+}
+
+/* Hide main UI layers when width warning is active, allowing background animation to shine */
+body.ui-hidden #sidebar,
+body.ui-hidden #app-header,
+body.ui-hidden #main-area,
+body.ui-hidden .modal-backdrop {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+    transition:
+        opacity 0.3s ease,
+        visibility 0.3s step-end !important;
 }
 
 .width-warning-content {
@@ -245,7 +279,7 @@
     padding: 40px 50px;
     background: rgba(255, 180, 0, 0.08);
     border: 1px solid rgba(255, 180, 0, 0.25);
-    border-radius: 32px;
+    border-radius: 16px;
 
     /* Strictly fixed pixels to prevent shape-shifting */
     width: 620px;
@@ -276,6 +310,7 @@
     font-weight: 600;
     line-height: 1.4;
     max-width: 520px;
+    font-family: 'Monocraft', monospace !important; /* Apply requested retro font */
 }
 
 /* Zoom Hint Styling */
@@ -311,6 +346,7 @@
     color: #fff;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
     animation: ctrlPulse 2s ease-in-out infinite;
+    font-family: 'Monocraft', monospace !important;
 }
 
 .mouse-icon {
@@ -656,7 +692,7 @@
     background: var(--primary) !important;
     color: white !important;
     border: none !important;
-    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3);
+    box-shadow: none;
 
     /* Clean, performant transitions */
     transition:
@@ -668,7 +704,7 @@
 .model-card-premium .model-card-action.download-module-btn:hover {
     background: var(--primary-hover) !important;
     transform: translateY(-3px) scale(1.02) !important;
-    box-shadow: 0 8px 20px rgba(138, 43, 226, 0.4);
+    box-shadow: none;
 }
 
 .model-card-premium .model-card-action.active-module-btn:hover {
@@ -700,6 +736,78 @@
     background: #b71c1c !important; /* Extremely dark red for contrast */
     border-color: #b71c1c !important;
     color: #ffffff !important;
+}
+
+/* Download Progress Animation */
+.model-card-premium .model-card-action.download-module-btn.downloading,
+.app-card-hover-actions .download-btn.downloading {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-2) !important;
+    color: var(--text-color) !important;
+    cursor: pointer !important; /* Allow clicking to reset */
+    pointer-events: auto !important;
+    box-shadow: none !important;
+    transform: none !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.model-card-premium .model-card-action.download-module-btn.downloading::before,
+.app-card-hover-actions .download-btn.downloading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--download-progress, 0%);
+    background: var(--primary);
+    opacity: 0.2; /* Subdued fill, no glow */
+    transition: width 0.3s ease-out;
+    z-index: 1;
+}
+
+.model-card-premium .model-card-action.download-module-btn.downloading.indeterminate::before,
+.app-card-hover-actions .download-btn.downloading.indeterminate::before {
+    width: 100%;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    background-size: 200% 100%;
+    animation: indeterminate-pulse 1.5s infinite linear;
+}
+
+@keyframes indeterminate-pulse {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.model-card-premium .model-card-action.download-module-btn.downloading .btn-content,
+.app-card-hover-actions .download-btn.downloading .btn-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.download-pct {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    min-width: 3ch;
+}
+
+.stop-square-icon {
+    width: 14px;
+    height: 14px;
+    background-color: currentColor;
+    border-radius: 2px;
+    display: inline-block;
 }
 
 /* Specific Card Accents */
@@ -1125,8 +1233,14 @@ body.snapping .modal-backdrop {
 }
 
 .app-card:hover .app-icon-wrapper,
-.app-card:hover .app-card-title,
-.app-card:hover .app-card-desc,
+.app-card:hover .app-card-title {
+    /* Translate down to visually center in the space vacated by the description */
+    transform: translateY(18px);
+    transition:
+        transform 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.6s ease !important;
+}
+
 .app-card:hover .app-delete-badge,
 .app-card:hover .module-type-badge {
     /* Kept fully visible per user preference */
@@ -1138,11 +1252,18 @@ body.snapping .modal-backdrop {
 /* Don't fade content for API or already installed modules (no overlay needed) */
 .app-card.is-api:hover .app-icon-wrapper,
 .app-card.is-api:hover .app-card-title,
-.app-card.is-api:hover .app-card-desc,
 .app-card.is-installed:hover .app-icon-wrapper,
-.app-card.is-installed:hover .app-card-title,
-.app-card.is-installed:hover .app-card-desc {
+.app-card.is-installed:hover .app-card-title {
     opacity: 1 !important;
+}
+
+/* Base transition for smooth centering */
+.app-icon-wrapper,
+.app-card-title {
+    transform: translateY(0);
+    transition:
+        transform 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.6s ease;
 }
 
 .app-card:hover {
@@ -1189,7 +1310,7 @@ body.snapping .modal-backdrop {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 1rem !important;
+    margin-bottom: 1.25rem !important; /* Extra spacing to title */
     margin-top: 0 !important;
     font-size: 2rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -1197,8 +1318,8 @@ body.snapping .modal-backdrop {
 }
 
 .app-card-title {
-    font-size: 1.15rem; /* Slightly smaller title */
-    font-weight: 600;
+    font-size: 1.35rem; /* Noticeably larger title per request */
+    font-weight: 700; /* Bolder text */
     color: var(--text-primary);
     margin-bottom: 0px !important;
     min-height: 2.5rem !important;
@@ -1232,6 +1353,15 @@ body.snapping .modal-backdrop {
 /* Hide scrollbar for Chrome/Safari */
 .app-card-desc::-webkit-scrollbar {
     display: none !important;
+}
+
+/* On hover, fade out the description */
+.app-card:hover .app-card-desc,
+.app-card.is-installed:hover .app-card-desc,
+.app-card.is-api:hover .app-card-desc {
+    opacity: 0 !important;
+    pointer-events: none;
+    transition: opacity 0.2s ease !important;
 }
 
 .app-status {
@@ -1271,21 +1401,6 @@ body.snapping .modal-backdrop {
     z-index: 10 !important;
 }
 
-.app-status.active-label {
-    margin-top: auto !important;
-    margin-bottom: 0.5rem !important;
-    padding: 0.6rem 2.2rem !important;
-    font-size: 0.95rem !important;
-    border-radius: 10px !important;
-    background: rgba(138, 43, 226, 0.15) !important;
-    border: 1px solid rgba(138, 43, 226, 0.3) !important;
-    color: var(--primary-light, #dcbdfb) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.5px;
-    cursor: default;
-    flex-shrink: 0;
-}
-
 .app-status.download-btn:hover {
     background: var(--primary-hover) !important;
     transform: translateY(-2px) scale(1.02);
@@ -1298,73 +1413,6 @@ body.snapping .modal-backdrop {
     animation: pulse 1.5s infinite;
 }
 
-/* Centered Download Redesign */
-.app-card-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(10, 10, 15, 0.85);
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 40;
-    transition:
-        opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-        backdrop-filter 0.4s ease;
-    border-radius: 12px;
-}
-
-.app-card:not(.selected):hover .app-card-overlay {
-    opacity: 1;
-    pointer-events: auto;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-}
-
-/* Hide overlay completely on selected cards */
-.app-card.selected .app-card-overlay {
-    display: none !important;
-    opacity: 0 !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-}
-
-.app-card-overlay .download-btn.centered {
-    margin: 0 !important;
-    padding: 0.75rem 2.2rem !important; /* Smaller, better proportions */
-    font-size: 1rem !important;
-    font-weight: 700 !important;
-    border-radius: 12px !important; /* Match Text/Image category filters (squircle) */
-
-    background: var(--primary) !important;
-    color: white !important;
-
-    transform: translateY(15px) scale(0.9);
-    transition:
-        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-        background 0.3s ease,
-        box-shadow 0.3s ease !important;
-
-    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-.app-card:hover .app-card-overlay .download-btn.centered {
-    transform: translateY(0) scale(1);
-}
-
-.app-card-overlay .download-btn.centered:hover {
-    transform: scale(1.05) translateY(-2px) !important;
-    background: var(--primary-hover) !important;
-    box-shadow: 0 8px 25px rgba(138, 43, 226, 0.5) !important;
-}
-
 @keyframes pulse {
     0% {
         opacity: 0.7;
@@ -1375,6 +1423,129 @@ body.snapping .modal-backdrop {
     100% {
         opacity: 0.7;
     }
+}
+
+/* Hover Actions Container (Fixed bottom replacing desc) */
+.app-card-hover-actions {
+    position: absolute;
+    bottom: 24px; /* Fixed distance from the bottom of the card */
+    left: 20px;
+    right: 20px;
+    height: 48px; /* Fixed height for the button area */
+    display: flex;
+    justify-content: center;
+    align-items: center; /* Center the buttons inside the fixed area */
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 30;
+}
+
+.app-card:hover .app-card-hover-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+/* Style buttons inside the hover container */
+.app-card-hover-actions button,
+.app-card-hover-actions .download-btn {
+    width: 100%;
+    max-width: 220px; /* Prevent it from being too wide on large grids */
+    margin: 0 !important;
+    padding: 0.8rem 1rem !important;
+    font-family: var(--app-font-family) !important;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3) !important;
+
+    background: var(--primary) !important;
+    color: white !important;
+    transition:
+        transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.3s ease,
+        box-shadow 0.3s ease !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+
+    /* Undo the base .download-btn margins for the hover area */
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    position: static !important;
+}
+
+.app-card-hover-actions button:hover,
+.app-card-hover-actions .download-btn:hover {
+    transform: scale(1.05) translateY(-2px) !important;
+    background: var(--primary-hover) !important;
+    box-shadow: 0 8px 25px rgba(138, 43, 226, 0.5) !important;
+}
+
+/* Specifically style the "Remove" (Secondary) Button to be red */
+.app-card-hover-actions .modal-btn-secondary {
+    background: #dc3545 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: none !important; /* No glow at all for red button */
+}
+
+.app-card-hover-actions .modal-btn-secondary:hover {
+    background: #c82333 !important;
+    transform: scale(1.05) translateY(-2px) !important;
+    box-shadow: none !important; /* Strictly no glow */
+    color: #ffffff !important;
+}
+
+/* Selected Card properly marching dashed border (Conic walking technique) */
+@property --border-angle {
+    syntax: '<angle>';
+    inherits: true;
+    initial-value: 0deg;
+}
+
+@keyframes spinDashed {
+    0% {
+        --border-angle: 0deg;
+    }
+    100% {
+        --border-angle: 360deg;
+    }
+}
+
+.app-card.selected {
+    border: 1px solid transparent !important; /* Keep base card border clear */
+    box-shadow: none !important;
+}
+
+/* Pseudo element creates the crawling dashed line via conic gradient and mask */
+.app-card.selected::before {
+    content: '';
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    bottom: 0px;
+    right: 0px;
+    border-radius: 12px;
+    padding: 1px; /* 1px very thin padding */
+    background: repeating-conic-gradient(
+        from var(--border-angle),
+        rgba(138, 43, 226, 0.4) 0deg,
+        rgba(138, 43, 226, 0.4) 4deg,
+        transparent 4deg,
+        transparent 8deg
+    );
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    z-index: 5;
+    animation: spinDashed 45s linear infinite; /* Ultra slow pace around the circle */
 }
 
 /* --- Card Corner Actions (Settings and Reset) --- */

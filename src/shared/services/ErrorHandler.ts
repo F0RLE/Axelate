@@ -5,7 +5,7 @@
 
 import DOMPurify from 'dompurify';
 import { eventBus } from './EventBus';
-import type { TGlobalWin } from '../types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 /**
  * Detailed error information.
@@ -42,7 +42,7 @@ class ErrorHandler {
             return;
         }
 
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         if (win.errorHandler !== undefined) {
             // eslint-disable-next-line no-console
             console.warn('[ErrorHandler] Another instance already initialized. Using existing.');

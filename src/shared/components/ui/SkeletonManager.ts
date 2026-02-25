@@ -1,4 +1,4 @@
-import type { TGlobalWin } from '../../types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 /**
  * @class SkeletonManager
@@ -14,7 +14,7 @@ export class SkeletonManager {
         const container = document.getElementById(containerId);
         if (container === null) return;
 
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         // Legacy support if global function exists (though we prefer direct DOM manipulation here for purity)
         if (typeof win.showSkeletonLoaders === 'function') {
             (win.showSkeletonLoaders as (id: string, count: number) => void)(containerId, count);

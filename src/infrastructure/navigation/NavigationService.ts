@@ -3,7 +3,7 @@
  * @description Manages application navigation and history
  */
 
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 
@@ -11,8 +11,16 @@ import { logger } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationService {
     private readonly _historyStack: string[] = [];
-    private readonly _actionStack: { id: string; action: () => void; forwardAction?: () => void }[] = [];
-    private readonly _forwardActionStack: { id: string; action: () => void; forwardAction: () => void }[] = [];
+    private readonly _actionStack: {
+        id: string;
+        action: () => void;
+        forwardAction?: () => void;
+    }[] = [];
+    private readonly _forwardActionStack: {
+        id: string;
+        action: () => void;
+        forwardAction: () => void;
+    }[] = [];
     private _currentIndex = -1;
     private static _instance: NavigationService | undefined;
     private _uiSettingsService: UISettingsService | null = null;
@@ -33,7 +41,7 @@ export class NavigationService {
      * Called after uiState.load() completes.
      */
     public refreshFromUiState(): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions, @typescript-eslint/no-unnecessary-condition
         if (win.uiState && typeof win.uiState.last_page === 'string') {
             const lastPage = win.uiState.last_page;
@@ -129,7 +137,10 @@ export class NavigationService {
      */
     public pushBackAction(id: string, action: () => void, forwardAction?: () => void): void {
         this.removeBackAction(id);
-        const entry: { id: string; action: () => void; forwardAction?: () => void } = { id, action };
+        const entry: { id: string; action: () => void; forwardAction?: () => void } = {
+            id,
+            action,
+        };
         if (forwardAction) {
             entry.forwardAction = forwardAction;
         }
@@ -158,12 +169,14 @@ export class NavigationService {
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (actionInfo) {
                 logger.debug(`[NavigationService] Executing back action: ${actionInfo.id}`);
-                
+
                 if (actionInfo.forwardAction) {
                     // Safe to cast because we checked for forwardAction existence
-                    this._forwardActionStack.push(actionInfo as { id: string; action: () => void; forwardAction: () => void });
+                    this._forwardActionStack.push(
+                        actionInfo as { id: string; action: () => void; forwardAction: () => void },
+                    );
                 }
-                
+
                 actionInfo.action();
                 return true;
             }

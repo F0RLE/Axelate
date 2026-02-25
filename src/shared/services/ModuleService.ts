@@ -6,7 +6,7 @@
 import { type IBridge } from '@/shared/types/IBridge';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import type { IModuleDownloadState } from '../types/coreTypes';
-import type { TGlobalWin } from '../types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { commands } from '../types/bindings';
 import { invokeSafe } from '../api/invoke';
 
@@ -128,6 +128,21 @@ export class ModuleService {
     }
 
     /**
+     * Cancels an in-progress module download.
+     * @param moduleId - The ID of the module whose download to cancel
+     */
+    public async cancelDownload(moduleId: string): Promise<boolean> {
+        logger.info(`[ModuleService] Cancelling download: ${moduleId}`);
+        if (!this._bridge.isTauri()) return false;
+        try {
+            return await commands.cancelDownload(moduleId);
+        } catch (e) {
+            logger.error(`[ModuleService] Cancel failed: ${String(e)}`);
+            return false;
+        }
+    }
+
+    /**
      * Deletes a module from the local disk
      * @param moduleId - The ID of the module to delete
      */
@@ -195,7 +210,7 @@ export class ModuleService {
      * Broadcasts download state to global scope for legacy UI compatibility.
      */
     private _broadcastState(moduleId: string) {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         win.moduleDownloadState ??= {};
         const state = this._downloadState[moduleId];
         if (state !== undefined) {

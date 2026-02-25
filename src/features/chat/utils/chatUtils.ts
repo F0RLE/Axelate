@@ -3,7 +3,7 @@
  * @description Utility functions for chat-related operations
  */
 
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { logger } from '@/infrastructure/logging/LoggerService';
 
 /**
@@ -156,7 +156,7 @@ export function estimateTokenCount(text: string): number {
  */
 export async function getTokenCount(text: string, model = 'gpt-4'): Promise<number> {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if ((globalThis as TGlobalWin).__TAURI__ !== undefined) {
+    if (getGlobalWin().__TAURI__ !== undefined) {
         try {
             return await globalThis.__TAURI__.core.invoke('count_tokens', { text, model });
         } catch (e) {

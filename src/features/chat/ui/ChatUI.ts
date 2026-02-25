@@ -21,7 +21,7 @@ marked.use({
 import { chatFileHandler } from '../services/ChatFileHandler';
 import type { IChatAttachment, IChatRole } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import DOMPurify from 'dompurify';
 import { logger } from '@/infrastructure/logging/LoggerService';
 
@@ -65,13 +65,13 @@ export class ChatUI {
              <div class="code-block-wrapper">
                  <div class="code-block-header">
                      <span class="code-lang">${language}</span>
-                     <button class="code-copy-btn" title="${(globalThis as TGlobalWin).t('ui.launcher.web.copy_code', 'Copy code')}">
+                     <button class="code-copy-btn" title="${getGlobalWin().t('ui.launcher.web.copy_code', 'Copy code')}">
                         <!-- Simple Copy Icon -->
                         <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                         </svg>
-                        <span>${(globalThis as TGlobalWin).t('ui.launcher.web.copy', 'Copy')}</span>
+                        <span>${getGlobalWin().t('ui.launcher.web.copy', 'Copy')}</span>
                      </button>
                  </div>
                  <pre><code class="language-${language}">${escaped === true ? text : text.replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</code></pre>
@@ -101,13 +101,13 @@ export class ChatUI {
     }
 
     private async _bindAiEvents(): Promise<void> {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         if (win.__TAURI_INTERNALS__ !== undefined) {
             await listen<{ code: string; wait_seconds: number }>('ai:status:retry', (e) => {
                 const { code, wait_seconds } = e.payload;
                 if (code === 'GEMINI_QUOTA_RETRY') {
                     // Show toast or update UI
-                    const g = globalThis as TGlobalWin;
+                    const g = getGlobalWin();
                     const msg =
                         typeof g.t === 'function'
                             ? g.t(
@@ -334,7 +334,7 @@ export class ChatUI {
         content: string,
         opts: Record<string, unknown>,
     ): string {
-        const g = globalThis as TGlobalWin;
+        const g = getGlobalWin();
 
         // Handle i18nKey
         if (typeof opts['i18nKey'] === 'string' && opts['i18nKey'] !== '') {
@@ -464,7 +464,7 @@ export class ChatUI {
         if (typeof tokens === 'number' && tokens > 0) {
             const tokenSpan = document.createElement('span');
             tokenSpan.className = 'chat-tokens';
-            const t = (globalThis as TGlobalWin).t;
+            const t = getGlobalWin().t;
             const fallback = tokens === 1 ? 'token' : 'tokens';
             const tokensWord = t('ui.launcher.web.tokens', fallback);
             tokenSpan.textContent = `${String(tokens)} ${tokensWord}`;
@@ -528,7 +528,7 @@ export class ChatUI {
 
         card.innerHTML = `
             ${contentHtml}
-            <button type="button" class="media-remove" title="${(globalThis as TGlobalWin).t('ui.launcher.web.remove_attachment', 'Remove attachment')}">×</button>
+            <button type="button" class="media-remove" title="${getGlobalWin().t('ui.launcher.web.remove_attachment', 'Remove attachment')}">×</button>
         `;
 
         const btn: HTMLElement | null = card.querySelector('.media-remove');
@@ -552,7 +552,7 @@ export class ChatUI {
             iconSvg = '📄';
         }
 
-        const t = (globalThis as TGlobalWin).t;
+        const t = getGlobalWin().t;
         const tokensLabel = t('ui.launcher.web.tokens', 'tokens');
         const tokensHtml =
             tokens > 0 ? `<div class="media-tokens">${String(tokens)} ${tokensLabel}</div>` : '';
@@ -613,7 +613,7 @@ export class ChatUI {
         type: 'success' | 'error' | 'warning' = 'success',
         duration = 2000,
     ): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         if (typeof win.showToast === 'function') {
             win.showToast(msg, type, duration);
         } else {
@@ -647,7 +647,7 @@ export class ChatUI {
     }
 
     private async _copyToClipboard(text: string): Promise<void> {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const isTauri = win.__TAURI_INTERNALS__ !== undefined;
         if (isTauri) {
             try {
@@ -663,14 +663,14 @@ export class ChatUI {
     private _showCopyResult(btn: HTMLElement, success: boolean): void {
         if (!success) {
             this.showToast(
-                (globalThis as TGlobalWin).t('ui.launcher.web.copy_failed', 'Failed to copy code'),
+                getGlobalWin().t('ui.launcher.web.copy_failed', 'Failed to copy code'),
                 'error',
             );
             return;
         }
 
         const originalHtml = btn.innerHTML;
-        const t = (globalThis as TGlobalWin).t;
+        const t = getGlobalWin().t;
         const label = t('ui.launcher.web.copied', 'Copied!');
 
         btn.innerHTML = DOMPurify.sanitize(`
@@ -693,7 +693,7 @@ export class ChatUI {
         if (el === null) return;
 
         if (count > 0) {
-            el.textContent = `${String(count)} ${(globalThis as TGlobalWin).t('ui.launcher.web.tokens', 'tokens')}`;
+            el.textContent = `${String(count)} ${getGlobalWin().t('ui.launcher.web.tokens', 'tokens')}`;
             el.classList.add('visible');
             el.style.display = '';
             // Add warning color if tokens are high (heuristic: 20k tokens)
@@ -722,7 +722,7 @@ export class ChatUI {
             e.stopPropagation();
 
             const url = link.href;
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             const isTauri = win.__TAURI_INTERNALS__ !== undefined;
             if (isTauri) {
                 try {
@@ -743,7 +743,7 @@ export class ChatUI {
      * Refreshes all localized static strings in the Chat UI.
      */
     public refreshTranslations(): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const t = win.t;
         if (typeof t !== 'function') return;
 

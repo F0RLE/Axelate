@@ -94,8 +94,7 @@ export class AIBridge implements IAIBridge {
         const started = await this._manager.startProvider(providerId);
 
         if (started) {
-            const display = this._manager.getProviderDisplayName(providerId);
-            this._showSuccessToast('ui.ai.provider_started', `${display} active`);
+            // Toast removed as per user feedback (obvious from UI state)
         } else {
             // Check if it failed due to missing key
             const isLocal = providerId === 'local' || providerId === 'axelate-localai';
@@ -321,10 +320,6 @@ export class AIBridge implements IAIBridge {
 
     private _showErrorToast(key: string, fallback: string): void {
         this._showToast(globalThis.t(key, fallback), 'error');
-    }
-
-    private _showSuccessToast(key: string, fallback: string): void {
-        this._showToast(globalThis.t(key, fallback), 'success');
     }
 
     private _showInfoToast(key: string, fallback: string): void {

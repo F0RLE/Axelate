@@ -12,7 +12,7 @@
  */
 
 import type { IChatAttachment } from '../types/chatTypes';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import {
     estimateTokenCount,
     getTokenCount,
@@ -155,7 +155,7 @@ export class ChatFileHandler {
      * Internal router for file processing based on environment.
      */
     private _processSingleFile(file: File): Promise<IFileProcessResult> {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (win.__TAURI__ !== undefined) {
             return this._processWithBackend(file);

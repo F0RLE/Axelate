@@ -13,7 +13,7 @@
  */
 
 import type { ILogEntry } from '@/shared/types/coreTypes';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 export class LoggerService {
     private _buffer: ILogEntry[] = [];
@@ -66,7 +66,7 @@ export class LoggerService {
     }
 
     private _setupInterceptors(): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
 
         // Intercept window.onerror for uncaught JS errors
         win.onerror = (

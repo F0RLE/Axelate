@@ -12,7 +12,7 @@ import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { IAIModelData } from '../types/aiTypes';
 import { getModelData } from '../utils/catalogHelpers';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { logger } from '@/infrastructure/logging/LoggerService';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
@@ -163,19 +163,23 @@ class AISettingsRenderer extends BaseComponent {
                     </section>
 
                     ${
-                        appId === 'gemini' || appId === 'claude' || appId === 'gpt' || appId === 'deepseek'
+                        appId === 'gemini' ||
+                        appId === 'claude' ||
+                        appId === 'gpt' ||
+                        appId === 'deepseek'
                             ? (() => {
                                   const savedLevel = this._aiSettings?.getThinkingLevel(appId);
                                   const isLow = savedLevel === 'low';
                                   const isMedium = savedLevel === 'medium';
                                   const isHigh = savedLevel === 'high' || savedLevel === undefined;
-                                  
-                                  const selectedModelData = models.find(m => m.id === savedModel);
-                                  const hasReasoning = selectedModelData?.capabilities?.reasoning === true;
+
+                                  const selectedModelData = models.find((m) => m.id === savedModel);
+                                  const hasReasoning =
+                                      selectedModelData?.capabilities?.reasoning === true;
 
                                   return `
                         <!-- 3. THINKING LEVEL SECTION (WINDOW) -->
-                        <section class="thinking-level-section" aria-labelledby="${appId}-thinking-title" style="display: ${hasReasoning ? 'block' : 'none'};">
+                        <section id="${appId}-thinking-section" class="thinking-level-section" aria-labelledby="${appId}-thinking-title" style="display: ${hasReasoning ? 'block' : 'none'};">
                             <div class="ai-content-panel">
                                 <div class="settings-card-header-center">
                                     <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
@@ -422,10 +426,13 @@ class AISettingsRenderer extends BaseComponent {
 
             if (count >= thresholdFull) {
                 className += ' full';
+                style = 'style="color: #f5a623; text-shadow: 0 0 4px rgba(245,166,35,0.4);"';
             } else if (count >= thresholdHalf) {
                 className += ' half';
+                style = 'style="color: #f5a623; opacity: 0.6;"';
             } else {
                 className += ' empty';
+                style = 'style="color: var(--text-tertiary, #555); opacity: 0.3;"';
             }
 
             starsHtml += `<span class="${className}" ${style}>★</span>`;
@@ -542,7 +549,7 @@ class AISettingsRenderer extends BaseComponent {
             });
         }
 
-        const globalContext = globalThis as TGlobalWin;
+        const globalContext = getGlobalWin();
         if (typeof globalContext.applyTranslations === 'function') {
             globalContext.applyTranslations();
         }
@@ -667,7 +674,7 @@ class AISettingsRenderer extends BaseComponent {
 
         const modelData = getModelData(appId, modelKey);
         const hasReasoning = modelData?.capabilities?.reasoning === true;
-        const thinkingSection = document.querySelector<HTMLElement>('.thinking-level-section');
+        const thinkingSection = document.getElementById(`${appId}-thinking-section`);
         if (thinkingSection) {
             thinkingSection.style.display = hasReasoning ? 'block' : 'none';
         }
@@ -709,7 +716,7 @@ class AISettingsRenderer extends BaseComponent {
                 ],
             });
 
-            const globalContext = globalThis as TGlobalWin;
+            const globalContext = getGlobalWin();
             if (typeof globalContext.applyTranslations === 'function') {
                 globalContext.applyTranslations();
             }
@@ -728,7 +735,7 @@ class AISettingsRenderer extends BaseComponent {
      * Resolves the translation service from the global context.
      */
     private _getTranslator(): TranslateFunc {
-        const globalContext = globalThis as TGlobalWin;
+        const globalContext = getGlobalWin();
         const t = globalContext.t;
         return (t as TranslateFunc | undefined) ?? ((_key: string, fallback: string) => fallback);
     }
@@ -737,7 +744,7 @@ class AISettingsRenderer extends BaseComponent {
      * Emits a toast notification to the global UI.
      */
     private _showToast(message: string, type: string): void {
-        const globalContext = globalThis as TGlobalWin;
+        const globalContext = getGlobalWin();
         if (typeof globalContext.showToast === 'function') {
             (globalContext.showToast as (m: string, t: string) => void)(message, type);
         }

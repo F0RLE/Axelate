@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import type { TGlobalWin } from '../../types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 /**
  * @interface ToastElement
@@ -87,7 +87,7 @@ export class ToastManager {
             container.className = 'toast-container';
             container.id = 'toast-container';
             container.style.zIndex = '9999';
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             // Fallback for translation if not available
             const containerTitle =
                 typeof win.t === 'function' ? win.t('ui.toast.container', '') : '';

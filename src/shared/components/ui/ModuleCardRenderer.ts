@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 import type { IApp } from '../../types/coreTypes';
-import type { TGlobalWin } from '../../types/global_bridge_types';
+import { getGlobalWin } from '../../utils/globalAccessor';
 import { logger } from '../../../infrastructure/logging/LoggerService';
 
 /**
@@ -49,10 +49,14 @@ export class ModuleCardRenderer {
     public createCard(
         app: IApp,
         _category: string,
+        isSelected: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
     ): HTMLElement {
         const card = document.createElement('div');
         card.className = 'app-card allow-context-menu';
+        if (isSelected) {
+            card.classList.add('selected');
+        }
         card.dataset['appId'] = app.id;
 
         const isApi = this._isApiModule(app);
@@ -60,10 +64,6 @@ export class ModuleCardRenderer {
 
         card.classList.toggle('is-api', isApi);
         card.classList.toggle('is-installed', isInstalled);
-
-        const g = globalThis as TGlobalWin;
-        const downloadText =
-            typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
 
         const template = document.getElementById('tpl-module-card') as HTMLTemplateElement | null;
         if (!template) {
@@ -73,7 +73,19 @@ export class ModuleCardRenderer {
 
         const clone = template.content.cloneNode(true) as DocumentFragment;
 
-        // Add Delete Badge if applicable
+        this._injectBadges(clone, isApi, isInstalled);
+        this._injectCoreContent(clone, app);
+        this._injectStatusAndActions(clone, app, isApi, isInstalled, isSelected, onClick);
+
+        card.appendChild(clone);
+
+        this._attachEventHandlers(card, app, isApi, isInstalled, onClick);
+        this._startAsyncInstallCheck(card, app, isApi, isInstalled, onClick);
+
+        return card;
+    }
+
+    private _injectBadges(clone: DocumentFragment, isApi: boolean, isInstalled: boolean): void {
         const deleteBadgeHtml = this._getAppDeleteBadgeHtml(isApi, isInstalled);
         if (deleteBadgeHtml) {
             const tempDiv = document.createElement('div');
@@ -83,31 +95,39 @@ export class ModuleCardRenderer {
             }
         }
 
-        // Add Type Badge
         const typeBadgeHtml = this._getAppTypeBadgeHtml(isApi, isInstalled);
         if (typeBadgeHtml) {
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = DOMPurify.sanitize(typeBadgeHtml, this._purifyConfig);
             if (tempDiv.firstElementChild) {
-                // Insert after delete badge if it exists, or at start
                 const iconWrapper = clone.querySelector('.app-icon-wrapper');
                 if (iconWrapper) {
                     clone.insertBefore(tempDiv.firstElementChild, iconWrapper);
                 }
             }
         }
+    }
 
+    private _injectCoreContent(clone: DocumentFragment, app: IApp): void {
         const iconWrapper = clone.querySelector('.app-icon-wrapper');
         if (iconWrapper)
-            iconWrapper.innerHTML = DOMPurify.sanitize(app.icon || '❓', this._purifyConfig);
+            iconWrapper.innerHTML = DOMPurify.sanitize(app.icon ?? '❓', this._purifyConfig);
 
         const titleEl = clone.querySelector('.app-card-title');
         if (titleEl) titleEl.textContent = this._getAppName(app);
 
         const descEl = clone.querySelector('.app-card-desc');
         if (descEl) descEl.textContent = this._getAppDesc(app);
+    }
 
-        // Status HTML
+    private _injectStatusAndActions(
+        clone: DocumentFragment,
+        app: IApp,
+        isApi: boolean,
+        isInstalled: boolean,
+        isSelected: boolean,
+        onClick: (e: MouseEvent, app: IApp) => void,
+    ): void {
         const statusHtml = this._getAppStatusHtml(isApi, isInstalled);
         if (statusHtml) {
             const tempDiv = document.createElement('div');
@@ -117,37 +137,90 @@ export class ModuleCardRenderer {
             }
         }
 
-        // Overlay
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'app-card-hover-actions';
+
         if (!isInstalled && !isApi) {
-            const overlay = document.createElement('div');
-            overlay.className = 'app-card-overlay';
-            const btn = document.createElement('div');
-            btn.className = 'app-status download-btn centered';
-            btn.textContent = downloadText;
-            overlay.appendChild(btn);
-            clone.appendChild(overlay);
+            actionsContainer.appendChild(this._buildDownloadButton());
+        } else {
+            actionsContainer.appendChild(this._buildActionButton(app, isSelected, onClick));
         }
 
-        card.appendChild(clone);
+        clone.appendChild(actionsContainer);
+    }
 
+    private _buildDownloadButton(): HTMLButtonElement {
+        const downloadBtn = document.createElement('button');
+        const g = getGlobalWin();
+        const downloadText =
+            typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
+        downloadBtn.className = 'modal-btn modal-btn-primary download-btn';
+        downloadBtn.textContent = downloadText;
+        return downloadBtn;
+    }
+
+    private _buildActionButton(
+        app: IApp,
+        isSelected: boolean,
+        onClick: (e: MouseEvent, app: IApp) => void,
+    ): HTMLButtonElement {
+        const actionBtn = document.createElement('button');
+        actionBtn.className = isSelected
+            ? 'modal-btn modal-btn-secondary'
+            : 'modal-btn modal-btn-primary';
+
+        const i18nKey = isSelected
+            ? 'ui.launcher.modules.modal.btn_remove'
+            : 'ui.launcher.modules.modal.btn_select';
+        const defaultText = isSelected ? 'Remove' : 'Select';
+        actionBtn.dataset['i18n'] = i18nKey;
+
+        const winConfig = getGlobalWin();
+        actionBtn.textContent =
+            typeof winConfig.t === 'function' ? winConfig.t(i18nKey, defaultText) : defaultText;
+
+        actionBtn.onclick = (e) => {
+            e.stopPropagation();
+
+            // Tactile press animation
+            actionBtn.style.transition = 'transform 0.1s ease';
+            actionBtn.style.transform = 'scale(0.92)';
+            setTimeout(() => {
+                actionBtn.style.transition = 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)';
+                actionBtn.style.transform = '';
+            }, 100);
+
+            onClick(e, app);
+        };
+
+        return actionBtn;
+    }
+
+    private _attachEventHandlers(
+        card: HTMLElement,
+        app: IApp,
+        isApi: boolean,
+        isInstalled: boolean,
+        onClick: (e: MouseEvent, app: IApp) => void,
+    ): void {
         card.onclick = (e) => onClick(e, app);
 
-        // Isolated Right-click support (capturing to bypass other listeners)
         card.addEventListener(
             'contextmenu',
             (e: MouseEvent) => {
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
-                
-                // Do not allow opening settings for non-installed modules
+
                 if (!isInstalled && !isApi) {
-                    logger.debug(`[ModuleCardRenderer] Ignored right-click on uninstalled module: ${app.id}`);
+                    logger.debug(
+                        `[ModuleCardRenderer] Ignored right-click on uninstalled module: ${app.id}`,
+                    );
                     return;
                 }
 
                 logger.info('[ModuleCardRenderer] Isolated right-click on module card:', app.id);
-                const win = globalThis as TGlobalWin;
+                const win = getGlobalWin();
                 if (typeof win.openModuleSettings === 'function') {
                     win.openModuleSettings(app);
                 }
@@ -155,7 +228,6 @@ export class ModuleCardRenderer {
             { capture: true },
         );
 
-        // Prevent right-click from triggering mousedown/click logic elsewhere
         card.addEventListener(
             'mousedown',
             (e: MouseEvent) => {
@@ -166,10 +238,17 @@ export class ModuleCardRenderer {
             },
             { capture: true },
         );
+    }
 
-        // Self-Correction: Async check for installation status to handle race conditions (Restored from AppUI history)
+    private _startAsyncInstallCheck(
+        card: HTMLElement,
+        app: IApp,
+        isApi: boolean,
+        isInstalled: boolean,
+        onClick: (e: MouseEvent, app: IApp) => void,
+    ): void {
         if (!isInstalled && !isApi) {
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             if (typeof win.checkModuleInstalled === 'function') {
                 void (async (): Promise<void> => {
                     try {
@@ -177,27 +256,7 @@ export class ModuleCardRenderer {
                             win.checkModuleInstalled as (id: string) => Promise<boolean>
                         )(app.id);
                         if (actuallyInstalled) {
-                            app.installed = true;
-
-                            card.classList.remove('has-download');
-                            card.classList.add('has-launch', 'is-installed');
-                            const overlay = card.querySelector('.app-card-overlay');
-                            if (overlay) overlay.remove();
-
-                            const typeBadge = card.querySelector('.app-type-badge');
-                            if (typeBadge) {
-                                typeBadge.classList.remove('not-installed');
-                                typeBadge.classList.add('installed');
-                            }
-
-                            // Verify and inject delete badge if missing (Fix for intermittent visibility)
-                            if (card.querySelector('.app-delete-badge') === null) {
-                                // We know it's installed now, so pass true
-                                const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
-                                if (badgeHtml !== '') {
-                                    card.insertAdjacentHTML('afterbegin', badgeHtml);
-                                }
-                            }
+                            this._handleAsyncInstallSuccess(card, app, isApi, onClick);
                         }
                     } catch (err) {
                         logger.debug(
@@ -207,8 +266,51 @@ export class ModuleCardRenderer {
                 })();
             }
         }
+    }
 
-        return card;
+    private _handleAsyncInstallSuccess(
+        card: HTMLElement,
+        app: IApp,
+        isApi: boolean,
+        onClick: (e: MouseEvent, app: IApp) => void,
+    ): void {
+        app.installed = true;
+
+        card.classList.remove('has-download');
+        card.classList.add('has-launch', 'is-installed');
+
+        const actionsContainer = card.querySelector('.app-card-hover-actions');
+        if (actionsContainer) {
+            actionsContainer.innerHTML = '';
+            const actionBtn = document.createElement('button');
+            actionBtn.className = 'modal-btn modal-btn-primary';
+            const i18nKey = 'ui.launcher.modules.modal.btn_select';
+            const defaultText = 'Select';
+            actionBtn.dataset['i18n'] = i18nKey;
+
+            const winConfig = getGlobalWin();
+            actionBtn.textContent =
+                typeof winConfig.t === 'function' ? winConfig.t(i18nKey, defaultText) : defaultText;
+
+            actionBtn.onclick = (e) => {
+                e.stopPropagation();
+                onClick(e, app);
+            };
+            actionsContainer.appendChild(actionBtn);
+        }
+
+        const typeBadge = card.querySelector('.app-type-badge');
+        if (typeBadge) {
+            typeBadge.classList.remove('not-installed');
+            typeBadge.classList.add('installed');
+        }
+
+        if (card.querySelector('.app-delete-badge') === null) {
+            const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
+            if (badgeHtml !== '') {
+                card.insertAdjacentHTML('afterbegin', badgeHtml);
+            }
+        }
     }
 
     public updateCardAttributes(card: HTMLElement, app: IApp): void {
@@ -228,7 +330,7 @@ export class ModuleCardRenderer {
         if (iconWrapper === null) return;
 
         iconWrapper.innerHTML = DOMPurify.sanitize(
-            `<div>${app.icon || '📦'}</div>`,
+            `<div>${app.icon ?? '📦'}</div>`,
             this._purifyConfig,
         );
     }
@@ -238,7 +340,7 @@ export class ModuleCardRenderer {
         if (!(title instanceof HTMLElement)) return;
 
         if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             title.textContent =
                 typeof win.t === 'function'
                     ? win.t('ui.launcher.web.app_title', 'Axelate')
@@ -248,7 +350,7 @@ export class ModuleCardRenderer {
         }
 
         let titleText = app.name ?? '';
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         if (typeof win.t === 'function' && (app.nameKey ?? '') !== '') {
             title.dataset['i18n'] = app.nameKey;
             titleText = win.t(app.nameKey ?? '', titleText);
@@ -263,7 +365,7 @@ export class ModuleCardRenderer {
         if (!(desc instanceof HTMLElement)) return;
 
         let descText = app.desc ?? '';
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         if (typeof win.t === 'function' && (app.descKey ?? '') !== '') {
             desc.dataset['i18n'] = app.descKey ?? '';
             const translated = win.t(app.descKey ?? '', descText);
@@ -316,20 +418,20 @@ export class ModuleCardRenderer {
 
     private _getAppName(app: IApp): string {
         const key = app.nameKey ?? `ui.launcher.module.${app.id}.name`;
-        const g = globalThis as TGlobalWin;
+        const g = getGlobalWin();
         if (typeof g.t === 'function') return g.t(key, app.name ?? app.id);
         return app.name ?? app.id;
     }
 
     private _getAppDesc(app: IApp): string {
         const key = app.descKey ?? `ui.launcher.module.${app.id}.desc`;
-        const g = globalThis as TGlobalWin;
+        const g = getGlobalWin();
         if (typeof g.t === 'function') return g.t(key, app.desc ?? '');
         return app.desc ?? '';
     }
 
     private _getAppTypeBadgeHtml(isApi: boolean, isInstalled: boolean): string {
-        const g = globalThis as TGlobalWin;
+        const g = getGlobalWin();
         let text: string;
         let iconHtml: string;
 
@@ -360,7 +462,7 @@ export class ModuleCardRenderer {
 
     private _getAppDeleteBadgeHtml(isApi: boolean, isInstalled: boolean): string {
         if (isApi || !isInstalled) return '';
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const deleteText =
             typeof win.t === 'function' ? win.t('ui.launcher.module.delete', 'DELETE') : 'DELETE';
 

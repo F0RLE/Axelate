@@ -4,7 +4,7 @@
  */
 
 import { type WindowService } from '../services/WindowService';
-import type { TGlobalWin } from '../types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
 import { logger } from '@/infrastructure/logging/LoggerService';
@@ -19,8 +19,7 @@ export class WindowUI {
     private readonly _cleanupAbort: AbortController = new AbortController();
 
     private _splash: HTMLElement | null = null;
-    private _modulesWarning: HTMLElement | null = null;
-    private _settingsWarning: HTMLElement | null = null;
+    private _globalWarning: HTMLDialogElement | null = null;
     private _maximizeIcon: HTMLElement | null = null;
     private _soundToggle: HTMLElement | null = null;
     private _monitoringTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -65,8 +64,9 @@ export class WindowUI {
      */
     private _cacheElements(): void {
         this._splash = document.getElementById('splash-screen');
-        this._modulesWarning = document.getElementById('modules-width-warning');
-        this._settingsWarning = document.getElementById('settings-width-warning');
+        this._globalWarning = document.getElementById(
+            'global-width-warning',
+        ) as HTMLDialogElement | null;
         this._maximizeIcon = document.getElementById('maximize-icon');
         this._soundToggle = document.getElementById('sound-toggle-btn');
     }
@@ -337,7 +337,7 @@ export class WindowUI {
         if (!this._isSmallScreen) return;
 
         if (this._wasMaximizedOnSmallScreen && !isMaximized) {
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             const width = Math.floor((win.screen.availWidth || win.screen.width) * 0.85);
             const height = Math.floor((win.screen.availHeight || win.screen.height) * 0.85);
 
@@ -366,7 +366,7 @@ export class WindowUI {
         const btn = document.getElementById('maximize-btn');
         if (!btn) return;
 
-        const g = globalThis as TGlobalWin;
+        const g = getGlobalWin();
         const labelKey = isMaximized ? 'ui.launcher.button.restore' : 'ui.launcher.button.maximize';
         const fallback = isMaximized ? 'Restore' : 'Maximize';
         const label = typeof g.t === 'function' ? g.t(labelKey, fallback) : fallback;
@@ -447,7 +447,7 @@ export class WindowUI {
         const zoom = Number.parseFloat(computedStyle.zoom || '1') || 1;
 
         // Calculate effective space available to the layout
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const width = win.innerWidth / zoom;
         const height = win.innerHeight / zoom;
 
@@ -457,30 +457,17 @@ export class WindowUI {
         const minHeight = config?.thresholds.warningHeight ?? 0;
 
         const showWarning = width < minWidth || height < minHeight;
+        const isDuringSplash = this._splash !== null && !this._splash.classList.contains('hidden');
 
-        const modulesPage = document.getElementById('page-modules');
-        const settingsPage = document.getElementById('page-settings');
-
-        const isModulesActive = modulesPage?.classList.contains('active') === true;
-        const isSettingsActive = settingsPage?.classList.contains('active') === true;
-
-        if (this._modulesWarning) {
-            if (showWarning && isModulesActive) {
-                this._modulesWarning.classList.remove('hidden');
-                this._modulesWarning.classList.add('flex-important');
-            } else {
-                this._modulesWarning.classList.remove('flex-important');
-                this._modulesWarning.classList.add('hidden');
-            }
-        }
-
-        if (this._settingsWarning) {
-            if (showWarning && isSettingsActive) {
-                this._settingsWarning.classList.remove('hidden');
-                this._settingsWarning.classList.add('flex-important');
-            } else {
-                this._settingsWarning.classList.remove('flex-important');
-                this._settingsWarning.classList.add('hidden');
+        if (this._globalWarning) {
+            if (showWarning && !isDuringSplash) {
+                if (!this._globalWarning.open) {
+                    this._globalWarning.showModal();
+                    document.body.classList.add('ui-hidden');
+                }
+            } else if (this._globalWarning.open) {
+                this._globalWarning.close();
+                document.body.classList.remove('ui-hidden');
             }
         }
     }
@@ -504,6 +491,7 @@ export class WindowUI {
                 }
                 document.body.classList.remove('no-overflow');
                 this._splashTimeout = null;
+                this._checkWidth(); // Re-evaluate now that splash is gone
             }, 650);
         }
 

@@ -181,6 +181,12 @@ async setDownloadSettings(enabled: boolean, maxSpeed: number) : Promise<void> {
     await TAURI_INVOKE("set_download_settings", { enabled, maxSpeed });
 },
 /**
+ * Cancels an in-progress module download
+ */
+async cancelDownload(moduleId: string) : Promise<boolean> {
+    return await TAURI_INVOKE("cancel_download", { moduleId });
+},
+/**
  * Retrieves real-time system statistics (CPU, RAM, GPU, disk, network)
  */
 async getSystemStats() : Promise<Result<SystemStats, AppError>> {

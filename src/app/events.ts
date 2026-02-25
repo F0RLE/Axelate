@@ -4,7 +4,7 @@
  */
 
 import type { Core } from './init';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 export class EventHandler {
     private readonly _core: Core;
@@ -90,7 +90,7 @@ export class EventHandler {
                 const debugTab = target.closest('.console-tab[data-view]');
                 if (debugTab instanceof HTMLElement) {
                     const view = debugTab.dataset['view'];
-                    const win = globalThis as TGlobalWin;
+                    const win = getGlobalWin();
                     const setLogView = win.setLogView;
                     if (view !== undefined && typeof setLogView === 'function') {
                         setLogView(view, debugTab);
@@ -147,7 +147,7 @@ export class EventHandler {
         this._setupModuleAddBtn(servicesModuleAdd, 'services');
     }
 
-    private _setupModuleCard(card: HTMLElement | null, type: 'ai' | 'services'): void {
+    private _setupModuleCard(card: HTMLElement | null, type: string): void {
         if (!card) return;
         this._addListener(card, 'click', (e): void => {
             const ev = e as MouseEvent;
@@ -160,19 +160,19 @@ export class EventHandler {
             ) {
                 return;
             }
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             if (typeof win.openAppSelection === 'function') {
                 win.openAppSelection(type);
             }
         });
     }
 
-    private _setupModuleAddBtn(btn: HTMLElement | null, type: 'ai' | 'services'): void {
+    private _setupModuleAddBtn(btn: HTMLElement | null, type: string): void {
         if (!btn) return;
         this._addListener(btn, 'click', (e): void => {
             const ev = e as MouseEvent;
             ev.stopPropagation();
-            const win = globalThis as TGlobalWin;
+            const win = getGlobalWin();
             if (typeof win.openAppSelection === 'function') {
                 win.openAppSelection(type);
             }
@@ -204,7 +204,7 @@ export class EventHandler {
     }
 
     private _initLanguageModal(): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const selectLangInModal = win.selectLangInModal;
         const confirmLanguage = win.confirmLanguage;
 
@@ -222,7 +222,7 @@ export class EventHandler {
     }
 
     private _initCloseConfirmModal(): void {
-        const win = globalThis as TGlobalWin;
+        const win = getGlobalWin();
         const hideCloseConfirmModal = win.hideCloseConfirmModal;
         const confirmCloseFromModal = win.confirmCloseFromModal;
 

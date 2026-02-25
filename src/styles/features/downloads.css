@@ -569,3 +569,64 @@
     align-items: center;
     gap: 0.5rem;
 }
+
+/* ─── Dynamic Multi-Download Cards ─────────────────── */
+
+.downloads-dynamic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+}
+
+.download-item-card {
+    animation: downloadCardFadeIn 0.3s ease-out;
+}
+
+.downloads-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.download-cancel-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(220, 53, 69, 0.4);
+    background: rgba(220, 53, 69, 0.15);
+    color: var(--danger, #dc3545);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.download-cancel-btn:hover {
+    background: rgba(220, 53, 69, 0.3);
+    border-color: rgba(220, 53, 69, 0.6);
+    transform: scale(1.05);
+}
+
+.download-cancel-btn .stop-square-icon {
+    width: 12px;
+    height: 12px;
+}
+
+.downloads-bar-inner.indeterminate-bar {
+    animation: indeterminateFlow 1.5s ease-in-out infinite;
+    background: linear-gradient(90deg, transparent, rgba(var(--primary-raw), 0.6), transparent);
+    width: 100% !important;
+}
+
+@keyframes indeterminateFlow {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}

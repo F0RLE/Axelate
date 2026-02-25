@@ -78,3 +78,14 @@ pub fn set_download_settings(
 ) {
     downloader.set_limit(enabled, max_speed);
 }
+
+#[tauri::command]
+#[specta::specta]
+/// Cancels an in-progress module download
+#[allow(clippy::needless_pass_by_value)]
+pub fn cancel_download(
+    downloader: tauri::State<'_, downloader::DownloaderService>,
+    module_id: String,
+) -> bool {
+    downloader.cancel(&module_id)
+}
