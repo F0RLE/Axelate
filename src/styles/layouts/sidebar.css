@@ -589,6 +589,7 @@
         visibility 0.3s;
     overflow: hidden;
     white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* Dragging visibility overrides removed */

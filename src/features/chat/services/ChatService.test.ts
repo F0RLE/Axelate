@@ -33,6 +33,14 @@ describe('ChatService', () => {
         chatService = new ChatService(mockAIBridge, mockI18n);
     });
 
+    it('should return error when AIBridge is not active (L27)', async () => {
+        (mockAIBridge.isActive as any).mockReturnValue(false);
+
+        const result = await chatService.sendMessage('Hello', [], []);
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe('No AI module running. Please launch a module first.');
+    });
+
     it('should return error if message and attachments are empty', async () => {
         const result = await chatService.sendMessage('', [], []);
         expect(result.ok).toBe(false);
@@ -64,5 +72,32 @@ describe('ChatService', () => {
         const result = await chatService.sendMessage('Hi', [], []);
         expect(result.ok).toBe(false);
         expect(result.error).toBe('Network fail');
+    });
+
+    it('should use fallback error when response.error is undefined (L43)', async () => {
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockResolvedValue({ ok: false });
+
+        const result = await chatService.sendMessage('Hello', [], []);
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe('Unknown bridge error');
+    });
+
+    it('should use empty string when response.text is undefined (L49)', async () => {
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockResolvedValue({ ok: true });
+
+        const result = await chatService.sendMessage('Hello', [], []);
+        expect(result.ok).toBe(true);
+        expect(result.message).toBe('');
+    });
+
+    it('should handle non-Error throw in sendMessage (L52)', async () => {
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockRejectedValue('string-error');
+
+        const result = await chatService.sendMessage('Hi', [], []);
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe('Unknown error');
     });
 });

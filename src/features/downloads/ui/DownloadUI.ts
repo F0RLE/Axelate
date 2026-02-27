@@ -7,7 +7,7 @@ import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types
 import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
 import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
-import { NavigationService } from '@/infrastructure/navigation/NavigationService';
+import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
 
 export class DownloadUI {
     private _settings: DownloadSettings = {
@@ -53,6 +53,7 @@ export class DownloadUI {
     constructor(
         private readonly _downloadSettings: DownloadSettingsService,
         private readonly _i18n: I18nService,
+        private readonly _navigation: NavigationService,
     ) {
         this.loadSettings();
     }
@@ -450,7 +451,7 @@ export class DownloadUI {
             controls.style.pointerEvents = this._settings.limitEnabled ? 'auto' : 'none';
         }
         if (overlay) {
-            NavigationService.getInstance().pushBackAction(
+            this._navigation.pushBackAction(
                 'download-settings-overlay',
                 () => {
                     this.closeSettings();
@@ -467,7 +468,7 @@ export class DownloadUI {
      * Closes the download settings overlay.
      */
     public closeSettings(): void {
-        NavigationService.getInstance().removeBackAction('download-settings-overlay');
+        this._navigation.removeBackAction('download-settings-overlay');
         const overlay = document.getElementById(
             DownloadUI.SELECTORS.OVERLAY,
         ) as HTMLDialogElement | null;

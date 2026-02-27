@@ -9,7 +9,7 @@ import { ChatUI } from './ui/ChatUI';
 import type { IChatMessage, IChatResponse } from './types/chatTypes';
 import { chatFileHandler } from './services/ChatFileHandler';
 import { getTokenCount } from './utils/chatUtils';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { SoundService } from '@/shared/services/SoundService';
@@ -39,11 +39,10 @@ export class ChatController {
     // --- Lifecycle ---
 
     public init(): void {
-        logger.info('[Chat] Initializing TS Controller...');
+        tracer.info('[Chat] Initializing TS Controller...');
         void this._ui.init().catch((err: unknown) => {
-            logger.error(`[Chat] UI init failed: ${String(err)}`);
+            tracer.error(`[Chat] UI init failed: ${String(err)}`);
         });
-        this._bindEvents();
 
         chatFileHandler.setUpdateCallback((files, onRemove) => {
             this._ui.updateAttachments(files, onRemove);
@@ -56,11 +55,17 @@ export class ChatController {
             });
         }
 
-        this.randomizeGreeting();
         void this._loadHistory();
+
+        let eventsBound = false;
 
         eventBus.on('page:change', (data) => {
             if (data.pageId === 'chat') {
+                // Bind DOM events the first time the chat page is actually shown
+                if (!eventsBound) {
+                    this._bindEvents();
+                    eventsBound = true;
+                }
                 this.randomizeGreeting();
                 this._ui.refreshTranslations();
             }
@@ -219,7 +224,7 @@ export class ChatController {
     private async _loadHistory(): Promise<void> {
         const history = await this._aiBridge.getHistory();
         if (Array.isArray(history) && history.length > 0) {
-            logger.info(
+            tracer.info(
                 `[ChatController] Restoring ${String(history.length)} messages from persistence`,
             );
 

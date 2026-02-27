@@ -4,16 +4,17 @@ import { ModuleService } from '@/shared/services/ModuleService';
 import { I18nService } from '@/infrastructure/i18n/I18nService';
 import { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import { WindowService } from '@/shared/services/WindowService';
-import { WindowUI } from '@/shared/components/WindowUI';
+import { WindowUI } from '@/shared/shell/WindowUI';
 import { CatalogService } from '@/shared/services/CatalogService';
 import { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
-import { SidebarUI } from '@/shared/components/SidebarUI';
-import { AppUI } from '@/shared/components/AppUI';
+import { SidebarUI } from '@/shared/shell/SidebarUI';
+import { AppUI } from '@/shared/shell/AppUI';
 import { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import { SoundService } from '@/shared/services/SoundService';
-import { logger, type LoggerService } from '@/infrastructure/logging/LoggerService';
+import { tracer, type LoggerService } from '@/infrastructure/logging/LoggerService';
 import { templateLoader } from '@/shared/services/TemplateLoader';
+import { APP_PAGES } from '@/shared/config/AppPages';
 import type { IApp, IBootstrapData } from '@/shared/types/coreTypes';
 import { GlobalBridge } from './bridge';
 import { EventHandler } from './events';
@@ -22,7 +23,7 @@ import { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { AISettingsService } from '@/shared/services/ai/AISettingsService';
 import { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
-import { Particles } from '@/shared/components/Particles';
+import { Particles } from '@/shared/shell/Particles';
 import { MonitoringService } from '@/features/monitoring/services/MonitoringService';
 import { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
 import { DebugService } from '@/features/debug/services/DebugService';
@@ -36,7 +37,7 @@ import { ModulePlatformService } from '@/shared/services/ModulePlatformService';
 export class Core {
     // Services - Made public for EventHandler and GlobalBridge
     public readonly tauriProvider: TauriProvider;
-    public readonly logger: LoggerService;
+    public readonly tracer: LoggerService;
     public readonly i18n: I18nService;
     public readonly windowService: WindowService;
     public readonly moduleService: ModuleService;
@@ -73,12 +74,13 @@ export class Core {
     constructor() {
         // Initialize base services following Section 16 patterns
         this.tauriProvider = new TauriProvider();
-        this.logger = logger;
-        this.logger.init();
-        // Wire transport so logger uses TauriProvider instead of raw __TAURI__ (§4.1)
-        this.logger.setTransport((logs) => this.tauriProvider.invoke('log_batch', { logs }));
+        this.tauriProvider.init();
+        this.tracer = tracer;
+        this.tracer.init();
+        // Wire transport so tracer uses TauriProvider instead of raw __TAURI__ (§4.1)
+        this.tracer.setTransport((logs) => this.tauriProvider.invoke('log_batch', { logs }));
 
-        this.logger.info(`AXELATE v${__APP_VERSION__}`);
+        this.tracer.info(`AXELATE v${__APP_VERSION__}`);
 
         // 2. Init Core Services
         this.stateStore = new UiStateStore(this.tauriProvider);
@@ -91,7 +93,7 @@ export class Core {
         this.windowService = new WindowService(this.tauriProvider);
         this.i18n = new I18nService(this.tauriProvider);
         this.catalog = new CatalogService(this.tauriProvider);
-        this.navigation = NavigationService.getInstance();
+        this.navigation = new NavigationService();
         this.soundService = new SoundService();
         templateLoader.init();
 
@@ -105,12 +107,12 @@ export class Core {
         this.settingsService = new SettingsService(this.tauriProvider);
 
         // 3. Init UI Handlers
-        this.appUI = new AppUI(this.modulePlatformService);
+        this.appUI = new AppUI(this.modulePlatformService, this.navigation);
         this.i18nUI = new I18nUI(this.i18n);
         this.windowUI = new WindowUI(this.windowService, this.uiSettings, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.uiSettings, this.soundService);
-        this.downloadUI = new DownloadUI(this.downloadSettings, this.i18n);
+        this.downloadUI = new DownloadUI(this.downloadSettings, this.i18n, this.navigation);
         this.downloadUI.setOnCancel((moduleId: string) => {
             void this.modulePlatformService.cancelDownload(moduleId);
         });
@@ -120,6 +122,7 @@ export class Core {
             this.aiSettings,
             this.i18nUI,
             this.tauriProvider,
+            this.navigation,
         );
         this.particles = new Particles();
         this.monitoringUI = new MonitoringUI(this.monitoringService);
@@ -143,11 +146,11 @@ export class Core {
      * Executes the core initialization sequence with hardened survival logic.
      */
     public async init(): Promise<void> {
-        this.logger.debug('[Core] Init sequence started.');
+        this.tracer.debug('[Core] Init sequence started.');
 
         // 1. Emergency Safety Timeout (Guarantee splash disappears)
         const safetyTimeout = setTimeout(() => {
-            this.logger.warn('[Core] Emergency bootstrap timeout triggered! Forcing UI reveal.');
+            this.tracer.warn('[Core] Emergency bootstrap timeout triggered! Forcing UI reveal.');
             this.windowUI.hideSplashScreen();
         }, 12000);
 
@@ -157,11 +160,15 @@ export class Core {
             bootstrapData = await this._fetchBootstrapData();
 
             // 4. Critical Service hydration
+            const pagePromises = APP_PAGES.map((page) =>
+                templateLoader.loadAndInject(`pages/${page.id}`, `page-${page.id}`),
+            );
+
             const templateLoadPromise = Promise.all([
                 templateLoader.loadAndInject('components/sidebar', 'sidebar'),
-                templateLoader.loadAndInject('pages/settings', 'page-settings'),
+                ...pagePromises,
             ]).catch((e: unknown) => {
-                this.logger.error(`[Core] Template loading failed: ${String(e)}`);
+                this.tracer.error(`[Core] Template loading failed: ${String(e)}`);
             });
 
             if (bootstrapData === null) {
@@ -179,7 +186,7 @@ export class Core {
                     this.windowUI.init();
                     await this.i18n.init(bootstrapData.systemLanguage);
                 } catch (e) {
-                    this.logger.warn(`[Core] Fast-path init failed: ${String(e)}`);
+                    this.tracer.warn(`[Core] Fast-path init failed: ${String(e)}`);
                 }
                 await templateLoadPromise;
             }
@@ -219,7 +226,7 @@ export class Core {
 
             this.debugUI.init();
         } catch (e) {
-            this.logger.error(`[Core] Critical bootstrap failure: ${String(e)}`);
+            this.tracer.error(`[Core] Critical bootstrap failure: ${String(e)}`);
         } finally {
             clearTimeout(safetyTimeout);
         }
@@ -227,7 +234,7 @@ export class Core {
         this._initGlobalShortcuts();
 
         // 8. Controlled Reveal - Sync with CSS
-        this.logger.debug('[Core] App Ready. Hiding splash...');
+        this.tracer.debug('[Core] App Ready. Hiding splash...');
 
         // Wait for splash animation (min 2s)
         await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
@@ -246,7 +253,7 @@ export class Core {
             });
         }, 50); // Almost immediate, let opacity handles transition
 
-        this.logger.info('[Core] Ready.');
+        this.tracer.info('[Core] Ready.');
     }
 
     /**
@@ -270,7 +277,7 @@ export class Core {
      * Restores module selection from state.
      */
     private _restoreSelectedModules(): void {
-        this.logger.debug('[Core] Restoring selected modules...');
+        this.tracer.debug('[Core] Restoring selected modules...');
         const selected = this.moduleSettings.getSelectedModules();
 
         for (const category of ['ai', 'services']) {
@@ -301,7 +308,7 @@ export class Core {
 
             // Auto-start AI provider if it's the AI module
             if (category === 'ai') {
-                this.logger.info(`[Core] Auto-starting saved AI provider: ${savedAppId}`);
+                this.tracer.info(`[Core] Auto-starting saved AI provider: ${savedAppId}`);
                 void aiBridge.startProvider(savedAppId);
             }
         }
@@ -323,12 +330,12 @@ export class Core {
             );
 
             const result = await Promise.race([bootstrapPromise, timeoutPromise]);
-            this.logger.debug(
+            this.tracer.debug(
                 `[Core] Bootstrap result: ${result === null ? 'Timed out' : 'Data fetched'}`,
             );
             return result;
         } catch (e) {
-            this.logger.warn(`[Core] Bootstrap IPC failed: ${String(e)}`);
+            this.tracer.warn(`[Core] Bootstrap IPC failed: ${String(e)}`);
             return null;
         }
     }
@@ -337,7 +344,7 @@ export class Core {
 document.addEventListener('DOMContentLoaded', () => {
     const coreInstance = new Core();
     coreInstance.init().catch((e: unknown) => {
-        logger.error(`[Core] Boot failed: ${String(e)}`);
+        tracer.error(`[Core] Boot failed: ${String(e)}`);
     });
 
     const win = globalThis as unknown as Window & { core: Core };

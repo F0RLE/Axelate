@@ -3,18 +3,45 @@
  * @description Exposes core functionality to the global window object
  */
 
-import type { Core } from './init';
+import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
+import type { AppUI } from '@/shared/shell/AppUI';
+import type { CatalogService } from '@/shared/services/CatalogService';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { ModuleService } from '@/shared/services/ModuleService';
+import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
+import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { WindowService } from '@/shared/services/WindowService';
+import type { WindowUI } from '@/shared/shell/WindowUI';
 import type { IApp } from '@/shared/types/coreTypes';
+import type { IAICatalogApp } from '@/features/ai/types/aiTypes';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import { resolveProviderModel } from '@/features/ai/utils/catalogHelpers';
+import { aiBridge } from '@/features/ai/services/AIBridge';
+
+export interface ICoreBridge {
+    readonly aiSettings: AISettingsService;
+    readonly appUI: AppUI;
+    readonly catalog: CatalogService;
+    readonly i18n: I18nService;
+    readonly i18nUI: I18nUI;
+    readonly tracer: LoggerService;
+    readonly moduleService: ModuleService;
+    readonly navigationUI: NavigationUI;
+    readonly tauriProvider: TauriProvider;
+    readonly windowService: WindowService;
+    readonly windowUI: WindowUI;
+}
 
 /**
  * GlobalBridge handles the exposure of core services to the global window object.
  * This decouples legacy bridge logic and boilerplate from the main Core orchestrator.
  */
 export class GlobalBridge {
-    private readonly _core: Core;
+    private readonly _core: ICoreBridge;
 
-    constructor(core: Core) {
+    constructor(core: ICoreBridge) {
         this._core = core;
     }
 
@@ -107,7 +134,7 @@ export class GlobalBridge {
                 apps = [];
             }
 
-            this._core.logger.info(
+            this._core.tracer.info(
                 `[GlobalBridge] openAppSelection requested for ${cat}. Found ${String(apps.length)} apps.`,
             );
             this._core.appUI.openAppSelection(cat, apps);
@@ -135,10 +162,9 @@ export class GlobalBridge {
 
         // App Launching
         win.launchApp = async (id: string): Promise<void> => {
-            this._core.logger.debug(`[GlobalBridge] Launching App: ${id}`);
+            this._core.tracer.debug(`[GlobalBridge] Launching App: ${id}`);
 
             // Activate the AI provider so isActive() returns true
-            const { aiBridge } = await import('@/features/ai/services/AIBridge');
             await aiBridge.startProvider(id);
 
             if (this._core.tauriProvider.isTauri()) {
@@ -153,17 +179,17 @@ export class GlobalBridge {
                         result.provider !== undefined &&
                         result.provider !== ''
                     ) {
-                        localStorage.setItem('selected_ai_provider', result.provider);
+                        this._core.aiSettings.setLastActiveProvider(result.provider);
                     } else if (result.action === 'start_local') {
                         await this._core.moduleService.control(id, 'start');
                     }
                 } catch (err) {
-                    this._core.logger.error('[GlobalBridge] Launch module failed:', err);
+                    this._core.tracer.error('[GlobalBridge] Launch module failed:', err);
                 }
             } else {
                 const apiModules = ['gpt', 'gemini', 'claude', 'mistral', 'axelate-localai'];
                 if (apiModules.includes(id)) {
-                    localStorage.setItem('selected_ai_provider', id);
+                    this._core.aiSettings.setLastActiveProvider(id);
                 }
             }
         };
@@ -216,24 +242,24 @@ export class GlobalBridge {
             minimize: async () => {
                 if (this._core.tauriProvider.isTauri())
                     await this._core.tauriProvider.invoke('minimize_window');
-                else this._core.logger.debug('[AxelateAPI] minimize (no Tauri)');
+                else this._core.tracer.debug('[AxelateAPI] minimize (no Tauri)');
             },
             toggleMaximize: async () => {
                 if (this._core.tauriProvider.isTauri())
                     await this._core.tauriProvider.invoke('toggle_maximize');
-                else this._core.logger.debug('[AxelateAPI] toggleMaximize (no Tauri)');
+                else this._core.tracer.debug('[AxelateAPI] toggleMaximize (no Tauri)');
             },
             close: async () => {
                 if (this._core.tauriProvider.isTauri())
                     await this._core.tauriProvider.invoke('close_window');
-                else this._core.logger.debug('[AxelateAPI] close (no Tauri)');
+                else this._core.tracer.debug('[AxelateAPI] close (no Tauri)');
             },
             secureStorage: {
                 save: async (service: string, key: string) => {
                     if (this._core.tauriProvider.isTauri()) {
                         await this._core.tauriProvider.invoke('save_secure_key', { service, key });
                     } else {
-                        this._core.logger.warn(
+                        this._core.tracer.warn(
                             `[AxelateAPI] Secure storage not available in web mode. Key not persisted for: ${service}`,
                         );
                         // Security: Do not persist keys in localStorage/sessionStorage
@@ -255,7 +281,7 @@ export class GlobalBridge {
         const originalFetch = g.fetch;
 
         if (typeof originalFetch !== 'function') {
-            this._core.logger.warn(
+            this._core.tracer.warn(
                 '[GlobalBridge] fetch is not defined on globalThis, skipping interceptor',
             );
             return;
@@ -264,8 +290,8 @@ export class GlobalBridge {
         const boundFetch = originalFetch.bind(g);
 
         g.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            let url = '';
             try {
-                let url: string;
                 if (typeof input === 'string') {
                     url = input;
                 } else if (input instanceof URL) {
@@ -291,8 +317,10 @@ export class GlobalBridge {
 
                 return await boundFetch(input, init);
             } catch (err) {
-                this._core.logger.error('[GlobalBridge] Fetch interceptor error:', err);
-                return boundFetch(input, init);
+                if (!url.startsWith('ipc:') && !url.includes('ipc.localhost')) {
+                    this._core.tracer.error('[GlobalBridge] Fetch interceptor error:', err);
+                }
+                throw err;
             }
         };
     }
@@ -306,7 +334,7 @@ export class GlobalBridge {
             const body = JSON.parse(bodyStr) as Record<string, unknown>;
             const provider =
                 (body['provider'] as string | undefined) ??
-                localStorage.getItem('selected_ai_provider') ??
+                this._core.aiSettings.getLastActiveProvider() ??
                 'gpt';
 
             const model = (body['model'] as string | undefined) ?? this._resolveModel(provider);
@@ -321,67 +349,19 @@ export class GlobalBridge {
             });
             return new Response(JSON.stringify(res));
         } catch (e) {
-            this._core.logger.error('[GlobalBridge] Chat Request Error:', e);
+            this._core.tracer.error('[GlobalBridge] Chat Request Error:', e);
             return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
         }
     }
 
     /**
-     * Resolves the appropriate model for a provider.
+     * Resolves the appropriate API model ID for a provider.
      */
     private _resolveModel(provider: string): string {
-        const savedKey = localStorage.getItem(`${provider}_selected_model`);
-        const catalog = this._core.catalog.getCatalog();
-        const appList = catalog.ai;
-        const providerApp = appList.find((a) => a.id === provider);
-
-        // Define shape of provider data
-        interface ProviderData {
-            models?: Record<
-                string,
-                {
-                    apiModels?: { text?: string };
-                    stats?: { logic?: number; creative?: number };
-                }
-            >;
-        }
-
-        const data = providerApp?.apiProviderData as unknown as ProviderData | undefined;
-        const models = data?.models ?? {};
-
-        // 1. Saved model
-        if (savedKey !== null && savedKey !== '') return this._getApiId(savedKey, models);
-
-        // 2. Default (most powerful)
-        const sortedKeys = this._sortModelsByPower(models);
-        const defaultKey = sortedKeys[0] ?? '';
-
-        return this._getApiId(defaultKey, models);
-    }
-
-    /**
-     * Returns the API ID for a model key.
-     */
-    private _getApiId(
-        key: string,
-        models: Record<string, { apiModels?: { text?: string } }>,
-    ): string {
-        const modelData = models[key];
-        return modelData?.apiModels?.text ?? key;
-    }
-
-    /**
-     * Sorts models by power level.
-     */
-    private _sortModelsByPower(
-        models: Record<string, { stats?: { logic?: number; creative?: number } }>,
-    ): string[] {
-        return Object.keys(models).sort((a, b) => {
-            const statsA = models[a]?.stats;
-            const statsB = models[b]?.stats;
-            const powerA = (statsA?.logic ?? 0) + (statsA?.creative ?? 0);
-            const powerB = (statsB?.logic ?? 0) + (statsB?.creative ?? 0);
-            return powerB - powerA;
-        });
+        return resolveProviderModel(
+            provider,
+            this._core.catalog.getCatalog().ai as unknown as IAICatalogApp[],
+            (p) => this._core.aiSettings.getSelectedAIModel(p),
+        );
     }
 }

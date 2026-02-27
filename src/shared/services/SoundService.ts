@@ -3,7 +3,7 @@
  * @description Provides audio feedback for UI interactions
  */
 
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 interface ISoundGlobal {
     AudioContext?: typeof AudioContext;
@@ -34,7 +34,7 @@ export class SoundService {
                 this._ctx = new AudioContextClass();
             }
         } catch {
-            logger.warn('[SoundService] AudioContext not available');
+            tracer.warn('[SoundService] AudioContext not available');
         }
     }
 
@@ -49,11 +49,11 @@ export class SoundService {
 
         if (this._ctx && this._ctx.state !== 'closed') {
             this._ctx.close().catch((e: unknown) => {
-                logger.error(`[SoundService] Error closing context: ${String(e)}`);
+                tracer.error(`[SoundService] Error closing context: ${String(e)}`);
             });
         }
 
-        logger.debug('[SoundService] Destroyed.');
+        tracer.debug('[SoundService] Destroyed.');
     }
 
     /**
@@ -241,10 +241,8 @@ export class SoundService {
                 this._lastHovered = null;
             }
 
-            // Badge/Corner expansion sounds
-            if (e.target instanceof Element) {
-                this._handleExpansionSounds(e.target);
-            }
+            // Badge/Corner expansion sounds — target is guaranteed Element (crash at L231 otherwise)
+            this._handleExpansionSounds(e.target as Element);
         };
 
         // 2. Mouse Out

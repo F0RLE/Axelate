@@ -3,18 +3,18 @@
  * @description Main dashboard UI component. Currently a placeholder for future widgets and charts.
  */
 
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class DashboardUI {
     constructor() {
-        logger.info('[DashboardUI] Constructed');
+        tracer.info('[DashboardUI] Constructed');
     }
 
     /**
      * Initializes the dashboard UI.
      */
     public init(): void {
-        logger.info('[DashboardUI] Initialized');
+        tracer.info('[DashboardUI] Initialized');
         // Dashboard widgets and data visualization will be added here in future releases.
     }
 
@@ -22,6 +22,6 @@ export class DashboardUI {
      * Cleans up the dashboard UI resources.
      */
     public destroy(): void {
-        logger.info('[DashboardUI] Destroyed.');
+        tracer.info('[DashboardUI] Destroyed.');
     }
 }

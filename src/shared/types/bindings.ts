@@ -440,7 +440,8 @@ async saveZoomLevel(zoom: number) : Promise<Result<null, AppError>> {
 }
 },
 /**
- * Set `WebView` zoom level and persist for current resolution
+ * Set `WebView` zoom level and persist for current resolution.
+ * This is the ONLY place that saves zoom — always saves both global and per-resolution.
  */
 async setWebviewZoom(zoom: number) : Promise<Result<null, AppError>> {
     try {
@@ -462,7 +463,8 @@ async getWebviewZoom() : Promise<Result<number, AppError>> {
 }
 },
 /**
- * Get initial zoom for a resolution. Calculates default if not exists.
+ * Get the effective zoom for the current monitor resolution.
+ * Read-only — never auto-saves, so "user set" is always distinguishable from "defaulted".
  */
 async getResolutionZoom() : Promise<Result<number, AppError>> {
     try {
@@ -892,7 +894,7 @@ systemLanguage: string;
  */
 modules: Module[]; 
 /**
- * Calculated initial zoom level
+ * Effective zoom for the current monitor resolution
  */
 initialZoom: number }
 /**

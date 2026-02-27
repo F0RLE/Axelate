@@ -1,6 +1,6 @@
 import type { IChatRequest, IChatResponse, IBridgeResponse } from '../types/aiTypes';
 import type { Core } from '@/app/init';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export interface IChatTransport {
     init(): Promise<void>;
@@ -27,7 +27,7 @@ export class AIChatTransport implements IChatTransport {
             // Setup global listener for streaming chunks if needed here,
             // or let the bridge handle the subscription via onStream.
             // For now, we follow the pattern that Transport manages the low-level listener.
-            logger.info('[AIChatTransport] Transport initialized');
+            tracer.info('[AIChatTransport] Transport initialized');
         }
         await Promise.resolve();
     }
@@ -54,7 +54,7 @@ export class AIChatTransport implements IChatTransport {
             return await Promise.race([invokePromise, timeoutPromise]);
         } catch (error: unknown) {
             const errorMsg = error instanceof Error ? error.message : 'Transport failure';
-            logger.error('[AIChatTransport] IPC error:', error);
+            tracer.error('[AIChatTransport] IPC error:', error);
             return { ok: false, error: errorMsg };
         }
     }

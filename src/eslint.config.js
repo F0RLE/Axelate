@@ -105,7 +105,15 @@ export default [
             '@typescript-eslint/only-throw-error': 'error',
             '@typescript-eslint/no-floating-promises': 'error',
             '@typescript-eslint/await-thenable': 'error',
-            '@typescript-eslint/no-misused-promises': 'error',
+            '@typescript-eslint/no-misused-promises': [
+                'error',
+                {
+                    // Allow async functions as callbacks to args typed as () => void.
+                    // This is needed for vitest/jest `it('...', async () => {...})` pattern,
+                    // where the test runner types the callback as `() => void` but accepts Promise.
+                    checksVoidReturn: { arguments: false },
+                },
+            ],
             '@typescript-eslint/require-await': 'error',
             '@typescript-eslint/strict-boolean-expressions': 'error',
             '@typescript-eslint/no-unnecessary-condition': 'error',

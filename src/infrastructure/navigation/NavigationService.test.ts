@@ -3,7 +3,7 @@ import { NavigationService } from '@/infrastructure/navigation/NavigationService
 
 // Mock LoggerService
 vi.mock('@/infrastructure/logging/LoggerService', () => ({
-    logger: {
+    tracer: {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
@@ -15,10 +15,7 @@ describe('NavigationService', () => {
     let navService: NavigationService;
 
     beforeEach(() => {
-        // Reset singleton for each test
-        // Access private static property for testing
-        (NavigationService as unknown as { _instance: NavigationService | null })._instance = null;
-        navService = NavigationService.getInstance();
+        navService = new NavigationService();
     });
 
     afterEach(() => {
@@ -26,15 +23,6 @@ describe('NavigationService', () => {
         const win = globalThis as unknown as Record<string, unknown>;
         delete win['navigationService'];
         delete win['navigate'];
-    });
-
-    describe('getInstance', () => {
-        it('should return singleton instance', () => {
-            const instance1 = NavigationService.getInstance();
-            const instance2 = NavigationService.getInstance();
-
-            expect(instance1).toBe(instance2);
-        });
     });
 
     describe('navigate', () => {
@@ -141,10 +129,7 @@ describe('NavigationService', () => {
 
     describe('getCurrentPage', () => {
         it('should return undefined when no navigation has occurred', () => {
-            // Reset to fresh instance
-            (NavigationService as unknown as { _instance: NavigationService | null })._instance =
-                null;
-            const freshService = NavigationService.getInstance();
+            const freshService = new NavigationService();
 
             expect(freshService.getCurrentPage()).toBeUndefined();
         });
@@ -189,7 +174,7 @@ describe('NavigationService', () => {
 
         it('should handle empty last page', () => {
             const mockUiState = {
-                getLastPage: vi.fn().mockReturnValue(''),
+                last_page: '', // Fix: use last_page property instead of getLastPage method
             };
 
             const win = globalThis as unknown as Record<string, unknown>;
@@ -201,6 +186,158 @@ describe('NavigationService', () => {
             expect(navService.getCurrentPage()).toBeUndefined();
 
             delete win['uiState'];
+        });
+
+        it('should handle uiState with non-string last_page gracefully (Line 40)', () => {
+            const mockUiState = {
+                last_page: null,
+            };
+
+            const win = globalThis as unknown as Record<string, unknown>;
+            win['uiState'] = mockUiState;
+
+            navService.refreshFromUiState();
+
+            // Should not throw, page should be undefined
+            expect(navService.getCurrentPage()).toBeUndefined();
+
+            delete win['uiState'];
+        });
+
+        it('should handle uiState existing but without last_page property (Line 40)', () => {
+            const mockUiState = {};
+
+            const win = globalThis as unknown as Record<string, unknown>;
+            win['uiState'] = mockUiState;
+
+            navService.refreshFromUiState();
+
+            // Should not throw, page should be undefined
+            expect(navService.getCurrentPage()).toBeUndefined();
+
+            delete win['uiState'];
+        });
+    });
+
+    describe('setCurrentPage with isHistoryNav', () => {
+        it('should not modify history stack when isHistoryNav is true', () => {
+            navService.navigate('home');
+            navService.setCurrentPage('settings', true);
+            expect(navService.getCurrentPage()).toBe('home');
+        });
+
+        it('should update UISettingsService last page when isHistoryNav is true', () => {
+            const mockUiSettings = { setLastPage: vi.fn() };
+            navService.setUISettingsService(
+                mockUiSettings as unknown as Parameters<typeof navService.setUISettingsService>[0],
+            );
+            navService.navigate('home');
+            navService.setCurrentPage('settings', true);
+            expect(mockUiSettings.setLastPage).toHaveBeenCalledWith('settings');
+        });
+    });
+
+    describe('setUISettingsService', () => {
+        it('should persist page via UISettingsService on navigate', () => {
+            const mockUiSettings = { setLastPage: vi.fn() };
+            navService.setUISettingsService(
+                mockUiSettings as unknown as Parameters<typeof navService.setUISettingsService>[0],
+            );
+            navService.navigate('dashboard');
+            expect(mockUiSettings.setLastPage).toHaveBeenCalledWith('dashboard');
+        });
+    });
+
+    describe('pushBackAction', () => {
+        it('should push action with forwardAction', () => {
+            const action = vi.fn();
+            const forwardAction = vi.fn();
+            navService.pushBackAction('modal', action, forwardAction);
+            const result = navService.popBackAction();
+            expect(result).toBe(true);
+            expect(action).toHaveBeenCalled();
+        });
+
+        it('should deduplicate by id', () => {
+            const action1 = vi.fn();
+            const action2 = vi.fn();
+            navService.pushBackAction('modal', action1);
+            navService.pushBackAction('modal', action2);
+            navService.popBackAction();
+            expect(action1).not.toHaveBeenCalled();
+            expect(action2).toHaveBeenCalled();
+        });
+    });
+
+    describe('removeBackAction', () => {
+        it('should remove action by id', () => {
+            navService.pushBackAction('modal', vi.fn());
+            navService.removeBackAction('modal');
+            expect(navService.popBackAction()).toBe(false);
+        });
+
+        it('should do nothing when id not found', () => {
+            navService.removeBackAction('nonexistent');
+            expect(navService.popBackAction()).toBe(false);
+        });
+    });
+
+    describe('popBackAction with forward', () => {
+        it('should push to forward stack when forwardAction exists', () => {
+            const forwardAction = vi.fn();
+            navService.pushBackAction('modal', vi.fn(), forwardAction);
+            navService.popBackAction();
+            // Now forward action should be in forward stack
+            const result = navService.popForwardAction();
+            expect(result).toBe(true);
+            expect(forwardAction).toHaveBeenCalled();
+        });
+
+        it('should return false when no actions', () => {
+            expect(navService.popBackAction()).toBe(false);
+        });
+
+        it('should not push to forward stack when forwardAction is undefined (Line 154)', () => {
+            navService.pushBackAction('modal', vi.fn());
+            navService.popBackAction();
+            // forwardAction is undefined, so forward stack should be empty
+            const result = navService.popForwardAction();
+            expect(result).toBe(false);
+        });
+
+        it('should return false when actionInfo is falsy (Line 154)', () => {
+            // Unrealistic in normal usage due to TS types, but good for defensive coverage
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (navService as any)._actionStack.push(undefined);
+            expect(navService.popBackAction()).toBe(false);
+        });
+    });
+
+    describe('popForwardAction', () => {
+        it('should return false when forward stack empty', () => {
+            expect(navService.popForwardAction()).toBe(false);
+        });
+
+        it('should return false when forward stack pops undefined/null (Line 178)', () => {
+            // Unrealistic in normal usage due to TS types, but good for defensive coverage
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (navService as any)._forwardActionStack.push(undefined);
+            expect(navService.popForwardAction()).toBe(false);
+        });
+    });
+
+    describe('clearForwardActions', () => {
+        it('should clear forward actions stack', () => {
+            const forwardAction = vi.fn();
+            navService.pushBackAction('modal', vi.fn(), forwardAction);
+            navService.popBackAction();
+            navService.clearForwardActions();
+            expect(navService.popForwardAction()).toBe(false);
+        });
+
+        it('should do nothing when already empty', () => {
+            navService.clearForwardActions();
+            expect(navService.popForwardAction()).toBe(false);
         });
     });
 });

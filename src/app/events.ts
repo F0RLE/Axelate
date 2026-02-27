@@ -3,15 +3,35 @@
  * @description Centralized event handling and global listeners using delegation
  */
 
-import type { Core } from './init';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import type { AppUI } from '@/shared/shell/AppUI';
+import type { ChatController } from '@/features/chat/chat';
+import type { DebugUI } from '@/features/debug/ui/DebugUI';
+import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
+import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
+import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
+import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
+import type { WindowService } from '@/shared/services/WindowService';
+import type { WindowUI } from '@/shared/shell/WindowUI';
+import { tracer } from '@/infrastructure/logging/LoggerService';
+
+export interface ICoreEvents {
+    readonly appUI: AppUI;
+    readonly chatController: ChatController;
+    readonly debugUI: DebugUI;
+    readonly downloadUI: DownloadUI;
+    readonly i18nUI: I18nUI;
+    readonly navigationUI: NavigationUI;
+    readonly settingsUI: SettingsUI;
+    readonly windowService: WindowService;
+    readonly windowUI: WindowUI;
+}
 
 export class EventHandler {
-    private readonly _core: Core;
+    private readonly _core: ICoreEvents;
     private _unsubscribers: (() => void)[] = [];
     private readonly _cleanupAbort: AbortController = new AbortController();
 
-    constructor(core: Core) {
+    constructor(core: ICoreEvents) {
         this._core = core;
     }
 
@@ -32,8 +52,7 @@ export class EventHandler {
         this._initModuleSettingsModal();
         this._initDownloadSpeedSettings();
 
-        // eslint-disable-next-line no-console
-        console.debug('[EventHandler] Initialized with delegation.');
+        tracer.debug('[EventHandler] Initialized with delegation.');
     }
 
     /**
@@ -51,8 +70,7 @@ export class EventHandler {
                     const pageId = navBtn.dataset['page'];
                     if (pageId !== undefined) {
                         e.preventDefault();
-                        // eslint-disable-next-line no-console
-                        console.debug('[EventHandler] Navigating to:', pageId);
+                        tracer.debug(`[EventHandler] Navigating to: ${pageId}`);
                         void this._core.navigationUI.showPage(pageId, navBtn);
                         return;
                     }
@@ -72,8 +90,7 @@ export class EventHandler {
                     const lang = langBtn.dataset['lang'];
                     if (lang !== undefined) {
                         e.preventDefault();
-                        // eslint-disable-next-line no-console
-                        console.debug('[EventHandler] Switching language to:', lang);
+                        tracer.debug(`[EventHandler] Switching language to: ${lang}`);
                         await this._core.i18nUI.setLanguage(lang);
                         return;
                     }
@@ -90,10 +107,8 @@ export class EventHandler {
                 const debugTab = target.closest('.console-tab[data-view]');
                 if (debugTab instanceof HTMLElement) {
                     const view = debugTab.dataset['view'];
-                    const win = getGlobalWin();
-                    const setLogView = win.setLogView;
-                    if (view !== undefined && typeof setLogView === 'function') {
-                        setLogView(view, debugTab);
+                    if (view !== undefined) {
+                        this._core.debugUI.setTab(view);
                     }
                 }
             })();
@@ -109,8 +124,7 @@ export class EventHandler {
             fn();
         });
         this._unsubscribers = [];
-        // eslint-disable-next-line no-console
-        console.debug('[EventHandler] Destroyed and listeners removed.');
+        tracer.debug('[EventHandler] Destroyed and listeners removed.');
     }
 
     /**
@@ -136,45 +150,36 @@ export class EventHandler {
     }
 
     private _initAppModuleCards(): void {
-        const aiModuleCard = document.getElementById('ai-module-card');
-        const aiModuleAdd = document.getElementById('ai-module-add-btn');
-        const servicesModuleCard = document.getElementById('services-module-card');
-        const servicesModuleAdd = document.getElementById('services-module-add-btn');
-
-        this._setupModuleCard(aiModuleCard, 'ai');
-        this._setupModuleAddBtn(aiModuleAdd, 'ai');
-        this._setupModuleCard(servicesModuleCard, 'services');
-        this._setupModuleAddBtn(servicesModuleAdd, 'services');
-    }
-
-    private _setupModuleCard(card: HTMLElement | null, type: string): void {
-        if (!card) return;
-        this._addListener(card, 'click', (e): void => {
+        // Use event delegation because the module cards live in a template
+        // that is loaded asynchronously AFTER this init runs.
+        // Direct getElementById would return null at init time.
+        this._addListener(document.body, 'click', (e): void => {
             const ev = e as MouseEvent;
             const target = ev.target;
             if (!(target instanceof HTMLElement)) return;
-            if (
-                target.closest(
-                    '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
-                )
-            ) {
+
+            // Check if click is inside a module add button (has priority)
+            const addBtn = target.closest('#ai-module-add-btn, #services-module-add-btn');
+            if (addBtn instanceof HTMLElement) {
+                ev.stopPropagation();
+                const type = addBtn.id === 'ai-module-add-btn' ? 'ai' : 'services';
+                this._core.appUI.openAppSelection(type);
                 return;
             }
-            const win = getGlobalWin();
-            if (typeof win.openAppSelection === 'function') {
-                win.openAppSelection(type);
-            }
-        });
-    }
 
-    private _setupModuleAddBtn(btn: HTMLElement | null, type: string): void {
-        if (!btn) return;
-        this._addListener(btn, 'click', (e): void => {
-            const ev = e as MouseEvent;
-            ev.stopPropagation();
-            const win = getGlobalWin();
-            if (typeof win.openAppSelection === 'function') {
-                win.openAppSelection(type);
+            // Check if click is inside a module card
+            const card = target.closest('#ai-module-card, #services-module-card');
+            if (card instanceof HTMLElement) {
+                // Skip if clicked on action elements inside the card
+                if (
+                    target.closest(
+                        '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
+                    )
+                ) {
+                    return;
+                }
+                const type = card.id === 'ai-module-card' ? 'ai' : 'services';
+                this._core.appUI.openAppSelection(type);
             }
         });
     }
@@ -189,48 +194,63 @@ export class EventHandler {
     }
 
     private _initChatPage(): void {
-        this._addListener(document.getElementById('clear-chat-btn'), 'click', () => {
-            this._core.chatController.clearChat();
+        // All chat elements live in chat.html which is loaded asynchronously —
+        // getElementById returns null at init time, so direct binding silently fails.
+        // Use delegation on document.body for both click and keydown.
+
+        this._addListener(document.body, 'click', (e: Event) => {
+            const target = (e as MouseEvent).target as HTMLElement | null;
+            if (!target) return;
+
+            if (target.closest('#clear-chat-btn')) {
+                this._core.chatController.clearChat();
+                return;
+            }
+            if (target.closest('#chat-attach-btn')) {
+                void this._core.chatController.pickChatFiles();
+                return;
+            }
+            if (target.closest('#chat-voice-btn')) {
+                this._core.chatController.toggleVoiceInput();
+                return;
+            }
+            if (target.closest('#chat-send-btn')) {
+                void this._core.chatController.sendChat();
+            }
         });
-        this._addListener(document.getElementById('chat-attach-btn'), 'click', () => {
-            void this._core.chatController.pickChatFiles();
-        });
-        this._addListener(document.getElementById('chat-voice-btn'), 'click', () => {
-            this._core.chatController.toggleVoiceInput();
-        });
-        this._addListener(document.getElementById('chat-send-btn'), 'click', () => {
-            void this._core.chatController.sendChat();
+
+        // Enter = send, Shift+Enter = newline
+        this._addListener(document.body, 'keydown', (e: Event) => {
+            const ke = e as KeyboardEvent;
+            if (!(ke.target instanceof HTMLElement)) return;
+            if (ke.target.id !== 'chat-input') return;
+            if (ke.key === 'Enter' && !ke.shiftKey) {
+                ke.preventDefault();
+                void this._core.chatController.sendChat();
+            }
         });
     }
 
     private _initLanguageModal(): void {
-        const win = getGlobalWin();
-        const selectLangInModal = win.selectLangInModal;
-        const confirmLanguage = win.confirmLanguage;
-
         document.querySelectorAll<HTMLElement>('.lang-modal-btn[data-lang]').forEach((btn) => {
             this._addListener(btn, 'click', () => {
                 const lang = btn.dataset['lang'];
-                if (lang !== undefined && typeof selectLangInModal === 'function') {
-                    selectLangInModal(lang);
+                if (lang !== undefined) {
+                    this._core.i18nUI.selectLangInModal(lang);
                 }
             });
         });
         this._addListener(document.getElementById('confirm-lang-btn'), 'click', () => {
-            if (typeof confirmLanguage === 'function') confirmLanguage();
+            void this._core.i18nUI.confirmLanguage();
         });
     }
 
     private _initCloseConfirmModal(): void {
-        const win = getGlobalWin();
-        const hideCloseConfirmModal = win.hideCloseConfirmModal;
-        const confirmCloseFromModal = win.confirmCloseFromModal;
-
         this._addListener(document.getElementById('cancel-close-btn'), 'click', () => {
-            if (typeof hideCloseConfirmModal === 'function') hideCloseConfirmModal();
+            this._core.windowUI.hideCloseConfirmModal();
         });
         this._addListener(document.getElementById('confirm-close-btn'), 'click', () => {
-            if (typeof confirmCloseFromModal === 'function') confirmCloseFromModal();
+            this._core.windowUI.confirmCloseFromModal();
         });
     }
 

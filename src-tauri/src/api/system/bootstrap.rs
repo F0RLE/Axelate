@@ -1,3 +1,4 @@
+use crate::api::settings::window_settings::{res_key_from_window, resolve_zoom};
 use crate::domain::modules::controller as module_controller;
 use crate::errors::AppError;
 use crate::infrastructure::config::window_settings::WindowConfig;
@@ -5,7 +6,7 @@ use crate::infrastructure::config::{settings, ui_state, window_settings};
 use crate::models::{Module, UIState};
 use serde::Serialize;
 use specta::Type;
-use tauri::Window;
+use tauri::WebviewWindow;
 
 /// Application bootstrap data sent to frontend during initialization
 #[derive(Debug, Serialize, Type)]
@@ -19,7 +20,7 @@ pub struct BootstrapData {
     pub system_language: String,
     /// All available modules
     pub modules: Vec<Module>,
-    /// Calculated initial zoom level
+    /// Effective zoom for the current monitor resolution
     pub initial_zoom: f64,
 }
 
@@ -27,7 +28,7 @@ pub struct BootstrapData {
 #[specta::specta]
 /// Retrieves all application state and configuration during app startup
 pub async fn get_app_bootstrap_data(
-    window: Window,
+    window: WebviewWindow,
     ui_service: tauri::State<'_, ui_state::UiStateService>,
 ) -> Result<BootstrapData, AppError> {
     tracing::debug!("[Bootstrap] Collecting application data...");
@@ -37,21 +38,10 @@ pub async fn get_app_bootstrap_data(
     let system_language = settings::get_language_sync();
     let modules = module_controller::get_all_modules().await;
 
-    // Determine initial zoom level based on monitor resolution
-    let mut initial_zoom = ui_state.zoom_level;
-    if let Ok(Some(monitor)) = window.primary_monitor() {
-        let scale_factor = monitor.scale_factor();
-        let size = monitor.size().to_logical::<u32>(scale_factor);
-        let res_key = format!("{}x{}", size.width, size.height);
-
-        if let Some(&saved_zoom) = ui_state.resolution_zoom.get(&res_key) {
-            if saved_zoom > 0.0 {
-                initial_zoom = saved_zoom;
-            }
-        } else {
-            initial_zoom = window_settings::calculate_adaptive_zoom(size.height);
-        }
-    }
+    // Resolve zoom using the canonical priority chain:
+    // per-resolution saved > global zoom_level > 1.0
+    let res_key = res_key_from_window(&window).unwrap_or_else(|| "unknown".to_string());
+    let initial_zoom = resolve_zoom(&ui_state, &res_key);
 
     Ok(BootstrapData {
         ui_state,

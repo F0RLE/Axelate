@@ -268,6 +268,35 @@ export class I18nUI {
     }
 
     /**
+     * Toggles the language selection in the welcome modal.
+     */
+    public selectLangInModal(lang: string): void {
+        document.querySelectorAll('.lang-modal-btn').forEach((btn) => {
+            btn.classList.remove('selected');
+        });
+        const selectedBtn = document.querySelector(`.lang-modal-btn[data-lang="${lang}"]`);
+        if (selectedBtn) {
+            selectedBtn.classList.add('selected');
+        }
+    }
+
+    /**
+     * Confirms the selected language from the welcome modal.
+     */
+    public async confirmLanguage(): Promise<void> {
+        const selectedBtn = document.querySelector('.lang-modal-btn.selected');
+        if (selectedBtn instanceof HTMLElement && selectedBtn.dataset['lang'] !== undefined) {
+            const lang = selectedBtn.dataset['lang'];
+            await this.setLanguage(lang);
+        }
+
+        const modal = document.getElementById('lang-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    /**
      * Initializes emoji flags (legacy compatibility).
      */
     public initEmojiFlags(): void {

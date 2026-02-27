@@ -7,7 +7,7 @@ import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationService {
     private readonly _historyStack: string[] = [];
@@ -22,15 +22,7 @@ export class NavigationService {
         forwardAction: () => void;
     }[] = [];
     private _currentIndex = -1;
-    private static _instance: NavigationService | undefined;
     private _uiSettingsService: UISettingsService | null = null;
-
-    private constructor() {
-        if (NavigationService._instance !== undefined) {
-            logger.warn('[NavigationService] Instance already exists!');
-        }
-        NavigationService._instance = this;
-    }
 
     public setUISettingsService(uiSettingsService: UISettingsService): void {
         this._uiSettingsService = uiSettingsService;
@@ -48,7 +40,7 @@ export class NavigationService {
             if (lastPage !== '') {
                 this._historyStack.push(lastPage);
                 this._currentIndex = this._historyStack.length - 1;
-                logger.info(`[NavigationService] Restored last page: ${lastPage}`);
+                tracer.info(`[NavigationService] Restored last page: ${lastPage}`);
             }
         }
     }
@@ -73,7 +65,7 @@ export class NavigationService {
      * Navigates to a specific page.
      */
     public navigate(pageId: string): void {
-        logger.info(`[NavigationService] Navigating to: ${pageId}`);
+        tracer.info(`[NavigationService] Navigating to: ${pageId}`);
         this.clearForwardActions();
         if (this._currentIndex < this._historyStack.length - 1) {
             this._historyStack.splice(this._currentIndex + 1); // Clear forward history
@@ -87,21 +79,13 @@ export class NavigationService {
     }
 
     /**
-     * Returns the singleton instance of NavigationService.
-     */
-    public static getInstance(): NavigationService {
-        NavigationService._instance ??= new NavigationService();
-        return NavigationService._instance;
-    }
-
-    /**
      * Navigates back in history.
      */
     public goBack(): string | undefined {
         if (this._currentIndex > 0) {
             this._currentIndex--;
             const backPage = this._historyStack[this._currentIndex];
-            logger.info(`[NavigationService] Navigating back to: ${String(backPage)}`);
+            tracer.info(`[NavigationService] Navigating back to: ${String(backPage)}`);
             return backPage;
         }
         return undefined;
@@ -114,7 +98,7 @@ export class NavigationService {
         if (this._currentIndex < this._historyStack.length - 1) {
             this._currentIndex++;
             const forwardPage = this._historyStack[this._currentIndex];
-            logger.info(`[NavigationService] Navigating forward to: ${String(forwardPage)}`);
+            tracer.info(`[NavigationService] Navigating forward to: ${String(forwardPage)}`);
             return forwardPage;
         }
         return undefined;
@@ -145,7 +129,7 @@ export class NavigationService {
             entry.forwardAction = forwardAction;
         }
         this._actionStack.push(entry);
-        logger.debug(`[NavigationService] Pushed back action: ${id}`);
+        tracer.debug(`[NavigationService] Pushed back action: ${id}`);
     }
 
     /**
@@ -155,7 +139,7 @@ export class NavigationService {
         const index = this._actionStack.findIndex((a) => a.id === id);
         if (index !== -1) {
             this._actionStack.splice(index, 1);
-            logger.debug(`[NavigationService] Removed back action: ${id}`);
+            tracer.debug(`[NavigationService] Removed back action: ${id}`);
         }
     }
 
@@ -168,7 +152,7 @@ export class NavigationService {
             const actionInfo = this._actionStack.pop();
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (actionInfo) {
-                logger.debug(`[NavigationService] Executing back action: ${actionInfo.id}`);
+                tracer.debug(`[NavigationService] Executing back action: ${actionInfo.id}`);
 
                 if (actionInfo.forwardAction) {
                     // Safe to cast because we checked for forwardAction existence
@@ -192,7 +176,7 @@ export class NavigationService {
         if (this._forwardActionStack.length > 0) {
             const actionInfo = this._forwardActionStack.pop();
             if (actionInfo) {
-                logger.debug(`[NavigationService] Executing forward action: ${actionInfo.id}`);
+                tracer.debug(`[NavigationService] Executing forward action: ${actionInfo.id}`);
                 actionInfo.forwardAction();
                 return true;
             }
@@ -206,7 +190,7 @@ export class NavigationService {
     public clearForwardActions(): void {
         if (this._forwardActionStack.length > 0) {
             this._forwardActionStack.length = 0;
-            logger.debug('[NavigationService] Cleared forward actions stack');
+            tracer.debug('[NavigationService] Cleared forward actions stack');
         }
     }
 }

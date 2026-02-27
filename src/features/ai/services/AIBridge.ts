@@ -8,7 +8,7 @@ import type {
 import type { Core } from '@/app/init';
 import { constructChatRequest, createMultimodalContent } from '../utils/chatRequestUtils';
 import { AIProviderManager } from './AIProviderManager';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import { AIChatTransport, type IChatTransport } from './AIChatTransport';
 import type { IAIBridge } from '../types/IAIBridge';
@@ -47,7 +47,7 @@ export class AIBridge implements IAIBridge {
      */
     public async init(): Promise<void> {
         if (this._initialized) {
-            logger.warn('[AIBridge] Attempted duplicate initialization; operation aborted');
+            tracer.warn('[AIBridge] Attempted duplicate initialization; operation aborted');
             return;
         }
 
@@ -57,33 +57,29 @@ export class AIBridge implements IAIBridge {
         try {
             if (this._core?.tauriProvider.isTauri() === true) {
                 const unlistenChunk = this._transport.onStream((payload: string) => {
-                    if (import.meta.env.DEV) {
-                        logger.debug(
-                            `[AIBridge] Stream chunk received (${String(payload.length)} chars)`,
-                        );
-                    }
+                    tracer.debug(
+                        `[AIBridge] Stream chunk received (${String(payload.length)} chars)`,
+                    );
                     this._broadcastChunk(payload);
                 });
                 this._unlisteners.push(unlistenChunk);
 
                 const unlistenThought = this._transport.onThought((payload: string) => {
-                    if (import.meta.env.DEV) {
-                        logger.debug(
-                            `[AIBridge] Thought chunk received (${String(payload.length)} chars)`,
-                        );
-                    }
+                    tracer.debug(
+                        `[AIBridge] Thought chunk received (${String(payload.length)} chars)`,
+                    );
                     this._broadcastThought(payload);
                 });
                 this._unlisteners.push(unlistenThought);
 
-                logger.info('[AIBridge] Streaming active (IPC via Transport)');
+                tracer.info('[AIBridge] Streaming active (IPC via Transport)');
             } else {
-                logger.info('[AIBridge] Web mode active (Mocks)');
+                tracer.info('[AIBridge] Web mode active (Mocks)');
             }
 
             this._initialized = true;
         } catch (error: unknown) {
-            logger.error('[AIBridge] Critical IPC initialization failure:', error);
+            tracer.error('[AIBridge] Critical IPC initialization failure:', error);
         }
     }
 
@@ -187,7 +183,7 @@ export class AIBridge implements IAIBridge {
             return this._handleTransportResponse(response, source);
         } catch (error: unknown) {
             const errorMsg = error instanceof Error ? error.message : 'Communication failure';
-            logger.error('[AIBridge] Messaging pipeline error:', error);
+            tracer.error('[AIBridge] Messaging pipeline error:', error);
             return { ok: false, error: errorMsg };
         }
     }
@@ -214,7 +210,7 @@ export class AIBridge implements IAIBridge {
         if (response.ok && typeof response.text === 'string' && response.text !== '') {
             this._broadcastResponse(response.text, source);
         } else if (!response.ok && typeof response.error === 'string' && response.error !== '') {
-            logger.error('[AIBridge] Backend operation anomaly:', response.error);
+            tracer.error('[AIBridge] Backend operation anomaly:', response.error);
         }
 
         return response;
@@ -287,7 +283,7 @@ export class AIBridge implements IAIBridge {
                     },
                 );
             } catch (e) {
-                logger.error('[AIBridge] Failed to load history:', e);
+                tracer.error('[AIBridge] Failed to load history:', e);
             }
         }
         return [];
@@ -309,7 +305,7 @@ export class AIBridge implements IAIBridge {
         this._listeners.clear();
         this._chunkListeners.clear();
         this._initialized = false;
-        logger.info('[AIBridge] Resource released');
+        tracer.info('[AIBridge] Resource released');
     }
 
     private _showToast(msg: string, type: 'success' | 'error' | 'info' | 'warning'): void {

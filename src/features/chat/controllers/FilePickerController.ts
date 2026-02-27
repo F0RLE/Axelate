@@ -6,7 +6,7 @@
 
 import { chatFileHandler } from '../services/ChatFileHandler';
 import { getTokenCount } from '../utils/chatUtils';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { ChatUI } from '../ui/ChatUI';
 
@@ -95,7 +95,7 @@ export class FilePickerController {
             }
             return true;
         } catch (err) {
-            logger.error('[FilePickerController] Native file picker failed:', err);
+            tracer.error('[FilePickerController] Native file picker failed:', err);
             return false;
         }
     }
@@ -120,7 +120,7 @@ export class FilePickerController {
             const mime = mimeMap[ext] ?? 'application/octet-stream';
             return new File([data], name, { type: mime });
         } catch (err) {
-            logger.error(`[FilePickerController] Failed to read file: ${path}`, err);
+            tracer.error(`[FilePickerController] Failed to read file: ${path}`, err);
             return null;
         }
     }

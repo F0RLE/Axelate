@@ -6,9 +6,9 @@
  *
  * @example
  * ```typescript
- * import { logger } from './LoggerService';
+ * import { tracer } from './LoggerService';
  *
- * logger.info('System event occurred');
+ * tracer.info('System event occurred');
  * ```
  */
 
@@ -20,10 +20,10 @@ export class LoggerService {
     private _flushTimeout: ReturnType<typeof setTimeout> | null = null;
     private readonly _FLUSH_INTERVAL = 500;
     private readonly _MAX_BUFFER = 10;
-    private readonly _originalConsoleError: (..._args: unknown[]) => void;
-    private readonly _originalConsoleWarn: (..._args: unknown[]) => void;
-    private readonly _originalConsoleLog: (..._args: unknown[]) => void;
-    private readonly _originalConsoleDebug: (..._args: unknown[]) => void;
+    private _originalConsoleError: (..._args: unknown[]) => void;
+    private _originalConsoleWarn: (..._args: unknown[]) => void;
+    private _originalConsoleLog: (..._args: unknown[]) => void;
+    private _originalConsoleDebug: (..._args: unknown[]) => void;
 
     // Flag to prevent recursive logging loops during interception
     private _isInternalLog = false;
@@ -33,11 +33,12 @@ export class LoggerService {
         null;
 
     constructor() {
-        // Capture original methods before overriding
-        this._originalConsoleError = console.error.bind(console);
-        this._originalConsoleWarn = console.warn.bind(console);
-        this._originalConsoleLog = console.log.bind(console);
-        this._originalConsoleDebug = console.debug.bind(console);
+        // We defer capturing original methods until init() so that any environment patches
+        // (e.g. Vitest/React) applied after instantiation but before init are respected.
+        this._originalConsoleError = console.error;
+        this._originalConsoleWarn = console.warn;
+        this._originalConsoleLog = console.log;
+        this._originalConsoleDebug = console.debug;
     }
 
     /**
@@ -59,6 +60,11 @@ export class LoggerService {
             console.warn('[LoggerService] Already initialized');
             return;
         }
+
+        this._originalConsoleError = console.error.bind(console);
+        this._originalConsoleWarn = console.warn.bind(console);
+        this._originalConsoleLog = console.log.bind(console);
+        this._originalConsoleDebug = console.debug.bind(console);
 
         this._setupInterceptors();
 
@@ -255,9 +261,8 @@ export class LoggerService {
     private async _flush(): Promise<void> {
         if (this._buffer.length === 0) return;
 
-        // Take snapshot and clear buffer immediately
+        // Take snapshot
         const logs = [...this._buffer];
-        this._buffer = [];
 
         try {
             if (this._transport) {
@@ -274,7 +279,10 @@ export class LoggerService {
                     });
                 }
             }
+            // Clear only the logs we successfully sent
+            this._buffer = this._buffer.slice(logs.length);
         } catch (e) {
+            // Keep buffer intact so next flush might succeed
             this._originalConsoleError('Log batch sync failed:', e);
         }
     }
@@ -325,4 +333,4 @@ export class LoggerService {
 /**
  * Global singleton instance of the LoggerService.
  */
-export const logger = new LoggerService();
+export const tracer = new LoggerService();

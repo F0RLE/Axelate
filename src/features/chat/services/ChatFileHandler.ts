@@ -20,7 +20,7 @@ import {
     readFileAsBase64,
     readFileAsText,
 } from '../utils/chatUtils';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 // ============================================================================
 // Types
 // ============================================================================
@@ -57,7 +57,7 @@ export class ChatFileHandler {
      */
     public init(): void {
         if (this._initialized) {
-            logger.warn('[ChatFileHandler] Already initialized');
+            tracer.warn('[ChatFileHandler] Already initialized');
             return;
         }
 
@@ -214,7 +214,7 @@ export class ChatFileHandler {
 
             return { content: '' };
         } catch (e) {
-            logger.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
+            tracer.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
             return { error: `\n[Error processing ${file.name}]` };
         }
     }

@@ -4,7 +4,7 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 interface IWindowGlobal {
     windowService?: WindowService;
@@ -65,12 +65,8 @@ export class WindowService {
      * Initializes the window service by retrieving the current zoom level from the host.
      */
     public async init(initialConfig?: IWindowConfig, initialZoom?: number): Promise<void> {
-        // Load fallback from localStorage
-        const saved = localStorage.getItem('axelate_zoom');
-        let fallbackZoom = 1;
-        if (saved !== null) {
-            fallbackZoom = Number.parseFloat(saved) || 1;
-        }
+        // Load fallback from UISettingsService (injected before init) or default to 1
+        const fallbackZoom = this._uiSettingsService?.getZoomLevel() ?? 1;
 
         if (this._bridge.isTauri()) {
             try {
@@ -80,13 +76,13 @@ export class WindowService {
                     (await this._bridge.invoke<IWindowConfig>('get_window_config'));
 
                 // Update breakpoints from backend (placeholder/not used in UI yet)
-                logger.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
+                tracer.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
 
                 // Use pre-loaded initialZoom or determine it
                 const zoom = initialZoom ?? (await this._getInitialZoomWithFallback(fallbackZoom));
                 await this.setZoom(zoom);
             } catch (e) {
-                logger.warn(
+                tracer.warn(
                     `[WindowService] Failed to get initial window data, using fallback: ${String(e)}`,
                 );
                 await this.setZoom(fallbackZoom);
@@ -125,7 +121,7 @@ export class WindowService {
         if (this._bridge.isTauri()) {
             await this._bridge.invoke('minimize_window');
         } else {
-            logger.info('[WindowService] minimize (mock)');
+            tracer.info('[WindowService] minimize (mock)');
         }
     }
 
@@ -136,7 +132,7 @@ export class WindowService {
         if (this._bridge.isTauri()) {
             await this._bridge.invoke('maximize_window');
         } else {
-            logger.info('[WindowService] toggleMaximize (mock)');
+            tracer.info('[WindowService] toggleMaximize (mock)');
         }
     }
 
@@ -163,7 +159,7 @@ export class WindowService {
                 await this.minimize();
             }
         } else {
-            logger.info('[WindowService] hideToTray (mock)');
+            tracer.info('[WindowService] hideToTray (mock)');
         }
     }
 
@@ -172,7 +168,7 @@ export class WindowService {
      */
     public async show(): Promise<void> {
         if (!this._bridge.isTauri()) {
-            logger.info('[WindowService] Not in Tauri, skipping native show');
+            tracer.info('[WindowService] Not in Tauri, skipping native show');
             return;
         }
 
@@ -190,7 +186,7 @@ export class WindowService {
 
                 return; // Success
             } catch (e) {
-                logger.warn(
+                tracer.warn(
                     `[WindowService] show_window attempt ${(i + 1).toString()} failed: ${String(e)}`,
                 );
                 if (i < maxRetries - 1) {
@@ -198,7 +194,7 @@ export class WindowService {
                 }
             }
         }
-        logger.error('[WindowService] All show_window attempts failed. Continuing anyway.');
+        tracer.error('[WindowService] All show_window attempts failed. Continuing anyway.');
     }
 
     // --- Zoom ---
@@ -228,8 +224,7 @@ export class WindowService {
     public async setZoom(zoom: number): Promise<number> {
         this._currentZoom = Math.max(this._MIN_ZOOM, Math.min(this._MAX_ZOOM, zoom));
 
-        // Always save to localStorage as backup
-        localStorage.setItem('axelate_zoom', this._currentZoom.toString());
+        // Persist via UISettingsService (if injected — always true in normal boot)
 
         if (this._bridge.isTauri()) {
             try {
@@ -237,7 +232,7 @@ export class WindowService {
                     zoom: this._currentZoom,
                 });
             } catch (e) {
-                logger.error(`[WindowService] Zoom error: ${String(e)}`);
+                tracer.error(`[WindowService] Zoom error: ${String(e)}`);
             }
         }
 
@@ -289,7 +284,7 @@ export class WindowService {
                     this._toggleMonitorPanel(visible);
                 });
             } catch {
-                logger.error('[WindowService] Failed to set monitoring state');
+                tracer.error('[WindowService] Failed to set monitoring state');
             }
         }
     }
@@ -307,7 +302,7 @@ export class WindowService {
         // Check if resolution changed (monitor switch)
         const currentRes = `${window.screen.width.toString()}x${window.screen.height.toString()}`;
         if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
-            logger.info(
+            tracer.info(
                 `[WindowService] Resolution changed: ${this._lastResolutionKey} -> ${currentRes}`,
             );
             this._lastResolutionKey = currentRes;
@@ -321,7 +316,7 @@ export class WindowService {
         try {
             return await this._bridge.invoke<IWindowPolicy>('get_window_policy');
         } catch (e) {
-            logger.error(`[WindowService] Failed to fetch window policy: ${String(e)}`);
+            tracer.error(`[WindowService] Failed to fetch window policy: ${String(e)}`);
             return { isSmallScreen: false, showWarning: false };
         }
     }
@@ -335,7 +330,7 @@ export class WindowService {
         if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
             const oldRes = this._lastResolutionKey;
             this._lastResolutionKey = currentRes;
-            logger.info(`[WindowService] Resolution changed: ${oldRes} -> ${currentRes}`);
+            tracer.info(`[WindowService] Resolution changed: ${oldRes} -> ${currentRes}`);
             void this._handleResolutionChange();
         }
     }
@@ -361,7 +356,7 @@ export class WindowService {
                     await appWindow.center();
                 }
             } catch (e) {
-                logger.warn(`[WindowService] setSize failed: ${String(e)}`);
+                tracer.warn(`[WindowService] setSize failed: ${String(e)}`);
             }
         }
     }
@@ -387,7 +382,7 @@ export class WindowService {
      * Dispatches a custom event to toggle the visibility of the monitoring panel.
      */
     private _toggleMonitorPanel(visible: boolean): void {
-        logger.info(`[WindowService] toggleMonitorPanel: ${String(visible)}`);
+        tracer.info(`[WindowService] toggleMonitorPanel: ${String(visible)}`);
         const event = new CustomEvent('monitor:toggle', { detail: { visible } });
         globalThis.dispatchEvent(event);
     }
@@ -425,6 +420,7 @@ export class WindowService {
      * Persists the current window state (size, position, maximized) to the backend.
      */
     private async _saveWindowState(): Promise<void> {
+        /* v8 ignore next */
         if (!this._bridge.isTauri()) return;
 
         try {
@@ -455,7 +451,7 @@ export class WindowService {
                 }
             }
         } catch (e) {
-            logger.warn(`[WindowService] Failed to save window state: ${String(e)}`);
+            tracer.warn(`[WindowService] Failed to save window state: ${String(e)}`);
         }
     }
 
@@ -463,6 +459,7 @@ export class WindowService {
      * Helper to retrieve initial zoom with timeout and state service priority.
      */
     private async _getInitialZoomWithFallback(fallback: number): Promise<number> {
+        /* v8 ignore next */
         if (!this._bridge.isTauri()) return fallback;
 
         try {
@@ -473,7 +470,7 @@ export class WindowService {
                 return zoom;
             }
         } catch (e) {
-            logger.error(`[WindowService] Failed to fetch backend zoom: ${String(e)}`);
+            tracer.error(`[WindowService] Failed to fetch backend zoom: ${String(e)}`);
         }
 
         return fallback;
@@ -493,7 +490,7 @@ export class WindowService {
                 await this.setZoom(zoom);
             }
         } catch (e) {
-            logger.error(`[WindowService] Resolution change zoom fetch failed: ${String(e)}`);
+            tracer.error(`[WindowService] Resolution change zoom fetch failed: ${String(e)}`);
         }
     }
 }

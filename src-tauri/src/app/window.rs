@@ -3,6 +3,7 @@
 //! Handles WebView2 cache isolation, global shortcuts, and window
 //! creation / restoration from saved state.
 
+use crate::api::settings::window_settings::{res_key_from_window, resolve_zoom};
 use crate::domain::monitoring::system_monitor;
 use crate::infrastructure::config::{
     ui_state as infra_ui_state, window_settings as infra_window_settings,
@@ -107,23 +108,11 @@ pub fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow
     // Attempt to build
     match builder.build() {
         Ok(window) => {
-            // 4. Apply zoom and maximized state
-            let ui_settings = infra_ui_state::get_ui_state_sync();
-            let mut zoom = ui_settings.zoom_level;
-
-            // Try to detect monitor resolution and apply specific zoom early
-            if let Ok(Some(monitor)) = window.primary_monitor() {
-                let scale_factor = monitor.scale_factor();
-                let size = monitor.size().to_logical::<u32>(scale_factor);
-                let res_key = format!("{}x{}", size.width, size.height);
-                if let Some(&res_zoom) = ui_settings.resolution_zoom.get(&res_key) {
-                    zoom = res_zoom;
-                    tracing::debug!("Applying saved resolution zoom: {zoom} for {res_key}");
-                } else {
-                    zoom = infra_window_settings::calculate_adaptive_zoom(size.height);
-                    tracing::debug!("Applying default resolution zoom: {zoom} for {res_key}");
-                }
-            }
+            // 4. Apply zoom using canonical priority chain:
+            //    per-resolution saved > global zoom_level > 1.0
+            let ui_state = infra_ui_state::get_ui_state_sync();
+            let res_key = res_key_from_window(&window).unwrap_or_else(|| "unknown".to_string());
+            let zoom = resolve_zoom(&ui_state, &res_key);
 
             if (zoom - 1.0).abs() > f64::EPSILON {
                 let _ = window.set_zoom(zoom);

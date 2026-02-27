@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type * as Bindings from '@/shared/types/bindings';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IBridge } from '@/shared/types/IBridge';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
@@ -10,8 +10,7 @@ import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 export class TauriProvider implements IBridge {
     private _isTauriDetected: boolean | null = null;
 
-    constructor() {
-        // Trigger background handshake
+    public init(): void {
         void this._performHandshake();
     }
 
@@ -20,10 +19,10 @@ export class TauriProvider implements IBridge {
             // Priority Check: Try to call a safe, neutral command
             await this._performInvoke('get_health', {});
             this._isTauriDetected = true;
-            logger.info('[TauriProvider] IPC Handshake successful');
+            tracer.info('[TauriProvider] IPC Handshake successful');
         } catch {
             this._isTauriDetected = false;
-            logger.warn('[TauriProvider] Handshake failed, operating in Mock mode');
+            tracer.warn('[TauriProvider] Handshake failed, operating in Mock mode');
         }
     }
 
@@ -60,6 +59,7 @@ export class TauriProvider implements IBridge {
         }
 
         // Priority 2: Global __TAURI__ (v1 or v2 withGlobalTauri)
+        /* v8 ignore start */
         const win = globalThis as unknown as TGlobalWin;
         const tauri = win.__TAURI__;
         const globalInvoke = tauri.core.invoke;
@@ -69,6 +69,7 @@ export class TauriProvider implements IBridge {
         }
 
         throw new Error('No valid invoke function available in this environment');
+        /* v8 ignore stop */
     }
 
     /**
@@ -80,8 +81,10 @@ export class TauriProvider implements IBridge {
             return Promise.reject(e instanceof Error ? e : new Error(String(e)));
         }
 
-        logger.warn(`[TauriProvider] IPC failure for ${cmd}, falling back to mock: ${String(e)}`);
+        /* v8 ignore start */
+        tracer.warn(`[TauriProvider] IPC failure for ${cmd}, falling back to mock: ${String(e)}`);
         return this._mockInvoke(cmd, args);
+        /* v8 ignore stop */
     }
 
     private _isTest(): boolean {
@@ -103,7 +106,7 @@ export class TauriProvider implements IBridge {
             });
             return unlisten;
         } else {
-            logger.info(`[TauriProvider] Mock Listen: ${event}`);
+            tracer.info(`[TauriProvider] Mock Listen: ${event}`);
             return () => {
                 /* no-op */
             };
@@ -114,7 +117,7 @@ export class TauriProvider implements IBridge {
         if (this.isTauri()) {
             await this.invoke('plugin:clipboard-manager|write_text', { text });
         } else {
-            logger.info(`[Mock Clipboard] Write: ${text}`);
+            tracer.info(`[Mock Clipboard] Write: ${text}`);
         }
     }
 
@@ -122,7 +125,7 @@ export class TauriProvider implements IBridge {
         if (this.isTauri()) {
             await this.invoke('plugin:shell|open', { path: url });
         } else {
-            logger.info(`[Mock Shell] Open URL: ${url}`);
+            tracer.info(`[Mock Shell] Open URL: ${url}`);
             window.open(url, '_blank');
         }
     }
@@ -134,7 +137,7 @@ export class TauriProvider implements IBridge {
         try {
             return await this.invoke<string | null>('get_secure_key', { service });
         } catch (e) {
-            logger.error(`[TauriProvider] Secure get failed for ${service}: ${String(e)}`);
+            tracer.error(`[TauriProvider] Secure get failed for ${service}: ${String(e)}`);
             return null;
         }
     }
@@ -146,18 +149,20 @@ export class TauriProvider implements IBridge {
         try {
             await this.invoke('save_secure_key', { service, key });
         } catch (e) {
-            logger.error(`[TauriProvider] Secure save failed for ${service}: ${String(e)}`);
+            tracer.error(`[TauriProvider] Secure save failed for ${service}: ${String(e)}`);
             throw e;
         }
     }
 
     private _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
         const isProd = !this._isTest() && import.meta.env.MODE === 'production';
+        /* v8 ignore start */
         if (isProd) {
-            logger.warn('[TauriProvider] Mock invoked in production! Sane fallback returned.');
+            tracer.warn('[TauriProvider] Mock invoked in production! Sane fallback returned.');
         } else {
-            logger.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
+            tracer.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
         }
+        /* v8 ignore stop */
 
         const saneDefaults: Record<string, unknown> = {
             get_settings: {

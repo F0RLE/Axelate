@@ -8,7 +8,7 @@ import type {
     ISpeechRecognitionErrorEvent,
     ISpeechRecognitionInstance,
 } from '../types/chatTypes';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export type VoiceResultCallback = (text: string) => void;
 export type VoiceStateCallback = (isRecording: boolean) => void;
@@ -65,7 +65,7 @@ export class VoiceInputService {
                 zh: 'zh-CN',
             };
             recognition.lang = langMap[currentLang] ?? currentLang;
-            logger.info(
+            tracer.info(
                 `[VoiceInputService] Target Recognition Lang: ${recognition.lang} (from: ${currentLang})`,
             );
             recognition.continuous = true;
@@ -97,7 +97,7 @@ export class VoiceInputService {
             };
 
             recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
-                logger.error(`[VoiceInputService] Recognition error: ${event.error}`);
+                tracer.error(`[VoiceInputService] Recognition error: ${event.error}`);
                 if (this._isRecording) {
                     this.stop();
                 }
@@ -112,7 +112,7 @@ export class VoiceInputService {
 
             return true;
         } catch (e) {
-            logger.error(`[VoiceInputService] Error starting recognition: ${String(e)}`);
+            tracer.error(`[VoiceInputService] Error starting recognition: ${String(e)}`);
             this.stop();
             return false;
         }

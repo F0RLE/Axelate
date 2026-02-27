@@ -1,7 +1,7 @@
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { IApp } from '@/shared/types/coreTypes';
 
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { AppSettings } from '@/shared/types/bindings';
 export type ISettings = AppSettings;
 export type SettingsValue = string | number | boolean;
@@ -31,7 +31,7 @@ export class SettingsService {
             this.settings = { ...this.settings, ...data };
             return this.settings;
         } catch (e) {
-            logger.error('[SettingsService] Failed to load settings:', e);
+            tracer.error('[SettingsService] Failed to load settings:', e);
             return this.settings;
         }
     }
@@ -51,9 +51,7 @@ export class SettingsService {
 
     public async updateSettings(updates: Partial<ISettings>): Promise<void> {
         for (const [key, value] of Object.entries(updates)) {
-            if (key in updates) {
-                await this.saveSetting(key, value as SettingsValue);
-            }
+            await this.saveSetting(key, value as SettingsValue);
         }
     }
 
@@ -65,7 +63,7 @@ export class SettingsService {
             await this._tauri.invoke('control_service', { action, service });
             return true;
         } catch (e) {
-            logger.error('[SettingsService] Control service failed:', e);
+            tracer.error('[SettingsService] Control service failed:', e);
             return false;
         }
     }
@@ -74,7 +72,7 @@ export class SettingsService {
         try {
             return await this._tauri.invoke<IGpuInfo>('get_gpu_info');
         } catch (e) {
-            logger.error('[SettingsService] Failed to load GPU info:', e);
+            tracer.error('[SettingsService] Failed to load GPU info:', e);
             return { detected: false };
         }
     }
@@ -87,7 +85,7 @@ export class SettingsService {
         try {
             return await this._tauri.invoke<IApp[]>('get_modules');
         } catch (e) {
-            logger.error('[SettingsService] Failed to get modules:', e);
+            tracer.error('[SettingsService] Failed to get modules:', e);
             return [];
         }
     }
@@ -104,7 +102,7 @@ export class SettingsService {
                 key: key,
             });
         } catch (e) {
-            logger.error('[SettingsService] Failed to save secure key:', e);
+            tracer.error('[SettingsService] Failed to save secure key:', e);
         }
     }
 
@@ -119,7 +117,7 @@ export class SettingsService {
             });
             return value ?? '';
         } catch (e) {
-            logger.error('[SettingsService] Failed to get secure key:', e);
+            tracer.error('[SettingsService] Failed to get secure key:', e);
             return '';
         }
     }
@@ -134,7 +132,7 @@ export class SettingsService {
                 key,
             });
         } catch (e) {
-            logger.error('[SettingsService] API Key validation failed:', e);
+            tracer.error('[SettingsService] API Key validation failed:', e);
             return false;
         }
     }
@@ -148,7 +146,7 @@ export class SettingsService {
                 baseModelId: id,
             });
         } catch (e) {
-            logger.error('[SettingsService] Failed to add custom model:', e);
+            tracer.error('[SettingsService] Failed to add custom model:', e);
             throw e;
         }
     }
@@ -157,7 +155,7 @@ export class SettingsService {
         try {
             return await this._tauri.invoke<ICustomModel[]>('get_custom_models');
         } catch (e) {
-            logger.error('[SettingsService] Failed to get custom models:', e);
+            tracer.error('[SettingsService] Failed to get custom models:', e);
             return [];
         }
     }

@@ -1,8 +1,9 @@
 import { BaseComponent } from '../ui/BaseComponent';
 import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import { mountLogos } from '@/assets/logos';
+import { APP_PAGES } from '@/shared/config/AppPages';
 
 export class SidebarUI extends BaseComponent {
     private _sidebar: HTMLElement | null = null;
@@ -34,11 +35,12 @@ export class SidebarUI extends BaseComponent {
         }
 
         if (this._sidebar === null) {
-            logger.error('[SidebarUI] Sidebar element not found or empty after 1s');
+            tracer.error('[SidebarUI] Sidebar element not found or empty after 1s');
             return;
         }
 
         this._restoreState();
+        this._renderNavigation();
         this._initToggle();
         this._initAdaptiveMonitoring();
 
@@ -57,6 +59,52 @@ export class SidebarUI extends BaseComponent {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;
         }
+    }
+
+    /**
+     * Dynamically renders navigation buttons from APP_PAGES.
+     */
+    private _renderNavigation(): void {
+        if (!this._sidebar) return;
+        const mainMenu = this._sidebar.querySelector('.main-menu');
+        const bottomMenu = this._sidebar.querySelector('.bottom-menu');
+        if (!mainMenu || !bottomMenu) return;
+
+        mainMenu.innerHTML = '';
+        bottomMenu.innerHTML = '';
+
+        const dfMain = document.createDocumentFragment();
+        const dfBottom = document.createDocumentFragment();
+
+        APP_PAGES.forEach((page) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'nav-btn';
+            if (page.id === 'debug') btn.classList.add('debug-trigger');
+            btn.dataset['page'] = page.id;
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'icon');
+            const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+            use.setAttribute('href', page.icon);
+            svg.appendChild(use);
+
+            const span = document.createElement('span');
+            span.dataset['i18n'] = page.i18nKey;
+            span.textContent = page.defaultLabel;
+
+            btn.appendChild(svg);
+            btn.appendChild(span);
+
+            if (page.isBottom === true) {
+                dfBottom.appendChild(btn);
+            } else {
+                dfMain.appendChild(btn);
+            }
+        });
+
+        mainMenu.appendChild(dfMain);
+        bottomMenu.appendChild(dfBottom);
     }
 
     /**
@@ -219,11 +267,11 @@ export class SidebarUI extends BaseComponent {
 
         if (isVisible && (sidebarHeight < requiredSpace || isOverflowing)) {
             monitor.classList.add('adaptive-hidden');
-            logger.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
+            tracer.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
         } else if (!isVisible && sidebarHeight >= requiredSpace + 10) {
             // Only bring back if there's substantial extra space to avoid flickering
             monitor.classList.remove('adaptive-hidden');
-            logger.debug('[SidebarUI] Showing monitor (space restored)');
+            tracer.debug('[SidebarUI] Showing monitor (space restored)');
         }
     }
 }

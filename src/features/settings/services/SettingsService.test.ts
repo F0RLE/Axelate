@@ -1,0 +1,208 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SettingsService } from './SettingsService';
+import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+
+function createMockTauri(): TauriProvider {
+    return {
+        invoke: vi.fn().mockResolvedValue(undefined),
+        isTauri: vi.fn(() => true),
+        listen: vi.fn().mockResolvedValue(() => {}),
+        getSecureKey: vi.fn().mockResolvedValue(null),
+        saveSecureKey: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TauriProvider;
+}
+
+describe('SettingsService', () => {
+    let tauri: TauriProvider;
+    let service: SettingsService;
+
+    beforeEach(() => {
+        tauri = createMockTauri();
+        service = new SettingsService(tauri);
+    });
+
+    describe('loadSettings', () => {
+        it('should load settings from backend', async () => {
+            const mockSettings = { language: 'en', theme: 'dark' };
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(mockSettings);
+
+            const result = await service.loadSettings();
+            expect(tauri.invoke).toHaveBeenCalledWith('get_settings');
+            expect(result).toEqual(expect.objectContaining(mockSettings));
+        });
+
+        it('should return current settings on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            const result = await service.loadSettings();
+            expect(result).toBeDefined();
+        });
+    });
+
+    describe('set', () => {
+        it('should set value locally and trigger save', () => {
+            const saveSpy = vi.spyOn(service, 'saveSetting').mockResolvedValue(undefined);
+            service.set('language', 'ru');
+            expect(service.getSettings()).toEqual(expect.objectContaining({ language: 'ru' }));
+            expect(saveSpy).toHaveBeenCalled();
+        });
+    });
+
+    describe('saveSetting', () => {
+        it('should invoke backend with key and stringified value', async () => {
+            await service.saveSetting('theme', 'dark');
+            expect(tauri.invoke).toHaveBeenCalledWith('save_setting', {
+                key: 'theme',
+                value: 'dark',
+            });
+        });
+    });
+
+    describe('updateSettings', () => {
+        it('should save each key individually', async () => {
+            const saveSpy = vi.spyOn(service, 'saveSetting').mockResolvedValue(undefined);
+            await service.updateSettings({ language: 'en' } as Parameters<
+                typeof service.updateSettings
+            >[0]);
+            expect(saveSpy).toHaveBeenCalledWith('language', 'en');
+        });
+
+        it('should iterate and save multiple keys (L54)', async () => {
+            const saveSpy = vi.spyOn(service, 'saveSetting').mockResolvedValue(undefined);
+            await service.updateSettings({ language: 'ru', theme: 'light' } as Parameters<
+                typeof service.updateSettings
+            >[0]);
+            expect(saveSpy).toHaveBeenCalledWith('language', 'ru');
+            expect(saveSpy).toHaveBeenCalledWith('theme', 'light');
+            expect(saveSpy).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('controlService', () => {
+        it('should return true on success', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+            const result = await service.controlService('start', 'ollama');
+            expect(result).toBe(true);
+            expect(tauri.invoke).toHaveBeenCalledWith('control_service', {
+                action: 'start',
+                service: 'ollama',
+            });
+        });
+
+        it('should return false on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            const result = await service.controlService('stop', 'ollama');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('loadGpuInfo', () => {
+        it('should return GPU info from backend', async () => {
+            const gpuInfo = { detected: true, name: 'NVIDIA RTX 4090', cuda: true };
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(gpuInfo);
+            const result = await service.loadGpuInfo();
+            expect(result).toEqual(gpuInfo);
+        });
+
+        it('should return default on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            const result = await service.loadGpuInfo();
+            expect(result).toEqual({ detected: false });
+        });
+    });
+
+    describe('getModules', () => {
+        it('should return modules from backend', async () => {
+            const modules = [{ id: 'mod1', name: 'Module 1' }];
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(modules);
+            const result = await service.getModules();
+            expect(result).toEqual(modules);
+        });
+
+        it('should return empty array on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            const result = await service.getModules();
+            expect(result).toEqual([]);
+        });
+    });
+
+    describe('saveSecureKey', () => {
+        it('should invoke save_secure_key with correct args', async () => {
+            await service.saveSecureKey('gemini', 'my-api-key');
+            expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
+                service: 'gemini_api_key',
+                key: 'my-api-key',
+            });
+        });
+
+        it('should handle error gracefully', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            await expect(service.saveSecureKey('x', 'k')).resolves.toBeUndefined();
+        });
+    });
+
+    describe('getSecureKey', () => {
+        it('should return key from backend', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue('secret-key');
+            const result = await service.getSecureKey('gemini');
+            expect(result).toBe('secret-key');
+        });
+
+        it('should return empty string when null', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+            const result = await service.getSecureKey('gemini');
+            expect(result).toBe('');
+        });
+
+        it('should return empty string on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            const result = await service.getSecureKey('gemini');
+            expect(result).toBe('');
+        });
+    });
+
+    describe('validateApiKey', () => {
+        it('should return true when valid', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+            const result = await service.validateApiKey('gemini', 'key');
+            expect(result).toBe(true);
+        });
+
+        it('should return false on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            const result = await service.validateApiKey('gemini', 'key');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('addCustomModel', () => {
+        it('should invoke add_custom_model', async () => {
+            await service.addCustomModel('gemini', 'custom-1', 'My Model');
+            expect(tauri.invoke).toHaveBeenCalledWith('add_custom_model', {
+                providerId: 'gemini',
+                id: 'custom-1',
+                name: 'My Model',
+                baseModelId: 'custom-1',
+            });
+        });
+
+        it('should rethrow errors', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            await expect(service.addCustomModel('x', 'y', 'z')).rejects.toThrow('fail');
+        });
+    });
+
+    describe('getCustomModels', () => {
+        it('should return models from backend', async () => {
+            const models = [{ id: 'm1', name: 'Model 1' }];
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(models);
+            const result = await service.getCustomModels();
+            expect(result).toEqual(models);
+        });
+
+        it('should return empty array on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            const result = await service.getCustomModels();
+            expect(result).toEqual([]);
+        });
+    });
+});

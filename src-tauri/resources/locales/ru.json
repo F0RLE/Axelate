@@ -309,5 +309,8 @@
   "ui.settings.module_not_ready": "Этот модуль еще не готов",
   "ui.launcher.badge.cloud": "ОБЛАКО",
   "ui.launcher.badge.local": "ЛОКАЛЬНО",
-  "ui.deepseek.model.v32.desc": "Сбалансированная модель среднего уровня с улучшенными навыками кодинга и логики."
+  "ui.deepseek.model.v32.desc": "Сбалансированная модель среднего уровня с улучшенными навыками кодинга и логики.",
+  "ui.launcher.web.coming_soon": "Скоро появится",
+  "ui.launcher.web.marketplace": "Магазин",
+  "ui.launcher.settings.toggle_marketplace": "Магазин"
 }

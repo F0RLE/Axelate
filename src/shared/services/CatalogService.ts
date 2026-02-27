@@ -6,7 +6,7 @@
 import type { IBridge } from '@/shared/types/IBridge';
 import type { IApp, IModule, IConfigField, ICatalogData } from '@/shared/types/coreTypes';
 import type { AppConfig, ModuleItem, ApiProvider } from '@/shared/types/bindings';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
@@ -59,14 +59,14 @@ export class CatalogService {
             const ai = validConfig.catalog.ai;
             const services = validConfig.catalog.services;
 
-            logger.info(
+            tracer.info(
                 `[CatalogService] Mapping config - AI: ${String(ai.length)}, Services: ${String(services.length)}`,
             );
 
             this._appData.ai = this._mapModuleItems(ai, 'ai');
             this._appData.services = this._mapModuleItems(services, 'services');
 
-            logger.info(
+            tracer.info(
                 `[CatalogService] After mapping - AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
             );
 
@@ -78,7 +78,7 @@ export class CatalogService {
 
             this._syncToGlobal();
 
-            logger.info(
+            tracer.info(
                 `[CatalogService] Catalog hydrated successfully. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
             );
 
@@ -87,11 +87,11 @@ export class CatalogService {
 
             this._updateLegacySettings(validConfig.apiProviders);
 
-            logger.info(
+            tracer.info(
                 `[CatalogService] Catalog initialized. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
             );
         } catch (e) {
-            logger.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
+            tracer.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
         }
     }
 
@@ -107,7 +107,7 @@ export class CatalogService {
                 return res.ok ? ((await res.json()) as AppConfig) : FALLBACK_CONFIG;
             }
         } catch (e) {
-            logger.warn(`[CatalogService] Backend config failed, using fallback: ${String(e)}`);
+            tracer.warn(`[CatalogService] Backend config failed, using fallback: ${String(e)}`);
             return FALLBACK_CONFIG;
         }
     }
@@ -119,14 +119,14 @@ export class CatalogService {
         try {
             if (this._bridge.isTauri()) {
                 const modules = await this._bridge.invoke<IModule[]>('get_modules');
-                logger.info(`[CatalogService] Fetched ${String(modules.length)} modules.`);
+                tracer.info(`[CatalogService] Fetched ${String(modules.length)} modules.`);
                 return modules;
             } else {
                 const res = await fetch('/api/modules');
                 return res.ok ? ((await res.json()) as IModule[]) : [];
             }
         } catch (e) {
-            logger.warn(`[CatalogService] Module list failed: ${String(e)}`);
+            tracer.warn(`[CatalogService] Module list failed: ${String(e)}`);
             return [];
         }
     }
@@ -189,6 +189,7 @@ export class CatalogService {
     private _ensureFallbacks(): void {
         const mergeAppSchema = (app: IApp) => {
             // Simplified merge for fallback injection if needed
+            /* v8 ignore next 2 -- FALLBACK_CONFIG has empty arrays; branch only reachable with populated fallbacks */
             if (app.type === 'api') app.installed = true;
         };
 
@@ -196,23 +197,23 @@ export class CatalogService {
         const fallbackServices = FALLBACK_CONFIG.catalog.services;
 
         if (this._appData.ai.length === 0) {
-            logger.warn(
+            tracer.warn(
                 `[CatalogService] AI catalog still empty (fallback source has ${String(fallbackAi.length)} items), injecting fallbacks.`,
             );
             this._appData.ai = this._mapModuleItems(fallbackAi, 'ai');
             this._appData.ai.forEach(mergeAppSchema);
-            logger.info(
+            tracer.info(
                 `[CatalogService] AI catalog now has ${String(this._appData.ai.length)} items.`,
             );
         }
 
         if (this._appData.services.length === 0) {
-            logger.warn(
+            tracer.warn(
                 `[CatalogService] Services catalog still empty (fallback source has ${String(fallbackServices.length)} items), injecting fallbacks.`,
             );
             this._appData.services = this._mapModuleItems(fallbackServices, 'services');
             this._appData.services.forEach(mergeAppSchema);
-            logger.info(
+            tracer.info(
                 `[CatalogService] Services catalog now has ${String(this._appData.services.length)} items.`,
             );
         }
@@ -263,7 +264,7 @@ export class CatalogService {
                 });
                 updateFn(models_map);
             } catch {
-                logger.warn('[CatalogService] Warning updating module settings');
+                tracer.warn('[CatalogService] Warning updating module settings');
             }
         }
     }
@@ -275,20 +276,20 @@ export class CatalogService {
         const fallback = FALLBACK_CONFIG;
 
         if (!config) {
-            logger.warn('[CatalogService] Config is null. Using FALLBACK_CONFIG.');
+            tracer.warn('[CatalogService] Config is null. Using FALLBACK_CONFIG.');
             return fallback;
         }
 
         if (config.catalog.ai.length === 0 && config.catalog.services.length === 0) {
             const aiLen = config.catalog.ai.length;
             const srvLen = config.catalog.services.length;
-            logger.warn(
+            tracer.warn(
                 `[CatalogService] Config invalid or empty (AI: ${String(aiLen)}, Services: ${String(srvLen)}). FORCING FALLBACK_CONFIG.`,
             );
             return fallback;
         }
 
-        logger.info(
+        tracer.info(
             `[CatalogService] _ensureValidConfig passed (AI: ${String(config.catalog.ai.length)}, Services: ${String(config.catalog.services.length)})`,
         );
         return config;

@@ -1,7 +1,7 @@
 import type { IApp } from '../../types/coreTypes';
 import { getGlobalWin } from '../../utils/globalAccessor';
-import { logger } from '@/infrastructure/logging/LoggerService';
-import { NavigationService } from '@/infrastructure/navigation/NavigationService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
+import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
 import { type ModuleCardRenderer } from './ModuleCardRenderer';
 
 /**
@@ -21,6 +21,7 @@ export class ModalManager {
     constructor(
         cardRenderer: ModuleCardRenderer,
         onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void,
+        private readonly _navigation: NavigationService,
     ) {
         this._cardRenderer = cardRenderer;
         this._onAppInteraction = onAppInteraction;
@@ -32,7 +33,7 @@ export class ModalManager {
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
         const listEl = document.getElementById('app-modal-list');
 
-        logger.info(
+        tracer.info(
             `[ModalManager] Opening selection modal for ${category} with ${String(apps.length)} items.`,
         );
 
@@ -69,7 +70,7 @@ export class ModalManager {
         if (container !== null) container.classList.add('content-hidden');
 
         // Register back action for mouse/keyboard global navigation
-        NavigationService.getInstance().pushBackAction(
+        this._navigation.pushBackAction(
             'app-selection-modal',
             () => {
                 this.closeAppSelection();
@@ -90,7 +91,7 @@ export class ModalManager {
     }
 
     public closeAppSelection(): void {
-        NavigationService.getInstance().removeBackAction('app-selection-modal');
+        this._navigation.removeBackAction('app-selection-modal');
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
         if (modal) {
             if (modal.open) {

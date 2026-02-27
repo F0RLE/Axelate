@@ -1,6 +1,6 @@
 import type { UiStateStore } from '../state/UiStateStore';
 import { type IBridge } from '@/shared/types/IBridge';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class DownloadSettingsService {
     constructor(
@@ -33,7 +33,7 @@ export class DownloadSettingsService {
                     max_speed: state.download_max_speed,
                 })
                 .catch((e: unknown) => {
-                    logger.error(
+                    tracer.error(
                         `[DownloadSettingsService] Failed to sync download settings: ${String(e)}`,
                     );
                 });

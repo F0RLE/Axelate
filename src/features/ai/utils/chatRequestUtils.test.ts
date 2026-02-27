@@ -22,6 +22,16 @@ describe('chatRequestUtils', () => {
                 image_url: { url: 'data:image/png;base64,base64data' },
             });
         });
+
+        it('should skip non-image attachments (only text part)', () => {
+            const result = createMultimodalContent('Check this', [
+                { name: 'doc.pdf', type: 'application/pdf', data_base64: 'pdfdata' },
+            ]);
+
+            expect(Array.isArray(result)).toBe(true);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toEqual({ type: 'text', text: 'Check this' });
+        });
     });
 
     describe('constructChatRequest', () => {

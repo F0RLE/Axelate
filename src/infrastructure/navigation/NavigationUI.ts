@@ -12,7 +12,7 @@
 import { eventBus } from '@/shared/services/EventBus';
 import { type NavigationService } from './NavigationService';
 import { type SoundService } from '@/shared/services/SoundService';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationUI {
     private _mouseUpHandler: ((e: MouseEvent) => void) | null = null;
@@ -28,19 +28,31 @@ export class NavigationUI {
      * Re-binds listeners directly to ensure they work after template injection.
      */
     public init(): void {
-        logger.debug('[NavigationUI] Navigation initialized (pure service mode).');
+        tracer.debug('[NavigationUI] Navigation initialized.');
 
-        // Bind global mouse navigation (Button 3 = Back, Button 4 = Forward)
+        // 1. Delegate clicks on the sidebar wrapper rather than individual buttons
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+            sidebar.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const btn = target.closest('.nav-btn');
+                if (btn instanceof HTMLElement) {
+                    const pageId = btn.dataset['page'];
+                    if (pageId !== undefined && pageId !== '') {
+                        e.preventDefault();
+                        void this.showPage(pageId, btn);
+                    }
+                }
+            });
+        }
+
+        // 2. Bind global mouse navigation (Button 3 = Back, Button 4 = Forward)
         this._mouseUpHandler = (e: MouseEvent) => {
             if (e.button === 3) {
                 // Back button
                 e.preventDefault();
-                // 1. Check if there are any contextual back actions (modals, dropdowns)
-                if (this._service.popBackAction()) {
-                    return; // Action consumed
-                }
+                if (this._service.popBackAction()) return;
 
-                // 2. Otherwise do normal history back
                 const backPageId = this._service.goBack();
                 if (backPageId !== undefined && backPageId !== '') {
                     void this.showPage(backPageId, null, false, true);
@@ -48,13 +60,8 @@ export class NavigationUI {
             } else if (e.button === 4) {
                 // Forward button
                 e.preventDefault();
+                if (this._service.popForwardAction()) return;
 
-                // 1. Check if there are any contextual forward actions (modals)
-                if (this._service.popForwardAction()) {
-                    return; // Action consumed
-                }
-
-                // 2. Otherwise do normal forward
                 const forwardPageId = this._service.goForward();
                 if (forwardPageId !== undefined && forwardPageId !== '') {
                     void this.showPage(forwardPageId, null, false, true);
@@ -103,7 +110,7 @@ export class NavigationUI {
         silent = false,
         isHistoryNav = false,
     ): Promise<void> {
-        logger.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn, isHistoryNav });
+        tracer.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn, isHistoryNav });
         const previousPageId = this._service.getCurrentPage();
 
         // 1. Play Sound
@@ -136,7 +143,7 @@ export class NavigationUI {
             target.classList.add('active');
             this._service.setCurrentPage(pageId, isHistoryNav);
         } else {
-            logger.warn(`[NavigationUI] Page not found: ${pageId}`);
+            tracer.warn(`[NavigationUI] Page not found: ${pageId}`);
         }
 
         // 4. Update Sidebar Buttons

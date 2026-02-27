@@ -1,7 +1,7 @@
 import DOMPurify from 'dompurify';
 import type { IApp } from '../../types/coreTypes';
 import { getGlobalWin } from '../../utils/globalAccessor';
-import { logger } from '../../../infrastructure/logging/LoggerService';
+import { tracer } from '../../../infrastructure/logging/LoggerService';
 
 /**
  * @class ModuleCardRenderer
@@ -67,7 +67,7 @@ export class ModuleCardRenderer {
 
         const template = document.getElementById('tpl-module-card') as HTMLTemplateElement | null;
         if (!template) {
-            logger.error('[ModuleCardRenderer] template #tpl-module-card not found');
+            tracer.error('[ModuleCardRenderer] template #tpl-module-card not found');
             return card;
         }
 
@@ -213,13 +213,13 @@ export class ModuleCardRenderer {
                 e.stopImmediatePropagation();
 
                 if (!isInstalled && !isApi) {
-                    logger.debug(
+                    tracer.debug(
                         `[ModuleCardRenderer] Ignored right-click on uninstalled module: ${app.id}`,
                     );
                     return;
                 }
 
-                logger.info('[ModuleCardRenderer] Isolated right-click on module card:', app.id);
+                tracer.info('[ModuleCardRenderer] Isolated right-click on module card:', app.id);
                 const win = getGlobalWin();
                 if (typeof win.openModuleSettings === 'function') {
                     win.openModuleSettings(app);
@@ -259,7 +259,7 @@ export class ModuleCardRenderer {
                             this._handleAsyncInstallSuccess(card, app, isApi, onClick);
                         }
                     } catch (err) {
-                        logger.debug(
+                        tracer.debug(
                             `[ModuleCardRenderer] Failed to check installation status for ${app.id}: ${String(err)}`,
                         );
                     }

@@ -4,8 +4,9 @@
  */
 
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { ISettingsUIContext } from './SettingsContext';
+import { APP_PAGES } from '@/shared/config/AppPages';
 
 export class GeneralSettingsRenderer {
     constructor(private readonly _uiSettings: UISettingsService) {}
@@ -14,7 +15,7 @@ export class GeneralSettingsRenderer {
      * Initializes the general settings renderer.
      */
     public init(context: ISettingsUIContext): void {
-        logger.info('[GeneralSettingsRenderer] Initializing...');
+        tracer.info('[GeneralSettingsRenderer] Initializing...');
         this._initTaskbarToggles(context);
         this._initMonitorToggles(context);
     }
@@ -25,26 +26,19 @@ export class GeneralSettingsRenderer {
     private _initTaskbarToggles(context: ISettingsUIContext) {
         const container = document.getElementById('taskbar-toggles');
         if (!container) {
-            logger.warn('[GeneralSettingsRenderer] #taskbar-toggles not found');
+            tracer.warn('[GeneralSettingsRenderer] #taskbar-toggles not found');
             return;
         }
         if (container.dataset['initialized'] === 'true') {
-            logger.info('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
+            tracer.info('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
             return;
         }
         container.dataset['initialized'] = 'true';
-        logger.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
+        tracer.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
 
         const { t } = context;
 
-        const navItems = [
-            { id: 'home', label: 'Home', icon: '#icon-home' },
-            { id: 'chat', label: 'Chat', icon: '#icon-chat' },
-            { id: 'modules', label: 'Modules', icon: '#icon-folder' },
-            // Settings omitted to prevent lockout
-            { id: 'debug', label: 'Console', icon: '#icon-console' },
-            { id: 'downloads', label: 'Downloads', icon: '#icon-download' },
-        ];
+        const navItems = APP_PAGES.filter((p) => p.inSettings === true);
 
         const hiddenItems = this._uiSettings.getHiddenNavItems();
 
@@ -52,7 +46,7 @@ export class GeneralSettingsRenderer {
             'tpl-taskbar-toggle',
         ) as HTMLTemplateElement | null;
         if (!template) {
-            logger.error('[GeneralSettingsRenderer] template #tpl-taskbar-toggle not found');
+            tracer.error('[GeneralSettingsRenderer] template #tpl-taskbar-toggle not found');
             return;
         }
 
@@ -78,7 +72,7 @@ export class GeneralSettingsRenderer {
             const labelEl = clone.querySelector('.toggle-label');
             if (labelEl instanceof HTMLElement) {
                 labelEl.dataset['i18n'] = labelKey;
-                labelEl.textContent = t(labelKey, item.label);
+                labelEl.textContent = t(labelKey, item.defaultLabel);
             }
 
             fragment.appendChild(clone);
@@ -166,15 +160,15 @@ export class GeneralSettingsRenderer {
     private _initMonitorToggles(context: ISettingsUIContext) {
         const container = document.getElementById('monitor-toggles');
         if (!container) {
-            logger.warn('[GeneralSettingsRenderer] #monitor-toggles not found');
+            tracer.warn('[GeneralSettingsRenderer] #monitor-toggles not found');
             return;
         }
         if (container.dataset['initialized'] === 'true') {
-            logger.info('[GeneralSettingsRenderer] #monitor-toggles already initialized');
+            tracer.info('[GeneralSettingsRenderer] #monitor-toggles already initialized');
             return;
         }
         container.dataset['initialized'] = 'true';
-        logger.info('[GeneralSettingsRenderer] Initializing monitor toggles');
+        tracer.info('[GeneralSettingsRenderer] Initializing monitor toggles');
         const monitorItems = [
             { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
             { id: 'gpu', label: 'GPU', icon: '#icon-gpu' },
@@ -192,7 +186,7 @@ export class GeneralSettingsRenderer {
             'tpl-monitor-toggle',
         ) as HTMLTemplateElement | null;
         if (!template) {
-            logger.error('[GeneralSettingsRenderer] template #tpl-monitor-toggle not found');
+            tracer.error('[GeneralSettingsRenderer] template #tpl-monitor-toggle not found');
             return;
         }
 

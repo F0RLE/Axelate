@@ -1,10 +1,37 @@
-// Window settings commands for frontend
-
 use crate::errors::AppError;
 use crate::infrastructure::config::{
     ui_state,
     window_settings::{self, WindowSettings},
 };
+use crate::models::UIState;
+
+/// Extracts a resolution key string from the primary monitor attached to `window`.
+/// Returns `None` if monitor information is unavailable.
+pub fn res_key_from_window(window: &tauri::WebviewWindow) -> Option<String> {
+    let monitor = window.primary_monitor().ok()??;
+    let scale = monitor.scale_factor();
+    let size = monitor.size().to_logical::<u32>(scale);
+    Some(format!("{}x{}", size.width, size.height))
+}
+
+/// Resolves the effective zoom for a given resolution key.
+///
+/// Priority (highest → lowest):
+/// 1. Saved per-resolution zoom for `res_key` (explicit user preference)
+/// 2. Global `zoom_level` from UI state (last zoom the user applied on any screen)
+/// 3. Neutral default: `1.0`
+pub fn resolve_zoom(state: &UIState, res_key: &str) -> f64 {
+    state
+        .resolution_zoom
+        .get(res_key)
+        .copied()
+        .filter(|&z| z > 0.0)
+        .unwrap_or(if state.zoom_level > 0.0 {
+            state.zoom_level
+        } else {
+            1.0
+        })
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -59,7 +86,8 @@ pub async fn save_zoom_level(
     ui_service.save_ui_state(&state).await
 }
 
-/// Set `WebView` zoom level and persist for current resolution
+/// Set `WebView` zoom level and persist for current resolution.
+/// This is the ONLY place that saves zoom — always saves both global and per-resolution.
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned WebviewWindow
@@ -70,15 +98,11 @@ pub async fn set_webview_zoom(
 ) -> Result<(), AppError> {
     window.set_zoom(zoom)?;
 
-    // Save to UI State (Global and Per-Resolution)
+    // Save to UI State: both global level and per-resolution override
     let mut state = ui_service.get_ui_state().await.unwrap_or_default();
     state.zoom_level = zoom;
 
-    // Determine current resolution to save per-resolution zoom
-    if let Ok(Some(monitor)) = window.primary_monitor() {
-        let scale_factor = monitor.scale_factor();
-        let size = monitor.size().to_logical::<u32>(scale_factor);
-        let res_key = format!("{}x{}", size.width, size.height);
+    if let Some(res_key) = res_key_from_window(&window) {
         state.resolution_zoom.insert(res_key, zoom);
     }
 
@@ -86,39 +110,18 @@ pub async fn set_webview_zoom(
     Ok(())
 }
 
-/// Get initial zoom for a resolution. Calculates default if not exists.
+/// Get the effective zoom for the current monitor resolution.
+/// Read-only — never auto-saves, so "user set" is always distinguishable from "defaulted".
 #[tauri::command]
 #[specta::specta]
-#[allow(clippy::needless_pass_by_value)] // Tauri commands require owned Window
+#[allow(clippy::needless_pass_by_value)] // Tauri commands require owned WebviewWindow
 pub async fn get_resolution_zoom(
-    window: tauri::Window,
+    window: tauri::WebviewWindow,
     ui_service: tauri::State<'_, ui_state::UiStateService>,
 ) -> Result<f64, AppError> {
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
-
-    let (res_key, screen_height) = if let Ok(Some(monitor)) = window.primary_monitor() {
-        let scale_factor = monitor.scale_factor();
-        let size = monitor.size().to_logical::<u32>(scale_factor);
-        (format!("{}x{}", size.width, size.height), size.height)
-    } else {
-        ("unknown".to_string(), 600)
-    };
-
-    // 1. Try to get existing zoom for this resolution (collapsed if)
-    if let Some(&zoom) = state.resolution_zoom.get(&res_key)
-        && zoom > 0.0
-    {
-        return Ok(zoom);
-    }
-
-    // 2. No zoom saved? Calculate smart default based on baseline
-    let smart_default = window_settings::calculate_adaptive_zoom(screen_height);
-
-    // 3. Save calculated default
-    state.resolution_zoom.insert(res_key, smart_default);
-    ui_service.save_ui_state(&state).await?;
-
-    Ok(smart_default)
+    let state = ui_service.get_ui_state().await.unwrap_or_default();
+    let res_key = res_key_from_window(&window).unwrap_or_else(|| "unknown".to_string());
+    Ok(resolve_zoom(&state, &res_key))
 }
 
 /// Retrieves current global `WebView` zoom level

@@ -1,5 +1,5 @@
 import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
@@ -50,7 +50,7 @@ export class ChatService {
             };
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : 'Unknown error';
-            logger.error(`[ChatService] Error: ${String(e)}`);
+            tracer.error(`[ChatService] Error: ${String(e)}`);
             return { ok: false, error: errorMsg };
         }
     }

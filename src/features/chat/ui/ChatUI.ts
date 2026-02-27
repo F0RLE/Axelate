@@ -23,31 +23,40 @@ import type { IChatAttachment, IChatRole } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import DOMPurify from 'dompurify';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class ChatUI {
-    private readonly _messagesContainer: HTMLElement | null;
-    private readonly _chatContainer: HTMLElement | null;
-    private readonly _attachmentsContainer: HTMLElement | null;
-    private readonly _chatInput: HTMLTextAreaElement | null;
-    private readonly _clearBtn: HTMLElement | null;
-    private readonly _attachBtn: HTMLElement | null;
-    private readonly _voiceBtn: HTMLElement | null;
-    private readonly _sendBtn: HTMLElement | null;
-    private readonly _tokenCount: HTMLElement | null;
+    private get _messagesContainer(): HTMLElement | null {
+        return document.getElementById('chat-messages');
+    }
+    private get _chatContainer(): HTMLElement | null {
+        return document.getElementById('chat-container');
+    }
+    private get _attachmentsContainer(): HTMLElement | null {
+        return document.getElementById('chat-attachments');
+    }
+    private get _chatInput(): HTMLTextAreaElement | null {
+        return document.getElementById('chat-input') as HTMLTextAreaElement | null;
+    }
+    private get _clearBtn(): HTMLElement | null {
+        return document.getElementById('clear-chat-btn');
+    }
+    private get _attachBtn(): HTMLElement | null {
+        return document.getElementById('chat-attach-btn');
+    }
+    private get _voiceBtn(): HTMLElement | null {
+        return document.getElementById('chat-voice-btn');
+    }
+    private get _sendBtn(): HTMLElement | null {
+        return document.getElementById('chat-send-btn');
+    }
+    private get _tokenCount(): HTMLElement | null {
+        return document.getElementById('chat-token-count');
+    }
+
     private readonly _typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor() {
-        this._messagesContainer = document.getElementById('chat-messages');
-        this._chatContainer = document.getElementById('chat-container');
-        this._attachmentsContainer = document.getElementById('chat-attachments');
-        this._chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        this._clearBtn = document.getElementById('clear-chat-btn');
-        this._attachBtn = document.getElementById('chat-attach-btn');
-        this._voiceBtn = document.getElementById('chat-voice-btn');
-        this._sendBtn = document.getElementById('chat-send-btn');
-        this._tokenCount = document.getElementById('chat-token-count');
-
         // Configure marked renderer for code blocks
         const renderer = new marked.Renderer();
         renderer.code = function ({
@@ -81,15 +90,13 @@ export class ChatUI {
 
         marked.use({ renderer });
 
-        // Bind event listeners
-        if (this._messagesContainer) {
-            this._messagesContainer.addEventListener('click', (e) => {
-                void this._handleMessageClick(e as MouseEvent);
-            });
-            this._messagesContainer.addEventListener('click', (e) => {
-                void this._handleCopyClick(e as MouseEvent);
-            });
-        }
+        // Bind event listeners on messages container — also lazy via delegation
+        document.addEventListener('click', (e) => {
+            if (!(e.target instanceof HTMLElement)) return;
+            if (!e.target.closest('#chat-messages')) return;
+            void this._handleMessageClick(e as MouseEvent);
+            void this._handleCopyClick(e as MouseEvent);
+        });
     }
 
     /**
@@ -322,7 +329,7 @@ export class ChatUI {
             const rawHtml = marked.parse(finalContent);
             textNode.innerHTML = DOMPurify.sanitize(rawHtml);
         } catch (e) {
-            logger.error('[ChatUI] Markdown render error:', e);
+            tracer.error('[ChatUI] Markdown render error:', e);
             textNode.textContent = finalContent;
         }
 
@@ -346,7 +353,7 @@ export class ChatUI {
             }
 
             // Note: tParams would be used here if translator supported interpolation
-            logger.debug('[ChatUI] i18nParams ignored by translator');
+            tracer.debug('[ChatUI] i18nParams ignored by translator');
 
             return typeof g.t === 'function' ? g.t(i18nKey, content) : content;
         }
@@ -588,7 +595,7 @@ export class ChatUI {
 
         // Safety auto-cleanup after 60 seconds
         const timeout = globalThis.setTimeout((): void => {
-            logger.warn(`[ChatUI] Typing indicator ${id} timed out and was auto-removed`);
+            tracer.warn(`[ChatUI] Typing indicator ${id} timed out and was auto-removed`);
             this.removeTyping(id);
         }, 60000);
         this._typingTimeouts.set(id, timeout);
@@ -617,7 +624,7 @@ export class ChatUI {
         if (typeof win.showToast === 'function') {
             win.showToast(msg, type, duration);
         } else {
-            logger.debug(`[Toast] ${type}: ${msg}`);
+            tracer.debug(`[Toast] ${type}: ${msg}`);
         }
     }
 
@@ -641,7 +648,7 @@ export class ChatUI {
             await this._copyToClipboard(text);
             this._showCopyResult(btn as HTMLElement, true);
         } catch (err) {
-            logger.error('[ChatUI] Copy failed:', err);
+            tracer.error('[ChatUI] Copy failed:', err);
             this._showCopyResult(btn as HTMLElement, false);
         }
     }
@@ -728,7 +735,7 @@ export class ChatUI {
                 try {
                     await invoke('plugin:shell|open', { path: url });
                 } catch (err) {
-                    logger.error('[ChatUI] Failed to open link via shell:', err);
+                    tracer.error('[ChatUI] Failed to open link via shell:', err);
                     // Fallback to window.open (might be blocked or open in webview depending on config)
                     window.open(url, '_blank');
                 }

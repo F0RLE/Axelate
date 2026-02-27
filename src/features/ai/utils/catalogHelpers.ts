@@ -98,12 +98,65 @@ export function getMostPowerfulModel(providerId: string): string {
 }
 
 /**
- * Resolves the preferred model by auditing local state and falling back to catalog rankings.
+ * Resolves the preferred model by checking injected state, then falling back to catalog rankings.
+ * The `modelGetter` is provided by the caller (e.g. AISettingsService) to avoid
+ * direct localStorage coupling in this utility module.
  *
  * @param providerId - Provider identifier
+ * @param modelGetter - Optional function to retrieve persisted model selection from app state
  * @returns Effective model key
  */
-export function getSelectedModel(providerId: string): string {
-    const saved = localStorage.getItem(`${providerId}_selected_model`);
+export function getSelectedModel(
+    providerId: string,
+    modelGetter?: (providerId: string) => string | undefined,
+): string {
+    const saved = modelGetter?.(providerId);
     return saved ?? getMostPowerfulModel(providerId);
+}
+
+// ============================================================================
+// Model Resolution (full pipeline: saved state → API ID)
+// ============================================================================
+
+interface IProviderModelEntry {
+    apiModels?: { text?: string };
+    stats?: { logic?: number; creative?: number };
+}
+
+/**
+ * Resolves the full API model ID for a provider, using saved state or the most powerful model.
+ * Encapsulates the complete resolution pipeline so callers (e.g. GlobalBridge) stay thin.
+ *
+ * @param providerId - Provider identifier
+ * @param catalog - AI catalog app list
+ * @param modelGetter - Optional function to retrieve persisted model selection from app state
+ * @returns API model identifier string
+ */
+export function resolveProviderModel(
+    providerId: string,
+    catalog: IAICatalogApp[],
+    modelGetter?: (providerId: string) => string | undefined,
+): string {
+    const providerApp = catalog.find((a) => a.id === providerId);
+    const data = providerApp?.apiProviderData as
+        | { models?: Record<string, IProviderModelEntry> }
+        | undefined;
+    const models: Record<string, IProviderModelEntry> = data?.models ?? {};
+
+    // 1. Saved model key from state
+    const savedKey = modelGetter?.(providerId);
+    const resolvedKey =
+        savedKey !== undefined && savedKey !== '' ? savedKey : _mostPowerfulModelKey(models);
+
+    // 2. Map to API ID
+    return models[resolvedKey]?.apiModels?.text ?? resolvedKey;
+}
+
+function _mostPowerfulModelKey(models: Record<string, IProviderModelEntry>): string {
+    const sorted = Object.keys(models).sort((a, b) => {
+        const sA = models[a]?.stats;
+        const sB = models[b]?.stats;
+        return (sB?.logic ?? 0) + (sB?.creative ?? 0) - ((sA?.logic ?? 0) + (sA?.creative ?? 0));
+    });
+    return sorted[0] ?? '';
 }

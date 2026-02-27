@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => {
             checkModuleInstalled: vi.fn(),
             downloadModule: vi.fn(),
             deleteModule: vi.fn(),
+            cancelDownload: vi.fn().mockResolvedValue(true),
         },
         tauriProvider: {
             isTauri: vi.fn().mockReturnValue(true),
@@ -273,6 +274,118 @@ describe('ModuleService', () => {
 
             const state = moduleService.getDownloadState('test-module');
             expect(state?.progress).toBe(1);
+        });
+    });
+
+    describe('cancelDownload', () => {
+        it('should return false when not in Tauri', async () => {
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
+            const result = await moduleService.cancelDownload('test-module');
+            expect(result).toBe(false);
+        });
+
+        it('should return false on error', async () => {
+            // cancelDownload calls commands.cancelDownload directly, so mock it
+            mocks.commands.cancelDownload.mockRejectedValue(new Error('Cancel error'));
+            const result = await moduleService.cancelDownload('test-module');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('deleteModule exceptions', () => {
+        it('should return false on exception', async () => {
+            mocks.invokeSafe.mockRejectedValueOnce(new Error('Delete crash'));
+            const result = await moduleService.deleteModule('test-module');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('downloadModule with hash', () => {
+        it('should pass the hash to downloadModule command', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
+            await moduleService.downloadModule('mod', 'https://repo.com', 'abc123');
+            expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
+                'mod',
+                'https://repo.com',
+                'abc123',
+            );
+        });
+
+        it('should pass null for empty hash', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
+            await moduleService.downloadModule('mod', 'https://repo.com', '   ');
+            expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
+                'mod',
+                'https://repo.com',
+                null,
+            );
+        });
+    });
+
+    describe('checkInstalled additional', () => {
+        it('should return false on error status from invokeSafe', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'API error' },
+            });
+            const result = await moduleService.checkInstalled('test-module');
+            expect(result).toBe(false);
+        });
+
+        it('should return false for deleted module', async () => {
+            // First delete the module
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
+            await moduleService.deleteModule('del-mod');
+            // checkInstalled should short-circuit
+            const result = await moduleService.checkInstalled('del-mod');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('downloadModule with undefined hash', () => {
+        it('should pass null when hash is undefined (L122)', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
+            await moduleService.downloadModule('mod', 'https://repo.com');
+            expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
+                'mod',
+                'https://repo.com',
+                null,
+            );
+        });
+
+        it('should handle non-Error throw in downloadModule catch (L122)', async () => {
+            // Make invokeSafe throw a plain string (non-Error)
+            mocks.invokeSafe.mockRejectedValueOnce('string error');
+            await expect(moduleService.downloadModule('mod', 'https://repo.com')).rejects.toBe(
+                'string error',
+            );
+
+            // State should record error with String() conversion
+            const state = moduleService.getDownloadState('mod');
+            expect(state?.status).toBe('error');
+            expect(state?.error).toBe('string error');
+        });
+    });
+
+    describe('broadcast state for non-existent module (L216)', () => {
+        it('should handle getDownloadState for non-existing module gracefully', () => {
+            const state = moduleService.getDownloadState('non-existent-module');
+            expect(state).toBeUndefined();
+        });
+
+        it('should not broadcast when state is undefined (L218)', async () => {
+            // deleteModule internally calls _broadcastState after removing from state
+            // Pre-condition: module has a state entry
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
+
+            // Delete a module that has no download state — _broadcastState skip branch
+            mocks.tauriProvider.isTauri.mockReturnValue(true);
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
+            await moduleService.deleteModule('no-state-module');
+
+            // Should not have thrown — the undefined state guard was hit silently
+            const state = moduleService.getDownloadState('no-state-module');
+            expect(state).toBeUndefined();
         });
     });
 });

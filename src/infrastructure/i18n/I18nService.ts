@@ -3,7 +3,7 @@
  * @description Internationalization service for managing translations and language settings
  */
 
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import { type IBridge } from '@/shared/types/IBridge';
 
 export class I18nService {
@@ -18,7 +18,7 @@ export class I18nService {
      */
     public async init(initialLang?: string): Promise<void> {
         if (this._initialized) {
-            logger.warn('[I18n] Already initialized');
+            tracer.warn('[I18n] Already initialized');
             return;
         }
 
@@ -37,7 +37,7 @@ export class I18nService {
             const backendLang = await this._getBackendLanguage();
             if (backendLang !== null && backendLang !== '') return backendLang;
         } catch (e) {
-            logger.warn('[I18n] Failed to get backend language', e);
+            tracer.warn('[I18n] Failed to get backend language', e);
         }
         return 'en';
     }
@@ -68,7 +68,7 @@ export class I18nService {
 
             if (res !== undefined && res !== 'unknown') return res;
         } catch {
-            logger.warn('[I18n] Native system language check failed or timed out');
+            tracer.warn('[I18n] Native system language check failed or timed out');
         }
         return null;
     }
@@ -94,7 +94,7 @@ export class I18nService {
      * Loads translation files for the specified language.
      */
     public async loadTranslations(lang: string): Promise<void> {
-        logger.info(`[I18n] Loading ${lang}...`);
+        tracer.info(`[I18n] Loading ${lang}...`);
 
         try {
             // Backend now handles merging base (en) with target lang
@@ -105,14 +105,14 @@ export class I18nService {
 
             // Persist only to backend
             this._syncToBackend(lang).catch((e: unknown) => {
-                logger.error(String(e));
+                tracer.error(String(e));
             });
 
             // Notify UI of language change
             globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
-            logger.info(`[I18n] Language changed to ${lang}, event dispatched`);
+            tracer.info(`[I18n] Language changed to ${lang}, event dispatched`);
         } catch (e) {
-            logger.error(`[I18n] Failed to load translations for ${lang}`, e);
+            tracer.error(`[I18n] Failed to load translations for ${lang}`, e);
             // Fallback to empty or keep existing?
             // If failed, we might want to try 'en' explicitly if we haven't already
             if (lang !== 'en') {
@@ -120,7 +120,7 @@ export class I18nService {
                     this._translations = await this._fetchTranslations('en');
                     this._currentLang = 'en';
                 } catch (err) {
-                    logger.error('[I18n] Critical: Failed to load fallback English', err);
+                    tracer.error('[I18n] Critical: Failed to load fallback English', err);
                 }
             }
         }
@@ -164,7 +164,7 @@ export class I18nService {
                 });
             }
         } catch (e) {
-            logger.warn('[I18n] Sync to settings failed', e);
+            tracer.warn('[I18n] Sync to settings failed', e);
         }
     }
 

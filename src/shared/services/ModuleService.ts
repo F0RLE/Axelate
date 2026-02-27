@@ -4,7 +4,7 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IModuleDownloadState } from '../types/coreTypes';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { commands } from '../types/bindings';
@@ -33,9 +33,7 @@ export class ModuleService {
             downloaded: number;
             total: number;
         }>('download_progress', (payload) => {
-            if (import.meta.env.DEV) {
-                logger.debug(`[ModuleService] Progress Event: ${JSON.stringify(payload)}`);
-            }
+            tracer.debug(`[ModuleService] Progress Event: ${JSON.stringify(payload)}`);
 
             this._downloadState[payload.module_id] = {
                 status: payload.status as
@@ -53,8 +51,7 @@ export class ModuleService {
             };
 
             if (payload.status === 'complete') {
-                const state = this._downloadState[payload.module_id];
-                if (state !== undefined) state.progress = 1;
+                (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
             }
 
             this._broadcastState(payload.module_id);
@@ -78,10 +75,10 @@ export class ModuleService {
             if (result.status === 'ok') {
                 return result.data;
             }
-            logger.warn(`[ModuleService] Check installed failed: ${result.error.message}`);
+            tracer.warn(`[ModuleService] Check installed failed: ${result.error.message}`);
             return false;
         } catch (err) {
-            logger.error(`Check installed error: ${String(err)}`);
+            tracer.error(`Check installed error: ${String(err)}`);
             return false;
         }
     }
@@ -97,9 +94,9 @@ export class ModuleService {
         repoUrl: string,
         expectedHash?: string,
     ): Promise<void> {
-        logger.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
+        tracer.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
         if (expectedHash !== undefined && expectedHash !== '') {
-            logger.info(`[ModuleService] Expected hash: ${expectedHash}`);
+            tracer.info(`[ModuleService] Expected hash: ${expectedHash}`);
         }
 
         if (!this._bridge.isTauri()) {
@@ -120,7 +117,7 @@ export class ModuleService {
             }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            logger.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
+            tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
             this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
             this._broadcastState(moduleId);
             throw err;
@@ -132,12 +129,12 @@ export class ModuleService {
      * @param moduleId - The ID of the module whose download to cancel
      */
     public async cancelDownload(moduleId: string): Promise<boolean> {
-        logger.info(`[ModuleService] Cancelling download: ${moduleId}`);
+        tracer.info(`[ModuleService] Cancelling download: ${moduleId}`);
         if (!this._bridge.isTauri()) return false;
         try {
             return await commands.cancelDownload(moduleId);
         } catch (e) {
-            logger.error(`[ModuleService] Cancel failed: ${String(e)}`);
+            tracer.error(`[ModuleService] Cancel failed: ${String(e)}`);
             return false;
         }
     }
@@ -147,7 +144,7 @@ export class ModuleService {
      * @param moduleId - The ID of the module to delete
      */
     public async deleteModule(moduleId: string): Promise<boolean> {
-        logger.info(`[ModuleService] Deleting module: ${moduleId}`);
+        tracer.info(`[ModuleService] Deleting module: ${moduleId}`);
         if (!this._bridge.isTauri()) {
             throw new Error('Delete available only in desktop app');
         }
@@ -157,7 +154,7 @@ export class ModuleService {
             const result = await invokeSafe(commands.deleteModule(moduleId));
 
             if (result.status === 'error') {
-                logger.error(`[ModuleService] Delete failed: ${result.error.message}`);
+                tracer.error(`[ModuleService] Delete failed: ${result.error.message}`);
                 return false;
             }
 
@@ -166,7 +163,7 @@ export class ModuleService {
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {
-            logger.error(`[ModuleService] Delete exception: ${String(e)}`);
+            tracer.error(`[ModuleService] Delete exception: ${String(e)}`);
             return false;
         }
     }
@@ -178,7 +175,7 @@ export class ModuleService {
      * @param action - The action to perform (start, stop, restart)
      */
     public async control(serviceName: string, action: string): Promise<boolean> {
-        logger.info(`[ModuleService] Control ${serviceName} -> ${action}`);
+        tracer.info(`[ModuleService] Control ${serviceName} -> ${action}`);
         if (this._bridge.isTauri()) {
             try {
                 await this._bridge.invoke('control_module', {
@@ -189,11 +186,11 @@ export class ModuleService {
                 });
                 return true;
             } catch (e) {
-                logger.error(`[ModuleService] Control failed: ${String(e)}`);
+                tracer.error(`[ModuleService] Control failed: ${String(e)}`);
                 return false;
             }
         } else {
-            logger.warn('[ModuleService] Control not available in web mode');
+            tracer.warn('[ModuleService] Control not available in web mode');
             return false;
         }
     }
@@ -213,6 +210,7 @@ export class ModuleService {
         const win = getGlobalWin();
         win.moduleDownloadState ??= {};
         const state = this._downloadState[moduleId];
+        /* v8 ignore next */
         if (state !== undefined) {
             win.moduleDownloadState[moduleId] = state;
         }

@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { errorHandler } from '@/shared/services/ErrorHandler';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 describe('ErrorHandler', () => {
-    let consoleSpy: ReturnType<typeof vi.spyOn>;
+    let tracerSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-        consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+        tracerSpy = vi.spyOn(tracer, 'error').mockImplementation(() => {
             /* no-op */
         });
         // Clear error log before each test
@@ -14,15 +15,15 @@ describe('ErrorHandler', () => {
 
     afterEach(() => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-        consoleSpy.mockRestore();
+        tracerSpy.mockRestore();
     });
 
     describe('captureError', () => {
-        it('should log error to console', () => {
+        it('should log error using tracer', () => {
             const error = new Error('Test error');
             errorHandler.captureError(error, 'test-context');
 
-            expect(consoleSpy).toHaveBeenCalled();
+            expect(tracerSpy).toHaveBeenCalled();
         });
 
         it('should add error to error log', () => {
@@ -137,6 +138,219 @@ describe('ErrorHandler', () => {
 
             expect(errorHandler.getErrorLog().length).toBe(1);
             expect(errorHandler.getErrorLog()[0]?.context).toBe('click-handler');
+        });
+
+        it('should use "eventHandler" as default context (L207)', () => {
+            const handler = vi.fn(() => {
+                throw new Error('No context error');
+            });
+            const safe = errorHandler.safeHandler(handler);
+            safe(new Event('click'));
+
+            const log = errorHandler.getErrorLog();
+            expect(log.at(-1)?.context).toBe('eventHandler');
+        });
+    });
+
+    describe('wrapAsync edge cases', () => {
+        it('should handle non-Error throw with no context (L189)', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression
+            const result = await errorHandler.wrapAsync(async () => {
+                await Promise.resolve();
+                throw 42; // eslint-disable-line no-throw-literal, @typescript-eslint/only-throw-error
+            });
+
+            expect(result).toBeUndefined();
+            const log = errorHandler.getErrorLog();
+            expect(log.at(-1)?.message).toBe('42');
+        });
+    });
+
+    describe('init', () => {
+        it('should set up global error handlers', () => {
+            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['errorHandler'];
+            errorHandler.init();
+            expect(typeof globalThis.onerror).toBe('function');
+            expect(typeof globalThis.onunhandledrejection).toBe('function');
+        });
+
+        it('should skip if already initialized', () => {
+            const warnSpy = vi.spyOn(tracer, 'warn').mockImplementation(() => {});
+            (errorHandler as unknown as { _initialized: boolean })._initialized = true;
+            errorHandler.init();
+            expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Already initialized'));
+            warnSpy.mockRestore();
+        });
+
+        it('should skip if another instance exists on window', () => {
+            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+            const win = globalThis as unknown as Record<string, unknown>;
+            win['errorHandler'] = {};
+            errorHandler.init();
+            expect((errorHandler as unknown as { _initialized: boolean })._initialized).toBe(false);
+            delete win['errorHandler'];
+        });
+
+        it('should handle onerror with source and line info', () => {
+            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['errorHandler'];
+            errorHandler.init();
+            errorHandler.clearErrorLog();
+
+            if (globalThis.onerror !== null) {
+                globalThis.onerror('Test message', 'test.js', 42, 10, new Error('onerror'));
+            }
+            const log = errorHandler.getErrorLog();
+            expect(log.length).toBeGreaterThanOrEqual(1);
+            expect(log[0]?.url).toBe('test.js');
+            expect(log[0]?.line).toBe(42);
+        });
+
+        it('should handle onerror without error object', () => {
+            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['errorHandler'];
+            errorHandler.init();
+            errorHandler.clearErrorLog();
+
+            if (globalThis.onerror !== null) {
+                (
+                    globalThis.onerror as (
+                        msg: string,
+                        src?: string,
+                        line?: number,
+                        col?: number,
+                        err?: Error,
+                    ) => void
+                )('Raw string message', undefined, undefined, undefined, undefined);
+            }
+            expect(errorHandler.getErrorLog().length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('should handle onunhandledrejection', () => {
+            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['errorHandler'];
+            errorHandler.init();
+            errorHandler.clearErrorLog();
+
+            if (globalThis.onunhandledrejection !== null) {
+                (globalThis.onunhandledrejection as (e: PromiseRejectionEvent) => void)({
+                    reason: new Error('Promise rejected'),
+                } as PromiseRejectionEvent);
+            }
+            expect(errorHandler.getErrorLog().length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('should handle onunhandledrejection with non-Error reason', () => {
+            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['errorHandler'];
+            errorHandler.init();
+            errorHandler.clearErrorLog();
+
+            if (globalThis.onunhandledrejection !== null) {
+                (globalThis.onunhandledrejection as (e: PromiseRejectionEvent) => void)({
+                    reason: 'string rejection',
+                } as PromiseRejectionEvent);
+            }
+            expect(errorHandler.getErrorLog().length).toBeGreaterThanOrEqual(1);
+        });
+    });
+
+    describe('_showErrorToast', () => {
+        it('should create toast when container exists', () => {
+            vi.useFakeTimers();
+            document.body.innerHTML = '<div id="toast-container"></div>';
+            errorHandler.captureError(new Error('Toast test'));
+            const container = document.getElementById('toast-container');
+            expect(container?.children.length).toBeGreaterThanOrEqual(1);
+            vi.advanceTimersByTime(5500);
+            vi.useRealTimers();
+            document.body.innerHTML = '';
+        });
+
+        it('should skip toast when no container', () => {
+            document.body.innerHTML = '';
+            expect(() => errorHandler.captureError(new Error('No toast'))).not.toThrow();
+        });
+    });
+
+    describe('error log max size', () => {
+        it('should truncate log at 100 entries', () => {
+            for (let i = 0; i < 105; i++) {
+                errorHandler.captureError(new Error(`Error ${i}`));
+            }
+            expect(errorHandler.getErrorLog().length).toBeLessThanOrEqual(100);
+        });
+    });
+
+    describe('captureError with extra', () => {
+        it('should include url, line, column from extra', () => {
+            errorHandler.captureError(new Error('full'), 'ctx', {
+                url: 'file.ts',
+                line: 10,
+                column: 5,
+            });
+            const log = errorHandler.getErrorLog();
+            const entry = log.at(-1);
+            expect(entry?.url).toBe('file.ts');
+            expect(entry?.line).toBe(10);
+            expect(entry?.column).toBe(5);
+        });
+    });
+
+    describe('callback error handling', () => {
+        it('should catch errors in onError callbacks', () => {
+            const badCb = vi.fn(() => {
+                throw new Error('Callback crash');
+            });
+            errorHandler.onError(badCb);
+            expect(() => errorHandler.captureError(new Error('trigger'))).not.toThrow();
+        });
+    });
+
+    describe('edge branches', () => {
+        it('should handle onerror with object message (L60)', () => {
+            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+            const win = globalThis as unknown as Record<string, unknown>;
+            delete win['errorHandler'];
+            errorHandler.init();
+            errorHandler.clearErrorLog();
+
+            if (globalThis.onerror !== null) {
+                (
+                    globalThis.onerror as (
+                        msg: unknown,
+                        src?: string,
+                        line?: number,
+                        col?: number,
+                        err?: Error,
+                    ) => void
+                )({ complex: 'object' }, undefined, undefined, undefined, undefined);
+            }
+            expect(errorHandler.getErrorLog().length).toBeGreaterThanOrEqual(1);
+        });
+
+        it('should handle captureError with error without stack (L91)', () => {
+            const err = new Error('no-stack');
+            delete (err as unknown as Record<string, unknown>)['stack'];
+            errorHandler.captureError(err, 'ctx');
+            const log = errorHandler.getErrorLog();
+            expect(log.at(-1)?.stack).toBeUndefined();
+        });
+
+        it('should handle safeHandler when handler throws non-Error (L189-207)', () => {
+            const handler = vi.fn(() => {
+                throw 'string-error'; // eslint-disable-line no-throw-literal, @typescript-eslint/only-throw-error
+            });
+            const safe = errorHandler.safeHandler(handler, 'ctx');
+            safe(new Event('click'));
+            const log = errorHandler.getErrorLog();
+            expect(log.at(-1)?.message).toBe('string-error');
         });
     });
 });

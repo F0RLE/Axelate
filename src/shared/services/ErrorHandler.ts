@@ -5,6 +5,7 @@
 
 import DOMPurify from 'dompurify';
 import { eventBus } from './EventBus';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 /**
@@ -37,15 +38,13 @@ class ErrorHandler {
      */
     public init(): void {
         if (this._initialized) {
-            // eslint-disable-next-line no-console
-            console.warn('[ErrorHandler] Already initialized');
+            tracer.warn('[ErrorHandler] Already initialized');
             return;
         }
 
         const win = getGlobalWin();
         if (win.errorHandler !== undefined) {
-            // eslint-disable-next-line no-console
-            console.warn('[ErrorHandler] Another instance already initialized. Using existing.');
+            tracer.warn('[ErrorHandler] Another instance already initialized. Using existing.');
             return;
         }
         win.errorHandler = this;
@@ -73,8 +72,7 @@ class ErrorHandler {
         };
 
         this._initialized = true;
-        // eslint-disable-next-line no-console
-        console.log('[ErrorHandler] Initialized');
+        tracer.info('[ErrorHandler] Initialized');
     }
 
     /**
@@ -102,13 +100,8 @@ class ErrorHandler {
             this._errorLog.shift();
         }
 
-        // Console log with styling
-        // eslint-disable-next-line no-console
-        console.error(
-            `%c[ErrorHandler] ${context ?? 'Error'}`,
-            'color: #ff4444; font-weight: bold',
-            error,
-        );
+        // Logger with styling (mimic console)
+        tracer.error(`[ErrorHandler] ${context ?? 'Error'} - ${error.message}`, error);
 
         // Emit event for other components
         const eventPayload: { error: Error; context?: string } = { error };
@@ -120,8 +113,7 @@ class ErrorHandler {
             try {
                 cb(errorInfo);
             } catch (e) {
-                // eslint-disable-next-line no-console
-                console.error('[ErrorHandler] Callback error:', e);
+                tracer.error('[ErrorHandler] Callback error:', e);
             }
         });
 

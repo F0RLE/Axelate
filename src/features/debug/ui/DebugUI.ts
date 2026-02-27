@@ -145,14 +145,14 @@ export class DebugUI {
         });
     }
 
-    private setTab(tabId: string, btn: HTMLElement): void {
+    public setTab(tabId: string, btn?: HTMLElement): void {
         document.querySelectorAll('.debug-tab').forEach((t) => {
             t.classList.remove('active');
         });
         document.querySelectorAll('.debug-tab-content').forEach((p) => {
             p.classList.remove('active');
         });
-        btn.classList.add('active');
+        if (btn) btn.classList.add('active');
         const tabContent = document.getElementById(`debug-${tabId}-tab`);
         if (tabContent) {
             tabContent.classList.add('active');

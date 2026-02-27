@@ -14,7 +14,7 @@ import { type IGlobalBridge } from '@/shared/types/global_bridge_types';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { eventBus } from '@/shared/services/EventBus';
 import { aiSettingsRenderer } from '@/features/ai/ui/AISettingsRenderer';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import { type SettingsService } from '../services/SettingsService';
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
@@ -25,7 +25,7 @@ import { createField } from './components/FieldFactory';
 import { CardResizer } from './components/CardResizer';
 import { type I18nUI } from '@/infrastructure/i18n/I18nUI';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { NavigationService } from '@/infrastructure/navigation/NavigationService';
+import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
 
 type SettingValue = string | number | boolean | null;
 
@@ -87,6 +87,7 @@ export class SettingsUI {
         private readonly _aiSettings: AISettingsService,
         private readonly _i18nUI: I18nUI,
         private readonly _tauri: TauriProvider,
+        private readonly _navigation: NavigationService,
     ) {
         this._generalRenderer = new GeneralSettingsRenderer(_uiSettings);
         // Pre-sanitize static SVG icons once, not at every assignment site
@@ -127,7 +128,7 @@ export class SettingsUI {
             showToast:
                 win.showToast ??
                 ((m: string, s: string) => {
-                    logger.info(m, s);
+                    tracer.info(m, s);
                 }),
             toggleNavItem: (id: string, en: boolean) => {
                 this._generalRenderer.toggleNavItem(id, en);
@@ -148,11 +149,11 @@ export class SettingsUI {
         }
 
         if (container === null) {
-            logger.error(
+            tracer.error(
                 '[SettingsUI] Settings container "settings-grid" not found after 5s. Rendering failed.',
             );
         } else {
-            logger.info('[SettingsUI] Settings container found. Initializing renderers.');
+            tracer.info('[SettingsUI] Settings container found. Initializing renderers.');
         }
 
         // 0. Subscribe to navigation events
@@ -174,7 +175,7 @@ export class SettingsUI {
         // 5. Expose necessary global functions (legacy support for some templates)
         win.openModuleSettings = (app: IApp) => {
             void this._openModuleSettingsHelper(app).catch((e: unknown) => {
-                logger.error(String(e));
+                tracer.error(String(e));
             });
         };
         (win as unknown as IGlobalBridge)['setCardWidth'] = (btn: HTMLElement, w: string) => {
@@ -186,8 +187,8 @@ export class SettingsUI {
         });
     }
 
-    public static close(): void {
-        NavigationService.getInstance().removeBackAction('module-settings-modal');
+    public close(): void {
+        this._navigation.removeBackAction('module-settings-modal');
         const modal = document.getElementById('module-settings-modal') as HTMLDialogElement | null;
         if (modal) {
             if (modal.open) {
@@ -220,20 +221,16 @@ export class SettingsUI {
         const container = document.getElementById('module-config-modal-active');
 
         if (modal && modal.open && container !== null && currentApp !== undefined) {
-            logger.debug('[SettingsUI] Refreshing active module settings:', currentApp.id);
+            tracer.debug('[SettingsUI] Refreshing active module settings:', currentApp.id);
 
             const title = document.getElementById('module-settings-title');
             const suffix = this._context.t('ui.settings.header_suffix', 'Settings');
             if (title !== null) title.innerHTML = DOMPurify.sanitize(suffix);
 
             this._renderSpecializedModuleConfig(container, currentApp).catch((e: unknown) => {
-                logger.error(String(e));
+                tracer.error(String(e));
             });
         }
-    }
-
-    public close(): void {
-        SettingsUI.close();
     }
 
     /**
@@ -245,7 +242,7 @@ export class SettingsUI {
             fn();
         });
         this._unsubscribers.length = 0;
-        logger.info('[SettingsUI] Destroyed.');
+        tracer.info('[SettingsUI] Destroyed.');
     }
 
     /**
@@ -462,7 +459,7 @@ export class SettingsUI {
             const container = document.getElementById('module-config-modal-active');
             if (container && currentApp) {
                 this._renderUniversalApiSettings(container, currentApp).catch((e: unknown) => {
-                    logger.error(String(e));
+                    tracer.error(String(e));
                 });
             }
 
@@ -475,7 +472,7 @@ export class SettingsUI {
                 );
             }
         } catch (e) {
-            logger.error('[SettingsUI] Failed to add custom model', e);
+            tracer.error('[SettingsUI] Failed to add custom model', e);
         }
     }
 
@@ -573,10 +570,10 @@ export class SettingsUI {
 
         // modal-backdrop: just remove hidden class, CSS handles animation
         modal.classList.remove('hidden');
-        NavigationService.getInstance().pushBackAction(
+        this._navigation.pushBackAction(
             'module-settings-modal',
             () => {
-                SettingsUI.close();
+                this.close();
             },
             () => {
                 const win = getGlobalWin();
@@ -653,7 +650,7 @@ export class SettingsUI {
         if (this._saveTimer !== null) clearTimeout(this._saveTimer);
         this._saveTimer = setTimeout(() => {
             void (async () => {
-                logger.info(`[SettingsUI] Debounced saving: ${key} = ${String(value)}`);
+                tracer.info(`[SettingsUI] Debounced saving: ${key} = ${String(value)}`);
                 // Use non-null assertion or cast since backend expects non-null string|number|boolean
                 if (value !== null) {
                     await this._service.saveSetting(key, value);

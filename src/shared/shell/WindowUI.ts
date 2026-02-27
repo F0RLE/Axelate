@@ -7,7 +7,7 @@ import { type WindowService } from '../services/WindowService';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 // IWindowUIGlobal removed
 
@@ -46,7 +46,7 @@ export class WindowUI {
 
         // Fire and forget
         this._applySmallScreenProtection().catch((err: unknown) => {
-            logger.warn('[WindowUI] Failed to apply small screen protection:', err);
+            tracer.warn('[WindowUI] Failed to apply small screen protection:', err);
         });
 
         // Initial check
@@ -186,7 +186,7 @@ export class WindowUI {
             this.updateMaximizeIcon(isMaximized);
             this._handlePolicyAdjustments(policy, isMaximized);
         } catch (e) {
-            logger.warn('[WindowUI] Resize check failed:', e);
+            tracer.warn('[WindowUI] Resize check failed:', e);
         }
     }
 
@@ -501,5 +501,23 @@ export class WindowUI {
                 el.classList.add('visible');
             }
         });
+    }
+
+    /**
+     * Hides the close confirmation modal.
+     */
+    public hideCloseConfirmModal(): void {
+        const modal = document.getElementById('close-confirm-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Confirms the application close from the modal.
+     */
+    public confirmCloseFromModal(): void {
+        this.hideCloseConfirmModal();
+        void this._service.close();
     }
 }

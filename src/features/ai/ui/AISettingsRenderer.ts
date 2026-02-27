@@ -13,7 +13,7 @@ import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { IAIModelData } from '../types/aiTypes';
 import { getModelData } from '../utils/catalogHelpers';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 
@@ -78,7 +78,7 @@ class AISettingsRenderer extends BaseComponent {
     }
 
     protected onInit(): void | Promise<void> {
-        logger.debug('[AISettingsRenderer] Initialized');
+        tracer.debug('[AISettingsRenderer] Initialized');
     }
 
     protected onDestroy(): void {
@@ -101,7 +101,7 @@ class AISettingsRenderer extends BaseComponent {
      */
     public async render(container: HTMLElement, app: IApp): Promise<void> {
         if (!this._isInit) {
-            logger.error('[AISettingsRenderer] Not initialized. Call init() first.');
+            tracer.error('[AISettingsRenderer] Not initialized. Call init() first.');
             return;
         }
 
@@ -611,7 +611,7 @@ class AISettingsRenderer extends BaseComponent {
                 this._showToast(t('ui.settings.key_invalid_check', 'Key is invalid'), 'error');
             }
         } catch (error: unknown) {
-            logger.error('[AISettingsRenderer] Key check failed:', error);
+            tracer.error('[AISettingsRenderer] Key check failed:', error);
             this._updateKeyButtonState(btn, 'error', ICONS.X);
             this._showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
         } finally {
@@ -638,7 +638,7 @@ class AISettingsRenderer extends BaseComponent {
             const provider = appId === 'gemini' ? 'gemini' : 'openai';
             return await this._tauri.invoke<boolean>('validate_api_key', { provider, key });
         } catch (error) {
-            logger.error('[AISettingsRenderer] Key validation failed:', error);
+            tracer.error('[AISettingsRenderer] Key validation failed:', error);
             return false;
         }
     }

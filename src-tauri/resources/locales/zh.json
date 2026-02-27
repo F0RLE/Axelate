@@ -289,5 +289,8 @@
   "ui.settings.module_not_ready": "此模块尚未就绪。",
   "ui.launcher.badge.cloud": "云端",
   "ui.launcher.badge.local": "本地",
-  "ui.deepseek.model.v32.desc": "平衡的中型模型，具有改进的代码和逻辑能力。"
+  "ui.deepseek.model.v32.desc": "平衡的中型模型，具有改进的代码和逻辑能力。",
+  "ui.launcher.web.coming_soon": "即将推出",
+  "ui.launcher.web.marketplace": "商店",
+  "ui.launcher.settings.toggle_marketplace": "商店"
 }

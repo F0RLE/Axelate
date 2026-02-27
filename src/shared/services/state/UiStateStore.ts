@@ -4,7 +4,7 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
 
 export type ThinkingLevel = 'low' | 'medium' | 'high';
@@ -31,7 +31,7 @@ export interface IUIState {
 const DEFAULT_UI_STATE: IUIState = {
     sidebar_collapsed: false,
     sidebar_width: 280,
-    hidden_nav_items: [],
+    hidden_nav_items: ['marketplace'],
     hidden_monitors: [],
     card_widths: {},
     download_limit_enabled: false,
@@ -61,16 +61,16 @@ export class UiStateStore {
             if (this._bridge.isTauri()) {
                 const loaded = await this._bridge.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
-                logger.info('[UiStateStore] Loaded from backend');
+                tracer.info('[UiStateStore] Loaded from backend');
             } else {
                 const stored = localStorage.getItem(this._STORAGE_KEY);
                 if (stored !== null) {
                     this.setState(JSON.parse(stored) as Partial<IUIState>);
-                    logger.info('[UiStateStore] Loaded from localStorage');
+                    tracer.info('[UiStateStore] Loaded from localStorage');
                 }
             }
         } catch (e) {
-            logger.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
+            tracer.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
         }
         return this._state;
     }
@@ -137,7 +137,7 @@ export class UiStateStore {
             }
             this._isDirty = false;
         } catch (e) {
-            logger.error(`[UiStateStore] Failed to save state: ${String(e)}`);
+            tracer.error(`[UiStateStore] Failed to save state: ${String(e)}`);
         }
     }
 
@@ -151,7 +151,7 @@ export class UiStateStore {
             }
             this._isDirty = false;
         } catch (e) {
-            logger.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
+            tracer.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
         }
     }
 

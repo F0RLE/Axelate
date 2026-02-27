@@ -1,4 +1,4 @@
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IBridge } from '@/shared/types/IBridge';
 
 export interface ILogEntry {
@@ -30,7 +30,7 @@ export class DebugService {
                 return this.processLogs(logs);
             }
         } catch (e) {
-            logger.error('[DebugService] Fetch logs failed:', e);
+            tracer.error('[DebugService] Fetch logs failed:', e);
             return [];
         }
     }
@@ -46,7 +46,7 @@ export class DebugService {
             }
             return true;
         } catch (e) {
-            logger.error('[DebugService] Clear logs failed:', e);
+            tracer.error('[DebugService] Clear logs failed:', e);
             return false;
         }
     }

@@ -4,7 +4,7 @@
  */
 
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 /**
  * Check if a file is a text-based file.
@@ -90,7 +90,7 @@ export function readFileAsBase64(file: File): Promise<string> {
  * Get a suitable SVG icon based on the file extension.
  */
 export function getFileIcon(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+    const ext = (filename.split('.').pop() ?? '').toLowerCase();
 
     // Code
     if (
@@ -160,7 +160,7 @@ export async function getTokenCount(text: string, model = 'gpt-4'): Promise<numb
         try {
             return await globalThis.__TAURI__.core.invoke('count_tokens', { text, model });
         } catch (e) {
-            logger.warn(`[TokenCount] Backend failed, using heuristic: ${String(e)}`);
+            tracer.warn(`[TokenCount] Backend failed, using heuristic: ${String(e)}`);
         }
     }
     return estimateTokenCount(text);

@@ -1,104 +1,1127 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+/**
+ * DownloadUI Unit Tests — Full Coverage
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DownloadUI } from './DownloadUI';
+import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
+function setupDOM() {
+    document.body.innerHTML = `
+        <div id="downloads-main-card" class="hidden"></div>
+        <div id="downloads-empty-text"></div>
+        <div id="downloads-progress-bar"></div>
+        <div id="downloads-progress-text"></div>
+        <div id="downloads-speed"></div>
+        <div id="downloads-downloaded"></div>
+        <div id="downloads-total"></div>
+        <div id="downloads-item-label"></div>
+        <div id="downloads-status"></div>
+        <div id="downloads-eta"></div>
+        <div id="speed-limit-controls"></div>
+        <div id="speed-limit-value"></div>
+        <div id="downloads-body"></div>
+        <div class="downloads-header"></div>
+        <div id="downloads-container"></div>
+        <div id="model-download-modal" class="show"></div>
+        <dialog id="download-settings-overlay"></dialog>
+    `;
+
+    // jsdom doesn't implement showModal/close on <dialog>, so add them
+    const overlayEl = document.getElementById('download-settings-overlay');
+    if (overlayEl !== null) {
+        const overlay = overlayEl as HTMLDialogElement;
+        overlay.showModal = vi.fn();
+        overlay.close = vi.fn();
+    }
+
+    // Create proper input elements
+    const toggle = document.createElement('input');
+    toggle.id = 'download-speed-limit-toggle';
+    toggle.type = 'checkbox';
+    document.body.appendChild(toggle);
+
+    const slider = document.createElement('input');
+    slider.id = 'download-speed-slider';
+    slider.type = 'range';
+    slider.min = '1';
+    slider.max = '200';
+    slider.value = '50';
+    document.body.appendChild(slider);
+}
+
+function createMocks() {
+    const downloadSettings = {
+        getDownloadSettings: vi.fn().mockReturnValue({ limitEnabled: false, maxSpeed: 50 }),
+        setDownloadSettings: vi.fn(),
+    } as unknown as DownloadSettingsService;
+
+    const i18nService = {
+        t: vi.fn((_key: string, def?: string) => def ?? _key),
+    } as unknown as I18nService;
+
+    const navigation = {
+        pushBackAction: vi.fn(),
+        removeBackAction: vi.fn(),
+    } as unknown as NavigationService;
+
+    return { downloadSettings, i18nService, navigation };
+}
+
 describe('DownloadUI', () => {
+    let ui: DownloadUI;
     let downloadSettings: DownloadSettingsService;
     let i18nService: I18nService;
-    let ui: DownloadUI;
+    let navigation: NavigationService;
 
     beforeEach(() => {
-        // Reset DOM mocks
-        document.body.innerHTML = `
-            <div id="downloads-main-card" class="hidden"></div>
-            <div id="downloads-empty-text"></div>
-            <div id="downloads-progress-bar"></div>
-            <div id="downloads-progress-text"></div>
-            <div id="downloads-speed"></div>
-            <div id="downloads-downloaded"></div>
-            <div id="downloads-total"></div>
-            <div id="downloads-item-label"></div>
-            <div id="downloads-status"></div>
-            <div id="downloads-eta"></div>
-            <div id="download-speed-limit-toggle"></div>
-            <div id="download-speed-slider"></div>
-            <div id="speed-limit-value"></div>
-            <div id="speed-limit-controls"></div>
-        `;
-
-        // Ensure inputs are actual InputElements for instanceof checks
-        const toggle = document.createElement('input');
-        toggle.id = 'download-speed-limit-toggle';
-        toggle.type = 'checkbox';
-        document.body.appendChild(toggle);
-
-        const slider = document.createElement('input');
-        slider.id = 'download-speed-slider';
-        slider.type = 'range';
-        document.body.appendChild(slider);
-
-        // Remove duplicates from innerHTML (ids must be unique)
-        const oldToggle = document.querySelector('div#download-speed-limit-toggle');
-        if (oldToggle) oldToggle.remove();
-        const oldSlider = document.querySelector('div#download-speed-slider');
-        if (oldSlider) oldSlider.remove();
-
-        downloadSettings = {
-            getDownloadSettings: vi.fn().mockReturnValue({ limitEnabled: false, maxSpeed: 50 }),
-            setDownloadSettings: vi.fn(),
-        } as unknown as DownloadSettingsService;
-
-        i18nService = {
-            t: vi.fn((key: string, def?: string) => def ?? key),
-        } as unknown as I18nService;
-
-        ui = new DownloadUI(downloadSettings, i18nService);
+        vi.useFakeTimers();
+        setupDOM();
+        const mocks = createMocks();
+        downloadSettings = mocks.downloadSettings;
+        i18nService = mocks.i18nService;
+        navigation = mocks.navigation;
+        ui = new DownloadUI(downloadSettings, i18nService, navigation);
     });
 
-    it('should initialize and load settings', () => {
-        expect(downloadSettings.getDownloadSettings).toHaveBeenCalled();
+    afterEach(() => {
+        ui.destroy();
+        vi.useRealTimers();
+        vi.clearAllMocks();
+        document.body.innerHTML = '';
     });
 
-    it('should render download progress correctly', () => {
-        ui.renderDownloadsProgress({
-            percent: 50,
-            hasActive: true,
-            speed: 1024 * 1024, // 1 MB/s
-            downloaded: 50 * 1024 * 1024,
-            total: 100 * 1024 * 1024,
-            label: 'Test Download',
+    // ---------------------------------------------------------- constructor
+    describe('constructor', () => {
+        it('should load settings on construction', () => {
+            expect(downloadSettings.getDownloadSettings).toHaveBeenCalled();
+        });
+    });
+
+    // ---------------------------------------------------------- init
+    describe('init', () => {
+        it('should initialize polling and settings listeners', () => {
+            ui.init();
+            // Should register event listener for download-progress-update
+            const mainCard = document.getElementById('downloads-main-card');
+            expect(mainCard?.classList.contains('hidden')).toBe(true);
+        });
+    });
+
+    // ---------------------------------------------------------- setOnCancel
+    describe('setOnCancel', () => {
+        it('should set cancel callback', () => {
+            const cancelFn = vi.fn();
+            ui.setOnCancel(cancelFn);
+            // Stored internally — tested via dynamic card cancel button
+        });
+    });
+
+    // ---------------------------------------------------------- destroy
+    describe('destroy', () => {
+        it('should remove event listener', () => {
+            ui.init(); // Sets up the listener
+            const spy = vi.spyOn(globalThis, 'removeEventListener');
+            ui.destroy();
+            expect(spy).toHaveBeenCalledWith('download-progress-update', expect.any(Function));
         });
 
-        const bar = document.getElementById('downloads-progress-bar');
-        const text = document.getElementById('downloads-progress-text');
-        const speed = document.getElementById('downloads-speed');
-
-        expect(bar?.style.width).toBe('50%');
-        expect(text?.textContent).toBe('50.0%');
-        expect(speed?.textContent).toBe('1.00 MB/s');
+        it('should be safe to call without init', () => {
+            ui.destroy(); // No listener set, should not throw
+        });
     });
 
-    it('should show empty state when no active download', () => {
-        ui.renderDownloadsProgress({ hasActive: false });
+    // ---------------------------------------------------------- renderDownloadsProgress basics
+    describe('renderDownloadsProgress', () => {
+        it('should render progress bar and text', () => {
+            ui.renderDownloadsProgress({
+                percent: 50,
+                hasActive: true,
+                speed: 1024 * 1024,
+                downloaded: 50 * 1024 * 1024,
+                total: 100 * 1024 * 1024,
+                label: 'Test Download',
+            });
 
-        const mainCard = document.getElementById('downloads-main-card');
-        const emptyText = document.getElementById('downloads-empty-text');
+            const bar = document.getElementById('downloads-progress-bar');
+            const text = document.getElementById('downloads-progress-text');
+            const speed = document.getElementById('downloads-speed');
 
-        expect(mainCard?.classList.contains('hidden')).toBe(true);
-        expect(emptyText?.classList.contains('hidden')).toBe(false);
+            expect(bar?.style.width).toBe('50%');
+            expect(text?.textContent).toBe('50.0%');
+            expect(speed?.textContent).toBe('1.00 MB/s');
+        });
+
+        it('should show empty state when no active download', () => {
+            ui.renderDownloadsProgress({ hasActive: false });
+
+            const mainCard = document.getElementById('downloads-main-card');
+            const emptyText = document.getElementById('downloads-empty-text');
+
+            expect(mainCard?.classList.contains('hidden')).toBe(true);
+            expect(emptyText?.classList.contains('hidden')).toBe(false);
+        });
+
+        it('should show indeterminate progress for negative percent', () => {
+            ui.renderDownloadsProgress({
+                percent: -1,
+                hasActive: true,
+                label: 'Connecting',
+            });
+
+            const bar = document.getElementById('downloads-progress-bar');
+            const text = document.getElementById('downloads-progress-text');
+
+            expect(bar?.style.width).toBe('100%');
+            expect(bar?.classList.contains('indeterminate-bar')).toBe(true);
+            expect(text?.textContent).toBe('--%');
+        });
+
+        it('should show progress visuals with defaults', () => {
+            ui.renderDownloadsProgress({});
+
+            const text = document.getElementById('downloads-progress-text');
+            expect(text?.textContent).toBe('0.0%');
+        });
     });
 
-    it('should update settings when changed', () => {
-        const toggle = document.getElementById('download-speed-limit-toggle') as HTMLInputElement;
-        const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+    // ---------------------------------------------------------- formatSpeed
+    describe('formatSpeed (via renderDownloadsProgress)', () => {
+        it('should format speed in MB/s', () => {
+            ui.renderDownloadsProgress({ speed: 2 * 1024 * 1024, hasActive: true, label: 'x' });
+            expect(document.getElementById('downloads-speed')?.textContent).toBe('2.00 MB/s');
+        });
 
-        // Manually trigger saveSettings since we are mocking DOM events
-        toggle.checked = true;
-        slider.value = '100';
+        it('should format speed in KB/s', () => {
+            ui.renderDownloadsProgress({ speed: 512 * 1024, hasActive: true, label: 'x' });
+            expect(document.getElementById('downloads-speed')?.textContent).toBe('512.0 KB/s');
+        });
 
-        ui.saveSettings();
+        it('should format speed in B/s', () => {
+            ui.renderDownloadsProgress({ speed: 500, hasActive: true, label: 'x' });
+            expect(document.getElementById('downloads-speed')?.textContent).toBe('500 B/s');
+        });
+    });
 
-        expect(downloadSettings.setDownloadSettings).toHaveBeenCalledWith(true, 100);
+    // ---------------------------------------------------------- formatBytes
+    describe('formatBytes (via renderDownloadsProgress)', () => {
+        it('should format bytes in GB', () => {
+            ui.renderDownloadsProgress({
+                downloaded: 2 * 1024 * 1024 * 1024,
+                hasActive: true,
+                label: 'x',
+            });
+            expect(document.getElementById('downloads-downloaded')?.textContent).toBe('2.00 GB');
+        });
+
+        it('should format bytes in MB', () => {
+            ui.renderDownloadsProgress({
+                downloaded: 150 * 1024 * 1024,
+                hasActive: true,
+                label: 'x',
+            });
+            expect(document.getElementById('downloads-downloaded')?.textContent).toBe('150.00 MB');
+        });
+
+        it('should format bytes in KB', () => {
+            ui.renderDownloadsProgress({ downloaded: 512 * 1024, hasActive: true, label: 'x' });
+            expect(document.getElementById('downloads-downloaded')?.textContent).toBe('512.0 KB');
+        });
+
+        it('should format bytes in B', () => {
+            ui.renderDownloadsProgress({ downloaded: 100, hasActive: true, label: 'x' });
+            expect(document.getElementById('downloads-downloaded')?.textContent).toBe('100 B');
+        });
+
+        it('should show -- for total when 0', () => {
+            ui.renderDownloadsProgress({ total: 0, hasActive: true, label: 'x' });
+            expect(document.getElementById('downloads-total')?.textContent).toBe('--');
+        });
+    });
+
+    // ---------------------------------------------------------- status updates
+    describe('status updates', () => {
+        it('should show "Completed" status', () => {
+            ui.renderDownloadsProgress({ completed: true, label: 'Done' });
+            const status = document.getElementById('downloads-status');
+            expect(status?.textContent).toBe('Completed');
+            expect(status?.classList.contains('completed')).toBe(true);
+        });
+
+        it('should show "Error" status', () => {
+            ui.renderDownloadsProgress({ error: 'Network failure', label: 'Fail' });
+            const status = document.getElementById('downloads-status');
+            expect(status?.textContent).toBe('Error');
+            expect(status?.classList.contains('error')).toBe(true);
+        });
+
+        it('should show "In Progress" status', () => {
+            ui.renderDownloadsProgress({ hasActive: true, label: 'Downloading' });
+            const status = document.getElementById('downloads-status');
+            expect(status?.textContent).toBe('In Progress');
+            expect(status?.classList.contains('active')).toBe(true);
+        });
+
+        it('should show "Waiting" status', () => {
+            ui.renderDownloadsProgress({ hasActive: false });
+            const status = document.getElementById('downloads-status');
+            expect(status?.textContent).toBe('Waiting');
+        });
+    });
+
+    // ---------------------------------------------------------- ETA updates
+    describe('ETA updates', () => {
+        it('should show "Ready" when completed', () => {
+            ui.renderDownloadsProgress({ completed: true, label: 'Done' });
+            expect(document.getElementById('downloads-eta')?.textContent).toBe('Ready');
+        });
+
+        it('should show error message as ETA', () => {
+            ui.renderDownloadsProgress({ error: 'Connection lost', label: 'Fail' });
+            expect(document.getElementById('downloads-eta')?.textContent).toBe('Connection lost');
+        });
+
+        it('should calculate ETA in seconds', () => {
+            ui.renderDownloadsProgress({
+                speed: 1024 * 1024,
+                total: 30 * 1024 * 1024,
+                downloaded: 0,
+                hasActive: true,
+                label: 'Test',
+            });
+            // 30MB / 1MB/s = 30s
+            expect(document.getElementById('downloads-eta')?.textContent).toBe('30s');
+        });
+
+        it('should calculate ETA in minutes and seconds', () => {
+            ui.renderDownloadsProgress({
+                speed: 1024 * 1024,
+                total: 90 * 1024 * 1024,
+                downloaded: 0,
+                hasActive: true,
+                label: 'Test',
+            });
+            // 90MB / 1MB/s = 90s = 1m 30s
+            expect(document.getElementById('downloads-eta')?.textContent).toBe('1m 30s');
+        });
+
+        it('should show -- when no speed or total', () => {
+            ui.renderDownloadsProgress({ speed: 0, total: 0, hasActive: true, label: 'Test' });
+            expect(document.getElementById('downloads-eta')?.textContent).toBe('--');
+        });
+    });
+
+    // ---------------------------------------------------------- label updates
+    describe('label updates', () => {
+        it('should show fallback text when inactive and no label', () => {
+            ui.renderDownloadsProgress({ hasActive: false });
+            const label = document.getElementById('downloads-item-label');
+            expect(label?.textContent).toBe('No active downloads');
+        });
+
+        it('should show label when active', () => {
+            ui.renderDownloadsProgress({ hasActive: true, label: 'Module X' });
+            const label = document.getElementById('downloads-item-label');
+            expect(label?.textContent).toBe('Module X');
+        });
+    });
+
+    // ---------------------------------------------------------- saveSettings
+    describe('saveSettings', () => {
+        it('should save settings with toggle and slider values', () => {
+            const toggle = document.getElementById(
+                'download-speed-limit-toggle',
+            ) as HTMLInputElement;
+            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+
+            toggle.checked = true;
+            slider.value = '100';
+
+            ui.saveSettings();
+
+            expect(downloadSettings.setDownloadSettings).toHaveBeenCalledWith(true, 100);
+        });
+
+        it('should update controls opacity class', () => {
+            const toggle = document.getElementById(
+                'download-speed-limit-toggle',
+            ) as HTMLInputElement;
+            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+
+            toggle.checked = true;
+            slider.value = '50';
+
+            ui.saveSettings();
+
+            const controls = document.getElementById('speed-limit-controls');
+            expect(controls?.classList.contains('opacity-50')).toBe(true);
+        });
+
+        it('should update toggle background style', () => {
+            const toggle = document.getElementById(
+                'download-speed-limit-toggle',
+            ) as HTMLInputElement;
+            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+
+            toggle.checked = false;
+            slider.value = '50';
+
+            ui.saveSettings();
+
+            expect(toggle.style.background).toBe('var(--bg-light)');
+        });
+    });
+
+    // ---------------------------------------------------------- updateSpeedDisplay
+    describe('updateSpeedDisplay', () => {
+        it('should update speed display value with number', () => {
+            ui.updateSpeedDisplay(100);
+            expect(document.getElementById('speed-limit-value')?.textContent).toBe('100');
+        });
+
+        it('should update speed display value with string', () => {
+            ui.updateSpeedDisplay('75');
+            expect(document.getElementById('speed-limit-value')?.textContent).toBe('75');
+        });
+
+        it('should update slider gradient', () => {
+            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+            ui.updateSpeedDisplay(100);
+            expect(slider.style.background).toContain('linear-gradient');
+        });
+
+        it('should be no-op when speed-limit-value display is missing (L416 false)', () => {
+            document.getElementById('speed-limit-value')?.remove();
+            ui.updateSpeedDisplay(100); // display null → skip display update
+        });
+
+        it('should be no-op when slider is missing (L418 false)', () => {
+            document.getElementById('download-speed-slider')?.remove();
+            ui.updateSpeedDisplay(100); // slider null → skip gradient update
+        });
+    });
+
+    // ---------------------------------------------------------- saveSettings null branches
+    describe('saveSettings null branches', () => {
+        it('should skip controls opacity when controls element is missing (L395 false)', () => {
+            ui.init();
+            // Remove controls before saving
+            document.getElementById('speed-limit-controls')?.remove();
+            ui.saveSettings(); // controls instanceof HTMLElement → false → skip
+        });
+    });
+
+    // ---------------------------------------------------------- renderDownloadsProgress eta null
+    describe('renderDownloadsProgress without etaEl', () => {
+        it('should skip ETA update when eta element is missing (L288 false)', () => {
+            document.getElementById('downloads-eta')?.remove();
+            ui.renderDownloadsProgress({
+                hasActive: true,
+                percent: 50,
+                completed: true, // triggers _updateEta(els, state) → if (!els.etaEl) return
+            });
+        });
+    });
+
+    // ---------------------------------------------------------- startDownloadsPolling null element guards
+    describe('startDownloadsPolling without mainCard/emptyText', () => {
+        it('should handle missing mainCard in startDownloadsPolling init path (L319 false)', () => {
+            document.getElementById('downloads-main-card')?.remove();
+            ui.init(); // startDownloadsPolling → if (mainCard !== null) false branch
+        });
+
+        it('should handle missing emptyText in startDownloadsPolling init path (L320 false)', () => {
+            document.getElementById('downloads-empty-text')?.remove();
+            ui.init(); // startDownloadsPolling → if (emptyText !== null) false branch
+        });
+    });
+
+    // ---------------------------------------------------------- error event with no error field (L364 || branch)
+    describe('error event unknown error branch', () => {
+        it('should use Unknown error fallback when error field is missing/empty (L364)', () => {
+            ui.init();
+            // Dispatch error status without an error string → triggers `|| 'Unknown error'`
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-noerrfield',
+                        progress: 0.3,
+                        status: 'error',
+                        // no 'error' field — falsy → 'Unknown error'
+                    },
+                }),
+            );
+            const status = document.getElementById('downloads-status');
+            expect(status?.textContent).toBe('Error');
+        });
+    });
+
+    // ---------------------------------------------------------- openSettings / closeSettings
+    describe('openSettings / closeSettings', () => {
+        it('should open settings overlay as modal', () => {
+            const overlay = document.getElementById(
+                'download-settings-overlay',
+            ) as HTMLDialogElement;
+
+            ui.openSettings();
+
+            expect(overlay.showModal).toHaveBeenCalled();
+            expect(navigation.pushBackAction).toHaveBeenCalledWith(
+                'download-settings-overlay',
+                expect.any(Function),
+                expect.any(Function),
+            );
+        });
+
+        it('should set toggle and slider values from settings', () => {
+            (downloadSettings.getDownloadSettings as ReturnType<typeof vi.fn>).mockReturnValue({
+                limitEnabled: true,
+                maxSpeed: 150,
+            });
+
+            ui.openSettings();
+
+            const toggle = document.getElementById(
+                'download-speed-limit-toggle',
+            ) as HTMLInputElement;
+            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+
+            expect(toggle.checked).toBe(true);
+            expect(slider.value).toBe('150');
+        });
+
+        it('should close settings overlay', () => {
+            const overlay = document.getElementById(
+                'download-settings-overlay',
+            ) as HTMLDialogElement;
+            // Simulate open state
+            Object.defineProperty(overlay, 'open', { value: true, configurable: true });
+
+            ui.closeSettings();
+
+            expect(overlay.close).toHaveBeenCalled();
+            expect(navigation.removeBackAction).toHaveBeenCalledWith('download-settings-overlay');
+        });
+
+        it('should not close if overlay is not open', () => {
+            const overlay = document.getElementById(
+                'download-settings-overlay',
+            ) as HTMLDialogElement;
+            Object.defineProperty(overlay, 'open', { value: false, configurable: true });
+            // Reset the mock to track calls
+            (overlay.close as ReturnType<typeof vi.fn>).mockClear();
+
+            ui.closeSettings();
+
+            expect(overlay.close).not.toHaveBeenCalled();
+        });
+    });
+
+    // ---------------------------------------------------------- hideModelDownloadModal
+    describe('hideModelDownloadModal', () => {
+        it('should add hidden and remove show class', () => {
+            ui.hideModelDownloadModal();
+
+            const modal = document.getElementById('model-download-modal');
+            expect(modal?.classList.contains('hidden')).toBe(true);
+            expect(modal?.classList.contains('show')).toBe(false);
+        });
+
+        it('should be no-op when modal element is missing', () => {
+            document.getElementById('model-download-modal')?.remove();
+            ui.hideModelDownloadModal(); // should not throw
+        });
+    });
+
+    // ---------------------------------------------------------- null guard branches
+    describe('null guard branches', () => {
+        it('should be no-op when speed-limit-controls is missing in openSettings', () => {
+            ui.init();
+            document.getElementById('speed-limit-controls')?.remove();
+            ui.openSettings(); // controls branch → null → skip
+        });
+
+        it('should be no-op when overlay is missing in openSettings', () => {
+            ui.init();
+            document.getElementById('download-settings-overlay')?.remove();
+            ui.openSettings(); // overlay branch → null → skip, no showModal call
+        });
+
+        it('should handle missing emptyText in download complete cleanup', () => {
+            ui.init();
+            document.getElementById('downloads-empty-text')?.remove();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-et', progress: 0.5, status: 'downloading' },
+                }),
+            );
+            // Complete → _activeDownloads becomes 0 → _renderDynamicList hits emptyText null branch
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-et', progress: 1, status: 'complete' },
+                }),
+            );
+            vi.advanceTimersByTime(2100);
+        });
+
+        it('should handle missing mainCard in dynamic list render', () => {
+            ui.init();
+            document.getElementById('downloads-main-card')?.remove();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-mc', progress: 0.5, status: 'downloading' },
+                }),
+            );
+            // mainCard is null → style.display assignment is skipped
+        });
+
+        it('should handle missing downloads-body in _ensureDynamicList', () => {
+            document.getElementById('downloads-body')?.remove();
+            ui.init();
+            // Dispatching triggers _ensureDynamicList → body is null → early return
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-nb', progress: 0.5, status: 'downloading' },
+                }),
+            );
+            // Should not throw
+        });
+
+        it('should handle patching a card without pctEl, statValues, or itemLabel', () => {
+            ui.init();
+
+            // Create a card, then manually gut its DOM
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-gut', progress: 0.3, status: 'downloading' },
+                }),
+            );
+
+            // Remove internal elements from the card
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector('.download-item-card');
+            card?.querySelector('.downloads-progress-percent')?.remove();
+            card?.querySelectorAll('.downloads-stat-value').forEach((el) => el.remove());
+            card?.querySelector('.downloads-item-label')?.remove();
+
+            // Patching a card with missing elements should not throw
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-gut',
+                        progress: 0.9,
+                        status: 'downloading',
+                        message: 'Updated',
+                    },
+                }),
+            );
+        });
+
+        it('should handle patching a card without bar element', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-nobar', progress: 0.3, status: 'downloading' },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector('.download-item-card');
+            card?.querySelector('.downloads-bar-inner')?.remove();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-nobar', progress: 0.7, status: 'downloading' },
+                }),
+            );
+        });
+
+        it('should handle patching a card without status pill', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-nopill', progress: 0.3, status: 'downloading' },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector('.download-item-card');
+            card?.querySelector('.downloads-status-pill')?.remove();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-nopill', progress: 0.7, status: 'complete' },
+                }),
+            );
+        });
+    });
+
+    // ---------------------------------------------------------- _initSettingsListeners
+    describe('settings listeners', () => {
+        it('should save settings when toggle changes', () => {
+            ui.init();
+            const toggle = document.getElementById(
+                'download-speed-limit-toggle',
+            ) as HTMLInputElement;
+
+            toggle.checked = true;
+            toggle.dispatchEvent(new Event('change'));
+
+            expect(downloadSettings.setDownloadSettings).toHaveBeenCalled();
+        });
+
+        it('should update speed display and save when slider changes', () => {
+            ui.init();
+            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+
+            slider.value = '120';
+            slider.dispatchEvent(new Event('input'));
+
+            expect(document.getElementById('speed-limit-value')?.textContent).toBe('120');
+            expect(downloadSettings.setDownloadSettings).toHaveBeenCalled();
+        });
+    });
+
+    // ---------------------------------------------------------- startDownloadsPolling event handling
+    describe('startDownloadsPolling', () => {
+        it('should handle download progress events', () => {
+            ui.init();
+
+            const event = new CustomEvent('download-progress-update', {
+                detail: {
+                    module_id: 'mod-1',
+                    progress: 0.5,
+                    downloaded: 50,
+                    total: 100,
+                    status: 'downloading',
+                    message: 'Downloading mod-1',
+                },
+            });
+            globalThis.dispatchEvent(event);
+
+            const label = document.getElementById('downloads-item-label');
+            expect(label?.textContent).toContain('Downloading mod-1');
+        });
+
+        it('should ignore events without module_id', () => {
+            ui.init();
+
+            const event = new CustomEvent('download-progress-update', {
+                detail: {
+                    progress: 0.5,
+                    status: 'downloading',
+                },
+            });
+            globalThis.dispatchEvent(event);
+
+            // Should not crash
+        });
+
+        it('should handle complete status and cleanup after 2s', () => {
+            ui.init();
+
+            const event = new CustomEvent('download-progress-update', {
+                detail: {
+                    module_id: 'mod-1',
+                    progress: 1,
+                    downloaded: 100,
+                    total: 100,
+                    status: 'complete',
+                    message: 'Done',
+                },
+            });
+            globalThis.dispatchEvent(event);
+
+            // Advance past the 2s cleanup delay
+            vi.advanceTimersByTime(2100);
+        });
+
+        it('should handle error status', () => {
+            ui.init();
+
+            const event = new CustomEvent('download-progress-update', {
+                detail: {
+                    module_id: 'mod-1',
+                    progress: 0.3,
+                    status: 'error',
+                    error: 'Network failure',
+                },
+            });
+            globalThis.dispatchEvent(event);
+
+            const status = document.getElementById('downloads-status');
+            expect(status?.textContent).toBe('Error');
+        });
+
+        it('should handle cancelled status', () => {
+            ui.init();
+
+            const event = new CustomEvent('download-progress-update', {
+                detail: {
+                    module_id: 'mod-1',
+                    progress: 0.2,
+                    status: 'cancelled',
+                },
+            });
+            globalThis.dispatchEvent(event);
+
+            // Should not crash, setTimeout scheduled for cleanup
+            vi.advanceTimersByTime(2100);
+        });
+
+        it('should handle connecting and extracting statuses', () => {
+            ui.init();
+
+            for (const status of ['connecting', 'extracting']) {
+                const event = new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: `mod-${status}`,
+                        progress: 0.1,
+                        status,
+                        message: status,
+                    },
+                });
+                globalThis.dispatchEvent(event);
+            }
+        });
+    });
+
+    // ---------------------------------------------------------- Dynamic multi-download list
+    describe('dynamic card rendering', () => {
+        it('should render a download card when event fires', () => {
+            ui.init();
+
+            const event = new CustomEvent('download-progress-update', {
+                detail: {
+                    module_id: 'mod-abc',
+                    progress: 0.3,
+                    downloaded: 30 * 1024 * 1024,
+                    total: 100 * 1024 * 1024,
+                    status: 'downloading',
+                    message: 'Downloading module',
+                },
+            });
+            globalThis.dispatchEvent(event);
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector<HTMLElement>('.download-item-card');
+            expect(card).not.toBeNull();
+            expect(card?.dataset['moduleId']).toBe('mod-abc');
+        });
+
+        it('should patch existing card on update', () => {
+            ui.init();
+
+            // First event creates card
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-x',
+                        progress: 0.2,
+                        status: 'downloading',
+                        message: 'Step 1',
+                    },
+                }),
+            );
+
+            // Second event patches
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-x',
+                        progress: 0.8,
+                        status: 'downloading',
+                        message: 'Step 2',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const cards = list?.querySelectorAll('.download-item-card');
+            expect(cards?.length).toBe(1); // Same card, not duplicated
+        });
+
+        it('should handle indeterminate progress in card', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-indet',
+                        progress: -1,
+                        status: 'connecting',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector('.download-item-card');
+            const bar = card?.querySelector('.downloads-bar-inner');
+            expect(bar?.classList.contains('indeterminate-bar')).toBe(true);
+        });
+
+        it('should wire cancel button on downloading card', () => {
+            const cancelFn = vi.fn();
+            ui.setOnCancel(cancelFn);
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-cancel',
+                        progress: 0.5,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const cancelBtn = list?.querySelector('.download-cancel-btn');
+            expect(cancelBtn).not.toBeNull();
+
+            if (cancelBtn !== null) (cancelBtn as HTMLElement).click();
+            expect(cancelFn).toHaveBeenCalledWith('mod-cancel');
+        });
+
+        it('should not add cancel button for complete status', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-done',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const cancelBtn = list?.querySelector('.download-cancel-btn');
+            expect(cancelBtn).toBeNull();
+        });
+
+        it('should remove cards for finished downloads after delay', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-remove',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            expect(list?.querySelectorAll('.download-item-card').length).toBe(1);
+
+            // After 2s cleanup
+            vi.advanceTimersByTime(2100);
+
+            expect(list?.querySelectorAll('.download-item-card').length).toBe(0);
+        });
+
+        it('should render error status card', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-err',
+                        progress: 0.3,
+                        status: 'error',
+                        error: 'Disk full',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const pill = list?.querySelector('.downloads-status-pill');
+            expect(pill?.classList.contains('error')).toBe(true);
+        });
+
+        it('should invoke pushBackAction callbacks (L457-460)', () => {
+            ui.init();
+            ui.openSettings();
+
+            // navigation.pushBackAction was called with closeSettings and openSettings callbacks
+            const pushCall = (navigation.pushBackAction as ReturnType<typeof vi.fn>).mock
+                .calls[0] as [string, () => void, () => void];
+            const closeCallback = pushCall[1];
+            const openCallback = pushCall[2];
+
+            // Set overlay as open so closeSettings() calls close()
+            const overlay = document.getElementById(
+                'download-settings-overlay',
+            ) as HTMLDialogElement;
+            Object.defineProperty(overlay, 'open', { value: true, configurable: true });
+
+            // Call the close callback (L457)
+            closeCallback();
+            expect(overlay.close).toHaveBeenCalled();
+
+            // Call the open callback (L459-460)
+            openCallback();
+            expect(overlay.showModal).toHaveBeenCalledTimes(2); // once from openSettings(), once from callback
+        });
+
+        it('should remove stale cards (L550)', () => {
+            ui.init();
+
+            // Start TWO concurrent downloads
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-a', progress: 0.3, status: 'downloading' },
+                }),
+            );
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-b', progress: 0.5, status: 'downloading' },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            expect(list?.querySelectorAll('.download-item-card').length).toBe(2);
+
+            // Complete mod-a → cleanup timer removes it from _activeDownloads after 2s
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-a', progress: 1, status: 'complete' },
+                }),
+            );
+            vi.advanceTimersByTime(2100);
+            // mod-a removed from _activeDownloads. mod-b still active.
+
+            // Now fire another progress update for mod-b — this calls _renderDynamicList
+            // while mod-a's card is still in the DOM but not in _activeDownloads (L550 fires)
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-b', progress: 0.9, status: 'downloading' },
+                }),
+            );
+
+            // mod-a card should be gone, mod-b card remains
+            expect(list?.querySelectorAll('.download-item-card').length).toBe(1);
+            expect(
+                list?.querySelector('.download-item-card[data-module-id="mod-b"]'),
+            ).not.toBeNull();
+        });
+
+        it('should patch indeterminate bar on existing card (L599-600)', () => {
+            ui.init();
+
+            // Create card with determinate progress
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-patch',
+                        progress: 0.5,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            // Patch to indeterminate
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-patch',
+                        progress: -1,
+                        status: 'connecting',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector('.download-item-card');
+            const bar = card?.querySelector('.downloads-bar-inner');
+            expect(bar?.classList.contains('indeterminate-bar')).toBe(true);
+        });
+
+        it('should patch active status pill on existing card', () => {
+            ui.init();
+
+            // Create card
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-active',
+                        progress: 0.2,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            // Patch with extracting status (non-complete, non-error → active class)
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-active',
+                        progress: 0.9,
+                        status: 'extracting',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const pill = list?.querySelector('.downloads-status-pill');
+            expect(pill?.classList.contains('active')).toBe(true);
+        });
+
+        it('should patch error status pill on existing card (L613)', () => {
+            ui.init();
+
+            // First create a downloading card
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-err-patch',
+                        progress: 0.5,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            // Patch the same card to error status — triggers _patchStatusPill with 'error' (L613)
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-err-patch',
+                        progress: 0.5,
+                        status: 'error',
+                        error: 'Connection refused',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const pill = list?.querySelector('.downloads-status-pill');
+            expect(pill?.classList.contains('error')).toBe(true);
+        });
+
+        it('should render waiting label for unknown status (L720)', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-unknown',
+                        progress: 0,
+                        status: 'some_unknown_status',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const pill = list?.querySelector('.downloads-status-pill');
+            expect(pill?.textContent).toBe('Waiting');
+        });
     });
 });

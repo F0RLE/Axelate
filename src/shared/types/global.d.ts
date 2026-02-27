@@ -101,11 +101,9 @@ declare global {
     var applyTranslations: () => void;
     var initEmojiFlags: () => void;
     var updateLangButtons: () => void;
-    var selectLangInModal: (_lang: string) => void;
-    var confirmLanguage: () => void;
 
     // --- Core Services & Logging ---
-    var logger: {
+    var tracer: {
         info: (_msg: string, ..._args: unknown[]) => void;
         warn: (_msg: string, ..._args: unknown[]) => void;
         error: (_msg: string, ..._args: unknown[]) => void;
@@ -225,15 +223,13 @@ declare global {
     var hideToTray: () => Promise<void>;
     var confirmClose: () => Promise<void>;
     var hideSplashScreen: () => void;
-    var hideCloseConfirmModal: () => void;
-    var confirmCloseFromModal: () => void;
 
     interface Window {
         t: typeof t;
         currentLang: typeof currentLang;
         setLanguage: typeof setLanguage;
         changeLanguage: typeof changeLanguage;
-        logger: typeof logger;
+        tracer: typeof tracer;
         core: typeof core;
         control: typeof control;
         controlModule: typeof controlModule;
@@ -285,12 +281,8 @@ declare global {
         updateLangButtons: typeof updateLangButtons;
         setLogView: typeof setLogView;
         sendChat: typeof sendChat;
-        selectLangInModal: typeof selectLangInModal;
-        confirmLanguage: typeof confirmLanguage;
         clearLogs: typeof clearLogs;
         setDebugTab: typeof setDebugTab;
-        hideCloseConfirmModal: typeof hideCloseConfirmModal;
-        confirmCloseFromModal: typeof confirmCloseFromModal;
         saveDownloadSettings: typeof saveDownloadSettings;
         updateSpeedDisplay: typeof updateSpeedDisplay;
         catalogService: typeof catalogService;

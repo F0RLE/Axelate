@@ -121,6 +121,10 @@ export default defineConfig({
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
+            exclude: [
+                // Pure TypeScript interface — no executable lines, always 0%
+                '**/shared/types/IBridge.ts',
+            ],
             thresholds: {
                 'src/features/**/services/*.ts': {
                     lines: 80,

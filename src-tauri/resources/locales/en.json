@@ -308,5 +308,8 @@
   "ui.settings.module_not_ready": "This module is not ready yet.",
   "ui.launcher.badge.cloud": "CLOUD",
   "ui.launcher.badge.local": "LOCAL",
-  "ui.deepseek.model.v32.desc": "Balanced mid-range model with improved coding and logic capabilities."
+  "ui.deepseek.model.v32.desc": "Balanced mid-range model with improved coding and logic capabilities.",
+  "ui.launcher.web.coming_soon": "Coming soon",
+  "ui.launcher.web.marketplace": "Store",
+  "ui.launcher.settings.toggle_marketplace": "Store"
 }

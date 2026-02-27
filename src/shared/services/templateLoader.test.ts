@@ -1,98 +1,119 @@
-/**
- * TemplateLoader Unit Tests
- */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { templateLoader } from '@/shared/services/TemplateLoader';
+import { templateLoader } from './TemplateLoader';
 
 describe('TemplateLoader', () => {
     beforeEach(() => {
+        document.body.innerHTML = '<div id="test-container"></div>';
         templateLoader.clearCache();
-        // Reset fetch mock
-        vi.restoreAllMocks();
+        (templateLoader as unknown as { _initialized: boolean })._initialized = false;
     });
 
     afterEach(() => {
-        templateLoader.clearCache();
+        document.body.innerHTML = '';
+        vi.restoreAllMocks();
+    });
+
+    describe('init', () => {
+        it('should initialize only once', () => {
+            templateLoader.init();
+            expect((templateLoader as unknown as { _initialized: boolean })._initialized).toBe(
+                true,
+            );
+            templateLoader.init();
+            expect((templateLoader as unknown as { _initialized: boolean })._initialized).toBe(
+                true,
+            );
+        });
     });
 
     describe('loadTemplate', () => {
-        it('should fetch and return template content', async () => {
-            const mockHtml = '<div>Test Template</div>';
-            globalThis.fetch = vi.fn().mockResolvedValue({
-                ok: true,
-                text: () => Promise.resolve(mockHtml),
-            });
-
-            const result = await templateLoader.loadTemplate('pages/test');
-
-            expect(result).toBe(mockHtml);
-            expect(fetch).toHaveBeenCalledWith(
-                expect.stringContaining('templates/pages/test.html'),
-            );
-        });
-
-        it('should have mocked Tauri invoke', () => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const win = globalThis as unknown as Record<string, any>;
-            expect(win['__TAURI__']).toBeDefined();
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-            expect(typeof win['__TAURI__'].core.invoke).toBe('function');
-        });
-
-        it('should cache templates', async () => {
-            const mockHtml = '<div>Cached</div>';
-            globalThis.fetch = vi.fn().mockResolvedValue({
-                ok: true,
-                text: () => Promise.resolve(mockHtml),
-            });
-
-            await templateLoader.loadTemplate('pages/cached');
-            await templateLoader.loadTemplate('pages/cached');
-
-            // Fetch should only be called once due to caching
-            expect(fetch).toHaveBeenCalledTimes(1);
+        it('should return cached template on second call', async () => {
+            const fetchSpy = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValue(new Response('<p>Hello</p>', { status: 200 }));
+            const html1 = await templateLoader.loadTemplate('test');
+            const html2 = await templateLoader.loadTemplate('test');
+            expect(fetchSpy).toHaveBeenCalledTimes(1);
+            expect(html1).toBe(html2);
         });
 
         it('should return empty string on fetch error', async () => {
-            globalThis.fetch = vi.fn().mockResolvedValue({
-                ok: false,
-                status: 404,
-            });
+            vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network'));
+            const html = await templateLoader.loadTemplate('missing');
+            expect(html).toBe('');
+        });
 
-            const result = await templateLoader.loadTemplate('pages/notfound');
-
-            expect(result).toBe('');
+        it('should return empty string on non-ok response', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+                new Response('Not Found', { status: 404 }),
+            );
+            const html = await templateLoader.loadTemplate('notfound');
+            expect(html).toBe('');
         });
     });
 
     describe('injectTemplate', () => {
-        it('should inject HTML into container', () => {
-            document.body.innerHTML = '<div id="container"></div>';
-
-            const result = templateLoader.injectTemplate('container', '<span>Injected</span>');
-
+        it('should inject sanitized HTML into container', () => {
+            const result = templateLoader.injectTemplate('test-container', '<p>Test</p>');
             expect(result).toBe(true);
-            expect(document.getElementById('container')?.innerHTML).toBe('<span>Injected</span>');
+            expect(document.getElementById('test-container')?.innerHTML).toContain('Test');
         });
 
-        it('should return false if container not found', () => {
-            document.body.innerHTML = '';
+        it('should return false for missing container', () => {
+            expect(templateLoader.injectTemplate('nonexistent', '<p>x</p>')).toBe(false);
+        });
+    });
 
-            const result = templateLoader.injectTemplate('nonexistent', '<span>Test</span>');
+    describe('loadAndInject', () => {
+        it('should load and inject in one step', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+                new Response('<p>Loaded</p>', { status: 200 }),
+            );
+            const result = await templateLoader.loadAndInject('tpl', 'test-container');
+            expect(result).toBe(true);
+        });
 
+        it('should return false if container missing', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+                new Response('<p>x</p>', { status: 200 }),
+            );
+            const result = await templateLoader.loadAndInject('tpl', 'nonexistent');
             expect(result).toBe(false);
         });
     });
 
     describe('appendTemplate', () => {
-        it('should append HTML to container', () => {
-            document.body.innerHTML = '<div id="container"><span>Existing</span></div>';
+        it('should append HTML to existing content', () => {
+            templateLoader.injectTemplate('test-container', '<p>First</p>');
+            const result = templateLoader.appendTemplate('test-container', '<p>Second</p>');
+            expect(result).toBe(true);
+            expect(document.getElementById('test-container')?.children).toHaveLength(2);
+        });
 
-            templateLoader.appendTemplate('container', '<span>Appended</span>');
+        it('should return false for missing container', () => {
+            expect(templateLoader.appendTemplate('nonexistent', '<p>x</p>')).toBe(false);
+        });
+    });
 
-            const container = document.getElementById('container');
-            expect(container?.children.length).toBe(2);
+    describe('preloadTemplates', () => {
+        it('should preload multiple templates', async () => {
+            const fetchSpy = vi
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValue(new Response('<p>ok</p>', { status: 200 }));
+            await templateLoader.preloadTemplates(['a', 'b', 'c']);
+            expect(fetchSpy).toHaveBeenCalledTimes(3);
+        });
+    });
+
+    describe('clearCache', () => {
+        it('should clear the cache', async () => {
+            vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+                new Response('<p>cached</p>', { status: 200 }),
+            );
+            await templateLoader.loadTemplate('cached');
+            templateLoader.clearCache();
+            await templateLoader.loadTemplate('cached');
+            expect(globalThis.fetch).toHaveBeenCalledTimes(2);
         });
     });
 });

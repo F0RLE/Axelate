@@ -1,0 +1,259 @@
+/**
+ * AIProviderManager Unit Tests — Full Coverage
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AIProviderManager } from '@/features/ai/services/AIProviderManager';
+import type { Core } from '@/app/init';
+
+// Mock catalogHelpers used internally
+vi.mock('@/features/ai/utils/catalogHelpers', () => ({
+    getModelData: vi.fn(() => null),
+    getMostPowerfulModel: vi.fn(() => null),
+}));
+
+function createMockCore(
+    getKeyFn: (k: string) => Promise<string | null> = () => Promise.resolve(null),
+): Core {
+    return {
+        tauriProvider: {
+            getSecureKey: vi.fn(getKeyFn),
+            saveSecureKey: vi.fn().mockResolvedValue(undefined),
+        },
+        aiSettings: {
+            setAiSessionId: vi.fn(),
+            setSelectedAIModel: vi.fn(),
+            setLastActiveProvider: vi.fn(),
+            getSelectedAIModel: vi.fn().mockReturnValue(null),
+        },
+    } as unknown as Core;
+}
+
+describe('AIProviderManager', () => {
+    let manager: AIProviderManager;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        manager = new AIProviderManager();
+    });
+
+    // ---------------------------------------------------------- init
+    describe('init', () => {
+        it('should generate and save a new session ID if none exists', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(null));
+            manager.setCore(mockCore);
+
+            await manager.init();
+
+            expect(mockCore.tauriProvider.saveSecureKey).toHaveBeenCalledWith(
+                'ai_session_id',
+                expect.any(String),
+            );
+            expect(mockCore.aiSettings.setAiSessionId).toHaveBeenCalledWith(expect.any(String));
+            expect(manager.sessionId).not.toBe('default');
+        });
+
+        it('should restore existing session ID without saving', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('existing-session-abc'));
+            manager.setCore(mockCore);
+
+            await manager.init();
+
+            expect(mockCore.tauriProvider.saveSecureKey).not.toHaveBeenCalled();
+            expect(manager.sessionId).toBe('existing-session-abc');
+        });
+
+        it('should work without core set (generates UUID session)', async () => {
+            await expect(manager.init()).resolves.not.toThrow();
+            // Without core, _getSecureVal returns null → randomUUID is generated
+            expect(manager.sessionId).not.toBe('default');
+            expect(manager.sessionId.length).toBeGreaterThan(0);
+        });
+    });
+
+    // ---------------------------------------------------------- startProvider
+    describe('startProvider', () => {
+        it('should return true immediately if same provider already active', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            manager.setCore(mockCore);
+            await manager.startProvider('gemini');
+
+            const result = await manager.startProvider('gemini');
+            expect(result).toBe(true);
+        });
+
+        it('should stop previous provider when switching', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            manager.setCore(mockCore);
+
+            await manager.startProvider('gemini');
+            await manager.startProvider('gpt');
+
+            expect(manager.activeProviderId).toBe('gpt');
+        });
+
+        it('should return false if API key is empty for non-local provider', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(''));
+            manager.setCore(mockCore);
+
+            const result = await manager.startProvider('gemini');
+            expect(result).toBe(false);
+            expect(manager.isActive()).toBe(false);
+        });
+
+        it('should succeed for local provider without a key', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(''));
+            manager.setCore(mockCore);
+
+            const result = await manager.startProvider('local');
+            expect(result).toBe(true);
+        });
+
+        it('should return false and log on exception (lines 71-72)', async () => {
+            const mockCore = createMockCore(() =>
+                Promise.reject(new Error('Secure storage crash')),
+            );
+            manager.setCore(mockCore);
+
+            const result = await manager.startProvider('gemini');
+            expect(result).toBe(false);
+        });
+
+        it('should persist model and provider via aiSettings', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-test'));
+            manager.setCore(mockCore);
+
+            await manager.startProvider('gemini');
+
+            expect(mockCore.aiSettings.setSelectedAIModel).toHaveBeenCalledWith(
+                'gemini',
+                expect.any(String),
+            );
+            expect(mockCore.aiSettings.setLastActiveProvider).toHaveBeenCalledWith('gemini');
+        });
+    });
+
+    // ---------------------------------------------------------- stopProvider
+    describe('stopProvider', () => {
+        it('should clear state when active', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            manager.setCore(mockCore);
+            await manager.startProvider('gemini');
+
+            manager.stopProvider();
+
+            expect(manager.activeProviderId).toBeNull();
+            expect(manager.apiKey).toBeNull();
+            expect(manager.isActive()).toBe(false);
+        });
+
+        it('should be a no-op when not active', () => {
+            manager.stopProvider();
+            expect(manager.activeProviderId).toBeNull();
+        });
+    });
+
+    // ---------------------------------------------------------- isActive
+    describe('isActive', () => {
+        it('should return false when no provider', () => {
+            expect(manager.isActive()).toBe(false);
+        });
+
+        it('should return true for axelate-localai without key', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(''));
+            manager.setCore(mockCore);
+            await manager.startProvider('axelate-localai');
+
+            expect(manager.isActive()).toBe(true);
+        });
+    });
+
+    // ---------------------------------------------------------- refreshActiveApiKey
+    describe('refreshActiveApiKey', () => {
+        it('should update apiKey if it changed', async () => {
+            let callCount = 0;
+            const mockCore = createMockCore(() => {
+                callCount++;
+                return Promise.resolve(callCount === 1 ? 'original-key' : 'new-key');
+            });
+            manager.setCore(mockCore);
+            await manager.startProvider('gemini');
+
+            await manager.refreshActiveApiKey();
+
+            expect(manager.apiKey).toBe('new-key');
+        });
+
+        it('should do nothing if no active provider', async () => {
+            await manager.refreshActiveApiKey();
+        });
+    });
+
+    // ---------------------------------------------------------- _saveSecureVal (lines 163-168)
+    describe('_saveSecureVal (via init)', () => {
+        it('should save session ID when core is present and no session exists', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(null));
+            manager.setCore(mockCore);
+
+            await manager.init();
+
+            expect(mockCore.tauriProvider.saveSecureKey).toHaveBeenCalled();
+        });
+
+        it('should silently skip save when core is absent', async () => {
+            await expect(manager.init()).resolves.not.toThrow();
+        });
+    });
+
+    // ---------------------------------------------------------- getters
+    describe('getters', () => {
+        it('maxOutputTokens should return undefined when inactive', () => {
+            expect(manager.maxOutputTokens).toBeUndefined();
+        });
+
+        it('getProviderDisplayName should return known names', () => {
+            expect(manager.getProviderDisplayName('gpt')).toBe('OpenAI GPT');
+            expect(manager.getProviderDisplayName('gemini')).toBe('Google Gemini');
+            expect(manager.getProviderDisplayName('axelate-localai')).toBe('Axelate Local AI');
+            expect(manager.getProviderDisplayName('unknown-id')).toBe('unknown-id');
+        });
+    });
+
+    // ---------------------------------------------------------- _getPersistedModel / _getDefaultModel
+    describe('model resolution branches', () => {
+        it('should use persisted model from aiSettings when available (L143)', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('custom-model');
+            manager.setCore(mockCore);
+
+            await manager.startProvider('gemini');
+
+            expect(manager.model).toBe('custom-model');
+        });
+
+        it('should use catalog model from getMostPowerfulModel when available (L149)', async () => {
+            const { getMostPowerfulModel } = await import('@/features/ai/utils/catalogHelpers');
+            vi.mocked(getMostPowerfulModel).mockReturnValue('catalog-best-model');
+
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue(
+                null as unknown as string,
+            );
+            manager.setCore(mockCore);
+
+            await manager.startProvider('gemini');
+
+            expect(manager.model).toBe('catalog-best-model');
+            vi.mocked(getMostPowerfulModel).mockReturnValue(null as unknown as string);
+        });
+
+        it('should return null from _getPersistedModel when core is not set (L143 true branch)', async () => {
+            // No setCore() called — _core is null → _getPersistedModel returns null
+            // startProvider('local') resolves with fallback model from _getDefaultModel
+            //  'local' provider: _resolveApiKey returns '' (no core), isLocal=true → proceeds
+            const result = await manager.startProvider('local');
+            expect(result).toBe(true);
+            // Model comes from _getDefaultModel since _getPersistedModel returned null
+            expect(manager.model).toBe('llama-4-maverick');
+        });
+    });
+});

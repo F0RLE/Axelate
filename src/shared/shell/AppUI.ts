@@ -2,13 +2,14 @@ import type { IApp } from '../types/coreTypes';
 import { getGlobalWin } from '../utils/globalAccessor';
 import DOMPurify from 'dompurify';
 import { eventBus } from '../services/EventBus';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 import { ToastManager } from './ui/ToastManager';
 import { ModuleCardRenderer } from './ui/ModuleCardRenderer';
 import { ModalManager } from './ui/ModalManager';
 import { SkeletonManager } from './ui/SkeletonManager';
 import type { ModulePlatformService } from '../services/ModulePlatformService';
+import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
 
 /**
  * @class AppUI
@@ -61,14 +62,21 @@ export class AppUI {
     private readonly _platformService: ModulePlatformService;
     private readonly _selectedApps = new Map<string, IApp>();
 
-    constructor(platformService: ModulePlatformService) {
+    constructor(
+        platformService: ModulePlatformService,
+        private readonly _navigation: NavigationService,
+    ) {
         this._platformService = platformService;
         this._toastManager = new ToastManager();
         this._cardRenderer = new ModuleCardRenderer();
         this._skeletonManager = new SkeletonManager();
-        this._modalManager = new ModalManager(this._cardRenderer, (e, app, category) => {
-            void this._handleAppCardClick(e, app, category);
-        });
+        this._modalManager = new ModalManager(
+            this._cardRenderer,
+            (e, app, category) => {
+                void this._handleAppCardClick(e, app, category);
+            },
+            this._navigation,
+        );
 
         globalThis.addEventListener('language-changed', () => {
             this._modalManager.refreshCurrentSelection();
@@ -88,50 +96,47 @@ export class AppUI {
      * Initializes permanent listeners for dashboard cards to handle interactions safely.
      */
     private _initDashboardCardListeners(): void {
-        const cards = [
-            { id: 'ai-module-card', category: 'ai' },
-            { id: 'services-module-card', category: 'services' },
-        ];
+        const categoryOf = (id: string): string => (id === 'ai-module-card' ? 'ai' : 'services');
 
-        cards.forEach(({ id, category }) => {
-            const card = document.getElementById(id);
-            if (card === null) return;
+        // Use delegation because module cards live in a template loaded async
+        document.body.addEventListener('contextmenu', (e) => {
+            const target = e.target as HTMLElement;
+            const card = target.closest('#ai-module-card, #services-module-card');
+            if (!(card instanceof HTMLElement)) return;
+            if (!card.classList.contains('selected')) return;
 
-            // Right-click (Context Menu) - Open Settings
-            card.addEventListener('contextmenu', (e) => {
-                if (!card.classList.contains('selected')) return;
+            const category = categoryOf(card.id);
+            const app = this._selectedApps.get(category);
+            if (app === undefined) return;
 
-                const app = this._selectedApps.get(category);
-                if (app === undefined) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
 
+            tracer.info(`[AppUI] Right-click settings for ${category}:`, app.id);
+            const win = getGlobalWin();
+            if (typeof win.openModuleSettings === 'function') {
+                win.openModuleSettings(app);
+            }
+        });
+
+        document.body.addEventListener('mousedown', (e) => {
+            const target = e.target as HTMLElement;
+            const card = target.closest('#ai-module-card, #services-module-card');
+            if (!(card instanceof HTMLElement)) return;
+            if (!card.classList.contains('selected')) return;
+
+            const category = categoryOf(card.id);
+
+            if (e.button === 1) {
                 e.preventDefault();
                 e.stopPropagation();
+                tracer.info(`[AppUI] Middle-click close for ${category}`);
+                this._deselectModule(card, category);
+            } else if (e.button === 2) {
+                e.stopPropagation();
                 e.stopImmediatePropagation();
-
-                logger.info(`[AppUI] Right-click settings for ${category}:`, app.id);
-                const win = getGlobalWin();
-                if (typeof win.openModuleSettings === 'function') {
-                    win.openModuleSettings(app);
-                }
-            });
-
-            // Mouse Down - Catch Middle Click
-            card.addEventListener('mousedown', (e) => {
-                if (!card.classList.contains('selected')) return;
-
-                // 1 = Middle Button
-                if (e.button === 1) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    logger.info(`[AppUI] Middle-click close for ${category}`);
-                    this._deselectModule(card, category);
-                }
-                // 2 = Right Button (Just stop propagation to prevent interference)
-                else if (e.button === 2) {
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                }
-            });
+            }
         });
     }
 
@@ -220,14 +225,22 @@ export class AppUI {
     public setButtonLoading(button: HTMLButtonElement | null, loading = true): void {
         this._skeletonManager.setButtonLoading(button, loading);
     }
-    // --- App Selection Modal ---
     /**
      * Opens the app selection modal for a specific category.
      * @param {string} category - 'ai' or 'services'.
-     * @param {IApp[]} apps - List of apps to display.
+     * @param {IApp[]} [apps] - List of apps to display.
      */
-    public openAppSelection(category: string, apps: IApp[]): void {
-        this._modalManager.openAppSelection(category, apps, this._selectedApps.get(category)?.id);
+    public openAppSelection(category: string, apps?: IApp[]): void {
+        let appsToRender = apps;
+        if (!appsToRender) {
+            const win = getGlobalWin();
+            appsToRender = (win.getCatalogCategory as (cat: string) => IApp[])(category);
+        }
+        this._modalManager.openAppSelection(
+            category,
+            appsToRender,
+            this._selectedApps.get(category)?.id,
+        );
     }
 
     public closeAppSelection(): void {
@@ -262,7 +275,7 @@ export class AppUI {
             // Update persistent state for listeners
             this._selectedApps.set(category, app);
         } else {
-            logger.warn(`[AppUI] Could not find module card: ${cardId}`);
+            tracer.warn(`[AppUI] Could not find module card: ${cardId}`);
         }
     }
 
@@ -332,10 +345,21 @@ export class AppUI {
             target.closest('.app-card-overlay') ?? target.closest('.app-card-hover-actions');
         const isApi = this._platformService.isApiModule(app);
 
-        if (!isApi && app.installed !== true) {
-            // Fallback allows any click for non-installed modules to trigger download
+        // Only trigger download when the download button is explicitly clicked
+        if (!isApi && app.installed !== true && (downloadBtn !== null || overlay !== null)) {
             if (app.repoUrl === undefined || app.repoUrl === '') {
-                throw new Error('ui.launcher.web.download_url_empty'); // Key for localization
+                tracer.warn('[AppUI] Download URL is empty for module:', app.id);
+                const win = getGlobalWin();
+                this.showToast(
+                    typeof win.t === 'function'
+                        ? win.t(
+                              'ui.launcher.web.download_url_empty',
+                              'Download URL is not available',
+                          )
+                        : 'Download URL is not available',
+                    'warning',
+                );
+                return true;
             }
 
             e.stopPropagation();
@@ -397,7 +421,7 @@ export class AppUI {
     }
 
     private async _handleDeleteModule(app: IApp, category: string): Promise<void> {
-        logger.info('[AppUI] Remove module clicked:', app.id);
+        tracer.info('[AppUI] Remove module clicked:', app.id);
         const win = getGlobalWin();
         try {
             await this._platformService.delete(app);
@@ -412,7 +436,7 @@ export class AppUI {
             const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(category);
             this.openAppSelection(category, allApps);
         } catch (err: unknown) {
-            logger.error('[AppUI] Delete error:', err);
+            tracer.error('[AppUI] Delete error:', err);
             const error = err as Error;
             const msg = error.message.startsWith('ui.')
                 ? error.message
@@ -429,7 +453,7 @@ export class AppUI {
         _category: string,
         btn: HTMLElement | null,
     ): Promise<void> {
-        logger.info('[AppUI] Download module clicked:', app.id);
+        tracer.info('[AppUI] Download module clicked:', app.id);
         if (btn !== null) {
             btn.classList.add('downloading', 'indeterminate');
             btn.innerHTML = `<div class="btn-content"><span class="stop-square-icon" title="Cancel"></span><span class="download-pct">0%</span></div>`;
@@ -478,7 +502,7 @@ export class AppUI {
     }
 
     private _onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
-        logger.error('[AppUI] Download error:', err);
+        tracer.error('[AppUI] Download error:', err);
         if (btn !== null) {
             btn.classList.remove('downloading', 'indeterminate');
             btn.style.removeProperty('--download-progress');
@@ -554,7 +578,7 @@ export class AppUI {
             }
         });
 
-        logger.info('[AppUI] Stopped previous module:', previousModuleId);
+        tracer.info('[AppUI] Stopped previous module:', previousModuleId);
     }
 
     // _updateCardAttributes removed (delegated to ModuleCardRenderer)
@@ -619,13 +643,13 @@ export class AppUI {
 
         // If currently downloading, clicking cancels the download
         if (actionBtn.classList.contains('downloading')) {
-            logger.info('[AppUI] Cancelling download for:', app.id);
+            tracer.info('[AppUI] Cancelling download for:', app.id);
             void this._platformService.cancelDownload(app.id);
             this._setDownloadReady(actionBtn);
             return;
         }
 
-        logger.info('[AppUI] Download module clicked (card):', app.id);
+        tracer.info('[AppUI] Download module clicked (card):', app.id);
         this._setDownloadLoading(actionBtn);
 
         // Polling fallback to guarantee UI updates even if events drop
@@ -725,7 +749,7 @@ export class AppUI {
     }
 
     private _onDownloadError(actionBtn: HTMLElement, _app: IApp, err: unknown): void {
-        logger.error('Download error:', err);
+        tracer.error('Download error:', err);
         const win = getGlobalWin();
         win.showToast(
             typeof win.t === 'function'
@@ -750,14 +774,14 @@ export class AppUI {
         settingsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             e.stopImmediatePropagation();
-            logger.info('[AppUI] Settings button clicked (event) for:', app.id);
+            tracer.info('[AppUI] Settings button clicked (event) for:', app.id);
             const win = getGlobalWin();
             if (typeof win.openModuleSettings === 'function') win.openModuleSettings(app);
-            else logger.error('[AppUI] globalThis.openModuleSettings is undefined'); // Suppress loop below if needed
+            else tracer.error('[AppUI] globalThis.openModuleSettings is undefined'); // Suppress loop below if needed
         });
         settingsBtn.addEventListener('mousedown', (e) => {
             e.stopPropagation();
-            logger.debug('[AppUI] Settings button mousedown for:', app.id);
+            tracer.debug('[AppUI] Settings button mousedown for:', app.id);
         });
         card.appendChild(settingsBtn);
     }

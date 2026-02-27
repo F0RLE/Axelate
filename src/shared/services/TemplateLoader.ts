@@ -12,7 +12,7 @@
  */
 
 import DOMPurify from 'dompurify';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 /**
  * @class TemplateLoader
@@ -33,7 +33,7 @@ class TemplateLoader {
      */
     public init(): void {
         if (this._initialized) {
-            logger.warn('[TemplateLoader] Already initialized');
+            tracer.warn('[TemplateLoader] Already initialized');
             return;
         }
 
@@ -66,7 +66,7 @@ class TemplateLoader {
             this._cache.set(path, html);
             return html;
         } catch (error) {
-            logger.error(`[TemplateLoader] Error loading template ${path}: ${String(error)}`);
+            tracer.error(`[TemplateLoader] Error loading template ${path}: ${String(error)}`);
             return '';
         }
     }
@@ -127,7 +127,7 @@ class TemplateLoader {
                 SAFE_FOR_TEMPLATES: true,
                 KEEP_CONTENT: true,
             });
-            logger.debug(`[TemplateLoader] Injected: ${containerId}`);
+            tracer.debug(`[TemplateLoader] Injected: ${containerId}`);
             return true;
         }
         return false;

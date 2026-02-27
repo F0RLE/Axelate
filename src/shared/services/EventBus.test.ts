@@ -51,6 +51,31 @@ describe('EventBus', () => {
             expect(handler).toHaveBeenCalledTimes(1);
             expect(handler).toHaveBeenCalledWith({ moduleId: 'test' });
         });
+
+        it('should allow unsubscribe from once()', () => {
+            const handler = vi.fn();
+            const unsub = eventBus.once('module:download:complete', handler);
+            unsub();
+            eventBus.emit('module:download:complete', { moduleId: 'test' });
+            expect(handler).not.toHaveBeenCalled();
+        });
+
+        it('should reuse existing once-listener set for same event (L110)', () => {
+            const handler1 = vi.fn();
+            const handler2 = vi.fn();
+            eventBus.once('module:download:complete', handler1);
+            eventBus.once('module:download:complete', handler2);
+
+            eventBus.emit('module:download:complete', { moduleId: 'test' });
+
+            expect(handler1).toHaveBeenCalledTimes(1);
+            expect(handler2).toHaveBeenCalledTimes(1);
+
+            // Second emit should not call either handler
+            eventBus.emit('module:download:complete', { moduleId: 'test2' });
+            expect(handler1).toHaveBeenCalledTimes(1);
+            expect(handler2).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('off', () => {
@@ -142,6 +167,15 @@ describe('EventBus', () => {
 
             expect(errorHandler).toHaveBeenCalledTimes(1);
             expect(successHandler).toHaveBeenCalledTimes(1);
+        });
+
+        it('should catch error in once-handler without throwing', () => {
+            const errorHandler = vi.fn(() => {
+                throw new Error('Once error');
+            });
+            eventBus.once('page:change', errorHandler);
+            expect(() => eventBus.emit('page:change', { pageId: 'x' })).not.toThrow();
+            expect(errorHandler).toHaveBeenCalledTimes(1);
         });
     });
 });

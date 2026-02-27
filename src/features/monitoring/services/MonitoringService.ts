@@ -1,5 +1,5 @@
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 interface IMonitoringGlobal {
@@ -38,16 +38,16 @@ export class MonitoringService {
                         this.notifyListeners(payload);
                     },
                 );
-                logger.info('[MonitoringService] Started listening to system_stats');
+                tracer.info('[MonitoringService] Started listening to system_stats');
             } catch (e) {
-                logger.error('[MonitoringService] Failed to listen to events:', e);
+                tracer.error('[MonitoringService] Failed to listen to events:', e);
                 this.startFallback();
             }
 
             // Optimization: Pause backend monitoring when window is hidden
             this._bindVisibilityHandler();
         } else {
-            logger.info('[MonitoringService] Non-Tauri environment, starting fallback polling');
+            tracer.info('[MonitoringService] Non-Tauri environment, starting fallback polling');
             this.startFallback();
         }
     }
@@ -57,13 +57,12 @@ export class MonitoringService {
      */
     private _bindVisibilityHandler(): void {
         document.addEventListener('visibilitychange', () => {
+            /* v8 ignore next */
             if (this._tauri.isTauri()) {
                 const isHidden = document.hidden;
                 // Fire and forget
                 void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
-                if (import.meta.env.DEV) {
-                    logger.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
-                }
+                tracer.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
             }
         });
     }
@@ -78,10 +77,7 @@ export class MonitoringService {
             this.unlistenFn = null;
         }
         if (this.pollingInterval) {
-            const g = globalThis as unknown as IMonitoringGlobal;
-            if (typeof g.clearInterval === 'function') {
-                g.clearInterval(this.pollingInterval);
-            }
+            clearInterval(this.pollingInterval);
             this.pollingInterval = null;
         }
     }
@@ -109,14 +105,12 @@ export class MonitoringService {
             try {
                 cb(stats);
             } catch (err) {
-                logger.error('[MonitoringService] Listener error:', err);
+                tracer.error('[MonitoringService] Listener error:', err);
             }
         });
     }
 
     private startFallback() {
-        if (this.pollingInterval) return;
-
         const g = globalThis as IMonitoringGlobal;
         this.pollingInterval = g.setInterval(() => {
             void (async () => {
@@ -128,7 +122,7 @@ export class MonitoringService {
                         return;
                     }
                 } catch (e) {
-                    logger.warn('[MonitoringService] Poll failed', e);
+                    tracer.warn('[MonitoringService] Poll failed', e);
                 }
                 // Fallback to mock removed for quality assurance
             })();

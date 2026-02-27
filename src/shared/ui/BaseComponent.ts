@@ -1,4 +1,4 @@
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 
 /**
  * @abstract BaseComponent
@@ -20,7 +20,7 @@ export abstract class BaseComponent {
         try {
             await this.onInit();
         } catch (err) {
-            logger.error(`[${this.constructor.name}] Init failed:`, err);
+            tracer.error(`[${this.constructor.name}] Init failed:`, err);
         }
     }
 
@@ -38,7 +38,7 @@ export abstract class BaseComponent {
         try {
             this.onDestroy();
         } catch (err) {
-            logger.error(`[${this.constructor.name}] Destroy failed:`, err);
+            tracer.error(`[${this.constructor.name}] Destroy failed:`, err);
         }
 
         this._elementCache.clear();

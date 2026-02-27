@@ -1,5 +1,5 @@
 import type { Core } from '@/app/init';
-import { logger } from '@/infrastructure/logging/LoggerService';
+import { tracer } from '@/infrastructure/logging/LoggerService';
 import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
 
 export class AIProviderManager {
@@ -40,7 +40,7 @@ export class AIProviderManager {
     public async startProvider(providerId: string): Promise<boolean> {
         if (this._activeProviderId === providerId) return true;
 
-        logger.info(`[AIProviderManager] Switching provider to: ${providerId}`);
+        tracer.info(`[AIProviderManager] Switching provider to: ${providerId}`);
 
         if (this._activeProviderId !== null) {
             this.stopProvider();
@@ -68,7 +68,7 @@ export class AIProviderManager {
 
             return true;
         } catch (error) {
-            logger.error('[AIProviderManager] Failed to start provider:', error);
+            tracer.error('[AIProviderManager] Failed to start provider:', error);
             return false;
         }
     }
@@ -78,7 +78,7 @@ export class AIProviderManager {
             this._activeProviderId = null;
             this._apiKey = null;
             this._model = '';
-            logger.info('[AIProviderManager] Provider stopped');
+            tracer.info('[AIProviderManager] Provider stopped');
         }
     }
 
