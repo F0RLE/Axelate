@@ -67,6 +67,22 @@ describe('chatUtils', () => {
     });
 
     describe('readFileAsBase64', () => {
+        const createMockFileReader = (resultValue: string | null, throwsOnGet = false) => {
+            return class MockFileReader {
+                onload: (() => void) | null = null;
+                onerror: ((e: Error) => void) | null = null;
+                get result(): string | null {
+                    if (throwsOnGet) throw new Error('Fake Error');
+                    return resultValue;
+                }
+                readAsDataURL() {
+                    setTimeout(() => {
+                        this.onload?.();
+                    }, 0);
+                }
+            } as unknown as typeof FileReader;
+        };
+
         it('should read file and return base64 part of Data URL', async () => {
             const file = new File(['test'], 'test.txt', { type: 'text/plain' });
             const result = await readFileAsBase64(file);
@@ -76,21 +92,9 @@ describe('chatUtils', () => {
 
         it('should handle non-base64 standard reader result safely', async () => {
             const file = new File(['test'], 'test.txt');
-            // Mocking FileReader to manually trigger onload with no comma
             const originalFileReader = globalThis.FileReader;
 
-            class MockFileReader {
-                onload: (() => void) | null = null;
-                onerror: ((e: Error) => void) | null = null;
-                result = 'plainstringwithoutcomma';
-                readAsDataURL() {
-                    setTimeout(() => {
-                        this.onload?.();
-                    }, 0);
-                }
-            }
-
-            globalThis.FileReader = MockFileReader as unknown as typeof FileReader;
+            globalThis.FileReader = createMockFileReader('plainstringwithoutcomma');
             const result = await readFileAsBase64(file);
             expect(result).toBe('plainstringwithoutcomma');
 
@@ -102,18 +106,7 @@ describe('chatUtils', () => {
             const file = new File(['test'], 'test.txt');
             const originalFileReader = globalThis.FileReader;
 
-            class MockFileReader {
-                onload: (() => void) | null = null;
-                onerror: ((e: Error) => void) | null = null;
-                result = null;
-                readAsDataURL() {
-                    setTimeout(() => {
-                        this.onload?.();
-                    }, 0);
-                }
-            }
-
-            globalThis.FileReader = MockFileReader as unknown as typeof FileReader;
+            globalThis.FileReader = createMockFileReader(null);
             const result = await readFileAsBase64(file);
             expect(result).toBe('');
 
@@ -125,20 +118,7 @@ describe('chatUtils', () => {
             const file = new File(['test'], 'test.txt');
             const originalFileReader = globalThis.FileReader;
 
-            class MockFileReader {
-                onload: (() => void) | null = null;
-                onerror: ((e: Error) => void) | null = null;
-                get result(): string {
-                    throw new Error('Fake Error');
-                }
-                readAsDataURL() {
-                    setTimeout(() => {
-                        this.onload?.();
-                    }, 0);
-                }
-            }
-
-            globalThis.FileReader = MockFileReader as unknown as typeof FileReader;
+            globalThis.FileReader = createMockFileReader(null, true);
             const result = await readFileAsBase64(file);
             expect(result).toBe('');
 

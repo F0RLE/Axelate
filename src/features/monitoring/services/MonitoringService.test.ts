@@ -72,7 +72,7 @@ describe('MonitoringService', () => {
         let capturedHandler: ((payload: ISystemStats) => void) | undefined;
 
         vi.mocked(mockTauri.listen).mockImplementation(async (_event: string, handler: unknown) => {
-            capturedHandler = handler as unknown as (payload: ISystemStats) => void;
+            capturedHandler = handler as (payload: ISystemStats) => void;
             return await Promise.resolve(mockUnlisten);
         });
 
@@ -178,7 +178,7 @@ describe('MonitoringService', () => {
         let capturedHandler: ((payload: ISystemStats) => void) | undefined;
 
         vi.mocked(mockTauri.listen).mockImplementation(async (_event: string, handler: unknown) => {
-            capturedHandler = handler as unknown as (payload: ISystemStats) => void;
+            capturedHandler = handler as (payload: ISystemStats) => void;
             return await Promise.resolve(mockUnlisten);
         });
 

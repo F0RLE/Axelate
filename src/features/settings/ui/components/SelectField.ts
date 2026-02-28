@@ -1,7 +1,7 @@
 import type { ISettingField } from './ISettingField';
 
 export class SelectField implements ISettingField<string> {
-    private select: HTMLSelectElement;
+    private readonly select: HTMLSelectElement;
 
     constructor(options: string[], initialValue: string) {
         this.select = document.createElement('select');

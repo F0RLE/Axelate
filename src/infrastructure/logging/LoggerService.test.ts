@@ -325,7 +325,7 @@ describe('LoggerService', () => {
         it('should stringify complex objects and redact secrets', () => {
             const obj = {
                 normal: 'val',
-                password: 'secret123',
+                password: 'test-password-123',
                 nested: { authorization: 'token' },
             };
             tracer.info('Obj', obj);

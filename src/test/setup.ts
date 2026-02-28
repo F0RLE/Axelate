@@ -32,7 +32,7 @@ vi.mock('@tauri-apps/api/core', () => ({
         if (tauri && typeof tauri['invoke'] === 'function') {
             return tauri['invoke'](cmd, args);
         }
-        if (tauri && tauri['core'] && typeof tauri['core']['invoke'] === 'function') {
+        if (typeof tauri?.['core']?.['invoke'] === 'function') {
             return tauri['core']['invoke'](cmd, args);
         }
         return Promise.resolve();
@@ -44,7 +44,7 @@ vi.mock('@tauri-apps/api/event', () => ({
         const win = globalThis as unknown as Record<string, unknown>;
         const tauri = win['__TAURI__'] as Record<string, any> | undefined;
 
-        if (tauri && tauri['event'] && typeof tauri['event']['listen'] === 'function') {
+        if (typeof tauri?.['event']?.['listen'] === 'function') {
             return tauri['event']['listen'](event, callback);
         }
         return Promise.resolve(() => {});

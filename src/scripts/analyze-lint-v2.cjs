@@ -37,7 +37,7 @@ try {
         .forEach(([rule, count]) => console.log(`${rule}: ${count}`));
 
     console.log('\nTop 5 Files with Errors:');
-    fileErrors.sort((a, b) => b.errorCount - a.errorCount).slice(0, 5).forEach(f => {
+    fileErrors.toSorted((a, b) => b.errorCount - a.errorCount).slice(0, 5).forEach(f => {
         console.log(`${f.filePath} (${f.errorCount} errors)`);
         f.messages.forEach(m => console.log(`  - ${m.ruleId}: ${m.message} (Line ${m.line})`));
     });
