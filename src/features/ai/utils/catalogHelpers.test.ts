@@ -11,24 +11,22 @@ import {
 } from './catalogHelpers';
 import type { IAICatalogApp } from '../types/aiTypes';
 
+const createAppMock = (id: string, models: unknown = null) =>
+    ({
+        id,
+        apiProviderData: models === null ? null : { models },
+    }) as unknown as IAICatalogApp;
+
 describe('catalogHelpers', () => {
     beforeEach(() => {
         // Mock global APP_DATA
         (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = {
             ai: [
-                {
-                    id: 'gemini',
-                    apiProviderData: {
-                        models: [
-                            { id: 'gemini-pro', apiModels: { text: 'models/gemini-pro' } },
-                            { id: 'gemini-ultra', apiModels: { text: 'models/gemini-ultra' } },
-                        ],
-                    },
-                },
-                {
-                    id: 'gpt',
-                    apiProviderData: null, // Edge case: Data missing
-                },
+                createAppMock('gemini', [
+                    { id: 'gemini-pro', apiModels: { text: 'models/gemini-pro' } },
+                    { id: 'gemini-ultra', apiModels: { text: 'models/gemini-ultra' } },
+                ]),
+                createAppMock('gpt'),
             ],
         };
     });
@@ -91,7 +89,7 @@ describe('catalogHelpers', () => {
             // Mock edge case where apiModels doesn't exist natively.
             const globalAny = globalThis as unknown as Record<string, unknown>;
             globalAny['APP_DATA'] = {
-                ai: [{ id: 'gemini', apiProviderData: { models: [{ id: 'broken-model' }] } }],
+                ai: [createAppMock('gemini', [{ id: 'broken-model' }])],
             };
             expect(getApiModelId('gemini', 'broken-model')).toBe('broken-model');
         });
@@ -116,25 +114,17 @@ describe('catalogHelpers', () => {
 
     describe('resolveProviderModel', () => {
         const mockCatalog: IAICatalogApp[] = [
-            {
-                id: 'advanced',
-                apiProviderData: {
-                    models: {
-                        'model-a': {
-                            apiModels: { text: 'api-model-a' },
-                            stats: { logic: 10, creative: 10 },
-                        },
-                        'model-b': {
-                            apiModels: { text: 'api-model-b' },
-                            stats: { logic: 20, creative: 15 },
-                        },
-                    },
+            createAppMock('advanced', {
+                'model-a': {
+                    apiModels: { text: 'api-model-a' },
+                    stats: { logic: 10, creative: 10 },
                 },
-            } as unknown as IAICatalogApp,
-            {
-                id: 'empty',
-                apiProviderData: null,
-            } as unknown as IAICatalogApp,
+                'model-b': {
+                    apiModels: { text: 'api-model-b' },
+                    stats: { logic: 20, creative: 15 },
+                },
+            }),
+            createAppMock('empty'),
         ];
 
         it('should use modelGetter value and map to API ID', () => {
@@ -168,15 +158,10 @@ describe('catalogHelpers', () => {
 
         it('should handle models without stats gracefully during sorting', () => {
             const noStatsCatalog: IAICatalogApp[] = [
-                {
-                    id: 'nostats',
-                    apiProviderData: {
-                        models: {
-                            'model-x': { apiModels: { text: 'api-x' } }, // no stats
-                            'model-y': { apiModels: { text: 'api-y' } }, // no stats
-                        },
-                    },
-                } as unknown as IAICatalogApp,
+                createAppMock('nostats', {
+                    'model-x': { apiModels: { text: 'api-x' } }, // no stats
+                    'model-y': { apiModels: { text: 'api-y' } }, // no stats
+                }),
             ];
             const result = resolveProviderModel('nostats', noStatsCatalog);
             // sort is stable or depends on engine, but it shouldn't crash and should return one of them
@@ -184,9 +169,7 @@ describe('catalogHelpers', () => {
         });
 
         it('should handle empty models gracefully', () => {
-            const noModelsCatalog: IAICatalogApp[] = [
-                { id: 'nomodels', apiProviderData: { models: {} } } as unknown as IAICatalogApp,
-            ];
+            const noModelsCatalog: IAICatalogApp[] = [createAppMock('nomodels', {})];
             const result = resolveProviderModel('nomodels', noModelsCatalog);
             expect(result).toBe('');
         });
