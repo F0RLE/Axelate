@@ -5,12 +5,19 @@ import { tracer } from '@/infrastructure/logging/LoggerService';
 describe('ErrorHandler', () => {
     let tracerSpy: ReturnType<typeof vi.spyOn>;
 
+    const resetHandler = () => {
+        (errorHandler as unknown as { _initialized: boolean })._initialized = false;
+        const win = globalThis as unknown as Record<string, unknown>;
+        delete win['errorHandler'];
+        errorHandler.init();
+        errorHandler.clearErrorLog();
+    };
+
     beforeEach(() => {
         tracerSpy = vi.spyOn(tracer, 'error').mockImplementation(() => {
             /* no-op */
         });
-        // Clear error log before each test
-        errorHandler.clearErrorLog();
+        resetHandler();
     });
 
     afterEach(() => {
@@ -168,10 +175,7 @@ describe('ErrorHandler', () => {
 
     describe('init', () => {
         it('should set up global error handlers', () => {
-            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['errorHandler'];
-            errorHandler.init();
+            resetHandler();
             expect(typeof globalThis.onerror).toBe('function');
             expect(typeof globalThis.onunhandledrejection).toBe('function');
         });
@@ -194,11 +198,7 @@ describe('ErrorHandler', () => {
         });
 
         it('should handle onerror with source and line info', () => {
-            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['errorHandler'];
-            errorHandler.init();
-            errorHandler.clearErrorLog();
+            resetHandler();
 
             if (globalThis.onerror !== null) {
                 globalThis.onerror('Test message', 'test.js', 42, 10, new Error('onerror'));
@@ -210,11 +210,7 @@ describe('ErrorHandler', () => {
         });
 
         it('should handle onerror without error object', () => {
-            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['errorHandler'];
-            errorHandler.init();
-            errorHandler.clearErrorLog();
+            resetHandler();
 
             if (globalThis.onerror !== null) {
                 (
@@ -231,11 +227,7 @@ describe('ErrorHandler', () => {
         });
 
         it('should handle onunhandledrejection', () => {
-            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['errorHandler'];
-            errorHandler.init();
-            errorHandler.clearErrorLog();
+            resetHandler();
 
             if (globalThis.onunhandledrejection !== null) {
                 (globalThis.onunhandledrejection as (e: PromiseRejectionEvent) => void)({
@@ -246,11 +238,7 @@ describe('ErrorHandler', () => {
         });
 
         it('should handle onunhandledrejection with non-Error reason', () => {
-            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['errorHandler'];
-            errorHandler.init();
-            errorHandler.clearErrorLog();
+            resetHandler();
 
             if (globalThis.onunhandledrejection !== null) {
                 (globalThis.onunhandledrejection as (e: PromiseRejectionEvent) => void)({
@@ -315,11 +303,7 @@ describe('ErrorHandler', () => {
 
     describe('edge branches', () => {
         it('should handle onerror with object message (L60)', () => {
-            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['errorHandler'];
-            errorHandler.init();
-            errorHandler.clearErrorLog();
+            resetHandler();
 
             if (globalThis.onerror !== null) {
                 (

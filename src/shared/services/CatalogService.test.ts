@@ -11,7 +11,7 @@ function createMockAppConfig(overrides?: unknown): AppConfig {
         catalog: { ai: [], services: [] },
         apiProviders: [],
         autoStartModules: [],
-        ...(overrides as any),
+        ...(overrides as Record<string, unknown>),
     } as unknown as AppConfig;
 }
 

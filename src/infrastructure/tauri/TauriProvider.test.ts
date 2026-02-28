@@ -39,6 +39,16 @@ function createListenWithPayload(payload: unknown) {
     };
 }
 
+function setupWebMode(): { win: Record<string, unknown>; origTauri: unknown; origInternals: unknown; provider: TauriProvider } {
+    const win = globalThis as unknown as Record<string, unknown>;
+    const origTauri = win['__TAURI__'];
+    const origInternals = win['__TAURI_INTERNALS__'];
+    delete win['__TAURI__'];
+    delete win['__TAURI_INTERNALS__'];
+    
+    return { win, origTauri, origInternals, provider: new TauriProvider() };
+}
+
 import { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 
 describe('TauriProvider', () => {
@@ -70,11 +80,7 @@ describe('TauriProvider', () => {
         });
 
         it('should return false when __TAURI__ is missing', () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             expect(webProvider.isTauri()).toBe(false);
         });
 
@@ -107,10 +113,7 @@ describe('TauriProvider', () => {
 
             // Remove globals so the static check on line 35 would return false.
             // If isTauri() still returns true, it MUST use the cached path (line 32).
-            const win = globalThis as unknown as Record<string, unknown>;
-            const origTauri = win['__TAURI__'];
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
+            const { win, origTauri } = setupWebMode();
 
             expect(provider.isTauri()).toBe(true);
 
@@ -118,11 +121,7 @@ describe('TauriProvider', () => {
         });
 
         it('should return _isTauriDetected=false from line 31 after failed handshake', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            // Temporarily remove global markers so static check also returns false
-            const origTauri = win['__TAURI__'];
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
+            const { win, origTauri } = setupWebMode();
 
             (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
                 new Error('Handshake fail'),
@@ -227,11 +226,7 @@ describe('TauriProvider', () => {
         });
 
         it('should return no-op function in web mode', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             const unsub = await webProvider.listen('test:event', vi.fn());
 
             expect(typeof unsub).toBe('function');
@@ -300,11 +295,7 @@ describe('TauriProvider', () => {
         });
 
         it('should log in web mode', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             await webProvider.writeToClipboard('text'); // should not throw
         });
     });
@@ -322,14 +313,11 @@ describe('TauriProvider', () => {
         });
 
         it('should open window in web mode', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
+            const { provider: webProvider } = setupWebMode();
 
             const openSpy = vi.fn();
             vi.stubGlobal('open', openSpy);
 
-            const webProvider = new TauriProvider();
             await webProvider.openUrl('https://example.com');
 
             expect(openSpy).toHaveBeenCalledWith('https://example.com', '_blank');
@@ -339,10 +327,7 @@ describe('TauriProvider', () => {
     // ---------------------------------------------------------- mock mode
     describe('mock mode', () => {
         it('should work without Tauri and use mock invoke', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             expect(webProvider.isTauri()).toBe(false);
 
             const result = await webProvider.invoke('get_settings');
@@ -355,55 +340,37 @@ describe('TauriProvider', () => {
         });
 
         it('should return empty object for unknown commands', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             const result = await webProvider.invoke('unknown_command');
             expect(result).toEqual({});
         });
 
         it('should return mock modules for get_modules', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             const result = await webProvider.invoke('get_modules');
             expect(result).toEqual([]);
         });
 
         it('should return mock system stats', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             const result = await webProvider.invoke<{ cpu: { name: string } }>('get_system_stats');
             expect(result.cpu.name).toBe('Mock CPU');
         });
 
         it('should return mock translations for get_translations', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             const result = await webProvider.invoke('get_translations');
             expect(result).toEqual({});
         });
 
         it('should return mock config for get_config', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             const result = await webProvider.invoke<{ version: string }>('get_config');
             expect(result.version).toBe('1.0.0');
         });
 
         it('should return true for validate_api_key', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-
-            const webProvider = new TauriProvider();
+            const { provider: webProvider } = setupWebMode();
             const result = await webProvider.invoke('validate_api_key');
             expect(result).toBe(true);
         });
@@ -424,15 +391,14 @@ describe('TauriProvider', () => {
             // _isTauriDetected is now false, but isTauri() returns static check (true since __TAURI__ exists)
             // The internal flag is false — verify by checking it doesn't use handshake-based detection
             // We can verify indirectly: a new provider with no __TAURI__ and failed handshake returns false
-            const win = globalThis as unknown as Record<string, unknown>;
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
+            const { win, origTauri, provider: provider3 } = setupWebMode();
 
             (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(new Error('Fail'));
-            const provider3 = new TauriProvider();
             provider3.init();
 
             expect(provider3.isTauri()).toBe(false);
+
+            win['__TAURI__'] = origTauri;
         });
     });
 
@@ -450,13 +416,9 @@ describe('TauriProvider', () => {
         });
 
         it('should fallback to mock when __TAURI__ is removed', async () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            const origTauri = win['__TAURI__'];
-            delete win['__TAURI__'];
-            delete win['__TAURI_INTERNALS__'];
+            const { provider: webProvider, win, origTauri } = setupWebMode();
 
             // Without __TAURI__, isTauri() is false → _mockInvoke is used
-            const webProvider = new TauriProvider();
             const result = await webProvider.invoke('any_cmd');
             expect(result).toEqual({});
 

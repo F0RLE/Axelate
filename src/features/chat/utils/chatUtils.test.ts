@@ -12,34 +12,18 @@ import { tracer } from '@/infrastructure/logging/LoggerService';
 
 describe('chatUtils', () => {
     describe('isTextFile', () => {
-        it('should return true for known text MIME types', () => {
-            const file = new File(['text'], 'file', { type: 'application/json' });
-            expect(isTextFile(file)).toBe(true);
-
-            const file2 = new File(['text'], 'file', { type: 'text/plain' });
-            expect(isTextFile(file2)).toBe(true);
-        });
-
-        it('should return true for known text extensions', () => {
-            const file = new File(['code'], 'script.ts', { type: '' });
-            expect(isTextFile(file)).toBe(true);
-
-            const file2 = new File(['code'], 'README.md', { type: '' });
-            expect(isTextFile(file2)).toBe(true);
-
-            const file3 = new File(['code'], 'config.yml', { type: 'unknown/mime' });
-            expect(isTextFile(file3)).toBe(true);
-        });
-
-        it('should return false for unknown binary files', () => {
-            const file = new File(['bytes'], 'image.png', { type: 'image/png' });
-            expect(isTextFile(file)).toBe(false);
-
-            const file2 = new File(['bytes'], 'archive.zip', { type: 'application/zip' });
-            expect(isTextFile(file2)).toBe(false);
-
-            const file3 = new File(['bytes'], 'unknown.bin', { type: '' });
-            expect(isTextFile(file3)).toBe(false);
+        it.each([
+            ['application/json', 'file', true],
+            ['text/plain', 'file', true],
+            ['', 'script.ts', true],
+            ['', 'README.md', true],
+            ['unknown/mime', 'config.yml', true],
+            ['image/png', 'image.png', false],
+            ['application/zip', 'archive.zip', false],
+            ['', 'unknown.bin', false],
+        ])('should handle type=%s, name=%s correctly', (type, name, expected) => {
+            const file = new File(['contents'], name, { type });
+            expect(isTextFile(file)).toBe(expected);
         });
     });
 
@@ -151,41 +135,17 @@ describe('chatUtils', () => {
     });
 
     describe('getFileIcon', () => {
-        it('should identify code files', () => {
-            const icon = getFileIcon('main.ts');
-            expect(icon).toContain('<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>');
-        });
-
-        it('should identify image files', () => {
-            const icon = getFileIcon('photo.jpg');
-            expect(icon).toContain('<rect x="3" y="3"');
-            expect(icon).toContain('<circle cx="8.5"');
-        });
-
-        it('should identify document files', () => {
-            const icon = getFileIcon('notes.md');
-            expect(icon).toContain('<polyline points="14 2 14 8 20 8"/>');
-        });
-
-        it('should identify archive files', () => {
-            const icon = getFileIcon('backup.zip');
-            expect(icon).toContain('<line x1="12" y1="22.08" x2="12" y2="12"/>');
-        });
-
-        it('should return default icon for unknown types', () => {
-            const icon = getFileIcon('unknown.blob');
-            expect(icon).toContain('<path d="M13 2H6a2 2 0 0 0-2 2v16');
-        });
-
-        it('should handle extensionless files', () => {
-            const icon = getFileIcon('Makefile');
-            expect(icon).toContain('<path d="M13 2H6a2 2 0 0 0-2 2v16');
-        });
-
-        it('should handle empty filename (L93)', () => {
-            const icon = getFileIcon('');
-            // Empty string → pop returns '' → no match → default icon
-            expect(icon).toContain('<path d="M13 2H6a2 2 0 0 0-2 2v16');
+        it.each([
+            ['main.ts', '<path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/>'],
+            ['photo.jpg', '<rect x="3" y="3"'],
+            ['notes.md', '<polyline points="14 2 14 8 20 8"/>'],
+            ['backup.zip', '<line x1="12" y1="22.08" x2="12" y2="12"/>'],
+            ['unknown.blob', '<path d="M13 2H6a2 2 0 0 0-2 2v16'],
+            ['Makefile', '<path d="M13 2H6a2 2 0 0 0-2 2v16'],
+            ['', '<path d="M13 2H6a2 2 0 0 0-2 2v16'], // Empty filename
+        ])('should identify %s correctly', (filename, expectedFragment) => {
+            const icon = getFileIcon(filename);
+            expect(icon).toContain(expectedFragment);
         });
     });
 
