@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DebugService, type ILogEntry } from './DebugService';
 import type { IBridge } from '@/shared/types/IBridge';
+import { createMockBridge } from '@/test/mocks/mockBridge';
 
 describe('DebugService', () => {
     let bridge: IBridge;
@@ -12,11 +13,7 @@ describe('DebugService', () => {
     ];
 
     beforeEach(() => {
-        bridge = {
-            invoke: vi.fn(),
-            listen: vi.fn(),
-            isTauri: vi.fn(),
-        };
+        bridge = createMockBridge();
         service = new DebugService(bridge);
         // Mock global fetch for fallback
         globalThis.fetch = vi.fn();

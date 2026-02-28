@@ -1,40 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DownloadSettingsService } from './DownloadSettingsService';
-import type { UiStateStore, IUIState } from '../state/UiStateStore';
+import type { UiStateStore } from '../state/UiStateStore';
 import type { IBridge } from '@/shared/types/IBridge';
 
-function createMockStore(): UiStateStore {
-    const state: IUIState = {
-        sidebar_collapsed: false,
-        sidebar_width: 280,
-        hidden_nav_items: [],
-        hidden_monitors: [],
-        card_widths: {},
-        download_limit_enabled: false,
-        download_max_speed: 50,
-        selected_modules: {},
-        zoom_level: 1,
-        selected_ai_models: {},
-        resolution_zoom: {},
-        sound_enabled: true,
-        ai_thinking_level: {},
-        last_active_provider: null,
-        ai_session_id: null,
-    };
-
-    return {
-        getState: vi.fn(() => state),
-        updateState: vi.fn((updates: Partial<IUIState>) => Object.assign(state, updates)),
-    } as unknown as UiStateStore;
-}
-
-function createMockBridge(isTauri = false): IBridge {
-    return {
-        isTauri: vi.fn(() => isTauri),
-        invoke: vi.fn().mockResolvedValue(undefined),
-        listen: vi.fn().mockResolvedValue(() => {}),
-    };
-}
+import { createMockStore } from '@/test/mocks/mockUiStateStore';
+import { createMockBridge } from '@/test/mocks/mockBridge';
 
 describe('DownloadSettingsService', () => {
     let store: UiStateStore;

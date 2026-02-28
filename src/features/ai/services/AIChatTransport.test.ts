@@ -127,24 +127,43 @@ describe('AIChatTransport', () => {
         });
     });
 
-    // ---------------------------------------------------------- onStream
-    describe('onStream', () => {
+    // ---------------------------------------------------------- Stream Listeners (onStream, onThought)
+    describe.each([
+        ['onStream', 'ai:chat:chunk'],
+        ['onThought', 'ai:thought:chunk'],
+    ])('%s', (methodName, eventName) => {
+        const invokeMethod = (listener: (chunk: string) => void) => {
+            const method = (
+                transport as unknown as Record<string, (cb: (c: string) => void) => () => void>
+            )[methodName];
+            return (method as (cb: (c: string) => void) => () => void).call(transport, listener);
+        };
+
         it('should return no-op function when not in Tauri mode', () => {
             mockCore.tauriProvider.isTauri.mockReturnValue(false);
-            const unsub = transport.onStream(vi.fn());
+            const unsub = invokeMethod(vi.fn());
             expect(typeof unsub).toBe('function');
             unsub(); // should not throw
         });
 
-        it('should call tauriProvider.listen with ai:chat:chunk', async () => {
-            const listener = vi.fn();
-            transport.onStream(listener);
+        it('should return no-op function when core is null', () => {
+            const t = new AIChatTransport();
+            const method = (
+                t as unknown as Record<string, (cb: (c: string) => void) => () => void>
+            )[methodName];
+            const unsub = (method as (cb: (c: string) => void) => () => void).call(t, vi.fn());
+            expect(typeof unsub).toBe('function');
+            unsub();
+        });
+
+        it(`should call tauriProvider.listen with ${eventName}`, async () => {
+            invokeMethod(vi.fn());
 
             // Flush the internal promise
             await vi.runAllTimersAsync();
 
             expect(mockCore.tauriProvider.listen).toHaveBeenCalledWith(
-                'ai:chat:chunk',
+                eventName,
                 expect.any(Function),
             );
         });
@@ -160,7 +179,7 @@ describe('AIChatTransport', () => {
                 },
             );
 
-            transport.onStream(listener);
+            invokeMethod(listener);
             await vi.runAllTimersAsync();
 
             expect(listener).toHaveBeenCalledWith('chunk-data');
@@ -177,7 +196,7 @@ describe('AIChatTransport', () => {
                 },
             );
 
-            const unsub = transport.onStream(listener);
+            const unsub = invokeMethod(listener);
             await vi.runAllTimersAsync();
 
             unsub();
@@ -190,7 +209,7 @@ describe('AIChatTransport', () => {
             const mockUnlisten = vi.fn();
             mockCore.tauriProvider.listen.mockResolvedValue(mockUnlisten);
 
-            const unsub = transport.onStream(vi.fn());
+            const unsub = invokeMethod(vi.fn());
             await vi.runAllTimersAsync();
 
             unsub();
@@ -207,103 +226,10 @@ describe('AIChatTransport', () => {
                 });
             });
 
-            const unsub = transport.onStream(vi.fn());
+            const unsub = invokeMethod(vi.fn());
             unsub(); // Cancel before listen resolves
 
             // Now resolve the listen promise
-            captured.resolve?.(mockUnlisten);
-            await vi.runAllTimersAsync();
-
-            expect(mockUnlisten).toHaveBeenCalled();
-        });
-    });
-
-    // ---------------------------------------------------------- onThought
-    describe('onThought', () => {
-        it('should return no-op function when not in Tauri mode', () => {
-            mockCore.tauriProvider.isTauri.mockReturnValue(false);
-            const unsub = transport.onThought(vi.fn());
-            expect(typeof unsub).toBe('function');
-            unsub();
-        });
-
-        it('should return no-op function when core is null (Line 96)', () => {
-            const t = new AIChatTransport();
-            const unsub = t.onThought(vi.fn());
-            expect(typeof unsub).toBe('function');
-            unsub();
-        });
-
-        it('should call tauriProvider.listen with ai:thought:chunk', async () => {
-            const listener = vi.fn();
-            transport.onThought(listener);
-            await vi.runAllTimersAsync();
-
-            expect(mockCore.tauriProvider.listen).toHaveBeenCalledWith(
-                'ai:thought:chunk',
-                expect.any(Function),
-            );
-        });
-
-        it('should forward payload to listener', async () => {
-            const listener = vi.fn();
-            mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: string) => void) => {
-                    cb('thought-data');
-                    return Promise.resolve(vi.fn());
-                },
-            );
-
-            transport.onThought(listener);
-            await vi.runAllTimersAsync();
-
-            expect(listener).toHaveBeenCalledWith('thought-data');
-        });
-
-        it('should NOT forward payload after unsubscribe (Line 104)', async () => {
-            const listener = vi.fn();
-            let capturedCb: (payload: string) => void = () => {};
-
-            mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: string) => void) => {
-                    capturedCb = cb;
-                    return Promise.resolve(vi.fn());
-                },
-            );
-
-            const unsub = transport.onThought(listener);
-            await vi.runAllTimersAsync();
-
-            unsub();
-            capturedCb('after-unsub');
-
-            expect(listener).not.toHaveBeenCalled();
-        });
-
-        it('should call unlisten on cleanup if already resolved (Line 110)', async () => {
-            const mockUnlisten = vi.fn();
-            mockCore.tauriProvider.listen.mockResolvedValue(mockUnlisten);
-
-            const unsub = transport.onThought(vi.fn());
-            await vi.runAllTimersAsync();
-
-            unsub();
-            expect(mockUnlisten).toHaveBeenCalled();
-        });
-
-        it('should call unlisten immediately if cancelled before resolve', async () => {
-            const mockUnlisten = vi.fn();
-            const captured: { resolve: ((fn: () => void) => void) | null } = { resolve: null };
-
-            mockCore.tauriProvider.listen.mockImplementation(() => {
-                return new Promise<() => void>((resolve) => {
-                    captured.resolve = resolve;
-                });
-            });
-
-            const unsub = transport.onThought(vi.fn());
-            unsub(); // Cancel early
-
             captured.resolve?.(mockUnlisten);
             await vi.runAllTimersAsync();
 

@@ -64,6 +64,14 @@ export class AIChatTransport implements IChatTransport {
      * Returns an unlisten function.
      */
     public onStream(listener: (chunk: string) => void): () => void {
+        return this._createListener('ai:chat:chunk', listener);
+    }
+
+    public onThought(listener: (chunk: string) => void): () => void {
+        return this._createListener('ai:thought:chunk', listener);
+    }
+
+    private _createListener(eventName: string, listener: (chunk: string) => void): () => void {
         if (this._core?.tauriProvider.isTauri() !== true) {
             return () => {};
         }
@@ -74,7 +82,7 @@ export class AIChatTransport implements IChatTransport {
         let isActive = true;
 
         void this._core.tauriProvider
-            .listen<string>('ai:chat:chunk', (payload: string) => {
+            .listen<string>(eventName, (payload: string) => {
                 if (isActive) listener(payload);
             })
             .then((fn) => {
@@ -82,32 +90,6 @@ export class AIChatTransport implements IChatTransport {
                     unlistenFn = fn;
                 } else {
                     fn(); // If already cancelled, clean up immediately
-                }
-            });
-
-        return () => {
-            isActive = false;
-            if (unlistenFn) unlistenFn();
-        };
-    }
-
-    public onThought(listener: (chunk: string) => void): () => void {
-        if (this._core?.tauriProvider.isTauri() !== true) {
-            return () => {};
-        }
-
-        let unlistenFn: (() => void) | undefined;
-        let isActive = true;
-
-        void this._core.tauriProvider
-            .listen<string>('ai:thought:chunk', (payload: string) => {
-                if (isActive) listener(payload);
-            })
-            .then((fn) => {
-                if (isActive) {
-                    unlistenFn = fn;
-                } else {
-                    fn();
                 }
             });
 

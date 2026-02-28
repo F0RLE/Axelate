@@ -4,6 +4,16 @@ import type { IModule, ICatalogData } from '@/shared/types/coreTypes';
 import type { AppConfig } from '@/shared/types/bindings';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import type { IBridge } from '@/shared/types/IBridge';
+import { createMockBridge } from '@/test/mocks/mockBridge';
+
+function createMockAppConfig(overrides?: unknown): AppConfig {
+    return {
+        catalog: { ai: [], services: [] },
+        apiProviders: [],
+        autoStartModules: [],
+        ...(overrides as any),
+    } as unknown as AppConfig;
+}
 
 describe('CatalogService', () => {
     let mockBridge: {
@@ -20,10 +30,10 @@ describe('CatalogService', () => {
         globalThis.dispatchEvent = vi.fn();
         globalThis.updateModuleSettings = vi.fn();
 
-        mockBridge = {
-            isTauri: vi.fn(),
-            invoke: vi.fn(),
-            listen: vi.fn(),
+        mockBridge = createMockBridge() as unknown as {
+            isTauri: ReturnType<typeof vi.fn>;
+            invoke: ReturnType<typeof vi.fn>;
+            listen: ReturnType<typeof vi.fn>;
         };
 
         service = new CatalogService(mockBridge as unknown as IBridge);
@@ -46,11 +56,9 @@ describe('CatalogService', () => {
 
     describe('loadCatalog', () => {
         it('should load config and modules from bridge when in Tauri environment', async () => {
-            const mockConfig: AppConfig = {
+            const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'test-ai', name: 'Test AI' }], services: [] },
-                apiProviders: [],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             const mockModules: IModule[] = [
                 { id: 'test-ai', configSchema: { setting: {} } } as unknown as IModule,
@@ -76,11 +84,7 @@ describe('CatalogService', () => {
         });
 
         it('should fallback to FALLBACK_CONFIG if config is empty or invalid', async () => {
-            const invalidConfig: AppConfig = {
-                catalog: { ai: [], services: [] },
-                apiProviders: [],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            const invalidConfig = createMockAppConfig();
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -99,11 +103,10 @@ describe('CatalogService', () => {
         });
 
         it('should inject apiProviderData for API modules', async () => {
-            const mockApiConfig: AppConfig = {
+            const mockApiConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'gpt-4', name: 'GPT 4', type: 'api' }], services: [] },
                 apiProviders: [{ id: 'gpt-4', models: { default: 'gpt-4' } }],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -128,14 +131,12 @@ describe('CatalogService', () => {
         });
 
         it('should correctly retrieve an app by ID from loaded catalog', async () => {
-            const mockConfig: AppConfig = {
+            const mockConfig = createMockAppConfig({
                 catalog: {
                     ai: [{ id: 'ai-app', name: 'AI App' }],
                     services: [{ id: 'service-app', name: 'Service App' }],
                 },
-                apiProviders: [],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -161,14 +162,12 @@ describe('CatalogService', () => {
         });
 
         it('should return services array for services category', async () => {
-            const mockConfig: AppConfig = {
+            const mockConfig = createMockAppConfig({
                 catalog: {
                     ai: [],
                     services: [{ id: 'svc', name: 'Service' }],
                 },
-                apiProviders: [],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -187,11 +186,9 @@ describe('CatalogService', () => {
     // ---------------------------------------------------------- fetch fallback (web mode, lines 106-111, 125-130)
     describe('web mode fetch fallback', () => {
         it('should fetch config from /api/config in web mode', async () => {
-            const mockConfig: AppConfig = {
+            const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'fetched-ai', name: 'Fetched AI' }], services: [] },
-                apiProviders: [],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(false);
 
@@ -265,7 +262,7 @@ describe('CatalogService', () => {
     describe('loadCatalog inner error handling', () => {
         it('should catch errors in inner processing (e.g. stars access fail)', async () => {
             // Provide a valid config but with a stars getter that throws inside the try block
-            const badConfig: AppConfig = {
+            const badConfig = createMockAppConfig({
                 catalog: {
                     ai: [{ id: 'ok', name: 'OK' }],
                     services: [],
@@ -273,9 +270,7 @@ describe('CatalogService', () => {
                         throw new Error('Stars access fail');
                     },
                 },
-                apiProviders: [],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -296,11 +291,10 @@ describe('CatalogService', () => {
                 throw new Error('Hook failed');
             });
 
-            const mockConfig: AppConfig = {
+            const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'ai', name: 'AI' }], services: [] },
                 apiProviders: [{ id: 'ai', models: ['m1'] }],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -316,7 +310,7 @@ describe('CatalogService', () => {
     // ---------------------------------------------------------- _ensureFallbacks api-type (L193)
     describe('_ensureFallbacks api-type branch (L193)', () => {
         it('should mark api-type apps as installed=true', async () => {
-            const config: AppConfig = {
+            const config = createMockAppConfig({
                 catalog: {
                     ai: [
                         { id: 'api-mod', name: 'API Module', type: 'api' },
@@ -325,8 +319,7 @@ describe('CatalogService', () => {
                     services: [],
                 },
                 apiProviders: [{ id: 'api-mod', models: { default: 'model-1' } }],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -358,11 +351,9 @@ describe('CatalogService', () => {
     });
 
     describe('_loadModuleList web fetch branches (L126)', () => {
-        const webConfig: AppConfig = {
+        const webConfig = createMockAppConfig({
             catalog: { ai: [{ id: 'ai1', name: 'AI' }], services: [] },
-            apiProviders: [],
-            autoStartModules: [],
-        } as unknown as AppConfig;
+        });
 
         it('should return modules when fetch response is ok (L126 true branch)', async () => {
             mockBridge.isTauri.mockReturnValue(false);
@@ -414,11 +405,10 @@ describe('CatalogService', () => {
             // Set updateModuleSettings to undefined
             (globalThis as unknown as Record<string, unknown>)['updateModuleSettings'] = undefined;
 
-            const mockConfig: AppConfig = {
+            const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'x', name: 'X' }], services: [] },
                 apiProviders: [{ id: 'x', models: ['m'] }],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
@@ -433,12 +423,11 @@ describe('CatalogService', () => {
         it('should skip provider without models property (L253 false)', async () => {
             globalThis.updateModuleSettings = vi.fn();
 
-            const mockConfig: AppConfig = {
+            const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'nomod', name: 'NoMod' }], services: [] },
                 // Provider without models property
                 apiProviders: [{ id: 'nomod' }],
-                autoStartModules: [],
-            } as unknown as AppConfig;
+            });
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.invoke.mockImplementation((cmd: string) => {
