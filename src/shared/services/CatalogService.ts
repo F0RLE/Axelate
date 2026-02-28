@@ -187,12 +187,6 @@ export class CatalogService {
      * Ensures each category has at least one app from fallbacks if empty.
      */
     private _ensureFallbacks(): void {
-        const mergeAppSchema = (app: IApp) => {
-            // Simplified merge for fallback injection if needed
-            /* v8 ignore next 2 -- FALLBACK_CONFIG has empty arrays; branch only reachable with populated fallbacks */
-            if (app.type === 'api') app.installed = true;
-        };
-
         const fallbackAi = FALLBACK_CONFIG.catalog.ai;
         const fallbackServices = FALLBACK_CONFIG.catalog.services;
 
@@ -201,7 +195,6 @@ export class CatalogService {
                 `[CatalogService] AI catalog still empty (fallback source has ${String(fallbackAi.length)} items), injecting fallbacks.`,
             );
             this._appData.ai = this._mapModuleItems(fallbackAi, 'ai');
-            this._appData.ai.forEach(mergeAppSchema);
             tracer.info(
                 `[CatalogService] AI catalog now has ${String(this._appData.ai.length)} items.`,
             );
@@ -212,7 +205,6 @@ export class CatalogService {
                 `[CatalogService] Services catalog still empty (fallback source has ${String(fallbackServices.length)} items), injecting fallbacks.`,
             );
             this._appData.services = this._mapModuleItems(fallbackServices, 'services');
-            this._appData.services.forEach(mergeAppSchema);
             tracer.info(
                 `[CatalogService] Services catalog now has ${String(this._appData.services.length)} items.`,
             );

@@ -217,6 +217,49 @@ describe('SoundService', () => {
         });
     });
 
+    describe('resume rejection catch callbacks', () => {
+        it('should silently swallow resume rejection in _playTone', async () => {
+            mockCtx.state = 'suspended';
+            mockCtx.resume.mockRejectedValueOnce(new Error('resume fail'));
+            service.playHover();
+            // flush microtasks so the catch callback executes
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        it('should silently swallow resume rejection in playClick', async () => {
+            mockCtx.state = 'suspended';
+            mockCtx.resume.mockRejectedValueOnce(new Error('resume fail'));
+            service.playClick();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        it('should silently swallow resume rejection in playToggle', async () => {
+            mockCtx.state = 'suspended';
+            mockCtx.resume.mockRejectedValueOnce(new Error('resume fail'));
+            service.playToggle(true);
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        it('should silently swallow resume rejection in playExpand', async () => {
+            mockCtx.state = 'suspended';
+            mockCtx.resume.mockRejectedValueOnce(new Error('resume fail'));
+            service.playExpand(true);
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        it('should silently swallow close rejection in destroy', async () => {
+            mockCtx.close.mockRejectedValueOnce(new Error('close fail'));
+            service.destroy();
+            // Give the microtask queue time to run the catch callback
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+    });
+
     describe('Expansion sounds', () => {
         it('should play expand sound on badge hover', () => {
             const badge = document.createElement('div');

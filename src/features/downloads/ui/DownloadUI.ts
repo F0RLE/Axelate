@@ -545,7 +545,7 @@ export class DownloadUI {
         // Remove cards whose downloads are no longer tracked
         const existingCards = list.querySelectorAll<HTMLElement>('.download-item-card');
         for (const card of existingCards) {
-            const mid = card.dataset['moduleId'] ?? '';
+            const mid: string = card.dataset['moduleId'] ?? '';
             if (!this._activeDownloads.has(mid)) {
                 card.remove();
             }

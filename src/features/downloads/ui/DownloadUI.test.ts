@@ -1124,4 +1124,203 @@ describe('DownloadUI', () => {
             expect(pill?.textContent).toBe('Waiting');
         });
     });
+
+    // ---------------------------------------------------------- additional null-guard branch coverage
+    describe('null-guard branch coverage', () => {
+        it('should handle missing downloadsContainer in _updateDownloadsLayout (L164)', () => {
+            document.getElementById('downloads-container')?.remove();
+            ui.renderDownloadsProgress({ hasActive: true, label: 'Test' });
+            // no throw — downloadsContainer branch skipped
+        });
+
+        it('should handle missing bar element when percent < 0 (L192)', () => {
+            document.getElementById('downloads-progress-bar')?.remove();
+            ui.renderDownloadsProgress({ percent: -1, hasActive: true, label: 'Connecting' });
+        });
+
+        it('should handle missing text element when percent < 0 (L196)', () => {
+            document.getElementById('downloads-progress-text')?.remove();
+            ui.renderDownloadsProgress({ percent: -1, hasActive: true, label: 'Connecting' });
+        });
+
+        it('should handle missing bar element for normal percent path (L198)', () => {
+            document.getElementById('downloads-progress-bar')?.remove();
+            ui.renderDownloadsProgress({ percent: 50, hasActive: true, label: 'X' });
+        });
+
+        it('should handle missing text element for normal percent path (L202)', () => {
+            document.getElementById('downloads-progress-text')?.remove();
+            ui.renderDownloadsProgress({ percent: 50, hasActive: true, label: 'X' });
+        });
+
+        it('should handle missing statusEl in _updateStatus (L263)', () => {
+            document.getElementById('downloads-status')?.remove();
+            ui.renderDownloadsProgress({ hasActive: true, label: 'Running' });
+        });
+
+        it('should handle missing speedEl in _updateMetaStats (L219)', () => {
+            document.getElementById('downloads-speed')?.remove();
+            ui.renderDownloadsProgress({ hasActive: true, label: 'X', speed: 1024 });
+        });
+
+        it('should handle missing downloadedEl in _updateMetaStats (L220)', () => {
+            document.getElementById('downloads-downloaded')?.remove();
+            ui.renderDownloadsProgress({ hasActive: true, label: 'X', downloaded: 500 });
+        });
+
+        it('should handle missing totalEl in _updateMetaStats (L221)', () => {
+            document.getElementById('downloads-total')?.remove();
+            ui.renderDownloadsProgress({ hasActive: true, label: 'X', total: 1000 });
+        });
+
+        it('should be no-op when toggle is missing in saveSettings (L391 false)', () => {
+            document.getElementById('download-speed-limit-toggle')?.remove();
+            ui.saveSettings(); // toggle instanceof HTMLInputElement → false → skip block
+        });
+
+        it('should handle missing toggle in openSettings (L441 false branch)', () => {
+            document.getElementById('download-speed-limit-toggle')?.remove();
+            ui.openSettings();
+        });
+
+        it('should handle missing slider in openSettings (L445 false branch)', () => {
+            document.getElementById('download-speed-slider')?.remove();
+            ui.openSettings();
+        });
+
+        it('should not duplicate dynamic list when already exists (L512 early return)', () => {
+            ui.init(); // creates the dynamic list
+            ui.init(); // _ensureDynamicList → list already exists → return
+            const lists = document.querySelectorAll('#downloads-dynamic-list');
+            expect(lists.length).toBe(1);
+        });
+
+        it('should handle missing mainCard when activeDownloads.size === 0 (L537)', () => {
+            ui.init();
+            // Create an active download
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-mc0', progress: 0.5, status: 'downloading' },
+                }),
+            );
+            // Remove mainCard then complete → _renderDynamicList with size 0
+            document.getElementById('downloads-main-card')?.remove();
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-mc0', progress: 1, status: 'complete' },
+                }),
+            );
+            vi.advanceTimersByTime(2100);
+        });
+
+        it('should handle missing emptyText when activeDownloads.size > 0 (L548)', () => {
+            document.getElementById('downloads-empty-text')?.remove();
+            ui.init();
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-et2', progress: 0.5, status: 'downloading' },
+                }),
+            );
+            // emptyText null → the classList.add('hidden') call is skipped
+        });
+
+        it('should handle missing mainCard when activeDownloads.size > 0 (L543)', () => {
+            document.getElementById('downloads-main-card')?.remove();
+            ui.init();
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-mc2', progress: 0.5, status: 'downloading' },
+                }),
+            );
+        });
+
+        it('should patch stat[1] with total > 0 (L586 true branch)', () => {
+            ui.init();
+            // Create card
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-stat',
+                        progress: 0.4,
+                        status: 'downloading',
+                        downloaded: 40,
+                        total: 100,
+                    },
+                }),
+            );
+            // Patch same card with total still > 0 — hits the _formatBytes branch
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-stat',
+                        progress: 0.8,
+                        status: 'downloading',
+                        downloaded: 80,
+                        total: 100,
+                    },
+                }),
+            );
+            const list = document.getElementById('downloads-dynamic-list');
+            const statValues = list?.querySelectorAll('.downloads-stat-value');
+            // statValues[1] should show formatted bytes, not '--'
+            expect(statValues?.[1]?.textContent).not.toBe('--');
+        });
+
+        it('should handle label with non-empty string when not active (L233 branch)', () => {
+            ui.renderDownloadsProgress({ hasActive: false, label: 'Finished' });
+            const label = document.getElementById('downloads-item-label');
+            expect(label?.textContent).toBe('Finished');
+        });
+
+        it('should compute hasActive from percent/total/label when hasActive is not provided (L134)', () => {
+            // Do NOT set hasActive — let the computed path derive it:
+            // percent > 0, total > 0, label non-empty, not completed, no error
+            ui.renderDownloadsProgress({
+                percent: 25,
+                downloaded: 100,
+                total: 400,
+                label: 'Downloading test',
+                completed: false,
+            });
+            const mainCard = document.getElementById('downloads-main-card');
+            expect(mainCard?.classList.contains('hidden')).toBe(false);
+        });
+
+        it('should handle missing downloadsHeader in _updateDownloadsLayout (L161)', () => {
+            document.querySelector('.downloads-header')?.remove();
+            ui.renderDownloadsProgress({ hasActive: true, label: 'Test' });
+            // no throw — the els.downloadsHeader null branch is taken
+        });
+
+        it('should handle missing labelEl in _updateLabel (L228)', () => {
+            document.getElementById('downloads-item-label')?.remove();
+            ui.renderDownloadsProgress({ hasActive: true, label: 'Test' });
+            // _updateLabel returns early at if (!el) return
+        });
+
+        it('should handle card with missing moduleId dataset (L552)', () => {
+            ui.init();
+            // Create a download to trigger _renderDynamicList
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-dataset', progress: 0.5, status: 'downloading' },
+                }),
+            );
+            // Manually inject a card without moduleId into the dynamic list
+            const list = document.getElementById('downloads-dynamic-list');
+            const orphan = document.createElement('div');
+            orphan.className = 'download-item-card';
+            // no dataset['moduleId'] set — so || '' returns ''
+            list?.appendChild(orphan);
+
+            // Trigger another update to force _renderDynamicList to iterate existing cards
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: { module_id: 'mod-dataset', progress: 0.8, status: 'downloading' },
+                }),
+            );
+            // The orphan card with no moduleId should be removed
+            expect(list?.querySelector('.download-item-card:not([data-module-id])')).toBeNull();
+        });
+    });
 });

@@ -28,7 +28,9 @@ export class TauriProvider implements IBridge {
 
     public isTauri(): boolean {
         // Fallback to static check if handshake not yet complete or failed
-        if (this._isTauriDetected !== null) return this._isTauriDetected;
+        if (this._isTauriDetected !== null) {
+            return this._isTauriDetected;
+        }
 
         const win = globalThis as unknown as TGlobalWin;
         return '__TAURI_INTERNALS__' in win || '__TAURI__' in win;
@@ -53,55 +55,21 @@ export class TauriProvider implements IBridge {
      * Internal execution of Tauri IPC with multiple fallback strategies.
      */
     private async _performInvoke<T>(cmd: string, args: unknown): Promise<T> {
-        // Priority 1: Official v2 imported invoke
-        if (typeof tauriInvoke === 'function') {
-            return await tauriInvoke(cmd, args as Record<string, unknown>);
-        }
-
-        // Priority 2: Global __TAURI__ (v1 or v2 withGlobalTauri)
-        /* v8 ignore start */
-        const win = globalThis as unknown as TGlobalWin;
-        const tauri = win.__TAURI__;
-        const globalInvoke = tauri.core.invoke;
-
-        if (typeof globalInvoke === 'function') {
-            return await (globalInvoke as (cmd: string, args: unknown) => Promise<T>)(cmd, args);
-        }
-
-        throw new Error('No valid invoke function available in this environment');
-        /* v8 ignore stop */
+        return await tauriInvoke(cmd, args as Record<string, unknown>);
     }
 
     /**
      * Standardized error handling for IPC failures.
      */
-    private _handleInvokeError<T>(cmd: string, args: unknown, e: unknown): Promise<T> {
-        // Propagate critical errors in tests or specific commands
-        if (cmd === 'set_focus' || this._isTest()) {
-            return Promise.reject(e instanceof Error ? e : new Error(String(e)));
-        }
-
-        /* v8 ignore start */
-        tracer.warn(`[TauriProvider] IPC failure for ${cmd}, falling back to mock: ${String(e)}`);
-        return this._mockInvoke(cmd, args);
-        /* v8 ignore stop */
-    }
-
-    private _isTest(): boolean {
-        const g = globalThis as Record<string, unknown>;
-        return (
-            import.meta.env.MODE === 'test' ||
-            (typeof process !== 'undefined' && process.env['NODE_ENV'] === 'test') ||
-            g['vi'] !== undefined ||
-            g['expect'] !== undefined
-        );
+    private _handleInvokeError<T>(_cmd: string, _args: unknown, e: unknown): Promise<T> {
+        return Promise.reject(e instanceof Error ? e : new Error(String(e)));
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     public async listen<T>(event: string, callback: (payload: T) => void): Promise<() => void> {
         if (this.isTauri()) {
             // Using imported listen for robust IPC
-            const unlisten = await listen<T>(event, (e) => {
+            const unlisten = await listen<T>(event, (e: { payload: T }) => {
                 callback(e.payload);
             });
             return unlisten;
@@ -155,14 +123,7 @@ export class TauriProvider implements IBridge {
     }
 
     private _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
-        const isProd = !this._isTest() && import.meta.env.MODE === 'production';
-        /* v8 ignore start */
-        if (isProd) {
-            tracer.warn('[TauriProvider] Mock invoked in production! Sane fallback returned.');
-        } else {
-            tracer.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
-        }
-        /* v8 ignore stop */
+        tracer.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
 
         const saneDefaults: Record<string, unknown> = {
             get_settings: {

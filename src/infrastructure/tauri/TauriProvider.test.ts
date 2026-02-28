@@ -98,13 +98,46 @@ describe('TauriProvider', () => {
             expect(mockedTauriInvoke).toHaveBeenCalledWith('get_health', {});
         });
 
-        it('should set _isTauriDetected after successful handshake (L31)', async () => {
+        it('should use cached _isTauriDetected after successful handshake (L32)', async () => {
             (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce({ status: 'ok' });
             provider.init();
-            // Wait for the async handshake to resolve
+
+            // Wait for the async handshake promise to settle
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            // Remove globals so the static check on line 35 would return false.
+            // If isTauri() still returns true, it MUST use the cached path (line 32).
+            const win = globalThis as unknown as Record<string, unknown>;
+            const origTauri = win['__TAURI__'];
+            delete win['__TAURI__'];
+            delete win['__TAURI_INTERNALS__'];
+
+            expect(provider.isTauri()).toBe(true);
+
+            win['__TAURI__'] = origTauri;
+        });
+
+        it('should return _isTauriDetected=false from line 31 after failed handshake', async () => {
+            const win = globalThis as unknown as Record<string, unknown>;
+            // Temporarily remove global markers so static check also returns false
+            const origTauri = win['__TAURI__'];
+            delete win['__TAURI__'];
+            delete win['__TAURI_INTERNALS__'];
+
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Handshake fail'),
+            );
+            const p = new TauriProvider();
+            p.init();
+
+            // Wait for handshake to fail → _isTauriDetected becomes false
             await vi.waitFor(() => {
-                expect(provider.isTauri()).toBe(true);
+                // isTauri() now returns this._isTauriDetected (false), not the static check
+                expect(p.isTauri()).toBe(false);
             });
+
+            // Restore
+            win['__TAURI__'] = origTauri;
         });
     });
 
@@ -147,6 +180,13 @@ describe('TauriProvider', () => {
 
             // In test mode, error is propagated
             await expect(provider.invoke('get_settings')).rejects.toThrow('fail');
+        });
+
+        it('should wrap non-Error rejections in Error (L63 ternary false branch)', async () => {
+            // Reject with a string (not an Error instance)
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce('string rejection');
+
+            await expect(provider.invoke('some_cmd')).rejects.toThrow('string rejection');
         });
     });
 

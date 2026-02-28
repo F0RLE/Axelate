@@ -90,7 +90,8 @@ export function readFileAsBase64(file: File): Promise<string> {
  * Get a suitable SVG icon based on the file extension.
  */
 export function getFileIcon(filename: string): string {
-    const ext = (filename.split('.').pop() ?? '').toLowerCase();
+    const dotIndex = filename.lastIndexOf('.');
+    const ext = dotIndex >= 0 ? filename.substring(dotIndex + 1).toLowerCase() : '';
 
     // Code
     if (

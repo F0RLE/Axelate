@@ -344,4 +344,114 @@ describe('CatalogService', () => {
             expect(localApp?.installed).not.toBe(true);
         });
     });
+
+    describe('_initGlobalExposures DEV branch (L29)', () => {
+        it('should skip __DEV_CATALOG when DEV is false', () => {
+            const origDev = import.meta.env['DEV'];
+            (import.meta.env as Record<string, unknown>)['DEV'] = false;
+
+            const s = new CatalogService(mockBridge as unknown as IBridge);
+            expect(s).toBeDefined();
+
+            (import.meta.env as Record<string, unknown>)['DEV'] = origDev;
+        });
+    });
+
+    describe('_loadModuleList web fetch branches (L126)', () => {
+        const webConfig: AppConfig = {
+            catalog: { ai: [{ id: 'ai1', name: 'AI' }], services: [] },
+            apiProviders: [],
+            autoStartModules: [],
+        } as unknown as AppConfig;
+
+        it('should return modules when fetch response is ok (L126 true branch)', async () => {
+            mockBridge.isTauri.mockReturnValue(false);
+
+            const origFetch = globalThis.fetch;
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url === '/api/config') {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(webConfig),
+                    });
+                }
+                // /api/modules — ok
+                return Promise.resolve({
+                    ok: true,
+                    json: () => Promise.resolve([{ id: 'mod1', name: 'Module 1' }]),
+                });
+            }) as unknown as typeof fetch;
+
+            await service.loadCatalog();
+            globalThis.fetch = origFetch;
+        });
+
+        it('should return empty array when fetch response is not ok (L126 false branch)', async () => {
+            mockBridge.isTauri.mockReturnValue(false);
+
+            const origFetch = globalThis.fetch;
+            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+                if (url === '/api/config') {
+                    return Promise.resolve({
+                        ok: true,
+                        json: () => Promise.resolve(webConfig),
+                    });
+                }
+                // /api/modules — not ok
+                return Promise.resolve({
+                    ok: false,
+                    json: () => Promise.resolve([]),
+                });
+            }) as unknown as typeof fetch;
+
+            await service.loadCatalog();
+            globalThis.fetch = origFetch;
+        });
+    });
+
+    describe('_updateLegacySettings missing updateFn and models branches (L249-253)', () => {
+        it('should skip when updateModuleSettings is not a function (L249 false)', async () => {
+            // Set updateModuleSettings to undefined
+            (globalThis as unknown as Record<string, unknown>)['updateModuleSettings'] = undefined;
+
+            const mockConfig: AppConfig = {
+                catalog: { ai: [{ id: 'x', name: 'X' }], services: [] },
+                apiProviders: [{ id: 'x', models: ['m'] }],
+                autoStartModules: [],
+            } as unknown as AppConfig;
+
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.invoke.mockImplementation((cmd: string) => {
+                if (cmd === 'get_config') return Promise.resolve(mockConfig);
+                if (cmd === 'get_modules') return Promise.resolve([]);
+                return Promise.resolve(undefined);
+            });
+
+            await expect(service.loadCatalog()).resolves.not.toThrow();
+        });
+
+        it('should skip provider without models property (L253 false)', async () => {
+            globalThis.updateModuleSettings = vi.fn();
+
+            const mockConfig: AppConfig = {
+                catalog: { ai: [{ id: 'nomod', name: 'NoMod' }], services: [] },
+                // Provider without models property
+                apiProviders: [{ id: 'nomod' }],
+                autoStartModules: [],
+            } as unknown as AppConfig;
+
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.invoke.mockImplementation((cmd: string) => {
+                if (cmd === 'get_config') return Promise.resolve(mockConfig);
+                if (cmd === 'get_modules') return Promise.resolve([]);
+                return Promise.resolve(undefined);
+            });
+
+            await service.loadCatalog();
+
+            // updateModuleSettings was called, but the map should be empty
+            // since the provider has no models
+            expect(globalThis['updateModuleSettings']).toHaveBeenCalledWith({});
+        });
+    });
 });

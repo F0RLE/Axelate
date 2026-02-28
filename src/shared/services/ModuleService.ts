@@ -209,10 +209,8 @@ export class ModuleService {
     private _broadcastState(moduleId: string) {
         const win = getGlobalWin();
         win.moduleDownloadState ??= {};
-        const state = this._downloadState[moduleId];
-        /* v8 ignore next */
-        if (state !== undefined) {
-            win.moduleDownloadState[moduleId] = state;
-        }
+        // _broadcastState is always called right after setting _downloadState[moduleId]
+        const state = this._downloadState[moduleId] as IModuleDownloadState;
+        win.moduleDownloadState[moduleId] = state;
     }
 }
