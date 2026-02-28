@@ -88,38 +88,10 @@ describe('catalogHelpers', () => {
         });
 
         it('getApiModelId should return original string if api object missing', () => {
-            // Mock edge case where apiModels doesn't exist
-            (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = {
-                ai: [
-                    (globalThis as unknown as { APP_DATA: { ai: unknown[] } })['APP_DATA'].ai[0],
-                    ...((): unknown[] => {
-                        const appData = (
-                            globalThis as unknown as { APP_DATA?: { ai?: unknown[] } }
-                        )['APP_DATA'];
-                        if (appData?.ai?.[0] !== undefined) {
-                            (
-                                appData.ai[0] as { apiProviderData: { models: unknown[] } }
-                            ).apiProviderData.models.push({ id: 'broken-model' });
-                        }
-                        return [];
-                    })(),
-                ].filter(Boolean),
-            };
-            // Reset to original and push via index access
+            // Mock edge case where apiModels doesn't exist natively.
             const globalAny = globalThis as unknown as Record<string, unknown>;
             globalAny['APP_DATA'] = {
-                ai: [
-                    {
-                        id: 'gemini',
-                        apiProviderData: {
-                            models: [
-                                { id: 'gemini-pro', apiModels: { text: 'models/gemini-pro' } },
-                                { id: 'gemini-ultra', apiModels: { text: 'models/gemini-ultra' } },
-                                { id: 'broken-model' },
-                            ],
-                        },
-                    },
-                ],
+                ai: [{ id: 'gemini', apiProviderData: { models: [{ id: 'broken-model' }] } }],
             };
             expect(getApiModelId('gemini', 'broken-model')).toBe('broken-model');
         });
