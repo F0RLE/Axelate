@@ -15,6 +15,35 @@ function createMockAppConfig(overrides?: unknown): AppConfig {
     } as unknown as AppConfig;
 }
 
+function setupBridgeMocks(
+    bridge: { isTauri: ReturnType<typeof vi.fn>; invoke: ReturnType<typeof vi.fn> },
+    config: AppConfig | null,
+    modules: IModule[] = [],
+) {
+    bridge.isTauri.mockReturnValue(true);
+    bridge.invoke.mockImplementation((cmd: string) => {
+        if (cmd === 'get_config') return Promise.resolve(config);
+        if (cmd === 'get_modules') return Promise.resolve(modules);
+        return Promise.resolve(undefined);
+    });
+}
+
+function setupFetchMock(webConfig: AppConfig, moduleOk: boolean, moduleJson: unknown[]) {
+    return vi.fn().mockImplementation((url: string) => {
+        if (url === '/api/config') {
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve(webConfig),
+            });
+        }
+        // /api/modules
+        return Promise.resolve({
+            ok: moduleOk,
+            json: () => Promise.resolve(moduleJson),
+        });
+    }) as unknown as typeof fetch;
+}
+
 describe('CatalogService', () => {
     let mockBridge: {
         isTauri: ReturnType<typeof vi.fn>;
@@ -64,12 +93,7 @@ describe('CatalogService', () => {
                 { id: 'test-ai', configSchema: { setting: {} } } as unknown as IModule,
             ];
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(mockConfig);
-                if (cmd === 'get_modules') return Promise.resolve(mockModules);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, mockConfig, mockModules);
 
             await service.loadCatalog();
 
@@ -86,12 +110,7 @@ describe('CatalogService', () => {
         it('should fallback to FALLBACK_CONFIG if config is empty or invalid', async () => {
             const invalidConfig = createMockAppConfig();
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(invalidConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, invalidConfig);
 
             await service.loadCatalog();
 
@@ -108,12 +127,7 @@ describe('CatalogService', () => {
                 apiProviders: [{ id: 'gpt-4', models: { default: 'gpt-4' } }],
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(mockApiConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, mockApiConfig);
 
             await service.loadCatalog();
 
@@ -138,12 +152,7 @@ describe('CatalogService', () => {
                 },
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(mockConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, mockConfig);
 
             await service.loadCatalog();
 
@@ -169,12 +178,7 @@ describe('CatalogService', () => {
                 },
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(mockConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, mockConfig);
 
             await service.loadCatalog();
 
@@ -244,12 +248,7 @@ describe('CatalogService', () => {
     // ---------------------------------------------------------- _ensureValidConfig null config (lines 278-279)
     describe('_ensureValidConfig null config', () => {
         it('should use FALLBACK_CONFIG when bridge invoke returns null', async () => {
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(null);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, null);
 
             await service.loadCatalog();
 
@@ -272,12 +271,7 @@ describe('CatalogService', () => {
                 },
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(badConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, badConfig);
 
             // The inner try-catch at line 56-95 catches the error
             await expect(service.loadCatalog()).resolves.not.toThrow();
@@ -296,12 +290,7 @@ describe('CatalogService', () => {
                 apiProviders: [{ id: 'ai', models: ['m1'] }],
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(mockConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, mockConfig);
 
             await expect(service.loadCatalog()).resolves.not.toThrow();
         });
@@ -321,12 +310,7 @@ describe('CatalogService', () => {
                 apiProviders: [{ id: 'api-mod', models: { default: 'model-1' } }],
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(config);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, config);
 
             await service.loadCatalog();
 
@@ -359,19 +343,7 @@ describe('CatalogService', () => {
             mockBridge.isTauri.mockReturnValue(false);
 
             const origFetch = globalThis.fetch;
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url === '/api/config') {
-                    return Promise.resolve({
-                        ok: true,
-                        json: () => Promise.resolve(webConfig),
-                    });
-                }
-                // /api/modules — ok
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve([{ id: 'mod1', name: 'Module 1' }]),
-                });
-            }) as unknown as typeof fetch;
+            globalThis.fetch = setupFetchMock(webConfig, true, [{ id: 'mod1', name: 'Module 1' }]);
 
             await service.loadCatalog();
             globalThis.fetch = origFetch;
@@ -381,19 +353,7 @@ describe('CatalogService', () => {
             mockBridge.isTauri.mockReturnValue(false);
 
             const origFetch = globalThis.fetch;
-            globalThis.fetch = vi.fn().mockImplementation((url: string) => {
-                if (url === '/api/config') {
-                    return Promise.resolve({
-                        ok: true,
-                        json: () => Promise.resolve(webConfig),
-                    });
-                }
-                // /api/modules — not ok
-                return Promise.resolve({
-                    ok: false,
-                    json: () => Promise.resolve([]),
-                });
-            }) as unknown as typeof fetch;
+            globalThis.fetch = setupFetchMock(webConfig, false, []);
 
             await service.loadCatalog();
             globalThis.fetch = origFetch;
@@ -410,12 +370,7 @@ describe('CatalogService', () => {
                 apiProviders: [{ id: 'x', models: ['m'] }],
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(mockConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, mockConfig);
 
             await expect(service.loadCatalog()).resolves.not.toThrow();
         });
@@ -429,12 +384,7 @@ describe('CatalogService', () => {
                 apiProviders: [{ id: 'nomod' }],
             });
 
-            mockBridge.isTauri.mockReturnValue(true);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(mockConfig);
-                if (cmd === 'get_modules') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
+            setupBridgeMocks(mockBridge, mockConfig);
 
             await service.loadCatalog();
 

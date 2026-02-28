@@ -2,6 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DebugService, type ILogEntry } from './DebugService';
 import type { IBridge } from '@/shared/types/IBridge';
 import { createMockBridge } from '@/test/mocks/mockBridge';
+function setupTauri(
+    bridge: IBridge,
+    isTauri = true,
+    invokeReturn?: unknown,
+) {
+    vi.mocked(bridge.isTauri).mockReturnValue(isTauri);
+    if (invokeReturn !== undefined) {
+        vi.mocked(bridge.invoke).mockResolvedValue(invokeReturn);
+    }
+}
+
+function setupFetch(ok: boolean, textContent: string | null = null) {
+    const fetchMock = vi.fn().mockResolvedValue({
+        ok,
+        text: textContent === null ? undefined : () => Promise.resolve(textContent),
+    } as Response);
+    globalThis.fetch = fetchMock;
+    return fetchMock;
+}
 
 describe('DebugService', () => {
     let bridge: IBridge;
@@ -20,8 +39,7 @@ describe('DebugService', () => {
     });
 
     it('should fetch logs via generic bridge when isTauri is true', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
-        vi.mocked(bridge.invoke).mockResolvedValue(mockLogs);
+        setupTauri(bridge, true, mockLogs);
 
         const logs = await service.fetchLogs();
 
@@ -31,13 +49,12 @@ describe('DebugService', () => {
     });
 
     it('should filter noisy AI logs', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
         const noisyLogs: ILogEntry[] = [
             { timestamp: 100, source: 'CHATSERVICE', level: 'INFO', message: 'Noise' },
             { timestamp: 200, source: 'TEST', level: 'ERROR', message: 'Real Error' },
             { timestamp: 300, source: 'GEMINI', level: 'ERROR', message: 'ERROR 429' },
         ];
-        vi.mocked(bridge.invoke).mockResolvedValue(noisyLogs);
+        setupTauri(bridge, true, noisyLogs);
 
         const logs = await service.fetchLogs();
 
@@ -46,7 +63,7 @@ describe('DebugService', () => {
     });
 
     it('should clear logs via bridge', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
+        setupTauri(bridge, true);
 
         await service.clearLogs();
 
@@ -55,14 +72,8 @@ describe('DebugService', () => {
     });
 
     it('should fallback to fetch when bridge is not Tauri', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(false);
-        const fetchMock = vi.mocked(globalThis.fetch);
-        fetchMock.mockResolvedValue({
-            ok: true,
-            text: async () => {
-                return await Promise.resolve(JSON.stringify(mockLogs));
-            },
-        } as Response);
+        setupTauri(bridge, false);
+        const fetchMock = setupFetch(true, JSON.stringify(mockLogs));
 
         const logs = await service.fetchLogs();
 
@@ -75,36 +86,35 @@ describe('DebugService', () => {
             ['non-Tauri fetch error', false, () => vi.mocked(globalThis.fetch).mockRejectedValue(new Error('Network'))],
             ['non-Tauri fetch non-ok', false, () => vi.mocked(globalThis.fetch).mockResolvedValue({ ok: false } as Response)],
         ])('should return empty array on fetchLogs %s', async (_, isTauriFlag, setupMock) => {
-            vi.mocked(bridge.isTauri).mockReturnValue(isTauriFlag);
+            setupTauri(bridge, isTauriFlag);
             setupMock();
             const logs = await service.fetchLogs();
             expect(logs).toHaveLength(0);
         });
 
     it('should clear logs via fetch when not Tauri', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(false);
-        vi.mocked(globalThis.fetch).mockResolvedValue({} as Response);
+        setupTauri(bridge, false);
+        setupFetch(true);
         const result = await service.clearLogs();
         expect(result).toBe(true);
         expect(globalThis.fetch).toHaveBeenCalledWith('/api/logs/clear', { method: 'POST' });
     });
 
     it('should return false on clearLogs error', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
+        setupTauri(bridge, true);
         vi.mocked(bridge.invoke).mockRejectedValue(new Error('Clear fail'));
         const result = await service.clearLogs();
         expect(result).toBe(false);
     });
 
     it('should handle empty or non-array processLogs', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
-        vi.mocked(bridge.invoke).mockResolvedValue([]);
+        setupTauri(bridge, true, []);
         const logs = await service.fetchLogs();
         expect(logs).toHaveLength(0);
     });
 
     it('should truncate logs beyond 2000', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
+        setupTauri(bridge, true);
         // Fill logs with 2001 entries across multiple fetches
         const batch = Array.from({ length: 1500 }, (_, i) => ({
             timestamp: i,
@@ -127,17 +137,13 @@ describe('DebugService', () => {
     });
 
     it('should handle invalid JSON in safeJsonParse', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(false);
-        vi.mocked(globalThis.fetch).mockResolvedValue({
-            ok: true,
-            text: (): Promise<string> => Promise.resolve('not valid json'),
-        } as Response);
+        setupTauri(bridge, false);
+        setupFetch(true, 'not valid json');
         const logs = await service.fetchLogs();
         expect(logs).toHaveLength(0);
     });
 
     it('should handle logs with null/undefined message and source (L63-64)', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
         const logsWithNulls: ILogEntry[] = [
             {
                 timestamp: 100,
@@ -146,35 +152,31 @@ describe('DebugService', () => {
                 message: undefined as unknown as string,
             },
         ];
-        vi.mocked(bridge.invoke).mockResolvedValue(logsWithNulls);
+        setupTauri(bridge, true, logsWithNulls);
         const logs = await service.fetchLogs();
         // Should not crash — null/undefined safely coerced to ''
         expect(logs).toHaveLength(1);
     });
 
     it('should return empty when all logs are filtered (L90)', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
         const allNoisy: ILogEntry[] = [
             { timestamp: 100, source: 'CHATSERVICE', level: 'INFO', message: 'filtered' },
             { timestamp: 200, source: 'AIBRIDGE', level: 'INFO', message: 'filtered' },
         ];
-        vi.mocked(bridge.invoke).mockResolvedValue(allNoisy);
+        setupTauri(bridge, true, allNoisy);
         const logs = await service.fetchLogs();
         expect(logs).toHaveLength(0);
     });
 
     it('should handle empty string in safeJsonParse (L104)', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(false);
-        vi.mocked(globalThis.fetch).mockResolvedValue({
-            ok: true,
-            text: (): Promise<string> => Promise.resolve(''),
-        } as Response);
+        setupTauri(bridge, false);
+        setupFetch(true, '');
         const logs = await service.fetchLogs();
         expect(logs).toHaveLength(0);
     });
 
     it('should use previous lastTimestamp when last log has no timestamp (L93)', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
+        setupTauri(bridge, true);
         // First call sets lastTimestamp
         const firstBatch: ILogEntry[] = [
             { timestamp: 500, source: 'APP', level: 'INFO', message: 'ok' },
