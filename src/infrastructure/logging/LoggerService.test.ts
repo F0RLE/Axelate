@@ -325,7 +325,7 @@ describe('LoggerService', () => {
         it('should stringify complex objects and redact secrets', () => {
             const obj = {
                 normal: 'val',
-                password: 'test-password-123',
+                password: 'dummy-password-value', // NOSONAR - Just test data
                 nested: { authorization: 'token' },
             };
             tracer.info('Obj', obj);
