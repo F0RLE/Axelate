@@ -426,14 +426,12 @@ describe('DownloadUI', () => {
 
     // ---------------------------------------------------------- startDownloadsPolling null element guards
     describe('startDownloadsPolling without mainCard/emptyText', () => {
-        it('should handle missing mainCard in startDownloadsPolling init path (L319 false)', () => {
-            document.getElementById('downloads-main-card')?.remove();
-            ui.init(); // startDownloadsPolling → if (mainCard !== null) false branch
-        });
-
-        it('should handle missing emptyText in startDownloadsPolling init path (L320 false)', () => {
-            document.getElementById('downloads-empty-text')?.remove();
-            ui.init(); // startDownloadsPolling → if (emptyText !== null) false branch
+        it.each([
+            ['mainCard', 'downloads-main-card'],
+            ['emptyText', 'downloads-empty-text'],
+        ])('should handle missing %s in startDownloadsPolling init path', (_, id) => {
+            document.getElementById(id)?.remove();
+            ui.init();
         });
     });
 
@@ -590,75 +588,66 @@ describe('DownloadUI', () => {
             // Should not throw
         });
 
-        it('should handle patching a card without pctEl, statValues, or itemLabel', () => {
-            ui.init();
+        it.each([
+            [
+                'pctEl, statValues, or itemLabel',
+                'mod-gut',
+                0.9,
+                'downloading',
+                'Updated',
+                (card: Element | null | undefined) => {
+                    card?.querySelector('.downloads-progress-percent')?.remove();
+                    card?.querySelectorAll('.downloads-stat-value').forEach((el) => el.remove());
+                    card?.querySelector('.downloads-item-label')?.remove();
+                },
+            ],
+            [
+                'bar element',
+                'mod-nobar',
+                0.7,
+                'downloading',
+                undefined,
+                (card: Element | null | undefined) => {
+                    card?.querySelector('.downloads-bar-inner')?.remove();
+                },
+            ],
+            [
+                'status pill',
+                'mod-nopill',
+                0.7,
+                'complete',
+                undefined,
+                (card: Element | null | undefined) => {
+                    card?.querySelector('.downloads-status-pill')?.remove();
+                },
+            ],
+        ])(
+            'should handle patching a card without %s',
+            (_, modId, endPct, endStatus, endMsg, removeFn) => {
+                ui.init();
 
-            // Create a card, then manually gut its DOM
-            globalThis.dispatchEvent(
-                new CustomEvent('download-progress-update', {
-                    detail: { module_id: 'mod-gut', progress: 0.3, status: 'downloading' },
-                }),
-            );
+                globalThis.dispatchEvent(
+                    new CustomEvent('download-progress-update', {
+                        detail: { module_id: modId, progress: 0.3, status: 'downloading' },
+                    }),
+                );
 
-            // Remove internal elements from the card
-            const list = document.getElementById('downloads-dynamic-list');
-            const card = list?.querySelector('.download-item-card');
-            card?.querySelector('.downloads-progress-percent')?.remove();
-            card?.querySelectorAll('.downloads-stat-value').forEach((el) => el.remove());
-            card?.querySelector('.downloads-item-label')?.remove();
+                const list = document.getElementById('downloads-dynamic-list');
+                const card = list?.querySelector('.download-item-card');
+                removeFn(card);
 
-            // Patching a card with missing elements should not throw
-            globalThis.dispatchEvent(
-                new CustomEvent('download-progress-update', {
-                    detail: {
-                        module_id: 'mod-gut',
-                        progress: 0.9,
-                        status: 'downloading',
-                        message: 'Updated',
-                    },
-                }),
-            );
-        });
-
-        it('should handle patching a card without bar element', () => {
-            ui.init();
-
-            globalThis.dispatchEvent(
-                new CustomEvent('download-progress-update', {
-                    detail: { module_id: 'mod-nobar', progress: 0.3, status: 'downloading' },
-                }),
-            );
-
-            const list = document.getElementById('downloads-dynamic-list');
-            const card = list?.querySelector('.download-item-card');
-            card?.querySelector('.downloads-bar-inner')?.remove();
-
-            globalThis.dispatchEvent(
-                new CustomEvent('download-progress-update', {
-                    detail: { module_id: 'mod-nobar', progress: 0.7, status: 'downloading' },
-                }),
-            );
-        });
-
-        it('should handle patching a card without status pill', () => {
-            ui.init();
-
-            globalThis.dispatchEvent(
-                new CustomEvent('download-progress-update', {
-                    detail: { module_id: 'mod-nopill', progress: 0.3, status: 'downloading' },
-                }),
-            );
-
-            const list = document.getElementById('downloads-dynamic-list');
-            const card = list?.querySelector('.download-item-card');
-            card?.querySelector('.downloads-status-pill')?.remove();
-
-            globalThis.dispatchEvent(
-                new CustomEvent('download-progress-update', {
-                    detail: { module_id: 'mod-nopill', progress: 0.7, status: 'complete' },
-                }),
-            );
-        });
+                globalThis.dispatchEvent(
+                    new CustomEvent('download-progress-update', {
+                        detail: {
+                            module_id: modId,
+                            progress: endPct,
+                            status: endStatus,
+                            message: endMsg,
+                        },
+                    }),
+                );
+            },
+        );
     });
 
     // ---------------------------------------------------------- _initSettingsListeners

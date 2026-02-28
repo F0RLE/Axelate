@@ -70,28 +70,16 @@ describe('DebugService', () => {
         expect(logs).toHaveLength(2);
     });
 
-    it('should return empty array on fetchLogs error in Tauri', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(true);
-        vi.mocked(bridge.invoke).mockRejectedValue(new Error('Backend down'));
-        const logs = await service.fetchLogs();
-        expect(logs).toHaveLength(0);
-    });
-
-    it('should return empty array on fetch error in non-Tauri', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(false);
-        vi.mocked(globalThis.fetch).mockRejectedValue(new Error('Network'));
-        const logs = await service.fetchLogs();
-        expect(logs).toHaveLength(0);
-    });
-
-    it('should return empty array on non-ok fetch response', async () => {
-        vi.mocked(bridge.isTauri).mockReturnValue(false);
-        vi.mocked(globalThis.fetch).mockResolvedValue({
-            ok: false,
-        } as Response);
-        const logs = await service.fetchLogs();
-        expect(logs).toHaveLength(0);
-    });
+    it.each([
+            ['Tauri invoke error', true, () => vi.mocked(bridge.invoke).mockRejectedValue(new Error('Backend down'))],
+            ['non-Tauri fetch error', false, () => vi.mocked(globalThis.fetch).mockRejectedValue(new Error('Network'))],
+            ['non-Tauri fetch non-ok', false, () => vi.mocked(globalThis.fetch).mockResolvedValue({ ok: false } as Response)],
+        ])('should return empty array on fetchLogs %s', async (_, isTauriFlag, setupMock) => {
+            vi.mocked(bridge.isTauri).mockReturnValue(isTauriFlag);
+            setupMock();
+            const logs = await service.fetchLogs();
+            expect(logs).toHaveLength(0);
+        });
 
     it('should clear logs via fetch when not Tauri', async () => {
         vi.mocked(bridge.isTauri).mockReturnValue(false);

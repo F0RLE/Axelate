@@ -38,13 +38,11 @@ describe('catalogHelpers', () => {
     });
 
     describe('Global Access', () => {
-        it('should handle undefined APP_DATA gracefully', () => {
-            (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = undefined;
-            expect(getProviderFromCatalog('gemini')).toBeNull();
-        });
-
-        it('should handle undefined APP_DATA.ai gracefully', () => {
-            (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = {};
+        it.each([
+            ['APP_DATA', undefined],
+            ['APP_DATA.ai', {}],
+        ])('should handle undefined %s gracefully', (_, appDataVal) => {
+            (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = appDataVal;
             expect(getProviderFromCatalog('gemini')).toBeNull();
         });
     });
@@ -77,17 +75,16 @@ describe('catalogHelpers', () => {
             expect(getModelsFromProvider('unknown')).toEqual([]);
         });
 
-        it('getModelData should return correct model', () => {
-            const model = getModelData('gemini', 'gemini-ultra');
-            expect(model?.apiModels?.text).toBe('models/gemini-ultra');
-        });
-
-        it('getModelData should return null if model not found', () => {
-            expect(getModelData('gemini', 'unknown-model')).toBeNull();
-        });
-
-        it('getApiModelId should return api identifier', () => {
-            expect(getApiModelId('gemini', 'gemini-ultra')).toBe('models/gemini-ultra');
+        it.each([
+            ['getModelData should return correct model', 'getModelData', 'gemini-ultra', (model: unknown) => expect((model as { apiModels?: { text?: string } } | null)?.apiModels?.text).toBe('models/gemini-ultra')],
+            ['getModelData should return null if model not found', 'getModelData', 'unknown-model', (model: unknown) => expect(model).toBeNull()],
+            ['getApiModelId should return api identifier', 'getApiModelId', 'gemini-ultra', (id: unknown) => expect(id).toBe('models/gemini-ultra')],
+        ])('%s', (_, method, modelId, assertFn: (val: unknown) => void) => {
+            if (method === 'getModelData') {
+                assertFn(getModelData('gemini', modelId));
+            } else {
+                assertFn(getApiModelId('gemini', modelId));
+            }
         });
 
         it('getApiModelId should return original string if api object missing', () => {
