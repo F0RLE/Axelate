@@ -74,14 +74,15 @@ describe('catalogHelpers', () => {
         });
 
         it.each([
-            ['getModelData should return correct model', 'getModelData', 'gemini-ultra', (model: unknown) => expect((model as { apiModels?: { text?: string } } | null)?.apiModels?.text).toBe('models/gemini-ultra')],
-            ['getModelData should return null if model not found', 'getModelData', 'unknown-model', (model: unknown) => expect(model).toBeNull()],
-            ['getApiModelId should return api identifier', 'getApiModelId', 'gemini-ultra', (id: unknown) => expect(id).toBe('models/gemini-ultra')],
-        ])('%s', (_, method, modelId, assertFn: (val: unknown) => void) => {
+            ['getModelData should return correct model', 'getModelData', 'gemini-ultra', 'models/gemini-ultra'],
+            ['getModelData should return null if model not found', 'getModelData', 'unknown-model', null],
+            ['getApiModelId should return api identifier', 'getApiModelId', 'gemini-ultra', 'models/gemini-ultra'],
+        ])('%s', (_, method, modelId, expected) => {
             if (method === 'getModelData') {
-                assertFn(getModelData('gemini', modelId));
+                const model = getModelData('gemini', modelId) as { apiModels?: { text?: string } } | null;
+                expect(model?.apiModels?.text ?? null).toBe(expected);
             } else {
-                assertFn(getApiModelId('gemini', modelId));
+                expect(getApiModelId('gemini', modelId)).toBe(expected);
             }
         });
 
@@ -94,10 +95,11 @@ describe('catalogHelpers', () => {
             expect(getApiModelId('gemini', 'broken-model')).toBe('broken-model');
         });
 
-        it('getMostPowerfulModel should return first model id', () => {
-            // Because our naive implementation just returns first element array mapped by ID
-            expect(getMostPowerfulModel('gemini')).toBe('gemini-pro');
-            expect(getMostPowerfulModel('gpt')).toBe('');
+        it.each([
+            ['gemini', 'gemini-pro'],
+            ['gpt', ''],
+        ])('getMostPowerfulModel(%s) should return %s', (provider, expected) => {
+            expect(getMostPowerfulModel(provider)).toBe(expected);
         });
 
         it('getSelectedModel should use saved value first', () => {
