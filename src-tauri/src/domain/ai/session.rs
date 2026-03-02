@@ -252,7 +252,7 @@ mod tests {
             thought_signature: None,
         };
 
-        let history = manager.get_or_create_session("session-1", &[msg.clone()]);
+        let history = manager.get_or_create_session("session-1", std::slice::from_ref(&msg));
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].id, "msg-1");
         assert!(manager.dirty.load(Ordering::Relaxed));

@@ -57,7 +57,6 @@ describe('CatalogService', () => {
         globalThis.APP_DATA = { ai: [], services: [] } as unknown as ICatalogData;
         globalThis.getCatalogCategory = vi.fn();
         globalThis.dispatchEvent = vi.fn();
-        globalThis.updateModuleSettings = vi.fn();
 
         mockBridge = createMockBridge() as unknown as {
             isTauri: ReturnType<typeof vi.fn>;
@@ -278,24 +277,6 @@ describe('CatalogService', () => {
         });
     });
 
-    // ---------------------------------------------------------- _updateLegacySettings error (line 266)
-    describe('_updateLegacySettings error path', () => {
-        it('should handle updateModuleSettings throwing without crashing', async () => {
-            globalThis.updateModuleSettings = vi.fn().mockImplementation(() => {
-                throw new Error('Hook failed');
-            });
-
-            const mockConfig = createMockAppConfig({
-                catalog: { ai: [{ id: 'ai', name: 'AI' }], services: [] },
-                apiProviders: [{ id: 'ai', models: ['m1'] }],
-            });
-
-            setupBridgeMocks(mockBridge, mockConfig);
-
-            await expect(service.loadCatalog()).resolves.not.toThrow();
-        });
-    });
-
     // ---------------------------------------------------------- _ensureFallbacks api-type (L193)
     describe('_ensureFallbacks api-type branch (L193)', () => {
         it('should mark api-type apps as installed=true', async () => {
@@ -357,40 +338,6 @@ describe('CatalogService', () => {
 
             await service.loadCatalog();
             globalThis.fetch = origFetch;
-        });
-    });
-
-    describe('_updateLegacySettings missing updateFn and models branches (L249-253)', () => {
-        it('should skip when updateModuleSettings is not a function (L249 false)', async () => {
-            // Set updateModuleSettings to undefined
-            (globalThis as unknown as Record<string, unknown>)['updateModuleSettings'] = undefined;
-
-            const mockConfig = createMockAppConfig({
-                catalog: { ai: [{ id: 'x', name: 'X' }], services: [] },
-                apiProviders: [{ id: 'x', models: ['m'] }],
-            });
-
-            setupBridgeMocks(mockBridge, mockConfig);
-
-            await expect(service.loadCatalog()).resolves.not.toThrow();
-        });
-
-        it('should skip provider without models property (L253 false)', async () => {
-            globalThis.updateModuleSettings = vi.fn();
-
-            const mockConfig = createMockAppConfig({
-                catalog: { ai: [{ id: 'nomod', name: 'NoMod' }], services: [] },
-                // Provider without models property
-                apiProviders: [{ id: 'nomod' }],
-            });
-
-            setupBridgeMocks(mockBridge, mockConfig);
-
-            await service.loadCatalog();
-
-            // updateModuleSettings was called, but the map should be empty
-            // since the provider has no models
-            expect(globalThis['updateModuleSettings']).toHaveBeenCalledWith({});
         });
     });
 });

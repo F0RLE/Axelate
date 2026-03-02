@@ -551,22 +551,20 @@
 }
 
 .star-icon.full {
-    color: #ffd700;
+    color: #f5a623;
 }
 
 .star-icon.half {
-    background: linear-gradient(90deg, #ffd700 50%, rgba(255, 255, 255, 0.15) 50%);
+    background: linear-gradient(90deg, #f5a623 50%, rgba(255, 255, 255, 0.08) 50%);
     -webkit-background-clip: text;
     background-clip: text;
+    -webkit-text-fill-color: transparent;
     color: transparent;
     /* Special handling for half-star clipping/alignment */
     position: relative;
+    text-shadow: none; /* No shadow on half stars as it interferes with background-clip */
 }
 
 .star-icon.empty {
     color: rgba(255, 255, 255, 0.08);
-}
-
-.star-icon:hover {
-    transform: scale(1.2) translateY(-2px);
 }

@@ -218,17 +218,6 @@ export class EventHandler {
                 void this._core.chatController.sendChat();
             }
         });
-
-        // Enter = send, Shift+Enter = newline
-        this._addListener(document.body, 'keydown', (e: Event) => {
-            const ke = e as KeyboardEvent;
-            if (!(ke.target instanceof HTMLElement)) return;
-            if (ke.target.id !== 'chat-input') return;
-            if (ke.key === 'Enter' && !ke.shiftKey) {
-                ke.preventDefault();
-                void this._core.chatController.sendChat();
-            }
-        });
     }
 
     private _initLanguageModal(): void {

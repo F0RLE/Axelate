@@ -206,7 +206,6 @@ declare global {
     var checkModuleInstalled: (_id: string) => Promise<boolean>;
     var openModuleSettings: (_app: IApp) => void;
     var closeModuleSettings: () => void;
-    var updateModuleSettings: (_settings: Record<string, unknown>) => void;
     var openDownloadSettings: () => void;
     var closeDownloadSettings: () => void;
     var saveDownloadSettings: () => void;
@@ -264,7 +263,6 @@ declare global {
         checkModuleInstalled: typeof checkModuleInstalled;
         openModuleSettings: typeof openModuleSettings;
         closeModuleSettings: typeof closeModuleSettings;
-        updateModuleSettings: typeof updateModuleSettings;
         openDownloadSettings: typeof openDownloadSettings;
         closeDownloadSettings: typeof closeDownloadSettings;
         diskUtil: typeof diskUtil;

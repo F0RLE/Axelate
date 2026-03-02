@@ -12,7 +12,7 @@
  */
 
 import type { IChatAttachment } from '../types/chatTypes';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import type { IBridge } from '@/shared/types/IBridge';
 import {
     estimateTokenCount,
     getTokenCount,
@@ -45,10 +45,15 @@ export class ChatFileHandler {
     private _files: File[] = [];
     private _onUpdate: AttachmentUpdateCallback | null = null;
     private _initialized = false;
+    private _bridge: IBridge | null = null;
 
     constructor() {
         // Registration on globalThis for access from HTML/legacy code (Section 16.3)
         (globalThis as unknown as Record<string, unknown>)['chatFileHandler'] = this;
+    }
+
+    public setBridge(bridge: IBridge): void {
+        this._bridge = bridge;
     }
 
     /**
@@ -155,9 +160,7 @@ export class ChatFileHandler {
      * Internal router for file processing based on environment.
      */
     private _processSingleFile(file: File): Promise<IFileProcessResult> {
-        const win = getGlobalWin();
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (win.__TAURI__ !== undefined) {
+        if (this._bridge?.isTauri() === true) {
             return this._processWithBackend(file);
         }
         return this._processWithWebFallback(file);
@@ -167,11 +170,12 @@ export class ChatFileHandler {
      * Processes file using Tauri backend commands for efficient extraction.
      */
     private async _processWithBackend(file: File): Promise<IFileProcessResult> {
+        if (!this._bridge) return { error: '\n[Backend unavailable]' };
         try {
             const buffer = await file.arrayBuffer();
             const bytes = Array.from(new Uint8Array(buffer));
 
-            const result = await globalThis.__TAURI__.core.invoke<{
+            const result = await this._bridge.invoke<{
                 name: string;
                 content: string;
                 is_archive: boolean;

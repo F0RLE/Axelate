@@ -70,15 +70,6 @@ export class SettingsUI {
     private readonly _unsubscribers: (() => void)[] = [];
     private _context!: ISettingsUIContext;
     private _resizer!: CardResizer;
-
-    private readonly ICONS: {
-        VISIBLE: string;
-        HIDDEN: string;
-        CHECK: string;
-        X: string;
-        SPINNER: string;
-    };
-
     private readonly _generalRenderer: GeneralSettingsRenderer;
 
     constructor(
@@ -90,31 +81,7 @@ export class SettingsUI {
         private readonly _navigation: NavigationService,
     ) {
         this._generalRenderer = new GeneralSettingsRenderer(_uiSettings);
-        // Pre-sanitize static SVG icons once, not at every assignment site
-        this.ICONS = {
-            VISIBLE: DOMPurify.sanitize(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
-                { USE_PROFILES: { html: true, svg: true } },
-            ),
-            HIDDEN: DOMPurify.sanitize(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>',
-                { USE_PROFILES: { html: true, svg: true } },
-            ),
-            CHECK: DOMPurify.sanitize(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
-                { USE_PROFILES: { html: true, svg: true } },
-            ),
-            X: DOMPurify.sanitize(
-                '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
-                { USE_PROFILES: { html: true, svg: true } },
-            ),
-            SPINNER: DOMPurify.sanitize(
-                '<svg style="animation: spin 1s linear infinite; width: 18px; height: 18px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>',
-                { USE_PROFILES: { html: true, svg: true } },
-            ),
-        };
     }
-
     /**
      * Initializes the settings UI, renders components, and binds events.
      */
@@ -342,142 +309,6 @@ export class SettingsUI {
     private async _renderUniversalApiSettings(container: HTMLElement, app: IApp): Promise<void> {
         // Delegate to dedicated AI Settings Renderer singleton (Section 16.1)
         await aiSettingsRenderer.render(container, app);
-    }
-
-    /**
-     * Toggles visibility of an API key input field.
-     */
-    public toggleModuleKeyVisibility(appId: string) {
-        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
-        const btn = document.getElementById(`${appId}-key-toggle-btn`);
-        if (input !== null && btn !== null) {
-            const isPass = input.type === 'password';
-            input.type = isPass ? 'text' : 'password';
-            btn.innerHTML = isPass ? this.ICONS.VISIBLE : this.ICONS.HIDDEN;
-        }
-    }
-
-    /**
-     * Checks the validity of an API key via its provider endpoint.
-     */
-    public async checkModuleKey(appId: string) {
-        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
-        const btn = document.getElementById(`${appId}-key-check-btn`);
-        if (input === null || btn === null) return;
-
-        const t = this._context.t;
-        const key = input.value.trim();
-        if (key === '') {
-            this._context.showToast(t('ui.settings.key_invalid', 'Invalid Key'), 'error');
-            return;
-        }
-
-        const originalHtml = btn.innerHTML;
-        const originalWidth = btn.offsetWidth;
-        btn.style.width = `${originalWidth.toString()}px`;
-        btn.innerHTML = this.ICONS.SPINNER;
-        btn.style.pointerEvents = 'none';
-
-        try {
-            const provider = appId === 'gemini' ? 'gemini' : 'openai';
-            const ok = await this._service.validateApiKey(provider, key);
-
-            if (ok) {
-                btn.style.borderColor = 'var(--success)';
-                btn.style.color = 'var(--success)';
-                btn.innerHTML = this.ICONS.CHECK;
-                this._context.showToast(t('ui.settings.key_valid', 'Key is valid'), 'success');
-            } else {
-                btn.style.borderColor = 'var(--error)';
-                btn.style.color = 'var(--error)';
-                btn.innerHTML = this.ICONS.X;
-                this._context.showToast(
-                    t('ui.settings.key_invalid_check', 'Key is invalid'),
-                    'error',
-                );
-            }
-        } catch {
-            btn.style.borderColor = 'var(--error)';
-            btn.style.color = 'var(--error)';
-            btn.innerHTML = this.ICONS.X;
-            this._context.showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
-        } finally {
-            setTimeout(() => {
-                btn.style.pointerEvents = 'auto';
-                btn.style.width = '';
-                btn.style.borderColor = 'var(--border-color)';
-                btn.style.color = 'var(--text-secondary)';
-                btn.innerHTML = originalHtml;
-            }, 3000);
-        }
-    }
-
-    /**
-     * Selects an AI model and re-renders stats.
-     */
-    public selectAIModel(appId: string, modelKey: string) {
-        aiSettingsRenderer.selectModel(appId, modelKey);
-    }
-
-    /**
-     * Prompts the user to add a custom AI model.
-     */
-    public async addCustomModelToSettings(provider: 'openai' | 'gemini' | 'local') {
-        const t = this._context.t;
-        const currentApp = this._context.currentModule;
-
-        const promptMsg = t(
-            'ui.settings.custom_model.prompt_id',
-            `Enter Model ID for ${provider} (e.g. gpt-4o):`,
-            { provider },
-        );
-
-        const modelId = prompt(promptMsg);
-        if (modelId === null || modelId === '') return;
-
-        const promptNameMsg = t('ui.settings.custom_model.prompt_name', 'Enter Display Name:');
-        const modelName = prompt(promptNameMsg, modelId);
-        if (modelName === null || modelName === '') return;
-
-        try {
-            await this._service.addCustomModel(provider, modelId, modelName);
-
-            // Custom models will be added to the provider's model list in future update
-            if (typeof showToast === 'function') {
-                showToast(
-                    typeof t === 'function'
-                        ? t(
-                              'ui.settings.custom_model.toast_update',
-                              'Custom model support is being updated',
-                          )
-                        : 'Custom model support is being updated',
-                    'info',
-                );
-            }
-
-            // Re-render current modal content
-            const container = document.getElementById('module-config-modal-active');
-            if (container && currentApp) {
-                this._renderUniversalApiSettings(container, currentApp).catch((e: unknown) => {
-                    tracer.error(String(e));
-                });
-            }
-
-            if (typeof showToast === 'function') {
-                showToast(
-                    typeof t === 'function'
-                        ? t('ui.settings.custom_model.toast_added', 'Custom model added')
-                        : 'Custom model added',
-                    'success',
-                );
-            }
-        } catch (e) {
-            tracer.error('[SettingsUI] Failed to add custom model', e);
-        }
-    }
-
-    public updateModuleSettings(_configModels: unknown) {
-        // Dynamic update logic will be implemented via the catalog refresh
     }
 
     // --- Card Resizing ---

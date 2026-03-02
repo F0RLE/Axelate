@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ChatFileHandler } from '@/features/chat/services/ChatFileHandler';
+import type { IBridge } from '@/shared/types/IBridge';
 
 // Mock chatUtils
 vi.mock('@/features/chat/utils/chatUtils', () => ({
@@ -46,18 +47,23 @@ function createBackendFile(name: string, content: string, type = 'text/plain'): 
 
 describe('ChatFileHandler', () => {
     let handler: ChatFileHandler;
+    let mockBridge: {
+        isTauri: ReturnType<typeof vi.fn>;
+        invoke: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
         vi.clearAllMocks();
         handler = new ChatFileHandler();
-        // Cleanup __TAURI__
-        const win = globalThis as unknown as Record<string, unknown>;
-        delete win['__TAURI__'];
+        mockBridge = {
+            isTauri: vi.fn(),
+            invoke: vi.fn(),
+        };
+        handler.setBridge(mockBridge as unknown as IBridge);
     });
 
     afterEach(() => {
-        const win = globalThis as unknown as Record<string, unknown>;
-        delete win['__TAURI__'];
+        vi.unstubAllGlobals();
     });
 
     // ---------------------------------------------------------- initial state
@@ -202,17 +208,12 @@ describe('ChatFileHandler', () => {
 
     // ---------------------------------------------------------- processForSend (backend / Tauri)
     describe('processForSend (Tauri backend)', () => {
-        let mockInvoke: Mock;
-
         beforeEach(() => {
-            mockInvoke = vi.fn();
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
-                core: { invoke: mockInvoke },
-            };
+            mockBridge.isTauri.mockReturnValue(true);
         });
 
         it('should process text file via backend', async () => {
-            mockInvoke.mockResolvedValue({
+            mockBridge.invoke.mockResolvedValue({
                 name: 'doc.txt',
                 content: 'extracted text',
                 is_archive: false,
@@ -221,13 +222,16 @@ describe('ChatFileHandler', () => {
             handler.addFiles([createBackendFile('doc.txt', 'raw')]);
             const result = await handler.processForSend('Base');
 
-            expect(mockInvoke).toHaveBeenCalledWith('process_file_content', expect.any(Object));
+            expect(mockBridge.invoke).toHaveBeenCalledWith(
+                'process_file_content',
+                expect.any(Object),
+            );
             expect(result.combinedText).toContain('extracted text');
             expect(result.attachments).toHaveLength(1);
         });
 
         it('should handle backend error in result', async () => {
-            mockInvoke.mockResolvedValue({
+            mockBridge.invoke.mockResolvedValue({
                 name: 'bad.pdf',
                 content: '',
                 is_archive: false,
@@ -241,7 +245,7 @@ describe('ChatFileHandler', () => {
         });
 
         it('should handle archive result', async () => {
-            mockInvoke.mockResolvedValue({
+            mockBridge.invoke.mockResolvedValue({
                 name: 'project.zip',
                 content: 'extracted archive content',
                 is_archive: true,
@@ -255,7 +259,7 @@ describe('ChatFileHandler', () => {
         });
 
         it('should handle image file sent to backend with no content', async () => {
-            mockInvoke.mockResolvedValue({
+            mockBridge.invoke.mockResolvedValue({
                 name: 'photo.png',
                 content: '',
                 is_archive: false,
@@ -270,7 +274,7 @@ describe('ChatFileHandler', () => {
         });
 
         it('should handle empty content non-image file', async () => {
-            mockInvoke.mockResolvedValue({
+            mockBridge.invoke.mockResolvedValue({
                 name: 'binary.bin',
                 content: '',
                 is_archive: false,
@@ -284,7 +288,7 @@ describe('ChatFileHandler', () => {
         });
 
         it('should handle invoke exception', async () => {
-            mockInvoke.mockRejectedValue(new Error('IPC crash'));
+            mockBridge.invoke.mockRejectedValue(new Error('IPC crash'));
 
             handler.addFiles([createBackendFile('crash.txt', 'data')]);
             const result = await handler.processForSend('Base');
@@ -293,7 +297,7 @@ describe('ChatFileHandler', () => {
         });
 
         it('should use application/zip for archive with no file type (L193)', async () => {
-            mockInvoke.mockResolvedValue({
+            mockBridge.invoke.mockResolvedValue({
                 name: 'pkg.tar.gz',
                 content: 'archive content',
                 is_archive: true,
@@ -311,7 +315,7 @@ describe('ChatFileHandler', () => {
         });
 
         it('should use text/plain for non-archive file with no type (L232)', async () => {
-            mockInvoke.mockResolvedValue({
+            mockBridge.invoke.mockResolvedValue({
                 name: 'readme',
                 content: 'some readme text',
                 is_archive: false,
@@ -325,8 +329,8 @@ describe('ChatFileHandler', () => {
         });
 
         it('should process text file with empty type via web fallback (L232)', async () => {
-            // Remove __TAURI__ to force web fallback
-            delete (globalThis as unknown as Record<string, unknown>)['__TAURI__'];
+            // Force web fallback
+            mockBridge.isTauri.mockReturnValue(false);
             // Override isTextFile mock — real impl checks extension, not MIME type
             (isTextFile as Mock).mockReturnValueOnce(true);
 

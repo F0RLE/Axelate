@@ -243,22 +243,8 @@ export class CatalogService {
     /**
      * Updates legacy module settings from config.
      */
-    private _updateLegacySettings(apiProviders: ApiProvider[]): void {
-        const win = getGlobalWin();
-        const updateFn = win.updateModuleSettings;
-        if (typeof updateFn === 'function') {
-            try {
-                const models_map: Record<string, unknown> = {};
-                apiProviders.forEach((p) => {
-                    if (p.models) {
-                        models_map[p.id] = p.models;
-                    }
-                });
-                updateFn(models_map);
-            } catch {
-                tracer.warn('[CatalogService] Warning updating module settings');
-            }
-        }
+    private _updateLegacySettings(_apiProviders: ApiProvider[]): void {
+        tracer.info('[CatalogService] Legacy update settings deprecated.');
     }
 
     /**

@@ -24,6 +24,7 @@ export class ChatController {
     private readonly _filePicker: FilePickerController;
     private _chatHistory: IChatMessage[] = [];
     private _currentGreetingIndex = 1;
+    private _isSending = false;
 
     constructor(
         private readonly _aiBridge: AIBridge,
@@ -113,6 +114,8 @@ export class ChatController {
     // --- Send Message ---
 
     public async sendChat(): Promise<void> {
+        if (this._isSending) return;
+        
         const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         const text = (input ? input.value : '').trim();
 
@@ -122,6 +125,8 @@ export class ChatController {
         const uiElements = this._lockUI(input);
         const typingId = `typing-${String(Date.now())}`;
         const listenerId = `chat-stream-${String(Date.now())}`;
+
+        this._isSending = true;
 
         try {
             const tokenCount = await chatFileHandler.getTotalTokenEstimate(text);
@@ -163,6 +168,7 @@ export class ChatController {
             this._handleError(e instanceof Error ? e.message : 'Unknown error');
         } finally {
             this._unlockUI(uiElements);
+            this._isSending = false;
         }
     }
 

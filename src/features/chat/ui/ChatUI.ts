@@ -247,7 +247,7 @@ export class ChatUI {
                         ) {
                             textNode.textContent = accumulatedText;
                         } else {
-                            const rawHtml = marked.parse(accumulatedText);
+                            const rawHtml = marked.parse(accumulatedText) as string;
                             textNode.innerHTML = DOMPurify.sanitize(rawHtml);
                         }
                     } catch {
@@ -260,7 +260,7 @@ export class ChatUI {
             },
             finalize: (fullContent: string, finalOpts: Record<string, unknown> = {}) => {
                 try {
-                    const finalHtml = marked.parse(fullContent);
+                    const finalHtml = marked.parse(fullContent) as string;
                     textNode.innerHTML = DOMPurify.sanitize(finalHtml);
                 } catch {
                     textNode.textContent = fullContent;
@@ -326,7 +326,7 @@ export class ChatUI {
 
         // Render Markdown
         try {
-            const rawHtml = marked.parse(finalContent);
+            const rawHtml = marked.parse(finalContent) as string;
             textNode.innerHTML = DOMPurify.sanitize(rawHtml);
         } catch (e) {
             tracer.error('[ChatUI] Markdown render error:', e);

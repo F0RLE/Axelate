@@ -8,61 +8,6 @@
 }
 
 /* Confirmation Modal */
-/* Blur launcher when closing - apply to all content containers */
-body.launcher-blur .page,
-body.launcher-blur .top-controls,
-body.launcher-blur #sidebar,
-body.launcher-blur #app-header,
-body.launcher-blur #main-area {
-    /* Blur removed per user request for clear UI */
-    filter: none !important;
-    -webkit-filter: none !important;
-    transition: none;
-    pointer-events: none !important;
-}
-
-/* Block all buttons and clickable elements except modal buttons */
-body.launcher-blur button:not(.modal-btn),
-body.launcher-blur a:not(.modal-btn),
-body.launcher-blur [onclick]:not(.modal-btn):not(.modal-overlay),
-body.launcher-blur [role='button']:not(.modal-btn),
-body.launcher-blur input[type='button'],
-body.launcher-blur input[type='submit'] {
-    pointer-events: none !important;
-    cursor: not-allowed !important;
-}
-
-/* Exclude window controls from pointer-events blocking */
-body.launcher-blur .window-control-btn,
-body.launcher-blur .close-btn {
-    filter: none !important;
-    -webkit-filter: none !important;
-    pointer-events: auto !important;
-}
-
-/* Modal overlay and modal should never be blurred - create new stacking context */
-body.launcher-blur .modal-overlay {
-    filter: none !important;
-    -webkit-filter: none !important;
-    transform: translateZ(0);
-    isolation: isolate;
-    pointer-events: auto;
-}
-
-body.launcher-blur .modal-overlay *,
-body.launcher-blur .modal,
-body.launcher-blur .modal * {
-    filter: none !important;
-    -webkit-filter: none !important;
-    pointer-events: auto;
-}
-
-/* Ensure modal is above everything */
-body.launcher-blur .modal {
-    z-index: 10002 !important;
-    transform: translateZ(0);
-    isolation: isolate;
-}
 
 .modal-overlay {
     position: fixed;
@@ -77,9 +22,7 @@ body.launcher-blur .modal {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 2000000 !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    z-index: 5000;
     transition:
         opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
         visibility 0.8s;
@@ -89,14 +32,14 @@ body.launcher-blur .modal {
     visibility: visible;
     opacity: 1;
     pointer-events: auto;
-    z-index: 2000001 !important;
+    z-index: 5001;
     transition:
         opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         visibility 0s linear 0s;
 }
 
 .modal-overlay .modal {
-    z-index: 10002 !important;
+    z-index: 5002;
     position: relative;
 }
 
@@ -344,7 +287,7 @@ body.launcher-blur .modal {
     font-size: 0.9rem;
     font-weight: 600;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 3000000;
+    z-index: 5100;
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     opacity: 0;
     pointer-events: none;

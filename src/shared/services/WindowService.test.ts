@@ -31,10 +31,7 @@ describe('WindowService', () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        Object.defineProperty(globalThis, 'screen', {
-            value: { width: 1920, height: 1080 },
-            configurable: true,
-        });
+        vi.stubGlobal('screen', { width: 1920, height: 1080 });
 
         mockBridge = {
             isTauri: vi.fn().mockReturnValue(true),
@@ -59,9 +56,7 @@ describe('WindowService', () => {
         vi.useRealTimers();
         vi.clearAllMocks();
         vi.restoreAllMocks();
-        // Cleanup __TAURI__ if set
-        const win = globalThis as unknown as Record<string, unknown>;
-        delete win['__TAURI__'];
+        vi.unstubAllGlobals();
     });
 
     // ---------------------------------------------------------- Initialization
@@ -404,10 +399,7 @@ describe('WindowService', () => {
             await service.checkPolicy();
 
             // Change screen
-            Object.defineProperty(globalThis, 'screen', {
-                value: { width: 2560, height: 1440 },
-                configurable: true,
-            });
+            vi.stubGlobal('screen', { width: 2560, height: 1440 });
 
             service.checkResolutionChange();
             // Should have updated the internal key (no assertion on private, just no throw)
@@ -438,7 +430,7 @@ describe('WindowService', () => {
             const mockCenter = vi.fn().mockResolvedValue(undefined);
             const mockLogicalSize = vi.fn();
 
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
+            vi.stubGlobal('__TAURI__', {
                 window: {
                     getCurrentWindow: () => ({
                         setSize: mockSetSize,
@@ -446,7 +438,7 @@ describe('WindowService', () => {
                     }),
                     LogicalSize: mockLogicalSize,
                 },
-            };
+            });
 
             await service.setSize(800, 600);
 
@@ -455,7 +447,7 @@ describe('WindowService', () => {
         });
 
         it('should handle error gracefully', async () => {
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
+            vi.stubGlobal('__TAURI__', {
                 window: {
                     getCurrentWindow: () => ({
                         setSize: vi.fn().mockRejectedValue(new Error('fail')),
@@ -463,7 +455,7 @@ describe('WindowService', () => {
                     }),
                     LogicalSize: vi.fn(),
                 },
-            };
+            });
 
             await service.setSize(800, 600); // should not throw
         });
@@ -474,7 +466,7 @@ describe('WindowService', () => {
         });
 
         it('should skip if __TAURI__.window is missing', async () => {
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {};
+            vi.stubGlobal('__TAURI__', {});
             await service.setSize(800, 600); // should not throw
         });
     });
@@ -482,46 +474,46 @@ describe('WindowService', () => {
     // ---------------------------------------------------------- isMaximized
     describe('isMaximized', () => {
         it('should return true when Tauri window is maximized', async () => {
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
+            vi.stubGlobal('__TAURI__', {
                 window: {
                     getCurrentWindow: () => ({
                         isMaximized: vi.fn().mockResolvedValue(true),
                     }),
                 },
-            };
+            });
 
             const result = await service.isMaximized();
             expect(result).toBe(true);
         });
 
         it('should return false when Tauri window is not maximized', async () => {
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
+            vi.stubGlobal('__TAURI__', {
                 window: {
                     getCurrentWindow: () => ({
                         isMaximized: vi.fn().mockResolvedValue(false),
                     }),
                 },
-            };
+            });
 
             const result = await service.isMaximized();
             expect(result).toBe(false);
         });
 
         it('should return false on error', async () => {
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
+            vi.stubGlobal('__TAURI__', {
                 window: {
                     getCurrentWindow: () => ({
                         isMaximized: vi.fn().mockRejectedValue(new Error('fail')),
                     }),
                 },
-            };
+            });
 
             const result = await service.isMaximized();
             expect(result).toBe(false);
         });
 
         it('should return false if __TAURI__.window is missing', async () => {
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {};
+            vi.stubGlobal('__TAURI__', {});
             const result = await service.isMaximized();
             expect(result).toBe(false);
         });
@@ -554,7 +546,7 @@ describe('WindowService', () => {
 
         it('should save window state (maximized) when Tauri window resolves', async () => {
             const mockIsMaximized = vi.fn().mockResolvedValue(true);
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
+            vi.stubGlobal('__TAURI__', {
                 window: {
                     getCurrentWindow: () => ({
                         isMaximized: mockIsMaximized,
@@ -562,7 +554,7 @@ describe('WindowService', () => {
                         outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
                     }),
                 },
-            };
+            });
 
             await service.init(mockWindowConfig, 1);
             globalThis.dispatchEvent(new Event('resize'));
@@ -580,7 +572,7 @@ describe('WindowService', () => {
             const mockInnerSize = vi.fn().mockResolvedValue({ width: 1000, height: 600 });
             const mockOuterPos = vi.fn().mockResolvedValue({ x: 100, y: 50 });
 
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
+            vi.stubGlobal('__TAURI__', {
                 window: {
                     getCurrentWindow: () => ({
                         isMaximized: mockIsMaximized,
@@ -588,7 +580,7 @@ describe('WindowService', () => {
                         outerPosition: mockOuterPos,
                     }),
                 },
-            };
+            });
 
             await service.init(mockWindowConfig, 1);
             globalThis.dispatchEvent(new Event('resize'));
@@ -643,10 +635,7 @@ describe('WindowService', () => {
             });
 
             // Trigger resolution change by changing screen size
-            Object.defineProperty(globalThis, 'screen', {
-                value: { width: 2560, height: 1440 },
-                configurable: true,
-            });
+            vi.stubGlobal('screen', { width: 2560, height: 1440 });
 
             service.checkResolutionChange();
             await vi.runAllTimersAsync();
@@ -663,10 +652,7 @@ describe('WindowService', () => {
                 return Promise.resolve(undefined);
             });
 
-            Object.defineProperty(globalThis, 'screen', {
-                value: { width: 3840, height: 2160 },
-                configurable: true,
-            });
+            vi.stubGlobal('screen', { width: 3840, height: 2160 });
 
             service.checkResolutionChange();
             await vi.runAllTimersAsync(); // should not throw

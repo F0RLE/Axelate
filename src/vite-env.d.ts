@@ -12,15 +12,3 @@ declare module '@tauri-apps/plugin-fs' {
     export type ReadFileOptions = Record<string, unknown>;
     export function readFile(path: string, options?: ReadFileOptions): Promise<ArrayBuffer>;
 }
-
-declare module 'marked' {
-    export const marked: {
-        parse: (content: string) => string;
-        use: (...args: unknown[]) => void;
-        Renderer: new () => {
-            link?: unknown;
-            code?: unknown;
-            [key: string]: unknown;
-        };
-    };
-}

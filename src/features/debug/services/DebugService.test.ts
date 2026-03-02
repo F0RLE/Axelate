@@ -2,11 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DebugService, type ILogEntry } from './DebugService';
 import type { IBridge } from '@/shared/types/IBridge';
 import { createMockBridge } from '@/test/mocks/mockBridge';
-function setupTauri(
-    bridge: IBridge,
-    isTauri = true,
-    invokeReturn?: unknown,
-) {
+function setupTauri(bridge: IBridge, isTauri = true, invokeReturn?: unknown) {
     vi.mocked(bridge.isTauri).mockReturnValue(isTauri);
     if (invokeReturn !== undefined) {
         vi.mocked(bridge.invoke).mockResolvedValue(invokeReturn);
@@ -82,15 +78,27 @@ describe('DebugService', () => {
     });
 
     it.each([
-            ['Tauri invoke error', true, () => vi.mocked(bridge.invoke).mockRejectedValue(new Error('Backend down'))],
-            ['non-Tauri fetch error', false, () => vi.mocked(globalThis.fetch).mockRejectedValue(new Error('Network'))],
-            ['non-Tauri fetch non-ok', false, () => vi.mocked(globalThis.fetch).mockResolvedValue({ ok: false } as Response)],
-        ])('should return empty array on fetchLogs %s', async (_, isTauriFlag, setupMock) => {
-            setupTauri(bridge, isTauriFlag);
-            setupMock();
-            const logs = await service.fetchLogs();
-            expect(logs).toHaveLength(0);
-        });
+        [
+            'Tauri invoke error',
+            true,
+            () => vi.mocked(bridge.invoke).mockRejectedValue(new Error('Backend down')),
+        ],
+        [
+            'non-Tauri fetch error',
+            false,
+            () => vi.mocked(globalThis.fetch).mockRejectedValue(new Error('Network')),
+        ],
+        [
+            'non-Tauri fetch non-ok',
+            false,
+            () => vi.mocked(globalThis.fetch).mockResolvedValue({ ok: false } as Response),
+        ],
+    ])('should return empty array on fetchLogs %s', async (_, isTauriFlag, setupMock) => {
+        setupTauri(bridge, isTauriFlag);
+        setupMock();
+        const logs = await service.fetchLogs();
+        expect(logs).toHaveLength(0);
+    });
 
     it('should clear logs via fetch when not Tauri', async () => {
         setupTauri(bridge, false);

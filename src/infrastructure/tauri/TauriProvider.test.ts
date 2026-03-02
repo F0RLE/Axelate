@@ -39,13 +39,18 @@ function createListenWithPayload(payload: unknown) {
     };
 }
 
-function setupWebMode(): { win: Record<string, unknown>; origTauri: unknown; origInternals: unknown; provider: TauriProvider } {
+function setupWebMode(): {
+    win: Record<string, unknown>;
+    origTauri: unknown;
+    origInternals: unknown;
+    provider: TauriProvider;
+} {
     const win = globalThis as unknown as Record<string, unknown>;
     const origTauri = win['__TAURI__'];
     const origInternals = win['__TAURI_INTERNALS__'];
     delete win['__TAURI__'];
     delete win['__TAURI_INTERNALS__'];
-    
+
     return { win, origTauri, origInternals, provider: new TauriProvider() };
 }
 

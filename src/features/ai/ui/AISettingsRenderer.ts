@@ -27,7 +27,31 @@ const ICONS = {
         '<svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" style="opacity: 0.2;"></circle><path d="M4 12a8 8 0 0 1 8-8" style="opacity: 0.8;"></path></svg>',
 } as const;
 
-// ============================================================================
+const PURIFY_CONFIG = {
+    USE_PROFILES: { html: true, svg: true },
+    ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g'],
+    ADD_ATTR: [
+        'viewBox',
+        'd',
+        'fill',
+        'stroke',
+        'stroke-width',
+        'cx',
+        'cy',
+        'r',
+        'stroke-linecap',
+        'stroke-linejoin',
+        'points',
+        'x1',
+        'y1',
+        'x2',
+        'y2',
+        'width',
+        'height',
+        'style',
+        'class',
+    ],
+};
 // Types
 // ============================================================================
 
@@ -229,31 +253,7 @@ class AISettingsRenderer extends BaseComponent {
         `;
         }
 
-        container.innerHTML = DOMPurify.sanitize(rawHtml, {
-            USE_PROFILES: { html: true, svg: true },
-            ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g'],
-            ADD_ATTR: [
-                'viewBox',
-                'd',
-                'fill',
-                'stroke',
-                'stroke-width',
-                'cx',
-                'cy',
-                'r',
-                'stroke-linecap',
-                'stroke-linejoin',
-                'points',
-                'x1',
-                'y1',
-                'x2',
-                'y2',
-                'width',
-                'height',
-                'style',
-                'class',
-            ],
-        });
+        container.innerHTML = DOMPurify.sanitize(rawHtml, PURIFY_CONFIG);
         await this._bindEvents(container, appId);
     }
 
@@ -274,8 +274,8 @@ class AISettingsRenderer extends BaseComponent {
                 aria-selected="${String(isSelected)}" 
                 tabindex="0"
                 data-model-key="${key}">
-                <div class="model-name">${DOMPurify.sanitize(model.name, { USE_PROFILES: { html: true, svg: true } })}</div>
-                <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(t(model.descKey ?? '', model.desc), { USE_PROFILES: { html: true, svg: true } })}</div>
+                <div class="model-name">${DOMPurify.sanitize(model.name, PURIFY_CONFIG)}</div>
+                <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(t(model.descKey ?? '', model.desc), PURIFY_CONFIG)}</div>
                 <div class="model-pricing">${pricingHtml}</div>
             </div>
         `;
@@ -422,20 +422,16 @@ class AISettingsRenderer extends BaseComponent {
             const thresholdHalf = i * 2 + 1;
 
             let className = 'star-icon';
-            let style = '';
 
             if (count >= thresholdFull) {
                 className += ' full';
-                style = 'style="color: #f5a623; text-shadow: 0 0 4px rgba(245,166,35,0.4);"';
             } else if (count >= thresholdHalf) {
                 className += ' half';
-                style = 'style="color: #f5a623; opacity: 0.6;"';
             } else {
                 className += ' empty';
-                style = 'style="color: var(--text-tertiary, #555); opacity: 0.3;"';
             }
 
-            starsHtml += `<span class="${className}" ${style}>★</span>`;
+            starsHtml += `<span class="${className}">★</span>`;
         }
         return starsHtml;
     }
@@ -690,31 +686,7 @@ class AISettingsRenderer extends BaseComponent {
                     ${this.renderModelStats(appId, modelKey)}
                 </div>
             `;
-            statsArea.innerHTML = DOMPurify.sanitize(rawHtml, {
-                USE_PROFILES: { html: true, svg: true },
-                ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g'],
-                ADD_ATTR: [
-                    'viewBox',
-                    'd',
-                    'fill',
-                    'stroke',
-                    'stroke-width',
-                    'cx',
-                    'cy',
-                    'r',
-                    'stroke-linecap',
-                    'stroke-linejoin',
-                    'points',
-                    'x1',
-                    'y1',
-                    'x2',
-                    'y2',
-                    'width',
-                    'height',
-                    'style',
-                    'class',
-                ],
-            });
+            statsArea.innerHTML = DOMPurify.sanitize(rawHtml, PURIFY_CONFIG);
 
             const globalContext = getGlobalWin();
             if (typeof globalContext.applyTranslations === 'function') {
