@@ -74,12 +74,29 @@ describe('catalogHelpers', () => {
         });
 
         it.each([
-            ['getModelData should return correct model', 'getModelData', 'gemini-ultra', 'models/gemini-ultra'],
-            ['getModelData should return null if model not found', 'getModelData', 'unknown-model', null],
-            ['getApiModelId should return api identifier', 'getApiModelId', 'gemini-ultra', 'models/gemini-ultra'],
+            [
+                'getModelData should return correct model',
+                'getModelData',
+                'gemini-ultra',
+                'models/gemini-ultra',
+            ],
+            [
+                'getModelData should return null if model not found',
+                'getModelData',
+                'unknown-model',
+                null,
+            ],
+            [
+                'getApiModelId should return api identifier',
+                'getApiModelId',
+                'gemini-ultra',
+                'models/gemini-ultra',
+            ],
         ])('%s', (_, method, modelId, expected) => {
             if (method === 'getModelData') {
-                const model = getModelData('gemini', modelId) as { apiModels?: { text?: string } } | null;
+                const model = getModelData('gemini', modelId) as {
+                    apiModels?: { text?: string };
+                } | null;
                 expect(model?.apiModels?.text ?? null).toBe(expected);
             } else {
                 expect(getApiModelId('gemini', modelId)).toBe(expected);
@@ -129,23 +146,13 @@ describe('catalogHelpers', () => {
             createAppMock('empty'),
         ];
 
-        it('should use modelGetter value and map to API ID', () => {
-            const getter = vi.fn().mockReturnValue('model-a');
-            const result = resolveProviderModel('advanced', mockCatalog, getter);
-            expect(result).toBe('api-model-a');
-        });
-
-        it('should use modelGetter value even if it lacks API mapping', () => {
-            const getter = vi.fn().mockReturnValue('model-c'); // not in dict
-            const result = resolveProviderModel('advanced', mockCatalog, getter);
-            expect(result).toBe('model-c');
-        });
-
-        it('should calculate most powerful model if getter returns empty', () => {
-            const getter = vi.fn().mockReturnValue('');
-            const result = resolveProviderModel('advanced', mockCatalog, getter);
-            // model-b has higher combined stats (35 vs 20)
-            expect(result).toBe('api-model-b');
+        it.each([
+            ['use modelGetter value and map to API ID', 'model-a', 'api-model-a'],
+            ['use modelGetter value even if it lacks API mapping', 'model-c', 'model-c'], // not in dict
+            ['calculate most powerful model if getter returns empty', '', 'api-model-b'], // model-b has higher combined stats
+        ])('should %s', (_, getterValue, expected) => {
+            const getter = vi.fn().mockReturnValue(getterValue);
+            expect(resolveProviderModel('advanced', mockCatalog, getter)).toBe(expected);
         });
 
         it('should calculate most powerful model if getter is undefined', () => {
