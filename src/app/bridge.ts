@@ -164,15 +164,21 @@ export class GlobalBridge {
         win.launchApp = async (id: string): Promise<void> => {
             this._core.tracer.debug(`[GlobalBridge] Launching App: ${id}`);
 
-            // Activate the AI provider so isActive() returns true
-            await aiBridge.startProvider(id);
+            // Only activate AI provider for apps in the AI catalog.
+            // Services/bots are launched directly without an AI provider session.
+            const catalog = this._core.catalog.getCatalog();
+            const isAiApp = catalog.ai.some((a) => a.id === id);
+
+            if (isAiApp) {
+                await aiBridge.startProvider(id);
+            }
 
             if (this._core.tauriProvider.isTauri()) {
                 try {
                     const result = await this._core.tauriProvider.invoke<{
                         action: string;
                         provider?: string;
-                    }>('launch_module', { module_id: id });
+                    }>('launch_module', { moduleId: id });
 
                     if (
                         result.action === 'navigate' &&

@@ -115,7 +115,7 @@ export class ChatController {
 
     public async sendChat(): Promise<void> {
         if (this._isSending) return;
-        
+
         const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         const text = (input ? input.value : '').trim();
 
@@ -319,6 +319,15 @@ export class ChatController {
         if (msg.includes('429') || msg.includes('quota') || msg.includes('limit reached')) {
             return this._i18n
                 .t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`)
+                .replace('{model}', modelName);
+        }
+
+        if (msg.includes('402') || msg.includes('payment required') || msg.includes('credits')) {
+            return this._i18n
+                .t(
+                    'ui.chat.error.payment_required',
+                    `Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).`,
+                )
                 .replace('{model}', modelName);
         }
 

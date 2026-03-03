@@ -56,7 +56,7 @@ export class ModalManager {
             this._currentFilter = 'image';
         }
 
-        this._updateSidebar(rawCategory, category);
+        this._updateSidebar(rawCategory, category, apps);
         this._populateAppList(listEl, apps, category, this._currentSelectedAppId);
 
         modal.classList.remove('hidden');
@@ -148,7 +148,7 @@ export class ModalManager {
         };
     }
 
-    private _updateSidebar(rawCategory: string, compoundCategory: string): void {
+    private _updateSidebar(rawCategory: string, compoundCategory: string, apps: IApp[]): void {
         const sidebar = document.getElementById('app-modal-sidebar');
         const iconContainer = document.getElementById('app-modal-sidebar-icon');
         const titleEl = document.getElementById('app-modal-sidebar-title');
@@ -180,11 +180,32 @@ export class ModalManager {
             this._injectFilterButtons(actionsEl, t);
             this._bindFilterEvents(compoundCategory);
             this._hideIrrelevantFilterTab(compoundCategory);
+            this._applyImageFilterAvailability(apps, t);
         } else {
             // Hide the sidebar completely for Services/Bots
             sidebar.classList.add('hidden');
             if (modalContent) modalContent.classList.remove('with-sidebar');
         }
+    }
+
+    /**
+     * Disables the Image filter button when no apps support the 'image' capability.
+     * Prevents a misleading empty-state when clicking a seemingly available filter.
+     */
+    private _applyImageFilterAvailability(
+        apps: IApp[],
+        t: (key: string, defaultText: string) => string,
+    ): void {
+        const hasImageApps = apps.some((app) => app.capability === 'image');
+        if (hasImageApps) return;
+
+        const imgBtn = document.getElementById('filter-image-btn') as HTMLButtonElement | null;
+        if (imgBtn === null) return;
+
+        imgBtn.disabled = true;
+        imgBtn.style.opacity = '0.4';
+        imgBtn.style.cursor = 'not-allowed';
+        imgBtn.title = t('ui.launcher.web.coming_soon', 'Coming soon');
     }
 
     private _hideIrrelevantFilterTab(compoundCategory: string): void {

@@ -163,7 +163,11 @@ class AISettingsRenderer extends BaseComponent {
                     <section class="ai-key-section centered" aria-labelledby="${appId}-api-title">
                         <div class="ai-content-panel">
                             <div class="settings-card-header-center">
-                                <h3 id="${appId}-api-title">🔑 <span data-i18n="ui.settings.api_key_label">${t('ui.settings.api_key_label', 'API Key')}</span></h3>
+                                <h3 id="${appId}-api-title">🔑 
+                                    <a href="#" id="${appId}-api-link" class="api-key-link" style="text-decoration: none; cursor: pointer; color: inherit;" title="Manage your OpenRouter API Keys">
+                                        <span data-i18n="ui.settings.api_key_label">${t('ui.settings.api_key_label', 'API Key')}</span>
+                                    </a>
+                                </h3>
                             </div>
                             <div class="ai-key-input-row">
                                 <input type="password" id="${appId}-api-key-input" value="" placeholder="${t('ui.settings.enter_key_placeholder', 'Enter your API key here')}" data-i18n-placeholder="ui.settings.enter_key_placeholder">
@@ -448,7 +452,7 @@ class AISettingsRenderer extends BaseComponent {
 
         const input = container.querySelector<HTMLInputElement>(`#${appId}-api-key-input`);
 
-        const savedKey = await this._settingsService.getSecureKey(appId);
+        const savedKey = await this._settingsService.getSecureKey('openrouter');
         if (input !== null && savedKey !== '') input.value = savedKey;
 
         const addListener = (element: Element | null, type: string, fn: EventListener): void => {
@@ -461,7 +465,7 @@ class AISettingsRenderer extends BaseComponent {
             if (this._settingsService) {
                 // eslint-disable-next-line @typescript-eslint/no-floating-promises
                 this._settingsService.saveSecureKey(
-                    appId,
+                    'openrouter',
                     (event.target as HTMLInputElement).value,
                 );
             }
@@ -469,6 +473,14 @@ class AISettingsRenderer extends BaseComponent {
 
         addListener(container.querySelector(`#${appId}-key-toggle-btn`), 'click', () => {
             this.toggleKeyVisibility(appId);
+        });
+
+        // Add handler for the OpenRouter link
+        addListener(container.querySelector(`#${appId}-api-link`), 'click', (e) => {
+            e.preventDefault();
+            if (this._tauri) {
+                void this._tauri.openUrl('https://openrouter.ai/settings/keys');
+            }
         });
 
         addListener(container.querySelector(`#${appId}-key-check-btn`), 'click', () => {
@@ -627,12 +639,14 @@ class AISettingsRenderer extends BaseComponent {
     /**
      * Performs a network probe to validate credentials via Rust backend.
      */
-    private async _validateKey(appId: string, key: string): Promise<boolean> {
+    private async _validateKey(_appId: string, key: string): Promise<boolean> {
         if (!this._tauri) return false;
 
         try {
-            const provider = appId === 'gemini' ? 'gemini' : 'openai';
-            return await this._tauri.invoke<boolean>('validate_api_key', { provider, key });
+            return await this._tauri.invoke<boolean>('validate_api_key', {
+                provider: 'openrouter',
+                key,
+            });
         } catch (error) {
             tracer.error('[AISettingsRenderer] Key validation failed:', error);
             return false;

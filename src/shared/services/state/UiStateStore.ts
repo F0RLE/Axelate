@@ -118,6 +118,24 @@ export class UiStateStore {
         }
     }
 
+    // --- Module Selection Convenience API (satisfies UIStateInterface) ---
+
+    public getSelectedModules(): Record<string, Partial<IApp>> {
+        return this._state.selected_modules;
+    }
+
+    public getSelectedModule(category: string): Partial<IApp> | undefined {
+        return this._state.selected_modules[category];
+    }
+
+    public setSelectedModule(category: string, data: Partial<IApp>): void {
+        this.updateNestedState('selected_modules', category, data);
+    }
+
+    public removeSelectedModule(category: string): void {
+        this.removeNestedState('selected_modules', category);
+    }
+
     private _debouncedSave(): void {
         if (this._autoSaveTimer !== null) {
             globalThis.clearTimeout(this._autoSaveTimer);

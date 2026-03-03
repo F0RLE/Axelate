@@ -811,6 +811,9 @@ body.ui-hidden .modal-backdrop {
 }
 
 /* Specific Card Accents */
+.model-card-premium.ai .model-icon-wrapper {
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.1), rgba(0, 200, 255, 0.1));
+}
 .model-card-premium.image-gen .model-icon-wrapper {
     background: linear-gradient(135deg, rgba(255, 0, 128, 0.1), rgba(138, 43, 226, 0.1));
 }

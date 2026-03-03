@@ -135,7 +135,11 @@ export class AIProviderManager {
     // --- Private Helpers ---
 
     private async _resolveApiKey(providerId: string): Promise<string> {
-        const keyName = `${providerId}_api_key`;
+        const isLocal = providerId === 'local' || providerId === 'axelate-localai';
+        if (isLocal) return '';
+
+        // Unified Key Management: remote providers all use openrouter
+        const keyName = 'openrouter_api_key';
         return (await this._getSecureVal(keyName)) ?? '';
     }
 

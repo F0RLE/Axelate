@@ -43,6 +43,7 @@ export interface IApp {
     icon?: string;
     category?: string;
     type?: 'api' | 'local';
+    capability?: 'text' | 'image'; // AI output capability; used for modal filter tabs
     installed?: boolean;
     repoUrl?: string;
     expectedHash?: string;

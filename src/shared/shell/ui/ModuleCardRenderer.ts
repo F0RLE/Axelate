@@ -319,6 +319,14 @@ export class ModuleCardRenderer {
         card.dataset['originalHtml'] ??= card.innerHTML;
     }
 
+    /**
+     * Updates the icon, title, and description of a **dashboard card** (`.model-card-premium`).
+     *
+     * NOTE: This method targets `.model-icon-wrapper`, `.model-card-title`, `.model-card-desc` —
+     * the CSS classes used by the static HTML in `modules.html`. These are intentionally
+     * different from the `.app-icon-wrapper`/`.app-card-title`/`.app-card-desc` classes that
+     * `createCard()` generates for modal cards. Do NOT call this on modal `.app-card` elements.
+     */
     public updateCardContent(card: HTMLElement, app: IApp): void {
         this._updateCardIcon(card, app);
         this._updateCardTitle(card, app);

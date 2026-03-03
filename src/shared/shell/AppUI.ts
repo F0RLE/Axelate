@@ -33,7 +33,15 @@ export class AppUI {
             'div',
             'span',
             'svg',
+            'use',
+            'symbol',
             'line',
+            'path',
+            'polyline',
+            'polygon',
+            'rect',
+            'circle',
+            'ellipse',
         ],
         ALLOWED_ATTR: [
             'href',
@@ -42,15 +50,25 @@ export class AppUI {
             'viewBox',
             'width',
             'height',
+            'fill',
             'stroke',
             'stroke-width',
-            'fill',
             'stroke-linecap',
             'stroke-linejoin',
+            // Shape geometry attributes
+            'd',
+            'points',
+            'x',
+            'y',
             'x1',
             'y1',
             'x2',
             'y2',
+            'cx',
+            'cy',
+            'r',
+            'rx',
+            'ry',
         ],
         ALLOW_DATA_ATTR: true,
     };
@@ -150,8 +168,16 @@ export class AppUI {
 
         this._selectedApps.delete(category);
 
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- uiState is a runtime global, may not be set during teardown
-        getGlobalWin().uiState?.removeSelectedModule(category);
+        const win = getGlobalWin();
+        win.uiState.removeSelectedModule(category);
+
+        // Stop the AI provider and clear the persistent last-active-provider so
+        // the card is not restored on the next app reload.
+        if (category === 'ai') {
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- aiBridge is a runtime global
+            win.aiBridge?.stopProvider();
+            win.uiState.updateState({ last_active_provider: null });
+        }
     }
 
     // --- Toast System ---
@@ -804,15 +830,7 @@ export class AppUI {
         );
         closeBtn.onclick = (e): void => {
             e.stopImmediatePropagation();
-            card.innerHTML = DOMPurify.sanitize(
-                card.dataset['originalHtml'] ?? '',
-                this._purifyConfig,
-            );
-            card.classList.remove('selected');
-            card.classList.add('empty');
-
-            const win = getGlobalWin();
-            win.uiState.removeSelectedModule(category);
+            this._deselectModule(card, category);
         };
         card.appendChild(closeBtn);
     }

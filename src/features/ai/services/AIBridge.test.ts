@@ -157,7 +157,7 @@ describe('AIBridge', () => {
         it('should activate provider with valid API key', async () => {
             mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
                 await Promise.resolve();
-                if (cmd === 'get_secure_key' && args?.['service'] === 'gemini_api_key')
+                if (cmd === 'get_secure_key' && args?.['service'] === 'openrouter_api_key')
                     return 'sk-test-key-12345';
                 return null;
             });
@@ -189,7 +189,7 @@ describe('AIBridge', () => {
 
         it('should NOT fallback to localStorage when backend returns null', async () => {
             mockInvoke.mockResolvedValue(null);
-            localStorage.setItem('gemini_api_key', 'local-key-123');
+            localStorage.setItem('openrouter_api_key', 'local-key-123');
 
             const result = await aiBridge.startProvider('gemini');
 

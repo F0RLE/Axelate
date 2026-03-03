@@ -279,7 +279,7 @@ export class AIBridge implements IAIBridge {
                 return await (this._core.tauriProvider as unknown as TauriProvider).invoke(
                     'get_chat_history',
                     {
-                        session_id: this._manager.sessionId,
+                        sessionId: this._manager.sessionId,
                     },
                 );
             } catch (e) {

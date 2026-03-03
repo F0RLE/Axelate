@@ -239,7 +239,7 @@ export class WindowUI {
             'selectstart',
             (e: Event) => {
                 const target = e.target as HTMLElement;
-                if (target.closest(allowedSelectors)) {
+                if (target instanceof Element && target.closest(allowedSelectors)) {
                     return;
                 }
                 e.preventDefault();
@@ -252,7 +252,7 @@ export class WindowUI {
             (e: Event) => {
                 const ev = e as MouseEvent;
                 const target = ev.target as HTMLElement;
-                if (target.closest(allowedSelectors)) {
+                if (target instanceof Element && target.closest(allowedSelectors)) {
                     return;
                 }
                 if (ev.detail > 1) {

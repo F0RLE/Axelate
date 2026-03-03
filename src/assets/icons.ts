@@ -383,9 +383,12 @@ export const svgIcons = `
                 stroke-linecap="round"
                 stroke-linejoin="round"
             >
-                <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"></path>
-                <path d="M12 8v4"></path>
-                <path d="M12 12c-4.4 0-8 3.6-8 8h16c0-4.4-3.6-8-8-8z"></path>
+                <path d="M12 8V4H8"></path>
+                <rect width="16" height="12" x="4" y="8" rx="2"></rect>
+                <path d="M2 14h2"></path>
+                <path d="M20 14h2"></path>
+                <path d="M15 13v2"></path>
+                <path d="M9 13v2"></path>
             </symbol>
             <symbol
                 id="icon-services"

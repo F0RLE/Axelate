@@ -65,6 +65,7 @@ interface UIStateInterface {
     saveAsync: () => Promise<void>;
     saveImmediate: () => void;
     setState: (_state: Partial<IUIState>) => void;
+    updateState: (_updates: Partial<IUIState>) => void;
     getState: () => IUIState;
     get: <K extends keyof IUIState>(_key: K) => IUIState[K];
     set: <K extends keyof IUIState>(_key: K, _value: IUIState[K]) => void;
