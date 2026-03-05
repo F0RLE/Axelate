@@ -99,7 +99,7 @@ async-trait = "0.1.89"
 
 # --- Build Time ---
 [build-dependencies]
-tauri-build = { version = "2.5.3", features = [] }
+tauri-build = { version = "2.5.6", features = [] }
 
 # ==============================================================================
 #  OPTIMIZATION PROFILES (The 0.7 MB Magic)
