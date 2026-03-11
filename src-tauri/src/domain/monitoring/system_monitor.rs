@@ -40,8 +40,6 @@ pub struct SystemMonitor {
     max_disk_speed_mb: f64,
     max_net_speed_mb: f64,
 
-    // Smoothing & Peaks
-    gpu_load_ema: f32,
     max_vram_used_gb: f32,
 }
 
@@ -195,7 +193,6 @@ impl SystemMonitor {
             max_disk_speed_mb: 10.0,
             max_net_speed_mb: 1.0,
 
-            gpu_load_ema: 0.0,
             max_vram_used_gb: 0.0,
         }
     }
@@ -307,15 +304,7 @@ impl SystemMonitor {
         // 7. GPU Stats
         let (gpu_stats, vram_stats) = self.gpu.collect();
 
-        let mut gpu_stats_final = gpu_stats;
-        if let Some(gpu) = &mut gpu_stats_final {
-            let usage_f32 = gpu.usage as f32;
-            self.gpu_load_ema = self.gpu_load_ema.mul_add(0.7, usage_f32 * 0.3);
-
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let smoothed_usage = self.gpu_load_ema.round() as u32;
-            gpu.usage = smoothed_usage;
-        }
+        let gpu_stats_final = gpu_stats;
 
         if let Some(vram) = vram_stats
             .as_ref()

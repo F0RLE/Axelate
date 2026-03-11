@@ -3,29 +3,21 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-/// Root directory for application data.
-/// Defaults to:
-/// - Windows: `%APPDATA%/AxelateData`
-/// - Linux: `$XDG_CONFIG_HOME/AxelateData` or `~/.config/AxelateData`
-/// - macOS: `~/Library/Application Support/AxelateData`
-pub static APPDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
+fn resolve_config_root() -> PathBuf {
     #[cfg(test)]
     {
-        PathBuf::from("./test_appdata_root")
+        PathBuf::from("./test_appdata_roaming")
     }
 
     #[cfg(not(test))]
     {
-        // 1. Try standard config dir (e.g. C:\Users\User\AppData\Roaming)
         let mut root = dirs::config_dir();
 
-        // 2. Windows Fallback: Try APPDATA env var explicitly
         #[cfg(target_os = "windows")]
         {
             root = root.or_else(|| std::env::var("APPDATA").ok().map(PathBuf::from));
         }
 
-        // 3. Unix Fallback: Try HOME/.config
         #[cfg(not(target_os = "windows"))]
         {
             root = root.or_else(|| {
@@ -35,12 +27,48 @@ pub static APPDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(|| {
             });
         }
 
-        // 4. Ultimate Fallback: Current Directory (Development only usually)
         let mut path = root.unwrap_or_else(|| PathBuf::from("."));
         path.push("AxelateData");
         path
     }
-});
+}
+
+fn resolve_local_data_root() -> PathBuf {
+    #[cfg(test)]
+    {
+        PathBuf::from("./test_appdata_local")
+    }
+
+    #[cfg(not(test))]
+    {
+        #[cfg(target_os = "windows")]
+        {
+            let root = dirs::data_local_dir()
+                .or_else(|| std::env::var("LOCALAPPDATA").ok().map(PathBuf::from))
+                .unwrap_or_else(resolve_config_root);
+
+            return root.join("AxelateData");
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            resolve_config_root()
+        }
+    }
+}
+
+/// User/profile data root.
+/// Defaults to:
+/// - Windows: `%APPDATA%/AxelateData`
+/// - Linux: `$XDG_CONFIG_HOME/AxelateData` or `~/.config/AxelateData`
+/// - macOS: `~/Library/Application Support/AxelateData`
+pub static APPDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(resolve_config_root);
+
+/// Local machine data root.
+/// Defaults to:
+/// - Windows: `%LOCALAPPDATA%/AxelateData`
+/// - Other OSes: same as `APPDATA_ROOT`
+pub static LOCALDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(resolve_local_data_root);
 
 /// User-specific data root (`AxelateData/User`)
 pub static USER_ROOT: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("User"));
@@ -51,8 +79,9 @@ pub static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("Conf
 /// Directory for UI persistence state (`AxelateData/User/UI`)
 pub static UI_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("UI"));
 
-/// System root for internal app data (`AxelateData/System`)
-pub static SYSTEM_ROOT: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("System"));
+/// System root for internal app data.
+/// On Windows this is stored in Local AppData to keep large/cacheable files out of Roaming.
+pub static SYSTEM_ROOT: LazyLock<PathBuf> = LazyLock::new(|| LOCALDATA_ROOT.join("System"));
 
 /// Log files directory (`AxelateData/System/Logs`)
 pub static LOG_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Logs"));
@@ -62,6 +91,13 @@ pub static TEMP_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Temp
 
 /// Downloaded modules directory (`AxelateData/System/Modules`)
 pub static MODULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Modules"));
+
+/// Legacy downloaded modules directory in Roaming AppData (`AxelateData/System/Modules`)
+pub static LEGACY_MODULES_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| APPDATA_ROOT.join("System").join("Modules"));
+
+/// Downloaded or user-provided model files directory (`AxelateData/System/Models`)
+pub static MODELS_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Models"));
 
 /// Path to application resources.
 ///
@@ -121,6 +157,10 @@ pub static FILE_ENV: LazyLock<PathBuf> = LazyLock::new(|| CONFIG_DIR.join(".env"
 pub static FILE_GEN_CONFIG: LazyLock<PathBuf> =
     LazyLock::new(|| CONFIG_DIR.join("generation_config.json"));
 
+/// Path to engine user config (`AxelateData/User/Configs/engine_config.json`)
+pub static FILE_ENGINE_CONFIG: LazyLock<PathBuf> =
+    LazyLock::new(|| CONFIG_DIR.join("engine_config.json"));
+
 /// Path to UI state file (`AxelateData/User/UI/ui_state.json`)
 pub static FILE_UI_STATE: LazyLock<PathBuf> = LazyLock::new(|| UI_DIR.join("ui_state.json"));
 
@@ -139,13 +179,18 @@ const MAX_LOG_FILES: usize = 5;
 /// # Errors
 /// Returns `AppError::Io` if directory creation fails.
 pub fn init_filesystem() -> Result<(), AppError> {
+    migrate_legacy_windows_system_root()?;
+
     let dirs = [
+        &*APPDATA_ROOT,
+        &*LOCALDATA_ROOT,
         &*CONFIG_DIR,
         &*UI_DIR,
         &*SYSTEM_ROOT,
         &*LOG_DIR,
         &*TEMP_DIR,
         &*MODULES_DIR,
+        &*MODELS_DIR,
         &*CACHE_DIR,
         &*CHAT_DIR,
     ];
@@ -156,6 +201,40 @@ pub fn init_filesystem() -> Result<(), AppError> {
 
     // Cleanup old log files (keep only last MAX_LOG_FILES)
     cleanup_old_logs()?;
+
+    Ok(())
+}
+
+fn migrate_legacy_windows_system_root() -> Result<(), AppError> {
+    #[cfg(target_os = "windows")]
+    {
+        let legacy_system_root = APPDATA_ROOT.join("System");
+        if legacy_system_root == *SYSTEM_ROOT || !legacy_system_root.exists() || SYSTEM_ROOT.exists() {
+            return Ok(());
+        }
+
+        if let Some(parent) = SYSTEM_ROOT.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        match fs::rename(&legacy_system_root, &*SYSTEM_ROOT) {
+            Ok(()) => {
+                tracing::info!(
+                    from = %legacy_system_root.display(),
+                    to = %SYSTEM_ROOT.display(),
+                    "Migrated legacy system data to Local AppData"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    from = %legacy_system_root.display(),
+                    to = %SYSTEM_ROOT.display(),
+                    error = %err,
+                    "Failed to migrate legacy system data; keeping existing layout for this run"
+                );
+            }
+        }
+    }
 
     Ok(())
 }

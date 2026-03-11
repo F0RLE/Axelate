@@ -92,11 +92,11 @@ describe('AIChatTransport', () => {
             expect(result).toEqual({ ok: false, error: 'Rate limited' });
         });
 
-        it('should normalize response without explicit error to "Unknown backend error"', async () => {
+        it('should normalize response without explicit error to "Unknown error"', async () => {
             mockCore.tauriProvider.invoke.mockResolvedValue({ ok: false });
 
             const result = await transport.send(makeRequest());
-            expect(result).toEqual({ ok: false, error: 'Unknown backend error' });
+            expect(result).toEqual({ ok: false, error: 'Unknown error' });
         });
 
         it('should catch invoke errors and return error response', async () => {
@@ -106,11 +106,11 @@ describe('AIChatTransport', () => {
             expect(result).toEqual({ ok: false, error: 'Network down' });
         });
 
-        it('should catch non-Error throws and return "Transport failure"', async () => {
+        it('should catch non-Error throws and return the thrown string', async () => {
             mockCore.tauriProvider.invoke.mockRejectedValue('string error');
 
             const result = await transport.send(makeRequest());
-            expect(result).toEqual({ ok: false, error: 'Transport failure' });
+            expect(result).toEqual({ ok: false, error: 'string error' });
         });
 
         it('should timeout after 90 seconds', async () => {

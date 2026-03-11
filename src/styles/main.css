@@ -27,3 +27,9 @@
 @import './features/downloads.css';
 @import './features/monitoring.css';
 @import './features/settings.css';
+
+/* Global Disabled State Fix — must be AFTER all @imports */
+button:disabled *,
+button.disabled * {
+    pointer-events: none;
+}

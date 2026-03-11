@@ -26,6 +26,8 @@ export interface IUIState {
     ai_thinking_level: Record<string, ThinkingLevel>;
     last_active_provider: string | null;
     ai_session_id: string | null;
+    preferred_language?: string | null;
+    pending_chat_reveal: boolean;
 }
 
 const DEFAULT_UI_STATE: IUIState = {
@@ -44,6 +46,8 @@ const DEFAULT_UI_STATE: IUIState = {
     ai_thinking_level: {},
     last_active_provider: null,
     ai_session_id: null,
+    preferred_language: null,
+    pending_chat_reveal: false,
 };
 
 export class UiStateStore {

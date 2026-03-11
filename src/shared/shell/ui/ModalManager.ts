@@ -2,7 +2,7 @@ import type { IApp } from '../../types/coreTypes';
 import { getGlobalWin } from '../../utils/globalAccessor';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
-import { type ModuleCardRenderer } from './ModuleCardRenderer';
+import { ModuleCardRenderer } from './ModuleCardRenderer';
 
 /**
  * @class ModalManager
@@ -14,17 +14,70 @@ export class ModalManager {
     private _currentApps: IApp[] = [];
     private _currentFilter: 'text' | 'image' = 'text';
     private _currentSelectedAppId: string | null = null;
+    // Keeps reference for potential future cleanup
+    private readonly _progressHandler: (e: Event) => void;
 
     // Callback for app interactions (Download, Delete, Select)
     private readonly _onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void;
+    // Called when user switches filter tab — returns the selected app ID for that capability
+    private readonly _onFilterChange: (capability: 'text' | 'image') => string | null;
 
     constructor(
         cardRenderer: ModuleCardRenderer,
         onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void,
+        onFilterChange: (capability: 'text' | 'image') => string | null,
         private readonly _navigation: NavigationService,
     ) {
         this._cardRenderer = cardRenderer;
         this._onAppInteraction = onAppInteraction;
+        this._onFilterChange = onFilterChange;
+
+        // Per-module throttle state: maps moduleId → last render timestamp
+        const _throttleMap = new Map<string, number>();
+
+        // Subscribe to download progress updates emitted by ModuleService
+        // and forward them to the card's download button in the modal list.
+        this._progressHandler = (e: Event) => {
+            const payload = (e as CustomEvent).detail as {
+                module_id: string;
+                status: string;
+                progress: number;
+            };
+            if (!payload.module_id) return;
+
+            const now = Date.now();
+            const isTerminal =
+                payload.status === 'complete' ||
+                payload.status === 'error' ||
+                payload.status === 'cancelled';
+
+            // Always apply terminal states immediately; throttle transient progress ticks
+            const lastRender = _throttleMap.get(payload.module_id) ?? 0;
+            const withinThrottle = isTerminal === false && now - lastRender < 150;
+            if (withinThrottle) return;
+            _throttleMap.set(payload.module_id, now);
+
+            const list = document.getElementById('app-modal-list');
+            if (!list) return;
+
+            const card = list.querySelector<HTMLElement>(
+                `.app-card[data-app-id="${payload.module_id}"]`,
+            );
+            if (!card) return;
+
+            if (isTerminal) {
+                _throttleMap.delete(payload.module_id);
+                ModuleCardRenderer.clearDownloadProgress(card);
+                if (payload.status === 'complete') {
+                    card.classList.add('is-installed');
+                }
+            } else {
+                const pct = payload.progress < 0 ? -1 : Math.round(payload.progress * 100);
+                ModuleCardRenderer.setDownloadProgress(card, pct, payload.status);
+            }
+        };
+
+        globalThis.addEventListener('download-progress-update', this._progressHandler);
     }
 
     // --- App Selection Modal ---
@@ -43,20 +96,18 @@ export class ModalManager {
         this._currentApps = apps;
         this._currentSelectedAppId = selectedAppId ?? null;
 
-        // Reset filter when opening new category
-        this._currentFilter = 'text';
+        // Derive filter from compound category — do NOT blindly reset to 'text'
+        // so that reopening after removing an image-slot app stays on the image tab.
+        if (category === 'ai_image') {
+            this._currentFilter = 'image';
+        } else if (category === 'ai_text' || category === 'ai') {
+            this._currentFilter = 'text';
+        }
+        // Otherwise keep whatever was previously selected (e.g. when refreshing)
 
         this._updateAppModalTitle(category);
 
-        // Extract the raw catalog category and auto-set the filter
-        const rawCategory = category.startsWith('ai') ? 'ai' : category;
-        if (category === 'ai_text') {
-            this._currentFilter = 'text';
-        } else if (category === 'ai_image') {
-            this._currentFilter = 'image';
-        }
-
-        this._updateSidebar(rawCategory, category, apps);
+        this._updateSidebar(category.startsWith('ai') ? 'ai' : category, category, apps);
         this._populateAppList(listEl, apps, category, this._currentSelectedAppId);
 
         modal.classList.remove('hidden');
@@ -149,147 +200,49 @@ export class ModalManager {
     }
 
     private _updateSidebar(rawCategory: string, compoundCategory: string, apps: IApp[]): void {
-        const sidebar = document.getElementById('app-modal-sidebar');
-        const iconContainer = document.getElementById('app-modal-sidebar-icon');
-        const titleEl = document.getElementById('app-modal-sidebar-title');
-        const descEl = document.getElementById('app-modal-sidebar-desc');
-        const actionsEl = document.getElementById('app-modal-sidebar-actions');
-
-        if (!sidebar || !iconContainer || !titleEl || !descEl || !actionsEl) return;
+        const titleEl = document.getElementById('app-modal-title');
+        const tabRow = document.getElementById('app-modal-tab-row');
 
         const win = getGlobalWin();
         const t = (key: string, defaultText: string) =>
             typeof win.t === 'function' ? win.t(key, defaultText) : defaultText;
 
-        const modalContent = document.querySelector('#app-selection-modal .app-modal');
-
         if (rawCategory === 'ai') {
-            sidebar.classList.remove('hidden');
-            if (modalContent) modalContent.classList.add('with-sidebar');
+            // Show tab row, hide plain title
+            if (titleEl) titleEl.classList.add('hidden');
+            if (tabRow) tabRow.classList.remove('hidden');
 
-            iconContainer.innerHTML = '';
-            iconContainer.style.display = 'none';
-
-            titleEl.textContent = '';
-            titleEl.style.display = 'none';
-
-            // Hide description to keep things minimal
-            descEl.textContent = '';
-            descEl.style.display = 'none';
-
-            this._injectFilterButtons(actionsEl, t);
             this._bindFilterEvents(compoundCategory);
-            this._hideIrrelevantFilterTab(compoundCategory);
             this._applyImageFilterAvailability(apps, t);
         } else {
-            // Hide the sidebar completely for Services/Bots
-            sidebar.classList.add('hidden');
-            if (modalContent) modalContent.classList.remove('with-sidebar');
+            // Show plain title, hide tab row
+            if (titleEl) titleEl.classList.remove('hidden');
+            if (tabRow) tabRow.classList.add('hidden');
         }
     }
 
     /**
-     * Disables the Image filter button when no apps support the 'image' capability.
-     * Prevents a misleading empty-state when clicking a seemingly available filter.
+     * Disables the Image tab when no apps have 'image' capability.
      */
     private _applyImageFilterAvailability(
         apps: IApp[],
         t: (key: string, defaultText: string) => string,
     ): void {
         const hasImageApps = apps.some((app) => app.capability === 'image');
-        if (hasImageApps) return;
-
         const imgBtn = document.getElementById('filter-image-btn') as HTMLButtonElement | null;
         if (imgBtn === null) return;
 
-        imgBtn.disabled = true;
-        imgBtn.style.opacity = '0.4';
-        imgBtn.style.cursor = 'not-allowed';
-        imgBtn.title = t('ui.launcher.web.coming_soon', 'Coming soon');
-    }
-
-    private _hideIrrelevantFilterTab(compoundCategory: string): void {
-        if (compoundCategory === 'ai_text') {
-            const imgBtn = document.getElementById('filter-image-btn');
-            if (imgBtn) imgBtn.style.display = 'none';
-        } else if (compoundCategory === 'ai_image') {
-            const txtBtn = document.getElementById('filter-text-btn');
-            if (txtBtn) txtBtn.style.display = 'none';
-        }
-    }
-
-    private _injectFilterButtons(
-        actionsEl: HTMLElement,
-        t: (key: string, defaultText: string) => string,
-    ): void {
-        const textBtnKey = 'ui.launcher.modules.modal.filter_text';
-        const imageBtnKey = 'ui.launcher.modules.modal.filter_image';
-
-        const filterContainer = document.createDocumentFragment();
-        const btnTemplate = document.getElementById(
-            'tpl-modal-filter-btn',
-        ) as HTMLTemplateElement | null;
-
-        if (btnTemplate) {
-            this._appendFilterButton(
-                filterContainer,
-                btnTemplate,
-                'filter-text-btn',
-                'Filter Text',
-                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 6.1H3"/><path d="M21 12.1H3"/><path d="M15.1 18H3"/></svg>`,
-                textBtnKey,
-                t(textBtnKey, 'Text'),
-            );
-
-            this._appendFilterButton(
-                filterContainer,
-                btnTemplate,
-                'filter-image-btn',
-                'Filter Image',
-                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`,
-                imageBtnKey,
-                t(imageBtnKey, 'Image'),
-            );
-        }
-
-        actionsEl.innerHTML = '';
-        actionsEl.appendChild(filterContainer);
-        actionsEl.style.display = 'flex';
-    }
-
-    private _appendFilterButton(
-        container: DocumentFragment,
-        template: HTMLTemplateElement,
-        id: string,
-        ariaLabel: string,
-        svgContent: string,
-        i18nKey: string,
-        text: string,
-    ): void {
-        const clone = template.content.cloneNode(true) as DocumentFragment;
-        const btn = clone.querySelector('.category-filter-btn');
-        if (!btn) return;
-
-        btn.id = id;
-        btn.setAttribute('aria-label', ariaLabel);
-
-        const icon = btn.querySelector('.category-filter-icon');
-        if (icon) icon.innerHTML = svgContent;
-
-        const span = btn.querySelector('span');
-        if (span) {
-            span.dataset['i18n'] = i18nKey;
-            span.textContent = text;
-        }
-
-        container.appendChild(clone);
+        imgBtn.disabled = !hasImageApps;
+        imgBtn.style.opacity = hasImageApps ? '' : '0.4';
+        imgBtn.style.cursor = hasImageApps ? '' : 'not-allowed';
+        imgBtn.title = hasImageApps ? '' : t('ui.launcher.web.coming_soon', 'Coming soon');
     }
 
     private _bindFilterEvents(category: string): void {
-        const textBtn = document.getElementById('filter-text-btn');
-        const imageBtn = document.getElementById('filter-image-btn');
+        const textBtn = document.getElementById('filter-text-btn') as HTMLButtonElement | null;
+        const imageBtn = document.getElementById('filter-image-btn') as HTMLButtonElement | null;
 
-        const updateFilterUI = () => {
+        const updateTabUI = () => {
             if (textBtn) textBtn.classList.toggle('active', this._currentFilter === 'text');
             if (imageBtn) imageBtn.classList.toggle('active', this._currentFilter === 'image');
         };
@@ -297,15 +250,17 @@ export class ModalManager {
         const applyFilter = (filterType: 'text' | 'image') => {
             if (this._currentFilter === filterType) return;
             this._currentFilter = filterType;
-            updateFilterUI();
+            updateTabUI();
+
+            this._currentSelectedAppId = this._onFilterChange(filterType);
 
             const listEl = document.getElementById('app-modal-list');
             if (listEl) {
-                // Smooth fade out
+                listEl.style.willChange = 'opacity, transform';
                 listEl.style.transition =
-                    'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)';
+                    'opacity 0.24s cubic-bezier(0.4, 0, 0.2, 1), transform 0.24s cubic-bezier(0.4, 0, 0.2, 1)';
                 listEl.style.opacity = '0';
-                listEl.style.transform = 'translateY(8px)';
+                listEl.style.transform = 'translateY(4px)';
 
                 setTimeout(() => {
                     this._populateAppList(
@@ -314,31 +269,22 @@ export class ModalManager {
                         category,
                         this._currentSelectedAppId,
                     );
-
-                    // Force reflow
                     listEl.getBoundingClientRect();
-
-                    // Smooth fade in
                     listEl.style.opacity = '1';
                     listEl.style.transform = 'translateY(0)';
+                    setTimeout(() => {
+                        listEl.style.willChange = 'auto';
+                    }, 300);
                 }, 200);
             }
         };
 
-        // Ensure listeners are not duplicated if called multiple times
-        // A robust way mapping to simple clicks
-        if (textBtn) {
-            textBtn.onclick = () => applyFilter('text');
-        }
+        if (textBtn) textBtn.onclick = () => applyFilter('text');
+        if (imageBtn) imageBtn.onclick = () => applyFilter('image');
 
-        if (imageBtn) {
-            imageBtn.onclick = () => applyFilter('image');
-        }
-
-        // Initial UI state
-        updateFilterUI();
+        // Ensure initial state reflects _currentFilter
+        updateTabUI();
     }
-
     private _populateAppList(
         listEl: HTMLElement,
         apps: IApp[],
@@ -348,46 +294,126 @@ export class ModalManager {
         listEl.innerHTML = '';
 
         let filteredApps = apps;
-        if (category === 'ai') {
-            // Apply filtering: currently, all existing apps are mapped to 'text', and 'image' is empty
-            filteredApps = apps.filter((_app) => {
-                // In the future this should check app capability metadata
-                return this._currentFilter === 'text';
+        const isAi = category === 'ai' || category.startsWith('ai_');
+        if (isAi) {
+            filteredApps = apps.filter((app) => {
+                const cap = app.capability ?? 'text';
+                return cap === this._currentFilter;
             });
         }
 
         const sorted = this._getSortedApps(filteredApps);
 
         if (sorted.length === 0) {
-            const template = document.getElementById(
-                'tpl-empty-state-module',
-            ) as HTMLTemplateElement | null;
-            if (template) {
-                const clone = template.content.cloneNode(true) as DocumentFragment;
-                const span = clone.querySelector('span');
-                if (span) {
-                    span.dataset['i18n'] = 'ui.launcher.modules.modal.no_apps_filter';
-                    const win = getGlobalWin();
-                    span.textContent =
-                        typeof win.t === 'function'
-                            ? win.t(
-                                  'ui.launcher.modules.modal.no_apps_filter',
-                                  'No applications found for this type',
-                              )
-                            : 'No applications found for this type';
-                }
-                listEl.appendChild(clone);
-            }
+            this._renderEmptyState(listEl);
             return;
         }
 
-        sorted.forEach((app) => {
+        const interactionCategory = isAi ? `ai_${this._currentFilter}` : category;
+        this._renderAppCards(listEl, sorted, interactionCategory, selectedAppId);
+    }
+
+    private _renderEmptyState(listEl: HTMLElement): void {
+        const template = document.getElementById(
+            'tpl-empty-state-module',
+        ) as HTMLTemplateElement | null;
+        if (template) {
+            const clone = template.content.cloneNode(true) as DocumentFragment;
+            const span = clone.querySelector('span');
+            if (span) {
+                span.dataset['i18n'] = 'ui.launcher.modules.modal.no_apps_filter';
+                const win = getGlobalWin();
+                span.textContent =
+                    typeof win.t === 'function'
+                        ? win.t(
+                              'ui.launcher.modules.modal.no_apps_filter',
+                              'No applications found for this type',
+                          )
+                        : 'No applications found for this type';
+            }
+            listEl.appendChild(clone);
+        }
+    }
+
+    private _renderAppCards(
+        listEl: HTMLElement,
+        apps: IApp[],
+        interactionCategory: string,
+        selectedAppId: string | null,
+    ): void {
+        apps.forEach((app) => {
             const isSelected = selectedAppId !== null && app.id === selectedAppId;
-            const card = this._cardRenderer.createCard(app, category, isSelected, (e, a) =>
-                this._onAppInteraction(e, a, category),
+            const card = this._cardRenderer.createCard(
+                app,
+                interactionCategory,
+                isSelected,
+                (e, a) => this._onAppInteraction(e, a, interactionCategory),
+                (a) => this._handleDownload(a),
             );
             listEl.appendChild(card);
         });
+    }
+
+    /**
+     * Triggers a module download via the global bridge (win.downloadModule).
+     * Uses ModuleService under the hood which handles progress events.
+     */
+    private _handleDownload(app: IApp): void {
+        const win = getGlobalWin();
+        if (app.repoUrl === undefined || app.repoUrl === '') {
+            tracer.warn(`[ModalManager] No repoUrl for module: ${app.id}`);
+            return;
+        }
+
+        const list = document.getElementById('app-modal-list');
+        const card = list?.querySelector<HTMLElement>(`.app-card[data-app-id="${app.id}"]`);
+        const btn = card?.querySelector<HTMLButtonElement>('.download-btn');
+
+        // Check if currently downloading to cancel instead
+        if (btn?.classList.contains('downloading') === true) {
+            tracer.info(`[ModalManager] Cancelling download for: ${app.id}`);
+            void (async () => {
+                try {
+                    if (typeof win.cancelDownloadModule === 'function') {
+                        await win.cancelDownloadModule(app.id);
+                    }
+                    if (typeof win.deleteModule === 'function') {
+                        await win.deleteModule(app.id);
+                    }
+                    if (card !== null && card !== undefined)
+                        ModuleCardRenderer.clearDownloadProgress(card);
+                    // Reset UI label
+                    const pct = btn.querySelector<HTMLElement>('.download-pct');
+                    if (pct) pct.style.display = 'none';
+                    const label = btn.querySelector<HTMLElement>('.download-label');
+                    const defaultText =
+                        typeof win.t === 'function'
+                            ? win.t('ui.launcher.module.download', 'Download')
+                            : 'Download';
+                    if (label) {
+                        label.style.display = '';
+                        label.textContent = defaultText;
+                    }
+                } catch (err) {
+                    tracer.error(`[ModalManager] Cancel failed for ${app.id}:`, err);
+                }
+            })();
+            return;
+        }
+
+        if (typeof win.downloadModule !== 'function') {
+            tracer.warn('[ModalManager] win.downloadModule not available');
+            return;
+        }
+        tracer.info(`[ModalManager] Starting download: ${app.id}`);
+        void (
+            win.downloadModule as (
+                id: string,
+                url: string,
+                hash?: string,
+                dlType?: string,
+            ) => Promise<void>
+        )(app.id, app.repoUrl, app.expectedHash, app.dlType);
     }
 
     /**
@@ -421,29 +447,64 @@ export class ModalManager {
         const btn = card.querySelector<HTMLButtonElement>('.app-card-hover-actions button');
         if (btn === null) return;
 
-        const win = getGlobalWin();
+        const appId = card.dataset['appId'] ?? '';
+        const state = this._getButtonState(card, appId, isSelected);
 
-        // Phase 1: fade out
-        btn.style.transition = 'opacity 0.15s ease';
-        btn.style.opacity = '0';
+        const win = getGlobalWin() as unknown as { t?: (k: string, d: string) => string };
+        btn.textContent =
+            typeof win.t === 'function' ? win.t(state.key, state.defaultLabel) : state.defaultLabel;
+    }
 
-        setTimeout(() => {
-            // Phase 2: swap class & text while invisible
-            if (isSelected) {
-                btn.className = 'modal-btn modal-btn-secondary';
-                const key = 'ui.launcher.modules.modal.btn_remove';
-                btn.dataset['i18n'] = key;
-                btn.textContent = typeof win.t === 'function' ? win.t(key, 'Remove') : 'Remove';
-            } else {
-                btn.className = 'modal-btn modal-btn-primary';
-                const key = 'ui.launcher.modules.modal.btn_select';
-                btn.dataset['i18n'] = key;
-                btn.textContent = typeof win.t === 'function' ? win.t(key, 'Select') : 'Select';
-            }
+    private _getButtonState(
+        card: HTMLElement,
+        appId: string,
+        isSelected: boolean,
+    ): {
+        className: string;
+        key: string;
+        defaultLabel: string;
+    } {
+        if (!isSelected) {
+            return {
+                className: 'modal-btn modal-btn-primary',
+                key: 'ui.launcher.modules.modal.btn_select',
+                defaultLabel: 'Select',
+            };
+        }
 
-            // Phase 3: fade in
-            btn.style.opacity = '1';
-        }, 150);
+        const win = getGlobalWin() as unknown as {
+            aiBridge?: { getState: () => { activeProviderId?: string } };
+        };
+        const aiState = win.aiBridge?.getState();
+        const isCurrentlyActiveAi = aiState?.activeProviderId === appId;
+
+        const isStarting =
+            card.classList.contains('engine-starting') ||
+            card.classList.contains('engine-swapping');
+        const isReady = card.classList.contains('engine-ready');
+        const isEffectivelyRunning = isCurrentlyActiveAi || isReady;
+
+        if (isStarting) {
+            return {
+                className: 'modal-btn modal-btn-secondary active-module-btn',
+                key: 'ui.launcher.modules.modal.btn_booting',
+                defaultLabel: 'Booting...',
+            };
+        }
+
+        if (isEffectivelyRunning) {
+            return {
+                className: 'modal-btn modal-btn-secondary active-module-btn stop-btn',
+                key: 'ui.launcher.modules.modal.btn_running',
+                defaultLabel: 'Running',
+            };
+        }
+
+        return {
+            className: 'modal-btn modal-btn-secondary',
+            key: 'ui.launcher.modules.modal.btn_remove',
+            defaultLabel: 'Remove',
+        };
     }
 
     private _getSortedApps(apps: IApp[]): IApp[] {

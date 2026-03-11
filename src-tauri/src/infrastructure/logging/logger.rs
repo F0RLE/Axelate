@@ -1,6 +1,5 @@
 use serde::Serialize;
 use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::Subscriber;
@@ -75,15 +74,6 @@ impl tracing::field::Visit for LogVisitor {
     }
 }
 
-fn get_log_dir() -> Result<PathBuf, String> {
-    let app_data =
-        std::env::var("APPDATA").map_err(|_| "Could not find APPDATA directory".to_string())?;
-    let mut path = PathBuf::from(app_data);
-    path.push("AxelateData");
-    path.push("Logs");
-    Ok(path)
-}
-
 /// Adds a log entry to in-memory store
 pub fn add_log(message: &str, source: &str, level: &str) {
     let now = SystemTime::now()
@@ -129,11 +119,11 @@ pub fn clear_logs() {
 
 /// Initializes the global tracing subscriber
 pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuard, String> {
-    let log_dir = get_log_dir()?;
-    std::fs::create_dir_all(&log_dir).map_err(|e| e.to_string())?;
+    let log_dir = &*crate::utils::paths::LOG_DIR;
+    std::fs::create_dir_all(log_dir).map_err(|e| e.to_string())?;
 
     // Create file appender (rolling daily)
-    let file_appender = tracing_appender::rolling::daily(&log_dir, "axelate.log");
+    let file_appender = tracing_appender::rolling::daily(log_dir, "axelate.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let mut filter = tracing_subscriber::EnvFilter::from_default_env()

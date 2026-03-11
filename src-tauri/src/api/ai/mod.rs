@@ -2,10 +2,13 @@ use crate::domain::ai::{
     self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
 };
+use crate::app::window::{create_main_window, show_and_focus_window};
+use crate::domain::engine::manager::EngineManager;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
+use crate::infrastructure::config::ui_state::UiStateService;
 use std::sync::Arc;
-use tauri::{State, Window};
+use tauri::{Manager, State, Window};
 
 #[tauri::command]
 #[specta::specta]
@@ -15,8 +18,10 @@ pub async fn send_chat_message(
     request: ChatRequest,
     sessions: State<'_, Arc<ChatSessionManager>>,
     config_service: State<'_, Arc<ConfigService>>,
+    engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<ChatResponse, AppError> {
-    ai_service::process_chat_request(window, request, &sessions, &config_service).await
+    ai_service::process_chat_request(window, request, &sessions, &config_service, &engine_manager)
+        .await
 }
 
 #[tauri::command]
@@ -60,4 +65,62 @@ pub async fn count_tokens(text: String, model: Option<String>) -> Result<u32, St
     })
     .await
     .map_err(|e| format!("Task joined with error: {e}"))?
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Sends an image generation request to the connected AI provider
+pub async fn generate_image(
+    request: ai::ImageGenerationRequest,
+    sessions: State<'_, Arc<ChatSessionManager>>,
+    config_service: State<'_, Arc<ConfigService>>,
+    engine_manager: State<'_, Arc<EngineManager>>,
+) -> Result<ai::ImageGenerationResponse, AppError> {
+    ai_service::process_image_request(request, &sessions, &config_service, &engine_manager)
+        .await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Starts image generation as a detached backend task and restores the window on completion.
+pub async fn generate_image_background(
+    app: tauri::AppHandle,
+    _window: Window,
+    request: ai::ImageGenerationRequest,
+    sessions: State<'_, Arc<ChatSessionManager>>,
+    config_service: State<'_, Arc<ConfigService>>,
+    engine_manager: State<'_, Arc<EngineManager>>,
+    ui_state_service: State<'_, UiStateService>,
+) -> Result<(), AppError> {
+    let sessions = Arc::clone(&*sessions);
+    let config_service = Arc::clone(&*config_service);
+    let engine_manager = Arc::clone(&*engine_manager);
+    let ui_state_service = ui_state_service.inner().clone();
+    let app_handle = app.clone();
+
+    tauri::async_runtime::spawn(async move {
+        crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");
+        let result =
+            ai_service::process_image_request(request, &sessions, &config_service, &engine_manager)
+                .await;
+
+        if let Err(error) = &result {
+            tracing::error!("Background image generation failed: {error}");
+        }
+
+        let mut ui_state = ui_state_service.get_ui_state().await.unwrap_or_default();
+        ui_state.last_page = Some("chat".to_string());
+        ui_state.pending_chat_reveal = true;
+        let _ = ui_state_service.save_ui_state(&ui_state).await;
+
+        crate::app::tray::clear_background_generation(&app_handle);
+
+        if let Some(window) = app_handle.get_webview_window("main") {
+            show_and_focus_window(&window);
+        } else if let Some(window) = create_main_window(&app_handle) {
+            show_and_focus_window(&window);
+        }
+    });
+
+    Ok(())
 }

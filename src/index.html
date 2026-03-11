@@ -147,27 +147,19 @@
             <div id="page-debug" class="page"></div>
             <div id="page-settings" class="page"></div>
 
-            <!-- App Selection Modal (Moved here for proper positioning) -->
             <dialog id="app-selection-modal" class="modal-backdrop hidden">
-                <div class="app-modal with-sidebar">
-                    <aside class="app-modal-sidebar" id="app-modal-sidebar" aria-label="Modal Sidebar">
-                        <div class="sidebar-icon-container" id="app-modal-sidebar-icon"></div>
-                        <h3 class="sidebar-title" id="app-modal-sidebar-title" data-i18n="ui.launcher.modules.modal.ai_sidebar_title">Title Placeholder</h3>
-                        <div class="sidebar-desc" id="app-modal-sidebar-desc" data-i18n="ui.launcher.modules.modal.ai_sidebar_desc"></div>
-                        <div class="sidebar-actions" id="app-modal-sidebar-actions"></div>
-                    </aside>
+                <div class="app-modal">
                     <div class="app-modal-main">
                         <div class="app-modal-header">
-                            <h2 id="app-modal-title" class="app-modal-title">
-                                Select App
-                            </h2>
-                            <button
-                                id="close-app-selection-btn"
-                                class="app-close-btn"
-                            >
-                                <svg class="icon">
-                                    <use href="#icon-close"></use>
-                                </svg>
+                            <!-- Static title for non-AI categories -->
+                            <h2 id="app-modal-title" class="app-modal-title">Select App</h2>
+                            <!-- Tab row for AI categories (shown/hidden by ModalManager) -->
+                            <div id="app-modal-tab-row" class="app-modal-tab-row hidden">
+                                <button id="filter-text-btn" class="app-modal-tab active" data-i18n="ui.launcher.modules.modal.filter_text">Text</button>
+                                <button id="filter-image-btn" class="app-modal-tab" data-i18n="ui.launcher.modules.modal.filter_image">Image</button>
+                            </div>
+                            <button id="close-app-selection-btn" class="app-close-btn">
+                                <svg class="icon"><use href="#icon-close"></use></svg>
                             </button>
                         </div>
                         <div class="app-modal-body">
@@ -178,6 +170,7 @@
                     </div>
                 </div>
             </dialog>
+
 
         <!-- Module Settings Modal (inside main for proper positioning) -->
             <dialog

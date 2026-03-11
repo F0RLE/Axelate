@@ -2,6 +2,8 @@
 pub mod config;
 /// Cryptography infrastructure
 pub mod crypto;
+/// Engine infrastructure (event emitters)
+pub mod engine;
 /// Filesystem infrastructure
 pub mod filesystem;
 /// HTTP server infrastructure

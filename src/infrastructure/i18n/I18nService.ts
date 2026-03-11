@@ -154,8 +154,13 @@ export class I18nService {
     private async _syncToBackend(lang: string) {
         try {
             if (this._bridge.isTauri()) {
-                await this._bridge.invoke('save_setting', { key: 'LANGUAGE', value: lang });
-                await this._bridge.invoke('save_setting', { key: 'BOT_LANGUAGE', value: '' });
+                const uiState = await this._bridge.invoke<Record<string, unknown>>('get_ui_state');
+                await this._bridge.invoke('save_ui_state', {
+                    state: {
+                        ...uiState,
+                        preferred_language: lang.toLowerCase(),
+                    },
+                });
             } else {
                 await fetch('/api/settings', {
                     method: 'POST',

@@ -50,7 +50,7 @@ export class ChatService {
             };
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : 'Unknown error';
-            tracer.error(`[ChatService] Error: ${String(e)}`);
+            tracer.error('[ChatService] Error:', e);
             return { ok: false, error: errorMsg };
         }
     }

@@ -90,7 +90,9 @@ export class WindowUI {
     private _bindGlobalEvents(): void {
         const signal = this._cleanupAbort.signal;
 
-        // 1. Context Menu Block (Section 23.4: Discouraged globally, restricted here for App feel)
+        // 1. Context Menu Block — preventDefault alone blocks the native menu;
+        //    stopPropagation is intentionally omitted so card-level handlers
+        //    (ModuleCardRenderer, AppUI) can still intercept and open settings.
         document.addEventListener(
             'contextmenu',
             (e) => {
@@ -99,7 +101,6 @@ export class WindowUI {
                     return;
                 }
                 e.preventDefault();
-                e.stopPropagation();
             },
             { capture: true, signal },
         );
@@ -483,7 +484,7 @@ export class WindowUI {
 
             if (this._splashTimeout) clearTimeout(this._splashTimeout);
 
-            // Wait for CSS transition (600ms) + buffer
+            // Wait for CSS transition (350ms) + buffer
             this._splashTimeout = setTimeout(() => {
                 if (this._splash) {
                     this._splash.classList.remove('fade-out'); // Clean up class
@@ -492,7 +493,7 @@ export class WindowUI {
                 document.body.classList.remove('no-overflow');
                 this._splashTimeout = null;
                 this._checkWidth(); // Re-evaluate now that splash is gone
-            }, 650);
+            }, 400);
         }
 
         ['sidebar', 'app-header', 'main-area'].forEach((id) => {
@@ -501,23 +502,5 @@ export class WindowUI {
                 el.classList.add('visible');
             }
         });
-    }
-
-    /**
-     * Hides the close confirmation modal.
-     */
-    public hideCloseConfirmModal(): void {
-        const modal = document.getElementById('close-confirm-modal');
-        if (modal) {
-            modal.classList.add('hidden');
-        }
-    }
-
-    /**
-     * Confirms the application close from the modal.
-     */
-    public confirmCloseFromModal(): void {
-        this.hideCloseConfirmModal();
-        void this._service.close();
     }
 }

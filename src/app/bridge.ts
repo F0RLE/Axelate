@@ -63,8 +63,15 @@ export class GlobalBridge {
         const win = globalThis;
 
         // Module management
-        win.downloadModule = (id: string, url: string, hash?: string): Promise<void> =>
-            this._core.moduleService.downloadModule(id, url, hash);
+        win.downloadModule = (
+            id: string,
+            url: string,
+            hash?: string,
+            dlType?: string,
+        ): Promise<void> => this._core.moduleService.downloadModule(id, url, hash, dlType);
+        win.cancelDownloadModule = async (id: string): Promise<boolean> => {
+            return await this._core.moduleService.cancelDownload(id);
+        };
         win.deleteModule = async (id: string): Promise<void> => {
             await this._core.moduleService.deleteModule(id);
         };
@@ -193,7 +200,7 @@ export class GlobalBridge {
                     this._core.tracer.error('[GlobalBridge] Launch module failed:', err);
                 }
             } else {
-                const apiModules = ['gpt', 'gemini', 'claude', 'mistral', 'axelate-localai'];
+                const apiModules = ['gpt', 'gemini', 'claude', 'mistral'];
                 if (apiModules.includes(id)) {
                     this._core.aiSettings.setLastActiveProvider(id);
                 }

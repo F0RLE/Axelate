@@ -122,9 +122,9 @@ async logBatch(logs: BatchLogEntry[]) : Promise<Result<null, AppError>> {
 /**
  * Downloads and verifies a module from a Git repository
  */
-async downloadModule(moduleId: string, repoUrl: string, expectedHash: string | null) : Promise<Result<null, AppError>> {
+async downloadModule(moduleId: string, repoUrl: string, expectedHash: string | null, dlType: string | null) : Promise<Result<null, AppError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash }) };
+    return { status: "ok", data: await TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash, dlType }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -602,6 +602,28 @@ async countTokens(text: string, model: string | null) : Promise<Result<number, s
 }
 },
 /**
+ * Sends an image generation request to the connected AI provider
+ */
+async generateImage(request: ImageGenerationRequest) : Promise<Result<ImageGenerationResponse, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("generate_image", { request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Starts image generation as a detached backend task and restores the window on completion.
+ */
+async generateImageBackground(request: ImageGenerationRequest) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("generate_image_background", { request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Retrieves all custom AI models configured by the user
  */
 async getCustomModels() : Promise<Result<CustomModel[], AppError>> {
@@ -640,6 +662,89 @@ async removeCustomModel(id: string) : Promise<Result<null, AppError>> {
 async processFileContent(name: string, data: number[]) : Promise<Result<ProcessedFile, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("process_file_content", { name, data }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Starts a local engine. Hot-swaps if another engine is active.
+ */
+async startEngine(config: EngineConfig) : Promise<Result<EngineStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_engine", { config }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stops all running engines.
+ */
+async stopEngine() : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_engine") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stops the engine in a specific capability slot (text, image, vision).
+ */
+async stopEngineSlot(capability: Capability) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_engine_slot", { capability }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Gets the current engine state (idle, starting, ready, error).
+ */
+async getEngineState() : Promise<Result<EngineState, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_engine_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Checks if an engine binary is present (in MODULES_DIR or system PATH).
+ */
+async checkEngineInstalled(engineId: string, binaryName: string | null) : Promise<boolean> {
+    return await TAURI_INVOKE("check_engine_installed", { engineId, binaryName });
+},
+/**
+ * Returns all registered engine definitions with real-time installation status.
+ */
+async getEngineDefinitions() : Promise<Result<EngineDefinition[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_engine_definitions") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Returns the persisted user config for an engine, or defaults if none saved yet.
+ */
+async getEngineConfig(engineId: string) : Promise<Result<EngineConfig, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_engine_config", { engineId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Persists user engine config (port, gpu_layers, context_size, model_path, extra_args).
+ */
+async setEngineConfig(config: EngineConfig) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_engine_config", { config }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -844,7 +949,11 @@ message: string } }
 /**
  * Global application settings
  */
-export type AppSettings = { 
+export type AppSettings = 
+/**
+ * Dynamic extra settings (module-specific, etc.)
+ */
+({ [key in string]: string }) & { 
 /**
  * UI theme ("dark" or "light")
  */
@@ -913,6 +1022,22 @@ medium: number;
  * Width for large layout.
  */
 large: number }
+/**
+ * What an engine can do
+ */
+export type Capability = 
+/**
+ * Text generation (LLM)
+ */
+"text" | 
+/**
+ * Image generation (diffusion)
+ */
+"image" | 
+/**
+ * Image understanding (multimodal LLM)
+ */
+"vision"
 /**
  * AI chat message with role and content
  */
@@ -1146,6 +1271,162 @@ usedGb: number;
  */
 activityPercent: number }
 /**
+ * Runtime configuration for starting an engine
+ */
+export type EngineConfig = { 
+/**
+ * Engine identifier (matches EngineDefinition.id)
+ */
+engine_id: string; 
+/**
+ * Port to bind (local engines)
+ */
+port?: number; 
+/**
+ * Number of GPU layers (-1 = all)
+ */
+gpu_layers?: number; 
+/**
+ * Context window size
+ */
+context_size?: number; 
+/**
+ * Path to model file
+ */
+model_path: string | null; 
+/**
+ * Extra CLI arguments
+ */
+extra_args?: string[] }
+/**
+ * Static engine definition (from local_modules.json)
+ */
+export type EngineDefinition = { 
+/**
+ * Unique identifier (e.g. "llamacpp")
+ */
+id: string; 
+/**
+ * Display name
+ */
+name: string; 
+/**
+ * Description
+ */
+desc?: string; 
+/**
+ * Icon emoji
+ */
+icon?: string; 
+/**
+ * What this engine can do
+ */
+capabilities?: Capability[]; 
+/**
+ * Binary name for local engines
+ */
+binary?: string | null; 
+/**
+ * GitHub repository URL (for releases/downloads)
+ */
+repo_url?: string | null; 
+/**
+ * Current version
+ */
+version?: string; 
+/**
+ * Default port (extracted from configSchema.port.default)
+ */
+default_port?: number; 
+/**
+ * Default GPU layers (-1 = all, extracted from configSchema.gpuLayers.default)
+ */
+default_gpu_layers?: number; 
+/**
+ * Default context window size (extracted from configSchema.contextSize.default)
+ */
+default_context_size?: number; 
+/**
+ * Raw configuration schema for UI rendering (kept for frontend)
+ */
+config_schema?: JsonValue | null; 
+/**
+ * Whether the engine binary is currently installed (populated at runtime, not from JSON)
+ */
+installed?: boolean }
+/**
+ * Engine lifecycle state (for frontend)
+ */
+export type EngineState = 
+/**
+ * No engine loaded
+ */
+"idle" | 
+/**
+ * Engine is starting up
+ */
+{ starting: { 
+/**
+ * ID of the engine being started
+ */
+engine_id: string } } | 
+/**
+ * Swapping from one engine to another within a slot
+ */
+{ swapping: { 
+/**
+ * ID of the engine being stopped
+ */
+from: string; 
+/**
+ * ID of the engine being started
+ */
+to: string } } | 
+/**
+ * One or more engines are running
+ */
+{ ready: { 
+/**
+ * Active slots (one per capability)
+ */
+slots: SlotStatus[] } } | 
+/**
+ * Engine encountered an error
+ */
+{ error: { 
+/**
+ * ID of the failed engine
+ */
+engine_id: string; 
+/**
+ * Error description
+ */
+message: string } }
+/**
+ * Currently running engine
+ */
+export type EngineStatus = { 
+/**
+ * Engine identifier
+ */
+id: string; 
+/**
+ * Display name
+ */
+name: string; 
+/**
+ * Capabilities
+ */
+capabilities: Capability[]; 
+/**
+ * HTTP endpoint (e.g. "http://localhost:8081")
+ */
+endpoint: string; 
+/**
+ * Is the engine healthy and ready
+ */
+healthy: boolean }
+/**
  * GPU (Graphics Processing Unit) statistics
  */
 export type GpuStats = { 
@@ -1169,6 +1450,86 @@ temp: number;
  * GPU model name
  */
 name: string }
+/**
+ * Image generation request parameters
+ */
+export type ImageGenerationRequest = { 
+/**
+ * AI provider or local engine ID
+ */
+provider: string; 
+/**
+ * The text prompt for generation
+ */
+prompt: string; 
+/**
+ * Original user text before UI prompt prefixes
+ */
+original_prompt: string | null; 
+/**
+ * Model identifier
+ */
+model: string; 
+/**
+ * Session identifier for history tracking
+ */
+session_id: string | null; 
+/**
+ * Number of inference steps
+ */
+steps: number | null; 
+/**
+ * Guidance scale (CFG)
+ */
+cfg_scale: number | null; 
+/**
+ * Image width in pixels
+ */
+width: number | null; 
+/**
+ * Image height in pixels
+ */
+height: number | null; 
+/**
+ * Sampler algorithm
+ */
+sampler: string | null; 
+/**
+ * Random seed
+ */
+seed: number | null; 
+/**
+ * Clip skip
+ */
+clip_skip: number | null; 
+/**
+ * Optional negative prompt
+ */
+negative_prompt: string | null; 
+/**
+ * Number of images to generate (batch size)
+ */
+batch_size: number | null; 
+/**
+ * Scheduler algorithm
+ */
+scheduler: string | null }
+/**
+ * Image generation response
+ */
+export type ImageGenerationResponse = { 
+/**
+ * Base64 encoded images or URLs
+ */
+images: string[]; 
+/**
+ * Whether request was successful
+ */
+ok: boolean; 
+/**
+ * Error message if failed
+ */
+error: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key in string]: JsonValue }
 /**
  * Module launch response indicating how to handle the module
@@ -1399,9 +1760,21 @@ desc: string;
  */
 icon: string; 
 /**
- * Module type ("ai" or "service")
+ * Module type ("api" or "service")
  */
 type: string; 
+/**
+ * Download type ("source" or "release")
+ */
+dlType?: string | null; 
+/**
+ * Engine capabilities (e.g. `["text"]`, `["image"]`)
+ */
+capabilities?: string[]; 
+/**
+ * Binary executable name for local engines (e.g. "llama-server")
+ */
+binary?: string | null; 
 /**
  * GitHub repository URL
  */
@@ -1413,7 +1786,11 @@ expectedHash: string | null;
 /**
  * Semantic version (e.g., "1.0.0")
  */
-version?: string }
+version?: string; 
+/**
+ * Raw configSchema from JSON (used by engine registry to extract typed defaults)
+ */
+configSchema?: JsonValue | null }
 /**
  * Network I/O statistics
  */
@@ -1563,6 +1940,18 @@ descKey: string | null;
  */
 desc: string }
 /**
+ * Status of a single capability slot
+ */
+export type SlotStatus = { 
+/**
+ * Which capability this slot serves
+ */
+capability: Capability; 
+/**
+ * Engine running in this slot
+ */
+engine: EngineStatus }
+/**
  * Complete system statistics snapshot
  */
 export type SystemStats = { 
@@ -1694,7 +2083,27 @@ resolution_zoom: { [key in string]: number };
 /**
  * Sound effects enabled state
  */
-sound_enabled: boolean }
+sound_enabled: boolean; 
+/**
+ * Selected reasoning level by AI provider
+ */
+ai_thinking_level?: { [key in string]: string }; 
+/**
+ * Last provider activated in the UI
+ */
+last_active_provider?: string | null; 
+/**
+ * Current persistent AI session identifier
+ */
+ai_session_id?: string | null; 
+/**
+ * Preferred launcher interface language
+ */
+preferred_language?: string | null; 
+/**
+ * Request to reopen the chat and reveal the latest message after background work.
+ */
+pending_chat_reveal?: boolean }
 /**
  * VRAM (Video RAM) statistics
  */

@@ -93,6 +93,7 @@ export class ModuleService {
         moduleId: string,
         repoUrl: string,
         expectedHash?: string,
+        dlType?: string,
     ): Promise<void> {
         tracer.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
         if (expectedHash !== undefined && expectedHash !== '') {
@@ -110,7 +111,9 @@ export class ModuleService {
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
 
             // Updated to use new API layer
-            const result = await invokeSafe(commands.downloadModule(moduleId, repoUrl, hashToPass));
+            const result = await invokeSafe(
+                commands.downloadModule(moduleId, repoUrl, hashToPass, dlType ?? null),
+            );
 
             if (result.status === 'error') {
                 throw new Error(result.error.message);

@@ -28,6 +28,7 @@ export class SettingsService {
     public async loadSettings(): Promise<ISettings> {
         try {
             const data = await this._tauri.invoke<ISettings>('get_settings');
+            // Data is already unwrapped by TauriProvider.invoke
             this.settings = { ...this.settings, ...data };
             return this.settings;
         } catch (e) {

@@ -80,6 +80,37 @@ export interface IBridgeResponse {
     ok: boolean;
     text?: string;
     error?: string;
+    images?: string[];
+}
+
+export interface IImageGenerationRequest {
+    provider: string;
+    prompt: string;
+    model: string;
+    session_id?: string;
+    original_prompt?: string;
+    steps?: number | null;
+    cfg_scale?: number | null;
+    width?: number | null;
+    height?: number | null;
+    /** Sampler algorithm */
+    sampler?: string | null;
+    /** Random seed */
+    seed?: number | null;
+    /** Clip skip */
+    clip_skip?: number | null;
+    /** Optional negative prompt */
+    negative_prompt?: string | null;
+    /** Number of images to generate (batch size) */
+    batch_size?: number | null;
+    /** Scheduler algorithm */
+    scheduler?: string | null;
+}
+
+export interface IImageGenerationResponse {
+    images: string[];
+    ok: boolean;
+    error: string | null;
 }
 
 // ============================================================================

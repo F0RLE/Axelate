@@ -97,8 +97,8 @@
   "ui.launcher.modal.confirm_close_title": "Подтверждение выхода",
   "ui.launcher.models.ai": "AI",
   "ui.launcher.models.ai_desc": "Интегрированная ИИ-платформа для высококачественной генерации текста, изображений и кода.",
-  "ui.launcher.models.services": "Боты и Сервисы",
-  "ui.launcher.models.services_desc": "Телеграм боты и инструменты, использующие генерацию текста и изображений.",
+  "ui.launcher.models.services": "Скрипты",
+  "ui.launcher.models.services_desc": "Боты, инструменты автоматизации и пользовательские скрипты.",
   "ui.launcher.models_subtitle": "Выберите возможность ИИ для начала генерации",
   "ui.launcher.module.delete": "Удалить",
   "ui.launcher.module.download": "Скачать",
@@ -195,5 +195,11 @@
   "ui.settings.thinking.high": "Высокий",
   "ui.settings.thinking.low": "Низкий",
   "ui.settings.thinking.medium": "Средний",
-  "ui.settings.toggle_visibility": "Показать/скрыть пароль"
+  "ui.settings.toggle_visibility": "Показать/скрыть пароль",
+  "ui.launcher.modules.modal.btn_remove": "Удалить",
+  "ui.launcher.modules.modal.btn_select": "Выбрать",
+  "ui.launcher.engine.llamacpp.name": "llama.cpp",
+  "ui.launcher.engine.llamacpp.desc": "Универсальный LLM движок. CUDA, Vulkan, CPU.",
+  "ui.launcher.engine.sdcpp.name": "Stable Diffusion.cpp",
+  "ui.launcher.engine.sdcpp.desc": "Лёгкий движок генерации изображений."
 }

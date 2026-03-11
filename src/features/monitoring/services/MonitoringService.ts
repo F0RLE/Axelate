@@ -20,6 +20,8 @@ export class MonitoringService {
     private unlistenFn: (() => void) | null = null;
     private pollingInterval: ReturnType<typeof setTimeout> | null = null;
     private listeners: StatsCallback[] = [];
+    private readonly _boundVisibilityChange = this._handleVisibilityChange.bind(this);
+    private _visibilityBound = false;
 
     constructor(private readonly _tauri: TauriProvider) {}
 
@@ -39,6 +41,15 @@ export class MonitoringService {
                     },
                 );
                 tracer.info('[MonitoringService] Started listening to system_stats');
+
+                // Fetch cached stats immediately so UI doesn't flash empty
+                // (the Rust loop sleeps 1s before the first emit)
+                try {
+                    const cached = await this._tauri.invoke<ISystemStats>('get_system_stats');
+                    this.notifyListeners(cached);
+                } catch {
+                    tracer.debug('[MonitoringService] Initial stats fetch skipped');
+                }
             } catch (e) {
                 tracer.error('[MonitoringService] Failed to listen to events:', e);
                 this.startFallback();
@@ -56,15 +67,18 @@ export class MonitoringService {
      * Binds visibility change events to pause/resume backend monitoring.
      */
     private _bindVisibilityHandler(): void {
-        document.addEventListener('visibilitychange', () => {
-            /* v8 ignore next */
-            if (this._tauri.isTauri()) {
-                const isHidden = document.hidden;
-                // Fire and forget
-                void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
-                tracer.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
-            }
-        });
+        if (this._visibilityBound) return;
+        document.addEventListener('visibilitychange', this._boundVisibilityChange);
+        this._visibilityBound = true;
+    }
+
+    private _handleVisibilityChange(): void {
+        /* v8 ignore next */
+        if (this._tauri.isTauri()) {
+            const isHidden = document.hidden;
+            void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
+            tracer.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
+        }
     }
 
     /**
@@ -79,6 +93,10 @@ export class MonitoringService {
         if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
+        }
+        if (this._visibilityBound) {
+            document.removeEventListener('visibilitychange', this._boundVisibilityChange);
+            this._visibilityBound = false;
         }
     }
 

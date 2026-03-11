@@ -127,6 +127,7 @@ describe('ModuleService', () => {
                 'test-module',
                 'https://repo.com/module',
                 null,
+                null,
             );
             expect(mocks.invokeSafe).toHaveBeenCalled();
         });
@@ -308,6 +309,7 @@ describe('ModuleService', () => {
                 'mod',
                 'https://repo.com',
                 'abc123',
+                null,
             );
         });
 
@@ -317,6 +319,7 @@ describe('ModuleService', () => {
             expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
                 'mod',
                 'https://repo.com',
+                null,
                 null,
             );
         });
@@ -349,6 +352,7 @@ describe('ModuleService', () => {
             expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
                 'mod',
                 'https://repo.com',
+                null,
                 null,
             );
         });

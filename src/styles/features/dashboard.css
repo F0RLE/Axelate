@@ -931,35 +931,34 @@ body.snapping .modal-backdrop {
 }
 
 .modal-backdrop:not(.hidden) .app-card {
-    /* Use 'backwards' to hide element during delay (apply 0% style) but release after completion for hover */
-    animation: cardIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation: cardIn 0.35s ease-out backwards;
     will-change: transform, opacity;
     backface-visibility: hidden;
 }
 
 .modal-backdrop:not(.hidden) .app-card:nth-child(1) {
-    animation-delay: 0.1s;
+    animation-delay: 0.04s;
 }
 .modal-backdrop:not(.hidden) .app-card:nth-child(2) {
-    animation-delay: 0.15s;
+    animation-delay: 0.07s;
 }
 .modal-backdrop:not(.hidden) .app-card:nth-child(3) {
-    animation-delay: 0.2s;
+    animation-delay: 0.1s;
 }
 .modal-backdrop:not(.hidden) .app-card:nth-child(4) {
-    animation-delay: 0.25s;
+    animation-delay: 0.13s;
 }
 .modal-backdrop:not(.hidden) .app-card:nth-child(5) {
-    animation-delay: 0.3s;
+    animation-delay: 0.16s;
 }
 .modal-backdrop:not(.hidden) .app-card:nth-child(6) {
-    animation-delay: 0.35s;
+    animation-delay: 0.19s;
 }
 .modal-backdrop:not(.hidden) .app-card:nth-child(7) {
-    animation-delay: 0.4s;
+    animation-delay: 0.22s;
 }
 .modal-backdrop:not(.hidden) .app-card:nth-child(8) {
-    animation-delay: 0.45s;
+    animation-delay: 0.25s;
 }
 
 .premium-footer {
@@ -1001,7 +1000,7 @@ body.snapping .modal-backdrop {
 .app-modal-title {
     font-size: 1.15rem;
     font-weight: 700;
-    font-family: 'Monocraft', monospace; /* Applying pixel font to title */
+    font-family: 'Monocraft', monospace;
     color: var(--text-primary);
     margin: 0;
     text-align: center;
@@ -1010,6 +1009,62 @@ body.snapping .modal-backdrop {
     align-items: center;
     justify-content: center;
     height: 100%;
+}
+
+.app-modal-title.hidden {
+    display: none;
+}
+
+/* ─── Header tab row (Text / Image) ─────────────────── */
+.app-modal-tab-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    padding: 5px 6px;
+}
+
+.app-modal-tab-row.hidden {
+    display: none;
+}
+
+.app-modal-tab {
+    font-family: 'Monocraft', monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 0.35rem 1rem;
+    cursor: pointer;
+    transition:
+        background 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+        color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+    letter-spacing: 0.04em;
+}
+
+.app-modal-tab:hover:not(:disabled):not(.active) {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.app-modal-tab.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 2px 10px rgba(var(--primary-raw), 0.4);
+}
+
+.app-modal-tab:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 .app-close-btn {
@@ -1167,6 +1222,14 @@ body.snapping .modal-backdrop {
     font-weight: 600;
 }
 
+.category-filter-btn:disabled {
+    cursor: not-allowed;
+}
+
+.category-filter-btn:disabled * {
+    pointer-events: none;
+}
+
 .category-filter-icon {
     display: flex;
     align-items: center;
@@ -1277,7 +1340,9 @@ body.snapping .modal-backdrop {
 
 /* High specificity for cards in grid */
 #app-grid .app-card:hover,
-.app-grid .app-card:hover {
+.app-grid .app-card:hover,
+#app-grid .app-card:focus-within,
+.app-grid .app-card:focus-within {
     transform: translateY(-12px) translateZ(0) !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
     z-index: 20;
@@ -1297,7 +1362,8 @@ body.snapping .modal-backdrop {
     backface-visibility: hidden; /* Prevent flickering */
 }
 
-#app-modal-list .app-card:hover {
+#app-modal-list .app-card:hover,
+#app-modal-list .app-card:focus-within {
     transform: translateY(-6px) translateZ(0) !important;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
     z-index: 20;
@@ -1431,24 +1497,30 @@ body.snapping .modal-backdrop {
 /* Hover Actions Container (Fixed bottom replacing desc) */
 .app-card-hover-actions {
     position: absolute;
-    bottom: 24px; /* Fixed distance from the bottom of the card */
+    bottom: 24px;
     left: 20px;
     right: 20px;
-    height: 48px; /* Fixed height for the button area */
+    height: 48px;
     display: flex;
     justify-content: center;
-    align-items: center; /* Center the buttons inside the fixed area */
+    align-items: center;
     opacity: 0;
     pointer-events: none;
     transform: translateY(10px);
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: 0.1s; /* Add slight delay before hiding to prevent click flicker */
     z-index: 30;
 }
 
-.app-card:hover .app-card-hover-actions {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
+/* Ensure actions remain visible while the card is hovered, being clicked, or when elements inside have focus */
+.app-card:hover .app-card-hover-actions,
+.app-card:active .app-card-hover-actions,
+.app-card:focus-within .app-card-hover-actions,
+.app-card-hover-actions:hover {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateY(0) !important;
+    transition-delay: 0s; /* Instant display when remaining inside */
 }
 
 /* Style buttons inside the hover container */
@@ -1467,22 +1539,24 @@ body.snapping .modal-backdrop {
     background: var(--primary) !important;
     color: white !important;
     transition:
-        transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
         background 0.3s ease,
-        box-shadow 0.3s ease !important;
+        box-shadow 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
 
     /* Undo the base .download-btn margins for the hover area */
     margin-top: 0 !important;
     margin-bottom: 0 !important;
-    position: static !important;
+    /* Must be relative so downloading::before fill stays inside the button */
+    position: relative !important;
+    overflow: hidden;
 }
 
 .app-card-hover-actions button:hover,
 .app-card-hover-actions .download-btn:hover {
-    transform: scale(1.05) translateY(-2px) !important;
+    transform: scale(1.03) translateY(-1px) !important;
     background: var(--primary-hover) !important;
-    box-shadow: 0 8px 25px rgba(138, 43, 226, 0.5) !important;
+    box-shadow: 0 6px 20px rgba(138, 43, 226, 0.4) !important;
 }
 
 /* Specifically style the "Remove" (Secondary) Button to be red */
@@ -1495,7 +1569,7 @@ body.snapping .modal-backdrop {
 
 .app-card-hover-actions .modal-btn-secondary:hover {
     background: #c82333 !important;
-    transform: scale(1.05) translateY(-2px) !important;
+    transform: scale(1.03) translateY(-1px) !important;
     box-shadow: none !important; /* Strictly no glow */
     color: #ffffff !important;
 }
@@ -1505,6 +1579,12 @@ body.snapping .modal-backdrop {
     syntax: '<angle>';
     inherits: true;
     initial-value: 0deg;
+}
+
+@property --selected-border-color {
+    syntax: '<color>';
+    inherits: true;
+    initial-value: rgba(138, 43, 226, 0.4);
 }
 
 @keyframes spinDashed {
@@ -1519,6 +1599,11 @@ body.snapping .modal-backdrop {
 .app-card.selected {
     border: 1px solid transparent !important; /* Keep base card border clear */
     box-shadow: none !important;
+    --selected-border-color: rgba(138, 43, 226, 0.4);
+}
+
+.app-card.selected:hover {
+    --selected-border-color: rgba(220, 53, 69, 0.4); /* Dimmed red on hover */
 }
 
 /* Pseudo element creates the crawling dashed line via conic gradient and mask */
@@ -1533,8 +1618,8 @@ body.snapping .modal-backdrop {
     padding: 1px; /* 1px very thin padding */
     background: repeating-conic-gradient(
         from var(--border-angle),
-        rgba(138, 43, 226, 0.4) 0deg,
-        rgba(138, 43, 226, 0.4) 4deg,
+        var(--selected-border-color) 0deg,
+        var(--selected-border-color) 4deg,
         transparent 4deg,
         transparent 8deg
     );
@@ -1549,6 +1634,89 @@ body.snapping .modal-backdrop {
     pointer-events: none;
     z-index: 5;
     animation: spinDashed 45s linear infinite; /* Ultra slow pace around the circle */
+    transition: --selected-border-color 0.3s ease; /* Smooth color transition */
+}
+
+/* ============================================================
+   Engine Status Indicator
+   A small dot in the top-right corner of local engine cards.
+   Classes engine-starting / engine-ready / engine-error are
+   applied by EngineStatusService listening to ai:engine:* events.
+   ============================================================ */
+
+.app-card::after,
+.model-card-premium::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 20;
+}
+
+/* Starting: spinning ring */
+.app-card.engine-starting::after,
+.model-card-premium.engine-starting::after {
+    opacity: 1;
+    background: transparent;
+    border: 2px solid rgba(251, 191, 36, 0.8);
+    border-top-color: transparent;
+    animation: engineSpin 0.8s linear infinite;
+    width: 8px;
+    height: 8px;
+}
+
+/* Swapping: orange spinning ring */
+.app-card.engine-swapping::after,
+.model-card-premium.engine-swapping::after {
+    opacity: 1;
+    background: transparent;
+    border: 2px solid rgba(249, 115, 22, 0.8);
+    border-top-color: transparent;
+    animation: engineSpin 0.6s linear infinite;
+    width: 8px;
+    height: 8px;
+}
+
+/* Ready: solid green dot */
+.app-card.engine-ready::after,
+.model-card-premium.engine-ready::after {
+    opacity: 1;
+    background: radial-gradient(circle, #34d399 0%, #10b981 100%);
+    box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+    animation: enginePulse 2s ease-in-out infinite;
+}
+
+/* Error: solid red dot */
+.app-card.engine-error::after,
+.model-card-premium.engine-error::after {
+    opacity: 1;
+    background: radial-gradient(circle, #f87171 0%, #ef4444 100%);
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    animation: none;
+}
+
+@keyframes engineSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes enginePulse {
+    0%,
+    100% {
+        opacity: 1;
+        box-shadow: 0 0 4px rgba(52, 211, 153, 0.4);
+    }
+    50% {
+        opacity: 0.7;
+        box-shadow: 0 0 10px rgba(52, 211, 153, 0.8);
+    }
 }
 
 /* --- Card Corner Actions (Settings and Reset) --- */
@@ -1696,8 +1864,8 @@ body.snapping .modal-backdrop {
     /* Flex Layout */
     display: flex;
     align-items: center;
-    justify-content: center; /* Center content when collapsed */
-    gap: 0; /* Starts with 0 gap */
+    justify-content: flex-end; /* Anchor icon to the right to stop jumping */
+    gap: 0;
 
     /* Sizing & Shape */
     height: 32px;
@@ -1742,12 +1910,13 @@ body.snapping .modal-backdrop {
 }
 
 .app-type-badge:hover {
-    max-width: 140px; /* Expand enough */
-    padding-left: 12px; /* Add spacing for text on the left */
+    max-width: 250px; /* Expand enough to avoid clipping */
+    padding-left: 14px; /* Space for text on the left */
+    padding-right: 0; /* 0 to guarantee the icon does NOT shift/jump */
     background: rgba(30, 30, 35, 0.95);
     box-shadow: none;
     opacity: 1;
-    justify-content: center;
+    /* Do not override justify-content, keep flex-end */
 }
 
 .app-card:hover .app-type-badge {
@@ -1772,15 +1941,19 @@ body.snapping .modal-backdrop {
     max-width: 0;
     overflow: hidden;
     white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: 0;
     transition:
         opacity 0.3s,
-        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     transition-delay: 0.05s;
 }
 
 .app-type-badge:hover .badge-text {
     opacity: 1;
-    max-width: 100px;
+    max-width: 200px;
+    margin-right: 6px; /* Add spacing between text and icon */
 }
 
 .app-type-badge.core {
@@ -1813,8 +1986,8 @@ body.snapping .modal-backdrop {
     color: #27ae60;
 }
 .app-type-badge.local.not-installed {
-    color: var(--text-muted) !important;
-    background: rgba(30, 30, 35, 0.6);
+    color: #27ae60 !important; /* Make it visible and distinct */
+    background: rgba(30, 30, 35, 0.6); /* Standard dark background, like CLOUD */
 }
 
 /* Hover states */
@@ -1828,14 +2001,15 @@ body.snapping .modal-backdrop {
     color: var(--text-primary) !important; /* Fast contrast fix */
 }
 .app-type-badge.local.not-installed:hover {
-    background: rgba(30, 30, 35, 0.95); /* Dark background like delete */
-    color: var(--text-muted) !important;
+    /* Inherit default .local:hover styles (green background, white text) */
+    background: rgba(46, 204, 113, 0.15);
+    color: var(--text-primary) !important;
 }
 
 /* Status Badges */
 
-/* Hide badge completely if not installed (User request: "only download", "like delete") */
-.app-type-badge.not-installed {
+/* Hide badge completely if not installed — except LOCAL engines always show badge */
+.app-type-badge.not-installed:not(.local) {
     display: none !important;
 }
 
@@ -2409,4 +2583,56 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     color: #ffb400;
     font-weight: bold;
     margin: 0 4px;
+}
+/* ─── Multi-Slot Stack Badge (bottom-right corner) ──────────────────── */
+
+/* Bottom-right position override */
+.module-action-badge.bottom-right {
+    top: auto;
+    bottom: 10px;
+    right: 10px;
+    left: auto;
+}
+
+/* Stack variant: same glass look as ⚙️/✕ — no accent border */
+.module-action-badge.stack {
+    background: rgba(30, 30, 35, 0.6);
+}
+
+/* "+1" icon: white */
+.module-action-badge.stack .badge-icon {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.85);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    min-width: 32px;
+}
+
+/* Secondary engine name: white, no uppercase */
+.module-action-badge.stack .badge-text {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.73rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+    max-width: 0;
+    overflow: hidden;
+}
+
+/* Icon comes after text (badge grows to the left) */
+.module-action-badge.bottom-right .badge-icon {
+    order: 1;
+}
+
+/* On hover: reveal text, grow left */
+.module-action-badge.bottom-right:hover .badge-text {
+    max-width: 200px; /* wide enough for any engine name */
+    padding-left: 6px;
+    padding-right: 0;
+}
+
+.module-action-badge.stack:hover {
+    background: rgba(50, 50, 58, 0.75);
 }

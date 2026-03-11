@@ -47,6 +47,7 @@ export interface IApp {
     installed?: boolean;
     repoUrl?: string;
     expectedHash?: string;
+    dlType?: string;
     configSchema?: Record<string, IConfigField>;
     apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI
 }

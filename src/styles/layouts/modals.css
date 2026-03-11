@@ -211,6 +211,11 @@
     color: white;
 }
 
+.modal-btn-secondary {
+    background: var(--danger);
+    color: white;
+}
+
 /* SD reinstall progress */
 .progress-animated {
     position: relative;

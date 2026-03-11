@@ -51,9 +51,10 @@ export class ModuleCardRenderer {
         _category: string,
         isSelected: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
+        onDownload?: (app: IApp) => void,
     ): HTMLElement {
         const card = document.createElement('div');
-        card.className = 'app-card allow-context-menu';
+        card.className = 'app-card';
         if (isSelected) {
             card.classList.add('selected');
         }
@@ -75,7 +76,15 @@ export class ModuleCardRenderer {
 
         this._injectBadges(clone, isApi, isInstalled);
         this._injectCoreContent(clone, app);
-        this._injectStatusAndActions(clone, app, isApi, isInstalled, isSelected, onClick);
+        this._injectStatusAndActions(
+            clone,
+            app,
+            isApi,
+            isInstalled,
+            isSelected,
+            onClick,
+            onDownload,
+        );
 
         card.appendChild(clone);
 
@@ -127,6 +136,7 @@ export class ModuleCardRenderer {
         isInstalled: boolean,
         isSelected: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
+        onDownload?: (app: IApp) => void,
     ): void {
         const statusHtml = this._getAppStatusHtml(isApi, isInstalled);
         if (statusHtml) {
@@ -141,7 +151,7 @@ export class ModuleCardRenderer {
         actionsContainer.className = 'app-card-hover-actions';
 
         if (!isInstalled && !isApi) {
-            actionsContainer.appendChild(this._buildDownloadButton());
+            actionsContainer.appendChild(this._buildDownloadButton(app, onDownload));
         } else {
             actionsContainer.appendChild(this._buildActionButton(app, isSelected, onClick));
         }
@@ -149,14 +159,115 @@ export class ModuleCardRenderer {
         clone.appendChild(actionsContainer);
     }
 
-    private _buildDownloadButton(): HTMLButtonElement {
+    private _buildDownloadButton(app: IApp, onDownload?: (app: IApp) => void): HTMLButtonElement {
         const downloadBtn = document.createElement('button');
         const g = getGlobalWin();
         const downloadText =
             typeof g.t === 'function' ? g.t('ui.launcher.module.download', 'Download') : 'Download';
         downloadBtn.className = 'modal-btn modal-btn-primary download-btn';
-        downloadBtn.textContent = downloadText;
+        // overflow:hidden keeps the ::before progress fill from leaking outside the button
+        downloadBtn.style.overflow = 'hidden';
+        downloadBtn.style.position = 'relative';
+
+        // .btn-content wrapper — required by dashboard.css ::before/z-index layering
+        const content = document.createElement('span');
+        content.className = 'btn-content';
+        content.style.cssText =
+            'display:flex;align-items:center;justify-content:center;gap:6px;position:relative;z-index:2;width:100%;pointer-events:none';
+
+        const label = document.createElement('span');
+        label.className = 'download-label';
+        label.textContent = downloadText;
+
+        const pct = document.createElement('span');
+        pct.className = 'download-pct';
+        pct.style.display = 'none'; // hidden until download starts
+
+        content.appendChild(label);
+        content.appendChild(pct);
+        downloadBtn.appendChild(content);
+
+        // Wire the click to the injected callback
+        downloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            onDownload?.(app);
+        });
+
         return downloadBtn;
+    }
+
+    /**
+     * Updates visual download progress on a `.download-btn` inside a card.
+     *
+     * @param card    - The `.app-card` element containing the button
+     * @param percent - 0-100; pass -1 for indeterminate (connecting state)
+     * @param status  - Optional Rust status string; controls label text and pct visibility
+     */
+    public static setDownloadProgress(card: HTMLElement, percent: number, status?: string): void {
+        const btn = card.querySelector<HTMLButtonElement>('.download-btn');
+        if (btn === null) return;
+
+        btn.classList.add('downloading');
+        btn.style.overflow = 'hidden';
+
+        const isIndeterminate = ModuleCardRenderer._isStatusIndeterminate(percent, status);
+        if (isIndeterminate) {
+            btn.classList.add('indeterminate');
+            btn.style.removeProperty('--download-progress');
+        } else {
+            btn.classList.remove('indeterminate');
+            btn.style.setProperty('--download-progress', `${Math.min(100, percent).toFixed(1)}%`);
+        }
+
+        const pct = btn.querySelector<HTMLElement>('.download-pct');
+        if (pct) ModuleCardRenderer._updatePctDisplay(pct, percent, status);
+
+        const label = btn.querySelector<HTMLElement>('.download-label');
+        if (label) ModuleCardRenderer._updateLabelDisplay(label, status);
+    }
+
+    private static _isStatusIndeterminate(percent: number, status?: string): boolean {
+        return (
+            percent < 0 ||
+            status === 'extracting' ||
+            status === 'connecting' ||
+            status === 'pending'
+        );
+    }
+
+    private static _updatePctDisplay(pct: HTMLElement, percent: number, status?: string): void {
+        if (status === 'extracting') {
+            pct.style.display = 'none';
+        } else {
+            pct.style.display = '';
+            const displayPercent = percent < 0 ? 0 : Math.round(percent);
+            pct.textContent = `${displayPercent}%`;
+        }
+    }
+
+    private static _updateLabelDisplay(label: HTMLElement, status?: string): void {
+        const g = getGlobalWin();
+        const t = typeof g.t === 'function' ? g.t.bind(g) : (_k: string, d: string) => d;
+
+        let targetText = '';
+        if (status === 'extracting') {
+            const rawText = t('ui.launcher.module.extracting', 'Extracting').replace(/\.+$/, '');
+            targetText = typeof rawText === 'string' ? rawText : 'Extracting';
+        }
+
+        if (label.textContent !== targetText) {
+            label.textContent = targetText;
+        }
+    }
+
+    /**
+     * Marks a download button in a card as complete and resets its state.
+     */
+    public static clearDownloadProgress(card: HTMLElement): void {
+        const btn = card.querySelector<HTMLButtonElement>('.download-btn');
+        if (btn === null) return;
+        btn.classList.remove('downloading', 'indeterminate');
+        btn.style.removeProperty('--download-progress');
     }
 
     private _buildActionButton(
@@ -165,19 +276,35 @@ export class ModuleCardRenderer {
         onClick: (e: MouseEvent, app: IApp) => void,
     ): HTMLButtonElement {
         const actionBtn = document.createElement('button');
-        actionBtn.className = isSelected
-            ? 'modal-btn modal-btn-secondary'
-            : 'modal-btn modal-btn-primary';
+        const winConfig = getGlobalWin() as unknown as {
+            aiBridge?: { getState: () => { activeProviderId?: string } };
+            t?: (k: string, d: string) => string;
+        };
 
-        const i18nKey = isSelected
-            ? 'ui.launcher.modules.modal.btn_remove'
-            : 'ui.launcher.modules.modal.btn_select';
-        const defaultText = isSelected ? 'Remove' : 'Select';
-        actionBtn.dataset['i18n'] = i18nKey;
+        const aiState = winConfig.aiBridge?.getState();
+        const isRunning = aiState?.activeProviderId === app.id;
 
-        const winConfig = getGlobalWin();
-        actionBtn.textContent =
-            typeof winConfig.t === 'function' ? winConfig.t(i18nKey, defaultText) : defaultText;
+        if (isSelected) {
+            actionBtn.className = 'modal-btn modal-btn-secondary';
+            if (isRunning) {
+                actionBtn.classList.add('active-module-btn', 'stop-btn');
+                const i18nKey = 'ui.launcher.modules.modal.btn_running';
+                actionBtn.dataset['i18n'] = i18nKey;
+                actionBtn.textContent =
+                    typeof winConfig.t === 'function' ? winConfig.t(i18nKey, 'Running') : 'Running';
+            } else {
+                const i18nKey = 'ui.launcher.modules.modal.btn_remove';
+                actionBtn.dataset['i18n'] = i18nKey;
+                actionBtn.textContent =
+                    typeof winConfig.t === 'function' ? winConfig.t(i18nKey, 'Remove') : 'Remove';
+            }
+        } else {
+            actionBtn.className = 'modal-btn modal-btn-primary';
+            const i18nKey = 'ui.launcher.modules.modal.btn_select';
+            actionBtn.dataset['i18n'] = i18nKey;
+            actionBtn.textContent =
+                typeof winConfig.t === 'function' ? winConfig.t(i18nKey, 'Select') : 'Select';
+        }
 
         actionBtn.onclick = (e) => {
             e.stopPropagation();
@@ -347,7 +474,7 @@ export class ModuleCardRenderer {
         const title = card.querySelector('.model-card-title');
         if (!(title instanceof HTMLElement)) return;
 
-        if (['axelate', 'axelate-platform', 'axelate-localai'].includes(app.id)) {
+        if (['axelate', 'axelate-platform'].includes(app.id)) {
             const win = getGlobalWin();
             title.textContent =
                 typeof win.t === 'function'

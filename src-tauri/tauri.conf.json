@@ -33,12 +33,12 @@
                 "fullscreen": false,
                 "decorations": false,
                 "transparent": false,
-                "visible": true,
+                "visible": false,
                 "backgroundColor": "#111015"
             }
         ],
         "security": {
-            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: http://asset.localhost blob:; connect-src 'self' ipc: http://ipc.localhost https:; base-uri 'self'",
+            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: http://asset.localhost blob:; connect-src 'self' ipc: http://ipc.localhost https://openrouter.ai https://*.openrouter.ai; base-uri 'self'",
             "capabilities": [
                 "default"
             ]

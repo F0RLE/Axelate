@@ -48,7 +48,7 @@ export class AIProviderManager {
 
         try {
             const apiKey = await this._resolveApiKey(providerId);
-            const isLocal = providerId === 'local' || providerId === 'axelate-localai';
+            const isLocal = this._isLocalProvider(providerId);
 
             if (apiKey === '' && !isLocal) {
                 return false;
@@ -84,7 +84,7 @@ export class AIProviderManager {
 
     public isActive(): boolean {
         if (this._activeProviderId === null) return false;
-        if (this._activeProviderId === 'axelate-localai') return true;
+        if (this._isLocalProvider(this._activeProviderId)) return true;
         return this._apiKey !== null && this._apiKey !== '';
     }
 
@@ -114,7 +114,6 @@ export class AIProviderManager {
         const providers: Record<string, string> = {
             gpt: 'OpenAI GPT',
             gemini: 'Google Gemini',
-            'axelate-localai': 'Axelate Local AI',
         };
         return providers[id] ?? id;
     }
@@ -135,12 +134,30 @@ export class AIProviderManager {
     // --- Private Helpers ---
 
     private async _resolveApiKey(providerId: string): Promise<string> {
-        const isLocal = providerId === 'local' || providerId === 'axelate-localai';
-        if (isLocal) return '';
+        if (this._isLocalProvider(providerId)) return '';
 
         // Unified Key Management: remote providers all use openrouter
         const keyName = 'openrouter_api_key';
         return (await this._getSecureVal(keyName)) ?? '';
+    }
+
+    /**
+     * Returns true if the provider ID represents a local engine
+     * (not a cloud API provider requiring an API key).
+     * Any ID that doesn't match a known cloud provider prefix is treated as local.
+     */
+    private _isLocalProvider(providerId: string): boolean {
+        const cloudProviders = new Set([
+            'gpt',
+            'gemini',
+            'openai',
+            'openrouter',
+            'anthropic',
+            'mistral',
+            'claude',
+            'deepseek',
+        ]);
+        return !cloudProviders.has(providerId);
     }
 
     private _getPersistedModel(providerId: string): string | null {

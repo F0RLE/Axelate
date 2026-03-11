@@ -212,13 +212,17 @@ export class DebugUI {
     private startLogPolling() {
         if (this.pollInterval !== null) globalThis.clearInterval(this.pollInterval);
         this.pollInterval = globalThis.setInterval(() => {
+            // Only fetch when debug page is actually visible
+            const debugPage = document.getElementById('page-debug');
+            if (debugPage?.classList.contains('active') !== true) return;
+
             void (async () => {
                 const newLogs = await this.service.fetchLogs();
                 if (newLogs.length > 0) {
                     this.renderLogs();
                 }
             })();
-        }, 1000) as unknown as number;
+        }, 2000) as unknown as number;
     }
 
     private renderLogs(clear = false): void {

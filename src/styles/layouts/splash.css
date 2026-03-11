@@ -11,8 +11,8 @@
     align-items: center;
     justify-content: center;
     transition:
-        opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1),
-        visibility 0.6s step-end; /* Delay visibility:hidden until opacity is done */
+        opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.35s step-end;
 }
 
 /* Central card so logo/progress are readable over particle background */
@@ -49,8 +49,8 @@
     pointer-events: none;
     visibility: hidden;
     transition:
-        opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1),
-        visibility 0.6s step-end;
+        opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.35s step-end;
 }
 
 #splash-screen.hidden {
@@ -125,7 +125,7 @@
     -webkit-text-fill-color: transparent;
     opacity: 0;
     transform: translateY(10px);
-    animation: splashTitleReveal 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s forwards;
+    animation: splashTitleReveal 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s forwards;
     min-height: 1.2em; /* Reserve space for text to prevent vertical shift */
     margin-top: -0.2em; /* Fine tune spacing */
     line-height: 1.2;
@@ -147,7 +147,7 @@
     width: 0%;
     background: linear-gradient(90deg, #8a2be2, #c77dff);
     border-radius: 4px;
-    animation: splashProgressFill 1.5s ease-out forwards;
+    animation: splashProgressFill 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.1s forwards;
 }
 
 @keyframes splashTitleReveal {

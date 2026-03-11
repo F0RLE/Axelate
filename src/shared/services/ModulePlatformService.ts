@@ -27,7 +27,7 @@ export class ModulePlatformService {
         }
 
         const url: string = app.repoUrl;
-        await this._moduleService.downloadModule(app.id, url, app.expectedHash);
+        await this._moduleService.downloadModule(app.id, url, app.expectedHash, app.dlType);
     }
 
     /**

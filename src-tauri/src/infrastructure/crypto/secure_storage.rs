@@ -25,20 +25,13 @@ use crate::errors::AppError;
 
 impl SecureStorage {
     fn get_store_path() -> Result<PathBuf, AppError> {
-        let app_data = std::env::var("APPDATA")
-            .map_err(|_| AppError::Config("Could not find APPDATA directory".to_string()))?;
-
-        let mut path = PathBuf::from(app_data);
-        path.push("AxelateData");
-        path.push("User");
-        path.push("Configs");
+        let path = crate::utils::paths::CONFIG_DIR.as_path();
 
         if !path.exists() {
-            fs::create_dir_all(&path).map_err(|e| AppError::Io(e.to_string()))?;
+            fs::create_dir_all(path).map_err(|e| AppError::Io(e.to_string()))?;
         }
 
-        path.push("secure.enc");
-        Ok(path)
+        Ok(path.join("secure.enc"))
     }
 
     /// Derives a 32-byte key from the machine UID and a static pepper.

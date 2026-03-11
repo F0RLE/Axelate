@@ -29,6 +29,7 @@ mod app_tests {
             language: "en".to_string(),
             use_gpu: false,
             debug_mode: true,
+            ..Default::default()
         };
 
         let json = serde_json::to_string(&settings).expect("Failed to serialize");
@@ -64,8 +65,8 @@ mod app_tests {
 
     /// Test path utilities are initialized
     #[test]
-    fn test_appdata_root_initialized() {
-        use crate::utils::paths::APPDATA_ROOT;
+    fn test_data_roots_initialized() {
+        use crate::utils::paths::{APPDATA_ROOT, LOCALDATA_ROOT};
 
         // Verify path ends with AxelateData
         let path_str = APPDATA_ROOT.to_string_lossy();
@@ -73,12 +74,18 @@ mod app_tests {
             path_str.ends_with("AxelateData"),
             "APPDATA_ROOT should end with AxelateData"
         );
+
+        let local_path_str = LOCALDATA_ROOT.to_string_lossy();
+        assert!(
+            local_path_str.ends_with("AxelateData"),
+            "LOCALDATA_ROOT should end with AxelateData"
+        );
     }
 
     /// Test directory paths are correctly derived
     #[test]
     fn test_directory_paths() {
-        use crate::utils::paths::{CONFIG_DIR, LOG_DIR, SYSTEM_ROOT, USER_ROOT};
+        use crate::utils::paths::{CONFIG_DIR, LOG_DIR, MODELS_DIR, SYSTEM_ROOT, USER_ROOT};
 
         // Verify USER_ROOT is under APPDATA_ROOT
         assert!(USER_ROOT.to_string_lossy().contains("AxelateData"));
@@ -90,6 +97,7 @@ mod app_tests {
         // Verify SYSTEM_ROOT and LOG_DIR
         assert!(SYSTEM_ROOT.to_string_lossy().contains("System"));
         assert!(LOG_DIR.to_string_lossy().contains("Logs"));
+        assert!(MODELS_DIR.to_string_lossy().contains("Models"));
     }
 
     /// Test file paths are correctly derived

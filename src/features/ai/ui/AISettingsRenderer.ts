@@ -78,6 +78,7 @@ class AISettingsRenderer extends BaseComponent {
     private _aiSettings: AISettingsService | null = null;
     private _tauri: TauriProvider | null = null;
     private _checkTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _activeContainer: HTMLElement | null = null;
 
     constructor() {
         super();
@@ -109,6 +110,7 @@ class AISettingsRenderer extends BaseComponent {
         this._settingsService = null;
         this._aiSettings = null;
         this._tauri = null;
+        this._activeContainer = null;
 
         if (this._checkTimeout !== null) {
             clearTimeout(this._checkTimeout);
@@ -139,9 +141,9 @@ class AISettingsRenderer extends BaseComponent {
         const t = this._getTranslator();
 
         const isCleanApp =
-            ['axelate', 'axelate-platform', 'axelate-localai'].includes(appId) ||
-            appId.includes('telegram');
+            ['axelate', 'axelate-platform'].includes(appId) || appId.includes('telegram');
 
+        this._activeContainer = container;
         let rawHtml = '';
 
         if (isCleanApp) {
@@ -165,7 +167,7 @@ class AISettingsRenderer extends BaseComponent {
                             <div class="settings-card-header-center">
                                 <h3 id="${appId}-api-title">🔑 
                                     <a href="#" id="${appId}-api-link" class="api-key-link" style="text-decoration: none; cursor: pointer; color: inherit;" title="Manage your OpenRouter API Keys">
-                                        <span data-i18n="ui.settings.api_key_label">${t('ui.settings.api_key_label', 'API Key')}</span>
+                                        <span data-i18n="ui.settings.api_key_label">${t('ui.settings.api_key_label', 'OpenRouter API Key')}</span>
                                     </a>
                                 </h3>
                             </div>
@@ -174,7 +176,7 @@ class AISettingsRenderer extends BaseComponent {
                                 <button id="${appId}-key-toggle-btn" class="ai-icon-btn" aria-label="Toggle password visibility" data-i18n-aria-label="ui.settings.toggle_visibility">${ICONS.HIDDEN}</button>
                                 <button id="${appId}-key-check-btn" class="ai-check-btn" data-i18n="ui.gpt.key_check_btn">${t('ui.gpt.key_check_btn', 'Check')}</button>
                             </div>
-                            <div class="encryption-note">🔒 <span data-i18n="ui.settings.keys_encrypted">${t('ui.settings.keys_encrypted', 'Keys are securely encrypted locally.')}</span></div>
+                            <div class="encryption-note">🔒 <span data-i18n="ui.settings.keys_encrypted">${t('ui.settings.keys_encrypted', 'Shared OpenRouter key is securely encrypted locally.')}</span></div>
                         </div>
                     </section>
 
@@ -375,15 +377,6 @@ class AISettingsRenderer extends BaseComponent {
         const stats = modelData?.stats;
 
         if (stats) {
-            const thinkingLevel = this._aiSettings?.getThinkingLevel(appId) ?? 'high';
-
-            let adjustedLogic = stats.logic || 0;
-            if (thinkingLevel === 'high') {
-                adjustedLogic = Math.min(10, adjustedLogic + 2);
-            } else if (thinkingLevel === 'medium') {
-                adjustedLogic = Math.min(10, adjustedLogic + 1);
-            }
-
             return `
                 <div class="ai-stats-grid">
                     <div class="stat-item">
@@ -398,7 +391,7 @@ class AISettingsRenderer extends BaseComponent {
                             <span class="stat-icon-wrapper">🧠</span>
                             <div class="stat-label" data-i18n="ui.gpt.stats.logic">${t('ui.gpt.stats.logic', 'Logic')}</div>
                         </div>
-                        <div class="stat-stars">${this._renderStars(adjustedLogic)}</div>
+                        <div class="stat-stars">${this._renderStars(stats.logic)}</div>
                     </div>
                     <div class="stat-item">
                         <div class="stat-header">
@@ -408,6 +401,7 @@ class AISettingsRenderer extends BaseComponent {
                         <div class="stat-stars">${this._renderStars(stats.creative)}</div>
                     </div>
                 </div>
+                <div class="stats-note">${t('ui.settings.model_stats_note', 'Stats describe the selected model. Thinking level changes response style, not the base model rating.')}</div>
             `;
         }
 
@@ -676,7 +670,9 @@ class AISettingsRenderer extends BaseComponent {
     public selectModel(appId: string, modelKey: string): void {
         this._aiSettings?.setSelectedAIModel(appId, modelKey);
 
-        const grid = document.querySelector('.ai-models-grid');
+        const grid =
+            this._activeContainer?.querySelector('.ai-models-grid') ??
+            document.querySelector('.ai-models-grid');
         grid?.querySelectorAll('.ai-model-card').forEach((card) => {
             const cardKey = (card as HTMLElement).dataset['modelKey'];
             card.classList.toggle('selected', cardKey === modelKey);

@@ -13,6 +13,7 @@
 }
 
 .chat-bubble {
+    position: relative;
     max-width: 78%;
     padding: 0.6rem 0.75rem;
     border-radius: 12px;
@@ -53,6 +54,76 @@
 .chat-row.user .chat-bubble {
     background: rgba(var(--primary-raw), 0.18);
     border-color: rgba(var(--primary-raw), 0.35);
+    padding-left: 2.8rem;
+}
+
+.chat-copy-own-btn {
+    position: absolute;
+    top: 0.45rem;
+    left: 0.45rem;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(-2px);
+    pointer-events: none;
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s ease,
+        background 0.18s ease,
+        border-color 0.18s ease,
+        color 0.18s ease;
+}
+
+.chat-row.user:hover .chat-copy-own-btn,
+.chat-row.user:focus-within .chat-copy-own-btn {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.chat-copy-own-btn:hover {
+    background: rgba(var(--primary-raw), 0.2);
+    border-color: rgba(var(--primary-raw), 0.35);
+    color: white;
+}
+
+.chat-copy-own-btn svg {
+    opacity: 0.9;
+}
+
+.chat-copy-own-btn.is-copied {
+    background: rgba(33, 136, 56, 0.18);
+    border-color: rgba(33, 136, 56, 0.36);
+    color: var(--success);
+}
+
+.chat-copy-own-btn.is-copied .icon-check {
+    animation: chatCopyCheckPop 0.24s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+@keyframes chatCopyCheckPop {
+    0% {
+        opacity: 0;
+        transform: scale(0.7);
+    }
+
+    70% {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .chat-meta {

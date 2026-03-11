@@ -115,10 +115,16 @@ impl AiProvider for OpenRouterProvider {
         req: ChatRequest,
         sink: Arc<dyn StreamSink>,
     ) -> Result<ChatResponse, crate::errors::AppError> {
-        let api_key = req
-            .api_key
-            .clone()
-            .ok_or_else(|| crate::errors::AppError::Config("No API key provided".to_string()))?;
+        let mut api_key = req.api_key.clone().unwrap_or_default();
+        if api_key.is_empty() {
+            if self.base_url.contains("localhost") || self.base_url.contains("127.0.0.1") {
+                api_key = "local".to_string();
+            } else {
+                return Err(crate::errors::AppError::Config(
+                    "No API key provided".to_string(),
+                ));
+            }
+        }
 
         let client = Client::builder()
             .build()
@@ -132,7 +138,23 @@ impl AiProvider for OpenRouterProvider {
             "model".to_string(),
             serde_json::Value::String(req.model.clone()),
         );
-        payload.insert("messages".to_string(), serde_json::json!(req.messages));
+
+        // Map messages to strict OpenAI format (only role and content)
+        let mapped_messages: Vec<serde_json::Value> = req
+            .messages
+            .into_iter()
+            .map(|m| {
+                serde_json::json!({
+                    "role": m.role,
+                    "content": m.content,
+                })
+            })
+            .collect();
+
+        payload.insert(
+            "messages".to_string(),
+            serde_json::Value::Array(mapped_messages),
+        );
         payload.insert("stream".to_string(), serde_json::Value::Bool(true));
 
         if let Some(level) = &req.thinking_level {

@@ -45,10 +45,11 @@ export class CatalogService {
      * Asynchronously loads the application catalog from the Tauri backend.
      */
     public async loadCatalog(): Promise<void> {
-        // 1. Fetch Config and Modules
-        const [config, installedModules] = await Promise.all([
+        // 1. Fetch Config, Modules, and Engine Definitions in parallel
+        const [config, installedModules, engineDefs] = await Promise.all([
             this._loadConfig(),
             this._loadInstalledModules(),
+            this._loadEngineDefs(),
         ]);
 
         const validConfig = this._ensureValidConfig(config);
@@ -70,8 +71,8 @@ export class CatalogService {
                 `[CatalogService] After mapping - AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
             );
 
-            // Hydrate with schemas & providers
-            this._hydrateApps(validConfig, installedModules);
+            // Hydrate with schemas, providers & engine install status
+            this._hydrateApps(validConfig, installedModules, engineDefs);
 
             // Final check for fallbacks
             this._ensureFallbacks();
@@ -113,6 +114,22 @@ export class CatalogService {
     }
 
     /**
+     * Fetches engine definitions (with real-time `installed` status) from backend.
+     */
+    private async _loadEngineDefs(): Promise<Array<{ id: string; installed: boolean }>> {
+        try {
+            if (this._bridge.isTauri()) {
+                return await this._bridge.invoke<Array<{ id: string; installed: boolean }>>(
+                    'get_engine_definitions',
+                );
+            }
+        } catch (e) {
+            tracer.warn(`[CatalogService] Engine definitions unavailable: ${String(e)}`);
+        }
+        return [];
+    }
+
+    /**
      * Loads the list of installed modules.
      */
     private async _loadInstalledModules(): Promise<IModule[]> {
@@ -136,6 +153,11 @@ export class CatalogService {
      */
     private _mapModuleItems(items: ModuleItem[], category: 'ai' | 'services'): IApp[] {
         return items.map((item) => {
+            // Resolve capability from capabilities array (first match wins)
+            const caps = (item as ModuleItem & { capabilities?: string[] }).capabilities ?? [];
+            let capability: 'text' | 'image' = 'text';
+            if (caps.includes('image')) capability = 'image';
+
             return {
                 id: item.id,
                 nameKey: item.nameKey,
@@ -145,8 +167,10 @@ export class CatalogService {
                 icon: item.icon,
                 category: category,
                 type: category === 'ai' && item.type !== 'local' ? 'api' : 'local',
+                capability,
                 repoUrl: item.repoUrl ?? '',
                 expectedHash: item.expectedHash ?? '',
+                dlType: item.dlType ?? undefined,
                 version: item.version ?? '1.0.0',
                 installed: (item as ModuleItem & { installed?: boolean }).installed ?? false,
             } as IApp;
@@ -156,14 +180,25 @@ export class CatalogService {
     /**
      * Hydrates apps with schemas, providers, and model data.
      */
-    private _hydrateApps(config: AppConfig, installedModules: IModule[]): void {
+    private _hydrateApps(
+        config: AppConfig,
+        installedModules: IModule[],
+        engineDefs: Array<{ id: string; installed: boolean }> = [],
+    ): void {
         const installedMap = new Map(installedModules.map((m) => [m.id.toLowerCase(), m]));
+        // Build a fast lookup for engine installation status
+        const engineInstallMap = new Map(engineDefs.map((e) => [e.id.toLowerCase(), e.installed]));
 
         const mergeAppSchema = (app: IApp) => {
             const isApi =
                 app.type === 'api' || config.apiProviders.some((p: ApiProvider) => p.id === app.id);
 
-            if (isApi) app.installed = true;
+            if (isApi) {
+                app.installed = true;
+            } else if (app.type === 'local' && engineInstallMap.has(app.id.toLowerCase())) {
+                // Use real-time detection from is_engine_installed()
+                app.installed = engineInstallMap.get(app.id.toLowerCase()) ?? false;
+            }
 
             const provider = config.apiProviders.find((p: ApiProvider) => p.id === app.id);
             if (provider) {

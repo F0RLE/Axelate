@@ -97,8 +97,8 @@
   "ui.launcher.modal.confirm_close_title": "确认退出",
   "ui.launcher.models.ai": "AI",
   "ui.launcher.models.ai_desc": "集成 AI 平台，支持高质量的文本、图像和代码生成。",
-  "ui.launcher.models.services": "机器人与服务",
-  "ui.launcher.models.services_desc": "利用文本和图像生成的 Telegram 机器人和工具。",
+  "ui.launcher.models.services": "脚本",
+  "ui.launcher.models.services_desc": "机器人、自动化工具和自定义脚本。",
   "ui.launcher.models_subtitle": "选择AI功能以开始生成",
   "ui.launcher.module.delete": "删除",
   "ui.launcher.module.download": "下载",
@@ -195,5 +195,11 @@
   "ui.settings.thinking.high": "高",
   "ui.settings.thinking.low": "低",
   "ui.settings.thinking.medium": "中等",
-  "ui.settings.toggle_visibility": "切换密码显示"
+  "ui.settings.toggle_visibility": "切换密码显示",
+  "ui.launcher.modules.modal.btn_remove": "移除",
+  "ui.launcher.modules.modal.btn_select": "选择",
+  "ui.launcher.engine.llamacpp.name": "llama.cpp",
+  "ui.launcher.engine.llamacpp.desc": "通用LLM引擎。CUDA、Vulkan、CPU。",
+  "ui.launcher.engine.sdcpp.name": "Stable Diffusion.cpp",
+  "ui.launcher.engine.sdcpp.desc": "轻量级图像生成引擎。"
 }

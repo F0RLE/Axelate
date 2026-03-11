@@ -16,6 +16,7 @@ import type { SoundService } from '@/shared/services/SoundService';
 import { eventBus } from '@/shared/services/EventBus';
 import { VoiceController } from './controllers/VoiceController';
 import { FilePickerController } from './controllers/FilePickerController';
+import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 export class ChatController {
     private readonly _service: ChatService;
@@ -25,6 +26,8 @@ export class ChatController {
     private _chatHistory: IChatMessage[] = [];
     private _currentGreetingIndex = 1;
     private _isSending = false;
+    private _historyLoaded = false;
+    private _historyLoadInFlight: Promise<void> | null = null;
 
     constructor(
         private readonly _aiBridge: AIBridge,
@@ -56,7 +59,7 @@ export class ChatController {
             });
         }
 
-        void this._loadHistory();
+        void this._ensureHistoryLoaded();
 
         let eventsBound = false;
 
@@ -69,6 +72,7 @@ export class ChatController {
                 }
                 this.randomizeGreeting();
                 this._ui.refreshTranslations();
+                void this._ensureHistoryLoaded();
             }
         });
 
@@ -108,6 +112,9 @@ export class ChatController {
         chatFileHandler.clear();
         this._ui.clear();
         this._autoResizeInput();
+        void this._aiBridge.clearHistory().catch((e: unknown) => {
+            tracer.error('[Chat] Failed to clear persisted history:', e);
+        });
         this._ui.showToast('Chat cleared', 'success');
     }
 
@@ -120,7 +127,9 @@ export class ChatController {
         const text = (input ? input.value : '').trim();
 
         if (!this._validateInput(text)) return;
-        if (!this._checkAIActive(input)) return;
+
+        const isActive = await this._checkAIActive(input);
+        if (!isActive) return;
 
         const uiElements = this._lockUI(input);
         const typingId = `typing-${String(Date.now())}`;
@@ -140,6 +149,7 @@ export class ChatController {
 
             let streamingHandle: {
                 update: (chunk: string) => void;
+                replace: (chunk: string) => void;
                 finalize: (text: string, stats?: Record<string, unknown>) => void;
             } | null = null;
 
@@ -151,6 +161,14 @@ export class ChatController {
                 streamingHandle.update(chunk);
             });
 
+            this._aiBridge.onReplaceChunk(listenerId, (chunk) => {
+                if (!streamingHandle) {
+                    this._ui.removeTyping(typingId);
+                    streamingHandle = this._ui.createStreamingMessage('assistant');
+                }
+                streamingHandle.replace(chunk);
+            });
+
             const historyHead = this._chatHistory.slice(-40);
             const response = await this._service.sendMessage(
                 combinedText,
@@ -159,13 +177,15 @@ export class ChatController {
             );
 
             this._aiBridge.removeChunkListener(listenerId);
+            this._aiBridge.removeReplaceChunkListener(listenerId);
             this._ui.removeTyping(typingId);
 
             await this._handleChatResponse(response, streamingHandle);
         } catch (e: unknown) {
             this._aiBridge.removeChunkListener(listenerId);
+            this._aiBridge.removeReplaceChunkListener(listenerId);
             this._ui.removeTyping(typingId);
-            this._handleError(e instanceof Error ? e.message : 'Unknown error');
+            this._handleError(e);
         } finally {
             this._unlockUI(uiElements);
             this._isSending = false;
@@ -227,8 +247,28 @@ export class ChatController {
         }
     }
 
+    private async _ensureHistoryLoaded(): Promise<void> {
+        if (this._historyLoaded) return;
+        if (this._historyLoadInFlight !== null) {
+            await this._historyLoadInFlight;
+            return;
+        }
+
+        if (this._aiBridge.getSessionId() === 'default') {
+            globalThis.setTimeout(() => {
+                void this._ensureHistoryLoaded();
+            }, 300);
+            return;
+        }
+
+        this._historyLoadInFlight = this._loadHistory();
+        await this._historyLoadInFlight;
+        this._historyLoadInFlight = null;
+    }
+
     private async _loadHistory(): Promise<void> {
         const history = await this._aiBridge.getHistory();
+        this._historyLoaded = true;
         if (Array.isArray(history) && history.length > 0) {
             tracer.info(
                 `[ChatController] Restoring ${String(history.length)} messages from persistence`,
@@ -238,8 +278,7 @@ export class ChatController {
                 .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
                 .map((msg) => ({
                     role: msg.role as 'user' | 'assistant',
-                    content:
-                        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+                    content: this._safeExtractText(msg.content),
                 }));
 
             this._chatHistory.forEach((msg) => {
@@ -249,6 +288,25 @@ export class ChatController {
                 });
             });
         }
+
+        if (this._consumePendingChatReveal()) {
+            this._ui.revealLatestMessage();
+        }
+    }
+
+    private _consumePendingChatReveal(): boolean {
+        const win = getGlobalWin() as unknown as Window & {
+            uiState?: {
+                getState?: () => { pending_chat_reveal?: boolean };
+                updateState?: (updates: { pending_chat_reveal: boolean }) => void;
+            };
+        };
+
+        const shouldReveal = win.uiState?.getState?.().pending_chat_reveal === true;
+        if (shouldReveal) {
+            win.uiState?.updateState?.({ pending_chat_reveal: false });
+        }
+        return shouldReveal;
     }
 
     private _validateInput(text: string): boolean {
@@ -259,24 +317,53 @@ export class ChatController {
         return true;
     }
 
-    private _checkAIActive(input: HTMLTextAreaElement | null): boolean {
-        if (!this._aiBridge.isActive()) {
-            const text = input ? input.value.trim() : '';
-            if (text !== '') this._ui.appendMessage('user', text);
-            setTimeout(() => {
-                this._ui.appendMessage(
-                    'assistant',
-                    this._i18n.t(
-                        'ui.ai.no_provider',
-                        'No AI module running. Please launch a module first.',
-                    ),
-                    { error: true },
-                );
-            }, 500);
-            if (input) input.value = '';
-            return false;
+    private async _tryAutoStartAI(): Promise<boolean> {
+        const textModule = uiState.getSelectedModule('ai_text');
+        const imageModule = uiState.getSelectedModule('ai_image');
+
+        // Prefer text module for chat naturally, but allow image module if active
+        const selectedModule =
+            textModule?.id !== undefined && textModule.id !== '' ? textModule : imageModule;
+
+        if (selectedModule?.id === undefined || selectedModule.id === '') return false;
+
+        tracer.info(`[Chat] Auto-starting selected module: ${selectedModule.id}`);
+        const btn = document.getElementById('chat-actions-send');
+        if (btn) {
+            btn.classList.add('loading');
+            btn.setAttribute('disabled', 'true');
         }
-        return true;
+
+        const started = await this._aiBridge.startProvider(selectedModule.id);
+
+        if (btn) {
+            btn.classList.remove('loading');
+            btn.removeAttribute('disabled');
+        }
+
+        return started;
+    }
+
+    private async _checkAIActive(input: HTMLTextAreaElement | null): Promise<boolean> {
+        if (this._aiBridge.isActive()) return true;
+
+        const started = await this._tryAutoStartAI();
+        if (started) return true;
+
+        const text = input ? input.value.trim() : '';
+        if (text !== '') this._ui.appendMessage('user', text);
+        setTimeout(() => {
+            this._ui.appendMessage(
+                'assistant',
+                this._i18n.t(
+                    'ui.ai.no_provider',
+                    'No AI module running. Please select and launch a module first.',
+                ),
+                { error: true },
+            );
+        }, 500);
+        if (input) input.value = '';
+        return false;
     }
 
     private async _handleChatResponse(
@@ -287,7 +374,8 @@ export class ChatController {
         } | null,
     ): Promise<void> {
         if (response.ok) {
-            const replyText = response.message ?? response.reply?.text ?? '';
+            const rawReply = response.message ?? response.reply?.text ?? '';
+            const replyText = this._safeExtractText(rawReply);
 
             if (replyText !== '') {
                 const tokens = await getTokenCount(replyText);
@@ -306,8 +394,32 @@ export class ChatController {
         }
     }
 
-    private _getFriendlyErrorMessage(errorMsg: string, model?: string): string {
-        const msg = (errorMsg || '').toLowerCase();
+    private _extractFromObject(obj: Record<string, unknown>): string {
+        if ('message' in obj && typeof obj['message'] === 'string') return obj['message'];
+        if ('error' in obj && typeof obj['error'] === 'string') return obj['error'];
+        if ('text' in obj && typeof obj['text'] === 'string') return obj['text'];
+
+        try {
+            return JSON.stringify(obj, null, 2);
+        } catch {
+            return '[Сложный объект: невозможно отобразить]';
+        }
+    }
+
+    private _safeExtractText(data: unknown): string {
+        if (typeof data === 'string') return data;
+        if (data instanceof Error) return data.message;
+
+        if (typeof data === 'object' && data !== null) {
+            return this._extractFromObject(data as Record<string, unknown>);
+        }
+
+        return typeof data === 'number' || typeof data === 'boolean' ? String(data) : '';
+    }
+
+    private _getFriendlyErrorMessage(errorMsg: unknown, model?: string): string {
+        const msgStr = this._safeExtractText(errorMsg) || 'Unknown Error';
+        const msg = msgStr.toLowerCase();
         const modelName = model ?? 'Gemini';
 
         if (msg.includes('503') || msg.includes('unavailable') || msg.includes('overloaded')) {
@@ -344,11 +456,13 @@ export class ChatController {
         if (msg.includes('server error') || msg.includes('500'))
             return this._i18n.t('ui.chat.error.server', 'Server error. Please try again later.');
 
-        return errorMsg;
+        return msgStr;
     }
 
-    private _handleError(errorMsg = 'Unknown Error', _model?: string): void {
-        this._ui.appendMessage('assistant', errorMsg, { error: true });
+    private _handleError(errorMsg: unknown = 'Unknown Error', _model?: string): void {
+        const msgStr = this._safeExtractText(errorMsg) || 'Unknown Error';
+
+        this._ui.appendMessage('assistant', msgStr, { error: true });
     }
 
     private _lockUI(input: HTMLTextAreaElement | null) {

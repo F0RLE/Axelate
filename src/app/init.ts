@@ -70,7 +70,7 @@ export class Core {
     private readonly _bridge: GlobalBridge;
     private readonly _eventHandler: EventHandler;
 
-    private static readonly _SPLASH_TIMEOUT_MS = 2000;
+    private static readonly _SPLASH_TIMEOUT_MS = 500;
     constructor() {
         // Initialize base services following Section 16 patterns
         this.tauriProvider = new TauriProvider();
@@ -148,9 +148,10 @@ export class Core {
     public async init(): Promise<void> {
         this.tracer.debug('[Core] Init sequence started.');
 
-        // 1. Emergency Safety Timeout (Guarantee splash disappears)
+        // 1. Emergency Safety Timeout (Guarantee window appears + splash disappears)
         const safetyTimeout = setTimeout(() => {
             this.tracer.warn('[Core] Emergency bootstrap timeout triggered! Forcing UI reveal.');
+            void this.windowService.show();
             this.windowUI.hideSplashScreen();
         }, 12000);
 
@@ -206,22 +207,23 @@ export class Core {
             // 5. Show Window (immediately if ready)
             await this.windowService.show();
 
-            // 6. Init Remaining Services
-            await this.moduleService.init();
-            await this.sidebarUI.init();
+            // 6. Init Remaining Services (parallelized — no inter-dependencies)
             this.navigationUI.init();
             this.downloadUI.init();
-            await this.settingsUI.init();
-            await this.monitoringUI.init();
 
-            // 7. Catalog & AI (Resilient Load)
-            globalThis.addEventListener('catalog-loaded', () => {
-                this._restoreSelectedModules();
-            });
+            await this.settingsService.loadSettings();
 
-            await aiBridge.init();
-            await this.catalog.loadCatalog();
+            await Promise.all([
+                this.moduleService.init(),
+                this.sidebarUI.init(),
+                this.settingsUI.init(),
+                this.monitoringUI.init(),
+                aiBridge.init(),
+                this.catalog.loadCatalog(),
+            ]);
 
+            // 7. Post-catalog restore (needs catalog data)
+            this._restoreSelectedModules();
             this.i18nUI.applyTranslations();
 
             this.debugUI.init();
@@ -239,19 +241,8 @@ export class Core {
         // Wait for splash animation (min 2s)
         await new Promise((r) => setTimeout(r, Core._SPLASH_TIMEOUT_MS));
 
-        // Trigger Fade Out
+        // Trigger Fade Out (hideSplashScreen also reveals sidebar/header/main-area)
         this.windowUI.hideSplashScreen();
-
-        // Reveal UI elements underneath (they were hidden by .fade-in-init)
-        setTimeout(() => {
-            const elements = ['sidebar', 'app-header', 'main-area'];
-            elements.forEach((id) => {
-                const el = document.getElementById(id);
-                if (el) el.classList.remove('hidden'); // Ensure they are technically display:block
-                // 'visible' class triggers opacity: 1 transition from splash.css
-                if (el) el.classList.add('visible');
-            });
-        }, 50); // Almost immediate, let opacity handles transition
 
         this.tracer.info('[Core] Ready.');
     }
@@ -275,14 +266,18 @@ export class Core {
 
     /**
      * Restores module selection from state.
+     * Each AI capability slot ('ai_text', 'ai_image') is stored independently.
      */
     private _restoreSelectedModules(): void {
         this.tracer.debug('[Core] Restoring selected modules...');
         const selected = this.moduleSettings.getSelectedModules();
 
-        for (const category of ['ai', 'services']) {
-            this._restoreCategorySelection(category, selected[category]);
+        // Restore AI slots independently (compound keys)
+        for (const capability of ['ai_text', 'ai_image'] as const) {
+            this._restoreCategorySelection(capability, selected[capability]);
         }
+        // Restore service slots
+        this._restoreCategorySelection('services', selected['services']);
     }
 
     private _restoreCategorySelection(
@@ -293,21 +288,28 @@ export class Core {
 
         let savedAppId = catSelection.id ?? '';
 
-        // Fallback to last active provider if no currently active module is recorded
-        if (category === 'ai' && savedAppId === '') {
-            savedAppId = this.aiSettings.getLastActiveProvider() ?? '';
+        // Fallback: for text slot, check legacy 'ai' key and last_active_provider
+        if (category === 'ai_text' && savedAppId === '') {
+            savedAppId =
+                (this.moduleSettings.getSelectedModules()['ai'] as { id?: string } | undefined)
+                    ?.id ??
+                this.aiSettings.getLastActiveProvider() ??
+                '';
         }
 
         if (savedAppId === '') return;
 
-        const list = globalThis.getCatalogCategory(category);
+        // Catalog uses raw category ('ai' for both text/image slots, 'services' for services)
+        const rawCategory = category.startsWith('ai') ? 'ai' : category;
+        const list = globalThis.getCatalogCategory(rawCategory);
         const fullApp = list.find((a: IApp) => a.id === savedAppId);
 
         if (fullApp !== undefined) {
+            // Pass compound category so AppUI stores under correct slot key
             this.appUI.updateModuleCard(category, fullApp);
 
-            // Auto-start AI provider if it's the AI module
-            if (category === 'ai') {
+            // Auto-start AI provider only for text slot (one provider at a time for now)
+            if (category === 'ai_text') {
                 this.tracer.info(`[Core] Auto-starting saved AI provider: ${savedAppId}`);
                 void aiBridge.startProvider(savedAppId);
             }
@@ -341,7 +343,15 @@ export class Core {
     }
 }
 
+let _coreInitialized = false;
+
 document.addEventListener('DOMContentLoaded', () => {
+    if (_coreInitialized) {
+        tracer.warn('[Core] Double init blocked (HMR reload detected).');
+        return;
+    }
+    _coreInitialized = true;
+
     const coreInstance = new Core();
     coreInstance.init().catch((e: unknown) => {
         tracer.error(`[Core] Boot failed: ${String(e)}`);

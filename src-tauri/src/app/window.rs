@@ -24,17 +24,13 @@ pub fn show_and_focus_window(window: &tauri::WebviewWindow) {
 /// Configures the WebView2 user data folder to isolate cache.
 #[allow(unsafe_code)]
 pub fn setup_webview2_cache() {
-    if let Ok(app_data) = std::env::var("APPDATA") {
-        let mut path = std::path::PathBuf::from(app_data);
-        path.push("AxelateData");
-        path.push("Cache");
-        path.push("com.axelate");
-        if let Err(e) = std::fs::create_dir_all(&path) {
-            tracing::error!("Failed to create custom data directory: {e}");
-        } else if !path.as_os_str().is_empty() {
-            unsafe {
-                std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
-            }
+    let path = crate::utils::paths::CACHE_DIR.join("com.axelate");
+    if let Err(e) = std::fs::create_dir_all(&path) {
+        tracing::error!("Failed to create custom data directory: {e}");
+    } else if !path.as_os_str().is_empty() {
+        // Safety: called at startup before any threads read this env var
+        unsafe {
+            std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &path);
         }
     }
 }

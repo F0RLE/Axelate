@@ -47,7 +47,6 @@ export class EventHandler {
         this._initAppSelectionModal();
         this._initChatPage();
         this._initLanguageModal();
-        this._initCloseConfirmModal();
         this._initDownloadSettingsModal();
         this._initModuleSettingsModal();
         this._initDownloadSpeedSettings();
@@ -231,15 +230,6 @@ export class EventHandler {
         });
         this._addListener(document.getElementById('confirm-lang-btn'), 'click', () => {
             void this._core.i18nUI.confirmLanguage();
-        });
-    }
-
-    private _initCloseConfirmModal(): void {
-        this._addListener(document.getElementById('cancel-close-btn'), 'click', () => {
-            this._core.windowUI.hideCloseConfirmModal();
-        });
-        this._addListener(document.getElementById('confirm-close-btn'), 'click', () => {
-            this._core.windowUI.confirmCloseFromModal();
         });
     }
 

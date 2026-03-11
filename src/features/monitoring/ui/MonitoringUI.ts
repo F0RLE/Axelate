@@ -15,9 +15,6 @@ export class MonitoringUI extends BaseComponent {
     private _lastRenderTime = 0;
     private readonly _RENDER_THROTTLE_MS = 100; // ~10fps UI updates
 
-    // Frontend EMA for smooth graphs
-    private readonly _emaState = new Map<string, number>();
-
     constructor(private readonly service: MonitoringService) {
         super();
     }
@@ -34,7 +31,6 @@ export class MonitoringUI extends BaseComponent {
         this.service.unsubscribe(this._boundUpdateUI);
         this._lastValues.clear();
         this._nodeCache.clear();
-        this._emaState.clear();
 
         // Cancel any active animations
         for (const tweenId of this._activeTweens.values()) {
@@ -62,6 +58,8 @@ export class MonitoringUI extends BaseComponent {
         if (!el || !this.isVisible('network-status')) return;
 
         const cache = this._getCachedNodes(el, 'network-progress');
+        const downMb = stats.network.downloadRate / (1024 * 1024);
+        const upMb = stats.network.uploadRate / (1024 * 1024);
 
         const { val1, val2, unit } = this._formatSmartRate(
             stats.network.downloadRate,
@@ -72,7 +70,7 @@ export class MonitoringUI extends BaseComponent {
         else if (unit === 'GB/s') compactUnit = 'G/s';
 
         this._updateText(el, `↓${val1}·↑${val2}`, compactUnit);
-        this._updateProgressBar(cache.bar, stats.network.activityPercent, true);
+        this._updateProgressBar(cache.bar, this._rateToPercent(downMb, upMb), true);
     }
 
     private _updateDisk(stats: ISystemStats) {
@@ -80,6 +78,8 @@ export class MonitoringUI extends BaseComponent {
         if (!el || !this.isVisible('disk-usage')) return;
 
         const cache = this._getCachedNodes(el, 'disk-progress');
+        const readMb = stats.disk.readRate / (1024 * 1024);
+        const writeMb = stats.disk.writeRate / (1024 * 1024);
 
         const { val1, val2, unit } = this._formatSmartRate(
             stats.disk.readRate,
@@ -91,47 +91,30 @@ export class MonitoringUI extends BaseComponent {
 
         this._updateText(el, `R${val1}·W${val2}`, compactUnit);
         el.title = `Usage: ${stats.disk.utilization.toFixed(1)}%`;
-        this._updateProgressBar(cache.bar, stats.disk.activityPercent, true);
+        this._updateProgressBar(cache.bar, this._rateToPercent(readMb, writeMb), true);
     }
 
     private _animateMainValue(el: HTMLElement, targetVal: number, decimals = 0, suffix = '') {
         const { main } = this._getCachedNodes(el);
         const targetNode = main ?? el;
+        const text = `${targetVal.toFixed(decimals)}${suffix}`;
 
         const start = this._lastValues.get(targetNode) ?? 0;
-        // Skip micro-animations and redundant updates
-        if (Math.abs(start - targetVal) < (decimals === 0 ? 0.5 : 0.05)) {
-            const text = `${targetVal.toFixed(decimals)}${suffix}`;
-            if (targetNode.textContent !== text) targetNode.textContent = text;
-            this._lastValues.set(targetNode, targetVal);
-            return;
-        }
-
         const activeTween = this._activeTweens.get(targetNode);
         if (activeTween !== undefined) {
             cancelAnimationFrame(activeTween);
+            this._activeTweens.delete(targetNode);
         }
 
-        const duration = 400;
-        const startTime = performance.now();
+        if (
+            Math.abs(start - targetVal) < (decimals === 0 ? 0.5 : 0.05) &&
+            targetNode.textContent === text
+        ) {
+            return;
+        }
 
-        const tick = (now: number) => {
-            const elapsed = now - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const ease = 1 - Math.pow(1 - progress, 4);
-
-            const val = start + (targetVal - start) * ease;
-            targetNode.textContent = `${val.toFixed(decimals)}${suffix}`;
-
-            if (progress < 1) {
-                this._activeTweens.set(targetNode, requestAnimationFrame(tick));
-            } else {
-                this._activeTweens.delete(targetNode);
-                this._lastValues.set(targetNode, targetVal);
-            }
-        };
-
-        this._activeTweens.set(targetNode, requestAnimationFrame(tick));
+        targetNode.textContent = text;
+        this._lastValues.set(targetNode, targetVal);
     }
 
     private _updateCPU(stats: ISystemStats) {
@@ -164,11 +147,8 @@ export class MonitoringUI extends BaseComponent {
         const cache = this._getCachedNodes(el, 'gpu-progress');
         const rawUsage = stats.gpu?.usage ?? 0;
 
-        // Frontend EMA for silky smooth graph
-        const ema = this._ema('gpu', rawUsage, 0.3);
-
         this._animateMainValue(el, rawUsage, 0);
-        this._updateProgressBar(cache.bar, ema);
+        this._updateProgressBar(cache.bar, rawUsage);
     }
 
     private _updateVRAM(stats: ISystemStats) {
@@ -184,7 +164,7 @@ export class MonitoringUI extends BaseComponent {
         if (cache.sub && cache.sub.textContent !== subText) cache.sub.textContent = subText;
 
         this._animateMainValue(el, vramUsed, 1);
-        this._updateProgressBar(cache.bar, this._ema('vram', percent, 0.3));
+        this._updateProgressBar(cache.bar, percent);
     }
 
     private _getCachedNodes(
@@ -236,13 +216,6 @@ export class MonitoringUI extends BaseComponent {
         }
     }
 
-    private _ema(key: string, current: number, alpha: number): number {
-        const prev = this._emaState.get(key) ?? current;
-        const next = prev * (1 - alpha) + current * alpha;
-        this._emaState.set(key, next);
-        return next;
-    }
-
     private _formatSmartRate(b1: number, b2: number): { val1: string; val2: string; unit: string } {
         const mb1 = b1 / (1024 * 1024);
         const mb2 = b2 / (1024 * 1024);
@@ -252,5 +225,10 @@ export class MonitoringUI extends BaseComponent {
             return { val1: (mb1 / 1024).toFixed(1), val2: (mb2 / 1024).toFixed(1), unit: 'GB/s' };
         }
         return { val1: Math.round(mb1).toString(), val2: Math.round(mb2).toString(), unit: 'MB/s' };
+    }
+
+    private _rateToPercent(rateAInMb: number, rateBInMb: number): number {
+        const peakRate = Math.max(rateAInMb, rateBInMb);
+        return Math.max(0, Math.min(100, peakRate));
     }
 }

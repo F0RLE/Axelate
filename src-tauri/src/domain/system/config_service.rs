@@ -71,6 +71,10 @@ impl ConfigService {
                     .unwrap_or_else(|| "Cloud AI Provider".to_string()),
                 icon: provider.icon.clone().unwrap_or_else(|| "cloud".to_string()),
                 type_name: "api".to_string(),
+                dl_type: None,
+                capabilities: vec!["text".to_string()],
+                binary: None,
+                raw_config_schema: None,
                 repo_url: None,
                 expected_hash: None,
                 installed: true,
@@ -83,10 +87,9 @@ impl ConfigService {
 
         // 2. Add Local Modules (Distribute by type)
         for item in local_modules {
-            if item.type_name == "service" {
-                service_catalog.push(item);
-            } else {
-                ai_catalog.push(item);
+            match item.type_name.as_str() {
+                "service" | "script" => service_catalog.push(item),
+                _ => ai_catalog.push(item), // "local", "api", etc. → AI catalog
             }
         }
 

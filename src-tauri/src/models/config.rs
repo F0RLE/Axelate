@@ -181,9 +181,18 @@ pub struct ModuleItem {
     pub desc: String,
     /// Icon/emoji
     pub icon: String,
-    /// Module type ("ai" or "service")
+    /// Module type ("api" or "service")
     #[serde(rename = "type")]
     pub type_name: String,
+    /// Download type ("source" or "release")
+    #[serde(rename = "dlType", default)]
+    pub dl_type: Option<String>,
+    /// Engine capabilities (e.g. `["text"]`, `["image"]`)
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    /// Binary executable name for local engines (e.g. "llama-server")
+    #[serde(default)]
+    pub binary: Option<String>,
     /// GitHub repository URL
     pub repo_url: Option<String>,
     /// SHA-256 hash for integrity verification
@@ -194,7 +203,10 @@ pub struct ModuleItem {
     /// Whether module is currently installed (runtime only)
     #[serde(skip_deserializing, default)]
     pub installed: bool,
-    /// Configuration schema definition
+    /// Raw configSchema from JSON (used by engine registry to extract typed defaults)
+    #[serde(rename = "configSchema", default)]
+    pub raw_config_schema: Option<serde_json::Value>,
+    /// Configuration schema definition (runtime only, built from raw_config_schema)
     #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
     pub config_schema: Option<std::collections::HashMap<String, ConfigField>>,
 }

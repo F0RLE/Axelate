@@ -85,13 +85,14 @@ body.snapping #app-header {
 
 .window-control-btn:hover {
     background: transparent !important;
-    color: var(--warning) !important;
-    transform: scale(1.1);
+    color: var(--text-primary) !important;
+    transform: scale(1.05);
 }
 
 .window-control-btn:active {
-    background: rgba(var(--primary-raw), 0.1) !important;
-    transform: scale(0.95);
+    background: transparent !important;
+    transform: scale(0.9);
+    opacity: 0.7;
 }
 
 .close-btn {
@@ -104,13 +105,14 @@ body.snapping #app-header {
 .close-btn:hover {
     background: transparent !important;
     color: var(--danger) !important;
-    transform: rotate(90deg) scale(1.1);
+    transform: rotate(90deg);
 }
 
 .close-btn:active {
-    background: rgba(var(--danger-raw), 0.1) !important;
+    background: transparent !important;
     color: var(--danger) !important;
     transform: rotate(90deg) scale(0.9);
+    opacity: 0.8;
 }
 
 /* When maximized, the close button hits the screen edge, so it should be square */

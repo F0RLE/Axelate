@@ -158,10 +158,10 @@ describe('AIProviderManager', () => {
             expect(manager.isActive()).toBe(false);
         });
 
-        it('should return true for axelate-localai without key', async () => {
+        it('should return true for local engine without key', async () => {
             const mockCore = createMockCore(() => Promise.resolve(''));
             manager.setCore(mockCore);
-            await manager.startProvider('axelate-localai');
+            await manager.startProvider('llamacpp');
 
             expect(manager.isActive()).toBe(true);
         });
@@ -213,7 +213,7 @@ describe('AIProviderManager', () => {
         it('getProviderDisplayName should return known names', () => {
             expect(manager.getProviderDisplayName('gpt')).toBe('OpenAI GPT');
             expect(manager.getProviderDisplayName('gemini')).toBe('Google Gemini');
-            expect(manager.getProviderDisplayName('axelate-localai')).toBe('Axelate Local AI');
+            expect(manager.getProviderDisplayName('llamacpp')).toBe('llamacpp');
             expect(manager.getProviderDisplayName('unknown-id')).toBe('unknown-id');
         });
     });

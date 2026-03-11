@@ -12,6 +12,9 @@ pub struct AppSettings {
     pub use_gpu: bool,
     /// Enable debug mode and logging
     pub debug_mode: bool,
+    /// Dynamic extra settings (module-specific, etc.)
+    #[serde(flatten)]
+    pub extra_settings: std::collections::HashMap<String, String>,
 }
 
 impl Default for AppSettings {
@@ -21,6 +24,7 @@ impl Default for AppSettings {
             language: crate::utils::windows::detect_system_language(),
             use_gpu: true,
             debug_mode: false,
+            extra_settings: std::collections::HashMap::new(),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::errors::AppError;
-use crate::utils::paths::{MODULES_DIR, TEMP_DIR};
+use crate::utils::paths::{LEGACY_MODULES_DIR, MODULES_DIR, TEMP_DIR};
 use chrono;
 use futures_util::StreamExt;
 use std::collections::HashMap;
@@ -55,7 +55,7 @@ pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
 /// Returns the filesystem path to a module's directory
 pub fn get_module_path(module_id: &str) -> PathBuf {
     // Note: Callers should validate module_id before using this path for sensitive operations
-    MODULES_DIR.join(module_id)
+    resolve_existing_module_path(module_id).unwrap_or_else(|| MODULES_DIR.join(module_id))
 }
 
 /// Checks if a module is installed locally
@@ -63,15 +63,14 @@ pub fn is_module_installed(module_id: &str) -> bool {
     if validate_module_id(module_id).is_err() {
         return false;
     }
-    let module_path = MODULES_DIR.join(module_id);
-    module_path.exists() && module_path.is_dir()
+    resolve_existing_module_path(module_id).is_some()
 }
 
 /// Deletes a module from disk
 pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
     validate_module_id(module_id)?;
 
-    let module_path = MODULES_DIR.join(module_id);
+    let module_path = get_module_path(module_id);
     if module_path.exists() {
         tokio::fs::remove_dir_all(&module_path)
             .await
@@ -85,6 +84,14 @@ pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
     } else {
         Err(AppError::NotFound("Module not found".to_string()))
     }
+}
+
+fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
+    let candidates = [MODULES_DIR.join(module_id), LEGACY_MODULES_DIR.join(module_id)];
+
+    candidates
+        .into_iter()
+        .find(|path| path.exists() && path.is_dir())
 }
 
 use std::sync::LazyLock;
@@ -440,10 +447,10 @@ impl FileVerifier {
 struct ArchiveExtractor;
 
 impl ArchiveExtractor {
-    /// Extracts a ZIP archive to the target directory, handling nested roots
+    /// Extracts an archive to the target directory, handling nested roots and .tar.gz/.zip
     async fn extract(
         app: &AppHandle,
-        zip_path: &Path,
+        archive_path: &Path,
         module_id: &str,
         expected_hash: Option<&String>,
     ) -> Result<(), AppError> {
@@ -461,173 +468,224 @@ impl ArchiveExtractor {
 
         let app_handle = app.clone();
         let mid = module_id.to_string();
-        let zpath = zip_path.to_owned();
+        let apath = archive_path.to_owned();
         let epath = extraction_path.clone();
         let hash_snapshot = expected_hash.cloned();
 
+        let is_tar_gz = archive_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|name| name.ends_with(".tar.gz") || std::path::Path::new(name).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("tgz")));
+
         // 2. Heavy Extraction
         tokio::task::spawn_blocking(move || {
-            let zip_file = fs::File::open(&zpath).map_err(|e| e.to_string())?;
-            let mut archive =
-                ZipArchive::new(zip_file).map_err(|e| format!("Invalid archive: {e}"))?;
+            let archive_file = fs::File::open(&apath).map_err(|e| e.to_string())?;
 
-            let total_files = archive.len();
-
-            // ZIP Bomb & Integrity Limits
             const MAX_TOTAL_UNCOMPRESSED_SIZE: u64 = 800 * 1024 * 1024; // 800MB Limit
             const MAX_FILE_COUNT: usize = 10000;
             const MAX_SINGLE_FILE_SIZE: u64 = 300 * 1024 * 1024; // 300MB per file
 
-            let mut current_total_size: u64 = 0;
-            let mut seen_files = std::collections::HashSet::new();
+            if is_tar_gz {
+                tracing::info!("Extracting .tar.gz archive for {}", mid);
+                let tar = flate2::read::GzDecoder::new(archive_file);
+                let mut archive = tar::Archive::new(tar);
+                
+                let mut current_total_size: u64 = 0;
+                let mut file_count: usize = 0;
 
-            if total_files > MAX_FILE_COUNT {
-                return Err(format!(
-                    "Archive contains too many files ({total_files}). Limit is {MAX_FILE_COUNT}."
-                ));
-            }
+                for entry_result in archive.entries().map_err(|e| e.to_string())? {
+                    let mut entry = entry_result.map_err(|e| e.to_string())?;
+                    file_count += 1;
 
-            // Determine if there is a common root folder to skip
-            let root_to_skip = {
-                let mut first_dir: Option<String> = None;
-                let mut all_share_root = true;
+                    if file_count > MAX_FILE_COUNT {
+                        return Err(format!("Archive contains too many files. Limit is {MAX_FILE_COUNT}."));
+                    }
+
+                    // Strict Security Filtering for Tar
+                    let path = entry.path().map_err(|e| e.to_string())?.into_owned();
+                    if path.is_absolute() || path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+                        return Err(format!("Security Violation: Invalid path {}", path.display()));
+                    }
+
+                    // Skip common single root folders (heuristic: skip first component if it's the same for all, though harder in streaming tar. Just dump flat or let next step handle it.)
+                    // For simplicity in .tar.gz, we just extract it inside the epath.
+                    let outpath = epath.join(&path);
+
+                    if entry.header().entry_type().is_dir() {
+                        fs::create_dir_all(&outpath).ok();
+                        continue;
+                    }
+
+                    if let Some(p) = outpath.parent() {
+                        fs::create_dir_all(p).ok();
+                    }
+
+                    let size = entry.header().size().unwrap_or(0);
+                    if size > MAX_SINGLE_FILE_SIZE {
+                        return Err(format!("Security Violation: File {} size exceeds limit", path.display()));
+                    }
+                    
+                    current_total_size += size;
+                    if current_total_size > MAX_TOTAL_UNCOMPRESSED_SIZE {
+                        return Err(format!("Extraction aborted: Total size exceeds limit ({}MB)", MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)));
+                    }
+
+                    entry.unpack(&outpath).map_err(|e| format!("Unpack error for {}: {e}", path.display()))?;
+                }
+            } else {
+                tracing::info!("Extracting .zip archive for {}", mid);
+                let mut archive = ZipArchive::new(archive_file).map_err(|e| format!("Invalid archive: {e}"))?;
+
+                let total_files = archive.len();
+
+                let mut current_total_size: u64 = 0;
+                let mut seen_files = std::collections::HashSet::new();
+
+                if total_files > MAX_FILE_COUNT {
+                    return Err(format!(
+                        "Archive contains too many files ({total_files}). Limit is {MAX_FILE_COUNT}."
+                    ));
+                }
+
+                // Determine if there is a common root folder to skip
+                let root_to_skip = {
+                    let mut first_dir: Option<String> = None;
+                    let mut all_share_root = true;
+
+                    for i in 0..total_files {
+                        let file = archive.by_index(i).map_err(|e: ZipError| e.to_string())?;
+                        let name = file.name().to_string();
+                        if name == "/" || name.is_empty() {
+                            continue;
+                        }
+
+                        let parts: Vec<&str> =
+                            name.split('/').filter(|s: &&str| !s.is_empty()).collect();
+                        if parts.is_empty() {
+                            continue;
+                        }
+
+                        match &first_dir {
+                            None => {
+                                if let Some(first) = parts.first() {
+                                    first_dir = Some((*first).to_string());
+                                }
+                            }
+                            Some(root) => {
+                                if parts.first().is_some_and(|first| *first != root) {
+                                    all_share_root = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if all_share_root { first_dir } else { None }
+                };
 
                 for i in 0..total_files {
-                    let file = archive.by_index(i).map_err(|e: ZipError| e.to_string())?;
-                    let name = file.name().to_string();
-                    if name == "/" || name.is_empty() {
-                        continue;
+                    let mut file = archive
+                        .by_index(i)
+                        .map_err(|e: ZipError| e.to_string())?;
+
+                    // Security: Duplicate Entry Detection
+                    let raw_name = file.name().to_string();
+                    if !seen_files.insert(raw_name.clone()) {
+                        return Err(format!("Security Violation: Duplicate entry in archive: {raw_name}"));
                     }
 
-                    let parts: Vec<&str> =
-                        name.split('/').filter(|s: &&str| !s.is_empty()).collect();
-                    if parts.is_empty() {
-                        continue;
-                    }
-
-                    match &first_dir {
-                        None => {
-                            if let Some(first) = parts.first() {
-                                first_dir = Some((*first).to_string());
-                            }
-                        }
-                        Some(root) => {
-                            if parts.first().is_some_and(|first| *first != root) {
-                                all_share_root = false;
-                                break;
+                    // Security: Symlink, Hardlink, and Device Rejection
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::MetadataExt;
+                        if let Some(mode) = file.unix_mode() {
+                            let file_type = mode & 0o170000;
+                            if file_type != 0o100000 && file_type != 0o040000 {
+                                return Err(format!("Security Violation: Unsupported file type (symlink/device) in archive: {raw_name}"));
                             }
                         }
                     }
-                }
-                if all_share_root { first_dir } else { None }
-            };
 
-            for i in 0..total_files {
-                let mut file = archive
-                    .by_index(i)
-                    .map_err(|e: ZipError| e.to_string())?;
+                    let outpath = match file.enclosed_name() {
+                        Some(path) => {
+                            if path.is_absolute() {
+                                return Err(format!("Security Violation: Absolute path detected: {raw_name}"));
+                            }
 
-                // Security: Duplicate Entry Detection
-                let raw_name = file.name().to_string();
-                if !seen_files.insert(raw_name.clone()) {
-                    return Err(format!("Security Violation: Duplicate entry in archive: {raw_name}"));
-                }
-
-                // Security: Symlink, Hardlink, and Device Rejection
-                // Note: enclosed_name covers basic ZipSlip but we want to be explicit about types
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::MetadataExt;
-                    if let Some(mode) = file.unix_mode() {
-                        let file_type = mode & 0o170000;
-                        if file_type != 0o100000 && file_type != 0o040000 {
-                            return Err(format!("Security Violation: Unsupported file type (symlink/device) in archive: {raw_name}"));
-                        }
-                    }
-                }
-
-                let outpath = match file.enclosed_name() {
-                    Some(path) => {
-                        // Security: Absolute Path Rejection
-                        if path.is_absolute() {
-                            return Err(format!("Security Violation: Absolute path detected: {raw_name}"));
-                        }
-
-                        if let Some(root) = &root_to_skip {
-                            let mut components = path.as_path().components();
-                            let first = components.next();
-                            if let Some(std::path::Component::Normal(c)) = first {
-                                if c.to_string_lossy() == *root {
-                                    epath.join(components.as_path())
+                            if let Some(root) = &root_to_skip {
+                                let mut components = path.as_path().components();
+                                let first = components.next();
+                                if let Some(std::path::Component::Normal(c)) = first {
+                                    if c.to_string_lossy() == *root {
+                                        epath.join(components.as_path())
+                                    } else {
+                                        epath.join(path)
+                                    }
                                 } else {
                                     epath.join(path)
                                 }
                             } else {
                                 epath.join(path)
                             }
-                        } else {
-                            epath.join(path)
                         }
-                    }
-                    None => continue,
-                };
+                        None => continue,
+                    };
 
-                if outpath == epath {
-                    continue;
-                }
-
-                if (*file.name()).ends_with('/') {
-                    fs::create_dir_all(&outpath).ok();
-                } else {
-                    if let Some(p) = outpath.parent()
-                        && !p.exists()
-                    {
-                        fs::create_dir_all(p).ok();
+                    if outpath == epath {
+                        continue;
                     }
 
-                    // ZIP Bomb Protection (Advanced)
-                    let u_size = file.size();
-                    let c_size = file.compressed_size();
+                    if (*file.name()).ends_with('/') {
+                        fs::create_dir_all(&outpath).ok();
+                    } else {
+                        if let Some(p) = outpath.parent()
+                            && !p.exists()
+                        {
+                            fs::create_dir_all(p).ok();
+                        }
 
-                    if u_size > MAX_SINGLE_FILE_SIZE {
-                        return Err(format!("Security Violation: Single file size exceeds limit ({}MB): {raw_name}", MAX_SINGLE_FILE_SIZE / (1024 * 1024)));
-                    }
+                        let u_size = file.size();
+                        let c_size = file.compressed_size();
 
-                    if c_size > 0 {
-                        #[allow(clippy::cast_precision_loss)]
-                        let ratio = (u_size as f64) / (c_size as f64);
-                        if ratio > 1000.0 {
+                        if u_size > MAX_SINGLE_FILE_SIZE {
+                            return Err(format!("Security Violation: Single file size exceeds limit ({}MB): {raw_name}", MAX_SINGLE_FILE_SIZE / (1024 * 1024)));
+                        }
+
+                        if c_size > 0 {
+                            #[allow(clippy::cast_precision_loss)]
+                            let ratio = (u_size as f64) / (c_size as f64);
+                            if ratio > 1000.0 {
+                                return Err(format!(
+                                    "Security Violation: Anomalous compression ratio ({ratio}x) detected for {raw_name}"
+                                ));
+                            }
+                        }
+
+                        current_total_size += u_size;
+                        if current_total_size > MAX_TOTAL_UNCOMPRESSED_SIZE {
                             return Err(format!(
-                                "Security Violation: Anomalous compression ratio ({ratio}x) detected for {raw_name}"
+                                "Extraction aborted: Total uncompressed size exceeds limit ({}MB)",
+                                MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)
                             ));
                         }
+
+                        let mut outfile = fs::File::create(&outpath)
+                            .map_err(|e| format!("Failed to create file {}: {e}", outpath.display()))?;
+                        copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
                     }
 
-                    current_total_size += u_size;
-                    if current_total_size > MAX_TOTAL_UNCOMPRESSED_SIZE {
-                        return Err(format!(
-                            "Extraction aborted: Total uncompressed size exceeds limit ({}MB)",
-                            MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)
-                        ));
+                    if i % 10 == 0 {
+                        #[allow(clippy::cast_precision_loss)]
+                        let progress = i as f32 / total_files as f32;
+                        emit_progress(
+                            &app_handle,
+                            &mid,
+                            "extracting",
+                            "Extracting...",
+                            progress,
+                            0,
+                            0,
+                        );
                     }
-
-                    let mut outfile = fs::File::create(&outpath)
-                        .map_err(|e| format!("Failed to create file {}: {e}", outpath.display()))?;
-                    copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
-                }
-
-                if i % 10 == 0 {
-                    #[allow(clippy::cast_precision_loss)]
-                    let progress = i as f32 / total_files as f32;
-                    emit_progress(
-                        &app_handle,
-                        &mid,
-                        "extracting",
-                        "Extracting...",
-                        progress,
-                        0,
-                        0,
-                    );
                 }
             }
 
@@ -679,6 +737,7 @@ pub async fn download_module(
     module_id: String,
     repo_url: String,
     expected_hash: Option<String>,
+    dl_type: Option<String>,
 ) -> Result<(), AppError> {
     validate_module_id(&module_id)?;
 
@@ -690,7 +749,13 @@ pub async fn download_module(
         emit_progress(&app, &module_id, "connecting", "Connecting...", 0.0, 0, 0);
 
         let client = NetworkClient::build_client(&module_id)?;
-        let final_url = UrlResolver::resolve(&client, &repo_url).await?;
+
+        let final_url = if dl_type.as_deref() == Some("release") {
+            crate::domain::modules::github_releases::fetch_latest_release(&client, &repo_url)
+                .await?
+        } else {
+            UrlResolver::resolve(&client, &repo_url).await?
+        };
 
         NetworkClient::download_file(
             &app,

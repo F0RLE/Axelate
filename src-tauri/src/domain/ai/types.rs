@@ -90,3 +90,49 @@ pub struct ChatSession {
     /// Last modification time (Unix timestamp)
     pub last_updated: f64,
 }
+
+/// Image generation request parameters
+#[derive(Debug, Serialize, Deserialize, Clone, Type)]
+pub struct ImageGenerationRequest {
+    /// AI provider or local engine ID
+    pub provider: String,
+    /// The text prompt for generation
+    pub prompt: String,
+    /// Original user text before UI prompt prefixes
+    pub original_prompt: Option<String>,
+    /// Model identifier
+    pub model: String,
+    /// Session identifier for history tracking
+    pub session_id: Option<String>,
+    /// Number of inference steps
+    pub steps: Option<u32>,
+    /// Guidance scale (CFG)
+    pub cfg_scale: Option<f32>,
+    /// Image width in pixels
+    pub width: Option<u32>,
+    /// Image height in pixels
+    pub height: Option<u32>,
+    /// Sampler algorithm
+    pub sampler: Option<String>,
+    /// Random seed
+    pub seed: Option<i32>,
+    /// Clip skip
+    pub clip_skip: Option<i32>,
+    /// Optional negative prompt
+    pub negative_prompt: Option<String>,
+    /// Number of images to generate (batch size)
+    pub batch_size: Option<u32>,
+    /// Scheduler algorithm
+    pub scheduler: Option<String>,
+}
+
+/// Image generation response
+#[derive(Debug, Serialize, Deserialize, Type)]
+pub struct ImageGenerationResponse {
+    /// Base64 encoded images or URLs
+    pub images: Vec<String>,
+    /// Whether request was successful
+    pub ok: bool,
+    /// Error message if failed
+    pub error: Option<String>,
+}

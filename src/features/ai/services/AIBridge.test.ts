@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Deep mock of Tauri API
-const mockInvoke = vi.fn();
+const mockInvoke = vi.fn().mockResolvedValue(null);
 const mockListen = vi.fn().mockResolvedValue(() => {
     /* no-op */
 });
@@ -652,31 +652,32 @@ describe('AIBridge', () => {
         });
     });
 
-    // ---------------------------------------------------------- sendMessage with localai
-    describe('sendMessage with axelate-localai', () => {
-        it('should return disabled message for axelate-localai provider', async () => {
-            // Setup: start a normal provider first so manager is active
-            mockInvoke.mockImplementation(async (cmd: string) => {
-                await Promise.resolve();
-                if (cmd === 'get_secure_key') return 'sk-test';
-                return null;
-            });
-
-            // Force manager to have localai as active provider via spy
+    // ---------------------------------------------------------- sendMessage with local engine
+    describe('sendMessage with local engine (llamacpp)', () => {
+        it('should proceed without API key for local engine provider', async () => {
+            // Force manager to have llamacpp as active provider via spy
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((aiBridge as any)._manager, 'refreshActiveApiKey').mockResolvedValue(
                 undefined,
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             Object.defineProperty((aiBridge as any)._manager, 'activeProviderId', {
-                get: () => 'axelate-localai',
+                get: () => 'llamacpp',
             });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             Object.defineProperty((aiBridge as any)._manager, 'apiKey', { get: () => null });
+            // isActive() returns true for local providers
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn((aiBridge as any)._manager, 'isActive').mockReturnValue(true);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn((aiBridge as any)._transport, 'send').mockResolvedValue({
+                ok: true,
+                text: 'Local response',
+            });
 
             const result = await aiBridge.sendMessage('Hello');
 
-            expect(result.ok).toBe(false);
+            expect(result.ok).toBe(true);
         });
     });
 

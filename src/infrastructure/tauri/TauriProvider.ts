@@ -45,10 +45,60 @@ export class TauriProvider implements IBridge {
         }
 
         try {
-            return await this._performInvoke<T>(cmd, args);
+            const rawResponse = await this._performInvoke<unknown>(cmd, args);
+
+            // Handle Specta Result wrapper: { status: "ok", data: T } or { status: "error", error: E }
+            if (this._isSpectaResult(rawResponse)) {
+                if (rawResponse.status === 'ok') {
+                    return rawResponse.data as T;
+                } else {
+                    const errorPayload = rawResponse.error;
+                    let message = 'Backend error';
+
+                    if (typeof errorPayload === 'string') {
+                        message = errorPayload;
+                    } else if (
+                        typeof errorPayload === 'object' &&
+                        errorPayload !== null &&
+                        'message' in errorPayload
+                    ) {
+                        message = (errorPayload as { message: string }).message;
+                    } else if (
+                        typeof errorPayload === 'object' &&
+                        errorPayload !== null &&
+                        'payload' in errorPayload
+                    ) {
+                        // Some AppErrors might have a payload field
+                        message = String((errorPayload as { payload: unknown }).payload);
+                    }
+
+                    const err = new Error(message);
+                    // Attach full error for debugging if needed
+                    Object.defineProperty(err, 'raw', { value: errorPayload, enumerable: false });
+                    throw err;
+                }
+            }
+
+            return rawResponse as T;
         } catch (e: unknown) {
             return this._handleInvokeError<T>(cmd, args, e);
         }
+    }
+
+    /**
+     * Type guard for Specta Result wrapper.
+     */
+    private _isSpectaResult(obj: unknown): obj is {
+        status: 'ok' | 'error';
+        data?: unknown;
+        error?: unknown;
+    } {
+        if (typeof obj !== 'object' || obj === null) return false;
+        const res = obj as Record<string, unknown>;
+        return (
+            (res['status'] === 'ok' && 'data' in res) ||
+            (res['status'] === 'error' && 'error' in res)
+        );
     }
 
     /**
@@ -62,7 +112,26 @@ export class TauriProvider implements IBridge {
      * Standardized error handling for IPC failures.
      */
     private _handleInvokeError<T>(_cmd: string, _args: unknown, e: unknown): Promise<T> {
-        return Promise.reject(e instanceof Error ? e : new Error(String(e)));
+        if (e instanceof Error) {
+            return Promise.reject(e);
+        }
+        if (typeof e === 'object' && e !== null) {
+            const obj = e as Record<string, unknown>;
+            if (typeof obj['message'] === 'string') {
+                const err = new Error(obj['message']);
+                if (typeof obj['code'] === 'string') {
+                    // Use a safer cast to avoid typescript any issues but still attach code
+                    Object.defineProperty(err, 'code', { value: obj['code'], enumerable: true });
+                }
+                return Promise.reject(err);
+            }
+            try {
+                return Promise.reject(new Error(JSON.stringify(e)));
+            } catch {
+                return Promise.reject(new Error('[Complex Error Object]'));
+            }
+        }
+        return Promise.reject(new Error(String(e)));
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
@@ -131,14 +200,14 @@ export class TauriProvider implements IBridge {
                 theme: 'dark',
                 use_gpu: true,
                 debug_mode: false,
-            } satisfies Bindings.AppSettings,
+            } as Bindings.AppSettings,
             get_translations: {},
             get_system_language: 'en',
             get_config: {
                 version: '1.0.0',
                 catalog: { ai: [], services: [], stars: [] },
                 apiProviders: [],
-            } satisfies Bindings.AppConfig,
+            } as Bindings.AppConfig,
             get_modules: [] satisfies Bindings.Module[],
             get_app_bootstrap_data: null,
             get_system_stats: {

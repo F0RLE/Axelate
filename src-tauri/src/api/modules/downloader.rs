@@ -11,8 +11,17 @@ pub async fn download_module(
     module_id: String,
     repo_url: String,
     expected_hash: Option<String>,
+    dl_type: Option<String>,
 ) -> Result<(), AppError> {
-    downloader::download_module(app, &downloader, module_id, repo_url, expected_hash).await
+    downloader::download_module(
+        app,
+        &downloader,
+        module_id,
+        repo_url,
+        expected_hash,
+        dl_type,
+    )
+    .await
 }
 
 #[tauri::command]

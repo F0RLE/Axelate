@@ -53,6 +53,21 @@ pub struct UIState {
     pub resolution_zoom: std::collections::HashMap<String, f64>,
     /// Sound effects enabled state
     pub sound_enabled: bool,
+    /// Selected reasoning level by AI provider
+    #[serde(default)]
+    pub ai_thinking_level: std::collections::HashMap<String, String>,
+    /// Last provider activated in the UI
+    #[serde(default)]
+    pub last_active_provider: Option<String>,
+    /// Current persistent AI session identifier
+    #[serde(default)]
+    pub ai_session_id: Option<String>,
+    /// Preferred launcher interface language
+    #[serde(default)]
+    pub preferred_language: Option<String>,
+    /// Request to reopen the chat and reveal the latest message after background work.
+    #[serde(default)]
+    pub pending_chat_reveal: bool,
 }
 
 impl Default for UIState {
@@ -71,6 +86,11 @@ impl Default for UIState {
             last_page: None,
             resolution_zoom: std::collections::HashMap::new(),
             sound_enabled: true,
+            ai_thinking_level: std::collections::HashMap::new(),
+            last_active_provider: None,
+            ai_session_id: None,
+            preferred_language: None,
+            pending_chat_reveal: false,
         }
     }
 }

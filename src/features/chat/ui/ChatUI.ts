@@ -165,12 +165,35 @@ export class ChatUI {
         this.updateAttachments([], () => void 0);
     }
 
+    private _extractFromObject(obj: Record<string, unknown>): string {
+        if ('message' in obj && typeof obj['message'] === 'string') return obj['message'];
+        if ('error' in obj && typeof obj['error'] === 'string') return obj['error'];
+        if ('text' in obj && typeof obj['text'] === 'string') return obj['text'];
+
+        try {
+            return JSON.stringify(obj, null, 2);
+        } catch {
+            return '[Сложный объект: невозможно отобразить]';
+        }
+    }
+
+    private _safeExtractText(data: unknown): string {
+        if (typeof data === 'string') return data;
+        if (data instanceof Error) return data.message;
+
+        if (typeof data === 'object' && data !== null) {
+            return this._extractFromObject(data as Record<string, unknown>);
+        }
+
+        return typeof data === 'number' || typeof data === 'boolean' ? String(data) : '';
+    }
+
     /**
      * Appends a new message to the chat container.
      */
     public appendMessage(
         role: IChatRole,
-        content: string,
+        content: unknown,
         opts: Record<string, unknown> = {},
     ): void {
         this._prepareContainer();
@@ -178,8 +201,13 @@ export class ChatUI {
         const row = document.createElement('div');
         row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
 
+        const safeContent = this._safeExtractText(content);
+
         const bubble = this._createMessageBubble(opts);
-        const textNode = this._createMessageTextNode(content, opts);
+        if (role === 'user') {
+            this._appendUserCopyButton(bubble, safeContent);
+        }
+        const textNode = this._createMessageTextNode(safeContent, opts);
         bubble.appendChild(textNode);
 
         this._appendAttachments(bubble, opts['attachments'] as IChatAttachment[]);
@@ -201,8 +229,9 @@ export class ChatUI {
         opts: Record<string, unknown> = {},
     ): {
         textNode: HTMLElement;
-        update: (chunk: string) => void;
-        finalize: (fullContent: string, finalOpts?: Record<string, unknown>) => void;
+        update: (chunk: unknown) => void;
+        replace: (text: string) => void;
+        finalize: (fullContent: unknown, finalOpts?: Record<string, unknown>) => void;
     } {
         this._prepareContainer();
 
@@ -226,8 +255,9 @@ export class ChatUI {
 
         return {
             textNode,
-            update: (chunk: string) => {
-                accumulatedText += chunk;
+            update: (chunk: unknown) => {
+                const safeChunk = this._safeExtractText(chunk);
+                accumulatedText += safeChunk;
                 renderCounter++;
                 const now = Date.now();
 
@@ -247,8 +277,15 @@ export class ChatUI {
                         ) {
                             textNode.textContent = accumulatedText;
                         } else {
-                            const rawHtml = marked.parse(accumulatedText) as string;
-                            textNode.innerHTML = DOMPurify.sanitize(rawHtml);
+                            // marked.parse can return a Promise if async plugins are used
+                            const parseResult = marked.parse(accumulatedText);
+                            if (parseResult instanceof Promise) {
+                                void parseResult.then((rawHtml) => {
+                                    textNode.innerHTML = DOMPurify.sanitize(rawHtml);
+                                });
+                            } else {
+                                textNode.innerHTML = DOMPurify.sanitize(parseResult);
+                            }
                         }
                     } catch {
                         textNode.textContent = accumulatedText;
@@ -258,12 +295,42 @@ export class ChatUI {
 
                 this._scrollToBottom(true);
             },
-            finalize: (fullContent: string, finalOpts: Record<string, unknown> = {}) => {
+            replace: (text: string) => {
+                accumulatedText = text;
+                renderCounter++;
+                const now = Date.now();
+
                 try {
-                    const finalHtml = marked.parse(fullContent) as string;
-                    textNode.innerHTML = DOMPurify.sanitize(finalHtml);
+                    const parseResult = marked.parse(text);
+                    if (parseResult instanceof Promise) {
+                        void parseResult.then((rawHtml) => {
+                            textNode.innerHTML = DOMPurify.sanitize(rawHtml);
+                        });
+                    } else {
+                        textNode.innerHTML = DOMPurify.sanitize(parseResult);
+                    }
                 } catch {
-                    textNode.textContent = fullContent;
+                    textNode.textContent = text;
+                }
+
+                lastRenderTime = now;
+                this._scrollToBottom(true);
+            },
+            finalize: (fullContent: unknown, finalOpts: Record<string, unknown> = {}) => {
+                const safeFullContent = this._safeExtractText(fullContent);
+
+                try {
+                    const parseResult = marked.parse(safeFullContent);
+                    if (parseResult instanceof Promise) {
+                        void parseResult.then((finalHtml) => {
+                            textNode.innerHTML = DOMPurify.sanitize(finalHtml);
+                            this._scrollToBottom();
+                        });
+                    } else {
+                        textNode.innerHTML = DOMPurify.sanitize(parseResult);
+                    }
+                } catch {
+                    textNode.textContent = safeFullContent;
                 }
 
                 if (finalOpts['attachments'] !== undefined) {
@@ -306,6 +373,13 @@ export class ChatUI {
         this._messagesContainer.scrollTop = this._messagesContainer.scrollHeight;
     }
 
+    public revealLatestMessage(): void {
+        this._scrollToBottom();
+        globalThis.setTimeout(() => {
+            this._scrollToBottom();
+        }, 120);
+    }
+
     /**
      * Creates a message bubble element.
      */
@@ -313,6 +387,23 @@ export class ChatUI {
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble${opts['error'] === true ? ' chat-error' : ''}`;
         return bubble;
+    }
+
+    private _appendUserCopyButton(bubble: HTMLElement, content: string): void {
+        if (content.trim() === '') return;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chat-copy-own-btn';
+        btn.dataset['copyText'] = content;
+        btn.title = getGlobalWin().t('ui.launcher.web.copy', 'Copy');
+        btn.innerHTML = DOMPurify.sanitize(`
+            <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+        `);
+        bubble.appendChild(btn);
     }
 
     /**
@@ -326,8 +417,14 @@ export class ChatUI {
 
         // Render Markdown
         try {
-            const rawHtml = marked.parse(finalContent) as string;
-            textNode.innerHTML = DOMPurify.sanitize(rawHtml);
+            const parseResult = marked.parse(finalContent);
+            if (parseResult instanceof Promise) {
+                void parseResult.then((rawHtml) => {
+                    textNode.innerHTML = DOMPurify.sanitize(rawHtml);
+                });
+            } else {
+                textNode.innerHTML = DOMPurify.sanitize(parseResult);
+            }
         } catch (e) {
             tracer.error('[ChatUI] Markdown render error:', e);
             textNode.textContent = finalContent;
@@ -445,14 +542,136 @@ export class ChatUI {
                 const mime = img.mime || 'image/png';
                 const b64 = img.data_base64 || '';
                 if (b64 === '') return;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'chat-img-wrapper';
+                wrapper.style.position = 'relative';
+                wrapper.style.display = 'inline-block';
+                wrapper.style.maxWidth = '100%';
+
                 const el = document.createElement('img');
                 el.className = 'chat-img';
                 el.src = `data:${mime};base64,${b64}`;
-                bubble.appendChild(el);
+                el.style.display = 'block';
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = 'var(--radius-md)';
+
+                const btn = document.createElement('button');
+                btn.className = 'chat-img-download-btn';
+                btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
+
+                const g = getGlobalWin();
+                btn.title =
+                    typeof g.t === 'function'
+                        ? g.t('ui.chat.save_image', 'Save Image')
+                        : 'Save Image';
+
+                // Add basic overlay styling directly for now
+                btn.style.position = 'absolute';
+                btn.style.bottom = '10px';
+                btn.style.right = '10px';
+                btn.style.background = 'rgba(0,0,0,0.6)';
+                btn.style.color = 'white';
+                btn.style.border = 'none';
+                btn.style.borderRadius = 'var(--radius-sm)';
+                btn.style.padding = '6px';
+                btn.style.cursor = 'pointer';
+                btn.style.display = 'flex';
+                btn.style.alignItems = 'center';
+                btn.style.justifyContent = 'center';
+                btn.style.transition = 'background 0.2s';
+
+                btn.onmouseenter = () => (btn.style.background = 'rgba(0,0,0,0.8)');
+                btn.onmouseleave = () => (btn.style.background = 'rgba(0,0,0,0.6)');
+
+                btn.onclick = () => {
+                    void this._downloadImageBase64(b64, mime);
+                };
+
+                wrapper.appendChild(el);
+                wrapper.appendChild(btn);
+                bubble.appendChild(wrapper);
             } catch {
                 /* ignore image errors */
             }
         });
+    }
+
+    private _base64ToBytes(b64: string): Uint8Array {
+        const binaryString = atob(b64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.codePointAt(i) ?? 0;
+        }
+        return bytes;
+    }
+
+    private async _performSaveImage(b64: string, ext: string): Promise<string | null> {
+        type DialogModule = {
+            save(opts: {
+                filters: { name: string; extensions: string[] }[];
+                defaultPath: string;
+            }): Promise<string | null>;
+        };
+        type FsModule = {
+            writeFile(path: string, contents: Uint8Array): Promise<void>;
+        };
+
+        const dialogPlugin = (await import('@tauri-apps/plugin-dialog')) as unknown as DialogModule;
+        const fsPlugin = (await import('@tauri-apps/plugin-fs')) as unknown as FsModule;
+
+        const saveDialog = dialogPlugin.save;
+        const writeFile = fsPlugin.writeFile;
+
+        if (typeof saveDialog !== 'function' || typeof writeFile !== 'function') {
+            throw new TypeError('Could not find Tauri save/writeFile plugins.');
+        }
+
+        const filePath = await saveDialog({
+            filters: [{ name: 'Image', extensions: [ext] }],
+            defaultPath: `generated_image_${Date.now()}.${ext}`,
+        });
+
+        if (typeof filePath === 'string' && filePath.length > 0) {
+            const bytes = this._base64ToBytes(b64);
+            await writeFile(filePath, bytes);
+            return filePath;
+        }
+        return null;
+    }
+
+    private async _downloadImageBase64(b64: string, mime: string): Promise<void> {
+        try {
+            let ext = 'png';
+            if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+            if (mime.includes('webp')) ext = 'webp';
+
+            const filePath = await this._performSaveImage(b64, ext);
+
+            if (filePath !== null) {
+                const g = getGlobalWin();
+                if (typeof g.showToast === 'function') {
+                    g.showToast(
+                        typeof g.t === 'function'
+                            ? g.t('ui.chat.image_saved', 'Image saved successfully')
+                            : 'Image saved successfully',
+                        'success',
+                    );
+                }
+            }
+        } catch (e) {
+            tracer.error('[ChatUI] Save image failed', e);
+            const g = getGlobalWin();
+            if (typeof g.showToast === 'function') {
+                g.showToast(
+                    typeof g.t === 'function'
+                        ? g.t('ui.chat.image_save_failed', 'Failed to save image')
+                        : 'Failed to save image',
+                    'error',
+                );
+            }
+        }
     }
 
     /**
@@ -633,6 +852,24 @@ export class ChatUI {
      */
     private async _handleCopyClick(e: MouseEvent): Promise<void> {
         const target = e.target as HTMLElement;
+        const ownBtn = target.closest('.chat-copy-own-btn');
+        if (ownBtn instanceof HTMLElement) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const text = ownBtn.dataset['copyText'] ?? '';
+            if (text === '') return;
+
+            try {
+                await this._copyToClipboard(text);
+                this._showCopyResult(ownBtn, true);
+            } catch (err) {
+                tracer.error('[ChatUI] Message copy failed:', err);
+                this._showCopyResult(ownBtn, false);
+            }
+            return;
+        }
+
         const btn = target.closest('.code-copy-btn');
         if (btn === null) return;
 
@@ -658,7 +895,7 @@ export class ChatUI {
         const isTauri = win.__TAURI_INTERNALS__ !== undefined;
         if (isTauri) {
             try {
-                await invoke('plugin:clipboard|write', { text });
+                await invoke('plugin:clipboard-manager|write_text', { text });
                 return;
             } catch {
                 // Fallback to navigator
@@ -677,19 +914,18 @@ export class ChatUI {
         }
 
         const originalHtml = btn.innerHTML;
-        const t = getGlobalWin().t;
-        const label = t('ui.launcher.web.copied', 'Copied!');
+        btn.classList.add('is-copied');
 
         btn.innerHTML = DOMPurify.sanitize(`
-            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);">
+            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
-            <span style="color: var(--success);">${label}</span>
         `);
 
         setTimeout(() => {
+            btn.classList.remove('is-copied');
             btn.innerHTML = originalHtml;
-        }, 2000);
+        }, 1200);
     }
 
     /**

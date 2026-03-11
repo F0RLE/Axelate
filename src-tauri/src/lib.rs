@@ -45,7 +45,7 @@ mod tests;
 
 // Re-export API modules to match the flat structure expected by collect_commands!
 use api::{
-    ai, license,
+    ai, engine, license,
     modules::{self, downloader},
     secure,
     settings::{self, theme, translations, ui_state, window_settings},
@@ -65,6 +65,7 @@ use app::{
 // Import necessary services for run() and create_main_window()
 use domain::ai::ChatSessionManager;
 use domain::ai::custom_model_service;
+use domain::engine::manager::EngineManager;
 use domain::monitoring::system_monitor;
 use infrastructure::{
     config::{
@@ -140,10 +141,20 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         ai::clear_chat_history,
         ai::get_chat_history,
         ai::count_tokens,
+        ai::generate_image,
+        ai::generate_image_background,
         custom_model_service::get_custom_models,
         custom_model_service::add_custom_model,
         custom_model_service::remove_custom_model,
         file_service::process_file_content,
+        engine::start_engine,
+        engine::stop_engine,
+        engine::stop_engine_slot,
+        engine::get_engine_state,
+        engine::check_engine_installed,
+        engine::get_engine_definitions,
+        engine::get_engine_config,
+        engine::set_engine_config,
     ])
 }
 
@@ -174,6 +185,29 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     let sessions = std::sync::Arc::new(ChatSessionManager::new());
     sessions.start_saver();
     app.manage(sessions);
+
+    // Engine manager (local AI engine lifecycle)
+    let tauri_emitter = std::sync::Arc::new(
+        crate::infrastructure::engine::tauri_emitter::TauriEngineEmitter::new(app.handle().clone()),
+    );
+    let engine_manager = std::sync::Arc::new(EngineManager::new(tauri_emitter));
+
+    // Load engine definitions from local_modules.json and register them
+    {
+        let local_modules: Vec<crate::models::config::ModuleItem> =
+            serde_json::from_str(include_str!("../resources/config/local_modules.json"))
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Failed to parse local_modules.json for engine registry: {e}");
+                    Vec::new()
+                });
+        let defs = crate::domain::engine::registry::load_engine_definitions(&local_modules);
+        let em = std::sync::Arc::clone(&engine_manager);
+        tauri::async_runtime::block_on(async move {
+            em.register_definitions(defs).await;
+        });
+    }
+
+    app.manage(engine_manager);
 
     crate::utils::paths::init_filesystem().ok();
 
@@ -268,7 +302,7 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
     {
-        Ok(app) => app.run(|_app_handle, event| {
+        Ok(app) => app.run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
                 tracing::info!(
                     "RunEvent::ExitRequested. IS_QUITTING: {}",
@@ -276,6 +310,11 @@ pub fn run() {
                 );
                 if IS_QUITTING.load(Ordering::Relaxed) {
                     tracing::info!("App Exiting...");
+                    if let Some(am) = app_handle.try_state::<std::sync::Arc<EngineManager>>() {
+                        tauri::async_runtime::block_on(async move {
+                            let _ = am.stop().await;
+                        });
+                    }
                 } else {
                     crate::utils::memory::trim_memory();
                     api.prevent_exit();

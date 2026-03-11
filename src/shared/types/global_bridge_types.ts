@@ -16,6 +16,8 @@ export type TShowToastFunction = (
 ) => void;
 export type TOpenSettingsFunction = (app: IApp) => void;
 export type TDownloadModuleFunction = (id: string, url: string, hash?: string) => Promise<void>;
+export type TCancelDownloadFunction = (id: string) => Promise<boolean>;
+export type TDeleteModuleFunction = (id: string) => Promise<void>;
 export type TStopProviderFunction = () => void;
 
 export interface IGlobalBridge {
@@ -23,6 +25,8 @@ export interface IGlobalBridge {
     showToast?: TShowToastFunction;
     openModuleSettings?: TOpenSettingsFunction;
     downloadModule?: TDownloadModuleFunction;
+    cancelDownloadModule?: TCancelDownloadFunction;
+    deleteModule?: TDeleteModuleFunction;
     aiBridge?: {
         stopProvider: TStopProviderFunction;
         [key: string]: unknown;

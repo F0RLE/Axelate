@@ -203,6 +203,7 @@ declare global {
 
     // --- Module & Download Management ---
     var downloadModule: (_id: string, _url: string, _hash?: string) => Promise<void>;
+    var cancelDownloadModule: (_id: string) => Promise<boolean>;
     var deleteModule: (_id: string) => Promise<void>;
     var checkModuleInstalled: (_id: string) => Promise<boolean>;
     var openModuleSettings: (_app: IApp) => void;
@@ -260,6 +261,7 @@ declare global {
         hideSkeletonLoaders: typeof hideSkeletonLoaders;
         setButtonLoading: typeof setButtonLoading;
         downloadModule: typeof downloadModule;
+        cancelDownloadModule: typeof cancelDownloadModule;
         deleteModule: typeof deleteModule;
         checkModuleInstalled: typeof checkModuleInstalled;
         openModuleSettings: typeof openModuleSettings;

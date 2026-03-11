@@ -48,7 +48,7 @@
             "@/*": ["./*"]
         },
 
-        "types": ["vite/client"]
+        "types": ["vite/client", "node", "dompurify", "marked"]
     },
     "include": ["**/*.ts", "**/*.tsx", "**/*.d.ts"],
     "exclude": ["node_modules", "dist"]
