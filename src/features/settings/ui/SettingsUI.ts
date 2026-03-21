@@ -18,6 +18,7 @@ type CustomSelectControl = {
     input: HTMLInputElement;
     root: HTMLDivElement;
     syncDisplay: () => void;
+    destroy: () => void;
 };
 type ExtraArgsControl = {
     input: HTMLInputElement;
@@ -51,13 +52,32 @@ type SettingValue = string | number | boolean | null;
 export class SettingsUI {
     private readonly _unsubscribers: (() => void)[] = [];
     private _context!: ISettingsUIContext;
-    private _resizer!: CardResizer;
+    private _resizer: CardResizer | null = null;
     private readonly _generalRenderer: GeneralSettingsRenderer;
     private readonly _engineConfigService: EngineConfigService;
     private readonly _saveTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
     private readonly _extraArgsControls = new Map<string, ExtraArgsControl>();
+    private readonly _moduleCleanupHandlers: Array<() => void> = [];
     private _activeEngineInfoPopover: HTMLDivElement | null = null;
     private _activeEngineInfoCleanup: (() => void) | null = null;
+    private readonly _boundLangChanged = () => {
+        this.refreshActiveModule();
+    };
+    private readonly _boundDropdownDocumentClick = (event: MouseEvent) => {
+        document.querySelectorAll('.lang-dropdown-menu').forEach((dropdown) => {
+            const page = dropdown.id.replace('lang-dropdown-menu-', '');
+            const btn = document.getElementById(`lang-dropdown-btn-${page}`);
+            if (
+                btn !== null &&
+                !dropdown.contains(event.target as Node) &&
+                !btn.contains(event.target as Node)
+            ) {
+                dropdown.classList.remove('show');
+            }
+        });
+    };
+    private _isInitialized = false;
+    private _isDestroyed = false;
 
     private _renderSettingField(
         form: HTMLElement,
@@ -108,6 +128,9 @@ export class SettingsUI {
      * Initializes the settings UI, renders components, and binds events.
      */
     public async init(): Promise<void> {
+        if (this._isInitialized || this._isDestroyed) return;
+        this._isInitialized = true;
+
         await aiSettingsRenderer.init(this._service, this._aiSettings, this._tauri);
 
         // 1. Setup Context
@@ -171,13 +194,12 @@ export class SettingsUI {
             this.setCardWidth(btn, w);
         };
 
-        globalThis.addEventListener('lang:changed', () => {
-            this.refreshActiveModule();
-        });
+        globalThis.addEventListener('lang:changed', this._boundLangChanged);
     }
 
     public close(): void {
-        this._closeEngineInfoPopover();
+        this._resetDynamicModuleState();
+        delete this._context.currentModule;
         this._navigation.removeBackAction('module-settings-modal');
         const modal = document.getElementById('module-settings-modal') as HTMLDialogElement | null;
         if (modal) {
@@ -228,10 +250,24 @@ export class SettingsUI {
      * MANDATORY cleanup method required by Section 4.3.
      */
     public destroy(): void {
+        if (this._isDestroyed) return;
+        this._isDestroyed = true;
+        this._isInitialized = false;
+
+        this.close();
         this._unsubscribers.forEach((fn) => {
             fn();
         });
         this._unsubscribers.length = 0;
+        document.removeEventListener('click', this._boundDropdownDocumentClick);
+        globalThis.removeEventListener('lang:changed', this._boundLangChanged);
+        this._saveTimeouts.forEach((timeoutId) => {
+            clearTimeout(timeoutId);
+        });
+        this._saveTimeouts.clear();
+        this._resizer?.destroy();
+        this._resizer = null;
+        aiSettingsRenderer.destroy();
         tracer.info('[SettingsUI] Destroyed.');
     }
 
@@ -239,6 +275,8 @@ export class SettingsUI {
      * Renders a specialized module configuration UI (API, Local AI, or generic).
      */
     private async _renderSpecializedModuleConfig(container: HTMLElement, app: IApp) {
+        this._resetDynamicModuleState();
+
         const renderers: Record<string, (c: HTMLElement, a: IApp) => Promise<void> | void> = {
             gpt: (c, a) => {
                 void this._renderUniversalApiSettings(c, a);
@@ -247,6 +285,9 @@ export class SettingsUI {
                 void this._renderUniversalApiSettings(c, a);
             },
             claude: (c, a) => {
+                void this._renderUniversalApiSettings(c, a);
+            },
+            deepseek: (c, a) => {
                 void this._renderUniversalApiSettings(c, a);
             },
             axelate: (c, a) => {
@@ -269,6 +310,11 @@ export class SettingsUI {
         // Local engine — render real config from backend
         if (app.type === 'local') {
             await this._renderLocalEngineConfig(container, app);
+            return;
+        }
+
+        if (app.type === 'api') {
+            await this._renderUniversalApiSettings(container, app);
             return;
         }
 
@@ -377,8 +423,6 @@ export class SettingsUI {
 
         const corePrimary = container.querySelector(`#local-engine-core-primary-${app.id}`);
         if (!(corePrimary instanceof HTMLElement)) return;
-        const coreSecondary = container.querySelector(`#local-engine-core-secondary-${app.id}`);
-
         this._renderEngineFieldRow(corePrimary, {
             label: t('ui.settings.engine.model_path', 'Model Path (*.gguf, *.safetensors)'),
             key: 'model_path',
@@ -575,20 +619,7 @@ export class SettingsUI {
                 config,
             });
         } else {
-            if (!(coreSecondary instanceof HTMLElement)) return;
-            this._renderEngineFieldRow(coreSecondary, {
-                label: t('ui.settings.engine.gpu_layers', 'GPU Layers'),
-                key: 'gpu_layers',
-                type: 'number',
-                isEngineConfig: true,
-                placeholder: '-1',
-                defaultValue: -1,
-                min: -1,
-                max: 999,
-                appId: app.id,
-                config,
-            });
-            this._renderEngineFieldRow(coreSecondary, {
+            this._renderEngineFieldRow(corePrimary, {
                 label: t('ui.settings.engine.context_size', 'Context Window'),
                 key: 'context_size',
                 type: 'number',
@@ -597,18 +628,6 @@ export class SettingsUI {
                 defaultValue: 4096,
                 min: 512,
                 max: 128000,
-                appId: app.id,
-                config,
-            });
-            this._renderEngineFieldRow(corePrimary, {
-                label: t('ui.settings.engine.extra_args', 'Extra Arguments'),
-                key: 'extra_args',
-                type: 'text',
-                isEngineConfig: true,
-                placeholder: 'e.g. --flash-attn --threads 8',
-                defaultValue: '',
-                fullWidth: true,
-                showInfoButton: true,
                 appId: app.id,
                 config,
             });
@@ -694,26 +713,11 @@ export class SettingsUI {
                                     t('ui.settings.engine.core_config', 'Core Config'),
                                 )}</h3>
                             </div>
-                            <div class="local-engine-form-grid${isImage ? ' local-engine-form-grid--single' : ''}">
+                            <div class="local-engine-form-grid local-engine-form-grid--single">
                                 <div class="local-engine-panel-card local-engine-panel-card--hero local-engine-panel-card--flat">
                                     <div class="local-engine-spotlight"></div>
                                     <div id="local-engine-core-primary-${app.id}" class="local-engine-field-stack local-engine-field-stack--tight"></div>
                                 </div>
-                                ${
-                                    isImage
-                                        ? ''
-                                        : `<div class="local-engine-panel-card">
-                                    <div class="local-engine-group-header">
-                                        <h4>${this._escapeHtml(
-                                            t(
-                                                'ui.settings.engine.group_performance',
-                                                'Performance',
-                                            ),
-                                        )}</h4>
-                                    </div>
-                                    <div id="local-engine-core-secondary-${app.id}" class="local-engine-field-grid"></div>
-                                </div>`
-                                }
                             </div>
                             ${warnHtml}
                         </div>
@@ -785,6 +789,11 @@ export class SettingsUI {
         this._setupEngineFieldInitialValue(engineInput, options);
         this._setupEngineFieldEvents(engineInput, options);
         customSelect?.syncDisplay();
+        if (customSelect !== null) {
+            this._registerModuleCleanup(() => {
+                customSelect.destroy();
+            });
+        }
         extraArgsControl?.syncTokens();
 
         if (options.isFile === true && engineInput instanceof HTMLInputElement) {
@@ -810,8 +819,12 @@ export class SettingsUI {
             const infoBtn = document.createElement('button');
             infoBtn.type = 'button';
             infoBtn.className = 'local-engine-info-btn';
-            infoBtn.setAttribute('aria-label', 'Extra arguments info');
-            infoBtn.title = 'Extra arguments info';
+            const infoText = this._context.t(
+                'ui.settings.engine.extra_args.info',
+                'Extra arguments info',
+            );
+            infoBtn.setAttribute('aria-label', infoText);
+            infoBtn.title = infoText;
             infoBtn.textContent = 'i';
             infoBtn.addEventListener('click', (event) => {
                 event.preventDefault();
@@ -909,7 +922,10 @@ export class SettingsUI {
         const textInput = document.createElement('input');
         textInput.type = 'text';
         textInput.className = 'local-engine-tags-input';
-        textInput.placeholder = 'Add flag and press Enter';
+        textInput.placeholder = this._context.t(
+            'ui.settings.engine.extra_args.placeholder',
+            'Add flag and press Enter',
+        );
 
         const parseGroups = (raw: string): string[] => {
             const tokens = raw
@@ -975,7 +991,7 @@ export class SettingsUI {
                 const chip = document.createElement('button');
                 chip.type = 'button';
                 chip.className = 'local-engine-tag-chip';
-                chip.title = 'Remove';
+                chip.title = this._context.t('ui.settings.engine.extra_args.remove', 'Remove');
 
                 const label = document.createElement('span');
                 label.className = 'local-engine-tag-chip-label';
@@ -1079,14 +1095,22 @@ export class SettingsUI {
         const addAllBtn = document.createElement('button');
         addAllBtn.type = 'button';
         addAllBtn.className = 'local-engine-args-copy-all';
-        addAllBtn.textContent = 'Add all';
+        addAllBtn.textContent = this._context.t('ui.settings.engine.extra_args.add_all', 'Add all');
         addAllBtn.addEventListener('click', () => {
             const added = this._appendExtraArgs(
                 appId,
                 docs.items.map((item) => item.flag),
             );
             this._context.showToast(
-                added > 0 ? 'Arguments added' : 'Arguments already added',
+                added > 0
+                    ? this._context.t(
+                          'ui.settings.engine.extra_args.add_all_success',
+                          'Arguments added',
+                      )
+                    : this._context.t(
+                          'ui.settings.engine.extra_args.add_all_exists',
+                          'Arguments already added',
+                      ),
                 added > 0 ? 'success' : 'info',
             );
         });
@@ -1100,7 +1124,12 @@ export class SettingsUI {
             row.className = 'local-engine-args-item';
             row.tabIndex = 0;
             row.setAttribute('role', 'button');
-            row.setAttribute('aria-label', `Add ${item.flag}`);
+            row.setAttribute(
+                'aria-label',
+                this._context
+                    .t('ui.settings.engine.extra_args.add_flag', 'Add {flag}')
+                    .replace('{flag}', item.flag),
+            );
 
             const meta = document.createElement('div');
             meta.className = 'local-engine-args-item-meta';
@@ -1118,17 +1147,31 @@ export class SettingsUI {
             const copyBtn = document.createElement('button');
             copyBtn.type = 'button';
             copyBtn.className = 'local-engine-args-copy-btn';
-            copyBtn.textContent = 'Copy';
+            copyBtn.textContent = this._context.t('ui.launcher.web.copy', 'Copy');
             copyBtn.addEventListener('click', async (event) => {
                 event.stopPropagation();
                 await this._copyTextToClipboard(item.flag);
-                this._context.showToast(`${item.flag} copied`, 'success');
+                this._context.showToast(
+                    this._context
+                        .t('ui.settings.engine.extra_args.flag_copied', '{flag} copied')
+                        .replace('{flag}', item.flag),
+                    'success',
+                );
             });
 
             const addFlag = () => {
                 const added = this._appendExtraArgs(appId, [item.flag]);
                 this._context.showToast(
-                    added > 0 ? `${item.flag} added` : `${item.flag} already added`,
+                    (added > 0
+                        ? this._context.t(
+                              'ui.settings.engine.extra_args.flag_added',
+                              '{flag} added',
+                          )
+                        : this._context.t(
+                              'ui.settings.engine.extra_args.flag_exists',
+                              '{flag} already added',
+                          )
+                    ).replace('{flag}', item.flag),
                     added > 0 ? 'success' : 'info',
                 );
             };
@@ -1300,6 +1343,8 @@ export class SettingsUI {
         const overlayHost =
             (document.getElementById('module-settings-modal') as HTMLElement | null) ??
             document.body;
+        const controller = new AbortController();
+        const signal = controller.signal;
 
         const hiddenInput = document.createElement('input');
         hiddenInput.type = 'hidden';
@@ -1353,7 +1398,8 @@ export class SettingsUI {
         };
 
         const syncDisplay = () => {
-            valueEl.textContent = hiddenInput.value || options.options?.[0] || '';
+            valueEl.textContent =
+                hiddenInput.value !== '' ? hiddenInput.value : (options.options?.[0] ?? '');
             menu.querySelectorAll('.local-engine-select-option').forEach((node) => {
                 if (node instanceof HTMLButtonElement) {
                     node.classList.toggle('selected', node.textContent === valueEl.textContent);
@@ -1366,12 +1412,16 @@ export class SettingsUI {
             optionBtn.type = 'button';
             optionBtn.className = 'local-engine-select-option';
             optionBtn.textContent = opt;
-            optionBtn.addEventListener('click', () => {
-                hiddenInput.value = opt;
-                syncDisplay();
-                closeMenu();
-                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-            });
+            optionBtn.addEventListener(
+                'click',
+                () => {
+                    hiddenInput.value = opt;
+                    syncDisplay();
+                    closeMenu();
+                    hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+                },
+                { signal },
+            );
             menu.appendChild(optionBtn);
         });
 
@@ -1379,38 +1429,52 @@ export class SettingsUI {
         trigger.appendChild(chevron);
         trigger.setAttribute('aria-expanded', 'false');
 
-        trigger.addEventListener('click', () => {
-            const willOpen = !root.classList.contains('open');
-            document.querySelectorAll('.local-engine-select.open').forEach((el) => {
-                el.classList.remove('open');
-                const btn = el.querySelector('.local-engine-select-trigger');
-                if (btn instanceof HTMLElement) {
-                    btn.setAttribute('aria-expanded', 'false');
-                }
-            });
-            if (willOpen) {
-                updateMenuPosition();
-                root.classList.add('open');
-                trigger.setAttribute('aria-expanded', 'true');
-                menu.classList.add('open');
-            } else {
-                closeMenu();
-            }
-        });
+        trigger.addEventListener(
+            'click',
+            () => {
+                const willOpen = !root.classList.contains('open');
+                document.querySelectorAll('.local-engine-select.open').forEach((el) => {
+                    el.classList.remove('open');
+                    const btn = el.querySelector('.local-engine-select-trigger');
+                    if (btn instanceof HTMLElement) {
+                        btn.setAttribute('aria-expanded', 'false');
+                    }
+                });
+                document.querySelectorAll('.local-engine-select-menu.open').forEach((el) => {
+                    el.classList.remove('open');
+                });
 
-        document.addEventListener('click', (event) => {
-            if (!root.contains(event.target as Node)) {
-                if (!menu.contains(event.target as Node)) {
+                if (willOpen) {
+                    updateMenuPosition();
+                    root.classList.add('open');
+                    trigger.setAttribute('aria-expanded', 'true');
+                    menu.classList.add('open');
+                } else {
                     closeMenu();
                 }
-            }
-        });
+            },
+            { signal },
+        );
 
-        window.addEventListener('resize', () => {
-            if (root.classList.contains('open')) {
-                updateMenuPosition();
-            }
-        });
+        document.addEventListener(
+            'click',
+            (event) => {
+                if (!root.contains(event.target as Node) && !menu.contains(event.target as Node)) {
+                    closeMenu();
+                }
+            },
+            { signal },
+        );
+
+        window.addEventListener(
+            'resize',
+            () => {
+                if (root.classList.contains('open')) {
+                    updateMenuPosition();
+                }
+            },
+            { signal },
+        );
 
         window.addEventListener(
             'scroll',
@@ -1419,13 +1483,22 @@ export class SettingsUI {
                     updateMenuPosition();
                 }
             },
-            true,
+            { capture: true, signal },
         );
 
         root.appendChild(hiddenInput);
         root.appendChild(trigger);
 
-        return { input: hiddenInput, root, syncDisplay };
+        return {
+            input: hiddenInput,
+            root,
+            syncDisplay,
+            destroy: () => {
+                controller.abort();
+                closeMenu();
+                menu.remove();
+            },
+        };
     }
 
     private _createTextAreaField(options: { placeholder?: string }): HTMLTextAreaElement {
@@ -1670,7 +1743,7 @@ export class SettingsUI {
     ): void {
         const browseBtn = document.createElement('button');
         browseBtn.className = 'btn btn-secondary local-engine-browse-btn';
-        browseBtn.textContent = 'Browse';
+        browseBtn.textContent = this._context.t('ui.settings.engine.browse', 'Browse');
 
         browseBtn.onclick = async () => {
             try {
@@ -1681,7 +1754,10 @@ export class SettingsUI {
                 const selected = await open({
                     multiple: false,
                     filters: [{ name: extName, extensions: [extFilter] }],
-                    title: 'Select Model File',
+                    title: this._context.t(
+                        'ui.settings.engine.select_model_file',
+                        'Select Model File',
+                    ),
                 });
 
                 if (selected !== null && !Array.isArray(selected)) {
@@ -1759,19 +1835,21 @@ export class SettingsUI {
      * Binds global events (e.g. clicking outside dropdowns).
      */
     private _bindEvents() {
-        document.addEventListener('click', (e) => {
-            document.querySelectorAll('.lang-dropdown-menu').forEach((dropdown) => {
-                const page = dropdown.id.replace('lang-dropdown-menu-', '');
-                const btn = document.getElementById(`lang-dropdown-btn-${page}`);
-                if (
-                    btn !== null &&
-                    !dropdown.contains(e.target as Node) &&
-                    !btn.contains(e.target as Node)
-                ) {
-                    dropdown.classList.remove('show');
-                }
-            });
-        });
+        document.addEventListener('click', this._boundDropdownDocumentClick);
+    }
+
+    private _registerModuleCleanup(cleanup: () => void): void {
+        this._moduleCleanupHandlers.push(cleanup);
+    }
+
+    private _resetDynamicModuleState(): void {
+        this._closeEngineInfoPopover();
+        this._extraArgsControls.clear();
+
+        while (this._moduleCleanupHandlers.length > 0) {
+            const cleanup = this._moduleCleanupHandlers.pop();
+            cleanup?.();
+        }
     }
 
     /**
@@ -1887,7 +1965,10 @@ export class SettingsUI {
                     const span = indicator.querySelector('span');
                     if (span) {
                         span.style.color = 'var(--error)';
-                        span.textContent = 'Save failed';
+                        span.textContent = this._context.t(
+                            'ui.settings.save_failed',
+                            'Save failed',
+                        );
                     }
                 }
                 this._saveTimeouts.delete(key);

@@ -58,19 +58,16 @@ export class MonitoringUI extends BaseComponent {
         if (!el || !this.isVisible('network-status')) return;
 
         const cache = this._getCachedNodes(el, 'network-progress');
-        const downMb = stats.network.downloadRate / (1024 * 1024);
-        const upMb = stats.network.uploadRate / (1024 * 1024);
-
         const { val1, val2, unit } = this._formatSmartRate(
             stats.network.downloadRate,
             stats.network.uploadRate,
         );
-        let compactUnit = unit;
-        if (unit === 'MB/s') compactUnit = 'M/s';
-        else if (unit === 'GB/s') compactUnit = 'G/s';
-
-        this._updateText(el, `↓${val1}·↑${val2}`, compactUnit);
-        this._updateProgressBar(cache.bar, this._rateToPercent(downMb, upMb), true);
+        this._updateText(el, `↓${val1}·↑${val2}`, unit);
+        el.title =
+            stats.network.utilization > 0
+                ? `Usage: ${stats.network.utilization.toFixed(1)}%`
+                : 'Activity-based indicator';
+        this._updateProgressBar(cache.bar, stats.network.activityPercent, true);
     }
 
     private _updateDisk(stats: ISystemStats) {
@@ -78,20 +75,13 @@ export class MonitoringUI extends BaseComponent {
         if (!el || !this.isVisible('disk-usage')) return;
 
         const cache = this._getCachedNodes(el, 'disk-progress');
-        const readMb = stats.disk.readRate / (1024 * 1024);
-        const writeMb = stats.disk.writeRate / (1024 * 1024);
-
         const { val1, val2, unit } = this._formatSmartRate(
             stats.disk.readRate,
             stats.disk.writeRate,
         );
-        let compactUnit = unit;
-        if (unit === 'MB/s') compactUnit = 'M/s';
-        else if (unit === 'GB/s') compactUnit = 'G/s';
-
-        this._updateText(el, `R${val1}·W${val2}`, compactUnit);
+        this._updateText(el, `R${val1}·W${val2}`, unit);
         el.title = `Usage: ${stats.disk.utilization.toFixed(1)}%`;
-        this._updateProgressBar(cache.bar, this._rateToPercent(readMb, writeMb), true);
+        this._updateProgressBar(cache.bar, stats.disk.activityPercent, true);
     }
 
     private _animateMainValue(el: HTMLElement, targetVal: number, decimals = 0, suffix = '') {
@@ -133,7 +123,7 @@ export class MonitoringUI extends BaseComponent {
         const cache = this._getCachedNodes(el, 'ram-progress');
 
         // Update secondary text once per throttle cycle
-        const subText = `/${stats.ram.totalGb.toFixed(0)}G`;
+        const subText = `/${stats.ram.totalGb.toFixed(0)} GB`;
         if (cache.sub && cache.sub.textContent !== subText) cache.sub.textContent = subText;
 
         this._animateMainValue(el, stats.ram.usedGb, 1);
@@ -160,7 +150,7 @@ export class MonitoringUI extends BaseComponent {
         const vramTotal = stats.vram?.totalGb ?? 0;
         const percent = vramTotal > 0 ? (vramUsed / vramTotal) * 100 : 0;
 
-        const subText = `/${vramTotal.toFixed(0)}G`;
+        const subText = `/${vramTotal.toFixed(0)} GB`;
         if (cache.sub && cache.sub.textContent !== subText) cache.sub.textContent = subText;
 
         this._animateMainValue(el, vramUsed, 1);
@@ -225,10 +215,5 @@ export class MonitoringUI extends BaseComponent {
             return { val1: (mb1 / 1024).toFixed(1), val2: (mb2 / 1024).toFixed(1), unit: 'GB/s' };
         }
         return { val1: Math.round(mb1).toString(), val2: Math.round(mb2).toString(), unit: 'MB/s' };
-    }
-
-    private _rateToPercent(rateAInMb: number, rateBInMb: number): number {
-        const peakRate = Math.max(rateAInMb, rateBInMb);
-        return Math.max(0, Math.min(100, peakRate));
     }
 }

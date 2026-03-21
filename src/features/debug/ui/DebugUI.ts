@@ -1,9 +1,28 @@
+import { invoke } from '@tauri-apps/api/core';
 import { type DebugService } from '../services/DebugService';
 
 export class DebugUI {
+    private pollInterval: number | null = null;
+    private unsubscribers: (() => void)[] = [];
+    private _isInitialized = false;
+    private _dropzoneResetTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _previousSetDebugTab = globalThis.setDebugTab;
+    private _previousSetLogView = globalThis.setLogView;
+    private _previousClearLogs = globalThis.clearLogs;
+    private readonly _boundSetDebugTab = (tabId: string, btn: HTMLElement) => {
+        this.setTab(tabId, btn);
+    };
+    private readonly _boundSetLogView = (view: string, btn: HTMLElement) => {
+        this.setLogView(view, btn);
+    };
+    private readonly _boundClearLogs = () => this.clearLogs();
+
     constructor(private readonly service: DebugService) {}
 
     public init(): void {
+        if (this._isInitialized) return;
+        this._isInitialized = true;
+
         this.bindSliders();
         this.bindDraggable();
         this.bindDropzone();
@@ -13,13 +32,9 @@ export class DebugUI {
 
         // Shim globals for backward compat if needed, or preferably we fix the calls.
         // Legacy debug.js exposed setDebugTab. We bind it here.
-        globalThis.setDebugTab = (tabId: string, btn: HTMLElement) => {
-            this.setTab(tabId, btn);
-        };
-        globalThis.setLogView = (view: string, btn: HTMLElement) => {
-            this.setLogView(view, btn);
-        };
-        globalThis.clearLogs = () => this.clearLogs();
+        globalThis.setDebugTab = this._boundSetDebugTab;
+        globalThis.setLogView = this._boundSetLogView;
+        globalThis.clearLogs = this._boundClearLogs;
     }
 
     private bindSliders(): void {
@@ -27,9 +42,13 @@ export class DebugUI {
         const slider1 = document.querySelector('.debug-slider-1');
         const slider1Value = document.querySelector('.debug-slider-1-value');
         if (slider1 && slider1Value) {
-            slider1.addEventListener('input', (e) => {
+            const handleSlider1Input = (e: Event) => {
                 const target = e.target as HTMLInputElement;
                 slider1Value.textContent = `${target.value}%`;
+            };
+            slider1.addEventListener('input', handleSlider1Input);
+            this.unsubscribers.push(() => {
+                slider1.removeEventListener('input', handleSlider1Input);
             });
         }
 
@@ -37,9 +56,13 @@ export class DebugUI {
         const animatedSlider = document.querySelector('.debug-slider-animated');
         const sliderValue = document.querySelector('.debug-slider-value');
         if (animatedSlider && sliderValue) {
-            animatedSlider.addEventListener('input', (e) => {
+            const handleAnimatedSliderInput = (e: Event) => {
                 const target = e.target as HTMLInputElement;
                 sliderValue.textContent = `${target.value}%`;
+            };
+            animatedSlider.addEventListener('input', handleAnimatedSliderInput);
+            this.unsubscribers.push(() => {
+                animatedSlider.removeEventListener('input', handleAnimatedSliderInput);
             });
         }
 
@@ -47,9 +70,13 @@ export class DebugUI {
         const slider3 = document.querySelector('.debug-slider-3');
         const slider3Value = document.querySelector('.debug-slider-3-value');
         if (slider3 && slider3Value) {
-            slider3.addEventListener('input', (e) => {
+            const handleSlider3Input = (e: Event) => {
                 const target = e.target as HTMLInputElement;
                 slider3Value.textContent = `${target.value}%`;
+            };
+            slider3.addEventListener('input', handleSlider3Input);
+            this.unsubscribers.push(() => {
+                slider3.removeEventListener('input', handleSlider3Input);
             });
         }
     }
@@ -108,41 +135,47 @@ export class DebugUI {
         const dropzone = document.querySelector('.debug-dropzone');
         if (!(dropzone instanceof HTMLElement)) return;
 
-        dropzone.addEventListener('dragover', (e) => {
+        const handleDragOver = (e: DragEvent) => {
             e.preventDefault();
             dropzone.classList.add('drag-over');
-        });
+        };
 
-        dropzone.addEventListener('dragleave', () => {
+        const handleDragLeave = () => {
             dropzone.classList.remove('drag-over');
-        });
+        };
 
-        dropzone.addEventListener('drop', (e) => {
+        const handleDrop = (e: DragEvent) => {
             e.preventDefault();
             dropzone.classList.remove('drag-over');
             dropzone.textContent =
                 typeof globalThis.t === 'function'
                     ? globalThis.t('ui.debug.drag_drop.dragged', 'Item dragged!')
                     : 'Item dragged!';
-            setTimeout(() => {
+            if (this._dropzoneResetTimeout !== null) {
+                clearTimeout(this._dropzoneResetTimeout);
+            }
+            this._dropzoneResetTimeout = setTimeout(() => {
                 dropzone.textContent =
                     typeof globalThis.t === 'function'
                         ? globalThis.t('ui.debug.drag_drop.drop_here', 'Drop here')
                         : 'Drop here';
+                this._dropzoneResetTimeout = null;
             }, 2000);
+        };
+
+        dropzone.addEventListener('dragover', handleDragOver);
+        dropzone.addEventListener('dragleave', handleDragLeave);
+        dropzone.addEventListener('drop', handleDrop);
+
+        this.unsubscribers.push(() => {
+            dropzone.removeEventListener('dragover', handleDragOver);
+            dropzone.removeEventListener('dragleave', handleDragLeave);
+            dropzone.removeEventListener('drop', handleDrop);
         });
     }
 
     private bindTabs(): void {
-        // Tab logic is exposed via global setDebugTab for HTML onclick handlers
-        // But we could also bind if using data attributes
-        document.querySelectorAll('.debug-tab').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                // Extract ID 'debug-general-tab-btn' -> 'general' ???
-                // Legacy used: onclick="setDebugTab('general', this)"
-                // We keep the global shim for now.
-            });
-        });
+        // Tab logic is exposed via global setDebugTab for HTML onclick handlers.
     }
 
     public setTab(tabId: string, btn?: HTMLElement): void {
@@ -162,7 +195,24 @@ export class DebugUI {
     // --- Logs ---
 
     private bindLogControls(): void {
-        // logic handled via global setLogView shim
+        const clearBtn = document.getElementById('clear-logs-btn');
+        const copyBtn = document.getElementById('copy-logs-btn');
+
+        const handleClear = () => {
+            void this.clearLogs();
+        };
+
+        const handleCopy = () => {
+            void this.copyLogs();
+        };
+
+        clearBtn?.addEventListener('click', handleClear);
+        copyBtn?.addEventListener('click', handleCopy);
+
+        this.unsubscribers.push(() => {
+            clearBtn?.removeEventListener('click', handleClear);
+            copyBtn?.removeEventListener('click', handleCopy);
+        });
     }
 
     private setLogView(_view: string, btn: HTMLElement): void {
@@ -195,18 +245,98 @@ export class DebugUI {
         }
     }
 
-    private pollInterval: number | null = null;
-    private unsubscribers: (() => void)[] = [];
+    public async copyLogs(): Promise<void> {
+        const logs = this.service.getLogs();
+        const text = logs
+            .map((log) => log.message.trim())
+            .filter((message) => message.length > 0)
+            .join('\n');
+
+        if (!text) {
+            if (typeof globalThis.showToast === 'function') {
+                const msg =
+                    typeof globalThis.t === 'function'
+                        ? globalThis.t('ui.debug.logs_empty', 'No logs to copy')
+                        : 'No logs to copy';
+                globalThis.showToast(msg, 'warning', 1500);
+            }
+            return;
+        }
+
+        try {
+            const isTauri = (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+            if (isTauri !== undefined) {
+                try {
+                    await invoke('plugin:clipboard-manager|write_text', { text });
+                } catch {
+                    await this._copyWithBrowserApi(text);
+                }
+            } else {
+                await this._copyWithBrowserApi(text);
+            }
+
+            if (typeof globalThis.showToast === 'function') {
+                const msg =
+                    typeof globalThis.t === 'function'
+                        ? globalThis.t('ui.debug.logs_copied', 'Logs copied')
+                        : 'Logs copied';
+                globalThis.showToast(msg, 'success', 1500);
+            }
+        } catch {
+            if (typeof globalThis.showToast === 'function') {
+                const msg =
+                    typeof globalThis.t === 'function'
+                        ? globalThis.t('ui.debug.logs_copy_failed', 'Failed to copy logs')
+                        : 'Failed to copy logs';
+                globalThis.showToast(msg, 'error', 1800);
+            }
+        }
+    }
+
+    private async _copyWithBrowserApi(text: string): Promise<void> {
+        if (typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+    }
 
     public destroy(): void {
+        if (!this._isInitialized) return;
+        this._isInitialized = false;
+
         if (this.pollInterval !== null) {
             globalThis.clearInterval(this.pollInterval);
             this.pollInterval = null;
+        }
+        if (this._dropzoneResetTimeout !== null) {
+            clearTimeout(this._dropzoneResetTimeout);
+            this._dropzoneResetTimeout = null;
         }
         this.unsubscribers.forEach((fn) => {
             fn();
         });
         this.unsubscribers = [];
+
+        if (globalThis.setDebugTab === this._boundSetDebugTab) {
+            globalThis.setDebugTab = this._previousSetDebugTab;
+        }
+        if (globalThis.setLogView === this._boundSetLogView) {
+            globalThis.setLogView = this._previousSetLogView;
+        }
+        if (globalThis.clearLogs === this._boundClearLogs) {
+            globalThis.clearLogs = this._previousClearLogs;
+        }
     }
 
     private startLogPolling() {
@@ -228,6 +358,10 @@ export class DebugUI {
     private renderLogs(clear = false): void {
         const container = document.getElementById('logs-general');
         if (!container) return;
+
+        const wasNearBottom =
+            container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+        const distanceFromBottom = container.scrollHeight - container.scrollTop;
 
         if (clear) container.innerHTML = '';
 
@@ -265,6 +399,10 @@ export class DebugUI {
         });
 
         container.appendChild(fragment);
-        container.scrollTop = container.scrollHeight;
+        if (clear || wasNearBottom) {
+            container.scrollTop = container.scrollHeight;
+        } else {
+            container.scrollTop = Math.max(0, container.scrollHeight - distanceFromBottom);
+        }
     }
 }

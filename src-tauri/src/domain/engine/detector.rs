@@ -9,7 +9,10 @@ use std::path::PathBuf;
 use crate::utils::paths::{LEGACY_MODULES_DIR, MODULES_DIR};
 
 fn installed_engine_dirs(engine_id: &str) -> [PathBuf; 2] {
-    [MODULES_DIR.join(engine_id), LEGACY_MODULES_DIR.join(engine_id)]
+    [
+        MODULES_DIR.join(engine_id),
+        LEGACY_MODULES_DIR.join(engine_id),
+    ]
 }
 
 /// Checks if an engine is installed either in `MODULES_DIR/{id}` or on system PATH.

@@ -14,7 +14,7 @@ export class ChatService {
      */
     public async sendMessage(
         text: string,
-        _history: IChatMessage[],
+        history: IChatMessage[],
         attachments: IChatAttachment[],
     ): Promise<IChatResponse> {
         // Validation
@@ -35,7 +35,7 @@ export class ChatService {
 
         try {
             // Send through AIBridge
-            const response = await this._aiBridge.sendMessage(text, 'chat', attachments);
+            const response = await this._aiBridge.sendMessage(text, 'chat', attachments, history);
 
             if (!response.ok) {
                 return {

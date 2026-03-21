@@ -28,6 +28,19 @@ export class ChatController {
     private _isSending = false;
     private _historyLoaded = false;
     private _historyLoadInFlight: Promise<void> | null = null;
+    private _eventsBound = false;
+    private _pageChangeUnsub: (() => void) | null = null;
+    private _translationsLoadedUnsub: (() => void) | null = null;
+    private readonly _boundFileInputChange = (e: Event) => this._filePicker.handleFileSelect(e);
+    private readonly _boundChatInputKeydown = (e: KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            void this.sendChat();
+        } else {
+            setTimeout(() => this._autoResizeInput(), 0);
+        }
+    };
+    private readonly _boundChatInputInput = () => this._autoResizeInput();
 
     constructor(
         private readonly _aiBridge: AIBridge,
@@ -47,6 +60,9 @@ export class ChatController {
         void this._ui.init().catch((err: unknown) => {
             tracer.error(`[Chat] UI init failed: ${String(err)}`);
         });
+        this._ui.setEditMessageHandler(async (text) => {
+            await this._editLastTurn(text);
+        });
 
         chatFileHandler.setUpdateCallback((files, onRemove) => {
             this._ui.updateAttachments(files, onRemove);
@@ -61,14 +77,12 @@ export class ChatController {
 
         void this._ensureHistoryLoaded();
 
-        let eventsBound = false;
-
-        eventBus.on('page:change', (data) => {
+        this._pageChangeUnsub = eventBus.on('page:change', (data) => {
             if (data.pageId === 'chat') {
                 // Bind DOM events the first time the chat page is actually shown
-                if (!eventsBound) {
+                if (!this._eventsBound) {
                     this._bindEvents();
-                    eventsBound = true;
+                    this._eventsBound = true;
                 }
                 this.randomizeGreeting();
                 this._ui.refreshTranslations();
@@ -76,15 +90,26 @@ export class ChatController {
             }
         });
 
-        eventBus.on('i18n:translations:loaded', () => {
+        this._translationsLoadedUnsub = eventBus.on('i18n:translations:loaded', () => {
             this.randomizeGreeting(this._currentGreetingIndex);
             this._ui.refreshTranslations();
         });
+    }
 
-        globalThis.addEventListener('lang:changed', () => {
-            this.randomizeGreeting(this._currentGreetingIndex);
-            this._ui.refreshTranslations();
-        });
+    public destroy(): void {
+        this._pageChangeUnsub?.();
+        this._pageChangeUnsub = null;
+        this._translationsLoadedUnsub?.();
+        this._translationsLoadedUnsub = null;
+
+        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
+        fileInput?.removeEventListener('change', this._boundFileInputChange);
+
+        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+        chatInput?.removeEventListener('keydown', this._boundChatInputKeydown);
+        chatInput?.removeEventListener('input', this._boundChatInputInput);
+
+        this._ui.destroy();
     }
 
     // --- Public Actions ---
@@ -115,7 +140,7 @@ export class ChatController {
         void this._aiBridge.clearHistory().catch((e: unknown) => {
             tracer.error('[Chat] Failed to clear persisted history:', e);
         });
-        this._ui.showToast('Chat cleared', 'success');
+        this._ui.showToast(this._i18n.t('ui.chat.cleared', 'Chat cleared'), 'success');
     }
 
     // --- Send Message ---
@@ -140,6 +165,7 @@ export class ChatController {
         try {
             const tokenCount = await chatFileHandler.getTotalTokenEstimate(text);
             const { attachments, combinedText } = await chatFileHandler.processForSend(text);
+            const historyHead = this._chatHistory.slice(-40);
 
             this._ui.updateTokenCount(0);
             this._ui.appendMessage('user', text, { attachments: attachments, tokens: tokenCount });
@@ -169,7 +195,6 @@ export class ChatController {
                 streamingHandle.replace(chunk);
             });
 
-            const historyHead = this._chatHistory.slice(-40);
             const response = await this._service.sendMessage(
                 combinedText,
                 historyHead,
@@ -214,8 +239,12 @@ export class ChatController {
                 translation === '' ||
                 translation === `ui.chat.greeting.${String(this._currentGreetingIndex)}`
             ) {
-                if (el.textContent === '' || el.textContent === 'How can I help you today?') {
-                    el.textContent = 'How can I help you today?';
+                const fallbackGreeting = this._i18n.t(
+                    'ui.chat.greeting.default',
+                    'How can I help you today?',
+                );
+                if (el.textContent === '' || el.textContent === fallbackGreeting) {
+                    el.textContent = fallbackGreeting;
                 }
                 return;
             }
@@ -229,20 +258,13 @@ export class ChatController {
     private _bindEvents(): void {
         const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
         if (fileInput) {
-            fileInput.addEventListener('change', (e) => this._filePicker.handleFileSelect(e));
+            fileInput.addEventListener('change', this._boundFileInputChange);
         }
 
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         if (chatInput) {
-            chatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void this.sendChat();
-                } else {
-                    setTimeout(() => this._autoResizeInput(), 0);
-                }
-            });
-            chatInput.addEventListener('input', () => this._autoResizeInput());
+            chatInput.addEventListener('keydown', this._boundChatInputKeydown);
+            chatInput.addEventListener('input', this._boundChatInputInput);
             this._autoResizeInput();
         }
     }
@@ -264,6 +286,51 @@ export class ChatController {
         this._historyLoadInFlight = this._loadHistory();
         await this._historyLoadInFlight;
         this._historyLoadInFlight = null;
+    }
+
+    private async _editLastTurn(text: string): Promise<void> {
+        if (this._isSending) return;
+
+        try {
+            const removedText = await this._aiBridge.rewindLastTurn();
+            const nextText = removedText ?? text;
+
+            this._rewindLocalHistory();
+            this._ui.renderHistory(this._chatHistory);
+            this._restoreInputText(nextText);
+        } catch (error: unknown) {
+            tracer.error('[Chat] Failed to rewind last turn:', error);
+            this._ui.showToast(
+                this._i18n.t('ui.chat.edit_last_turn_failed', 'Failed to edit last turn'),
+                'error',
+            );
+        }
+    }
+
+    private _rewindLocalHistory(): void {
+        while (this._chatHistory.length > 0) {
+            const lastMessage = this._chatHistory[this._chatHistory.length - 1];
+            if (lastMessage?.role === 'user') {
+                break;
+            }
+            this._chatHistory.pop();
+        }
+
+        const lastMessage = this._chatHistory[this._chatHistory.length - 1];
+        if (lastMessage?.role === 'user') {
+            this._chatHistory.pop();
+        }
+    }
+
+    private _restoreInputText(text: string): void {
+        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+        if (!(chatInput instanceof HTMLTextAreaElement)) return;
+
+        chatInput.value = text;
+        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+        chatInput.focus();
+        chatInput.setSelectionRange(text.length, text.length);
+        this._autoResizeInput();
     }
 
     private async _loadHistory(): Promise<void> {
@@ -295,23 +362,32 @@ export class ChatController {
     }
 
     private _consumePendingChatReveal(): boolean {
+        type PendingUiState = {
+            getState: () => { pending_chat_reveal?: boolean };
+            updateState: (updates: { pending_chat_reveal: boolean }) => void;
+        };
         const win = getGlobalWin() as unknown as Window & {
             uiState?: {
-                getState?: () => { pending_chat_reveal?: boolean };
-                updateState?: (updates: { pending_chat_reveal: boolean }) => void;
+                getState?: PendingUiState['getState'];
+                updateState?: PendingUiState['updateState'];
             };
         };
 
-        const shouldReveal = win.uiState?.getState?.().pending_chat_reveal === true;
+        const uiState = win.uiState as PendingUiState | undefined;
+        const pendingState = uiState?.getState();
+        const shouldReveal = pendingState?.pending_chat_reveal === true;
         if (shouldReveal) {
-            win.uiState?.updateState?.({ pending_chat_reveal: false });
+            uiState?.updateState({ pending_chat_reveal: false });
         }
         return shouldReveal;
     }
 
     private _validateInput(text: string): boolean {
         if (!text && !chatFileHandler.hasFiles()) {
-            this._ui.showToast('Enter a message or attach a file', 'error');
+            this._ui.showToast(
+                this._i18n.t('ui.chat.input_required', 'Enter a message or attach a file'),
+                'error',
+            );
             return false;
         }
         return true;
@@ -402,7 +478,10 @@ export class ChatController {
         try {
             return JSON.stringify(obj, null, 2);
         } catch {
-            return '[Сложный объект: невозможно отобразить]';
+            return this._i18n.t(
+                'ui.chat.complex_object_fallback',
+                '[Complex object: cannot display]',
+            );
         }
     }
 

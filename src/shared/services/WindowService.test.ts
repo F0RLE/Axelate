@@ -53,6 +53,7 @@ describe('WindowService', () => {
     });
 
     afterEach(() => {
+        service.destroy();
         vi.useRealTimers();
         vi.clearAllMocks();
         vi.restoreAllMocks();
@@ -714,6 +715,18 @@ describe('WindowService', () => {
 
             expect(changeZoomSpy).not.toHaveBeenCalled();
         });
+
+        it('should remove wheel listener on destroy', async () => {
+            mockBridge.isTauri.mockReturnValue(false);
+
+            await service.init();
+            const changeZoomSpy = vi.spyOn(service, 'changeZoom').mockResolvedValue(1);
+
+            service.destroy();
+            globalThis.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true }));
+
+            expect(changeZoomSpy).not.toHaveBeenCalled();
+        });
     });
 
     // ---------------------------------------------------------- tauri://move callback body (line 403)
@@ -735,6 +748,18 @@ describe('WindowService', () => {
 
             // Should trigger a save attempt to invoke backend
             expect(mockBridge.isTauri).toHaveBeenCalled();
+        });
+
+        it('should unsubscribe tauri://move listener on destroy', async () => {
+            const unlisten = vi.fn();
+            mockBridge.listen.mockResolvedValue(unlisten);
+
+            await service.init(mockWindowConfig, 1);
+            await Promise.resolve();
+
+            service.destroy();
+
+            expect(unlisten).toHaveBeenCalledTimes(1);
         });
     });
 

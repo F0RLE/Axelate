@@ -77,6 +77,13 @@ describe('ModuleService', () => {
 
             expect(mocks.tauriProvider.listen).not.toHaveBeenCalled();
         });
+
+        it('should be idempotent across repeated init calls', async () => {
+            await moduleService.init();
+            await moduleService.init();
+
+            expect(mocks.tauriProvider.listen).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('checkInstalled', () => {
@@ -223,6 +230,24 @@ describe('ModuleService', () => {
         });
     });
 
+    describe('destroy', () => {
+        it('should unlisten active download listener and allow re-init', async () => {
+            const unlisten = vi.fn();
+            mocks.tauriProvider.listen.mockResolvedValueOnce(unlisten);
+
+            await moduleService.init();
+            moduleService.destroy();
+            await moduleService.init();
+
+            expect(unlisten).toHaveBeenCalledTimes(1);
+            expect(mocks.tauriProvider.listen).toHaveBeenCalledTimes(2);
+        });
+
+        it('should be safe to destroy before init', () => {
+            expect(() => moduleService.destroy()).not.toThrow();
+        });
+    });
+
     describe('download progress events', () => {
         it('should register listener on init', async () => {
             await moduleService.init();
@@ -251,11 +276,13 @@ describe('ModuleService', () => {
                 message: 'Downloading...',
                 downloaded: 50,
                 total: 100,
+                speed: 4096,
             });
 
             const state = moduleService.getDownloadState('test-module');
             expect(state?.status).toBe('downloading');
             expect(state?.progress).toBe(0.5);
+            expect(state?.speed).toBe(4096);
         });
 
         it('should set progress to 1 on complete', async () => {
@@ -271,6 +298,7 @@ describe('ModuleService', () => {
                 message: 'Done',
                 downloaded: 100,
                 total: 100,
+                speed: 0,
             });
 
             const state = moduleService.getDownloadState('test-module');

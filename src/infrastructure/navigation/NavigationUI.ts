@@ -15,8 +15,10 @@ import { type SoundService } from '@/shared/services/SoundService';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationUI {
+    private _sidebarClickHandler: ((e: MouseEvent) => void) | null = null;
     private _mouseUpHandler: ((e: MouseEvent) => void) | null = null;
     private _keyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+    private _initialized = false;
 
     constructor(
         private readonly _service: NavigationService,
@@ -28,22 +30,25 @@ export class NavigationUI {
      * Re-binds listeners directly to ensure they work after template injection.
      */
     public init(): void {
+        if (this._initialized) return;
+        this._initialized = true;
         tracer.debug('[NavigationUI] Navigation initialized.');
 
         // 1. Delegate clicks on the sidebar wrapper rather than individual buttons
         const sidebar = document.getElementById('sidebar');
-        if (sidebar) {
-            sidebar.addEventListener('click', (e) => {
-                const target = e.target as HTMLElement;
-                const btn = target.closest('.nav-btn');
-                if (btn instanceof HTMLElement) {
-                    const pageId = btn.dataset['page'];
-                    if (pageId !== undefined && pageId !== '') {
-                        e.preventDefault();
-                        void this.showPage(pageId, btn);
-                    }
+        this._sidebarClickHandler = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            const btn = target.closest('.nav-btn');
+            if (btn instanceof HTMLElement) {
+                const pageId = btn.dataset['page'];
+                if (pageId !== undefined && pageId !== '') {
+                    e.preventDefault();
+                    void this.showPage(pageId, btn);
                 }
-            });
+            }
+        };
+        if (sidebar) {
+            sidebar.addEventListener('click', this._sidebarClickHandler);
         }
 
         // 2. Bind global mouse navigation (Button 3 = Back, Button 4 = Forward)
@@ -86,6 +91,11 @@ export class NavigationUI {
      * Cleanup listeners.
      */
     public destroy(): void {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && this._sidebarClickHandler) {
+            sidebar.removeEventListener('click', this._sidebarClickHandler);
+        }
+        this._sidebarClickHandler = null;
         if (this._mouseUpHandler) {
             globalThis.removeEventListener('mouseup', this._mouseUpHandler);
             this._mouseUpHandler = null;
@@ -94,6 +104,7 @@ export class NavigationUI {
             globalThis.removeEventListener('keydown', this._keyDownHandler);
             this._keyDownHandler = null;
         }
+        this._initialized = false;
     }
 
     /**

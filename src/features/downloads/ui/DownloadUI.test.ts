@@ -125,10 +125,31 @@ describe('DownloadUI', () => {
             const spy = vi.spyOn(globalThis, 'removeEventListener');
             ui.destroy();
             expect(spy).toHaveBeenCalledWith('download-progress-update', expect.any(Function));
+            expect(spy).toHaveBeenCalledWith('language-changed', expect.any(Function));
         });
 
         it('should be safe to call without init', () => {
             ui.destroy(); // No listener set, should not throw
+        });
+
+        it('should cancel pending terminal cleanup timers on destroy', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-destroy',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+
+            ui.destroy();
+            vi.advanceTimersByTime(2100);
+
+            const list = document.getElementById('downloads-dynamic-list');
+            expect(list?.querySelectorAll('.download-item-card').length).toBe(1);
         });
     });
 
@@ -355,7 +376,26 @@ describe('DownloadUI', () => {
             ui.saveSettings();
 
             const controls = document.getElementById('speed-limit-controls');
+            expect(controls?.classList.contains('opacity-100')).toBe(true);
+            expect(controls?.classList.contains('opacity-50')).toBe(false);
+            expect(controls?.style.pointerEvents).toBe('auto');
+        });
+
+        it('should dim controls when the speed limit is disabled', () => {
+            const toggle = document.getElementById(
+                'download-speed-limit-toggle',
+            ) as HTMLInputElement;
+            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
+
+            toggle.checked = false;
+            slider.value = '50';
+
+            ui.saveSettings();
+
+            const controls = document.getElementById('speed-limit-controls');
             expect(controls?.classList.contains('opacity-50')).toBe(true);
+            expect(controls?.classList.contains('opacity-100')).toBe(false);
+            expect(controls?.style.pointerEvents).toBe('none');
         });
 
         it('should update toggle background style', () => {
@@ -674,6 +714,19 @@ describe('DownloadUI', () => {
             expect(document.getElementById('speed-limit-value')?.textContent).toBe('120');
             expect(downloadSettings.setDownloadSettings).toHaveBeenCalled();
         });
+
+        it('should not duplicate settings listeners across repeated init calls', () => {
+            ui.init();
+            ui.init();
+            const toggle = document.getElementById(
+                'download-speed-limit-toggle',
+            ) as HTMLInputElement;
+
+            toggle.checked = true;
+            toggle.dispatchEvent(new Event('change'));
+
+            expect(downloadSettings.setDownloadSettings).toHaveBeenCalledTimes(1);
+        });
     });
 
     // ---------------------------------------------------------- startDownloadsPolling event handling
@@ -689,12 +742,14 @@ describe('DownloadUI', () => {
                     total: 100,
                     status: 'downloading',
                     message: 'Downloading mod-1',
+                    speed: 2048,
                 },
             });
             globalThis.dispatchEvent(event);
 
             const label = document.getElementById('downloads-item-label');
             expect(label?.textContent).toContain('Downloading mod-1');
+            expect(document.getElementById('downloads-speed')?.textContent).toBe('2.0 KB/s');
         });
 
         it('should ignore events without module_id', () => {
@@ -778,6 +833,30 @@ describe('DownloadUI', () => {
                 globalThis.dispatchEvent(event);
             }
         });
+
+        it('should localize generic backend progress messages', () => {
+            (i18nService.t as ReturnType<typeof vi.fn>).mockImplementation(
+                (key: string, def?: string) => {
+                    if (key === 'ui.downloads.status.in_progress') return 'Загрузка';
+                    return def ?? key;
+                },
+            );
+
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-i18n',
+                        progress: 0.2,
+                        status: 'downloading',
+                        message: 'Downloading...',
+                    },
+                }),
+            );
+
+            expect(document.getElementById('downloads-item-label')?.textContent).toBe('Загрузка');
+        });
     });
 
     // ---------------------------------------------------------- Dynamic multi-download list
@@ -801,6 +880,28 @@ describe('DownloadUI', () => {
             const card = list?.querySelector<HTMLElement>('.download-item-card');
             expect(card).not.toBeNull();
             expect(card?.dataset['moduleId']).toBe('mod-abc');
+        });
+
+        it('should render per-module speed instead of hardcoded zero', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-speed',
+                        progress: 0.3,
+                        downloaded: 30 * 1024 * 1024,
+                        total: 100 * 1024 * 1024,
+                        speed: 3 * 1024 * 1024,
+                        status: 'downloading',
+                        message: 'Downloading module',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const statValues = list?.querySelectorAll('.downloads-stat-value');
+            expect(statValues?.[2]?.textContent).toBe('3.00 MB/s');
         });
 
         it('should patch existing card on update', () => {
@@ -915,6 +1016,43 @@ describe('DownloadUI', () => {
             vi.advanceTimersByTime(2100);
 
             expect(list?.querySelectorAll('.download-item-card').length).toBe(0);
+        });
+
+        it('should cancel stale terminal cleanup when the same module restarts downloading', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-retry',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+
+            vi.advanceTimersByTime(1000);
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-retry',
+                        progress: 0.1,
+                        status: 'downloading',
+                        message: 'Retrying download',
+                    },
+                }),
+            );
+
+            vi.advanceTimersByTime(1100);
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector<HTMLElement>(
+                '.download-item-card[data-module-id="mod-retry"]',
+            );
+
+            expect(card).not.toBeNull();
+            expect(card?.querySelector('.downloads-status-pill')?.textContent).toBe('Downloading');
         });
 
         it('should render error status card', () => {
@@ -1062,6 +1200,51 @@ describe('DownloadUI', () => {
             const list = document.getElementById('downloads-dynamic-list');
             const pill = list?.querySelector('.downloads-status-pill');
             expect(pill?.classList.contains('active')).toBe(true);
+        });
+
+        it('should refresh existing card translations after language change', () => {
+            const tMock = i18nService.t as ReturnType<typeof vi.fn>;
+            tMock.mockImplementation((_key: string, def?: string) => def ?? _key);
+
+            ui.init();
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-i18n',
+                        progress: 0.2,
+                        status: 'downloading',
+                        speed: 1024,
+                    },
+                }),
+            );
+
+            tMock.mockImplementation((key: string, def?: string) => {
+                const map: Record<string, string> = {
+                    'ui.launcher.web.progress': 'Прогресс',
+                    'ui.launcher.web.downloaded': 'Скачано',
+                    'ui.launcher.web.total': 'Всего',
+                    'ui.launcher.web.speed': 'Скорость',
+                    'ui.launcher.button.cancel': 'Отмена',
+                    'ui.downloads.status.in_progress': 'Загрузка',
+                };
+                return map[key] ?? def ?? key;
+            });
+
+            globalThis.dispatchEvent(new Event('language-changed'));
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const card = list?.querySelector<HTMLElement>(
+                '.download-item-card[data-module-id="mod-i18n"]',
+            );
+
+            expect(card?.querySelector('.downloads-progress-label')?.textContent).toBe('Прогресс');
+            expect(card?.querySelector('.downloads-downloaded-label')?.textContent).toBe('Скачано');
+            expect(card?.querySelector('.downloads-total-label')?.textContent).toBe('Всего');
+            expect(card?.querySelector('.downloads-speed-label')?.textContent).toBe('Скорость');
+            expect(card?.querySelector('.downloads-status-pill')?.textContent).toBe('Загрузка');
+            expect(card?.querySelector('.download-cancel-btn')?.getAttribute('title')).toBe(
+                'Отмена',
+            );
         });
 
         it('should patch error status pill on existing card (L613)', () => {

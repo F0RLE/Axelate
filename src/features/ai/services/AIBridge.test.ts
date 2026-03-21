@@ -454,6 +454,22 @@ describe('AIBridge', () => {
         });
     });
 
+    describe('onReplaceChunk / removeReplaceChunkListener', () => {
+        it('should register, invoke and remove replace-chunk handlers', () => {
+            const handler = vi.fn();
+            aiBridge.onReplaceChunk('replace-1', handler);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastReplaceChunk('replace data');
+            expect(handler).toHaveBeenCalledWith('replace data');
+
+            aiBridge.removeReplaceChunkListener('replace-1');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastReplaceChunk('again');
+            expect(handler).toHaveBeenCalledTimes(1);
+        });
+    });
+
     // ---------------------------------------------------------- getHistory
     describe('getHistory', () => {
         it('should invoke get_chat_history in Tauri mode', async () => {
@@ -482,6 +498,38 @@ describe('AIBridge', () => {
 
             // Restore for other tests
             mockCore.tauriProvider.isTauri.mockReturnValue(true);
+        });
+    });
+
+    describe('clearHistory / rewindLastTurn / session', () => {
+        it('should clear history in tauri mode and no-op in web mode', async () => {
+            mockInvoke.mockResolvedValueOnce(undefined);
+            await expect(aiBridge.clearHistory()).resolves.toBeUndefined();
+            expect(mockInvoke).toHaveBeenCalledWith('clear_chat_history', expect.any(Object));
+
+            mockCore.tauriProvider.isTauri.mockReturnValue(false);
+            await expect(aiBridge.clearHistory()).resolves.toBeUndefined();
+            mockCore.tauriProvider.isTauri.mockReturnValue(true);
+        });
+
+        it('should surface clear and rewind errors and support web null rewind', async () => {
+            mockInvoke.mockRejectedValueOnce(new Error('clear failed'));
+            await expect(aiBridge.clearHistory()).rejects.toThrow('clear failed');
+
+            mockInvoke.mockResolvedValueOnce('rewound message');
+            await expect(aiBridge.rewindLastTurn()).resolves.toBe('rewound message');
+            expect(mockInvoke).toHaveBeenCalledWith('rewind_last_turn', expect.any(Object));
+
+            mockInvoke.mockRejectedValueOnce(new Error('rewind failed'));
+            await expect(aiBridge.rewindLastTurn()).rejects.toThrow('rewind failed');
+
+            mockCore.tauriProvider.isTauri.mockReturnValue(false);
+            await expect(aiBridge.rewindLastTurn()).resolves.toBeNull();
+            mockCore.tauriProvider.isTauri.mockReturnValue(true);
+        });
+
+        it('should expose current session id', () => {
+            expect(aiBridge.getSessionId()).toBeTypeOf('string');
         });
     });
 
@@ -782,6 +830,12 @@ describe('AIBridge', () => {
             Object.defineProperty((tempBridge as any)._manager, 'apiKey', {
                 get: () => 'test-key',
             });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn((tempBridge as any)._manager, 'resolveActiveApiKey').mockResolvedValue(
+                'test-key',
+            );
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn((tempBridge as any)._manager, 'isActive').mockReturnValue(true);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((tempBridge as any)._transport, 'send').mockResolvedValue({

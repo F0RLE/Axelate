@@ -188,6 +188,16 @@ Axelate/
 * **SystemMonitor**: Real-time hardware polling (`domain/monitoring/system_monitor.rs`).
 * **License**: Offline/Online license state validation (`domain/license/`).
 
+### 5.4 Filesystem Layout
+
+Axelate stores application data under a single roaming root:
+
+* **Root**: `%APPDATA%/AxelateData`
+* **User data**: `%APPDATA%/AxelateData/User/...`
+* **System data**: `%APPDATA%/AxelateData/System/...`
+
+On Windows, older builds could place `System` under `%LOCALAPPDATA%/AxelateData/System`. Current builds migrate that data into the roaming root during startup.
+
 ---
 
 <div align="center">

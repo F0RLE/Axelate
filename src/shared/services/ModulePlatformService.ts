@@ -2,6 +2,7 @@ import type { IApp } from '../types/coreTypes';
 import type { ModuleService } from './ModuleService';
 import { aiBridge } from '@/features/ai/services/AIBridge';
 import { tracer } from '@/infrastructure/logging/LoggerService';
+import { isApiApp } from '@/shared/utils/moduleTypeUtils';
 
 /**
  * @class ModulePlatformService
@@ -92,7 +93,6 @@ export class ModulePlatformService {
     }
 
     private _isApiModule(app: IApp): boolean {
-        const type = app.type?.toLowerCase();
-        return type === 'api' || ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id);
+        return isApiApp(app);
     }
 }

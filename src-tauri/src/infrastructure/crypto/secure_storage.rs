@@ -173,34 +173,23 @@ impl SecureStorage {
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::redundant_clone)]
     use super::*;
-    use tempfile::tempdir;
 
     #[test]
     fn test_secure_storage_lifecycle() {
-        // Combined test to avoid race conditions on std::env::set_var("APPDATA")
-        let temp_dir = tempdir().unwrap();
-        let temp_path = temp_dir.path().to_path_buf();
-
-        // Mock APPDATA locally for this thread (conceptually, though env is global)
-        // Since we combined tests, we reduce risk.
-        unsafe {
-            std::env::set_var("APPDATA", &temp_path);
-        }
-
         // Test Data
         let service = "openai_api_key".to_string();
         let secret = "sk-unique-secret-123".to_string();
+        let expected_path = SecureStorage::get_store_path().unwrap();
+
+        if expected_path.exists() {
+            std::fs::remove_file(&expected_path).unwrap();
+        }
 
         // 1. Save Key
         let result = SecureStorage::save_key(service.clone(), secret.clone());
         assert!(result.is_ok(), "Failed to save key: {:?}", result.err());
 
         // 2. Verify File Exists
-        let mut expected_path = temp_path.clone();
-        expected_path.push("AxelateData");
-        expected_path.push("User");
-        expected_path.push("Configs");
-        expected_path.push("secure.enc");
         assert!(expected_path.exists(), "Encrypted file was not created");
 
         // 3. Verify Encryption Integrity (Read Raw)
@@ -221,5 +210,7 @@ mod tests {
         // 5. Test Missing Key
         let missing = SecureStorage::get_key("non_existent").unwrap();
         assert_eq!(missing, None, "Found key that shouldn't exist");
+
+        std::fs::remove_file(expected_path).unwrap();
     }
 }

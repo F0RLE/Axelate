@@ -140,6 +140,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         ai::validate_api_key,
         ai::clear_chat_history,
         ai::get_chat_history,
+        ai::rewind_last_turn,
         ai::count_tokens,
         ai::generate_image,
         ai::generate_image_background,

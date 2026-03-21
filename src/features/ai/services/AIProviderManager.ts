@@ -5,7 +5,7 @@ import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
 export class AIProviderManager {
     private _core: Core | null = null;
     private _activeProviderId: string | null = null;
-    private _apiKey: string | null = null;
+    private _hasApiKey = false;
     private _model = '';
 
     // Session Management
@@ -57,7 +57,7 @@ export class AIProviderManager {
             const model = this._getPersistedModel(providerId) ?? this._getDefaultModel(providerId);
 
             this._activeProviderId = providerId;
-            this._apiKey = apiKey;
+            this._hasApiKey = isLocal || apiKey !== '';
             this._model = model;
 
             // Persist state
@@ -76,7 +76,7 @@ export class AIProviderManager {
     public stopProvider(): void {
         if (this._activeProviderId !== null) {
             this._activeProviderId = null;
-            this._apiKey = null;
+            this._hasApiKey = false;
             this._model = '';
             tracer.info('[AIProviderManager] Provider stopped');
         }
@@ -85,7 +85,7 @@ export class AIProviderManager {
     public isActive(): boolean {
         if (this._activeProviderId === null) return false;
         if (this._isLocalProvider(this._activeProviderId)) return true;
-        return this._apiKey !== null && this._apiKey !== '';
+        return this._hasApiKey;
     }
 
     public get activeProviderId(): string | null {
@@ -93,7 +93,10 @@ export class AIProviderManager {
     }
 
     public get apiKey(): string | null {
-        return this._apiKey;
+        if (this._activeProviderId === null || this._isLocalProvider(this._activeProviderId)) {
+            return null;
+        }
+        return this._hasApiKey ? '[secure]' : null;
     }
 
     public get model(): string {
@@ -125,10 +128,17 @@ export class AIProviderManager {
     public async refreshActiveApiKey(): Promise<void> {
         if (this._activeProviderId !== null) {
             const freshKey = await this._resolveApiKey(this._activeProviderId);
-            if (freshKey !== this._apiKey) {
-                this._apiKey = freshKey;
-            }
+            this._hasApiKey = this._isLocalProvider(this._activeProviderId) || freshKey !== '';
         }
+    }
+
+    public async resolveActiveApiKey(): Promise<string | null> {
+        if (this._activeProviderId === null || this._isLocalProvider(this._activeProviderId)) {
+            return null;
+        }
+
+        const apiKey = await this._resolveApiKey(this._activeProviderId);
+        return apiKey === '' ? null : apiKey;
     }
 
     // --- Private Helpers ---
@@ -170,7 +180,7 @@ export class AIProviderManager {
         if (catalogModel) return catalogModel;
 
         const fallbacks: Record<string, string> = {
-            gpt: 'gpt-5.2',
+            gpt: 'gpt-5.4',
             gemini: 'gemini-3-pro',
             local: 'llama-4-maverick',
         };

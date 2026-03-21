@@ -7,6 +7,7 @@ import { getGlobalWin } from '@/shared/utils/globalAccessor';
  */
 export interface ToastElement extends HTMLElement {
     _timeout?: ReturnType<typeof setTimeout>;
+    _removeTimeout?: ReturnType<typeof setTimeout>;
 }
 
 /**
@@ -72,7 +73,13 @@ export class ToastManager {
         if (id !== null) {
             const existingToast = document.getElementById(`toast-${id}`);
             if (existingToast !== null) {
-                this._updateExistingToast(existingToast as ToastElement, message, title, duration);
+                this._updateExistingToast(
+                    existingToast as ToastElement,
+                    message,
+                    type,
+                    title,
+                    duration,
+                );
                 return;
             }
         }
@@ -100,6 +107,7 @@ export class ToastManager {
     private _updateExistingToast(
         toast: ToastElement,
         message: string,
+        type: string,
         title: string | null,
         duration: number,
     ): void {
@@ -114,18 +122,11 @@ export class ToastManager {
             );
         }
 
-        // Reset timer
-        if (toast._timeout !== undefined) clearTimeout(toast._timeout);
+        toast.className = `toast ${type}`;
+        this._clearToastTimers(toast);
 
         toast.classList.remove('leaving');
-
-        toast._timeout = setTimeout(() => {
-            toast.classList.add('leaving');
-            setTimeout(() => {
-                toast.remove();
-                this.toastQueue = this.toastQueue.filter((t) => t !== toast);
-            }, 300);
-        }, duration);
+        this._scheduleToastRemoval(toast, duration);
     }
 
     private _createToast(
@@ -153,12 +154,29 @@ export class ToastManager {
         container.appendChild(toast);
         this.toastQueue.push(toast);
 
+        this._scheduleToastRemoval(toast, duration);
+    }
+
+    private _scheduleToastRemoval(toast: ToastElement, duration: number): void {
         toast._timeout = setTimeout(() => {
             toast.classList.add('leaving');
-            setTimeout(() => {
+            toast._removeTimeout = setTimeout(() => {
+                delete toast._removeTimeout;
                 toast.remove();
                 this.toastQueue = this.toastQueue.filter((t) => t !== toast);
             }, 300);
         }, duration);
+    }
+
+    private _clearToastTimers(toast: ToastElement): void {
+        if (toast._timeout !== undefined) {
+            clearTimeout(toast._timeout);
+            delete toast._timeout;
+        }
+
+        if (toast._removeTimeout !== undefined) {
+            clearTimeout(toast._removeTimeout);
+            delete toast._removeTimeout;
+        }
     }
 }

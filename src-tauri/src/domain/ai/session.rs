@@ -212,6 +212,24 @@ impl ChatSessionManager {
         }
     }
 
+    /// Removes the last user turn and any following assistant messages.
+    /// Returns the removed user text so the frontend can preload it for editing.
+    pub fn rewind_last_turn(&self, session_id: &str) -> Option<String> {
+        let mut session = self.sessions.get_mut(session_id)?;
+        let user_index = session.history.iter().rposition(|msg| msg.role == "user")?;
+
+        let removed_text = match &session.history.get(user_index)?.content {
+            serde_json::Value::String(text) => text.clone(),
+            other => serde_json::to_string(other).ok()?,
+        };
+
+        session.history.truncate(user_index);
+        session.last_updated = Self::current_timestamp();
+        self.dirty.store(true, Ordering::Relaxed);
+
+        Some(removed_text)
+    }
+
     /// Returns the current UNIX timestamp in seconds (used for `last_updated` fields).
     pub fn current_timestamp() -> f64 {
         std::time::SystemTime::now()
@@ -276,6 +294,61 @@ mod tests {
 
         manager.clear_chat_history("session-1");
         assert!(manager.get_chat_history("session-1").is_empty());
+        assert!(manager.dirty.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_rewind_last_turn_in_memory() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        };
+
+        manager.get_or_create_session(
+            "session-1",
+            &[ChatMessage {
+                id: "msg-1".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("first".to_string()),
+                thought_signature: None,
+            }],
+        );
+        manager.append_response(
+            "session-1",
+            "msg-2".to_string(),
+            &ChatReply {
+                text: "reply".to_string(),
+                role: "assistant".to_string(),
+            },
+            None,
+        );
+        manager.get_or_create_session(
+            "session-1",
+            &[ChatMessage {
+                id: "msg-3".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("second".to_string()),
+                thought_signature: None,
+            }],
+        );
+        manager.append_response(
+            "session-1",
+            "msg-4".to_string(),
+            &ChatReply {
+                text: "second reply".to_string(),
+                role: "assistant".to_string(),
+            },
+            None,
+        );
+        manager.dirty.store(false, Ordering::Relaxed);
+
+        let removed = manager.rewind_last_turn("session-1");
+        let history = manager.get_chat_history("session-1");
+
+        assert_eq!(removed.as_deref(), Some("second"));
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].role, "user");
+        assert_eq!(history[1].role, "assistant");
         assert!(manager.dirty.load(Ordering::Relaxed));
     }
 

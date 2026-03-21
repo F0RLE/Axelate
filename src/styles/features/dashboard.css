@@ -1515,7 +1515,6 @@ body.snapping .modal-backdrop {
 /* Ensure actions remain visible while the card is hovered, being clicked, or when elements inside have focus */
 .app-card:hover .app-card-hover-actions,
 .app-card:active .app-card-hover-actions,
-.app-card:focus-within .app-card-hover-actions,
 .app-card-hover-actions:hover {
     opacity: 1 !important;
     pointer-events: auto !important;

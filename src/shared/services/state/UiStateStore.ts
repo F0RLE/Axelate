@@ -55,6 +55,15 @@ export class UiStateStore {
     private _isDirty = false;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly _STORAGE_KEY = 'axelate_ui_state';
+    private readonly _boundVisibilityChange = () => {
+        if (document.hidden) {
+            void this.saveAsync();
+        }
+    };
+    private readonly _boundBeforeUnload = () => {
+        this.saveImmediate();
+    };
+    private _isDestroyed = false;
 
     constructor(private readonly _bridge: IBridge) {
         this._initAutoSave();
@@ -178,14 +187,20 @@ export class UiStateStore {
     }
 
     private _initAutoSave(): void {
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                void this.saveAsync();
-            }
-        });
+        document.addEventListener('visibilitychange', this._boundVisibilityChange);
+        globalThis.addEventListener('beforeunload', this._boundBeforeUnload);
+    }
 
-        globalThis.addEventListener('beforeunload', () => {
-            this.saveImmediate();
-        });
+    public destroy(): void {
+        if (this._isDestroyed) return;
+        this._isDestroyed = true;
+
+        if (this._autoSaveTimer !== null) {
+            globalThis.clearTimeout(this._autoSaveTimer);
+            this._autoSaveTimer = null;
+        }
+
+        document.removeEventListener('visibilitychange', this._boundVisibilityChange);
+        globalThis.removeEventListener('beforeunload', this._boundBeforeUnload);
     }
 }

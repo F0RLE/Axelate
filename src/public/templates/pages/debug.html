@@ -4,7 +4,6 @@
 
                     <!-- Console Card (Matches Settings Card) -->
                     <div class="console-card">
-                        <!-- Card Header with Tabs and Actions -->
                         <div class="console-card-header">
                             <div class="console-tabs-group">
                                 <button
@@ -20,6 +19,15 @@
 
                             <div class="console-actions">
                                 <button
+                                    id="copy-logs-btn"
+                                    class="console-btn"
+                                    title="Copy Logs"
+                                >
+                                    <svg class="icon">
+                                        <use href="#icon-clipboard"></use>
+                                    </svg>
+                                </button>
+                                <button
                                     id="clear-logs-btn"
                                     class="console-btn"
                                     title="Clear Console"
@@ -31,7 +39,6 @@
                             </div>
                         </div>
 
-                        <!-- Card Content (Logs) -->
                         <div id="console-container" class="console-logs-area">
                             <div id="logs">
                                 <div

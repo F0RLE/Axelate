@@ -1,8 +1,8 @@
+use crate::app::window::{create_main_window, show_and_focus_window};
 use crate::domain::ai::{
     self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
 };
-use crate::app::window::{create_main_window, show_and_focus_window};
 use crate::domain::engine::manager::EngineManager;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
@@ -56,6 +56,19 @@ pub fn get_chat_history(
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
+/// Removes the latest user turn and any following assistant replies from a session.
+pub async fn rewind_last_turn(
+    session_id: &str,
+    sessions: State<'_, Arc<ChatSessionManager>>,
+) -> Result<Option<String>, AppError> {
+    let removed = sessions.rewind_last_turn(session_id);
+    let _ = sessions.force_save().await;
+    Ok(removed)
+}
+
+#[tauri::command]
+#[specta::specta]
 /// Counts tokens in text for the specified model
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned types for serialization
 pub async fn count_tokens(text: String, model: Option<String>) -> Result<u32, String> {
@@ -76,8 +89,7 @@ pub async fn generate_image(
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<ai::ImageGenerationResponse, AppError> {
-    ai_service::process_image_request(request, &sessions, &config_service, &engine_manager)
-        .await
+    ai_service::process_image_request(request, &sessions, &config_service, &engine_manager).await
 }
 
 #[tauri::command]
@@ -96,7 +108,7 @@ pub async fn generate_image_background(
     let config_service = Arc::clone(&*config_service);
     let engine_manager = Arc::clone(&*engine_manager);
     let ui_state_service = ui_state_service.inner().clone();
-    let app_handle = app.clone();
+    let app_handle = app;
 
     tauri::async_runtime::spawn(async move {
         crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");

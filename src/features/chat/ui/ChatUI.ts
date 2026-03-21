@@ -26,6 +26,13 @@ import DOMPurify from 'dompurify';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class ChatUI {
+    private _lastEditableUserActionBar: HTMLElement | null = null;
+    private _editMessageHandler: ((text: string) => void | Promise<void>) | null = null;
+    private readonly _boundDocumentClick: (e: Event) => void;
+    private _retryStatusUnlisten: (() => void) | null = null;
+    private _isInitialized = false;
+    private _isDestroyed = false;
+
     private get _messagesContainer(): HTMLElement | null {
         return document.getElementById('chat-messages');
     }
@@ -57,6 +64,13 @@ export class ChatUI {
     private readonly _typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
     constructor() {
+        this._boundDocumentClick = (e: Event) => {
+            if (!(e.target instanceof HTMLElement)) return;
+            if (!e.target.closest('#chat-messages')) return;
+            void this._handleMessageClick(e as MouseEvent);
+            void this._handleCopyClick(e as MouseEvent);
+        };
+
         // Configure marked renderer for code blocks
         const renderer = new marked.Renderer();
         renderer.code = function ({
@@ -90,64 +104,80 @@ export class ChatUI {
 
         marked.use({ renderer });
 
-        // Bind event listeners on messages container — also lazy via delegation
-        document.addEventListener('click', (e) => {
-            if (!(e.target instanceof HTMLElement)) return;
-            if (!e.target.closest('#chat-messages')) return;
-            void this._handleMessageClick(e as MouseEvent);
-            void this._handleCopyClick(e as MouseEvent);
-        });
+        document.addEventListener('click', this._boundDocumentClick);
     }
 
     /**
      * Initializes the ChatUI component.
      */
     public async init(): Promise<void> {
+        if (this._isInitialized || this._isDestroyed) return;
+        this._isInitialized = true;
         // Bind AI events
         await this._bindAiEvents();
     }
 
     private async _bindAiEvents(): Promise<void> {
         const win = getGlobalWin();
-        if (win.__TAURI_INTERNALS__ !== undefined) {
-            await listen<{ code: string; wait_seconds: number }>('ai:status:retry', (e) => {
-                const { code, wait_seconds } = e.payload;
-                if (code === 'GEMINI_QUOTA_RETRY') {
-                    // Show toast or update UI
-                    const g = getGlobalWin();
-                    const msg =
-                        typeof g.t === 'function'
-                            ? g.t(
-                                  'ui.gemini.status.retry',
-                                  'Rate limited. Retrying in {seconds}s...',
-                                  {
-                                      seconds: wait_seconds.toString(),
-                                  },
-                              )
-                            : 'Rate limited. Retrying...';
-                    this.showToast(msg, 'warning', 3000);
+        if (win.__TAURI_INTERNALS__ !== undefined && this._retryStatusUnlisten === null) {
+            this._retryStatusUnlisten = await listen<{ code: string; wait_seconds: number }>(
+                'ai:status:retry',
+                (e) => {
+                    const { code, wait_seconds } = e.payload;
+                    if (code === 'GEMINI_QUOTA_RETRY') {
+                        // Show toast or update UI
+                        const g = getGlobalWin();
+                        const msg =
+                            typeof g.t === 'function'
+                                ? g.t(
+                                      'ui.gemini.status.retry',
+                                      'Rate limited. Retrying in {seconds}s...',
+                                      {
+                                          seconds: wait_seconds.toString(),
+                                      },
+                                  )
+                                : 'Rate limited. Retrying...';
+                        this.showToast(msg, 'warning', 3000);
 
-                    // Optional: Update typing indicator if active
-                    const typing = document.querySelector(
-                        '.chat-message.assistant.typing .typing-dots',
-                    );
-                    if (typing) {
-                        const label = document.createElement('div');
-                        label.className = 'typing-status';
-                        label.textContent = msg;
-                        label.style.fontSize = '0.8em';
-                        label.style.opacity = '0.8';
-                        label.style.marginTop = '4px';
+                        // Optional: Update typing indicator if active
+                        const typing = document.querySelector(
+                            '.chat-message.assistant.typing .typing-dots',
+                        );
+                        if (typing) {
+                            const label = document.createElement('div');
+                            label.className = 'typing-status';
+                            label.textContent = msg;
+                            label.style.fontSize = '0.8em';
+                            label.style.opacity = '0.8';
+                            label.style.marginTop = '4px';
 
-                        // Remove old status if exists
-                        const old = typing.parentElement?.querySelector('.typing-status');
-                        if (old !== null && old !== undefined) old.remove();
+                            // Remove old status if exists
+                            const old = typing.parentElement?.querySelector('.typing-status');
+                            if (old !== null && old !== undefined) old.remove();
 
-                        typing.parentElement?.appendChild(label);
+                            typing.parentElement?.appendChild(label);
+                        }
                     }
-                }
-            });
+                },
+            );
         }
+    }
+
+    public destroy(): void {
+        if (this._isDestroyed) return;
+        this._isDestroyed = true;
+        this._isInitialized = false;
+
+        document.removeEventListener('click', this._boundDocumentClick);
+        this._retryStatusUnlisten?.();
+        this._retryStatusUnlisten = null;
+
+        for (const timeout of this._typingTimeouts.values()) {
+            clearTimeout(timeout);
+        }
+        this._typingTimeouts.clear();
+        this._lastEditableUserActionBar = null;
+        this._editMessageHandler = null;
     }
 
     /**
@@ -165,6 +195,19 @@ export class ChatUI {
         this.updateAttachments([], () => void 0);
     }
 
+    public setEditMessageHandler(handler: (text: string) => void | Promise<void>): void {
+        this._editMessageHandler = handler;
+    }
+
+    public renderHistory(messages: Array<{ role: IChatRole; content: unknown }>): void {
+        this.clear();
+        for (const message of messages) {
+            this.appendMessage(message.role, message.content, {
+                skipAnimation: true,
+            });
+        }
+    }
+
     private _extractFromObject(obj: Record<string, unknown>): string {
         if ('message' in obj && typeof obj['message'] === 'string') return obj['message'];
         if ('error' in obj && typeof obj['error'] === 'string') return obj['error'];
@@ -173,7 +216,10 @@ export class ChatUI {
         try {
             return JSON.stringify(obj, null, 2);
         } catch {
-            return '[Сложный объект: невозможно отобразить]';
+            return getGlobalWin().t(
+                'ui.chat.complex_object_fallback',
+                '[Complex object: cannot display]',
+            );
         }
     }
 
@@ -204,15 +250,14 @@ export class ChatUI {
         const safeContent = this._safeExtractText(content);
 
         const bubble = this._createMessageBubble(opts);
-        if (role === 'user') {
-            this._appendUserCopyButton(bubble, safeContent);
-        }
+        const actions = this._appendMessageActions(safeContent, role);
         const textNode = this._createMessageTextNode(safeContent, opts);
         bubble.appendChild(textNode);
 
         this._appendAttachments(bubble, opts['attachments'] as IChatAttachment[]);
         this._appendImages(bubble, opts['images'] as { mime: string; data_base64: string }[]);
         this._appendMeta(bubble, opts['tokens'] as number | undefined);
+        if (actions !== null) bubble.appendChild(actions.actionBar);
 
         row.appendChild(bubble);
         if (this._messagesContainer) {
@@ -239,6 +284,8 @@ export class ChatUI {
         row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
 
         const bubble = this._createMessageBubble(opts);
+        const actions = this._appendMessageActions('', role);
+        const copyBtn = actions?.copyBtn ?? null;
         const textNode = document.createElement('div');
         textNode.className = 'markdown-body';
         bubble.appendChild(textNode);
@@ -258,6 +305,9 @@ export class ChatUI {
             update: (chunk: unknown) => {
                 const safeChunk = this._safeExtractText(chunk);
                 accumulatedText += safeChunk;
+                if (copyBtn instanceof HTMLElement) {
+                    copyBtn.dataset['copyText'] = accumulatedText;
+                }
                 renderCounter++;
                 const now = Date.now();
 
@@ -297,6 +347,9 @@ export class ChatUI {
             },
             replace: (text: string) => {
                 accumulatedText = text;
+                if (copyBtn instanceof HTMLElement) {
+                    copyBtn.dataset['copyText'] = accumulatedText;
+                }
                 renderCounter++;
                 const now = Date.now();
 
@@ -318,6 +371,9 @@ export class ChatUI {
             },
             finalize: (fullContent: unknown, finalOpts: Record<string, unknown> = {}) => {
                 const safeFullContent = this._safeExtractText(fullContent);
+                if (copyBtn instanceof HTMLElement) {
+                    copyBtn.dataset['copyText'] = safeFullContent;
+                }
 
                 try {
                     const parseResult = marked.parse(safeFullContent);
@@ -344,6 +400,9 @@ export class ChatUI {
                 }
 
                 this._appendMeta(bubble, finalOpts['tokens'] as number | undefined);
+                if (actions !== null && !bubble.contains(actions.actionBar)) {
+                    bubble.appendChild(actions.actionBar);
+                }
                 this._scrollToBottom();
             },
         };
@@ -361,7 +420,7 @@ export class ChatUI {
         if (!this._messagesContainer) return;
 
         if (sticky) {
-            const threshold = 150; // px
+            const threshold = 150;
             const isAtBottom =
                 this._messagesContainer.scrollHeight -
                     this._messagesContainer.scrollTop -
@@ -389,21 +448,52 @@ export class ChatUI {
         return bubble;
     }
 
-    private _appendUserCopyButton(bubble: HTMLElement, content: string): void {
-        if (content.trim() === '') return;
+    private _appendMessageActions(
+        content: string,
+        role: 'user' | 'assistant',
+    ): { actionBar: HTMLElement; copyBtn: HTMLElement; editBtn: HTMLElement | null } | null {
+        const actionBar = document.createElement('div');
+        actionBar.className = `chat-message-actions ${role === 'user' ? 'is-user' : 'is-bot'}`;
 
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'chat-copy-own-btn';
-        btn.dataset['copyText'] = content;
-        btn.title = getGlobalWin().t('ui.launcher.web.copy', 'Copy');
-        btn.innerHTML = DOMPurify.sanitize(`
-            <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'chat-copy-own-btn';
+        copyBtn.dataset['copyText'] = content;
+        copyBtn.title = getGlobalWin().t('ui.launcher.web.copy', 'Copy');
+        copyBtn.innerHTML = DOMPurify.sanitize(`
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
         `);
-        bubble.appendChild(btn);
+        actionBar.appendChild(copyBtn);
+
+        let editBtn: HTMLButtonElement | null = null;
+        if (role === 'user') {
+            editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'chat-edit-own-btn';
+            editBtn.dataset['editText'] = content;
+            editBtn.title = getGlobalWin().t('ui.launcher.web.edit_last', 'Edit last message');
+            editBtn.innerHTML = DOMPurify.sanitize(`
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                </svg>
+            `);
+            actionBar.appendChild(editBtn);
+            this._setLastEditableUserActionBar(actionBar);
+        }
+
+        return { actionBar, copyBtn, editBtn };
+    }
+
+    private _setLastEditableUserActionBar(actionBar: HTMLElement): void {
+        if (this._lastEditableUserActionBar instanceof HTMLElement) {
+            this._lastEditableUserActionBar.classList.remove('is-last-editable');
+        }
+        actionBar.classList.add('is-last-editable');
+        this._lastEditableUserActionBar = actionBar;
     }
 
     /**
@@ -555,6 +645,13 @@ export class ChatUI {
                 el.style.display = 'block';
                 el.style.maxWidth = '100%';
                 el.style.borderRadius = 'var(--radius-md)';
+                el.addEventListener(
+                    'load',
+                    () => {
+                        this._scrollToBottom(true);
+                    },
+                    { once: true },
+                );
 
                 const btn = document.createElement('button');
                 btn.className = 'chat-img-download-btn';
@@ -678,26 +775,8 @@ export class ChatUI {
      * Appends metadata (time and tokens) to a message bubble.
      */
     private _appendMeta(bubble: HTMLElement, tokens?: number): void {
-        const meta = document.createElement('div');
-        meta.className = 'chat-meta';
-
-        // Time
-        const timeSpan = document.createElement('span');
-        timeSpan.textContent = new Date().toLocaleTimeString();
-        meta.appendChild(timeSpan);
-
-        // Tokens
-        if (typeof tokens === 'number' && tokens > 0) {
-            const tokenSpan = document.createElement('span');
-            tokenSpan.className = 'chat-tokens';
-            const t = getGlobalWin().t;
-            const fallback = tokens === 1 ? 'token' : 'tokens';
-            const tokensWord = t('ui.launcher.web.tokens', fallback);
-            tokenSpan.textContent = `${String(tokens)} ${tokensWord}`;
-            meta.appendChild(tokenSpan);
-        }
-
-        bubble.appendChild(meta);
+        void bubble;
+        void tokens;
     }
 
     public updateAttachments(files: File[], onRemove: (index: number) => void): void {
@@ -741,16 +820,14 @@ export class ChatUI {
         const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
         const name = this._shortenFileName(f.name);
 
-        let contentHtml = '';
-        if (isImage) {
-            const objectUrl = URL.createObjectURL(f);
-            contentHtml = `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" alt="${DOMPurify.sanitize(name)}" onload="URL.revokeObjectURL(this.src)">`;
-            if (fileTokens > 0) {
-                contentHtml += `<div class="media-badge">${String(fileTokens)}</div>`;
-            }
-        } else {
-            contentHtml = this._createFilePillHtml(f.name, fileTokens, name);
-        }
+        const contentHtml = isImage
+            ? (() => {
+                  const objectUrl = URL.createObjectURL(f);
+                  const badgeHtml =
+                      fileTokens > 0 ? `<div class="media-badge">${String(fileTokens)}</div>` : '';
+                  return `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" alt="${DOMPurify.sanitize(name)}" onload="URL.revokeObjectURL(this.src)">${badgeHtml}`;
+              })()
+            : this._createFilePillHtml(f.name, fileTokens, name);
 
         card.innerHTML = `
             ${contentHtml}
@@ -771,12 +848,13 @@ export class ChatUI {
     }
 
     private _createFilePillHtml(originalName: string, tokens: number, displayName: string): string {
-        let iconSvg = '';
-        try {
-            iconSvg = getFileIcon(originalName);
-        } catch {
-            iconSvg = '📄';
-        }
+        const iconSvg = (() => {
+            try {
+                return getFileIcon(originalName);
+            } catch {
+                return '📄';
+            }
+        })();
 
         const t = getGlobalWin().t;
         const tokensLabel = t('ui.launcher.web.tokens', 'tokens');
@@ -852,6 +930,18 @@ export class ChatUI {
      */
     private async _handleCopyClick(e: MouseEvent): Promise<void> {
         const target = e.target as HTMLElement;
+        const editBtn = target.closest('.chat-edit-own-btn');
+        if (editBtn instanceof HTMLElement) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const text = editBtn.dataset['editText'] ?? '';
+            if (text !== '' && this._editMessageHandler !== null) {
+                await this._editMessageHandler(text);
+            }
+            return;
+        }
+
         const ownBtn = target.closest('.chat-copy-own-btn');
         if (ownBtn instanceof HTMLElement) {
             e.preventDefault();
@@ -1012,6 +1102,30 @@ export class ChatUI {
         if (this._attachBtn) this._attachBtn.title = t('ui.launcher.web.attach', 'Attach');
         if (this._voiceBtn) this._voiceBtn.title = t('ui.launcher.web.voice', 'Voice');
         if (this._sendBtn) this._sendBtn.title = t('ui.launcher.web.send', 'Send');
+
+        document.querySelectorAll<HTMLElement>('.chat-copy-own-btn').forEach((btn) => {
+            btn.title = t('ui.launcher.web.copy', 'Copy');
+        });
+
+        document.querySelectorAll<HTMLElement>('.chat-edit-own-btn').forEach((btn) => {
+            btn.title = t('ui.launcher.web.edit_last', 'Edit last message');
+        });
+
+        document.querySelectorAll<HTMLElement>('.code-copy-btn').forEach((btn) => {
+            btn.title = t('ui.launcher.web.copy_code', 'Copy code');
+            const label = btn.querySelector('span');
+            if (label !== null) {
+                label.textContent = t('ui.launcher.web.copy', 'Copy');
+            }
+        });
+
+        document.querySelectorAll<HTMLElement>('.chat-img-download-btn').forEach((btn) => {
+            btn.title = t('ui.chat.save_image', 'Save Image');
+        });
+
+        document.querySelectorAll<HTMLElement>('.media-remove').forEach((btn) => {
+            btn.title = t('ui.launcher.web.remove_attachment', 'Remove attachment');
+        });
 
         // 3. Token count (if visible)
         if (this._tokenCount?.classList.contains('visible') === true) {

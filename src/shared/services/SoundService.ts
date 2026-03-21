@@ -17,6 +17,7 @@ export class SoundService {
     private _unsubscribers: (() => void)[] = [];
     private _currentBadge: Element | null = null;
     private _currentActionCorner: Element | null = null;
+    private _isDestroyed = false;
 
     constructor() {
         this._initContext();
@@ -42,6 +43,9 @@ export class SoundService {
      * Cleans up all event listeners and audio context.
      */
     public destroy(): void {
+        if (this._isDestroyed) return;
+        this._isDestroyed = true;
+
         this._unsubscribers.forEach((fn) => {
             fn();
         });
@@ -52,6 +56,11 @@ export class SoundService {
                 tracer.error(`[SoundService] Error closing context: ${String(e)}`);
             });
         }
+
+        this._ctx = null;
+        this._lastHovered = null;
+        this._currentBadge = null;
+        this._currentActionCorner = null;
 
         tracer.debug('[SoundService] Destroyed.');
     }

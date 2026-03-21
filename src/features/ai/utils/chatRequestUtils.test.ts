@@ -43,17 +43,17 @@ describe('chatRequestUtils', () => {
         it('should construct a valid request object', () => {
             const config = {
                 providerId: 'gpt',
-                model: 'gpt-5.2',
+                model: 'gpt-5.4',
                 apiKey: 'sk-123',
                 sessionId: 'session-1',
                 thinkingLevel: 'high' as const,
             };
 
-            const request = constructChatRequest(mockMessage, [], config);
+            const request = constructChatRequest([], mockMessage, [], config);
 
             expect(request).toEqual({
                 provider: 'gpt',
-                model: 'gpt-5.2',
+                model: 'gpt-5.4',
                 messages: [{ role: 'user', content: 'Hello', thought_signature: undefined }],
                 session_id: 'session-1',
                 api_key: 'sk-123',
@@ -72,10 +72,40 @@ describe('chatRequestUtils', () => {
                 thinkingLevel: 'low' as const,
             };
 
-            const request = constructChatRequest(mockMessage, [], config);
+            const request = constructChatRequest([], mockMessage, [], config);
 
             expect(request.api_key).toBeNull();
             expect(request.provider).toBe('local'); // mapped from 'local'
+        });
+
+        it('should prepend existing history before the current message', () => {
+            const config = {
+                providerId: 'gpt',
+                model: 'gpt-5.4',
+                apiKey: 'sk-123',
+                sessionId: 'session-1',
+                thinkingLevel: 'high' as const,
+            };
+
+            const request = constructChatRequest(
+                [{ role: 'assistant', content: 'Previous reply' }],
+                mockMessage,
+                [],
+                config,
+            );
+
+            expect(request.messages).toEqual([
+                {
+                    role: 'assistant',
+                    content: 'Previous reply',
+                    thought_signature: undefined,
+                },
+                {
+                    role: 'user',
+                    content: 'Hello',
+                    thought_signature: undefined,
+                },
+            ]);
         });
     });
 });

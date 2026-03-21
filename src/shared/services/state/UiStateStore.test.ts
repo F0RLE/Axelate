@@ -270,5 +270,16 @@ describe('UiStateStore', () => {
             >;
             expect(stored['sidebar_width']).toBe(500);
         });
+
+        it('should remove auto-save listeners on destroy', () => {
+            bridge = createMockBridge();
+            store = new UiStateStore(bridge);
+            store.updateState({ sidebar_width: 640 });
+
+            store.destroy();
+            globalThis.dispatchEvent(new Event('beforeunload'));
+
+            expect(localStorage.getItem('axelate_ui_state')).toBeNull();
+        });
     });
 });

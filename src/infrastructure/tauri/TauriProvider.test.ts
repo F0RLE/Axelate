@@ -192,6 +192,48 @@ describe('TauriProvider', () => {
 
             await expect(provider.invoke('some_cmd')).rejects.toThrow('string rejection');
         });
+
+        it('should unwrap successful Specta result responses', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce({
+                status: 'ok',
+                data: { value: 7 },
+            });
+
+            await expect(provider.invoke<{ value: number }>('specta_ok')).resolves.toEqual({
+                value: 7,
+            });
+        });
+
+        it('should throw readable errors for Specta error payloads', async () => {
+            (mockedTauriInvoke as unknown as Mock)
+                .mockResolvedValueOnce({ status: 'error', error: 'rate limited' })
+                .mockResolvedValueOnce({
+                    status: 'error',
+                    error: { message: 'boom' },
+                })
+                .mockResolvedValueOnce({
+                    status: 'error',
+                    error: { payload: { detail: 'bad' } },
+                });
+
+            await expect(provider.invoke('specta_err_string')).rejects.toThrow('rate limited');
+            await expect(provider.invoke('specta_err_message')).rejects.toThrow('boom');
+            await expect(provider.invoke('specta_err_payload')).rejects.toThrow('[object Object]');
+        });
+
+        it('should normalize object rejections with message, code and stringify fallback', async () => {
+            (mockedTauriInvoke as unknown as Mock)
+                .mockRejectedValueOnce({ message: 'ipc failed', code: 'E_IPC' })
+                .mockRejectedValueOnce({ nested: true });
+
+            const err = (await provider
+                .invoke('msg_error')
+                .catch((e) => e as Error & { code?: string })) as Error & { code?: string };
+            expect(err.message).toBe('ipc failed');
+            expect(err.code).toBe('E_IPC');
+
+            await expect(provider.invoke('json_error')).rejects.toThrow('{"nested":true}');
+        });
     });
 
     // ---------------------------------------------------------- listen

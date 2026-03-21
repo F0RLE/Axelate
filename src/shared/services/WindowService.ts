@@ -58,6 +58,12 @@ export class WindowService {
     private readonly _MAX_ZOOM = 3;
     private _saveWindowTimer: ReturnType<typeof setTimeout> | null = null;
     private _config: IWindowConfig | null = null;
+    private _moveUnlisten: (() => void) | null = null;
+    private _windowListenersInitialized = false;
+    private _webWheelHandler: ((e: WheelEvent) => void) | null = null;
+    private readonly _boundWindowResize = () => {
+        this._scheduleSaveWindowState();
+    };
 
     constructor(private readonly _bridge: IBridge) {}
 
@@ -97,18 +103,37 @@ export class WindowService {
             document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
 
             // Enable Ctrl + Scroll implementation for Web Browser
-            window.addEventListener(
-                'wheel',
-                (e) => {
+            if (this._webWheelHandler === null) {
+                this._webWheelHandler = (e: WheelEvent) => {
                     if (e.ctrlKey) {
                         e.preventDefault();
                         // Zoom Step 0.1
                         const delta = e.deltaY > 0 ? -0.1 : 0.1;
                         void this.changeZoom(delta);
                     }
-                },
-                { passive: false },
-            );
+                };
+                window.addEventListener('wheel', this._webWheelHandler, { passive: false });
+            }
+        }
+    }
+
+    public destroy(): void {
+        if (this._saveWindowTimer !== null) {
+            clearTimeout(this._saveWindowTimer);
+            this._saveWindowTimer = null;
+        }
+
+        if (this._windowListenersInitialized) {
+            window.removeEventListener('resize', this._boundWindowResize);
+            this._windowListenersInitialized = false;
+        }
+
+        this._moveUnlisten?.();
+        this._moveUnlisten = null;
+
+        if (this._webWheelHandler !== null) {
+            window.removeEventListener('wheel', this._webWheelHandler);
+            this._webWheelHandler = null;
         }
     }
 
@@ -393,14 +418,15 @@ export class WindowService {
      * Initializes listeners for window resize and move events to persist state.
      */
     private _initWindowListeners(): void {
+        if (this._windowListenersInitialized) return;
+        this._windowListenersInitialized = true;
+
         // DOM Resize event covers window resizing and maximizing
-        window.addEventListener('resize', () => {
-            this._scheduleSaveWindowState();
-        });
+        window.addEventListener('resize', this._boundWindowResize);
 
         // Tauri move event (if supported) covers window dragging
-        void this._bridge.listen('tauri://move', () => {
-            this._scheduleSaveWindowState();
+        void this._bridge.listen('tauri://move', this._boundWindowResize).then((unlisten) => {
+            this._moveUnlisten = unlisten;
         });
     }
 

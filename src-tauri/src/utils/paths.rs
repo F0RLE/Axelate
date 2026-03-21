@@ -36,24 +36,29 @@ fn resolve_config_root() -> PathBuf {
 fn resolve_local_data_root() -> PathBuf {
     #[cfg(test)]
     {
+        resolve_config_root()
+    }
+
+    #[cfg(not(test))]
+    {
+        resolve_config_root()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_local_data_root() -> PathBuf {
+    #[cfg(test)]
+    {
         PathBuf::from("./test_appdata_local")
     }
 
     #[cfg(not(test))]
     {
-        #[cfg(target_os = "windows")]
-        {
-            let root = dirs::data_local_dir()
-                .or_else(|| std::env::var("LOCALAPPDATA").ok().map(PathBuf::from))
-                .unwrap_or_else(resolve_config_root);
+        let root = dirs::data_local_dir()
+            .or_else(|| std::env::var("LOCALAPPDATA").ok().map(PathBuf::from))
+            .unwrap_or_else(resolve_config_root);
 
-            return root.join("AxelateData");
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            resolve_config_root()
-        }
+        root.join("AxelateData")
     }
 }
 
@@ -66,8 +71,9 @@ pub static APPDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(resolve_config_root);
 
 /// Local machine data root.
 /// Defaults to:
-/// - Windows: `%LOCALAPPDATA%/AxelateData`
-/// - Other OSes: same as `APPDATA_ROOT`
+/// - All OSes: same as `APPDATA_ROOT`
+///
+/// Kept as an alias for compatibility with older code paths.
 pub static LOCALDATA_ROOT: LazyLock<PathBuf> = LazyLock::new(resolve_local_data_root);
 
 /// User-specific data root (`AxelateData/User`)
@@ -79,9 +85,8 @@ pub static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("Conf
 /// Directory for UI persistence state (`AxelateData/User/UI`)
 pub static UI_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("UI"));
 
-/// System root for internal app data.
-/// On Windows this is stored in Local AppData to keep large/cacheable files out of Roaming.
-pub static SYSTEM_ROOT: LazyLock<PathBuf> = LazyLock::new(|| LOCALDATA_ROOT.join("System"));
+/// System root for internal app data (`AxelateData/System`).
+pub static SYSTEM_ROOT: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("System"));
 
 /// Log files directory (`AxelateData/System/Logs`)
 pub static LOG_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Logs"));
@@ -92,9 +97,21 @@ pub static TEMP_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Temp
 /// Downloaded modules directory (`AxelateData/System/Modules`)
 pub static MODULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Modules"));
 
-/// Legacy downloaded modules directory in Roaming AppData (`AxelateData/System/Modules`)
-pub static LEGACY_MODULES_DIR: LazyLock<PathBuf> =
-    LazyLock::new(|| APPDATA_ROOT.join("System").join("Modules"));
+/// Legacy downloaded modules directory used by older Windows builds
+/// that stored system data in Local AppData.
+pub static LEGACY_MODULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    #[cfg(target_os = "windows")]
+    {
+        resolve_windows_local_data_root()
+            .join("System")
+            .join("Modules")
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        (*MODULES_DIR).clone()
+    }
+});
 
 /// Downloaded or user-provided model files directory (`AxelateData/System/Models`)
 pub static MODELS_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Models"));
@@ -179,7 +196,7 @@ const MAX_LOG_FILES: usize = 5;
 /// # Errors
 /// Returns `AppError::Io` if directory creation fails.
 pub fn init_filesystem() -> Result<(), AppError> {
-    migrate_legacy_windows_system_root()?;
+    migrate_windows_system_root_to_roaming()?;
 
     let dirs = [
         &*APPDATA_ROOT,
@@ -205,11 +222,11 @@ pub fn init_filesystem() -> Result<(), AppError> {
     Ok(())
 }
 
-fn migrate_legacy_windows_system_root() -> Result<(), AppError> {
+fn migrate_windows_system_root_to_roaming() -> Result<(), AppError> {
     #[cfg(target_os = "windows")]
     {
-        let legacy_system_root = APPDATA_ROOT.join("System");
-        if legacy_system_root == *SYSTEM_ROOT || !legacy_system_root.exists() || SYSTEM_ROOT.exists() {
+        let legacy_system_root = resolve_windows_local_data_root().join("System");
+        if legacy_system_root == *SYSTEM_ROOT || !legacy_system_root.exists() {
             return Ok(());
         }
 
@@ -217,23 +234,77 @@ fn migrate_legacy_windows_system_root() -> Result<(), AppError> {
             fs::create_dir_all(parent)?;
         }
 
-        match fs::rename(&legacy_system_root, &*SYSTEM_ROOT) {
-            Ok(()) => {
-                tracing::info!(
-                    from = %legacy_system_root.display(),
-                    to = %SYSTEM_ROOT.display(),
-                    "Migrated legacy system data to Local AppData"
-                );
-            }
-            Err(err) => {
-                tracing::warn!(
-                    from = %legacy_system_root.display(),
-                    to = %SYSTEM_ROOT.display(),
-                    error = %err,
-                    "Failed to migrate legacy system data; keeping existing layout for this run"
-                );
-            }
+        if matches!(fs::rename(&legacy_system_root, &*SYSTEM_ROOT), Ok(())) {
+            tracing::info!(
+                from = %legacy_system_root.display(),
+                to = %SYSTEM_ROOT.display(),
+                "Migrated system data from Local AppData to Roaming AppData"
+            );
+        } else {
+            merge_directories(&legacy_system_root, &SYSTEM_ROOT)?;
+            remove_empty_dirs(&legacy_system_root)?;
+            tracing::info!(
+                from = %legacy_system_root.display(),
+                to = %SYSTEM_ROOT.display(),
+                "Merged legacy system data from Local AppData into Roaming AppData"
+            );
         }
+    }
+
+    Ok(())
+}
+
+fn merge_directories(source: &std::path::Path, target: &std::path::Path) -> Result<(), AppError> {
+    if !source.exists() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(target)?;
+
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+
+        if entry.file_type()?.is_dir() {
+            merge_directories(&source_path, &target_path)?;
+            remove_empty_dirs(&source_path)?;
+            continue;
+        }
+
+        if target_path.exists() {
+            fs::remove_file(&source_path)?;
+            continue;
+        }
+
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        if fs::rename(&source_path, &target_path).is_err() {
+            fs::copy(&source_path, &target_path)?;
+            fs::remove_file(&source_path)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn remove_empty_dirs(path: &std::path::Path) -> Result<(), AppError> {
+    if !path.exists() || !path.is_dir() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let child = entry.path();
+        if entry.file_type()?.is_dir() {
+            remove_empty_dirs(&child)?;
+        }
+    }
+
+    if fs::read_dir(path)?.next().is_none() {
+        fs::remove_dir(path)?;
     }
 
     Ok(())

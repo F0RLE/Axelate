@@ -21,8 +21,11 @@ pub struct TrayStatusState {
 impl std::fmt::Debug for TrayStatusState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TrayStatusState")
-            .field("background_active", &self.background_active.load(Ordering::Relaxed))
-            .finish()
+            .field(
+                "background_active",
+                &self.background_active.load(Ordering::Relaxed),
+            )
+            .finish_non_exhaustive()
     }
 }
 
@@ -84,7 +87,9 @@ fn format_progress_summary(progress: &str) -> String {
         .copied();
 
     match (percent, fraction, rate) {
-        (Some(p), Some(f), Some(r)) => format!("{}: {} - {} - {}", t_en_ru("Image", "Картинка"), p, f, r),
+        (Some(p), Some(f), Some(r)) => {
+            format!("{}: {} - {} - {}", t_en_ru("Image", "Картинка"), p, f, r)
+        }
         (Some(p), Some(f), None) => format!("{}: {} - {}", t_en_ru("Image", "Картинка"), p, f),
         (None, Some(f), Some(r)) => format!("{}: {} - {}", t_en_ru("Image", "Картинка"), f, r),
         (Some(p), None, None) => format!("{}: {}", t_en_ru("Progress", "Прогресс"), p),

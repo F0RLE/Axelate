@@ -14,8 +14,16 @@ export class ModalManager {
     private _currentApps: IApp[] = [];
     private _currentFilter: 'text' | 'image' = 'text';
     private _currentSelectedAppId: string | null = null;
+    private _overlayClickModal: HTMLDialogElement | null = null;
+    private _filterPopulateTimer: ReturnType<typeof setTimeout> | null = null;
+    private _filterStyleResetTimer: ReturnType<typeof setTimeout> | null = null;
     // Keeps reference for potential future cleanup
     private readonly _progressHandler: (e: Event) => void;
+    private readonly _boundOverlayClick = (e: MouseEvent) => {
+        if (e.target === this._overlayClickModal) {
+            this.closeAppSelection();
+        }
+    };
 
     // Callback for app interactions (Download, Delete, Select)
     private readonly _onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void;
@@ -80,6 +88,13 @@ export class ModalManager {
         globalThis.addEventListener('download-progress-update', this._progressHandler);
     }
 
+    public destroy(): void {
+        this._cancelPendingFilterTransition();
+        this._detachOverlayCloseHandler();
+        globalThis.removeEventListener('download-progress-update', this._progressHandler);
+        this.closeAppSelection();
+    }
+
     // --- App Selection Modal ---
 
     public openAppSelection(category: string, apps: IApp[], selectedAppId?: string): void {
@@ -91,6 +106,9 @@ export class ModalManager {
         );
 
         if (modal === null || listEl === null) return;
+
+        this._cancelPendingFilterTransition();
+        this._detachOverlayCloseHandler();
 
         this._currentCategory = category;
         this._currentApps = apps;
@@ -131,20 +149,16 @@ export class ModalManager {
             },
         );
 
-        // Close on overlay click
-        const closeOnOverlay = (e: MouseEvent): void => {
-            if (e.target === modal) {
-                this.closeAppSelection();
-                modal.removeEventListener('click', closeOnOverlay);
-            }
-        };
-        modal.addEventListener('click', closeOnOverlay);
+        this._overlayClickModal = modal;
+        modal.addEventListener('click', this._boundOverlayClick);
     }
 
     public closeAppSelection(): void {
+        this._cancelPendingFilterTransition();
         this._navigation.removeBackAction('app-selection-modal');
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
         if (modal) {
+            this._detachOverlayCloseHandler();
             if (modal.open) {
                 modal.close();
             }
@@ -256,13 +270,15 @@ export class ModalManager {
 
             const listEl = document.getElementById('app-modal-list');
             if (listEl) {
+                this._cancelPendingFilterTransition();
                 listEl.style.willChange = 'opacity, transform';
                 listEl.style.transition =
                     'opacity 0.24s cubic-bezier(0.4, 0, 0.2, 1), transform 0.24s cubic-bezier(0.4, 0, 0.2, 1)';
                 listEl.style.opacity = '0';
                 listEl.style.transform = 'translateY(4px)';
 
-                setTimeout(() => {
+                this._filterPopulateTimer = setTimeout(() => {
+                    this._filterPopulateTimer = null;
                     this._populateAppList(
                         listEl,
                         this._currentApps,
@@ -272,7 +288,8 @@ export class ModalManager {
                     listEl.getBoundingClientRect();
                     listEl.style.opacity = '1';
                     listEl.style.transform = 'translateY(0)';
-                    setTimeout(() => {
+                    this._filterStyleResetTimer = setTimeout(() => {
+                        this._filterStyleResetTimer = null;
                         listEl.style.willChange = 'auto';
                     }, 300);
                 }, 200);
@@ -285,6 +302,34 @@ export class ModalManager {
         // Ensure initial state reflects _currentFilter
         updateTabUI();
     }
+
+    private _detachOverlayCloseHandler(): void {
+        if (this._overlayClickModal !== null) {
+            this._overlayClickModal.removeEventListener('click', this._boundOverlayClick);
+            this._overlayClickModal = null;
+        }
+    }
+
+    private _cancelPendingFilterTransition(): void {
+        if (this._filterPopulateTimer !== null) {
+            clearTimeout(this._filterPopulateTimer);
+            this._filterPopulateTimer = null;
+        }
+
+        if (this._filterStyleResetTimer !== null) {
+            clearTimeout(this._filterStyleResetTimer);
+            this._filterStyleResetTimer = null;
+        }
+
+        const listEl = document.getElementById('app-modal-list');
+        if (!(listEl instanceof HTMLElement)) return;
+
+        listEl.style.removeProperty('will-change');
+        listEl.style.removeProperty('transition');
+        listEl.style.removeProperty('opacity');
+        listEl.style.removeProperty('transform');
+    }
+
     private _populateAppList(
         listEl: HTMLElement,
         apps: IApp[],

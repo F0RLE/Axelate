@@ -94,11 +94,20 @@ export interface ILogEntry {
  * State of a module download/installation process.
  */
 export interface IModuleDownloadState {
-    status: 'init' | 'pending' | 'connecting' | 'downloading' | 'extracting' | 'complete' | 'error';
+    status:
+        | 'init'
+        | 'pending'
+        | 'connecting'
+        | 'downloading'
+        | 'extracting'
+        | 'complete'
+        | 'error'
+        | 'cancelled';
     progress: number;
     message?: string;
     downloaded?: number;
     total?: number;
+    speed?: number;
     error?: unknown;
 }
 

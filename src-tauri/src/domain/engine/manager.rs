@@ -54,6 +54,10 @@ impl std::fmt::Debug for EngineManager {
     }
 }
 
+fn is_progress_log_line(line: &str) -> bool {
+    line.contains("it/s") || line.contains("s/it") || line.contains('%')
+}
+
 impl EngineManager {
     /// Creates a new engine manager with the given event emitter.
     pub fn new(emitter: Arc<dyn EngineEventEmitter>) -> Self {
@@ -266,7 +270,7 @@ impl EngineManager {
         })?;
 
         // Spawn stdout/stderr readers
-        let emitter_clone = self.emitter.clone();
+        let emitter_clone = Arc::clone(&self.emitter);
         let engine_id_clone = config.engine_id.clone();
         if let Some(mut stdout) = process.stdout.take() {
             let mut file = stdout_file;
@@ -279,7 +283,10 @@ impl EngineManager {
                     if n == 0 {
                         break;
                     }
-                    let chunk = String::from_utf8_lossy(&buf[..n]);
+                    let Some(bytes) = buf.get(..n) else {
+                        break;
+                    };
+                    let chunk = String::from_utf8_lossy(bytes);
                     for c in chunk.chars() {
                         if c == '\n' || c == '\r' {
                             if !current_line.is_empty() {
@@ -289,10 +296,7 @@ impl EngineManager {
                                     let _ = f.write_all(line_nl.as_bytes());
                                 }
                                 let trimmed = current_line.trim();
-                                if trimmed.contains("it/s")
-                                    || trimmed.contains("s/it")
-                                    || trimmed.contains("%")
-                                {
+                                if is_progress_log_line(trimmed) {
                                     emitter_clone.emit_log(&engine_id_clone, trimmed);
                                 }
                                 current_line.clear();
@@ -305,15 +309,14 @@ impl EngineManager {
 
                 if !current_line.is_empty() {
                     let trimmed = current_line.trim();
-                    if trimmed.contains("it/s") || trimmed.contains("s/it") || trimmed.contains("%")
-                    {
+                    if is_progress_log_line(trimmed) {
                         emitter_clone.emit_log(&engine_id_clone, trimmed);
                     }
                 }
             });
         }
 
-        let emitter_clone2 = self.emitter.clone();
+        let emitter_clone2 = Arc::clone(&self.emitter);
         let engine_id_clone2 = config.engine_id.clone();
         if let Some(mut stderr) = process.stderr.take() {
             let mut file = stderr_file;
@@ -326,7 +329,10 @@ impl EngineManager {
                     if n == 0 {
                         break;
                     }
-                    let chunk = String::from_utf8_lossy(&buf[..n]);
+                    let Some(bytes) = buf.get(..n) else {
+                        break;
+                    };
+                    let chunk = String::from_utf8_lossy(bytes);
                     for c in chunk.chars() {
                         if c == '\n' || c == '\r' {
                             if !current_line.is_empty() {
@@ -336,10 +342,7 @@ impl EngineManager {
                                     let _ = f.write_all(line_nl.as_bytes());
                                 }
                                 let trimmed = current_line.trim();
-                                if trimmed.contains("it/s")
-                                    || trimmed.contains("s/it")
-                                    || trimmed.contains("%")
-                                {
+                                if is_progress_log_line(trimmed) {
                                     emitter_clone2.emit_log(&engine_id_clone2, trimmed);
                                 }
                                 current_line.clear();
@@ -352,8 +355,7 @@ impl EngineManager {
 
                 if !current_line.is_empty() {
                     let trimmed = current_line.trim();
-                    if trimmed.contains("it/s") || trimmed.contains("s/it") || trimmed.contains("%")
-                    {
+                    if is_progress_log_line(trimmed) {
                         emitter_clone2.emit_log(&engine_id_clone2, trimmed);
                     }
                 }

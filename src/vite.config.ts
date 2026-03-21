@@ -4,6 +4,10 @@ import { defineConfig } from 'vitest/config';
 import { fileURLToPath, URL } from 'node:url';
 import pkg from './package.json';
 
+const tauriPlatform = process.env['TAURI_PLATFORM'];
+const buildTarget =
+    tauriPlatform === 'windows' ? 'chrome146' : tauriPlatform === 'macos' ? 'safari26' : 'safari26';
+
 const pruneFontsPlugin = {
     name: 'prune-fonts',
     enforce: 'post' as const,
@@ -77,8 +81,8 @@ export default defineConfig({
     },
 
     build: {
-        // Tauri v2 modern engine targets
-        target: process.env['TAURI_PLATFORM'] === 'windows' ? 'chrome120' : 'safari15',
+        // Align with current stable engine baselines used by the embedded runtimes.
+        target: buildTarget,
 
         minify: process.env['TAURI_DEBUG'] ? false : 'terser',
         terserOptions: {
@@ -100,8 +104,16 @@ export default defineConfig({
                 main: fileURLToPath(new URL('./index.html', import.meta.url)),
             },
             output: {
-                manualChunks: {
-                    'vendor-markdown': ['marked', 'dompurify', 'marked-alert', 'marked-footnote'],
+                manualChunks(id) {
+                    if (
+                        id.includes('marked') ||
+                        id.includes('dompurify') ||
+                        id.includes('marked-alert') ||
+                        id.includes('marked-footnote')
+                    ) {
+                        return 'vendor-markdown';
+                    }
+                    return undefined;
                 },
                 // Cleaner asset naming
                 assetFileNames: 'assets/[name]-[hash][extname]',

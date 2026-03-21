@@ -591,6 +591,17 @@ async getChatHistory(sessionId: string) : Promise<Result<ChatMessage[], AppError
 }
 },
 /**
+ * Removes the latest user turn and any following assistant replies from a session.
+ */
+async rewindLastTurn(sessionId: string) : Promise<Result<string | null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rewind_last_turn", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Counts tokens in text for the specified model
  */
 async countTokens(text: string, model: string | null) : Promise<Result<number, string>> {

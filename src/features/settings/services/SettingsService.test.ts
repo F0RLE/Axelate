@@ -55,6 +55,28 @@ describe('SettingsService', () => {
                 value: 'dark',
             });
         });
+
+        it('should preserve numeric values in local cache', async () => {
+            await service.saveSetting('download_max_speed', 120);
+
+            expect(service.getSettings()).toEqual(
+                expect.objectContaining({ download_max_speed: 120 }),
+            );
+            expect(tauri.invoke).toHaveBeenCalledWith('save_setting', {
+                key: 'download_max_speed',
+                value: '120',
+            });
+        });
+
+        it('should preserve boolean values in local cache', async () => {
+            await service.saveSetting('debug_mode', true);
+
+            expect(service.getSettings()).toEqual(expect.objectContaining({ debug_mode: true }));
+            expect(tauri.invoke).toHaveBeenCalledWith('save_setting', {
+                key: 'debug_mode',
+                value: 'true',
+            });
+        });
     });
 
     describe('updateSettings', () => {

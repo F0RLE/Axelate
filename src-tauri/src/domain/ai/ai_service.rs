@@ -354,7 +354,10 @@ pub async fn process_image_request(
     let normalized_sampler = if is_sdapi {
         normalize_sdcpp_sampler(request.sampler.as_deref())
     } else {
-        request.sampler.clone().unwrap_or_else(|| "euler_a".to_string())
+        request
+            .sampler
+            .clone()
+            .unwrap_or_else(|| "euler_a".to_string())
     };
     let normalized_scheduler = if is_sdapi {
         normalize_sdcpp_scheduler(request.scheduler.as_deref())

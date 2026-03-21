@@ -7,11 +7,14 @@ Find-WindowsSDK
 Write-Header "Axelate: Full Verification"
 
 # Backend
+Write-Step "Backend: Rustfmt Check"
+Exec $CARGO @("fmt", "--check") $TAURI_DIR
+
 Write-Step "Backend: Clippy (Strict Linting)"
 Exec $CARGO @("clippy", "--", "-D", "warnings") $TAURI_DIR
 
-Write-Step "Backend: Test Compilation"
-Exec $CARGO @("test", "--verbose", "--no-run") $TAURI_DIR
+Write-Step "Backend: Tests"
+Exec $CARGO @("test", "--verbose") $TAURI_DIR
 
 Write-Success "Backend Verified"
 

@@ -16,7 +16,7 @@ export class WindowUI {
     private _isSmallScreen = false;
     private _wasMaximizedOnSmallScreen = false;
     private _resizeTimeout: ReturnType<typeof setTimeout> | undefined;
-    private readonly _cleanupAbort: AbortController = new AbortController();
+    private _cleanupAbort: AbortController | null = null;
 
     private _splash: HTMLElement | null = null;
     private _globalWarning: HTMLDialogElement | null = null;
@@ -40,6 +40,7 @@ export class WindowUI {
     public init(): void {
         if (this._initialized) return;
         this._initialized = true;
+        this._cleanupAbort = new AbortController();
         this._cacheElements();
         this._bindGlobalEvents();
         this._suppressNativeTooltips();
@@ -75,12 +76,26 @@ export class WindowUI {
      * Cleans up all event listeners and timeouts.
      */
     public destroy(): void {
-        this._cleanupAbort.abort();
+        this._cleanupAbort?.abort();
+        this._cleanupAbort = null;
 
         if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
         if (this._monitoringTimeout) clearTimeout(this._monitoringTimeout);
         if (this._splashTimeout) clearTimeout(this._splashTimeout);
         if (this._gracePeriodTimeout) clearTimeout(this._gracePeriodTimeout);
+
+        this._resizeTimeout = undefined;
+        this._monitoringTimeout = null;
+        this._splashTimeout = null;
+        this._gracePeriodTimeout = null;
+        this._initialized = false;
+        this._isSmallScreen = false;
+        this._wasMaximizedOnSmallScreen = false;
+        this._isInGracePeriod = true;
+        this._splash = null;
+        this._globalWarning = null;
+        this._maximizeIcon = null;
+        this._soundToggle = null;
     }
 
     /**
@@ -88,7 +103,8 @@ export class WindowUI {
      * @sideeffect Pollutes global namespace with listeners
      */
     private _bindGlobalEvents(): void {
-        const signal = this._cleanupAbort.signal;
+        const signal = this._cleanupAbort?.signal;
+        if (signal === undefined) return;
 
         // 1. Context Menu Block — preventDefault alone blocks the native menu;
         //    stopPropagation is intentionally omitted so card-level handlers
@@ -268,7 +284,8 @@ export class WindowUI {
      * Hides native tooltips and stores them in data attributes.
      */
     private _suppressNativeTooltips(): void {
-        const signal = this._cleanupAbort.signal;
+        const signal = this._cleanupAbort?.signal;
+        if (signal === undefined) return;
 
         const handler = (): void => {
             document.querySelectorAll('[title]').forEach((el) => {

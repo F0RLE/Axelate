@@ -154,7 +154,7 @@ All commands run from project root. Root `package.json` proxies to `src/`.
 ```bash
 RUST_LOG=debug npm run tauri:dev
 ```
-Log files: `%APPDATA%/AxelateData/logs/`
+Log files: `%APPDATA%/AxelateData/System/Logs/`
 
 ---
 

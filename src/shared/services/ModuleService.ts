@@ -16,6 +16,8 @@ import { invokeSafe } from '../api/invoke';
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
     private readonly _deletedModules = new Set<string>();
+    private _downloadProgressUnlisten: (() => void) | null = null;
+    private _initialized = false;
 
     constructor(private readonly _bridge: IBridge) {}
 
@@ -23,15 +25,18 @@ export class ModuleService {
      * Initializes the module service and binds to download progress events from the backend.
      */
     public async init() {
+        if (this._initialized) return;
+        this._initialized = true;
         if (!this._bridge.isTauri()) return;
 
-        await this._bridge.listen<{
+        this._downloadProgressUnlisten = await this._bridge.listen<{
             module_id: string;
             status: string;
             progress: number;
             message: string;
             downloaded: number;
             total: number;
+            speed: number;
         }>('download_progress', (payload) => {
             tracer.debug(`[ModuleService] Progress Event: ${JSON.stringify(payload)}`);
 
@@ -43,11 +48,13 @@ export class ModuleService {
                     | 'downloading'
                     | 'extracting'
                     | 'complete'
-                    | 'error',
+                    | 'error'
+                    | 'cancelled',
                 progress: payload.progress,
                 message: payload.message,
                 downloaded: payload.downloaded,
                 total: payload.total,
+                speed: payload.speed,
             };
 
             if (payload.status === 'complete') {
@@ -60,6 +67,15 @@ export class ModuleService {
             const event = new CustomEvent('download-progress-update', { detail: payload });
             globalThis.dispatchEvent(event);
         });
+    }
+
+    /**
+     * Cleans up active backend listeners.
+     */
+    public destroy(): void {
+        this._downloadProgressUnlisten?.();
+        this._downloadProgressUnlisten = null;
+        this._initialized = false;
     }
 
     /**

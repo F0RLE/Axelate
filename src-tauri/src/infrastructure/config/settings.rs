@@ -33,8 +33,10 @@ impl SettingsService {
 
     /// Retrieves application settings from .env file
     pub async fn get_settings(&self) -> Result<AppSettings, AppError> {
-        let mut settings = AppSettings::default();
-        settings.language = get_language_sync();
+        let mut settings = AppSettings {
+            language: get_language_sync(),
+            ..AppSettings::default()
+        };
         if !FILE_ENV.exists() {
             return Ok(settings);
         }

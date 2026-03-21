@@ -344,5 +344,18 @@ describe('SoundService', () => {
             // Should not play click since div doesn't match the selector
             expect(mockCtx.createOscillator).not.toHaveBeenCalled();
         });
+
+        it('should remove document listeners on destroy', () => {
+            const btn = document.createElement('button');
+            document.body.appendChild(btn);
+
+            service.destroy();
+            mockCtx.createOscillator.mockClear();
+
+            btn.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+            btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+            expect(mockCtx.createOscillator).not.toHaveBeenCalled();
+        });
     });
 });

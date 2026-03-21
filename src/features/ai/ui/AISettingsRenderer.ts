@@ -144,10 +144,8 @@ class AISettingsRenderer extends BaseComponent {
             ['axelate', 'axelate-platform'].includes(appId) || appId.includes('telegram');
 
         this._activeContainer = container;
-        let rawHtml = '';
-
-        if (isCleanApp) {
-            rawHtml = `
+        const rawHtml = isCleanApp
+            ? `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
                 <div class="ai-content-panel">
                     <div class="settings-card-header-center">
@@ -155,9 +153,8 @@ class AISettingsRenderer extends BaseComponent {
                          <div class="model-desc" data-i18n="ui.settings.no_settings">No additional settings required for this module.</div>
                     </div>
                 </div>
-            </div>`;
-        } else {
-            rawHtml = `
+            </div>`
+            : `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
                 <!-- Unified API & Models Settings -->
                 <div class="ai-settings-content">
@@ -257,7 +254,6 @@ class AISettingsRenderer extends BaseComponent {
                 </div>
             </div>
         `;
-        }
 
         container.innerHTML = DOMPurify.sanitize(rawHtml, PURIFY_CONFIG);
         await this._bindEvents(container, appId);
@@ -273,6 +269,7 @@ class AISettingsRenderer extends BaseComponent {
         t: TranslateFunc,
     ): string {
         const pricingHtml = this._renderPricing(model.pricing);
+        const contextHtml = this._renderContextWindow(model.contextWindow);
 
         return `
             <div class="ai-model-card ${isSelected ? 'selected' : ''}" 
@@ -282,7 +279,7 @@ class AISettingsRenderer extends BaseComponent {
                 data-model-key="${key}">
                 <div class="model-name">${DOMPurify.sanitize(model.name, PURIFY_CONFIG)}</div>
                 <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(t(model.descKey ?? '', model.desc), PURIFY_CONFIG)}</div>
-                <div class="model-pricing">${pricingHtml}</div>
+                <div class="model-pricing">${pricingHtml}${contextHtml}</div>
             </div>
         `;
     }
@@ -303,6 +300,39 @@ class AISettingsRenderer extends BaseComponent {
         }
 
         return '';
+    }
+
+    private _renderContextWindow(contextWindow: number | null | undefined): string {
+        if (
+            contextWindow === null ||
+            contextWindow === undefined ||
+            !Number.isFinite(contextWindow)
+        ) {
+            return '';
+        }
+
+        return `
+            <div class="price-row context-row">
+                <span class="price-tag context-tag">Ctx: ${DOMPurify.sanitize(this._formatCompactContext(contextWindow), PURIFY_CONFIG)}</span>
+            </div>
+        `;
+    }
+
+    private _formatCompactContext(contextWindow: number): string {
+        if (contextWindow >= 1_000_000) {
+            const millions = contextWindow / 1_000_000;
+            return `${millions
+                .toFixed(millions >= 10 ? 0 : 2)
+                .replace(/\.00$/, '')
+                .replace(/(\.\d)0$/, '$1')}M`;
+        }
+
+        if (contextWindow >= 1_000) {
+            const thousands = contextWindow / 1_000;
+            return `${thousands.toFixed(thousands >= 100 ? 0 : 1).replace(/\.0$/, '')}K`;
+        }
+
+        return String(contextWindow);
     }
 
     /**
@@ -688,7 +718,7 @@ class AISettingsRenderer extends BaseComponent {
         const statsArea = document.getElementById(`${appId}-model-stats`);
         if (statsArea !== null) {
             const t = this._getTranslator();
-            const rawHtml = `
+            const statsHtml = `
                 <div class="ai-content-panel">
                     <div class="settings-card-header-center">
                         <h3>📊 <span data-i18n="ui.settings.model_stats">${t('ui.settings.model_stats', 'Model Stats')}</span></h3>
@@ -696,7 +726,7 @@ class AISettingsRenderer extends BaseComponent {
                     ${this.renderModelStats(appId, modelKey)}
                 </div>
             `;
-            statsArea.innerHTML = DOMPurify.sanitize(rawHtml, PURIFY_CONFIG);
+            statsArea.innerHTML = DOMPurify.sanitize(statsHtml, PURIFY_CONFIG);
 
             const globalContext = getGlobalWin();
             if (typeof globalContext.applyTranslations === 'function') {

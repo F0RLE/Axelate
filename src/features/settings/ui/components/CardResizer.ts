@@ -4,22 +4,42 @@ export class CardResizer {
     private startX = 0;
     private startWidth = 'full';
     private hasSwitched = false;
+    private _initialized = false;
+    private static readonly HANDLE_SELECTOR = '.card-resize-handle, .resize-handle';
+    private readonly _boundMouseDown = (e: MouseEvent) => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        const handle = target.closest(CardResizer.HANDLE_SELECTOR);
+        if (!(handle instanceof HTMLElement)) return;
+
+        this.start(e, handle);
+    };
+    private readonly _boundMouseMove = (e: MouseEvent) => {
+        this.move(e);
+    };
+    private readonly _boundMouseUp = () => {
+        this.stop();
+    };
 
     constructor(private readonly onSave: (id: string, width: string) => void) {}
 
     init() {
-        document.querySelectorAll('.resize-handle').forEach((h) => {
-            h.addEventListener('mousedown', (e) => {
-                this.start(e as MouseEvent, h as HTMLElement);
-            });
-        });
+        if (this._initialized) return;
+        this._initialized = true;
 
-        document.addEventListener('mousemove', (e) => {
-            this.move(e);
-        });
-        document.addEventListener('mouseup', () => {
-            this.stop();
-        });
+        document.addEventListener('mousedown', this._boundMouseDown);
+        document.addEventListener('mousemove', this._boundMouseMove);
+        document.addEventListener('mouseup', this._boundMouseUp);
+    }
+
+    destroy() {
+        if (!this._initialized) return;
+        this.stop();
+        document.removeEventListener('mousedown', this._boundMouseDown);
+        document.removeEventListener('mousemove', this._boundMouseMove);
+        document.removeEventListener('mouseup', this._boundMouseUp);
+        this._initialized = false;
     }
 
     private start(e: MouseEvent, handle: HTMLElement) {
@@ -36,11 +56,13 @@ export class CardResizer {
         document.body.style.cursor = 'ew-resize';
         document.body.classList.add('no-select');
 
-        const overlay = document.createElement('div');
-        overlay.id = 'resize-overlay';
-        overlay.style.cssText =
-            'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;cursor:ew-resize;';
-        document.body.appendChild(overlay);
+        if (document.getElementById('resize-overlay') === null) {
+            const overlay = document.createElement('div');
+            overlay.id = 'resize-overlay';
+            overlay.style.cssText =
+                'position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;cursor:ew-resize;';
+            document.body.appendChild(overlay);
+        }
     }
 
     private move(e: MouseEvent) {

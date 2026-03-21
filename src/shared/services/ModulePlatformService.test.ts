@@ -47,6 +47,7 @@ describe('ModulePlatformService', () => {
                 'test-module',
                 'https://repo.com/module.zip',
                 'abc123',
+                undefined,
             );
         });
 
@@ -89,9 +90,13 @@ describe('ModulePlatformService', () => {
             expect(aiBridge.stopProvider).toHaveBeenCalled();
         });
 
-        it('should stop API provider for known provider IDs', async () => {
+        it('should stop API provider when provider metadata is present', async () => {
             const { aiBridge } = await import('@/features/ai/services/AIBridge');
-            const app = createApp({ id: 'gemini', type: 'local' });
+            const app = createApp({
+                id: 'custom-provider',
+                type: 'local',
+                apiProviderData: { id: 'custom-provider' },
+            });
             const result = await service.stop(app);
             expect(result).toBe(true);
             expect(aiBridge.stopProvider).toHaveBeenCalled();
@@ -122,11 +127,16 @@ describe('ModulePlatformService', () => {
             expect(service.isApiModule(createApp({ type: 'api' }))).toBe(true);
         });
 
-        it('should return true for known provider IDs', () => {
-            const providerIds = ['gpt', 'gemini', 'claude', 'deepseek', 'llama'];
-            for (const id of providerIds) {
-                expect(service.isApiModule(createApp({ id, type: 'local' }))).toBe(true);
-            }
+        it('should return true when provider metadata is present', () => {
+            expect(
+                service.isApiModule(
+                    createApp({
+                        id: 'custom-provider',
+                        type: 'local',
+                        apiProviderData: { id: 'custom-provider' },
+                    }),
+                ),
+            ).toBe(true);
         });
 
         it('should return false for regular local modules', () => {

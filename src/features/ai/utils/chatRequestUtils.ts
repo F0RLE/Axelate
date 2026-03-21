@@ -28,6 +28,7 @@ export function createMultimodalContent(
  * Constructs a standardized chat request object.
  */
 export function constructChatRequest(
+    history: IChatMessage[],
     message: IChatMessage,
     attachments: { name: string; type: string; data_base64: string }[],
     config: {
@@ -46,6 +47,11 @@ export function constructChatRequest(
         provider: providerId,
         model: modelId,
         messages: [
+            ...history.map((historyMessage) => ({
+                role: historyMessage.role,
+                content: historyMessage.content,
+                thought_signature: historyMessage.thought_signature,
+            })),
             {
                 role: message.role,
                 content: message.content,

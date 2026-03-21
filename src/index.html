@@ -35,7 +35,12 @@
         <script type="module" src="assets/logos.ts"></script>
 
         <!-- Sidebar Placeholder (Loaded dynamically via TemplateLoader) -->
-        <aside id="sidebar" class="fade-in-init" aria-label="Main Navigation"></aside>
+        <aside
+            id="sidebar"
+            class="fade-in-init"
+            data-i18n-aria-label="ui.launcher.web.main_menu"
+            aria-label="Main Menu"
+        ></aside>
 
         <!-- App Header (Glass Panel) -->
         <header
@@ -158,7 +163,14 @@
                                 <button id="filter-text-btn" class="app-modal-tab active" data-i18n="ui.launcher.modules.modal.filter_text">Text</button>
                                 <button id="filter-image-btn" class="app-modal-tab" data-i18n="ui.launcher.modules.modal.filter_image">Image</button>
                             </div>
-                            <button id="close-app-selection-btn" class="app-close-btn">
+                            <button
+                                id="close-app-selection-btn"
+                                class="app-close-btn"
+                                data-i18n-aria-label="ui.launcher.button.close"
+                                data-i18n-title="ui.launcher.button.close"
+                                aria-label="Close"
+                                title="Close"
+                            >
                                 <svg class="icon"><use href="#icon-close"></use></svg>
                             </button>
                         </div>
@@ -189,6 +201,10 @@
                         <button
                             id="close-module-settings-btn"
                             class="app-close-btn"
+                            data-i18n-aria-label="ui.launcher.button.close"
+                            data-i18n-title="ui.launcher.button.close"
+                            aria-label="Close"
+                            title="Close"
                         >
                             <svg class="icon">
                                 <use href="#icon-close"></use>
@@ -249,7 +265,7 @@
                             >
                                 Russian
                             </div>
-                            <div class="lang-option-native">Russian</div>
+                            <div class="lang-option-native">Русский</div>
                     </div>
                     <div
                         class="lang-option lang-modal-btn"
@@ -444,7 +460,11 @@
         </template>
 
         <template id="tpl-modal-filter-btn">
-            <button class="category-filter-btn" aria-label="Filter Button">
+            <button
+                class="category-filter-btn"
+                data-i18n-aria-label="ui.launcher.web.filter_button"
+                aria-label="Filter Button"
+            >
                 <div class="category-filter-icon"></div>
                 <span data-i18n=""></span>
             </button>

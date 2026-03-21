@@ -125,6 +125,106 @@ describe('AIChatTransport', () => {
             const result = await sendPromise;
             expect(result).toEqual({ ok: false, error: 'AI request timed out' });
         });
+
+        it('should extract message from plain error objects', async () => {
+            mockCore.tauriProvider.invoke.mockRejectedValue({ message: 'ipc object failed' });
+
+            const result = await transport.send(makeRequest());
+            expect(result).toEqual({ ok: false, error: 'ipc object failed' });
+        });
+
+        it('should stringify unexpected thrown values', async () => {
+            mockCore.tauriProvider.invoke.mockRejectedValue({ nested: true });
+
+            const result = await transport.send(makeRequest());
+            expect(result).toEqual({ ok: false, error: '{"nested":true}' });
+        });
+    });
+
+    describe('generateImage', () => {
+        const request = { provider: 'sdcpp', prompt: 'mountain', model: 'default' } as Parameters<
+            AIChatTransport['generateImage']
+        >[0];
+
+        it('should reject in web mode', async () => {
+            mockCore.tauriProvider.isTauri.mockReturnValue(false);
+            await expect(transport.generateImage(request)).resolves.toEqual({
+                ok: false,
+                error: 'IPC host unavailable',
+            });
+        });
+
+        it('should normalize successful image generation responses', async () => {
+            mockCore.tauriProvider.invoke.mockResolvedValue({
+                ok: true,
+                images: ['file:///one.png'],
+            });
+
+            await expect(transport.generateImage(request)).resolves.toEqual({
+                ok: true,
+                images: ['file:///one.png'],
+            });
+        });
+
+        it('should return backend fallback error when no images were produced', async () => {
+            mockCore.tauriProvider.invoke
+                .mockResolvedValueOnce({ ok: false, error: 'backend failed', images: [] })
+                .mockResolvedValueOnce({ ok: true, images: [] });
+
+            await expect(transport.generateImage(request)).resolves.toEqual({
+                ok: false,
+                error: 'backend failed',
+            });
+            await expect(transport.generateImage(request)).resolves.toEqual({
+                ok: false,
+                error: 'Failed to generate image',
+            });
+        });
+
+        it('should surface invoke failures and timeouts for images', async () => {
+            mockCore.tauriProvider.invoke.mockRejectedValueOnce({ message: 'gpu busy' });
+            await expect(transport.generateImage(request)).resolves.toEqual({
+                ok: false,
+                error: 'gpu busy',
+            });
+
+            mockCore.tauriProvider.invoke.mockReturnValueOnce(new Promise(() => {}));
+            const promise = transport.generateImage(request);
+            vi.advanceTimersByTime(300_001);
+            await expect(promise).resolves.toEqual({
+                ok: false,
+                error: 'Image generation requested timed out',
+            });
+        });
+    });
+
+    describe('generateImageBackground', () => {
+        const request = { provider: 'sdcpp', prompt: 'city', model: 'default' } as Parameters<
+            AIChatTransport['generateImageBackground']
+        >[0];
+
+        it('should reject in web mode', async () => {
+            mockCore.tauriProvider.isTauri.mockReturnValue(false);
+            await expect(transport.generateImageBackground(request)).resolves.toEqual({
+                ok: false,
+                error: 'IPC host unavailable',
+            });
+        });
+
+        it('should invoke background generation and normalize errors', async () => {
+            mockCore.tauriProvider.invoke.mockResolvedValueOnce(undefined);
+            await expect(transport.generateImageBackground(request)).resolves.toEqual({ ok: true });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith(
+                'generate_image_background',
+                { request },
+            );
+
+            mockCore.tauriProvider.invoke.mockRejectedValueOnce('bg failed');
+            await expect(transport.generateImageBackground(request)).resolves.toEqual({
+                ok: false,
+                error: 'bg failed',
+            });
+        });
     });
 
     // ---------------------------------------------------------- Stream Listeners (onStream, onThought)
@@ -183,6 +283,20 @@ describe('AIChatTransport', () => {
             await vi.runAllTimersAsync();
 
             expect(listener).toHaveBeenCalledWith('chunk-data');
+        });
+
+        it('should unwrap object payload event shapes', async () => {
+            const listener = vi.fn();
+            mockCore.tauriProvider.listen.mockImplementation(
+                (_event: string, cb: (payload: { payload: string }) => void) => {
+                    cb({ payload: 'wrapped-data' });
+                    return Promise.resolve(vi.fn());
+                },
+            );
+
+            invokeMethod(listener);
+            await vi.runAllTimersAsync();
+            expect(listener).toHaveBeenCalledWith('wrapped-data');
         });
 
         it('should NOT forward payload after unsubscribe', async () => {

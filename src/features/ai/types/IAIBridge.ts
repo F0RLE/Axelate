@@ -13,11 +13,13 @@ export interface IAIBridge {
         text: string,
         source?: MessageSource,
         attachments?: { name: string; type: string; data_base64: string }[],
+        history?: IChatMessage[],
     ): Promise<IBridgeResponse>;
     startProvider(providerId: string): Promise<boolean>;
     stopProvider(): void;
     clearHistory(): Promise<void>;
     getHistory(): Promise<IChatMessage[]>;
+    rewindLastTurn(): Promise<string | null>;
     getState(): { activeProviderId: string | null; isRunning: boolean };
     onMessage(listenerId: string, handler: MessageHandler): void;
     removeListener(listenerId: string): void;

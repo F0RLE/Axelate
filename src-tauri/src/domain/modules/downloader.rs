@@ -12,6 +12,10 @@ use tokio::io::AsyncWriteExt;
 use zip::ZipArchive;
 use zip::result::ZipError;
 
+const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE: u64 = 3 * 1024 * 1024 * 1024; // 3GB per archive
+const MAX_ARCHIVE_FILE_COUNT: usize = 10000;
+const MAX_ARCHIVE_SINGLE_FILE_SIZE: u64 = 1024 * 1024 * 1024; // 1GB per file, needed for CUDA DLLs
+
 /// Download progress event payload
 #[derive(Clone, serde::Serialize, Debug)]
 pub struct DownloadProgress {
@@ -27,6 +31,8 @@ pub struct DownloadProgress {
     pub downloaded: u64,
     /// Total bytes
     pub total: u64,
+    /// Current transfer speed in bytes per second
+    pub speed: u64,
 }
 
 /// Validates module ID to prevent directory traversal and injection attacks
@@ -87,7 +93,10 @@ pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
 }
 
 fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
-    let candidates = [MODULES_DIR.join(module_id), LEGACY_MODULES_DIR.join(module_id)];
+    let candidates = [
+        MODULES_DIR.join(module_id),
+        LEGACY_MODULES_DIR.join(module_id),
+    ];
 
     candidates
         .into_iter()
@@ -192,6 +201,8 @@ impl DownloaderService {
 
 struct UrlResolver;
 
+type ReleaseDownloadAsset = (String, String, Option<String>, Option<u64>);
+
 impl UrlResolver {
     /// Resolves the actual download URL, handling GitHub specific logic (main/master fallback)
     async fn resolve(client: &reqwest::Client, download_url: &str) -> Result<String, AppError> {
@@ -247,6 +258,46 @@ impl UrlResolver {
 
 struct NetworkClient;
 
+#[derive(Clone, Copy, Debug, Default)]
+struct ProgressSnapshot {
+    downloaded: u64,
+    total: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AggregateDownloadContext {
+    completed_bytes_before: u64,
+    total_bytes: u64,
+}
+
+struct DownloadTask<'a> {
+    app: &'a AppHandle,
+    downloader: &'a DownloaderService,
+    client: &'a reqwest::Client,
+    url: &'a str,
+    dest_path: &'a Path,
+    module_id: &'a str,
+    cancel_token: &'a AtomicBool,
+}
+
+#[derive(Clone, Copy)]
+struct ProgressEvent<'a> {
+    app: &'a AppHandle,
+    module_id: &'a str,
+    status: &'a str,
+    message: &'a str,
+    progress: f32,
+    downloaded: u64,
+    total: u64,
+    speed: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct DownloadResult {
+    asset_downloaded: u64,
+    snapshot: ProgressSnapshot,
+}
+
 impl NetworkClient {
     /// Builds the HTTP client with correct headers and license injection
     fn build_client(module_id: &str) -> Result<reqwest::Client, AppError> {
@@ -279,16 +330,12 @@ impl NetworkClient {
 
     /// Downloads content with progress reporting, rate limiting, and cancellation support
     async fn download_file(
-        app: &AppHandle,
-        downloader: &DownloaderService,
-        client: &reqwest::Client,
-        url: &str,
-        dest_path: &Path,
-        module_id: &str,
-        cancel_token: &AtomicBool,
-    ) -> Result<(), AppError> {
-        let response = client
-            .get(url)
+        task: DownloadTask<'_>,
+        aggregate_context: Option<AggregateDownloadContext>,
+    ) -> Result<DownloadResult, AppError> {
+        let response = task
+            .client
+            .get(task.url)
             .send()
             .await
             .map_err(|e| AppError::External {
@@ -306,17 +353,19 @@ impl NetworkClient {
         let total_size = response.content_length().unwrap_or(0);
         let mut bytes_downloaded: u64 = 0;
         let mut stream = response.bytes_stream();
+        let mut window_bytes: u64 = 0;
 
         fs::create_dir_all(&*TEMP_DIR).map_err(|e| AppError::Io(e.to_string()))?;
 
-        let mut file = tokio::fs::File::create(dest_path).await?;
+        let mut file = tokio::fs::File::create(task.dest_path).await?;
 
         let mut last_log_time = std::time::Instant::now();
+        let mut last_speed_bytes_per_sec: u64 = 0;
 
         while let Some(item) = stream.next().await {
             // Check cancellation
-            if cancel_token.load(Ordering::Relaxed) {
-                tracing::info!("Download cancelled for module: {module_id}");
+            if task.cancel_token.load(Ordering::Relaxed) {
+                tracing::info!("Download cancelled for module: {}", task.module_id);
                 return Err(AppError::Validation("Download cancelled".to_string()));
             }
 
@@ -331,9 +380,10 @@ impl NetworkClient {
                 .await
                 .map_err(|e| AppError::Io(e.to_string()))?;
             bytes_downloaded += chunk_len as u64;
+            window_bytes += chunk_len as u64;
 
             // Rate Limiting Logic via injected service
-            let (limit_enabled, max_speed_bytes) = downloader.get_settings();
+            let (limit_enabled, max_speed_bytes) = task.downloader.get_settings();
             if limit_enabled && max_speed_bytes > 0 {
                 let ideal_duration_micros =
                     (chunk_len as u128 * 1_000_000) / u128::from(max_speed_bytes);
@@ -351,26 +401,87 @@ impl NetworkClient {
             }
 
             if last_log_time.elapsed().as_millis() > 100 {
+                let elapsed = last_log_time.elapsed().as_secs_f64();
+                if elapsed > 0.0 {
+                    last_speed_bytes_per_sec = calculate_speed(window_bytes, elapsed);
+                }
                 last_log_time = std::time::Instant::now();
+                window_bytes = 0;
+                let snapshot =
+                    build_progress_snapshot(bytes_downloaded, total_size, aggregate_context);
                 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let progress = if total_size > 0 {
-                    (bytes_downloaded as f64 / total_size as f64) as f32
+                let progress = if snapshot.total > 0 {
+                    (snapshot.downloaded as f64 / snapshot.total as f64) as f32
                 } else {
                     -1.0
                 };
-                emit_progress(
-                    app,
-                    module_id,
-                    "downloading",
-                    "Downloading...",
+                emit_progress(ProgressEvent {
+                    app: task.app,
+                    module_id: task.module_id,
+                    status: "downloading",
+                    message: "Downloading...",
                     progress,
-                    bytes_downloaded,
-                    total_size,
-                );
+                    downloaded: snapshot.downloaded,
+                    total: snapshot.total,
+                    speed: last_speed_bytes_per_sec,
+                });
             }
         }
 
-        Ok(())
+        let snapshot = build_progress_snapshot(bytes_downloaded, total_size, aggregate_context);
+        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+        let progress = if snapshot.total > 0 {
+            (snapshot.downloaded as f64 / snapshot.total as f64) as f32
+        } else {
+            -1.0
+        };
+
+        emit_progress(ProgressEvent {
+            app: task.app,
+            module_id: task.module_id,
+            status: "downloading",
+            message: "Downloading...",
+            progress,
+            downloaded: snapshot.downloaded,
+            total: snapshot.total,
+            speed: last_speed_bytes_per_sec,
+        });
+
+        Ok(DownloadResult {
+            asset_downloaded: bytes_downloaded,
+            snapshot,
+        })
+    }
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn calculate_speed(window_bytes: u64, elapsed_secs: f64) -> u64 {
+    if !(elapsed_secs.is_finite()) || elapsed_secs <= 0.0 {
+        return 0;
+    }
+
+    (window_bytes as f64 / elapsed_secs).round() as u64
+}
+
+fn build_progress_snapshot(
+    asset_downloaded: u64,
+    asset_total: u64,
+    aggregate_context: Option<AggregateDownloadContext>,
+) -> ProgressSnapshot {
+    if let Some(context) = aggregate_context {
+        return ProgressSnapshot {
+            downloaded: context.completed_bytes_before + asset_downloaded,
+            total: context.total_bytes,
+        };
+    }
+
+    ProgressSnapshot {
+        downloaded: asset_downloaded,
+        total: asset_total.max(asset_downloaded),
     }
 }
 
@@ -383,6 +494,7 @@ impl FileVerifier {
         file_path: &Path,
         expected_hash: Option<String>,
         module_id: &str,
+        progress_snapshot: Option<ProgressSnapshot>,
     ) -> Result<(), AppError> {
         if let Some(expected_hash) = expected_hash {
             if expected_hash.trim().is_empty() {
@@ -392,15 +504,16 @@ impl FileVerifier {
                 return Ok(());
             }
 
-            emit_progress(
+            emit_progress(ProgressEvent {
                 app,
                 module_id,
-                "verifying",
-                "Verifying Integrity...",
-                1.0,
-                0,
-                0,
-            );
+                status: "verifying",
+                message: "Verifying Integrity...",
+                progress: 1.0,
+                downloaded: progress_snapshot.map_or(0, |snapshot| snapshot.downloaded),
+                total: progress_snapshot.map_or(0, |snapshot| snapshot.total),
+                speed: 0,
+            });
 
             let path_clone = file_path.to_path_buf();
             let computed_hash = tokio::task::spawn_blocking(move || {
@@ -447,17 +560,7 @@ impl FileVerifier {
 struct ArchiveExtractor;
 
 impl ArchiveExtractor {
-    /// Extracts an archive to the target directory, handling nested roots and .tar.gz/.zip
-    async fn extract(
-        app: &AppHandle,
-        archive_path: &Path,
-        module_id: &str,
-        expected_hash: Option<&String>,
-    ) -> Result<(), AppError> {
-        emit_progress(app, module_id, "extracting", "Extracting...", 0.0, 0, 0);
-
-        // 1. Prepare Paths for Atomic Install
-        let final_path = MODULES_DIR.join(module_id);
+    fn prepare_staging(module_id: &str) -> Result<PathBuf, AppError> {
         let extraction_id = format!("extracting_{}_{}", module_id, uuid::Uuid::new_v4());
         let extraction_path = TEMP_DIR.join(extraction_id);
 
@@ -466,30 +569,52 @@ impl ArchiveExtractor {
         }
         fs::create_dir_all(&extraction_path).map_err(|e| AppError::Io(e.to_string()))?;
 
+        Ok(extraction_path)
+    }
+
+    /// Extracts an archive into an existing staging directory.
+    async fn extract_into(
+        app: &AppHandle,
+        archive_path: &Path,
+        module_id: &str,
+        extraction_path: &Path,
+        progress_snapshot: Option<ProgressSnapshot>,
+    ) -> Result<(), AppError> {
+        emit_progress(ProgressEvent {
+            app,
+            module_id,
+            status: "extracting",
+            message: "Extracting...",
+            progress: 0.0,
+            downloaded: progress_snapshot.map_or(0, |snapshot| snapshot.downloaded),
+            total: progress_snapshot.map_or(0, |snapshot| snapshot.total),
+            speed: 0,
+        });
+
         let app_handle = app.clone();
         let mid = module_id.to_string();
         let apath = archive_path.to_owned();
-        let epath = extraction_path.clone();
-        let hash_snapshot = expected_hash.cloned();
+        let epath = extraction_path.to_path_buf();
 
         let is_tar_gz = archive_path
             .file_name()
             .and_then(|n| n.to_str())
-            .is_some_and(|name| name.ends_with(".tar.gz") || std::path::Path::new(name).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("tgz")));
+            .is_some_and(|name| {
+                name.ends_with(".tar.gz")
+                    || std::path::Path::new(name)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("tgz"))
+            });
 
         // 2. Heavy Extraction
         tokio::task::spawn_blocking(move || {
             let archive_file = fs::File::open(&apath).map_err(|e| e.to_string())?;
 
-            const MAX_TOTAL_UNCOMPRESSED_SIZE: u64 = 800 * 1024 * 1024; // 800MB Limit
-            const MAX_FILE_COUNT: usize = 10000;
-            const MAX_SINGLE_FILE_SIZE: u64 = 300 * 1024 * 1024; // 300MB per file
-
             if is_tar_gz {
                 tracing::info!("Extracting .tar.gz archive for {}", mid);
                 let tar = flate2::read::GzDecoder::new(archive_file);
                 let mut archive = tar::Archive::new(tar);
-                
+
                 let mut current_total_size: u64 = 0;
                 let mut file_count: usize = 0;
 
@@ -497,8 +622,10 @@ impl ArchiveExtractor {
                     let mut entry = entry_result.map_err(|e| e.to_string())?;
                     file_count += 1;
 
-                    if file_count > MAX_FILE_COUNT {
-                        return Err(format!("Archive contains too many files. Limit is {MAX_FILE_COUNT}."));
+                    if file_count > MAX_ARCHIVE_FILE_COUNT {
+                        return Err(format!(
+                            "Archive contains too many files. Limit is {MAX_ARCHIVE_FILE_COUNT}."
+                        ));
                     }
 
                     // Strict Security Filtering for Tar
@@ -521,13 +648,16 @@ impl ArchiveExtractor {
                     }
 
                     let size = entry.header().size().unwrap_or(0);
-                    if size > MAX_SINGLE_FILE_SIZE {
+                    if size > MAX_ARCHIVE_SINGLE_FILE_SIZE {
                         return Err(format!("Security Violation: File {} size exceeds limit", path.display()));
                     }
-                    
+
                     current_total_size += size;
-                    if current_total_size > MAX_TOTAL_UNCOMPRESSED_SIZE {
-                        return Err(format!("Extraction aborted: Total size exceeds limit ({}MB)", MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)));
+                    if current_total_size > MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE {
+                        return Err(format!(
+                            "Extraction aborted: Total size exceeds limit ({}MB)",
+                            MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)
+                        ));
                     }
 
                     entry.unpack(&outpath).map_err(|e| format!("Unpack error for {}: {e}", path.display()))?;
@@ -541,9 +671,9 @@ impl ArchiveExtractor {
                 let mut current_total_size: u64 = 0;
                 let mut seen_files = std::collections::HashSet::new();
 
-                if total_files > MAX_FILE_COUNT {
+                if total_files > MAX_ARCHIVE_FILE_COUNT {
                     return Err(format!(
-                        "Archive contains too many files ({total_files}). Limit is {MAX_FILE_COUNT}."
+                        "Archive contains too many files ({total_files}). Limit is {MAX_ARCHIVE_FILE_COUNT}."
                     ));
                 }
 
@@ -646,8 +776,11 @@ impl ArchiveExtractor {
                         let u_size = file.size();
                         let c_size = file.compressed_size();
 
-                        if u_size > MAX_SINGLE_FILE_SIZE {
-                            return Err(format!("Security Violation: Single file size exceeds limit ({}MB): {raw_name}", MAX_SINGLE_FILE_SIZE / (1024 * 1024)));
+                        if u_size > MAX_ARCHIVE_SINGLE_FILE_SIZE {
+                            return Err(format!(
+                                "Security Violation: Single file size exceeds limit ({}MB): {raw_name}",
+                                MAX_ARCHIVE_SINGLE_FILE_SIZE / (1024 * 1024)
+                            ));
                         }
 
                         if c_size > 0 {
@@ -661,10 +794,10 @@ impl ArchiveExtractor {
                         }
 
                         current_total_size += u_size;
-                        if current_total_size > MAX_TOTAL_UNCOMPRESSED_SIZE {
+                        if current_total_size > MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE {
                             return Err(format!(
                                 "Extraction aborted: Total uncompressed size exceeds limit ({}MB)",
-                                MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)
+                                MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024)
                             ));
                         }
 
@@ -676,30 +809,18 @@ impl ArchiveExtractor {
                     if i % 10 == 0 {
                         #[allow(clippy::cast_precision_loss)]
                         let progress = i as f32 / total_files as f32;
-                        emit_progress(
-                            &app_handle,
-                            &mid,
-                            "extracting",
-                            "Extracting...",
+                        emit_progress(ProgressEvent {
+                            app: &app_handle,
+                            module_id: &mid,
+                            status: "extracting",
+                            message: "Extracting...",
                             progress,
-                            0,
-                            0,
-                        );
+                            downloaded: progress_snapshot.map_or(0, |snapshot| snapshot.downloaded),
+                            total: progress_snapshot.map_or(0, |snapshot| snapshot.total),
+                            speed: 0,
+                        });
                     }
                 }
-            }
-
-            // 3. Create Manifest (metadata.json)
-            let manifest = serde_json::json!({
-                "module_id": mid,
-                "installed_at": chrono::Local::now().to_rfc3339(),
-                "archive_hash": hash_snapshot,
-                "status": "complete",
-                "version": "unknown" // Version is usually in module.json, but keep for consistency
-            });
-            let manifest_path = epath.join("metadata.json");
-            if let Ok(m_file) = fs::File::create(manifest_path) {
-                let _ = serde_json::to_writer_pretty(m_file, &manifest);
             }
 
             Ok::<(), String>(())
@@ -712,22 +833,55 @@ impl ArchiveExtractor {
         .map_err(|e| AppError::Internal {
             request_id: None,
             message: format!("Extraction failed: {e}"),
-        })?;
+        })
+    }
 
-        // 4. Atomic Swap (Rename)
+    fn finalize(
+        module_id: &str,
+        extraction_path: &Path,
+        expected_hash: Option<&String>,
+        release_tag: Option<&str>,
+    ) -> Result<(), AppError> {
+        let final_path = MODULES_DIR.join(module_id);
+
+        let manifest = serde_json::json!({
+            "module_id": module_id,
+            "installed_at": chrono::Local::now().to_rfc3339(),
+            "archive_hash": expected_hash.cloned(),
+            "status": "complete",
+            "version": release_tag.unwrap_or("unknown"),
+        });
+        let manifest_path = extraction_path.join("metadata.json");
+        if let Ok(m_file) = fs::File::create(manifest_path) {
+            let _ = serde_json::to_writer_pretty(m_file, &manifest);
+        }
+
         if final_path.exists() {
             fs::remove_dir_all(&final_path)
                 .map_err(|e| AppError::Io(format!("Failed to remove old module version: {e}")))?;
         }
 
-        fs::rename(&extraction_path, &final_path).map_err(|e| {
+        fs::rename(extraction_path, &final_path).map_err(|e| {
             AppError::Io(format!(
                 "Atomic install failed during move: {e}. Attempting manual copy..."
             ))
-        })?;
-
-        Ok(())
+        })
     }
+}
+
+fn build_temp_archive_path(module_id: &str, asset_index: usize, asset_name: &str) -> PathBuf {
+    let safe_name: String = asset_name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    TEMP_DIR.join(format!("{module_id}_{asset_index}_{safe_name}"))
 }
 
 /// Downloads and extracts a module from a remote repository
@@ -741,34 +895,116 @@ pub async fn download_module(
 ) -> Result<(), AppError> {
     validate_module_id(&module_id)?;
 
-    let zip_path = TEMP_DIR.join(format!("{module_id}.zip.tmp"));
     let cancel_token = downloader.request_token(&module_id);
+    let mut temp_archives: Vec<PathBuf> = Vec::new();
+    let mut staging_path: Option<PathBuf> = None;
+    let mut final_progress_snapshot = ProgressSnapshot::default();
 
     // Orchestrate components
     let result = async {
-        emit_progress(&app, &module_id, "connecting", "Connecting...", 0.0, 0, 0);
+        emit_progress(ProgressEvent {
+            app: &app,
+            module_id: &module_id,
+            status: "connecting",
+            message: "Connecting...",
+            progress: 0.0,
+            downloaded: 0,
+            total: 0,
+            speed: 0,
+        });
 
         let client = NetworkClient::build_client(&module_id)?;
+        let extraction_path = ArchiveExtractor::prepare_staging(&module_id)?;
+        staging_path = Some(extraction_path.clone());
+        let mut completed_downloaded_bytes: u64 = 0;
+        let mut latest_progress_snapshot = ProgressSnapshot::default();
 
-        let final_url = if dl_type.as_deref() == Some("release") {
-            crate::domain::modules::github_releases::fetch_latest_release(&client, &repo_url)
-                .await?
-        } else {
-            UrlResolver::resolve(&client, &repo_url).await?
-        };
+        let (release_tag, assets_to_download): (Option<String>, Vec<ReleaseDownloadAsset>) =
+            if dl_type.as_deref() == Some("release") {
+                let bundle = crate::domain::modules::github_releases::fetch_release_bundle(
+                    &client, &repo_url, &module_id,
+                )
+                .await?;
 
-        NetworkClient::download_file(
-            &app,
-            downloader,
-            &client,
-            &final_url,
-            &zip_path,
+                let assets = bundle
+                    .assets
+                    .into_iter()
+                    .map(|asset| (asset.name, asset.download_url, None, Some(asset.size)))
+                    .collect();
+
+                (Some(bundle.tag_name), assets)
+            } else {
+                let final_url = UrlResolver::resolve(&client, &repo_url).await?;
+                let fallback_name = Path::new(&final_url)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or("archive.zip")
+                    .to_string();
+
+                (
+                    None,
+                    vec![(fallback_name, final_url, expected_hash.clone(), None)],
+                )
+            };
+
+        let aggregate_total_bytes = assets_to_download.iter().try_fold(0_u64, |acc, asset| {
+            asset.3.and_then(|size| acc.checked_add(size))
+        });
+
+        for (asset_index, (asset_name, asset_url, asset_hash, _asset_size)) in
+            assets_to_download.iter().enumerate()
+        {
+            let archive_path = build_temp_archive_path(&module_id, asset_index, asset_name);
+            temp_archives.push(archive_path.clone());
+
+            let download_result = NetworkClient::download_file(
+                DownloadTask {
+                    app: &app,
+                    downloader,
+                    client: &client,
+                    url: asset_url,
+                    dest_path: &archive_path,
+                    module_id: &module_id,
+                    cancel_token: &cancel_token,
+                },
+                aggregate_total_bytes.map(|total_bytes| AggregateDownloadContext {
+                    completed_bytes_before: completed_downloaded_bytes,
+                    total_bytes,
+                }),
+            )
+            .await?;
+
+            completed_downloaded_bytes =
+                completed_downloaded_bytes.saturating_add(download_result.asset_downloaded);
+            latest_progress_snapshot = download_result.snapshot;
+
+            FileVerifier::verify(
+                &app,
+                &archive_path,
+                asset_hash.clone(),
+                &module_id,
+                Some(latest_progress_snapshot),
+            )
+            .await?;
+            ArchiveExtractor::extract_into(
+                &app,
+                &archive_path,
+                &module_id,
+                &extraction_path,
+                Some(latest_progress_snapshot),
+            )
+            .await?;
+        }
+
+        final_progress_snapshot = latest_progress_snapshot;
+
+        ArchiveExtractor::finalize(
             &module_id,
-            &cancel_token,
-        )
-        .await?;
-        FileVerifier::verify(&app, &zip_path, expected_hash.clone(), &module_id).await?;
-        ArchiveExtractor::extract(&app, &zip_path, &module_id, expected_hash.as_ref()).await?;
+            &extraction_path,
+            expected_hash.as_ref(),
+            release_tag.as_deref(),
+        )?;
 
         Ok::<(), AppError>(())
     }
@@ -777,9 +1013,17 @@ pub async fn download_module(
     // Always cleanup token
     downloader.remove_token(&module_id);
 
-    // Guaranteed cleanup of temp zip
-    if zip_path.exists() {
-        let _ = tokio::fs::remove_file(&zip_path).await;
+    for archive_path in &temp_archives {
+        if archive_path.exists() {
+            let _ = tokio::fs::remove_file(archive_path).await;
+        }
+    }
+
+    if result.is_err()
+        && let Some(path) = &staging_path
+        && path.exists()
+    {
+        let _ = tokio::fs::remove_dir_all(path).await;
     }
 
     if let Err(e) = result {
@@ -788,11 +1032,29 @@ pub async fn download_module(
         } else {
             "error"
         };
-        emit_progress(&app, &module_id, status, &e.to_string(), 0.0, 0, 0);
+        emit_progress(ProgressEvent {
+            app: &app,
+            module_id: &module_id,
+            status,
+            message: &e.to_string(),
+            progress: 0.0,
+            downloaded: final_progress_snapshot.downloaded,
+            total: final_progress_snapshot.total,
+            speed: 0,
+        });
         return Err(e);
     }
 
-    emit_progress(&app, &module_id, "complete", "Success", 1.0, 0, 0);
+    emit_progress(ProgressEvent {
+        app: &app,
+        module_id: &module_id,
+        status: "complete",
+        message: "Success",
+        progress: 1.0,
+        downloaded: final_progress_snapshot.downloaded,
+        total: final_progress_snapshot.total,
+        speed: 0,
+    });
 
     crate::infrastructure::logging::logger::add_log(
         &format!("Module {module_id} installed successfully (Atomic)"),
@@ -803,24 +1065,17 @@ pub async fn download_module(
     Ok(())
 }
 
-fn emit_progress(
-    app: &AppHandle,
-    module_id: &str,
-    status: &str,
-    message: &str,
-    progress: f32,
-    downloaded: u64,
-    total: u64,
-) {
-    let _ = app.emit(
+fn emit_progress(event: ProgressEvent<'_>) {
+    let _ = event.app.emit(
         "download_progress",
         DownloadProgress {
-            module_id: module_id.to_string(),
-            status: status.to_string(),
-            progress,
-            message: message.to_string(),
-            downloaded,
-            total,
+            module_id: event.module_id.to_string(),
+            status: event.status.to_string(),
+            progress: event.progress,
+            message: event.message.to_string(),
+            downloaded: event.downloaded,
+            total: event.total,
+            speed: event.speed,
         },
     );
 }

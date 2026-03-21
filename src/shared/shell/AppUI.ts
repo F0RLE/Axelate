@@ -79,6 +79,100 @@ export class AppUI {
     private readonly _skeletonManager: SkeletonManager;
     private readonly _platformService: ModulePlatformService;
     private readonly _selectedApps = new Map<string, IApp>();
+    private _pendingDashboardSwitchTimer: ReturnType<typeof setTimeout> | null = null;
+    private _pendingDashboardSwitchCard: HTMLElement | null = null;
+    private _actionFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+    private readonly _boundLanguageChanged = () => {
+        this._modalManager.refreshCurrentSelection();
+    };
+    private readonly _boundPageChange = ({ pageId }: { pageId: string }) => {
+        if (pageId !== 'modules' && pageId !== 'page-modules') {
+            this.closeAppSelection();
+        }
+    };
+    private readonly _boundDashboardContextMenu = (e: Event) => {
+        const target = e.target as HTMLElement;
+        const card = target.closest('#ai-module-card, #services-module-card');
+        if (!(card instanceof HTMLElement)) return;
+        if (!card.classList.contains('selected')) return;
+
+        const category = this._resolveCategoryFromCard(card);
+        const app = this._selectedApps.get(category);
+        if (app === undefined) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        tracer.info(`[AppUI] Right-click settings for ${category}:`, app.id);
+        const win = getGlobalWin();
+        if (typeof win.openModuleSettings === 'function') {
+            win.openModuleSettings(app);
+        }
+    };
+    private readonly _boundDashboardMouseDown = (e: Event) => {
+        const mouseEvent = e as MouseEvent;
+        const target = mouseEvent.target as HTMLElement;
+        const card = target.closest('#ai-module-card, #services-module-card');
+        if (!(card instanceof HTMLElement)) return;
+        if (!card.classList.contains('selected')) return;
+
+        if (mouseEvent.button === 1) {
+            mouseEvent.preventDefault();
+            mouseEvent.stopPropagation();
+            const category = this._resolveCategoryFromCard(card);
+            tracer.info(`[AppUI] Middle-click close for ${category}`);
+            this.clearModuleCard(category);
+            getGlobalWin().uiState.removeSelectedModule(category);
+        } else if (mouseEvent.button === 2) {
+            mouseEvent.stopPropagation();
+            mouseEvent.stopImmediatePropagation();
+        }
+    };
+    private readonly _boundDashboardWheel = (e: Event) => {
+        const wheelEvent = e as WheelEvent;
+        const target = wheelEvent.target as HTMLElement;
+        const card = target.closest<HTMLElement>('#ai-module-card');
+        if (card?.classList.contains('selected') !== true) return;
+
+        const textApp = this._selectedApps.get('ai_text');
+        const imageApp = this._selectedApps.get('ai_image');
+        if (textApp === undefined || imageApp === undefined) return;
+
+        const shownModule = card.dataset['currentModule'];
+        const nextCategory = wheelEvent.deltaY < 0 ? 'ai_text' : 'ai_image';
+        const nextApp = nextCategory === 'ai_text' ? textApp : imageApp;
+        if (shownModule === nextApp.id) return;
+
+        wheelEvent.preventDefault();
+        this._cancelPendingDashboardSwitch();
+
+        card.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(4px)';
+        this._pendingDashboardSwitchCard = card;
+
+        this._pendingDashboardSwitchTimer = setTimeout(() => {
+            this._pendingDashboardSwitchTimer = null;
+            this._pendingDashboardSwitchCard = null;
+
+            const currentNextApp = this._selectedApps.get(nextCategory);
+            if (
+                !card.isConnected ||
+                !card.classList.contains('selected') ||
+                currentNextApp?.id !== nextApp.id
+            ) {
+                this._resetDashboardSwitchStyles(card);
+                return;
+            }
+
+            this._cardRenderer.updateCardContent(card, nextApp);
+            this._cardRenderer.updateCardAttributes(card, nextApp);
+            this._updateMultiSlotBadge();
+            this._resetDashboardSwitchStyles(card);
+        }, 150);
+    };
+    private readonly _pageChangeUnsub: () => void;
 
     constructor(
         platformService: ModulePlatformService,
@@ -98,124 +192,48 @@ export class AppUI {
             this._navigation,
         );
 
-        globalThis.addEventListener('language-changed', () => {
-            this._modalManager.refreshCurrentSelection();
-        });
+        globalThis.addEventListener('language-changed', this._boundLanguageChanged);
 
         // Close modal when navigating away from modules page
-        eventBus.on('page:change', ({ pageId }: { pageId: string }) => {
-            if (pageId !== 'modules' && pageId !== 'page-modules') {
-                this.closeAppSelection();
-            }
-        });
+        this._pageChangeUnsub = eventBus.on('page:change', this._boundPageChange);
 
         this._initDashboardCardListeners();
+    }
+
+    public destroy(): void {
+        this._cancelPendingDashboardSwitch();
+        this._clearActionFeedbackTimer();
+        globalThis.removeEventListener('language-changed', this._boundLanguageChanged);
+        this._pageChangeUnsub();
+        document.body.removeEventListener('contextmenu', this._boundDashboardContextMenu);
+        document.body.removeEventListener('mousedown', this._boundDashboardMouseDown);
+        document.body.removeEventListener('wheel', this._boundDashboardWheel);
+        this._modalManager.destroy();
     }
 
     /**
      * Initializes permanent listeners for dashboard cards to handle interactions safely.
      */
     private _initDashboardCardListeners(): void {
-        const categoryOf = (id: string): string =>
-            id === 'ai-module-card' ? 'ai_text' : 'services';
+        document.body.addEventListener('contextmenu', this._boundDashboardContextMenu);
+        document.body.addEventListener('mousedown', this._boundDashboardMouseDown);
+        document.body.addEventListener('wheel', this._boundDashboardWheel, { passive: false });
+    }
 
-        // Use delegation because module cards live in a template loaded async
-        document.body.addEventListener('contextmenu', (e) => {
-            const target = e.target as HTMLElement;
-            const card = target.closest('#ai-module-card, #services-module-card');
-            if (!(card instanceof HTMLElement)) return;
-            if (!card.classList.contains('selected')) return;
+    private _resolveCategoryFromCard(card: HTMLElement): string {
+        const defaultCategory = card.id === 'ai-module-card' ? 'ai_text' : 'services';
+        const shownId = card.dataset['currentModule'];
+        if (shownId === undefined) {
+            return defaultCategory;
+        }
 
-            let category = categoryOf(card.id);
-            let app = this._selectedApps.get(category);
-
-            const shownId = card.dataset['currentModule'];
-            if (shownId !== undefined) {
-                for (const [cap, a] of this._selectedApps.entries()) {
-                    if (a.id === shownId) {
-                        category = cap;
-                        app = a;
-                        break;
-                    }
-                }
+        for (const [capability, app] of this._selectedApps.entries()) {
+            if (app.id === shownId) {
+                return capability;
             }
+        }
 
-            if (app === undefined) return;
-
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-
-            tracer.info(`[AppUI] Right-click settings for ${category}:`, app.id);
-            const win = getGlobalWin();
-            if (typeof win.openModuleSettings === 'function') {
-                win.openModuleSettings(app);
-            }
-        });
-
-        document.body.addEventListener('mousedown', (e) => {
-            const target = e.target as HTMLElement;
-            const card = target.closest('#ai-module-card, #services-module-card');
-            if (!(card instanceof HTMLElement)) return;
-            if (!card.classList.contains('selected')) return;
-
-            if (e.button === 1) {
-                e.preventDefault();
-                e.stopPropagation();
-                // Resolve the currently-displayed category from the card's active module
-                // (the card might be showing 'ai_image' after 'ai_text' was closed first)
-                const shownId = card.dataset['currentModule'];
-                let category = categoryOf(card.id);
-                if (shownId !== undefined) {
-                    for (const [cap, app] of this._selectedApps.entries()) {
-                        if (app.id === shownId) {
-                            category = cap;
-                            break;
-                        }
-                    }
-                }
-                tracer.info(`[AppUI] Middle-click close for ${category}`);
-                this.clearModuleCard(category);
-                getGlobalWin().uiState.removeSelectedModule(category);
-            } else if (e.button === 2) {
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-            }
-        });
-
-        // Scroll wheel on AI card: cycle between ai_text and ai_image slots
-        document.body.addEventListener(
-            'wheel',
-            (e) => {
-                const target = e.target as HTMLElement;
-                const card = target.closest<HTMLElement>('#ai-module-card');
-                if (card?.classList.contains('selected') !== true) return;
-
-                const textApp = this._selectedApps.get('ai_text');
-                const imageApp = this._selectedApps.get('ai_image');
-                if (textApp === undefined || imageApp === undefined) return; // need both to switch
-
-                const shownModule = card.dataset['currentModule'];
-                // scroll up (deltaY < 0) → text, scroll down → image
-                const nextApp = e.deltaY < 0 ? textApp : imageApp;
-                if (shownModule === nextApp.id) return; // already on that slot
-
-                e.preventDefault();
-
-                card.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(4px)';
-
-                setTimeout(() => {
-                    this._cardRenderer.updateCardContent(card, nextApp);
-                    this._cardRenderer.updateCardAttributes(card, nextApp);
-                    this._updateMultiSlotBadge();
-                    card.style.opacity = '1';
-                    card.style.transform = 'translateY(0)';
-                }, 150);
-            },
-            { passive: false },
-        );
+        return defaultCategory;
     }
 
     // --- Toast System ---
@@ -249,10 +267,14 @@ export class AppUI {
             feedback.className = 'action-feedback';
             feedback.id = 'action-feedback';
             const win = getGlobalWin();
-            feedback.innerHTML = DOMPurify.sanitize(win.t('ui.feedback', ''), this._purifyConfig);
+            feedback.innerHTML = DOMPurify.sanitize(
+                typeof win.t === 'function' ? win.t('ui.feedback', '') : '',
+                this._purifyConfig,
+            );
             document.body.appendChild(feedback);
         }
 
+        this._clearActionFeedbackTimer();
         feedback.className = `action-feedback ${type}`;
         const iconElement = feedback.querySelector('.action-feedback-icon');
         if (iconElement !== null) {
@@ -261,7 +283,8 @@ export class AppUI {
         feedback.classList.add('show');
 
         const el = feedback;
-        setTimeout(() => {
+        this._actionFeedbackTimer = setTimeout(() => {
+            this._actionFeedbackTimer = null;
             el.classList.remove('show');
         }, 600);
     }
@@ -302,11 +325,13 @@ export class AppUI {
             appsToRender = (win.getCatalogCategory as (cat: string) => IApp[])(rawCategory);
         }
 
-        // Pass the compound category ('ai_text' or 'ai_image') to ModalManager so it
-        // preserves the correct filter tab. For plain 'ai', default to the text slot.
-        const modalCategory = category.startsWith('ai_') ? category : 'ai_text';
+        // Preserve AI compound categories for the modal filter tabs.
+        // Non-AI categories must keep their own category, otherwise service modals
+        // incorrectly show the global AI Text/Image tab row.
+        const modalCategory = category === 'ai' ? 'ai_text' : category;
         const selectedId =
-            this._selectedApps.get(modalCategory)?.id ?? this._selectedApps.get('ai_text')?.id;
+            this._selectedApps.get(modalCategory)?.id ??
+            (modalCategory.startsWith('ai') ? this._selectedApps.get('ai_text')?.id : undefined);
 
         this._modalManager.openAppSelection(modalCategory, appsToRender, selectedId);
     }
@@ -326,6 +351,7 @@ export class AppUI {
         const cardLike = document.getElementById(cardId);
 
         if (cardLike instanceof HTMLElement) {
+            this._cancelPendingDashboardSwitch();
             this._stopPreviousModule(cardLike, app);
             this._cardRenderer.updateCardAttributes(cardLike, app);
 
@@ -353,6 +379,8 @@ export class AppUI {
         const cardId = this._categoryToCardId(category);
         const cardLike = document.getElementById(cardId);
         if (!(cardLike instanceof HTMLElement)) return;
+
+        this._cancelPendingDashboardSwitch();
 
         const currentApp = this._selectedApps.get(category);
         if (currentApp) {
@@ -386,6 +414,31 @@ export class AppUI {
         if (originalHtml !== undefined && originalHtml !== '') {
             card.innerHTML = originalHtml;
         }
+    }
+
+    private _cancelPendingDashboardSwitch(): void {
+        if (this._pendingDashboardSwitchTimer !== null) {
+            clearTimeout(this._pendingDashboardSwitchTimer);
+            this._pendingDashboardSwitchTimer = null;
+        }
+
+        this._resetDashboardSwitchStyles(this._pendingDashboardSwitchCard);
+        this._pendingDashboardSwitchCard = null;
+    }
+
+    private _resetDashboardSwitchStyles(card: HTMLElement | null): void {
+        if (!(card instanceof HTMLElement)) return;
+
+        card.style.removeProperty('transition');
+        card.style.removeProperty('opacity');
+        card.style.removeProperty('transform');
+    }
+
+    private _clearActionFeedbackTimer(): void {
+        if (this._actionFeedbackTimer === null) return;
+
+        clearTimeout(this._actionFeedbackTimer);
+        this._actionFeedbackTimer = null;
     }
 
     /** Stops the AI provider when all AI capability slots are empty. */
@@ -687,42 +740,17 @@ export class AppUI {
         if (!(actionBtn instanceof HTMLElement)) return;
         if (actionBtn.dataset['running'] !== 'true') return;
 
-        // Create a temporary app object for previous module (minimal needed for stop)
-        // We might not have the full object, but _isApiModule uses type/id.
-        // Let's assume previous module follows similar ID patterns if we don't have full object.
-        // Actually, logic was: checks if ID in list OR type=api.
-        // We have dataset['currentModuleName'] but not type.
-        // However, if we just call stop, we need an IApp.
-        // Let's rely on cached module list or simply infer.
-        // The Service handles inference? No, service needs IApp to check props.
-        // Existing code constructed `isApi` bool locally.
-
-        // Let's just pass `app` (the current one) ? No, we need to stop the PREVIOUS one.
-        // But we don't have the previous IApp object here easily.
-        // The DOM has `dataset['currentModule']`.
-
-        // HACK: Reconstruct a partial IApp to pass to `stop`.
-        // This is a limitation of the current UI storage.
-        // Ideally `AppUI` should track `_currentActiveApp: IApp`.
-
         const prevId = previousModuleId;
-        const partialApp: IApp = {
-            id: prevId,
-            name: card.dataset['currentModuleName'] ?? prevId,
-        } as IApp;
+        const previousApp =
+            this._resolveAppById(prevId) ??
+            ({
+                id: prevId,
+                name: card.dataset['currentModuleName'] ?? prevId,
+            } as IApp);
 
-        // We need to know if it was API to know if we should call AIBridge.
-        // StartPreviousModule logic:
-        // const isApi = (app.type?.toLowerCase() ?? '') === 'api' || ['gpt',...].includes(app.id);
-        // We can do the checks on ID.
-        // PlatformService `isApiModule` checks ID list too.
-
-        void this._platformService.stop(partialApp).then(() => {
-            const prevName = card.dataset['currentModuleName'] ?? prevId;
-            // UI Toast (service handles API stop silent, local logs info)
-            // If local, we might want to show toast.
-            // For now, let's keep the toast here as UI feedback.
-            if (!this._platformService.isApiModule(partialApp)) {
+        void this._platformService.stop(previousApp).then(() => {
+            const prevName = previousApp.name ?? card.dataset['currentModuleName'] ?? prevId;
+            if (!this._platformService.isApiModule(previousApp)) {
                 const win = getGlobalWin();
                 if (typeof win.showToast === 'function') {
                     win.showToast(
@@ -736,6 +764,18 @@ export class AppUI {
         });
 
         tracer.info('[AppUI] Stopped previous module:', previousModuleId);
+    }
+
+    private _resolveAppById(appId: string): IApp | undefined {
+        for (const selectedApp of this._selectedApps.values()) {
+            if (selectedApp.id === appId) {
+                return selectedApp;
+            }
+        }
+
+        const catalog = globalThis.APP_DATA;
+        const allApps = [...catalog.ai, ...catalog.services];
+        return allApps.find((catalogApp) => catalogApp.id === appId);
     }
 
     // _updateCardAttributes removed (delegated to ModuleCardRenderer)

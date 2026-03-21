@@ -180,11 +180,22 @@ describe('AIProviderManager', () => {
 
             await manager.refreshActiveApiKey();
 
-            expect(manager.apiKey).toBe('new-key');
+            expect(manager.apiKey).toBe('[secure]');
         });
 
         it('should do nothing if no active provider', async () => {
             await manager.refreshActiveApiKey();
+        });
+    });
+
+    describe('resolveActiveApiKey', () => {
+        it('should return the active provider key only on demand', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-live-key'));
+            manager.setCore(mockCore);
+            await manager.startProvider('gemini');
+
+            await expect(manager.resolveActiveApiKey()).resolves.toBe('sk-live-key');
+            expect(manager.apiKey).toBe('[secure]');
         });
     });
 

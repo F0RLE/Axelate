@@ -39,13 +39,13 @@ export class SettingsService {
 
     public set(key: string, value: SettingsValue): void {
         // Safe cast for dynamic access
-        (this.settings as unknown as Record<string, SettingsValue>)[key] = String(value);
+        (this.settings as unknown as Record<string, SettingsValue>)[key] = value;
         void this.saveSetting(key, value);
     }
 
     public async saveSetting(key: string, value: SettingsValue): Promise<void> {
         // Update local cache immediately
-        (this.settings as unknown as Record<string, SettingsValue>)[key] = String(value);
+        (this.settings as unknown as Record<string, SettingsValue>)[key] = value;
 
         await this._tauri.invoke('save_setting', { key, value: String(value) });
     }

@@ -4,6 +4,7 @@
  */
 
 import { tracer } from '@/infrastructure/logging/LoggerService';
+import { eventBus } from '@/shared/services/EventBus';
 import { type IBridge } from '@/shared/types/IBridge';
 
 export class I18nService {
@@ -95,6 +96,7 @@ export class I18nService {
      */
     public async loadTranslations(lang: string): Promise<void> {
         tracer.info(`[I18n] Loading ${lang}...`);
+        const previousLang = this._currentLang;
 
         try {
             // Backend now handles merging base (en) with target lang
@@ -108,9 +110,7 @@ export class I18nService {
                 tracer.error(String(e));
             });
 
-            // Notify UI of language change
-            globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
-            tracer.info(`[I18n] Language changed to ${lang}, event dispatched`);
+            this._notifyLanguageChange(lang, previousLang);
         } catch (e) {
             tracer.error(`[I18n] Failed to load translations for ${lang}`, e);
             // Fallback to empty or keep existing?
@@ -119,6 +119,8 @@ export class I18nService {
                 try {
                     this._translations = await this._fetchTranslations('en');
                     this._currentLang = 'en';
+                    document.documentElement.lang = 'en';
+                    this._notifyLanguageChange('en', previousLang);
                 } catch (err) {
                     tracer.error('[I18n] Critical: Failed to load fallback English', err);
                 }
@@ -191,5 +193,13 @@ export class I18nService {
      */
     public getCurrentLang(): string {
         return this._currentLang === '' ? 'en' : this._currentLang;
+    }
+
+    private _notifyLanguageChange(lang: string, previousLang: string): void {
+        globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
+        globalThis.dispatchEvent(new CustomEvent('lang:changed', { detail: lang }));
+        eventBus.emit('i18n:language:change', { lang, previousLang });
+        eventBus.emit('i18n:translations:loaded', { lang });
+        tracer.info(`[I18n] Language changed to ${lang}, notifications dispatched`);
     }
 }

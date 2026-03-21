@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { I18nService } from '@/infrastructure/i18n/I18nService';
+import { eventBus } from '@/shared/services/EventBus';
 
 // Mock TauriProvider
 const createMockTauri = (isTauri = false) => ({
@@ -17,10 +18,12 @@ describe('I18nService', () => {
             mockTauri as unknown as ConstructorParameters<typeof I18nService>[0],
         );
         localStorage.clear();
+        eventBus.clear();
         vi.useFakeTimers();
     });
 
     afterEach(() => {
+        eventBus.clear();
         vi.useRealTimers();
         vi.unstubAllGlobals();
     });
@@ -98,6 +101,51 @@ describe('I18nService', () => {
     });
 
     describe('loadTranslations', () => {
+        it('should dispatch legacy DOM events and event bus notifications when translations load', async () => {
+            const fetchMock = vi.fn().mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({ greeting: 'Hello' }),
+            });
+            vi.stubGlobal('fetch', fetchMock);
+
+            const languageChangedHandler = vi.fn();
+            const legacyLangChangedHandler = vi.fn();
+            const languageBusHandler = vi.fn();
+            const translationsLoadedHandler = vi.fn();
+
+            globalThis.addEventListener(
+                'language-changed',
+                languageChangedHandler as EventListener,
+            );
+            globalThis.addEventListener('lang:changed', legacyLangChangedHandler as EventListener);
+            eventBus.on('i18n:language:change', languageBusHandler);
+            eventBus.on('i18n:translations:loaded', translationsLoadedHandler);
+
+            const loadPromise = i18n.loadTranslations('ru');
+            await vi.runAllTimersAsync();
+            await loadPromise;
+
+            expect(languageChangedHandler).toHaveBeenCalledTimes(1);
+            expect(
+                (languageChangedHandler.mock.calls[0]?.[0] as CustomEvent<{ lang: string }>).detail,
+            ).toEqual({ lang: 'ru' });
+            expect(legacyLangChangedHandler).toHaveBeenCalledTimes(1);
+            expect(
+                (legacyLangChangedHandler.mock.calls[0]?.[0] as CustomEvent<string>).detail,
+            ).toBe('ru');
+            expect(languageBusHandler).toHaveBeenCalledWith({ lang: 'ru', previousLang: 'en' });
+            expect(translationsLoadedHandler).toHaveBeenCalledWith({ lang: 'ru' });
+
+            globalThis.removeEventListener(
+                'language-changed',
+                languageChangedHandler as EventListener,
+            );
+            globalThis.removeEventListener(
+                'lang:changed',
+                legacyLangChangedHandler as EventListener,
+            );
+        });
+
         it('should set currentLang after loading translations', async () => {
             vi.stubGlobal(
                 'fetch',
@@ -132,6 +180,41 @@ describe('I18nService', () => {
             await vi.runAllTimersAsync();
             await initPromise;
             expect(i18n.getCurrentLang()).toBe('en');
+        });
+
+        it('should dispatch fallback English notifications when target translations fail', async () => {
+            const fetchMock = vi
+                .fn()
+                .mockRejectedValueOnce(new Error('Load failed ru'))
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: () => Promise.resolve({ greeting: 'Hello' }),
+                });
+            vi.stubGlobal('fetch', fetchMock);
+
+            const languageChangedHandler = vi.fn();
+            const translationsLoadedHandler = vi.fn();
+            globalThis.addEventListener(
+                'language-changed',
+                languageChangedHandler as EventListener,
+            );
+            eventBus.on('i18n:translations:loaded', translationsLoadedHandler);
+
+            const loadPromise = i18n.loadTranslations('ru');
+            await vi.runAllTimersAsync();
+            await loadPromise;
+
+            expect(i18n.getCurrentLang()).toBe('en');
+            expect(languageChangedHandler).toHaveBeenCalledTimes(1);
+            expect(
+                (languageChangedHandler.mock.calls[0]?.[0] as CustomEvent<{ lang: string }>).detail,
+            ).toEqual({ lang: 'en' });
+            expect(translationsLoadedHandler).toHaveBeenCalledWith({ lang: 'en' });
+
+            globalThis.removeEventListener(
+                'language-changed',
+                languageChangedHandler as EventListener,
+            );
         });
 
         it('should cover fail of fallback to en (Line 123)', async () => {
@@ -295,22 +378,30 @@ describe('I18nService', () => {
     describe('_syncToBackend', () => {
         it('should sync language to backend via Tauri', async () => {
             const tauriMock = createMockTauri(true);
-            tauriMock.invoke.mockResolvedValue({});
+            tauriMock.invoke.mockImplementation((cmd) => {
+                if (cmd === 'get_translations') return Promise.resolve({});
+                if (cmd === 'get_ui_state') return Promise.resolve({});
+                if (cmd === 'save_ui_state') return Promise.resolve({});
+                return Promise.resolve({});
+            });
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
             );
 
             // Trigger via loadTranslations
             vi.stubGlobal('fetch', vi.fn());
-            tauriMock.invoke.mockResolvedValue({});
             const loadPromise = tauriI18n.loadTranslations('ru');
             await vi.runAllTimersAsync();
             await loadPromise;
-            // invoke should have been called with save_setting
-            expect(tauriMock.invoke).toHaveBeenCalledWith(
-                'save_setting',
-                expect.objectContaining({ key: 'LANGUAGE' }),
+            const saveUiStateCall = tauriMock.invoke.mock.calls.find(
+                ([command]) => command === 'save_ui_state',
             );
+            expect(saveUiStateCall).toBeDefined();
+
+            const payload = saveUiStateCall?.[1] as
+                | { state?: { preferred_language?: string } }
+                | undefined;
+            expect(payload?.state?.preferred_language).toBe('ru');
         });
 
         it('should catch error in _syncToBackend via Tauri (Line 167)', async () => {

@@ -69,6 +69,18 @@ export class Core {
 
     private readonly _bridge: GlobalBridge;
     private readonly _eventHandler: EventHandler;
+    private _isDestroyed = false;
+    private readonly _boundGlobalShortcutKeydown = (e: KeyboardEvent) => {
+        const forbiddenKeys = ['F3', 'F7', 'F1'];
+        if (forbiddenKeys.includes(e.key)) {
+            e.preventDefault();
+            return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && ['f', 'p', 's'].includes(e.key.toLowerCase())) {
+            e.preventDefault();
+        }
+    };
 
     private static readonly _SPLASH_TIMEOUT_MS = 500;
     constructor() {
@@ -247,21 +259,36 @@ export class Core {
         this.tracer.info('[Core] Ready.');
     }
 
+    public destroy(): void {
+        if (this._isDestroyed) return;
+        this._isDestroyed = true;
+
+        globalThis.removeEventListener('keydown', this._boundGlobalShortcutKeydown);
+        this._eventHandler.destroy();
+        this.chatController.destroy();
+        this.appUI.destroy();
+        this.settingsUI.destroy();
+        this.downloadUI.destroy();
+        this.navigationUI.destroy();
+        this.windowUI.destroy();
+        this.windowService.destroy();
+        this.moduleService.destroy();
+        this.i18nUI.destroy();
+        this.debugUI.destroy();
+        this.monitoringUI.destroy();
+        this.monitoringService.destroy();
+        this.sidebarUI.destroy();
+        this.particles.destroy();
+        this.soundService.destroy();
+        this.stateStore.destroy();
+        aiBridge.destroy();
+    }
+
     /**
      * Prevents browser default shortcuts that conflict with app UX.
      */
     private _initGlobalShortcuts(): void {
-        globalThis.addEventListener('keydown', (e) => {
-            const forbiddenKeys = ['F3', 'F7', 'F1'];
-            if (forbiddenKeys.includes(e.key)) {
-                e.preventDefault();
-                return;
-            }
-
-            if ((e.ctrlKey || e.metaKey) && ['f', 'p', 's'].includes(e.key.toLowerCase())) {
-                e.preventDefault();
-            }
-        });
+        globalThis.addEventListener('keydown', this._boundGlobalShortcutKeydown);
     }
 
     /**
@@ -344,6 +371,7 @@ export class Core {
 }
 
 let _coreInitialized = false;
+let _coreInstance: Core | null = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     if (_coreInitialized) {
@@ -353,6 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
     _coreInitialized = true;
 
     const coreInstance = new Core();
+    _coreInstance = coreInstance;
     coreInstance.init().catch((e: unknown) => {
         tracer.error(`[Core] Boot failed: ${String(e)}`);
     });
@@ -360,3 +389,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const win = globalThis as unknown as Window & { core: Core };
     win.core = coreInstance;
 });
+
+globalThis.addEventListener('beforeunload', () => {
+    _coreInstance?.destroy();
+});
+
+if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+        _coreInstance?.destroy();
+        _coreInstance = null;
+        _coreInitialized = false;
+    });
+}

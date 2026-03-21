@@ -5,11 +5,6 @@
 
 import { type I18nService } from './I18nService';
 
-// Local types for global access
-interface II18nGlobal {
-    dispatchEvent: (event: Event) => boolean;
-}
-
 export class I18nUI {
     private readonly _cleanupAbort: AbortController = new AbortController();
 
@@ -259,12 +254,6 @@ export class I18nUI {
         await this._service.loadTranslations(lang);
         document.documentElement.lang = lang; // Set explicit lang for font switching
         this.applyTranslations();
-
-        // Notify other components if needed
-        const g = globalThis as unknown as II18nGlobal;
-        if (typeof g.dispatchEvent === 'function') {
-            g.dispatchEvent(new CustomEvent('lang:changed', { detail: lang }));
-        }
     }
 
     /**

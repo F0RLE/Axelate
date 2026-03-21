@@ -2,6 +2,7 @@ import DOMPurify from 'dompurify';
 import type { IApp } from '../../types/coreTypes';
 import { getGlobalWin } from '../../utils/globalAccessor';
 import { tracer } from '../../../infrastructure/logging/LoggerService';
+import { isApiApp } from '../../utils/moduleTypeUtils';
 
 /**
  * @class ModuleCardRenderer
@@ -545,10 +546,7 @@ export class ModuleCardRenderer {
     // --- Helpers ---
 
     private _isApiModule(app: IApp): boolean {
-        return (
-            app.type?.toLowerCase() === 'api' ||
-            ['gpt', 'gemini', 'claude', 'deepseek', 'llama'].includes(app.id)
-        );
+        return isApiApp(app);
     }
 
     private _getAppName(app: IApp): string {

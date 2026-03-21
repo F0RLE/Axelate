@@ -46,9 +46,22 @@ export class DownloadUI {
     };
 
     private _boundHandleUpdate: ((e: Event) => void) | null = null;
+    private readonly _terminalCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    private readonly _boundSettingsToggleChange = () => {
+        this.saveSettings();
+    };
+    private readonly _boundSettingsSliderInput = (e: Event) => {
+        const val = (e.target as HTMLInputElement).value;
+        this.updateSpeedDisplay(val);
+        this.saveSettings();
+    };
+    private readonly _boundLanguageChanged = () => {
+        this._refreshTranslations();
+    };
     /** Tracks active downloads keyed by module_id */
     private readonly _activeDownloads = new Map<string, ModuleDownloadState>();
     private _onCancel: ((moduleId: string) => void) | null = null;
+    private _initialized = false;
 
     constructor(
         private readonly _downloadSettings: DownloadSettingsService,
@@ -69,8 +82,11 @@ export class DownloadUI {
      * Initializes the downloader UI.
      */
     public init(): void {
+        if (this._initialized) return;
+        this._initialized = true;
         this.startDownloadsPolling();
         this._initSettingsListeners();
+        globalThis.addEventListener('language-changed', this._boundLanguageChanged);
     }
 
     /**
@@ -82,6 +98,10 @@ export class DownloadUI {
             globalThis.removeEventListener('download-progress-update', this._boundHandleUpdate);
             this._boundHandleUpdate = null;
         }
+        globalThis.removeEventListener('language-changed', this._boundLanguageChanged);
+        this._removeSettingsListeners();
+        this._clearTerminalCleanupTimers();
+        this._initialized = false;
     }
 
     /**
@@ -246,6 +266,25 @@ export class DownloadUI {
         return `${bytesPerSec.toFixed(0)} B/s`;
     }
 
+    private _messageLabel(status: string, message: string | undefined, moduleId: string): string {
+        const trimmed = message?.trim() ?? '';
+        if (trimmed === '') return moduleId;
+
+        const normalized = trimmed.toLowerCase();
+        const localizedStatus = this._statusLabel(status);
+
+        if (
+            normalized === 'connecting...' ||
+            normalized === 'downloading...' ||
+            normalized === 'extracting...' ||
+            normalized === 'success'
+        ) {
+            return localizedStatus;
+        }
+
+        return trimmed;
+    }
+
     /**
      * Formats bytes in GB, MB, or KB.
      */
@@ -314,6 +353,10 @@ export class DownloadUI {
      * Initializes polling for download progress (legacy).
      */
     public startDownloadsPolling(): void {
+        if (this._boundHandleUpdate !== null) {
+            globalThis.removeEventListener('download-progress-update', this._boundHandleUpdate);
+        }
+
         const mainCard = document.getElementById(DownloadUI.SELECTORS.MAIN_CARD);
         const emptyText = document.getElementById(DownloadUI.SELECTORS.EMPTY_TEXT);
         if (mainCard !== null) mainCard.classList.add('hidden');
@@ -329,6 +372,8 @@ export class DownloadUI {
             const moduleId = payload.module_id ?? '';
             if (moduleId === '') return;
 
+            this._clearTerminalCleanupTimer(moduleId);
+
             // Update active downloads map
             if (
                 payload.status === 'complete' ||
@@ -336,10 +381,12 @@ export class DownloadUI {
                 (payload.status as string) === 'cancelled'
             ) {
                 // Remove after a short delay so the user sees the final state
-                setTimeout(() => {
+                const cleanupTimer = setTimeout(() => {
+                    this._terminalCleanupTimers.delete(moduleId);
                     this._activeDownloads.delete(moduleId);
                     this._renderDynamicList();
                 }, 2000);
+                this._terminalCleanupTimers.set(moduleId, cleanupTimer);
                 // Still update with terminal state briefly
                 this._activeDownloads.set(moduleId, payload);
             } else {
@@ -353,7 +400,8 @@ export class DownloadUI {
                 percent: payload.progress * 100,
                 downloaded: payload.downloaded ?? 0,
                 total: payload.total ?? 0,
-                label: payload.message ?? moduleId,
+                speed: payload.speed ?? 0,
+                label: this._messageLabel(payload.status, payload.message, moduleId),
                 hasActive:
                     payload.status === 'downloading' ||
                     payload.status === 'connecting' ||
@@ -393,7 +441,10 @@ export class DownloadUI {
             this._settings.maxSpeed = Number.parseInt(slider.value, 10);
 
             if (controls instanceof HTMLElement) {
-                controls.classList.add(this._settings.limitEnabled ? 'opacity-50' : 'opacity-100');
+                controls.classList.toggle('opacity-100', this._settings.limitEnabled);
+                controls.classList.toggle('opacity-50', !this._settings.limitEnabled);
+                controls.style.opacity = this._settings.limitEnabled ? '1' : '0.5';
+                controls.style.pointerEvents = this._settings.limitEnabled ? 'auto' : 'none';
             }
 
             toggle.style.background = toggle.checked ? 'var(--primary)' : 'var(--bg-light)';
@@ -482,14 +533,32 @@ export class DownloadUI {
         const toggle = document.getElementById(DownloadUI.SELECTORS.TOGGLE);
         const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER);
 
-        toggle?.addEventListener('change', () => {
-            this.saveSettings();
-        });
-        slider?.addEventListener('input', (e) => {
-            const val = (e.target as HTMLInputElement).value;
-            this.updateSpeedDisplay(val);
-            this.saveSettings();
-        });
+        toggle?.removeEventListener('change', this._boundSettingsToggleChange);
+        slider?.removeEventListener('input', this._boundSettingsSliderInput);
+        toggle?.addEventListener('change', this._boundSettingsToggleChange);
+        slider?.addEventListener('input', this._boundSettingsSliderInput);
+    }
+
+    private _removeSettingsListeners(): void {
+        const toggle = document.getElementById(DownloadUI.SELECTORS.TOGGLE);
+        const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER);
+
+        toggle?.removeEventListener('change', this._boundSettingsToggleChange);
+        slider?.removeEventListener('input', this._boundSettingsSliderInput);
+    }
+
+    private _clearTerminalCleanupTimers(): void {
+        for (const moduleId of this._terminalCleanupTimers.keys()) {
+            this._clearTerminalCleanupTimer(moduleId);
+        }
+    }
+
+    private _clearTerminalCleanupTimer(moduleId: string): void {
+        const timer = this._terminalCleanupTimers.get(moduleId);
+        if (timer === undefined) return;
+
+        clearTimeout(timer);
+        this._terminalCleanupTimers.delete(moduleId);
     }
 
     /**
@@ -577,18 +646,60 @@ export class DownloadUI {
         if (pctEl) pctEl.textContent = pctText;
 
         this._patchStatusPill(card, state.status);
+        this._patchCardTranslations(card, state);
 
         // Stats
         const downloaded = state.downloaded ?? 0;
         const total = state.total ?? 0;
+        const speed = state.speed ?? 0;
         const statValues = card.querySelectorAll('.downloads-stat-value');
         if (statValues[0]) statValues[0].textContent = this._formatBytes(downloaded);
         if (statValues[1]) statValues[1].textContent = total > 0 ? this._formatBytes(total) : '--';
+        if (statValues[2]) statValues[2].textContent = this._formatSpeed(speed);
 
         // Message
         const itemLabel = card.querySelector('.downloads-item-label');
-        if (itemLabel !== null && state.message !== undefined && state.message !== '') {
-            itemLabel.textContent = state.message;
+        if (itemLabel !== null) {
+            itemLabel.textContent = this._messageLabel(
+                state.status,
+                state.message,
+                card.dataset['moduleId'] ?? '',
+            );
+        }
+    }
+
+    private _patchCardTranslations(card: HTMLElement, state: ModuleDownloadState): void {
+        const progressLabel = card.querySelector('.downloads-progress-label');
+        if (progressLabel !== null) {
+            progressLabel.textContent = this._i18n.t('ui.launcher.web.progress', 'Progress');
+        }
+
+        const downloadedLabel = card.querySelector('.downloads-downloaded-label');
+        if (downloadedLabel !== null) {
+            downloadedLabel.textContent = this._i18n.t('ui.launcher.web.downloaded', 'Downloaded');
+        }
+
+        const totalLabel = card.querySelector('.downloads-total-label');
+        if (totalLabel !== null) {
+            totalLabel.textContent = this._i18n.t('ui.launcher.web.total', 'Total');
+        }
+
+        const speedLabel = card.querySelector('.downloads-speed-label');
+        if (speedLabel !== null) {
+            speedLabel.textContent = this._i18n.t('ui.launcher.web.speed', 'Speed');
+        }
+
+        const cancelBtn = card.querySelector('.download-cancel-btn');
+        if (cancelBtn !== null) {
+            const cancelText = this._i18n.t('ui.launcher.button.cancel', 'Cancel');
+            cancelBtn.setAttribute('title', cancelText);
+            cancelBtn.setAttribute('aria-label', cancelText);
+        }
+
+        const moduleId = card.dataset['moduleId'] ?? '';
+        const itemLabel = card.querySelector('.downloads-item-label');
+        if (itemLabel !== null) {
+            itemLabel.textContent = this._messageLabel(state.status, state.message, moduleId);
         }
     }
 
@@ -626,7 +737,7 @@ export class DownloadUI {
         const pctText = pct < 0 ? '--' : `${String(pct)}%`;
         const downloaded = state.downloaded ?? 0;
         const total = state.total ?? 0;
-        const speed = 0; // Speed is not tracked per-module in current state, left for future
+        const speed = state.speed ?? 0;
 
         const statusText = this._statusLabel(state.status);
         let statusClass = 'active';
@@ -646,12 +757,12 @@ export class DownloadUI {
                     </div>
                     <div class="downloads-meta-content">
                         <div class="downloads-label">${moduleId}</div>
-                        <div class="downloads-item-label">${state.message ?? moduleId}</div>
+                        <div class="downloads-item-label">${this._messageLabel(state.status, state.message, moduleId)}</div>
                     </div>
                 </div>
                 <div class="downloads-card-actions">
                     <div class="downloads-status-pill ${statusClass}">${statusText}</div>
-                    ${isCancellable ? '<button class="download-cancel-btn" title="Cancel"><span class="stop-square-icon"></span></button>' : ''}
+                    ${isCancellable ? `<button class="download-cancel-btn" title="${this._i18n.t('ui.launcher.button.cancel', 'Cancel')}" aria-label="${this._i18n.t('ui.launcher.button.cancel', 'Cancel')}"><span class="stop-square-icon"></span></button>` : ''}
                 </div>
             </div>
             <div class="downloads-progress-section">
@@ -667,21 +778,21 @@ export class DownloadUI {
                 <div class="downloads-stat-item">
                     <div class="downloads-stat-label">
                         <svg class="icon icon-sm"><use href="#icon-download"></use></svg>
-                        <span>${this._i18n.t('ui.launcher.web.downloaded', 'Downloaded')}</span>
+                        <span class="downloads-downloaded-label">${this._i18n.t('ui.launcher.web.downloaded', 'Downloaded')}</span>
                     </div>
                     <div class="downloads-stat-value">${this._formatBytes(downloaded)}</div>
                 </div>
                 <div class="downloads-stat-item">
                     <div class="downloads-stat-label">
                         <svg class="icon icon-sm"><use href="#icon-folder"></use></svg>
-                        <span>${this._i18n.t('ui.launcher.web.total', 'Total')}</span>
+                        <span class="downloads-total-label">${this._i18n.t('ui.launcher.web.total', 'Total')}</span>
                     </div>
                     <div class="downloads-stat-value">${total > 0 ? this._formatBytes(total) : '--'}</div>
                 </div>
                 <div class="downloads-stat-item">
                     <div class="downloads-stat-label">
                         <svg class="icon icon-sm"><use href="#icon-network"></use></svg>
-                        <span>${this._i18n.t('ui.launcher.web.speed', 'Speed')}</span>
+                        <span class="downloads-speed-label">${this._i18n.t('ui.launcher.web.speed', 'Speed')}</span>
                     </div>
                     <div class="downloads-stat-value">${this._formatSpeed(speed)}</div>
                 </div>
@@ -697,6 +808,38 @@ export class DownloadUI {
         }
 
         return card;
+    }
+
+    private _refreshTranslations(): void {
+        this._renderDynamicList();
+
+        const firstEntry = this._activeDownloads.entries().next().value as
+            | [string, ModuleDownloadState]
+            | undefined;
+
+        if (firstEntry === undefined) {
+            this.renderDownloadsProgress({ hasActive: false });
+            return;
+        }
+
+        const [moduleId, firstDownload] = firstEntry;
+
+        this.renderDownloadsProgress({
+            percent: firstDownload.progress * 100,
+            downloaded: firstDownload.downloaded ?? 0,
+            total: firstDownload.total ?? 0,
+            speed: firstDownload.speed ?? 0,
+            label: this._messageLabel(firstDownload.status, firstDownload.message, moduleId),
+            hasActive:
+                firstDownload.status === 'downloading' ||
+                firstDownload.status === 'connecting' ||
+                firstDownload.status === 'extracting',
+            completed: firstDownload.status === 'complete',
+            error:
+                firstDownload.status === 'error'
+                    ? (firstDownload.error as string) || 'Unknown error'
+                    : null,
+        });
     }
 
     /**

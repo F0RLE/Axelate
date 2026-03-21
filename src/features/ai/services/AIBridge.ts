@@ -157,7 +157,10 @@ export class AIBridge implements IAIBridge {
             if (!isLocal && this._manager.apiKey === null) {
                 this._showErrorToast('ui.ai.no_api_key', 'API key missing');
             } else {
-                this._showToast('Provider activation failed', 'error');
+                this._showErrorToast(
+                    'ui.ai.provider_activation_failed',
+                    'Provider activation failed',
+                );
             }
         }
         return started;
@@ -200,6 +203,7 @@ export class AIBridge implements IAIBridge {
         text: string,
         source: MessageSource = 'chat',
         attachments: { name: string; type: string; data_base64: string }[] = [],
+        history: IChatMessage[] = [],
     ): Promise<IBridgeResponse> {
         if (this._manager.activeProviderId === null) {
             return this._handleMissingProvider(source);
@@ -301,7 +305,10 @@ export class AIBridge implements IAIBridge {
                         return this._handleTransportResponse(backgroundResponse, source);
                     }
 
-                    this._showToast('Performance mode active', 'success');
+                    this._showToast(
+                        globalThis.t('ui.ai.performance_mode_active', 'Performance mode active'),
+                        'success',
+                    );
                     await this._core?.windowService.close();
                     return { ok: true, text: '' };
                 }
@@ -327,10 +334,15 @@ export class AIBridge implements IAIBridge {
                 thinkingLevel = this._core.aiSettings.getThinkingLevel(providerId);
             }
 
-            const request = constructChatRequest(newMessage, attachments, {
+            const requestApiKey = await this._manager.resolveActiveApiKey();
+            if (requestApiKey === null && this._manager.isActive() === false) {
+                return this._handleMissingApiKey(source);
+            }
+
+            const request = constructChatRequest(history, newMessage, attachments, {
                 providerId,
                 model: this._manager.model,
-                apiKey: this._manager.apiKey,
+                apiKey: requestApiKey,
                 sessionId: this._manager.sessionId,
                 thinkingLevel: thinkingLevel as 'low' | 'medium' | 'high',
                 maxTokens: this._manager.maxOutputTokens,
@@ -339,7 +351,10 @@ export class AIBridge implements IAIBridge {
 
             return this._handleTransportResponse(response, source);
         } catch (error: unknown) {
-            const errorMsg = error instanceof Error ? error.message : 'Communication failure';
+            const errorMsg =
+                error instanceof Error
+                    ? error.message
+                    : globalThis.t('ui.ai.communication_failure', 'Communication failure');
             tracer.error('[AIBridge] Messaging pipeline error:', error);
             return { ok: false, error: errorMsg };
         }
@@ -495,6 +510,24 @@ export class AIBridge implements IAIBridge {
             );
         } catch (e) {
             tracer.error('[AIBridge] Failed to clear history:', e);
+            throw e;
+        }
+    }
+
+    public async rewindLastTurn(): Promise<string | null> {
+        if (this._core?.tauriProvider.isTauri() !== true) {
+            return null;
+        }
+
+        try {
+            return await (this._core.tauriProvider as unknown as TauriProvider).invoke(
+                'rewind_last_turn',
+                {
+                    sessionId: this._manager.sessionId,
+                },
+            );
+        } catch (e) {
+            tracer.error('[AIBridge] Failed to rewind last turn:', e);
             throw e;
         }
     }
