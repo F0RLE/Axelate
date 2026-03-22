@@ -112,7 +112,6 @@ describe('GeneralSettingsRenderer', () => {
     });
 
     it('toggles nav items and monitor items, persisting hidden lists', () => {
-        vi.useFakeTimers();
         renderer.init({
             t: (_key: string, fallback: string) => fallback,
         } as never);
@@ -124,7 +123,7 @@ describe('GeneralSettingsRenderer', () => {
             '#sidebar .nav-btn[data-page="home"]',
         ) as HTMLElement;
         expect(homeNav.classList.contains('nav-item-hiding')).toBe(true);
-        vi.advanceTimersByTime(351);
+        homeNav.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(homeNav.classList.contains('hidden')).toBe(true);
 
         uiSettings.getHiddenNavItems.mockReturnValue(['chat', 'home']);
@@ -138,7 +137,7 @@ describe('GeneralSettingsRenderer', () => {
         const cpuStat = document.querySelector(
             '#system-monitor .sysmon-stat[data-monitor-id="cpu"]',
         ) as HTMLElement;
-        vi.advanceTimersByTime(351);
+        cpuStat.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(cpuStat.classList.contains('hidden')).toBe(true);
 
         uiSettings.getHiddenMonitors.mockReturnValue(['gpu', 'cpu']);
@@ -148,7 +147,6 @@ describe('GeneralSettingsRenderer', () => {
     });
 
     it('updates monitor panel and divider visibility based on hidden monitors', () => {
-        vi.useFakeTimers();
         renderer.init({
             t: (_key: string, fallback: string) => fallback,
         } as never);
@@ -167,11 +165,16 @@ describe('GeneralSettingsRenderer', () => {
             'network',
         ]);
         renderer.toggleMonitorItem('network', false);
+        const networkStat = document.querySelector(
+            '#system-monitor .sysmon-stat[data-monitor-id="network"]',
+        ) as HTMLElement;
+        expect(panel.classList.contains('adaptive-hidden')).toBe(false);
+        networkStat.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(panel.classList.contains('adaptive-hidden')).toBe(true);
 
         uiSettings.getHiddenMonitors.mockReturnValue(['cpu', 'gpu', 'ram', 'vram']);
         renderer.toggleMonitorItem('disk', false);
-        vi.advanceTimersByTime(351);
+        divider.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(divider.classList.contains('hidden')).toBe(true);
     });
 

@@ -19,12 +19,12 @@
     box-sizing: border-box;
     -webkit-app-region: no-drag;
     transition:
-        opacity 0.4s var(--ease-smooth),
-        max-height 0.4s var(--ease-smooth),
-        margin 0.4s var(--ease-smooth),
-        padding 0.4s var(--ease-smooth),
-        transform 0.4s var(--ease-smooth),
-        visibility 0.4s; /* Consistent timing */
+        opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0.3s;
     max-height: 500px;
     transform: translateY(0);
     visibility: visible;
@@ -43,13 +43,13 @@
     transform: scale(0.95);
     visibility: hidden;
     transition:
-        opacity 0.2s ease,
-        max-height 0.4s var(--ease-smooth),
-        min-height 0.4s var(--ease-smooth),
-        margin 0.4s var(--ease-smooth),
-        padding 0.4s var(--ease-smooth),
-        transform 0.3s ease,
-        visibility 0s 0.4s;
+        opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        min-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        visibility 0s 0.3s;
     overflow: hidden;
 }
 
@@ -176,11 +176,12 @@
 /* Panel-level smooth collapse */
 #system-monitor {
     transition:
-        max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
         margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        border-width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        border-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
     max-height: 500px; /* Reduced from 800px */
     display: flex;
@@ -196,6 +197,7 @@
     padding: 0;
     pointer-events: none;
     border: none;
+    transform: scale(0.95);
 }
 
 .sysmon-track {

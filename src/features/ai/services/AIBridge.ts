@@ -227,74 +227,17 @@ export class AIBridge implements IAIBridge {
                     | Record<string, unknown>
                     | undefined;
 
-                const getNum = (key: string): number | null => {
-                    const val = settings?.[key];
-                    if (typeof val === 'number') return val;
-                    if (typeof val === 'string') {
-                        const parsed = Number(val);
-                        return Number.isNaN(parsed) ? null : parsed;
-                    }
-                    return null;
-                };
-
-                const getStr = (key: string): string | null => {
-                    const val = settings?.[key];
-                    return typeof val === 'string' && val.trim() !== '' ? val : null;
-                };
-                const getPromptSetting = (baseKey: string, legacyCamelKey: string): string | null =>
-                    getStr(baseKey) ??
-                    getStr(legacyCamelKey) ??
-                    getStr(baseKey.replaceAll('_', ''));
-
                 const selectedImageModule = this._core?.stateStore.getSelectedModule('ai_image');
                 const settingsKey = selectedImageModule?.id ?? providerId;
                 const performanceMode = this._isImagePerformanceModeEnabled(settings, settingsKey);
 
-                const posPrompt =
-                    getPromptSetting(
-                        `${settingsKey}_positive_prompt`,
-                        `${settingsKey}_positivePrompt`,
-                    ) ??
-                    getPromptSetting(
-                        `${providerId}_positive_prompt`,
-                        `${providerId}_positivePrompt`,
-                    );
-                const baseNegPrompt =
-                    getPromptSetting(
-                        `${settingsKey}_negative_prompt`,
-                        `${settingsKey}_negativePrompt`,
-                    ) ??
-                    getPromptSetting(
-                        `${providerId}_negative_prompt`,
-                        `${providerId}_negativePrompt`,
-                    );
-
-                // Combine user prompt with positive prompt base
-                let finalPrompt = text;
-                if (posPrompt !== null && posPrompt !== '') {
-                    finalPrompt = `${posPrompt}, ${text}`;
-                }
-
                 const request: IImageGenerationRequest = {
                     provider: providerId,
-                    prompt: finalPrompt,
+                    prompt: text,
                     original_prompt: text,
                     model: this._manager.model || 'default',
+                    settings_key: settingsKey,
                     session_id: this._manager.sessionId,
-                    steps: getNum(`${settingsKey}_steps`) ?? getNum(`${providerId}_steps`),
-                    cfg_scale:
-                        getNum(`${settingsKey}_cfg_scale`) ?? getNum(`${providerId}_cfg_scale`),
-                    width: getNum(`${settingsKey}_width`) ?? getNum(`${providerId}_width`),
-                    height: getNum(`${settingsKey}_height`) ?? getNum(`${providerId}_height`),
-                    sampler: getStr(`${settingsKey}_sampler`) ?? getStr(`${providerId}_sampler`),
-                    seed: getNum(`${settingsKey}_seed`) ?? getNum(`${providerId}_seed`),
-                    batch_size:
-                        getNum(`${settingsKey}_batch_size`) ?? getNum(`${providerId}_batch_size`),
-                    scheduler:
-                        getStr(`${settingsKey}_scheduler`) ?? getStr(`${providerId}_scheduler`),
-                    clip_skip:
-                        getNum(`${settingsKey}_clip_skip`) ?? getNum(`${providerId}_clip_skip`),
-                    negative_prompt: baseNegPrompt,
                 };
                 this._broadcastReplaceChunk('🎨 Generating image...\n');
 
@@ -328,25 +271,41 @@ export class AIBridge implements IAIBridge {
                 content: createMultimodalContent(text, attachments),
             };
 
-            // Get thinking level from state instead of localStorage
-            let thinkingLevel = 'high';
-            if (this._core) {
-                thinkingLevel = this._core.aiSettings.getThinkingLevel(providerId);
-            }
-
             const requestApiKey = await this._manager.resolveActiveApiKey();
             if (requestApiKey === null && this._manager.isActive() === false) {
                 return this._handleMissingApiKey(source);
             }
 
-            const request = constructChatRequest(history, newMessage, attachments, {
+            const isLocalProvider = requestApiKey === null;
+            const thinkingLevel =
+                this._core && !isLocalProvider
+                    ? this._core.aiSettings.getThinkingLevel(providerId)
+                    : undefined;
+            const maxTokens = isLocalProvider ? undefined : this._manager.maxOutputTokens;
+
+            const requestConfig: {
+                providerId: string;
+                model: string;
+                apiKey: string | null;
+                sessionId: string;
+                thinkingLevel?: 'low' | 'medium' | 'high';
+                maxTokens?: number;
+            } = {
                 providerId,
                 model: this._manager.model,
                 apiKey: requestApiKey,
                 sessionId: this._manager.sessionId,
-                thinkingLevel: thinkingLevel as 'low' | 'medium' | 'high',
-                maxTokens: this._manager.maxOutputTokens,
-            });
+            };
+
+            if (thinkingLevel !== undefined) {
+                requestConfig.thinkingLevel = thinkingLevel;
+            }
+
+            if (maxTokens !== undefined) {
+                requestConfig.maxTokens = maxTokens;
+            }
+
+            const request = constructChatRequest(history, newMessage, attachments, requestConfig);
             const response = await this._transport.send(request);
 
             return this._handleTransportResponse(response, source);

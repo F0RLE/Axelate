@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DebugUI } from './DebugUI';
 import type { DebugService } from '../services/DebugService';
+import { eventBus } from '@/shared/services/EventBus';
 
 describe('DebugUI lifecycle', () => {
     let ui: DebugUI | null = null;
@@ -21,7 +22,9 @@ describe('DebugUI lifecycle', () => {
             <button id="clear-logs-btn"></button>
             <button id="copy-logs-btn"></button>
             <div id="page-debug" class="active"></div>
-            <div id="logs-general" class="logs-pane active"></div>
+            <div id="console-container" class="console-logs-area">
+                <div id="logs-general" class="logs-pane active"></div>
+            </div>
         `;
         (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
             key,
@@ -131,6 +134,7 @@ describe('DebugUI lifecycle', () => {
     });
 
     it('should clear, copy and render logs through browser clipboard fallback', async () => {
+        vi.useFakeTimers();
         const service = {
             clearLogs: vi.fn().mockResolvedValue(true),
             getLogs: vi.fn().mockReturnValue([
@@ -150,6 +154,7 @@ describe('DebugUI lifecycle', () => {
 
         ui.init();
         await ui.clearLogs();
+        vi.advanceTimersByTime(100);
         expect(service.clearLogs).toHaveBeenCalled();
 
         await ui.copyLogs();
@@ -160,5 +165,77 @@ describe('DebugUI lifecycle', () => {
         expect(
             (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
         ).toHaveBeenCalledWith('ui.debug.logs_empty:No logs to copy', 'warning', 1500);
+    });
+
+    it('should scroll logs to the bottom on the first render', () => {
+        const service = {
+            clearLogs: vi.fn().mockResolvedValue(true),
+            getLogs: vi
+                .fn()
+                .mockReturnValue([
+                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                ]),
+            fetchLogs: vi.fn().mockResolvedValue([{ level: 'INFO', message: 'alpha' }]),
+        } as unknown as DebugService;
+
+        const container = document.getElementById('console-container') as HTMLDivElement;
+        Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 720 });
+        Object.defineProperty(container, 'clientHeight', { configurable: true, value: 200 });
+        container.scrollTop = 0;
+
+        ui = new DebugUI(service);
+        (
+            ui as unknown as {
+                renderLogs: (clear?: boolean) => void;
+            }
+        ).renderLogs();
+        vi.advanceTimersByTime(100);
+
+        expect(container.scrollTop).toBe(720);
+    });
+
+    it('should render logs at the bottom when debug page becomes active', async () => {
+        vi.useFakeTimers();
+        const service = {
+            clearLogs: vi.fn().mockResolvedValue(true),
+            getLogs: vi
+                .fn()
+                .mockReturnValue([
+                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                ]),
+            fetchLogs: vi.fn().mockResolvedValue([]),
+        } as unknown as DebugService;
+
+        const container = document.getElementById('console-container') as HTMLDivElement;
+        Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 720 });
+        Object.defineProperty(container, 'clientHeight', { configurable: true, value: 200 });
+        container.scrollTop = 0;
+
+        ui = new DebugUI(service);
+        ui.init();
+
+        eventBus.emit('page:change', { pageId: 'debug' });
+        await Promise.resolve();
+        await Promise.resolve();
+        vi.advanceTimersByTime(200);
+
+        expect(container.scrollTop).toBe(720);
+    });
+
+    it('should fetch logs immediately when debug page becomes active', async () => {
+        const service = {
+            clearLogs: vi.fn().mockResolvedValue(true),
+            getLogs: vi.fn().mockReturnValue([]),
+            fetchLogs: vi.fn().mockResolvedValue([]),
+        } as unknown as DebugService;
+
+        ui = new DebugUI(service);
+        ui.init();
+
+        eventBus.emit('page:change', { pageId: 'debug' });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(service.fetchLogs).toHaveBeenCalledTimes(1);
     });
 });

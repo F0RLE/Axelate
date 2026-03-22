@@ -18,6 +18,13 @@ import { VoiceController } from './controllers/VoiceController';
 import { FilePickerController } from './controllers/FilePickerController';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
+type StreamingMessageHandle = {
+    update: (chunk: string) => void;
+    replace: (chunk: string) => void;
+    discard: () => void;
+    finalize: (text: string, stats?: Record<string, unknown>) => void;
+};
+
 export class ChatController {
     private readonly _service: ChatService;
     private readonly _ui: ChatUI;
@@ -31,16 +38,16 @@ export class ChatController {
     private _eventsBound = false;
     private _pageChangeUnsub: (() => void) | null = null;
     private _translationsLoadedUnsub: (() => void) | null = null;
+    private _resizeAnimationFrame: number | null = null;
+    private _lastInputHeight = '';
     private readonly _boundFileInputChange = (e: Event) => this._filePicker.handleFileSelect(e);
     private readonly _boundChatInputKeydown = (e: KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             void this.sendChat();
-        } else {
-            setTimeout(() => this._autoResizeInput(), 0);
         }
     };
-    private readonly _boundChatInputInput = () => this._autoResizeInput();
+    private readonly _boundChatInputInput = () => this._scheduleAutoResizeInput();
 
     constructor(
         private readonly _aiBridge: AIBridge,
@@ -87,6 +94,12 @@ export class ChatController {
                 this.randomizeGreeting();
                 this._ui.refreshTranslations();
                 void this._ensureHistoryLoaded();
+                globalThis.requestAnimationFrame(() => {
+                    this._ui.revealLatestMessage();
+                });
+                globalThis.setTimeout(() => {
+                    this._ui.revealLatestMessage();
+                }, 120);
             }
         });
 
@@ -108,6 +121,10 @@ export class ChatController {
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         chatInput?.removeEventListener('keydown', this._boundChatInputKeydown);
         chatInput?.removeEventListener('input', this._boundChatInputInput);
+        if (this._resizeAnimationFrame !== null) {
+            globalThis.cancelAnimationFrame(this._resizeAnimationFrame);
+            this._resizeAnimationFrame = null;
+        }
 
         this._ui.destroy();
     }
@@ -123,7 +140,7 @@ export class ChatController {
             const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
             if (chatInput) {
                 chatInput.value += (chatInput.value ? ' ' : '') + text;
-                this._autoResizeInput();
+                this._scheduleAutoResizeInput();
             }
         });
     }
@@ -136,11 +153,10 @@ export class ChatController {
         this._chatHistory = [];
         chatFileHandler.clear();
         this._ui.clear();
-        this._autoResizeInput();
+        this._scheduleAutoResizeInput();
         void this._aiBridge.clearHistory().catch((e: unknown) => {
             tracer.error('[Chat] Failed to clear persisted history:', e);
         });
-        this._ui.showToast(this._i18n.t('ui.chat.cleared', 'Chat cleared'), 'success');
     }
 
     // --- Send Message ---
@@ -173,11 +189,7 @@ export class ChatController {
 
             this._ui.showTyping(typingId);
 
-            let streamingHandle: {
-                update: (chunk: string) => void;
-                replace: (chunk: string) => void;
-                finalize: (text: string, stats?: Record<string, unknown>) => void;
-            } | null = null;
+            let streamingHandle: StreamingMessageHandle | null = null;
 
             this._aiBridge.onChunk(listenerId, (chunk) => {
                 if (!streamingHandle) {
@@ -265,7 +277,7 @@ export class ChatController {
         if (chatInput) {
             chatInput.addEventListener('keydown', this._boundChatInputKeydown);
             chatInput.addEventListener('input', this._boundChatInputInput);
-            this._autoResizeInput();
+            this._scheduleAutoResizeInput();
         }
     }
 
@@ -330,7 +342,7 @@ export class ChatController {
         chatInput.dispatchEvent(new Event('input', { bubbles: true }));
         chatInput.focus();
         chatInput.setSelectionRange(text.length, text.length);
-        this._autoResizeInput();
+        this._scheduleAutoResizeInput();
     }
 
     private async _loadHistory(): Promise<void> {
@@ -447,6 +459,7 @@ export class ChatController {
         streamingHandle?: {
             update: (chunk: string) => void;
             finalize: (text: string, stats?: Record<string, unknown>) => void;
+            discard: () => void;
         } | null,
     ): Promise<void> {
         if (response.ok) {
@@ -463,6 +476,8 @@ export class ChatController {
                 }
 
                 this._chatHistory.push({ role: 'assistant', content: replyText });
+            } else if (streamingHandle) {
+                streamingHandle.discard();
             }
         } else {
             const friendlyMsg = this._getFriendlyErrorMessage(response.error ?? '', response.model);
@@ -552,7 +567,7 @@ export class ChatController {
         if (input) {
             input.value = '';
             input.disabled = true;
-            this._autoResizeInput();
+            this._scheduleAutoResizeInput();
         }
         if (sendBtn) sendBtn.disabled = true;
         if (voiceBtn) voiceBtn.disabled = true;
@@ -576,12 +591,28 @@ export class ChatController {
         if (els.attachBtn) els.attachBtn.disabled = false;
     }
 
+    private _scheduleAutoResizeInput(): void {
+        if (this._resizeAnimationFrame !== null) {
+            globalThis.cancelAnimationFrame(this._resizeAnimationFrame);
+        }
+        this._resizeAnimationFrame = globalThis.requestAnimationFrame(() => {
+            this._resizeAnimationFrame = null;
+            this._autoResizeInput();
+        });
+    }
+
     private _autoResizeInput(): void {
         const el = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         if (el) {
             el.style.height = 'auto';
             const newHeight = Math.min(el.scrollHeight, 200);
-            el.style.height = `${String(newHeight)}px`;
+            const nextHeight = `${String(newHeight)}px`;
+            if (this._lastInputHeight !== nextHeight) {
+                el.style.height = nextHeight;
+                this._lastInputHeight = nextHeight;
+            } else {
+                el.style.height = nextHeight;
+            }
         }
     }
 }

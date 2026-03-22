@@ -87,6 +87,12 @@ pub struct ChatReply {
 pub struct ChatSession {
     /// Message history
     pub history: Vec<ChatMessage>,
+    /// Persisted recap of older turns used to keep long chats within local context limits
+    #[serde(default)]
+    pub summary: Option<String>,
+    /// Number of leading messages already folded into the persisted recap
+    #[serde(default)]
+    pub summary_message_count: usize,
     /// Last modification time (Unix timestamp)
     pub last_updated: f64,
 }
@@ -102,6 +108,8 @@ pub struct ImageGenerationRequest {
     pub original_prompt: Option<String>,
     /// Model identifier
     pub model: String,
+    /// Optional settings namespace key when UI-selected module differs from provider id
+    pub settings_key: Option<String>,
     /// Session identifier for history tracking
     pub session_id: Option<String>,
     /// Number of inference steps

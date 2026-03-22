@@ -107,5 +107,31 @@ describe('chatRequestUtils', () => {
                 },
             ]);
         });
+
+        it('should omit thinking level when not provided', () => {
+            const config = {
+                providerId: 'llamacpp',
+                model: 'Qwen3.5-9B-Q4_K_M.gguf',
+                apiKey: null,
+                sessionId: 'session-1',
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.thinking_level).toBeUndefined();
+        });
+
+        it('should keep the raw model key and leave model resolution to backend', () => {
+            const config = {
+                providerId: 'gemini',
+                model: 'gemini-2.5-pro',
+                apiKey: 'sk-123',
+                sessionId: 'session-1',
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.model).toBe('gemini-2.5-pro');
+        });
     });
 });

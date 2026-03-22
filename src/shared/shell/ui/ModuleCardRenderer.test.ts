@@ -147,10 +147,13 @@ describe('ModuleCardRenderer', () => {
             false,
             onClick,
         );
+        document.body.appendChild(asyncCard);
         await Promise.resolve();
         await Promise.resolve();
 
         expect(asyncCard.classList.contains('is-installed')).toBe(true);
+        asyncCard.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        expect(openModuleSettings).toHaveBeenCalledTimes(2);
 
         const uninstalledCard = renderer.createCard(
             { id: 'not-installed', name: 'Missing', desc: 'Desc', installed: false } as never,
@@ -161,7 +164,27 @@ describe('ModuleCardRenderer', () => {
         uninstalledCard.dispatchEvent(
             new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
         );
-        expect(openModuleSettings).toHaveBeenCalledTimes(1);
+        expect(openModuleSettings).toHaveBeenCalledTimes(2);
+    });
+
+    it('should ignore late async install resolution for detached cards', async () => {
+        const onClick = vi.fn();
+        (
+            globalThis as unknown as { checkModuleInstalled?: (id: string) => Promise<boolean> }
+        ).checkModuleInstalled = vi.fn(() => Promise.resolve(true));
+
+        const card = renderer.createCard(
+            { id: 'late-install-detached', name: 'Later', desc: 'Desc', installed: false } as never,
+            'services',
+            false,
+            onClick,
+        );
+
+        card.remove();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(card.classList.contains('is-installed')).toBe(false);
     });
 
     it('updates dashboard card content and marks cards as installed', () => {

@@ -9,6 +9,7 @@ import type { DebugUI } from '@/features/debug/ui/DebugUI';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
+import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
 import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import type { WindowService } from '@/shared/services/WindowService';
 import type { WindowUI } from '@/shared/shell/WindowUI';
@@ -22,6 +23,7 @@ export interface ICoreEvents {
     readonly i18nUI: I18nUI;
     readonly navigationUI: NavigationUI;
     readonly settingsUI: SettingsUI;
+    readonly moduleSettingsUI: ModuleSettingsUI;
     readonly windowService: WindowService;
     readonly windowUI: WindowUI;
 }
@@ -47,9 +49,7 @@ export class EventHandler {
         this._initAppSelectionModal();
         this._initChatPage();
         this._initLanguageModal();
-        this._initDownloadSettingsModal();
         this._initModuleSettingsModal();
-        this._initDownloadSpeedSettings();
 
         tracer.debug('[EventHandler] Initialized with delegation.');
     }
@@ -96,20 +96,6 @@ export class EventHandler {
                 }
 
                 // 4. Window Controls (Moved to direct listeners)
-
-                // 5. Debug Console Logic
-                if (target.closest('#clear-logs-btn') !== null) {
-                    void this._core.debugUI.clearLogs();
-                    return;
-                }
-
-                const debugTab = target.closest('.console-tab[data-view]');
-                if (debugTab instanceof HTMLElement) {
-                    const view = debugTab.dataset['view'];
-                    if (view !== undefined) {
-                        this._core.debugUI.setTab(view);
-                    }
-                }
             })();
         });
     }
@@ -142,11 +128,7 @@ export class EventHandler {
         }
     }
 
-    private _initDownloadsPage(): void {
-        this._addListener(document.getElementById('open-download-settings'), 'click', () => {
-            this._core.downloadUI.openSettings();
-        });
-    }
+    private _initDownloadsPage(): void {}
 
     private _initAppModuleCards(): void {
         // Use event delegation because the module cards live in a template
@@ -233,37 +215,10 @@ export class EventHandler {
         });
     }
 
-    private _initDownloadSettingsModal(): void {
-        const downloadSettingsOverlay = document.getElementById('download-settings-overlay');
-        this._addListener(downloadSettingsOverlay, 'click', (e) => {
-            if (e.target === downloadSettingsOverlay) this._core.downloadUI.closeSettings();
-        });
-        this._addListener(document.getElementById('close-download-settings-btn'), 'click', () => {
-            this._core.downloadUI.closeSettings();
-        });
-    }
-
     private _initModuleSettingsModal(): void {
         this._addListener(document.getElementById('close-module-settings-btn'), 'click', () => {
-            this._core.settingsUI.close();
+            this._core.moduleSettingsUI.close();
         });
-    }
-
-    private _initDownloadSpeedSettings(): void {
-        const speedLimitToggle = document.getElementById('download-speed-limit-toggle');
-        if (speedLimitToggle instanceof HTMLInputElement) {
-            this._addListener(speedLimitToggle, 'change', () => {
-                this._core.downloadUI.saveSettings();
-            });
-        }
-        const speedSlider = document.getElementById('download-speed-slider');
-        if (speedSlider instanceof HTMLInputElement) {
-            this._addListener(speedSlider, 'input', (e: Event) => {
-                const target = e.target as HTMLInputElement;
-                this._core.downloadUI.updateSpeedDisplay(target.value);
-                this._core.downloadUI.saveSettings();
-            });
-        }
     }
 
     private _initWindowControls(): void {

@@ -88,6 +88,7 @@ export interface IImageGenerationRequest {
     prompt: string;
     model: string;
     session_id?: string;
+    settings_key?: string;
     original_prompt?: string;
     steps?: number | null;
     cfg_scale?: number | null;

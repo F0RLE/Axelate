@@ -52,6 +52,13 @@ export class ModulePlatformService {
 
         if (isApi) {
             // Stop API Provider
+            const activeProviderId = aiBridge.getState().activeProviderId;
+            if (activeProviderId !== app.id) {
+                tracer.info(
+                    `[ModulePlatformService] Skip stop for inactive API module: ${app.id} (active: ${activeProviderId ?? 'none'})`,
+                );
+                return false;
+            }
             aiBridge.stopProvider();
             return true;
         } else {

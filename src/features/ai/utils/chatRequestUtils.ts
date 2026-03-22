@@ -1,5 +1,4 @@
 import type { ChatContent, IChatMessage, IChatRequest, ChatContentPart } from '../types/aiTypes';
-import { getApiModelId } from '../utils/catalogHelpers';
 
 /**
  * Creates a multimodal content object from text and attachments.
@@ -36,16 +35,14 @@ export function constructChatRequest(
         model: string;
         apiKey: string | null;
         sessionId: string;
-        thinkingLevel: 'low' | 'medium' | 'high';
+        thinkingLevel?: 'low' | 'medium' | 'high';
         maxTokens?: number | undefined;
     },
 ): IChatRequest {
     const { providerId, model, apiKey, sessionId, thinkingLevel, maxTokens } = config;
-    const modelId = getApiModelId(providerId, model);
-
-    return {
+    const request: IChatRequest = {
         provider: providerId,
-        model: modelId,
+        model,
         messages: [
             ...history.map((historyMessage) => ({
                 role: historyMessage.role,
@@ -60,8 +57,16 @@ export function constructChatRequest(
         ],
         session_id: sessionId,
         api_key: apiKey,
-        thinking_level: thinkingLevel,
-        max_tokens: maxTokens,
         attachments,
     };
+
+    if (thinkingLevel !== undefined) {
+        request.thinking_level = thinkingLevel;
+    }
+
+    if (maxTokens !== undefined) {
+        request.max_tokens = maxTokens;
+    }
+
+    return request;
 }

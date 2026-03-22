@@ -635,6 +635,39 @@ async generateImageBackground(request: ImageGenerationRequest) : Promise<Result<
 }
 },
 /**
+ * Deletes a previously saved chat image from disk.
+ */
+async deleteChatImage(filePath: string) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_chat_image", { filePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the saved chat image folder in the system file manager.
+ */
+async openChatImageLocation(filePath: string, folderPath: string) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_chat_image_location", { filePath, folderPath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Saves a chat image to the default Pictures/axelate directory and returns the final path.
+ */
+async saveChatImageDefault(base64Data: string, mimeType: string) : Promise<Result<SavedChatImage, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_chat_image_default", { base64Data, mimeType }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Retrieves all custom AI models configured by the user
  */
 async getCustomModels() : Promise<Result<CustomModel[], AppError>> {
@@ -1482,6 +1515,10 @@ original_prompt: string | null;
  */
 model: string; 
 /**
+ * Optional settings namespace key when UI-selected module differs from provider id
+ */
+settings_key: string | null; 
+/**
  * Session identifier for history tracking
  */
 session_id: string | null; 
@@ -1918,6 +1955,18 @@ totalGb: number;
  * RAM available for allocation (GB)
  */
 availableGb: number }
+/**
+ * Result of saving a generated chat image to disk.
+ */
+export type SavedChatImage = { 
+/**
+ * Absolute path to the saved image file.
+ */
+file_path: string; 
+/**
+ * Absolute path to the folder containing the saved image.
+ */
+folder_path: string }
 /**
  * Currently selected module in UI
  */

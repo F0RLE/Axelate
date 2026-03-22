@@ -1,11 +1,14 @@
 import { invoke } from '@tauri-apps/api/core';
 import { type DebugService } from '../services/DebugService';
+import { eventBus } from '@/shared/services/EventBus';
 
 export class DebugUI {
     private pollInterval: number | null = null;
     private unsubscribers: (() => void)[] = [];
     private _isInitialized = false;
+    private _hasRenderedLogs = false;
     private _dropzoneResetTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _pageChangeUnsub: (() => void) | null = null;
     private _previousSetDebugTab = globalThis.setDebugTab;
     private _previousSetLogView = globalThis.setLogView;
     private _previousClearLogs = globalThis.clearLogs;
@@ -29,6 +32,11 @@ export class DebugUI {
         this.bindTabs();
         this.bindLogControls();
         this.startLogPolling();
+        this._pageChangeUnsub = eventBus.on('page:change', (data) => {
+            if (data.pageId === 'debug') {
+                void this._refreshLogsOnDebugOpen();
+            }
+        });
 
         // Shim globals for backward compat if needed, or preferably we fix the calls.
         // Legacy debug.js exposed setDebugTab. We bind it here.
@@ -319,6 +327,9 @@ export class DebugUI {
             globalThis.clearInterval(this.pollInterval);
             this.pollInterval = null;
         }
+        this._pageChangeUnsub?.();
+        this._pageChangeUnsub = null;
+        this._hasRenderedLogs = false;
         if (this._dropzoneResetTimeout !== null) {
             clearTimeout(this._dropzoneResetTimeout);
             this._dropzoneResetTimeout = null;
@@ -355,18 +366,28 @@ export class DebugUI {
         }, 2000) as unknown as number;
     }
 
+    private async _refreshLogsOnDebugOpen(): Promise<void> {
+        await this.service.fetchLogs();
+        this.renderLogs(true);
+    }
+
     private renderLogs(clear = false): void {
-        const container = document.getElementById('logs-general');
-        if (!container) return;
+        const scrollContainer = document.getElementById('console-container');
+        const pane = document.getElementById('logs-general');
+        if (!(scrollContainer instanceof HTMLElement) || !(pane instanceof HTMLElement)) return;
 
+        const isInitialRender = this._hasRenderedLogs === false;
         const wasNearBottom =
-            container.scrollHeight - container.scrollTop - container.clientHeight < 40;
-        const distanceFromBottom = container.scrollHeight - container.scrollTop;
+            scrollContainer.scrollHeight -
+                scrollContainer.scrollTop -
+                scrollContainer.clientHeight <
+            40;
+        const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop;
 
-        if (clear) container.innerHTML = '';
+        if (clear) pane.innerHTML = '';
 
         const logs = this.service.getLogs();
-        container.innerHTML = '';
+        pane.innerHTML = '';
         const fragment = document.createDocumentFragment();
 
         logs.forEach((log) => {
@@ -398,11 +419,25 @@ export class DebugUI {
             fragment.appendChild(div);
         });
 
-        container.appendChild(fragment);
-        if (clear || wasNearBottom) {
-            container.scrollTop = container.scrollHeight;
+        pane.appendChild(fragment);
+        if (isInitialRender || clear || wasNearBottom) {
+            this._scrollLogsToBottom(scrollContainer);
         } else {
-            container.scrollTop = Math.max(0, container.scrollHeight - distanceFromBottom);
+            scrollContainer.scrollTop = Math.max(
+                0,
+                scrollContainer.scrollHeight - distanceFromBottom,
+            );
         }
+        this._hasRenderedLogs = true;
+    }
+
+    private _scrollLogsToBottom(container: HTMLElement): void {
+        const scrollToBottom = () => {
+            container.scrollTop = container.scrollHeight;
+        };
+
+        scrollToBottom();
+        globalThis.requestAnimationFrame(scrollToBottom);
+        globalThis.setTimeout(scrollToBottom, 80);
     }
 }

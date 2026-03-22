@@ -289,6 +289,7 @@
     flex: 1;
     cursor: pointer;
     padding: 0.75rem;
+    font-family: var(--app-font-family);
     border-radius: 12px;
     background: var(--glass-surface);
     backdrop-filter: blur(8px);
@@ -333,6 +334,7 @@
 }
 
 .thinking-option-title {
+    font-family: var(--app-font-family);
     font-weight: 500;
     font-size: 0.95rem;
     margin-bottom: 0.1rem;
@@ -340,6 +342,7 @@
 }
 
 .thinking-option-subtitle {
+    font-family: var(--app-font-family);
     font-size: 0.75rem;
     opacity: 0.8;
     pointer-events: none;

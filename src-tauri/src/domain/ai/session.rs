@@ -12,6 +12,11 @@ use std::sync::{
 
 use super::types::{ChatMessage, ChatReply, ChatSession};
 
+const LOCAL_CONTEXT_RESERVE_TOKENS: usize = 1024;
+const LOCAL_RECENT_TURNS: usize = 3;
+const LOCAL_SUMMARY_BUDGET_RATIO: f32 = 0.28;
+const LOCAL_MIN_SUMMARY_TOKENS: usize = 160;
+
 /// Manages persistence and retrieval of chat sessions.
 ///
 /// Designed for DI via `app.manage(Arc::new(ChatSessionManager::new()))`.
@@ -157,24 +162,36 @@ impl ChatSessionManager {
         Self::flush_snapshot(&self.take_snapshot())
     }
 
-    /// Returns the full history for a session, creating it if necessary.
-    pub fn get_or_create_session(
+    /// Merges the latest frontend-provided request messages into persistent history
+    /// without duplicating already known turns. Returns the incoming messages as the
+    /// runtime context that should be sent to the provider.
+    pub fn merge_request_messages(
         &self,
         session_id: &str,
-        new_messages: &[ChatMessage],
+        incoming_messages: &[ChatMessage],
     ) -> Vec<ChatMessage> {
+        if incoming_messages.is_empty() {
+            return self.get_chat_history(session_id);
+        }
+
         let mut entry = self
             .sessions
             .entry(session_id.to_string())
             .or_insert_with(|| ChatSession {
                 history: Vec::new(),
+                summary: None,
+                summary_message_count: 0,
                 last_updated: Self::current_timestamp(),
             });
 
-        entry.history.extend_from_slice(new_messages);
+        let overlap = find_history_overlap(&entry.history, incoming_messages);
+        entry
+            .history
+            .extend_from_slice(&incoming_messages[overlap..]);
         entry.last_updated = Self::current_timestamp();
         self.dirty.store(true, Ordering::Relaxed);
-        entry.history.clone()
+
+        incoming_messages.to_vec()
     }
 
     /// Appends an assistant reply to an existing session.
@@ -224,10 +241,103 @@ impl ChatSessionManager {
         };
 
         session.history.truncate(user_index);
+        session.summary = None;
+        session.summary_message_count = 0;
         session.last_updated = Self::current_timestamp();
         self.dirty.store(true, Ordering::Relaxed);
 
         Some(removed_text)
+    }
+
+    /// Builds a compact, provider-facing context for local engines using a persisted
+    /// recap of older turns plus a verbatim sliding window of recent turns.
+    pub fn build_local_context(
+        &self,
+        session_id: &str,
+        context_size: usize,
+        model: &str,
+    ) -> Vec<ChatMessage> {
+        let mut session = match self.sessions.get_mut(session_id) {
+            Some(session) => session,
+            None => return Vec::new(),
+        };
+
+        if session.history.is_empty() {
+            return Vec::new();
+        }
+
+        let context_size = context_size.max(4096);
+        let available_budget = context_size.saturating_sub(LOCAL_CONTEXT_RESERVE_TOKENS).max(512);
+        let summary_budget = ((available_budget as f32) * LOCAL_SUMMARY_BUDGET_RATIO) as usize;
+        let summary_budget = summary_budget.max(LOCAL_MIN_SUMMARY_TOKENS);
+
+        let turn_ranges = group_turn_ranges(&session.history);
+        let recent_start_index = if turn_ranges.len() > LOCAL_RECENT_TURNS {
+            turn_ranges[turn_ranges.len() - LOCAL_RECENT_TURNS].0
+        } else {
+            0
+        };
+
+        if recent_start_index < session.summary_message_count {
+            session.summary = None;
+            session.summary_message_count = 0;
+            self.dirty.store(true, Ordering::Relaxed);
+        }
+
+        if recent_start_index > session.summary_message_count {
+            let new_summary_slice = &session.history[session.summary_message_count..recent_start_index];
+            let summary_lines = build_summary_lines(new_summary_slice);
+            if !summary_lines.is_empty() {
+                session.summary = merge_summary(
+                    session.summary.as_deref(),
+                    &summary_lines,
+                    summary_budget,
+                    model,
+                );
+                session.summary_message_count = recent_start_index;
+                self.dirty.store(true, Ordering::Relaxed);
+            }
+        }
+
+        let mut context: Vec<ChatMessage> = Vec::new();
+        let mut used_tokens = 0usize;
+
+        if let Some(summary_content) = session.summary.clone() {
+            let summary_message = ChatMessage {
+                id: uuid::Uuid::new_v4().to_string(),
+                role: "system".to_string(),
+                content: serde_json::Value::String(summary_content),
+                thought_signature: None,
+            };
+            let summary_tokens = estimate_message_tokens(&summary_message, model);
+            if summary_tokens <= available_budget {
+                used_tokens += summary_tokens;
+                context.push(summary_message);
+            }
+        }
+
+        let mut kept_recent: Vec<ChatMessage> = Vec::new();
+        let recent_turn_ranges = if turn_ranges.len() > LOCAL_RECENT_TURNS {
+            &turn_ranges[turn_ranges.len() - LOCAL_RECENT_TURNS..]
+        } else {
+            &turn_ranges[..]
+        };
+
+        for (start, end) in recent_turn_ranges.iter().rev() {
+            let turn = &session.history[*start..*end];
+            let turn_tokens = estimate_messages_tokens(turn, model);
+            if used_tokens + turn_tokens > available_budget {
+                continue;
+            }
+
+            let mut turn_messages = turn.to_vec();
+            turn_messages.append(&mut kept_recent);
+            kept_recent = turn_messages;
+            used_tokens += turn_tokens;
+        }
+
+        context.extend(kept_recent);
+        context
     }
 
     /// Returns the current UNIX timestamp in seconds (used for `last_updated` fields).
@@ -237,6 +347,209 @@ impl ChatSessionManager {
             .unwrap_or_default()
             .as_secs_f64()
     }
+}
+
+fn messages_equivalent(left: &ChatMessage, right: &ChatMessage) -> bool {
+    left.role == right.role
+        && left.content == right.content
+        && left.thought_signature == right.thought_signature
+}
+
+fn find_history_overlap(existing: &[ChatMessage], incoming: &[ChatMessage]) -> usize {
+    let max_overlap = existing.len().min(incoming.len());
+
+    for overlap in (1..=max_overlap).rev() {
+        let existing_suffix = &existing[existing.len() - overlap..];
+        let incoming_prefix = &incoming[..overlap];
+
+        if existing_suffix
+            .iter()
+            .zip(incoming_prefix.iter())
+            .all(|(left, right)| messages_equivalent(left, right))
+        {
+            return overlap;
+        }
+    }
+
+    0
+}
+
+fn estimate_message_tokens(message: &ChatMessage, model: &str) -> usize {
+    match &message.content {
+        serde_json::Value::String(text) => count_text_tokens(text, model),
+        serde_json::Value::Array(parts) => {
+            let mut text = String::new();
+            let mut image_count = 0usize;
+
+            for part in parts {
+                if let Some(part_type) = part.get("type").and_then(serde_json::Value::as_str) {
+                    if part_type == "text" {
+                        if let Some(value) = part.get("text").and_then(serde_json::Value::as_str) {
+                            if !text.is_empty() {
+                                text.push('\n');
+                            }
+                            text.push_str(value);
+                        }
+                    } else if part_type == "image_url" {
+                        image_count += 1;
+                    }
+                }
+            }
+
+            let text_tokens = if text.trim().is_empty() {
+                0
+            } else {
+                count_text_tokens(text.trim(), model)
+            };
+            text_tokens + image_count * 258
+        }
+        other => count_text_tokens(&other.to_string(), model),
+    }
+}
+
+fn estimate_messages_tokens(messages: &[ChatMessage], model: &str) -> usize {
+    messages
+        .iter()
+        .map(|message| estimate_message_tokens(message, model))
+        .sum()
+}
+
+fn count_text_tokens(text: &str, model: &str) -> usize {
+    super::ai_service::count_tokens(text, Some(model)).unwrap_or_else(|_| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            0
+        } else {
+            trimmed.chars().count().div_ceil(4)
+        }
+    })
+}
+
+fn group_turn_ranges(history: &[ChatMessage]) -> Vec<(usize, usize)> {
+    let mut turns = Vec::new();
+    let mut turn_start = 0usize;
+
+    for (index, message) in history.iter().enumerate() {
+        if index > 0 && message.role == "user" {
+            turns.push((turn_start, index));
+            turn_start = index;
+        }
+    }
+
+    if !history.is_empty() {
+        turns.push((turn_start, history.len()));
+    }
+
+    turns
+}
+
+fn build_summary_lines(messages: &[ChatMessage]) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    for (start, end) in group_turn_ranges(messages) {
+        let turn = &messages[start..end];
+        let user_text = turn
+            .iter()
+            .find(|message| message.role == "user")
+            .map_or_else(String::new, |message| summarize_content(&message.content));
+        let assistant_text = turn
+            .iter()
+            .find(|message| message.role == "assistant")
+            .map_or_else(String::new, |message| summarize_content(&message.content));
+
+        let mut pieces = Vec::new();
+        if !user_text.is_empty() {
+            pieces.push(format!("U: {user_text}"));
+        }
+        if !assistant_text.is_empty() {
+            pieces.push(format!("A: {assistant_text}"));
+        }
+
+        if !pieces.is_empty() {
+            lines.push(format!("- {}", pieces.join(" | ")));
+        }
+    }
+
+    lines
+}
+
+fn summarize_content(content: &serde_json::Value) -> String {
+    let text = match content {
+        serde_json::Value::String(value) => value.clone(),
+        serde_json::Value::Array(parts) => {
+            let mut text_parts = Vec::new();
+            let mut image_count = 0usize;
+
+            for part in parts {
+                if let Some(part_type) = part.get("type").and_then(serde_json::Value::as_str) {
+                    if part_type == "text" {
+                        if let Some(value) = part.get("text").and_then(serde_json::Value::as_str) {
+                            text_parts.push(value.to_string());
+                        }
+                    } else if part_type == "image_url" {
+                        image_count += 1;
+                    }
+                }
+            }
+
+            let mut merged = text_parts.join(" ");
+            if image_count > 0 {
+                if !merged.is_empty() {
+                    merged.push(' ');
+                }
+                merged.push_str(&format!("{image_count} image{}", if image_count == 1 { "" } else { "s" }));
+            }
+            merged
+        }
+        other => other.to_string(),
+    };
+
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.len() <= 96 {
+        normalized
+    } else {
+        let truncated: String = normalized.chars().take(93).collect();
+        format!("{}...", truncated.trim_end())
+    }
+}
+
+fn merge_summary(
+    existing_summary: Option<&str>,
+    new_lines: &[String],
+    token_budget: usize,
+    model: &str,
+) -> Option<String> {
+    let mut body_lines: Vec<String> = existing_summary
+        .map(|summary| {
+            summary
+                .strip_prefix("Conversation recap from earlier turns:\n")
+                .unwrap_or(summary)
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    body_lines.extend(new_lines.iter().cloned());
+
+    if body_lines.is_empty() {
+        return None;
+    }
+
+    while !body_lines.is_empty() {
+        let candidate = format!(
+            "Conversation recap from earlier turns:\n{}",
+            body_lines.join("\n")
+        );
+        if count_text_tokens(&candidate, model) <= token_budget {
+            return Some(candidate);
+        }
+        body_lines.remove(0);
+    }
+
+    None
 }
 
 impl Default for ChatSessionManager {
@@ -257,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_or_create_session_in_memory() {
+    fn test_merge_request_messages_in_memory() {
         let manager = ChatSessionManager {
             sessions: Arc::new(DashMap::new()),
             dirty: Arc::new(AtomicBool::new(false)),
@@ -270,7 +583,7 @@ mod tests {
             thought_signature: None,
         };
 
-        let history = manager.get_or_create_session("session-1", std::slice::from_ref(&msg));
+        let history = manager.merge_request_messages("session-1", std::slice::from_ref(&msg));
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].id, "msg-1");
         assert!(manager.dirty.load(Ordering::Relaxed));
@@ -289,7 +602,7 @@ mod tests {
             content: serde_json::Value::String("hello".to_string()),
             thought_signature: None,
         };
-        manager.get_or_create_session("session-1", &[msg]);
+        manager.merge_request_messages("session-1", &[msg]);
         manager.dirty.store(false, Ordering::Relaxed);
 
         manager.clear_chat_history("session-1");
@@ -304,7 +617,7 @@ mod tests {
             dirty: Arc::new(AtomicBool::new(false)),
         };
 
-        manager.get_or_create_session(
+        manager.merge_request_messages(
             "session-1",
             &[ChatMessage {
                 id: "msg-1".to_string(),
@@ -322,7 +635,7 @@ mod tests {
             },
             None,
         );
-        manager.get_or_create_session(
+        manager.merge_request_messages(
             "session-1",
             &[ChatMessage {
                 id: "msg-3".to_string(),
@@ -353,6 +666,58 @@ mod tests {
     }
 
     #[test]
+    fn test_merge_request_messages_deduplicates_overlap() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        };
+
+        let existing = vec![
+            ChatMessage {
+                id: "msg-1".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("hello".to_string()),
+                thought_signature: None,
+            },
+            ChatMessage {
+                id: "msg-2".to_string(),
+                role: "assistant".to_string(),
+                content: serde_json::Value::String("hi".to_string()),
+                thought_signature: None,
+            },
+        ];
+
+        let incoming = vec![
+            ChatMessage {
+                id: "new-msg-1".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("hello".to_string()),
+                thought_signature: None,
+            },
+            ChatMessage {
+                id: "new-msg-2".to_string(),
+                role: "assistant".to_string(),
+                content: serde_json::Value::String("hi".to_string()),
+                thought_signature: None,
+            },
+            ChatMessage {
+                id: "new-msg-3".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("next".to_string()),
+                thought_signature: None,
+            },
+        ];
+
+        manager.merge_request_messages("session-1", &existing);
+        let runtime_context = manager.merge_request_messages("session-1", &incoming);
+        let persisted = manager.get_chat_history("session-1");
+
+        assert_eq!(runtime_context.len(), 3);
+        assert_eq!(persisted.len(), 3);
+        assert_eq!(persisted[2].content, serde_json::Value::String("next".to_string()));
+    }
+
+    #[test]
     fn test_chat_session_serialization() {
         use super::super::types::ChatSession;
 
@@ -363,12 +728,15 @@ mod tests {
                 content: serde_json::Value::String("Hello".to_string()),
                 thought_signature: None,
             }],
+            summary: Some("Conversation recap from earlier turns:\n- U: Hello".to_string()),
+            summary_message_count: 1,
             last_updated: 1_700_000_000.0,
         };
 
         let json = serde_json::to_string(&session).expect("Failed to serialize ChatSession");
         assert!(json.contains("test-id"));
         assert!(json.contains("Hello"));
+        assert!(json.contains("summary_message_count"));
         assert!(json.contains("1700000000"));
     }
 
@@ -389,9 +757,137 @@ mod tests {
         let session: ChatSession =
             serde_json::from_str(json).expect("Failed to deserialize ChatSession");
         assert_eq!(session.history.len(), 1);
+        assert_eq!(session.summary, None);
+        assert_eq!(session.summary_message_count, 0);
         let msg = &session.history[0];
         assert_eq!(msg.id, "abc-123");
         assert_eq!(msg.role, "assistant");
         assert!((session.last_updated - 1_234_567_890.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_build_local_context_uses_persisted_summary_and_recent_turns() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        };
+
+        let session = ChatSession {
+            history: vec![
+                ChatMessage {
+                    id: "1".to_string(),
+                    role: "user".to_string(),
+                    content: serde_json::Value::String("minus one".to_string()),
+                    thought_signature: None,
+                },
+                ChatMessage {
+                    id: "2".to_string(),
+                    role: "assistant".to_string(),
+                    content: serde_json::Value::String("reply minus one".to_string()),
+                    thought_signature: None,
+                },
+                ChatMessage {
+                    id: "3".to_string(),
+                    role: "user".to_string(),
+                    content: serde_json::Value::String("zero".to_string()),
+                    thought_signature: None,
+                },
+                ChatMessage {
+                    id: "4".to_string(),
+                    role: "assistant".to_string(),
+                    content: serde_json::Value::String("reply zero".to_string()),
+                    thought_signature: None,
+                },
+                ChatMessage {
+                    id: "5".to_string(),
+                    role: "user".to_string(),
+                    content: serde_json::Value::String("one".to_string()),
+                    thought_signature: None,
+                },
+                ChatMessage {
+                    id: "6".to_string(),
+                    role: "assistant".to_string(),
+                    content: serde_json::Value::String("reply one".to_string()),
+                    thought_signature: None,
+                },
+                ChatMessage {
+                    id: "7".to_string(),
+                    role: "user".to_string(),
+                    content: serde_json::Value::String("two".to_string()),
+                    thought_signature: None,
+                },
+                ChatMessage {
+                    id: "8".to_string(),
+                    role: "assistant".to_string(),
+                    content: serde_json::Value::String("reply two".to_string()),
+                    thought_signature: None,
+                },
+            ],
+            summary: None,
+            summary_message_count: 0,
+            last_updated: 0.0,
+        };
+        manager.sessions.insert("session-1".to_string(), session);
+
+        let context = manager.build_local_context("session-1", 4096, "gpt-4");
+
+        assert_eq!(context.len(), 7);
+        assert_eq!(context[0].role, "system");
+        assert!(
+            context[0]
+                .content
+                .as_str()
+                .unwrap_or_default()
+                .contains("Conversation recap from earlier turns")
+        );
+
+        let stored = manager.sessions.get("session-1").expect("session should exist");
+        assert!(stored.summary.is_some());
+        assert_eq!(stored.summary_message_count, 2);
+        assert_eq!(context[1].content, serde_json::Value::String("zero".to_string()));
+    }
+
+    #[test]
+    fn test_rewind_last_turn_resets_persisted_summary_state() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        };
+
+        manager.sessions.insert(
+            "session-1".to_string(),
+            ChatSession {
+                history: vec![
+                    ChatMessage {
+                        id: "1".to_string(),
+                        role: "user".to_string(),
+                        content: serde_json::Value::String("first".to_string()),
+                        thought_signature: None,
+                    },
+                    ChatMessage {
+                        id: "2".to_string(),
+                        role: "assistant".to_string(),
+                        content: serde_json::Value::String("reply".to_string()),
+                        thought_signature: None,
+                    },
+                    ChatMessage {
+                        id: "3".to_string(),
+                        role: "user".to_string(),
+                        content: serde_json::Value::String("second".to_string()),
+                        thought_signature: None,
+                    },
+                ],
+                summary: Some("Conversation recap from earlier turns:\n- U: first".to_string()),
+                summary_message_count: 2,
+                last_updated: 0.0,
+            },
+        );
+
+        let removed = manager.rewind_last_turn("session-1");
+        let stored = manager.sessions.get("session-1").expect("session should exist");
+
+        assert_eq!(removed.as_deref(), Some("second"));
+        assert_eq!(stored.summary, None);
+        assert_eq!(stored.summary_message_count, 0);
     }
 }

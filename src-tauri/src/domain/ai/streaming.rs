@@ -157,7 +157,10 @@ impl AiProvider for OpenRouterProvider {
         );
         payload.insert("stream".to_string(), serde_json::Value::Bool(true));
 
-        if let Some(level) = &req.thinking_level {
+        if let Some(level) = &req.thinking_level
+            && !self.base_url.contains("localhost")
+            && !self.base_url.contains("127.0.0.1")
+        {
             payload.insert(
                 "reasoning".to_string(),
                 serde_json::json!({

@@ -7,6 +7,13 @@ import type { IApp } from '../types/coreTypes';
 
 describe('AppUI lifecycle', () => {
     let appUI: AppUI | null = null;
+    let platformServiceMock: {
+        isApiModule: ReturnType<typeof vi.fn>;
+        delete: ReturnType<typeof vi.fn>;
+        download: ReturnType<typeof vi.fn>;
+        cancelDownload: ReturnType<typeof vi.fn>;
+        stop: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
         document.body.innerHTML = '';
@@ -75,20 +82,20 @@ describe('AppUI lifecycle', () => {
     });
 
     function createAppUI(): AppUI {
-        const platformService = {
+        platformServiceMock = {
             isApiModule: vi.fn().mockReturnValue(false),
             delete: vi.fn(),
             download: vi.fn(),
             cancelDownload: vi.fn(),
-            stop: vi.fn(),
-        } as unknown as ModulePlatformService;
+            stop: vi.fn().mockResolvedValue(true),
+        };
 
         const navigation = {
             pushBackAction: vi.fn(),
             removeBackAction: vi.fn(),
         } as unknown as NavigationService;
 
-        return new AppUI(platformService, navigation);
+        return new AppUI(platformServiceMock as unknown as ModulePlatformService, navigation);
     }
 
     function mountAiCard(currentModule = 'text-model'): HTMLElement {
@@ -295,6 +302,76 @@ describe('AppUI lifecycle', () => {
         expect(mockedGlobals.uiState.updateState).toHaveBeenCalledWith({
             last_active_provider: null,
         });
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(textApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp);
+    });
+
+    it('should stop the current services module when clearing its card', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="services-module-card" class="selected">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        const card = document.getElementById('services-module-card') as HTMLElement;
+        card.dataset['currentModule'] = 'svc';
+        card.dataset['currentModuleName'] = 'Service';
+
+        const serviceApp = { id: 'svc', name: 'Service', installed: true } as IApp;
+        appUI.updateModuleCard('services', serviceApp);
+        platformServiceMock.stop.mockClear();
+
+        appUI.clearModuleCard('services');
+
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(serviceApp);
+    });
+
+    it('should not stop an AI provider if the same provider remains selected in the other AI slot', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="selected">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        const sharedApp = { id: 'shared-ai', name: 'Shared AI', installed: true } as IApp;
+        appUI.updateModuleCard('ai_text', sharedApp);
+        appUI.updateModuleCard('ai_image', sharedApp);
+        platformServiceMock.stop.mockClear();
+
+        appUI.clearModuleCard('ai_text');
+
+        expect(platformServiceMock.stop).not.toHaveBeenCalled();
+    });
+
+    it('should track the shown AI capability on the shared dashboard card', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="empty">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        const sharedApp = { id: 'shared-ai', name: 'Shared AI', installed: true } as IApp;
+        appUI.updateModuleCard('ai_text', sharedApp);
+
+        const card = document.getElementById('ai-module-card') as HTMLElement;
+        expect(card.dataset['currentCapability']).toBe('ai_text');
+
+        appUI.updateModuleCard('ai_image', sharedApp);
+        expect(card.dataset['currentCapability']).toBe('ai_image');
+
+        const resolvedCategory = (
+            appUI as unknown as { _resolveCategoryFromCard: (card: HTMLElement) => string }
+        )._resolveCategoryFromCard(card);
+        expect(resolvedCategory).toBe('ai_image');
     });
 
     it('should perform selection action for select and deselect flows', () => {
@@ -363,5 +440,58 @@ describe('AppUI lifecycle', () => {
         privateAppUI._onModalDownloadError(btn, new Error('broken'));
         const mockedGlobals = globalThis as unknown as { showToast: ReturnType<typeof vi.fn> };
         expect(mockedGlobals.showToast).not.toHaveBeenCalled();
+    });
+
+    it('should not reopen modal after delete if app selection was already closed', async () => {
+        appUI = createAppUI();
+
+        const privateAppUI = appUI as unknown as {
+            _handleDeleteModule: (app: IApp, category: string) => Promise<void>;
+            _modalManager: { isAppSelectionOpen: () => boolean };
+        };
+
+        vi.spyOn(privateAppUI._modalManager, 'isAppSelectionOpen').mockReturnValue(false);
+        const reopenSpy = vi.spyOn(appUI, 'openAppSelection');
+
+        platformServiceMock.delete.mockResolvedValue(undefined);
+        (
+            globalThis as unknown as {
+                getCatalogCategory: ReturnType<typeof vi.fn>;
+            }
+        ).getCatalogCategory.mockReturnValue([{ id: 'svc', name: 'Service', installed: false }]);
+
+        await privateAppUI._handleDeleteModule(
+            { id: 'svc', name: 'Service', installed: true } as IApp,
+            'services',
+        );
+
+        expect(reopenSpy).not.toHaveBeenCalled();
+    });
+
+    it('should reopen modal after delete when app selection is still open', async () => {
+        appUI = createAppUI();
+
+        const privateAppUI = appUI as unknown as {
+            _handleDeleteModule: (app: IApp, category: string) => Promise<void>;
+            _modalManager: { isAppSelectionOpen: () => boolean };
+        };
+
+        vi.spyOn(privateAppUI._modalManager, 'isAppSelectionOpen').mockReturnValue(true);
+        const reopenSpy = vi.spyOn(appUI, 'openAppSelection');
+
+        platformServiceMock.delete.mockResolvedValue(undefined);
+        const refreshedApps = [{ id: 'svc', name: 'Service', installed: false }] as IApp[];
+        (
+            globalThis as unknown as {
+                getCatalogCategory: ReturnType<typeof vi.fn>;
+            }
+        ).getCatalogCategory.mockReturnValue(refreshedApps);
+
+        await privateAppUI._handleDeleteModule(
+            { id: 'svc', name: 'Service', installed: true } as IApp,
+            'services',
+        );
+
+        expect(reopenSpy).toHaveBeenCalledWith('services', refreshedApps);
     });
 });

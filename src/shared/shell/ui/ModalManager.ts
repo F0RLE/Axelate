@@ -128,11 +128,17 @@ export class ModalManager {
         this._updateSidebar(category.startsWith('ai') ? 'ai' : category, category, apps);
         this._populateAppList(listEl, apps, category, this._currentSelectedAppId);
 
-        modal.classList.remove('hidden');
-        modal.showModal();
-
         // Calculate needed width for any language dynamically
         this._updateDynamicSidebarWidth();
+
+        if (modal.open && !modal.classList.contains('hidden')) {
+            this._overlayClickModal = modal;
+            modal.addEventListener('click', this._boundOverlayClick);
+            return;
+        }
+
+        modal.classList.remove('hidden');
+        modal.showModal();
 
         // Add smooth hiding for main content
         const container = document.querySelector('.models-container');
@@ -145,7 +151,11 @@ export class ModalManager {
                 this.closeAppSelection();
             },
             () => {
-                this.openAppSelection(category, apps);
+                this.openAppSelection(
+                    this._currentCategory ?? category,
+                    this._currentApps.length > 0 ? this._currentApps : apps,
+                    this._currentSelectedAppId ?? undefined,
+                );
             },
         );
 
@@ -170,10 +180,14 @@ export class ModalManager {
         if (container !== null) container.classList.remove('content-hidden');
     }
 
+    public isAppSelectionOpen(): boolean {
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
+        return modal !== null && modal.open && !modal.classList.contains('hidden');
+    }
+
     public refreshCurrentSelection(): void {
         if (this._currentCategory !== null && this._currentApps.length > 0) {
-            const modal = document.getElementById('app-selection-modal');
-            if (modal !== null && !modal.classList.contains('hidden')) {
+            if (this.isAppSelectionOpen()) {
                 this.openAppSelection(
                     this._currentCategory,
                     this._currentApps,
@@ -496,6 +510,8 @@ export class ModalManager {
         const state = this._getButtonState(card, appId, isSelected);
 
         const win = getGlobalWin() as unknown as { t?: (k: string, d: string) => string };
+        btn.className = state.className;
+        btn.dataset['i18n'] = state.key;
         btn.textContent =
             typeof win.t === 'function' ? win.t(state.key, state.defaultLabel) : state.defaultLabel;
     }
@@ -555,14 +571,19 @@ export class ModalManager {
     private _getSortedApps(apps: IApp[]): IApp[] {
         const priority = ['axelate', 'gpt', 'gemini'];
         return [...apps].sort((a, b) => {
-            const nameA = (a.name ?? '').toLowerCase();
-            const nameB = (b.name ?? '').toLowerCase();
-            const getP = (n: string): number => {
-                const idx = priority.findIndex((p) => n.includes(p));
+            const idA = a.id.toLowerCase();
+            const idB = b.id.toLowerCase();
+            const nameA = (a.name ?? a.id).toLowerCase();
+            const nameB = (b.name ?? b.id).toLowerCase();
+            const getP = (id: string): number => {
+                const idx = priority.findIndex((p) => id.includes(p));
                 return idx === -1 ? 999 : idx;
             };
-            const priorityDiff = getP(nameA) - getP(nameB);
+            const priorityDiff = getP(idA) - getP(idB);
             if (priorityDiff !== 0) return priorityDiff;
+            if ((a.installed === true) !== (b.installed === true)) {
+                return a.installed === true ? -1 : 1;
+            }
             return nameA.localeCompare(nameB);
         });
     }

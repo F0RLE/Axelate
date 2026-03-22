@@ -30,7 +30,7 @@ pub async fn process_chat_request(
     // 1. Session Management
     let mut messages_context = request.messages.clone();
     if let Some(sid) = &request.session_id {
-        messages_context = sessions.get_or_create_session(sid, &request.messages);
+        messages_context = sessions.merge_request_messages(sid, &request.messages);
     }
 
     // 2. Resolve Provider Configuration
@@ -64,9 +64,15 @@ pub async fn process_chat_request(
             config.model_path = Some(request.model.clone());
         }
 
+        let local_context_size = usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
         let status = engine_manager.start(config).await?;
         base_url = format!("{}/v1", status.endpoint);
         is_local_engine = true;
+
+        if let Some(sid) = &request.session_id {
+            messages_context =
+                sessions.build_local_context(sid, local_context_size, &request.model);
+        }
 
         tracing::info!(
             engine = %status.id,
@@ -299,7 +305,9 @@ pub async fn process_image_request(
     sessions: &crate::domain::ai::session::ChatSessionManager,
     _config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
 ) -> Result<super::types::ImageGenerationResponse, crate::errors::AppError> {
+    let request = apply_image_request_defaults(request, settings_service).await?;
     let base_url;
 
     // Route only local engines for now
@@ -447,7 +455,7 @@ pub async fn process_image_request(
             ),
             thought_signature: None,
         };
-        let _ = sessions.get_or_create_session(sid, &[user_message]);
+        let _ = sessions.merge_request_messages(sid, &[user_message]);
 
         let markdown_images = images
             .iter()
@@ -469,6 +477,140 @@ pub async fn process_image_request(
         ok: true,
         error: None,
     })
+}
+
+async fn apply_image_request_defaults(
+    mut request: super::types::ImageGenerationRequest,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
+) -> Result<super::types::ImageGenerationRequest, crate::errors::AppError> {
+    let settings = settings_service.get_settings().await?;
+    let settings_key = request
+        .settings_key
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| request.provider.clone());
+
+    let positive_prompt = resolve_string_setting(
+        &settings,
+        &settings_key,
+        &request.provider,
+        "positive_prompt",
+    );
+    if let Some(prefix) = positive_prompt.filter(|value| !value.trim().is_empty()) {
+        request.prompt = format!("{prefix}, {}", request.prompt);
+    }
+
+    request.negative_prompt = request.negative_prompt.or_else(|| {
+        resolve_string_setting(&settings, &settings_key, &request.provider, "negative_prompt")
+    });
+    request.steps = request
+        .steps
+        .or_else(|| resolve_u32_setting(&settings, &settings_key, &request.provider, "steps"));
+    request.cfg_scale = request.cfg_scale.or_else(|| {
+        resolve_f32_setting(&settings, &settings_key, &request.provider, "cfg_scale")
+    });
+    request.width = request
+        .width
+        .or_else(|| resolve_u32_setting(&settings, &settings_key, &request.provider, "width"));
+    request.height = request
+        .height
+        .or_else(|| resolve_u32_setting(&settings, &settings_key, &request.provider, "height"));
+    request.sampler = request.sampler.or_else(|| {
+        resolve_string_setting(&settings, &settings_key, &request.provider, "sampler")
+    });
+    request.seed = request
+        .seed
+        .or_else(|| resolve_i32_setting(&settings, &settings_key, &request.provider, "seed"));
+    request.batch_size = request.batch_size.or_else(|| {
+        resolve_u32_setting(&settings, &settings_key, &request.provider, "batch_size")
+    });
+    request.scheduler = request.scheduler.or_else(|| {
+        resolve_string_setting(&settings, &settings_key, &request.provider, "scheduler")
+    });
+    request.clip_skip = request.clip_skip.or_else(|| {
+        resolve_i32_setting(&settings, &settings_key, &request.provider, "clip_skip")
+    });
+
+    Ok(request)
+}
+
+fn resolve_string_setting(
+    settings: &crate::models::AppSettings,
+    settings_key: &str,
+    provider_id: &str,
+    suffix: &str,
+) -> Option<String> {
+    resolve_setting_value(settings, settings_key, provider_id, suffix).and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn resolve_u32_setting(
+    settings: &crate::models::AppSettings,
+    settings_key: &str,
+    provider_id: &str,
+    suffix: &str,
+) -> Option<u32> {
+    resolve_setting_value(settings, settings_key, provider_id, suffix)
+        .and_then(|value| value.parse::<u32>().ok())
+}
+
+fn resolve_i32_setting(
+    settings: &crate::models::AppSettings,
+    settings_key: &str,
+    provider_id: &str,
+    suffix: &str,
+) -> Option<i32> {
+    resolve_setting_value(settings, settings_key, provider_id, suffix)
+        .and_then(|value| value.parse::<i32>().ok())
+}
+
+fn resolve_f32_setting(
+    settings: &crate::models::AppSettings,
+    settings_key: &str,
+    provider_id: &str,
+    suffix: &str,
+) -> Option<f32> {
+    resolve_setting_value(settings, settings_key, provider_id, suffix)
+        .and_then(|value| value.parse::<f32>().ok())
+}
+
+fn resolve_setting_value<'a>(
+    settings: &'a crate::models::AppSettings,
+    settings_key: &str,
+    provider_id: &str,
+    suffix: &str,
+) -> Option<&'a str> {
+    let candidates = build_setting_candidates(settings_key, suffix);
+    for key in candidates {
+        if let Some(value) = settings.extra_settings.get(&key) {
+            return Some(value.as_str());
+        }
+    }
+
+    if settings_key != provider_id {
+        let candidates = build_setting_candidates(provider_id, suffix);
+        for key in candidates {
+            if let Some(value) = settings.extra_settings.get(&key) {
+                return Some(value.as_str());
+            }
+        }
+    }
+
+    None
+}
+
+fn build_setting_candidates(prefix: &str, suffix: &str) -> [String; 3] {
+    [
+        format!("{prefix}_{suffix}"),
+        format!("{prefix}_{}", suffix.to_lowercase()),
+        format!("{prefix}_{}", suffix.replace('_', "")),
+    ]
 }
 
 fn normalize_sdcpp_sampler(value: Option<&str>) -> String {
@@ -513,6 +655,8 @@ fn normalize_sdcpp_scheduler(value: Option<&str>) -> String {
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
     use super::*;
+    use crate::models::AppSettings;
+    use std::collections::HashMap;
 
     #[test]
     fn test_count_tokens_basic() {
@@ -549,5 +693,48 @@ mod tests {
         // 9 words, likely 9-11 tokens with cl100k_base
         assert!(count >= 9, "Should produce at least 9 tokens for 9 words");
         assert!(count <= 15, "Should not wildly over-count 9 words");
+    }
+
+    #[test]
+    fn test_resolve_image_setting_prefers_settings_key() {
+        let mut extra_settings = HashMap::new();
+        extra_settings.insert("custom_sd_steps".to_string(), "30".to_string());
+        extra_settings.insert("sdcpp_steps".to_string(), "20".to_string());
+        extra_settings.insert("custom_sd_positiveprompt".to_string(), "portrait".to_string());
+
+        let settings = AppSettings {
+            extra_settings,
+            ..AppSettings::default()
+        };
+
+        assert_eq!(
+            resolve_u32_setting(&settings, "custom_sd", "sdcpp", "steps"),
+            Some(30)
+        );
+        assert_eq!(
+            resolve_string_setting(&settings, "custom_sd", "sdcpp", "positive_prompt"),
+            Some("portrait".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_image_setting_falls_back_to_provider_id() {
+        let mut extra_settings = HashMap::new();
+        extra_settings.insert("sdcpp_cfg_scale".to_string(), "8.5".to_string());
+        extra_settings.insert("sdcpp_negative_prompt".to_string(), "blurry".to_string());
+
+        let settings = AppSettings {
+            extra_settings,
+            ..AppSettings::default()
+        };
+
+        assert_eq!(
+            resolve_f32_setting(&settings, "custom_sd", "sdcpp", "cfg_scale"),
+            Some(8.5)
+        );
+        assert_eq!(
+            resolve_string_setting(&settings, "custom_sd", "sdcpp", "negative_prompt"),
+            Some("blurry".to_string())
+        );
     }
 }

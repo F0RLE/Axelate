@@ -19,13 +19,29 @@ describe('AISettingsService', () => {
         expect(service.getSelectedAIModel('gemini')).toBe('gemini-pro');
     });
 
-    it('should get thinking level (default high)', () => {
+    it('should get thinking level (default high for cloud providers)', () => {
         expect(service.getThinkingLevel('gemini')).toBe('high');
+    });
+
+    it('should default llamacpp thinking level to low', () => {
+        expect(service.getThinkingLevel('llamacpp')).toBe('low');
     });
 
     it('should set thinking level', () => {
         service.setThinkingLevel('gemini', 'low');
         expect(service.getThinkingLevel('gemini')).toBe('low');
+    });
+
+    it('should get default local max output tokens', () => {
+        expect(service.getLocalMaxOutputTokens('llamacpp')).toBe(384);
+    });
+
+    it('should set and clamp local max output tokens', () => {
+        service.setLocalMaxOutputTokens('llamacpp', 512);
+        expect(service.getLocalMaxOutputTokens('llamacpp')).toBe(512);
+
+        service.setLocalMaxOutputTokens('llamacpp', 999999);
+        expect(service.getLocalMaxOutputTokens('llamacpp')).toBe(32768);
     });
 
     it('should get and set last active provider', () => {

@@ -152,7 +152,50 @@ describe('ModalManager lifecycle', () => {
         expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
 
         modalManager.refreshCurrentSelection();
-        expect(navigation.pushBackAction).toHaveBeenCalledTimes(2);
+        expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
+        expect(
+            (document.getElementById('app-selection-modal') as HTMLDialogElement).showModal,
+        ).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not re-show modal or duplicate back action when reopening an already open modal', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+        const apps = [{ id: 'svc', name: 'Service', installed: true } as IApp];
+
+        modalManager.openAppSelection('services', apps, 'svc');
+        modalManager.openAppSelection('services', apps, 'svc');
+
+        expect(modal.showModal).toHaveBeenCalledTimes(1);
+        expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve current selection when replaying modal back action', () => {
+        modalManager = createManager();
+        const apps = [
+            { id: 'svc-a', name: 'Service A', installed: true } as IApp,
+            { id: 'svc-b', name: 'Service B', installed: true } as IApp,
+        ];
+
+        modalManager.openAppSelection('services', apps, 'svc-a');
+        modalManager.updateSelection('svc-b');
+
+        const reopen = vi.mocked(navigation.pushBackAction).mock.calls[0]?.[2] as
+            | (() => void)
+            | undefined;
+        expect(reopen).toBeTypeOf('function');
+
+        modalManager.closeAppSelection();
+        reopen?.();
+
+        expect(document.querySelector('[data-app-id="svc-b"] .modal-btn')?.textContent).toBe(
+            'Remove',
+        );
+        expect(
+            document
+                .querySelector('[data-app-id="svc-b"] .modal-btn')
+                ?.classList.contains('modal-btn-secondary'),
+        ).toBe(true);
     });
 
     it('should disable image filter and render empty state for unsupported apps', () => {
@@ -179,6 +222,20 @@ describe('ModalManager lifecycle', () => {
         expect(document.querySelector('#app-modal-list span')?.textContent).toContain(
             'No applications found',
         );
+    });
+
+    it('should sort by stable module id priority instead of localized names', () => {
+        modalManager = createManager();
+
+        const sorted = (
+            modalManager as unknown as { _getSortedApps: (apps: IApp[]) => IApp[] }
+        )._getSortedApps([
+            { id: 'custom', name: 'A Localized Name', installed: true } as IApp,
+            { id: 'gemini', name: 'ZZZ localized', installed: true } as IApp,
+            { id: 'gpt', name: 'YYY localized', installed: true } as IApp,
+        ]);
+
+        expect(sorted.map((app) => app.id)).toEqual(['gpt', 'gemini', 'custom']);
     });
 
     it('should react to download progress events and update selection labels', () => {
@@ -209,6 +266,11 @@ describe('ModalManager lifecycle', () => {
         expect(document.querySelector('[data-app-id="gemini"] .modal-btn')?.textContent).toBe(
             'Remove',
         );
+        expect(
+            document
+                .querySelector('[data-app-id="gemini"] .modal-btn')
+                ?.classList.contains('modal-btn-secondary'),
+        ).toBe(true);
 
         globalThis.dispatchEvent(
             new CustomEvent('download-progress-update', {

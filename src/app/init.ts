@@ -30,6 +30,7 @@ import { DebugService } from '@/features/debug/services/DebugService';
 import { DebugUI } from '@/features/debug/ui/DebugUI';
 import { SettingsService } from '@/features/settings/services/SettingsService';
 import { SettingsUI } from '@/features/settings/ui/SettingsUI';
+import { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
 import { aiBridge } from '@/features/ai/services/AIBridge';
 import { ChatController } from '@/features/chat/chat';
 import { ModulePlatformService } from '@/shared/services/ModulePlatformService';
@@ -66,10 +67,13 @@ export class Core {
     public readonly sidebarUI: SidebarUI;
     public readonly downloadUI: DownloadUI;
     public readonly settingsUI: SettingsUI;
+    public readonly moduleSettingsUI: ModuleSettingsUI;
 
     private readonly _bridge: GlobalBridge;
     private readonly _eventHandler: EventHandler;
     private _isDestroyed = false;
+    private _isInitialized = false;
+    private _initPromise: Promise<void> | null = null;
     private readonly _boundGlobalShortcutKeydown = (e: KeyboardEvent) => {
         const forbiddenKeys = ['F3', 'F7', 'F1'];
         if (forbiddenKeys.includes(e.key)) {
@@ -136,29 +140,54 @@ export class Core {
             this.tauriProvider,
             this.navigation,
         );
+        this.moduleSettingsUI = new ModuleSettingsUI(
+            this.settingsService,
+            this.uiSettings,
+            this.aiSettings,
+            this.i18nUI,
+            this.tauriProvider,
+            this.navigation,
+        );
         this.particles = new Particles();
         this.monitoringUI = new MonitoringUI(this.monitoringService);
         this.debugUI = new DebugUI(this.debugService);
 
         // 4. Init Event Handler and Bridge
         this._bridge = new GlobalBridge(this);
-        this._bridge.init();
 
         this._eventHandler = new EventHandler(this);
-        this._eventHandler.init();
 
         // Inject Core into Service Singletons (Section 16.2)
         aiBridge.setCore(this);
 
         this.chatController = new ChatController(aiBridge, this.i18n, this.soundService);
-        this.chatController.init();
     }
 
     /**
      * Executes the core initialization sequence with hardened survival logic.
      */
     public async init(): Promise<void> {
+        if (this._isInitialized) return;
+        if (this._initPromise !== null) {
+            await this._initPromise;
+            return;
+        }
+
+        this._initPromise = this._runInit();
+        try {
+            await this._initPromise;
+            this._isInitialized = true;
+        } finally {
+            this._initPromise = null;
+        }
+    }
+
+    private async _runInit(): Promise<void> {
         this.tracer.debug('[Core] Init sequence started.');
+
+        this._bridge.init();
+        this._eventHandler.init();
+        this.chatController.init();
 
         // 1. Emergency Safety Timeout (Guarantee window appears + splash disappears)
         const safetyTimeout = setTimeout(() => {
@@ -229,6 +258,7 @@ export class Core {
                 this.moduleService.init(),
                 this.sidebarUI.init(),
                 this.settingsUI.init(),
+                this.moduleSettingsUI.init(),
                 this.monitoringUI.init(),
                 aiBridge.init(),
                 this.catalog.loadCatalog(),
@@ -241,6 +271,7 @@ export class Core {
             this.debugUI.init();
         } catch (e) {
             this.tracer.error(`[Core] Critical bootstrap failure: ${String(e)}`);
+            throw e;
         } finally {
             clearTimeout(safetyTimeout);
         }
@@ -262,12 +293,15 @@ export class Core {
     public destroy(): void {
         if (this._isDestroyed) return;
         this._isDestroyed = true;
+        this._isInitialized = false;
+        this._initPromise = null;
 
         globalThis.removeEventListener('keydown', this._boundGlobalShortcutKeydown);
         this._eventHandler.destroy();
         this.chatController.destroy();
         this.appUI.destroy();
         this.settingsUI.destroy();
+        this.moduleSettingsUI.destroy();
         this.downloadUI.destroy();
         this.navigationUI.destroy();
         this.windowUI.destroy();
@@ -370,34 +404,80 @@ export class Core {
     }
 }
 
-let _coreInitialized = false;
-let _coreInstance: Core | null = null;
+type CoreBootWindow = Window & {
+    core?: Core;
+    __axelateCoreInitialized__?: boolean;
+    __axelateCoreInstance__?: Core | null;
+    __axelateCoreBootBound__?: boolean;
+    __axelateCoreBeforeUnloadBound__?: boolean;
+};
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (_coreInitialized) {
-        tracer.warn('[Core] Double init blocked (HMR reload detected).');
+function bootCoreOnce(): void {
+    const win = globalThis as unknown as CoreBootWindow;
+
+    if (win.__axelateCoreInstance__ !== null && win.__axelateCoreInstance__ !== undefined) {
+        tracer.warn('[Core] Double init blocked (global singleton already active).');
         return;
     }
-    _coreInitialized = true;
 
-    const coreInstance = new Core();
-    _coreInstance = coreInstance;
-    coreInstance.init().catch((e: unknown) => {
-        tracer.error(`[Core] Boot failed: ${String(e)}`);
+    if (win.__axelateCoreInitialized__ === true) {
+        tracer.warn('[Core] Recovering from stale init flag without active core instance.');
+        win.__axelateCoreInitialized__ = false;
+    }
+
+    try {
+        const coreInstance = new Core();
+        win.__axelateCoreInitialized__ = true;
+        win.__axelateCoreInstance__ = coreInstance;
+        win.core = coreInstance;
+
+        coreInstance.init().catch((e: unknown) => {
+            tracer.error(`[Core] Boot failed: ${String(e)}`);
+        });
+    } catch (e: unknown) {
+        win.__axelateCoreInitialized__ = false;
+        win.__axelateCoreInstance__ = null;
+        delete (win as unknown as Record<string, unknown>)['core'];
+        tracer.error(`[Core] Constructor boot failed: ${String(e)}`);
+        throw e;
+    }
+}
+
+const coreBootWindow = globalThis as unknown as CoreBootWindow;
+
+if (document.readyState === 'loading') {
+    if (coreBootWindow.__axelateCoreBootBound__ !== true) {
+        coreBootWindow.__axelateCoreBootBound__ = true;
+        document.addEventListener(
+            'DOMContentLoaded',
+            () => {
+                bootCoreOnce();
+            },
+            { once: true },
+        );
+    }
+} else {
+    bootCoreOnce();
+}
+
+if (coreBootWindow.__axelateCoreBeforeUnloadBound__ !== true) {
+    coreBootWindow.__axelateCoreBeforeUnloadBound__ = true;
+    globalThis.addEventListener('beforeunload', () => {
+        const win = globalThis as unknown as CoreBootWindow;
+        win.__axelateCoreInstance__?.destroy();
+        win.__axelateCoreInstance__ = null;
+        win.__axelateCoreInitialized__ = false;
+        delete (win as unknown as Record<string, unknown>)['core'];
     });
-
-    const win = globalThis as unknown as Window & { core: Core };
-    win.core = coreInstance;
-});
-
-globalThis.addEventListener('beforeunload', () => {
-    _coreInstance?.destroy();
-});
+}
 
 if (import.meta.hot) {
     import.meta.hot.dispose(() => {
-        _coreInstance?.destroy();
-        _coreInstance = null;
-        _coreInitialized = false;
+        const win = globalThis as unknown as CoreBootWindow;
+        win.__axelateCoreInstance__?.destroy();
+        win.__axelateCoreInstance__ = null;
+        win.__axelateCoreInitialized__ = false;
+        win.__axelateCoreBootBound__ = false;
+        delete (win as unknown as Record<string, unknown>)['core'];
     });
 }

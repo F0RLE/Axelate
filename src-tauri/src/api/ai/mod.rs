@@ -7,8 +7,36 @@ use crate::domain::engine::manager::EngineManager;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
 use crate::infrastructure::config::ui_state::UiStateService;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use std::path::PathBuf;
+use std::process::Command;
 use std::sync::Arc;
 use tauri::{Manager, State, Window};
+
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::HWND;
+#[cfg(target_os = "windows")]
+use windows::core::Interface;
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Com::{
+    CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
+    IDispatch,
+};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Variant::VARIANT;
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::Shell::{IShellWindows, IWebBrowser2, ShellWindows};
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::{SW_RESTORE, SetForegroundWindow, ShowWindow};
+
+/// Result of saving a generated chat image to disk.
+#[derive(Debug, serde::Serialize, specta::Type)]
+pub struct SavedChatImage {
+    /// Absolute path to the saved image file.
+    file_path: String,
+    /// Absolute path to the folder containing the saved image.
+    folder_path: String,
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -88,8 +116,16 @@ pub async fn generate_image(
     sessions: State<'_, Arc<ChatSessionManager>>,
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
+    settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
 ) -> Result<ai::ImageGenerationResponse, AppError> {
-    ai_service::process_image_request(request, &sessions, &config_service, &engine_manager).await
+    ai_service::process_image_request(
+        request,
+        &sessions,
+        &config_service,
+        &engine_manager,
+        settings_service.inner(),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -102,19 +138,27 @@ pub async fn generate_image_background(
     sessions: State<'_, Arc<ChatSessionManager>>,
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
+    settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
     ui_state_service: State<'_, UiStateService>,
 ) -> Result<(), AppError> {
     let sessions = Arc::clone(&*sessions);
     let config_service = Arc::clone(&*config_service);
     let engine_manager = Arc::clone(&*engine_manager);
+    let settings_service = settings_service.inner().clone();
     let ui_state_service = ui_state_service.inner().clone();
     let app_handle = app;
 
     tauri::async_runtime::spawn(async move {
         crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");
         let result =
-            ai_service::process_image_request(request, &sessions, &config_service, &engine_manager)
-                .await;
+            ai_service::process_image_request(
+                request,
+                &sessions,
+                &config_service,
+                &engine_manager,
+                &settings_service,
+            )
+            .await;
 
         if let Err(error) = &result {
             tracing::error!("Background image generation failed: {error}");
@@ -135,4 +179,242 @@ pub async fn generate_image_background(
     });
 
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Saves a chat image to the default Pictures/axelate directory and returns the final path.
+pub fn save_chat_image_default(
+    base64_data: String,
+    mime_type: String,
+) -> Result<SavedChatImage, AppError> {
+    let picture_dir = dirs::picture_dir()
+        .ok_or_else(|| AppError::NotFound("Pictures directory is unavailable".to_string()))?;
+
+    let target_dir = picture_dir.join("axelate");
+    std::fs::create_dir_all(&target_dir)?;
+
+    let ext = match mime_type.to_ascii_lowercase().as_str() {
+        mime if mime.contains("jpeg") || mime.contains("jpg") => "jpg",
+        mime if mime.contains("webp") => "webp",
+        mime if mime.contains("gif") => "gif",
+        _ => "png",
+    };
+
+    let payload = base64_data
+        .split_once(',')
+        .map_or(base64_data.as_str(), |(_, data)| data);
+    let bytes = STANDARD
+        .decode(payload)
+        .map_err(|e| AppError::Validation(format!("Invalid image data: {e}")))?;
+
+    let file_name = format!(
+        "axelate_image_{}.{}",
+        chrono::Local::now().format("%Y%m%d_%H%M%S_%3f"),
+        ext
+    );
+    let file_path = target_dir.join(file_name);
+    std::fs::write(&file_path, bytes)?;
+
+    Ok(SavedChatImage {
+        file_path: file_path.to_string_lossy().into_owned(),
+        folder_path: target_dir.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Deletes a previously saved chat image from disk.
+pub fn delete_chat_image(file_path: String) -> Result<(), AppError> {
+    let file = PathBuf::from(&file_path);
+    if !file.exists() {
+        return Ok(());
+    }
+
+    if !file.is_file() {
+        return Err(AppError::Validation(format!(
+            "Path is not a file: {}",
+            file.display()
+        )));
+    }
+
+    std::fs::remove_file(&file)?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Opens the saved chat image folder in the system file manager.
+pub fn open_chat_image_location(file_path: String, folder_path: String) -> Result<(), AppError> {
+    let file = PathBuf::from(&file_path);
+    let path = PathBuf::from(&folder_path);
+    let open_folder_only = file == path || file.is_dir();
+
+    if !open_folder_only && !file.is_file() {
+        return Err(AppError::NotFound(format!(
+            "Saved image does not exist: {}",
+            file.display()
+        )));
+    }
+
+    if !path.is_dir() {
+        return Err(AppError::NotFound(format!(
+            "Image folder does not exist: {}",
+            path.display()
+        )));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if try_activate_existing_explorer_window(&path)? {
+            return Ok(());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command.arg(&path);
+        command
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg("-R");
+        command.arg(&file);
+        command
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(&path);
+        command
+    };
+
+    command.spawn().map_err(|e| AppError::Io(e.to_string()))?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
+fn try_activate_existing_explorer_window(target_folder: &std::path::Path) -> Result<bool, AppError> {
+    let coinit = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    let should_uninitialize = coinit.is_ok();
+    if let Err(err) = coinit.ok() {
+        const RPC_E_CHANGED_MODE: windows::core::HRESULT = windows::core::HRESULT(0x8001_0106u32 as i32);
+        if err.code() != RPC_E_CHANGED_MODE {
+            return Err(AppError::External {
+                request_id: None,
+                message: format!("Explorer COM initialization failed: {err}"),
+            });
+        }
+    }
+
+    let result = (|| {
+        let shell_windows: IShellWindows =
+            unsafe { CoCreateInstance(&ShellWindows, None, CLSCTX_ALL) }
+                .map_err(|err| AppError::External {
+                    request_id: None,
+                    message: format!("Failed to access ShellWindows: {err}"),
+                })?;
+
+        let count = unsafe { shell_windows.Count() }
+            .map_err(|err| AppError::External {
+                request_id: None,
+                message: format!("Failed to enumerate Explorer windows: {err}"),
+            })?;
+
+        let target_url = normalize_windows_explorer_url(&folder_path_to_file_url(target_folder));
+
+        for index in 0..count {
+            let variant_index: VARIANT = index.into();
+            let dispatch: IDispatch = match unsafe { shell_windows.Item(&variant_index) } {
+                Ok(dispatch) => dispatch,
+                Err(_) => continue,
+            };
+
+            let browser: IWebBrowser2 = match dispatch.cast() {
+                Ok(browser) => browser,
+                Err(_) => continue,
+            };
+
+            let current_url = match unsafe { browser.LocationURL() } {
+                Ok(url) => normalize_windows_explorer_url(&url.to_string()),
+                Err(_) => continue,
+            };
+
+            if current_url != target_url {
+                continue;
+            }
+
+            let hwnd_value = unsafe { browser.HWND() }
+                .map_err(|err| AppError::External {
+                    request_id: None,
+                    message: format!("Failed to get Explorer window handle: {err}"),
+                })?;
+            let hwnd = HWND(hwnd_value.0 as *mut core::ffi::c_void);
+
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+                let _ = SetForegroundWindow(hwnd);
+            }
+            return Ok(true);
+        }
+
+        Ok(false)
+    })();
+
+    if should_uninitialize {
+        unsafe { CoUninitialize() };
+    }
+
+    result
+}
+
+#[cfg(target_os = "windows")]
+fn folder_path_to_file_url(path: &std::path::Path) -> String {
+    let mut url = String::from("file:///");
+    let display = path.to_string_lossy().replace('\\', "/");
+    url.push_str(&display);
+    if !url.ends_with('/') {
+        url.push('/');
+    }
+    url
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_windows_explorer_url(url: &str) -> String {
+    let without_scheme = url
+        .strip_prefix("file:///")
+        .or_else(|| url.strip_prefix("file://"))
+        .unwrap_or(url);
+
+    let path = without_scheme.replace('/', "\\");
+    let decoded = percent_decode_path(&path);
+    decoded.trim_end_matches('\\').to_ascii_lowercase()
+}
+
+#[cfg(target_os = "windows")]
+fn percent_decode_path(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut result = String::with_capacity(value.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            let hex = &value[index + 1..index + 3];
+            if let Ok(parsed) = u8::from_str_radix(hex, 16) {
+                result.push(parsed as char);
+                index += 3;
+                continue;
+            }
+        }
+
+        result.push(bytes[index] as char);
+        index += 1;
+    }
+
+    result
 }

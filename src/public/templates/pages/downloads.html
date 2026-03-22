@@ -153,78 +153,39 @@
                                             0 KB/s
                                         </div>
                                     </div>
-                                    <div class="downloads-stat-item">
-                                        <div class="downloads-stat-label">
-                                            <svg
-                                                class="icon icon-sm"
-                                            >
-                                                <use href="#icon-clock"></use>
-                                            </svg>
-                                            <span
-                                                data-i18n="ui.launcher.web.eta_label"
-                                                >ETA</span
-                                            >
-                                        </div>
-                                        <div
-                                            id="downloads-eta"
-                                            class="downloads-stat-value"
-                                        >
-                                            --
-                                        </div>
-                                    </div>
                                 </div>
+                                <span id="downloads-eta" hidden>--</span>
                             </div>
 
                             <div class="downloads-info-card">
-                                <div class="downloads-info-header">
+                                <div
+                                    class="downloads-empty-state"
+                                    id="downloads-empty-text"
+                                >
                                     <svg
-                                        class="icon downloads-info-header-icon"
+                                        class="icon downloads-empty-icon"
                                     >
-                                        <use href="#icon-info"></use>
+                                        <use href="#icon-download"></use>
                                     </svg>
-                                    <span
-                                        data-i18n="ui.launcher.web.information"
-                                        >Information</span
-                                    >
-                                </div>
-                                <div class="downloads-info-content">
                                     <p
-                                        class="downloads-info-text"
-                                        data-i18n="ui.launcher.web.downloads_hint"
+                                        class="downloads-empty-title"
+                                        data-i18n="ui.launcher.web.no_active_downloads"
                                     >
-                                        Module downloads are shown
-                                        here in real-time. You can track
-                                        progress, download speed, and
-                                        remaining time.
+                                        No active downloads yet
                                     </p>
-                                    <div
-                                        class="downloads-empty-state"
-                                        id="downloads-empty-text"
+                                    <p
+                                        class="downloads-empty-hint"
+                                        data-i18n="ui.launcher.web.start_download_hint"
                                     >
-                                        <svg
-                                            class="icon downloads-empty-icon"
-                                        >
-                                            <use href="#icon-download"></use>
-                                        </svg>
-                                        <p
-                                            data-i18n="ui.launcher.web.no_active_downloads"
-                                        >
-                                            No active downloads yet
-                                        </p>
-                                        <p
-                                            class="downloads-empty-hint"
-                                            data-i18n="ui.launcher.web.start_download_hint"
-                                        >
-                                            Start a module installation
-                                            to see progress here
-                                        </p>
-                                        <p
-                                            class="downloads-empty-sub"
-                                            data-i18n="ui.launcher.web.not_downloading"
-                                        >
-                                            Not downloading yet
-                                        </p>
-                                    </div>
+                                        Start a module installation
+                                        to see progress here
+                                    </p>
+                                    <p
+                                        class="downloads-empty-sub"
+                                        data-i18n="ui.launcher.web.not_downloading"
+                                    >
+                                        Not downloading yet
+                                    </p>
                                 </div>
                             </div>
                         </div>

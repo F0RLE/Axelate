@@ -11,6 +11,18 @@ use crate::domain::engine::types::{
 use crate::errors::AppError;
 use tauri::State;
 
+const MIN_LLAMACPP_CONTEXT_SIZE: u32 = 4096;
+
+fn normalize_engine_config(
+    mut config: crate::domain::engine::types::EngineConfig,
+) -> crate::domain::engine::types::EngineConfig {
+    if config.engine_id == "llamacpp" && config.context_size < MIN_LLAMACPP_CONTEXT_SIZE {
+        config.context_size = MIN_LLAMACPP_CONTEXT_SIZE;
+    }
+
+    config
+}
+
 #[tauri::command]
 #[specta::specta]
 /// Starts a local engine. Hot-swaps if another engine is active.
@@ -18,7 +30,7 @@ pub async fn start_engine(
     config: EngineConfig,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<EngineStatus, AppError> {
-    engine_manager.start(config).await
+    engine_manager.start(normalize_engine_config(config)).await
 }
 
 #[tauri::command]
@@ -88,14 +100,14 @@ pub async fn get_engine_config(
         .await
         .ok_or_else(|| AppError::Config(format!("Unknown engine: {engine_id}")))?;
 
-    Ok(crate::domain::engine::types::EngineConfig {
+    Ok(normalize_engine_config(crate::domain::engine::types::EngineConfig {
         engine_id: def.id,
         port: def.default_port,
         gpu_layers: def.default_gpu_layers,
         context_size: def.default_context_size,
         model_path: None,
         extra_args: vec![],
-    })
+    }))
 }
 
 #[tauri::command]
@@ -105,7 +117,8 @@ pub fn set_engine_config(
     config: crate::domain::engine::types::EngineConfig,
 ) -> Result<(), AppError> {
     let mut map = load_engine_config_map().unwrap_or_default();
-    map.insert(config.engine_id.clone(), config);
+    let normalized = normalize_engine_config(config);
+    map.insert(normalized.engine_id.clone(), normalized);
     save_engine_config_map(&map)
 }
 
@@ -122,7 +135,16 @@ pub(crate) fn load_engine_config_map() -> Result<EngineConfigMap, AppError> {
         return Ok(EngineConfigMap::default());
     }
     let raw = std::fs::read_to_string(path).map_err(|e| AppError::Io(e.to_string()))?;
-    serde_json::from_str(&raw).map_err(|e| AppError::Serialization(e.to_string()))
+    let mut map: EngineConfigMap =
+        serde_json::from_str(&raw).map_err(|e| AppError::Serialization(e.to_string()))?;
+
+    for config in map.values_mut() {
+        if config.engine_id == "llamacpp" && config.context_size < MIN_LLAMACPP_CONTEXT_SIZE {
+            config.context_size = MIN_LLAMACPP_CONTEXT_SIZE;
+        }
+    }
+
+    Ok(map)
 }
 
 fn save_engine_config_map(map: &EngineConfigMap) -> Result<(), AppError> {

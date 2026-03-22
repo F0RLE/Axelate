@@ -7,6 +7,7 @@ import type { IApp } from '../types/coreTypes';
 vi.mock('@/features/ai/services/AIBridge', () => ({
     aiBridge: {
         stopProvider: vi.fn(),
+        getState: vi.fn(() => ({ activeProviderId: 'test-module' })),
     },
 }));
 
@@ -97,9 +98,25 @@ describe('ModulePlatformService', () => {
                 type: 'local',
                 apiProviderData: { id: 'custom-provider' },
             });
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: 'custom-provider',
+            });
             const result = await service.stop(app);
             expect(result).toBe(true);
             expect(aiBridge.stopProvider).toHaveBeenCalled();
+        });
+
+        it('should not stop an inactive API provider', async () => {
+            const { aiBridge } = await import('@/features/ai/services/AIBridge');
+            const app = createApp({ id: 'gemini', type: 'api' });
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: 'gpt',
+            });
+
+            const result = await service.stop(app);
+
+            expect(result).toBe(false);
+            expect(aiBridge.stopProvider).not.toHaveBeenCalled();
         });
 
         it('should call moduleService.control for local modules', async () => {

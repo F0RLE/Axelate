@@ -89,7 +89,7 @@ export class ModuleCardRenderer {
 
         card.appendChild(clone);
 
-        this._attachEventHandlers(card, app, isApi, isInstalled, onClick);
+        this._attachEventHandlers(card, app, isApi, onClick);
         this._startAsyncInstallCheck(card, app, isApi, isInstalled, onClick);
 
         return card;
@@ -328,7 +328,6 @@ export class ModuleCardRenderer {
         card: HTMLElement,
         app: IApp,
         isApi: boolean,
-        isInstalled: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
     ): void {
         card.onclick = (e) => onClick(e, app);
@@ -340,7 +339,8 @@ export class ModuleCardRenderer {
                 e.stopPropagation();
                 e.stopImmediatePropagation();
 
-                if (!isInstalled && !isApi) {
+                const isEffectivelyInstalled = isApi || card.classList.contains('is-installed');
+                if (!isEffectivelyInstalled) {
                     tracer.debug(
                         `[ModuleCardRenderer] Ignored right-click on uninstalled module: ${app.id}`,
                     );
@@ -402,6 +402,9 @@ export class ModuleCardRenderer {
         isApi: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
     ): void {
+        if (!card.isConnected) return;
+        if (card.dataset['appId'] !== app.id) return;
+
         app.installed = true;
 
         card.classList.remove('has-download');
@@ -441,9 +444,14 @@ export class ModuleCardRenderer {
         }
     }
 
-    public updateCardAttributes(card: HTMLElement, app: IApp): void {
+    public updateCardAttributes(card: HTMLElement, app: IApp, capability?: string): void {
         card.dataset['currentModule'] = app.id;
         card.dataset['currentModuleName'] = app.name ?? app.id;
+        if (capability !== undefined && capability !== '') {
+            card.dataset['currentCapability'] = capability;
+        } else {
+            delete card.dataset['currentCapability'];
+        }
         card.dataset['originalHtml'] ??= card.innerHTML;
     }
 

@@ -25,13 +25,52 @@ import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import DOMPurify from 'dompurify';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 
+type SavedChatImage = {
+    filePath: string;
+    folderPath: string;
+};
+
 export class ChatUI {
+    private static readonly _imageResetDelayMs = 250;
     private _lastEditableUserActionBar: HTMLElement | null = null;
     private _editMessageHandler: ((text: string) => void | Promise<void>) | null = null;
     private readonly _boundDocumentClick: (e: Event) => void;
+    private readonly _boundImageViewerKeydown: (e: KeyboardEvent) => void;
     private _retryStatusUnlisten: (() => void) | null = null;
     private _isInitialized = false;
     private _isDestroyed = false;
+    private _imageViewerOverlay: HTMLElement | null = null;
+    private _imageViewerImage: HTMLImageElement | null = null;
+
+    private static readonly _downloadIcon = DOMPurify.sanitize(`
+        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+    `);
+
+    private static readonly _folderIcon = DOMPurify.sanitize(`
+        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+    `);
+
+    private static readonly _checkIcon = DOMPurify.sanitize(`
+        <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+    `);
+
+    private static readonly _trashIcon = DOMPurify.sanitize(`
+        <svg class="icon-trash" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+    `);
 
     private get _messagesContainer(): HTMLElement | null {
         return document.getElementById('chat-messages');
@@ -66,9 +105,16 @@ export class ChatUI {
     constructor() {
         this._boundDocumentClick = (e: Event) => {
             if (!(e.target instanceof HTMLElement)) return;
+            if (e instanceof MouseEvent && e.button !== 0) return;
             if (!e.target.closest('#chat-messages')) return;
+            this._handleImageClick(e as MouseEvent);
             void this._handleMessageClick(e as MouseEvent);
             void this._handleCopyClick(e as MouseEvent);
+        };
+        this._boundImageViewerKeydown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                this._closeImageViewer();
+            }
         };
 
         // Configure marked renderer for code blocks
@@ -169,8 +215,12 @@ export class ChatUI {
         this._isInitialized = false;
 
         document.removeEventListener('click', this._boundDocumentClick);
+        document.removeEventListener('keydown', this._boundImageViewerKeydown);
         this._retryStatusUnlisten?.();
         this._retryStatusUnlisten = null;
+        this._imageViewerOverlay?.remove();
+        this._imageViewerOverlay = null;
+        this._imageViewerImage = null;
 
         for (const timeout of this._typingTimeouts.values()) {
             clearTimeout(timeout);
@@ -206,6 +256,7 @@ export class ChatUI {
                 skipAnimation: true,
             });
         }
+        this.revealLatestMessage();
     }
 
     private _extractFromObject(obj: Record<string, unknown>): string {
@@ -250,14 +301,23 @@ export class ChatUI {
         const safeContent = this._safeExtractText(content);
 
         const bubble = this._createMessageBubble(opts);
-        const actions = this._appendMessageActions(safeContent, role);
+        const actions = this._appendMessageActions(
+            safeContent,
+            role,
+            this._getPrimaryImage(opts['images']),
+        );
         const textNode = this._createMessageTextNode(safeContent, opts);
         bubble.appendChild(textNode);
 
         this._appendAttachments(bubble, opts['attachments'] as IChatAttachment[]);
         this._appendImages(bubble, opts['images'] as { mime: string; data_base64: string }[]);
         this._appendMeta(bubble, opts['tokens'] as number | undefined);
-        if (actions !== null) bubble.appendChild(actions.actionBar);
+        if (actions !== null) {
+            bubble.appendChild(actions.actionBar);
+            if (role === 'assistant') {
+                this._scheduleBubbleImageActions(bubble, actions.actionBar);
+            }
+        }
 
         row.appendChild(bubble);
         if (this._messagesContainer) {
@@ -276,6 +336,7 @@ export class ChatUI {
         textNode: HTMLElement;
         update: (chunk: unknown) => void;
         replace: (text: string) => void;
+        discard: () => void;
         finalize: (fullContent: unknown, finalOpts?: Record<string, unknown>) => void;
     } {
         this._prepareContainer();
@@ -284,8 +345,9 @@ export class ChatUI {
         row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
 
         const bubble = this._createMessageBubble(opts);
-        const actions = this._appendMessageActions('', role);
+        const actions = this._appendMessageActions('', role, null);
         const copyBtn = actions?.copyBtn ?? null;
+
         const textNode = document.createElement('div');
         textNode.className = 'markdown-body';
         bubble.appendChild(textNode);
@@ -369,8 +431,15 @@ export class ChatUI {
                 lastRenderTime = now;
                 this._scrollToBottom(true);
             },
+            discard: () => {
+                row.remove();
+            },
             finalize: (fullContent: unknown, finalOpts: Record<string, unknown> = {}) => {
                 const safeFullContent = this._safeExtractText(fullContent);
+                if (safeFullContent.trim() === '') {
+                    row.remove();
+                    return;
+                }
                 if (copyBtn instanceof HTMLElement) {
                     copyBtn.dataset['copyText'] = safeFullContent;
                 }
@@ -397,11 +466,18 @@ export class ChatUI {
                         bubble,
                         finalOpts['images'] as { mime: string; data_base64: string }[],
                     );
+                    const primaryImage = this._getPrimaryImage(finalOpts['images']);
+                    if (primaryImage !== null && actions !== null) {
+                        this._ensureImageActionButtons(actions.actionBar, primaryImage);
+                    }
                 }
 
                 this._appendMeta(bubble, finalOpts['tokens'] as number | undefined);
                 if (actions !== null && !bubble.contains(actions.actionBar)) {
                     bubble.appendChild(actions.actionBar);
+                }
+                if (actions !== null && role === 'assistant') {
+                    this._scheduleBubbleImageActions(bubble, actions.actionBar);
                 }
                 this._scrollToBottom();
             },
@@ -444,16 +520,18 @@ export class ChatUI {
      */
     private _createMessageBubble(opts: Record<string, unknown>): HTMLElement {
         const bubble = document.createElement('div');
-        bubble.className = `chat-bubble${opts['error'] === true ? ' chat-error' : ''}`;
+        bubble.className = `chat-bubble${opts['error'] === true ? ' chat-error' : ''}${opts['thought'] === true ? ' chat-thought' : ''}`;
         return bubble;
     }
 
     private _appendMessageActions(
         content: string,
         role: 'user' | 'assistant',
+        image: { mime: string; data_base64: string } | null,
     ): { actionBar: HTMLElement; copyBtn: HTMLElement; editBtn: HTMLElement | null } | null {
         const actionBar = document.createElement('div');
         actionBar.className = `chat-message-actions ${role === 'user' ? 'is-user' : 'is-bot'}`;
+        const hasImageActions = role === 'assistant' && image !== null;
 
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
@@ -466,7 +544,9 @@ export class ChatUI {
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
         `);
-        actionBar.appendChild(copyBtn);
+        if (!hasImageActions) {
+            actionBar.appendChild(copyBtn);
+        }
 
         let editBtn: HTMLButtonElement | null = null;
         if (role === 'user') {
@@ -485,7 +565,98 @@ export class ChatUI {
             this._setLastEditableUserActionBar(actionBar);
         }
 
+        if (hasImageActions) {
+            this._ensureImageActionButtons(actionBar, image);
+        }
+
         return { actionBar, copyBtn, editBtn };
+    }
+
+    private _getPrimaryImage(rawImages: unknown): { mime: string; data_base64: string } | null {
+        if (!Array.isArray(rawImages)) return null;
+
+        const candidate = rawImages.find(
+            (item) =>
+                typeof item === 'object' &&
+                item !== null &&
+                typeof (item as { data_base64?: unknown }).data_base64 === 'string' &&
+                typeof (item as { mime?: unknown }).mime === 'string',
+        ) as { mime: string; data_base64: string } | undefined;
+
+        return candidate ?? null;
+    }
+
+    private _ensureImageActionButtons(
+        actionBar: HTMLElement,
+        image: { mime: string; data_base64: string },
+    ): void {
+        if (actionBar.querySelector('.chat-save-image-btn, .chat-open-image-folder-btn')) return;
+        actionBar.querySelector('.chat-copy-own-btn')?.remove();
+
+        const t = getGlobalWin().t;
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'chat-save-image-btn';
+        saveBtn.title =
+            typeof t === 'function' ? t('ui.chat.save_image', 'Save Image') : 'Save Image';
+        saveBtn.innerHTML = ChatUI._downloadIcon;
+        saveBtn.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (saveBtn.classList.contains('chat-open-image-folder-btn')) {
+                void this._deleteSavedImage(saveBtn);
+            }
+        });
+        saveBtn.addEventListener('click', (event) => {
+            if (event.button !== 0) return;
+            const filePath = saveBtn.dataset['filePath'];
+            const folderPath = saveBtn.dataset['folderPath'];
+            if (
+                typeof filePath === 'string' &&
+                filePath.length > 0 &&
+                typeof folderPath === 'string' &&
+                folderPath.length > 0
+            ) {
+                void this._openImageLocation(saveBtn, filePath, folderPath);
+                return;
+            }
+            void this._handleSaveImageAction(saveBtn, image.data_base64, image.mime);
+        });
+        saveBtn.dataset['imageBase64'] = image.data_base64;
+        saveBtn.dataset['imageMime'] = image.mime;
+
+        actionBar.appendChild(saveBtn);
+    }
+
+    private _scheduleBubbleImageActions(bubble: HTMLElement, actionBar: HTMLElement): void {
+        globalThis.setTimeout(() => {
+            const image = this._extractImageFromBubble(bubble);
+            if (image !== null) {
+                this._ensureImageActionButtons(actionBar, image);
+            }
+        }, 0);
+    }
+
+    private _extractImageFromBubble(
+        bubble: HTMLElement,
+    ): { mime: string; data_base64: string } | null {
+        const image = bubble.querySelector<HTMLImageElement>('img');
+        if (!(image instanceof HTMLImageElement)) return null;
+
+        const src = image.currentSrc || image.src;
+        if (!src.startsWith('data:image/')) return null;
+
+        const match = /^data:([^;]+);base64,(.+)$/i.exec(src);
+        if (match === null) return null;
+
+        const mime = match[1];
+        const data_base64 = match[2];
+        if (mime === undefined || data_base64 === undefined || mime === '' || data_base64 === '') {
+            return null;
+        }
+
+        return { mime, data_base64 };
     }
 
     private _setLastEditableUserActionBar(actionBar: HTMLElement): void {
@@ -635,16 +806,11 @@ export class ChatUI {
 
                 const wrapper = document.createElement('div');
                 wrapper.className = 'chat-img-wrapper';
-                wrapper.style.position = 'relative';
-                wrapper.style.display = 'inline-block';
-                wrapper.style.maxWidth = '100%';
 
                 const el = document.createElement('img');
                 el.className = 'chat-img';
                 el.src = `data:${mime};base64,${b64}`;
-                el.style.display = 'block';
-                el.style.maxWidth = '100%';
-                el.style.borderRadius = 'var(--radius-md)';
+                el.alt = 'Generated image';
                 el.addEventListener(
                     'load',
                     () => {
@@ -653,40 +819,7 @@ export class ChatUI {
                     { once: true },
                 );
 
-                const btn = document.createElement('button');
-                btn.className = 'chat-img-download-btn';
-                btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
-
-                const g = getGlobalWin();
-                btn.title =
-                    typeof g.t === 'function'
-                        ? g.t('ui.chat.save_image', 'Save Image')
-                        : 'Save Image';
-
-                // Add basic overlay styling directly for now
-                btn.style.position = 'absolute';
-                btn.style.bottom = '10px';
-                btn.style.right = '10px';
-                btn.style.background = 'rgba(0,0,0,0.6)';
-                btn.style.color = 'white';
-                btn.style.border = 'none';
-                btn.style.borderRadius = 'var(--radius-sm)';
-                btn.style.padding = '6px';
-                btn.style.cursor = 'pointer';
-                btn.style.display = 'flex';
-                btn.style.alignItems = 'center';
-                btn.style.justifyContent = 'center';
-                btn.style.transition = 'background 0.2s';
-
-                btn.onmouseenter = () => (btn.style.background = 'rgba(0,0,0,0.8)');
-                btn.onmouseleave = () => (btn.style.background = 'rgba(0,0,0,0.6)');
-
-                btn.onclick = () => {
-                    void this._downloadImageBase64(b64, mime);
-                };
-
                 wrapper.appendChild(el);
-                wrapper.appendChild(btn);
                 bubble.appendChild(wrapper);
             } catch {
                 /* ignore image errors */
@@ -694,68 +827,47 @@ export class ChatUI {
         });
     }
 
-    private _base64ToBytes(b64: string): Uint8Array {
-        const binaryString = atob(b64);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.codePointAt(i) ?? 0;
-        }
-        return bytes;
-    }
+    private async _performSaveImage(b64: string, mime: string): Promise<SavedChatImage | null> {
+        const result = await invoke<{ file_path: string; folder_path: string }>(
+            'save_chat_image_default',
+            {
+                base64Data: b64,
+                mimeType: mime,
+            },
+        );
 
-    private async _performSaveImage(b64: string, ext: string): Promise<string | null> {
-        type DialogModule = {
-            save(opts: {
-                filters: { name: string; extensions: string[] }[];
-                defaultPath: string;
-            }): Promise<string | null>;
-        };
-        type FsModule = {
-            writeFile(path: string, contents: Uint8Array): Promise<void>;
-        };
-
-        const dialogPlugin = (await import('@tauri-apps/plugin-dialog')) as unknown as DialogModule;
-        const fsPlugin = (await import('@tauri-apps/plugin-fs')) as unknown as FsModule;
-
-        const saveDialog = dialogPlugin.save;
-        const writeFile = fsPlugin.writeFile;
-
-        if (typeof saveDialog !== 'function' || typeof writeFile !== 'function') {
-            throw new TypeError('Could not find Tauri save/writeFile plugins.');
+        if (
+            typeof result?.file_path === 'string' &&
+            result.file_path.length > 0 &&
+            typeof result?.folder_path === 'string' &&
+            result.folder_path.length > 0
+        ) {
+            return {
+                filePath: result.file_path,
+                folderPath: result.folder_path,
+            };
         }
 
-        const filePath = await saveDialog({
-            filters: [{ name: 'Image', extensions: [ext] }],
-            defaultPath: `generated_image_${Date.now()}.${ext}`,
-        });
-
-        if (typeof filePath === 'string' && filePath.length > 0) {
-            const bytes = this._base64ToBytes(b64);
-            await writeFile(filePath, bytes);
-            return filePath;
-        }
         return null;
     }
 
-    private async _downloadImageBase64(b64: string, mime: string): Promise<void> {
+    private async _handleSaveImageAction(
+        saveBtn: HTMLButtonElement,
+        b64: string,
+        mime: string,
+    ): Promise<void> {
         try {
-            let ext = 'png';
-            if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
-            if (mime.includes('webp')) ext = 'webp';
+            const savedImage = await this._performSaveImage(b64, mime);
 
-            const filePath = await this._performSaveImage(b64, ext);
-
-            if (filePath !== null) {
-                const g = getGlobalWin();
-                if (typeof g.showToast === 'function') {
-                    g.showToast(
-                        typeof g.t === 'function'
-                            ? g.t('ui.chat.image_saved', 'Image saved successfully')
-                            : 'Image saved successfully',
-                        'success',
-                    );
-                }
+            if (savedImage !== null) {
+                saveBtn.classList.add('is-saved');
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = ChatUI._checkIcon;
+                this._promoteSaveButtonToFolder(
+                    saveBtn,
+                    savedImage.filePath,
+                    savedImage.folderPath,
+                );
             }
         } catch (e) {
             tracer.error('[ChatUI] Save image failed', e);
@@ -765,6 +877,239 @@ export class ChatUI {
                     typeof g.t === 'function'
                         ? g.t('ui.chat.image_save_failed', 'Failed to save image')
                         : 'Failed to save image',
+                    'error',
+                );
+            }
+        }
+    }
+
+    private _handleImageClick(e: MouseEvent): void {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        const image = target.closest('.chat-img');
+        if (!(image instanceof HTMLImageElement)) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        this._openImageViewer(image.currentSrc || image.src);
+    }
+
+    private _ensureImageViewer(): void {
+        if (
+            this._imageViewerOverlay instanceof HTMLElement &&
+            this._imageViewerImage instanceof HTMLImageElement
+        ) {
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'chat-image-viewer hidden';
+        overlay.innerHTML = DOMPurify.sanitize(`
+            <button type="button" class="chat-image-viewer-close" aria-label="Close image preview">
+                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <div class="chat-image-viewer-stage">
+                <img class="chat-image-viewer-img" alt="Image preview">
+            </div>
+        `);
+
+        overlay.addEventListener('click', (event) => {
+            const eventTarget = event.target;
+            if (!(eventTarget instanceof HTMLElement)) return;
+            if (
+                eventTarget === overlay ||
+                eventTarget.closest('.chat-image-viewer-close') instanceof HTMLElement
+            ) {
+                this._closeImageViewer();
+            }
+        });
+
+        document.body.appendChild(overlay);
+        this._imageViewerOverlay = overlay;
+        this._imageViewerImage = overlay.querySelector('.chat-image-viewer-img');
+    }
+
+    private _openImageViewer(src: string): void {
+        this._ensureImageViewer();
+        if (
+            !(this._imageViewerOverlay instanceof HTMLElement) ||
+            !(this._imageViewerImage instanceof HTMLImageElement)
+        ) {
+            return;
+        }
+
+        this._imageViewerImage.src = src;
+        this._imageViewerOverlay.classList.remove('hidden');
+        document.body.classList.add('chat-image-viewer-open');
+        document.addEventListener('keydown', this._boundImageViewerKeydown);
+    }
+
+    private _closeImageViewer(): void {
+        if (!(this._imageViewerOverlay instanceof HTMLElement)) return;
+
+        this._imageViewerOverlay.classList.add('hidden');
+        document.body.classList.remove('chat-image-viewer-open');
+        document.removeEventListener('keydown', this._boundImageViewerKeydown);
+    }
+
+    private _promoteSaveButtonToFolder(
+        saveBtn: HTMLButtonElement,
+        filePath: string,
+        folderPath: string,
+    ): void {
+        const t = getGlobalWin().t;
+
+        globalThis.setTimeout(() => {
+            saveBtn.disabled = false;
+            saveBtn.classList.remove('chat-save-image-btn', 'is-saved');
+            saveBtn.classList.add('chat-open-image-folder-btn');
+            saveBtn.dataset['filePath'] = filePath;
+            saveBtn.dataset['folderPath'] = folderPath;
+            saveBtn.title =
+                typeof t === 'function'
+                    ? t('ui.chat.open_image_folder', 'Open image folder')
+                    : 'Open image folder';
+            saveBtn.innerHTML = ChatUI._folderIcon;
+        }, ChatUI._imageResetDelayMs);
+    }
+
+    private _restoreFolderButtonToSave(saveBtn: HTMLButtonElement): void {
+        const t = getGlobalWin().t;
+        saveBtn.disabled = false;
+        saveBtn.classList.remove(
+            'chat-open-image-folder-btn',
+            'is-saved',
+            'is-resetting',
+            'is-trash-state',
+        );
+        saveBtn.classList.add('chat-save-image-btn');
+        delete saveBtn.dataset['filePath'];
+        delete saveBtn.dataset['folderPath'];
+        saveBtn.title =
+            typeof t === 'function' ? t('ui.chat.save_image', 'Save Image') : 'Save Image';
+        saveBtn.innerHTML = ChatUI._downloadIcon;
+    }
+
+    private _setFolderButtonState(
+        saveBtn: HTMLButtonElement,
+        filePath: string,
+        folderPath: string,
+    ): void {
+        const t = getGlobalWin().t;
+        saveBtn.disabled = false;
+        saveBtn.classList.remove(
+            'chat-save-image-btn',
+            'is-saved',
+            'is-resetting',
+            'is-trash-state',
+        );
+        saveBtn.classList.add('chat-open-image-folder-btn');
+        saveBtn.dataset['filePath'] = filePath;
+        saveBtn.dataset['folderPath'] = folderPath;
+        saveBtn.title =
+            typeof t === 'function'
+                ? t('ui.chat.open_image_folder', 'Open image folder')
+                : 'Open image folder';
+        saveBtn.innerHTML = ChatUI._folderIcon;
+    }
+
+    private _animateFolderButtonReset(saveBtn: HTMLButtonElement): void {
+        if (!saveBtn.classList.contains('chat-open-image-folder-btn')) return;
+        if (saveBtn.classList.contains('is-resetting')) return;
+
+        saveBtn.disabled = true;
+        saveBtn.classList.add('is-resetting', 'is-trash-state');
+        saveBtn.innerHTML = ChatUI._trashIcon;
+    }
+
+    private async _deleteSavedImage(saveBtn: HTMLButtonElement): Promise<void> {
+        const filePath = saveBtn.dataset['filePath'];
+        const folderPath = saveBtn.dataset['folderPath'];
+        if (
+            typeof filePath !== 'string' ||
+            filePath.length === 0 ||
+            typeof folderPath !== 'string' ||
+            folderPath.length === 0
+        ) {
+            this._restoreFolderButtonToSave(saveBtn);
+            return;
+        }
+
+        this._animateFolderButtonReset(saveBtn);
+
+        const animationDelay = new Promise((resolve) => {
+            globalThis.setTimeout(resolve, ChatUI._imageResetDelayMs);
+        });
+        const deleteRequest = invoke('delete_chat_image', { filePath });
+
+        try {
+            await Promise.all([deleteRequest, animationDelay]);
+            this._restoreFolderButtonToSave(saveBtn);
+        } catch (e) {
+            tracer.error('[ChatUI] Delete saved image failed', e);
+            await animationDelay;
+            this._setFolderButtonState(saveBtn, filePath, folderPath);
+
+            const g = getGlobalWin();
+            if (typeof g.showToast === 'function') {
+                g.showToast(
+                    typeof g.t === 'function'
+                        ? g.t('ui.chat.image_delete_failed', 'Failed to delete image')
+                        : 'Failed to delete image',
+                    'error',
+                );
+            }
+        }
+    }
+
+    private async _openImageLocation(
+        saveBtn: HTMLButtonElement,
+        filePath: string,
+        folderPath: string,
+    ): Promise<void> {
+        const g = getGlobalWin();
+        const handleMissing = (): void => {
+            this._restoreFolderButtonToSave(saveBtn);
+            void invoke('open_chat_image_location', { filePath: folderPath, folderPath }).catch(
+                () => {
+                    /* ignore fallback folder-open errors */
+                },
+            );
+            if (typeof g.showToast === 'function') {
+                g.showToast(
+                    typeof g.t === 'function'
+                        ? g.t('ui.chat.image_missing_resave', 'Image was removed, save it again')
+                        : 'Image was removed, save it again',
+                    'warning',
+                );
+            }
+        };
+
+        try {
+            await invoke('open_chat_image_location', { filePath, folderPath });
+        } catch (e) {
+            const message = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e);
+            const normalized = message.toLowerCase();
+            const isMissing =
+                normalized.includes('does not exist') ||
+                normalized.includes('not found') ||
+                normalized.includes('saved image does not exist') ||
+                normalized.includes('not_found');
+            if (isMissing) {
+                handleMissing();
+                return;
+            }
+
+            tracer.error('[ChatUI] Open image location failed', e);
+            if (typeof g.showToast === 'function') {
+                g.showToast(
+                    typeof g.t === 'function'
+                        ? g.t('ui.chat.image_open_folder_failed', 'Failed to open image folder')
+                        : 'Failed to open image folder',
                     'error',
                 );
             }
@@ -1119,9 +1464,22 @@ export class ChatUI {
             }
         });
 
-        document.querySelectorAll<HTMLElement>('.chat-img-download-btn').forEach((btn) => {
+        document.querySelectorAll<HTMLElement>('.chat-save-image-btn').forEach((btn) => {
             btn.title = t('ui.chat.save_image', 'Save Image');
         });
+
+        document.querySelectorAll<HTMLElement>('.chat-open-image-folder-btn').forEach((btn) => {
+            btn.title = t('ui.chat.open_image_folder', 'Open image folder');
+        });
+
+        const viewerClose = document.querySelector<HTMLElement>('.chat-image-viewer-close');
+        if (viewerClose) {
+            viewerClose.setAttribute(
+                'aria-label',
+                t('ui.chat.close_image_preview', 'Close image preview'),
+            );
+            viewerClose.title = t('ui.chat.close_image_preview', 'Close image preview');
+        }
 
         document.querySelectorAll<HTMLElement>('.media-remove').forEach((btn) => {
             btn.title = t('ui.launcher.web.remove_attachment', 'Remove attachment');

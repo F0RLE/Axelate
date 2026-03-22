@@ -1,345 +1,79 @@
-﻿/* --- SETTINGS PAGE --- */
+/* --- SETTINGS PAGE --- */
 #page-settings {
     overflow-y: auto;
-    overflow-x: visible;
+    overflow-x: hidden;
     padding: var(--content-padding-top) 1.5rem 1.5rem 1.5rem;
     align-items: center;
     position: relative;
     background: linear-gradient(180deg, transparent 0%, rgba(var(--primary-raw), 0.02) 100%);
 }
 
-#page-settings .console-header {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-    margin-top: 0.5rem;
-    position: relative;
-    z-index: 1;
-    padding-left: 3.5rem;
-    min-height: 3rem;
-}
-
 .settings-wrapper {
-    padding: 2rem 2rem 2rem 2rem;
-    max-width: 1600px;
-    margin: 0 auto;
     width: 100%;
-    height: 100%;
+    max-width: 1240px;
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 1rem 0 1.5rem;
     box-sizing: border-box;
     display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
+    align-items: center;
 }
 
 .settings-grid {
+    width: 100%;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.5rem;
     align-items: stretch;
-    margin-top: auto;
-    margin-bottom: auto;
-    position: relative;
-    /* margin: 0 1.75rem 0 1.75rem;  Replaced by margin-top/bottom: auto */
-    animation: settingsGridFadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: settingsGridFadeIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 #settings-grid .module-card {
-    /* Standardize settings module card padding/layout */
     display: flex;
     flex-direction: column;
-    /* Remove padding overrides to match dashboard.css .module-card defaults (1.75rem) */
-    align-items: stretch; /* Stretch content to fill width */
+    align-items: stretch;
     text-align: center;
-    border: none; /* Remove border per user request */
+    border: none;
+    padding: 1.9rem 1.75rem;
+    border-radius: 24px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0%, rgba(255, 255, 255, 0.012) 100%),
+        rgba(14, 14, 22, 0.54);
 }
 
 #settings-grid .module-card:hover {
-    border-color: transparent; /* Ensure hover doesn't add it back */
-    background: var(--card-bg); /* Reset background to static state */
-    transform: translateY(-4px); /* Restored vertical lift per user request */
-    box-shadow: none; /* Reset shadow */
-    cursor: default; /* Cards are containers, not buttons */
-}
-
-#settings-grid .module-icon {
-    margin-bottom: 0.5rem;
-    align-self: center; /* keep icon centered */
+    border-color: transparent;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.026) 0%, rgba(255, 255, 255, 0.016) 100%),
+        rgba(18, 18, 28, 0.62);
+    transform: translateY(-3px);
+    box-shadow: none;
+    cursor: default;
 }
 
 #settings-grid .module-title {
     align-self: center;
     margin-bottom: 0.5rem;
+    font-size: 1.18rem;
 }
 
 #settings-grid .module-desc {
     align-self: center;
-    margin-bottom: 1.5rem;
-    min-height: 2.6em; /* Ensure uniform height for vertical alignment */
+    margin-bottom: 1.35rem;
+    min-height: 2.6em;
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    opacity: 0.8;
+    opacity: 0.72;
+    max-width: 24rem;
+    line-height: 1.35;
 }
 
-/* --- Restored Navigation & Sidebar Styles --- */
-.settings-nav {
-    display: flex;
-    flex-direction: row;
-    gap: 0.75rem;
-    margin-bottom: 2rem;
-    overflow-x: auto;
-    overflow-y: visible;
-    justify-content: center;
-    padding-top: 0;
-    position: relative;
-    z-index: 1;
-    padding-bottom: 0.5rem;
-}
-
-.settings-nav .nav-btn {
-    white-space: nowrap;
-    width: auto;
-    min-width: 140px;
-    text-align: center;
-    justify-content: center;
-    transform: translateY(0);
-    overflow: visible;
-    position: relative;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border: 1px solid transparent;
-    padding: 0.75rem 1.25rem;
-    font-weight: 500;
-}
-
-.settings-nav .nav-btn::before {
-    content: '';
-    position: absolute;
-    bottom: -0.5rem;
-    left: 50%;
-    transform: translateX(-50%) scaleX(0);
-    width: 80%;
-    height: 2px;
-    background: var(--primary);
-    border-radius: 2px;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.settings-nav .nav-btn:hover {
-    background: rgba(var(--primary-raw), 0.15);
-    transform: translateY(-4px); /* Restored per user request */
-    box-shadow: none; /* Kept removed (flat) */
-    border: none;
-    z-index: 10;
-}
-
-.settings-nav .nav-btn.active {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 4px 16px rgba(var(--primary-raw), 0.4);
-    transform: translateY(-2px);
-}
-
-.settings-nav .nav-btn.active::before {
-    display: none;
-}
-
-.settings-sidebar {
-    position: fixed;
-    right: 2rem;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 280px;
-    background: var(--bg-med);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1.5rem;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.settings-sidebar-item {
-    padding: 0.75rem;
-    background: var(--bg-light);
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
-    font-size: 0.8rem;
-}
-
-.settings-sidebar-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-    color: var(--text-primary);
-}
-
-@media (max-width: 1024px) {
-    .settings-grid {
-        grid-template-columns: 1fr !important;
-    }
-    .settings-nav {
-        position: static;
-        display: flex;
-        flex-direction: row;
-        overflow-x: auto;
-        margin-bottom: 1rem;
-    }
-}
-
-/* --- Restored Resizable Card & Section Styles --- */
-.settings-section {
-    display: none;
-    overflow: visible;
-    opacity: 0;
-    transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.settings-section.active {
-    display: block;
-    overflow: visible;
-    opacity: 1;
-    animation: settingsSectionFadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.resizable-card {
-    position: relative;
-    cursor: default;
-    transition:
-        transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-        opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.card-resize-handle {
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 8px;
-    cursor: col-resize;
-    z-index: 10;
-    background: transparent;
-    transition: background 0.2s;
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-}
-
-.card-resize-handle:hover {
-    background: rgba(var(--primary-raw), 0.4);
-}
-
-.card-resize-handle:active {
-    background: var(--primary);
-}
-
-.card-resize-handle::after {
-    content: '';
-    position: absolute;
-    right: 2px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 2px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 1px;
-    transition: background 0.2s;
-}
-
-.card-resize-handle:hover::after {
-    background: rgba(255, 255, 255, 0.6);
-}
-
-body.resizing,
-body.resizing * {
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    -moz-user-select: none !important;
-    -ms-user-select: none !important;
-    cursor: col-resize !important;
-}
-
-.resizable-card[data-card-width='half'] {
-    grid-column: span 1;
-}
-.resizable-card[data-card-width='full'] {
-    grid-column: 1 / -1;
-}
-.resizable-card.animating {
-    animation: cardResize 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-@keyframes cardResize {
-    0% {
-        opacity: 0.95;
-        transform: scale(0.98);
-    }
-    50% {
-        opacity: 0.9;
-        transform: scale(1.01);
-    }
-    100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-.nav-btn.hidden {
-    display: none !important;
-}
-.nav-btn.hiding {
-    animation: navHide 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    overflow: hidden;
-}
-.nav-btn.showing {
-    animation: navShow 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-    overflow: hidden;
-}
-
-@keyframes navHide {
-    from {
-        opacity: 1;
-        max-height: 50px;
-        margin-bottom: 0.25rem;
-        transform: scale(1);
-    }
-    to {
-        opacity: 0;
-        max-height: 0;
-        margin-bottom: 0;
-        transform: scale(0.95);
-    }
-}
-
-@keyframes navShow {
-    from {
-        opacity: 0;
-        max-height: 0;
-        margin-bottom: 0;
-        transform: scale(0.95);
-    }
-    to {
-        opacity: 1;
-        max-height: 50px;
-        margin-bottom: 0.25rem;
-        transform: scale(1);
-    }
-}
-
-/* --- Toggle Grids (Launcher Style) --- */
-
-#taskbar-toggles {
-    display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1.5rem !important; /* Launcher standard gap */
-    width: 100%;
-}
-
+#taskbar-toggles,
 #monitor-toggles {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 1.5rem !important; /* Launcher standard gap */
+    gap: 1.5rem !important;
     width: 100%;
 }
 
@@ -348,103 +82,93 @@ body.resizing * {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.75rem; /* Increased internal gap for larger tiles */
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 0;
+    aspect-ratio: 1;
     padding: 1rem;
     background: rgba(255, 255, 255, 0.05);
-    /* border: 1px solid rgba(255, 255, 255, 0.1); Removed per user request */
+    border-radius: 20px;
     outline: none;
-    border-radius: 16px; /* Slightly larger radius for larger tiles */
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    min-height: 0;
-    width: 100%;
-    /* Removed max-width to let tiles fill space "Launcher Style" */
-    height: auto;
-    aspect-ratio: 1;
-    /* Premium Hover Effect */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    /* Entry Animation */
     opacity: 0;
-    animation: toggleEntry 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    transition:
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        background 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: toggleEntry 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
-/* Staggered Entry Delays (up to 12 items) */
 .monitor-toggle-btn:nth-child(1) {
-    animation-delay: 0.05s;
+    animation-delay: 0.03s;
 }
+
 .monitor-toggle-btn:nth-child(2) {
-    animation-delay: 0.1s;
+    animation-delay: 0.06s;
 }
+
 .monitor-toggle-btn:nth-child(3) {
+    animation-delay: 0.09s;
+}
+
+.monitor-toggle-btn:nth-child(4) {
+    animation-delay: 0.12s;
+}
+
+.monitor-toggle-btn:nth-child(5) {
     animation-delay: 0.15s;
 }
-.monitor-toggle-btn:nth-child(4) {
-    animation-delay: 0.2s;
-}
-.monitor-toggle-btn:nth-child(5) {
-    animation-delay: 0.25s;
-}
+
 .monitor-toggle-btn:nth-child(6) {
-    animation-delay: 0.3s;
-}
-.monitor-toggle-btn:nth-child(7) {
-    animation-delay: 0.35s;
-}
-.monitor-toggle-btn:nth-child(8) {
-    animation-delay: 0.4s;
-}
-.monitor-toggle-btn:nth-child(9) {
-    animation-delay: 0.45s;
+    animation-delay: 0.18s;
 }
 
-@keyframes toggleEntry {
-    from {
-        opacity: 0;
-        transform: translateY(20px) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+.monitor-toggle-btn:nth-child(7) {
+    animation-delay: 0.21s;
+}
+
+.monitor-toggle-btn:nth-child(8) {
+    animation-delay: 0.24s;
+}
+
+.monitor-toggle-btn:nth-child(9) {
+    animation-delay: 0.27s;
 }
 
 .monitor-toggle-btn::before {
     content: '';
     position: absolute;
     inset: 0;
+    border-radius: inherit;
     background: linear-gradient(
         135deg,
-        rgba(var(--primary-raw), 0.2),
-        rgba(var(--primary-alt-raw), 0.15),
-        rgba(var(--accent-raw), 0.1)
+        rgba(var(--primary-raw), 0.18),
+        rgba(var(--primary-alt-raw), 0.12),
+        rgba(var(--accent-raw), 0.08)
     );
     opacity: 0;
-    transition: opacity 0.3s ease;
-    border-radius: 12px;
+    transition: opacity 0.25s ease;
 }
 
 .monitor-toggle-btn:hover {
-    transform: translateY(-4px); /* Restored per user request */
-    /* border-color: rgba(var(--primary-raw), 0.4); Removed per user request */
-    box-shadow: none; /* Kept removed (flat) */
-    background: rgba(255, 255, 255, 0.08); /* Keep subtle background change but flat */
+    transform: translateY(-4px);
+    background: rgba(255, 255, 255, 0.075);
+    box-shadow: none;
 }
 
 .monitor-toggle-btn:active {
-    transform: translateY(-2px) scale(0.96); /* Tactile click response */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    transform: translateY(-2px) scale(0.97);
 }
 
 .monitor-toggle-btn.active {
     background: linear-gradient(
         145deg,
-        rgba(var(--primary-raw), 0.3),
-        rgba(var(--primary-alt-raw), 0.2)
+        rgba(var(--primary-raw), 0.25),
+        rgba(var(--primary-alt-raw), 0.17)
     );
-    /* border-color: rgba(var(--primary-raw), 0.5); Removed per user request */
-    /* box-shadow: 0 0 20px rgba(var(--primary-raw), 0.3); Removed per user request */
 }
 
 .monitor-toggle-btn.active::before {
@@ -452,14 +176,18 @@ body.resizing * {
 }
 
 .monitor-toggle-btn .toggle-icon {
-    width: 40%; /* Responsive size (approx 48-64px depending on grid) */
+    width: 40%;
     height: auto;
     aspect-ratio: 1;
     color: var(--text-muted);
     opacity: 0.4;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 1;
-    pointer-events: none; /* Fix cursor disappearing on hover */
+    transition:
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
 }
 
 .monitor-toggle-btn .toggle-icon svg {
@@ -471,56 +199,30 @@ body.resizing * {
 .monitor-toggle-btn.active .toggle-icon {
     color: #fff;
     opacity: 1;
+    transform: scale(1.08);
     filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.8));
-    transform: scale(1.1); /* Pop effect */
 }
 
 .monitor-toggle-btn .toggle-label {
+    margin-top: 0.25rem;
     font-family: var(--app-font-family);
     font-size: 0.7rem;
     font-weight: 600;
-    color: var(--text-muted);
-    opacity: 0.5;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    color: var(--text-muted);
+    opacity: 0.5;
     z-index: 1;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    margin-top: 0.25rem;
-    pointer-events: none; /* Fix cursor disappearing on hover */
+    transition:
+        color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
 }
 
 .monitor-toggle-btn.active .toggle-label {
-    color: white;
+    color: #fff;
     opacity: 1;
-}
-
-@media (max-width: 600px) {
-    #monitor-toggles,
-    #taskbar-toggles {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 900px) {
-    .monitor-toggle-btn .toggle-label {
-        display: none;
-    }
-
-    .monitor-toggle-btn {
-        min-height: 60px;
-        padding: 0.75rem 0.5rem;
-    }
-}
-
-@media (max-width: 700px) {
-    .monitor-toggle-btn .toggle-icon {
-        width: 24px;
-        height: 24px;
-    }
-
-    .monitor-toggle-btn {
-        min-height: 50px;
-    }
 }
 
 #taskbar-toggles.compact .toggle-label,
@@ -532,284 +234,67 @@ body.resizing * {
 
 #taskbar-toggles.compact .monitor-toggle-btn,
 #monitor-toggles.compact .monitor-toggle-btn {
-    min-height: 50px;
     padding: 0.5rem;
 }
 
 #taskbar-toggles.super-compact .toggle-icon,
 #monitor-toggles.super-compact .toggle-icon {
     width: 20px;
-    height: 20px;
 }
 
-/* ============================================
-   SAVE BUTTON & INDICATORS (Moved from system-info.css)
-   ============================================ */
-
-.save-all-btn {
-    position: sticky;
-    bottom: 0;
-    background: linear-gradient(to top, var(--bg-med) 0%, var(--bg-med) 80%, transparent 100%);
-    border-top: 1px solid var(--border-color);
-    padding: 1.5rem 1.5rem;
-    margin: 2rem -1.5rem -1.5rem;
-    display: flex;
-    justify-content: flex-end;
-    z-index: 10;
-    animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(10px);
-}
-
-@keyframes slideUp {
+@keyframes settingsGridFadeIn {
     from {
         opacity: 0;
+        transform: translateY(10px);
     }
 
     to {
         opacity: 1;
+        transform: translateY(0);
     }
 }
 
-.save-all-btn .btn {
-    box-shadow: 0 4px 16px rgba(var(--primary-raw), 0.4);
-    font-weight: 600;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
+@keyframes toggleEntry {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.96);
+    }
 
-.save-all-btn .btn::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    transform: translate(-50%, -50%);
-    transition:
-        width 0.6s,
-        height 0.6s;
-}
-
-.save-all-btn .btn:hover {
-    transform: translateY(-3px) scale(1.02);
-    box-shadow: 0 8px 24px rgba(var(--primary-raw), 0.5);
-}
-
-.save-all-btn .btn:hover::before {
-    width: 300px;
-    height: 300px;
-}
-
-.save-all-btn .btn:active {
-    transform: translateY(-1px) scale(0.98);
-}
-
-.unsaved-indicator {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--warning);
-    margin-left: 6px;
-    animation: pulse 1.5s infinite;
-}
-
-/* Save indicator */
-#save-indicator {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    font-size: 2rem;
-    z-index: 10000;
-    opacity: 0;
-    transform: scale(0.5);
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    pointer-events: none;
-    user-select: none;
-}
-
-#save-indicator.saving {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-    animation: saveIndicatorPulse 0.6s ease-in-out 3;
-}
-
-@keyframes saveIndicatorPulse {
-    0%,
-    100% {
-        transform: scale(1) translateY(0);
+    to {
         opacity: 1;
-    }
-
-    50% {
-        transform: scale(1.2) translateY(-5px);
-        opacity: 0.8;
+        transform: translateY(0) scale(1);
     }
 }
 
-/* --- REFACTORED INLINE STYLES --- */
-
-.settings-card-flex {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+@media (max-width: 1024px) {
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
-.settings-card-header-center {
-    margin-bottom: 1.5rem;
-    padding-bottom: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    text-align: center;
+@media (max-width: 600px) {
+    #taskbar-toggles,
+    #monitor-toggles {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
-.settings-icon-box {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    background: rgba(var(--primary-raw), 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+@media (max-width: 900px) {
+    .monitor-toggle-btn .toggle-label {
+        display: none;
+    }
+
+    .monitor-toggle-btn {
+        padding: 0.75rem 0.5rem;
+    }
 }
 
-.settings-icon-svg {
-    width: 20px;
-    height: 20px;
-    color: var(--primary);
-}
+@media (max-width: 700px) {
+    .settings-wrapper {
+        padding: 0.75rem 0 1rem;
+    }
 
-.settings-title-text {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.settings-desc-text {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    margin-top: 0.25rem;
-}
-
-/* --- MODULES SETTINGS SECTION --- */
-.modules-settings-container {
-    display: flex;
-    gap: 1.5rem;
-    height: calc(100vh - 250px);
-    min-height: 500px;
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 16px;
-    border: 1px solid var(--border-color);
-    overflow: hidden;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-.modules-sidebar {
-    width: 260px;
-    background: rgba(0, 0, 0, 0.2);
-    border-right: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-}
-
-.modules-nav-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.module-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: none; /* Removed border */
-    color: var(--text-muted);
-}
-
-.module-nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-primary);
-}
-
-.module-nav-item.active {
-    background: rgba(138, 43, 226, 0.15);
-    border: none;
-    color: var(--primary-light, #a855f7);
-}
-
-.module-nav-item .module-icon {
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    object-fit: cover;
-}
-
-.module-nav-item .module-name {
-    font-size: 0.9rem;
-    font-weight: 500;
-}
-
-.modules-config-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 2rem;
-    position: relative;
-}
-
-.module-config-active {
-    max-width: 800px;
-    margin: 0 auto;
-}
-
-.module-settings-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: var(--text-muted);
-    text-align: center;
-    gap: 1rem;
-}
-
-.module-settings-empty .empty-icon {
-    font-size: 3rem;
-    opacity: 0.3;
-}
-
-/* Scrollbar for modules list */
-.modules-nav-list::-webkit-scrollbar {
-    width: 4px;
-}
-
-.modules-nav-list::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.modules-nav-list::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-}
-
-.settings-content-wrapper {
-    margin-bottom: 1rem;
-    flex: 1;
-}
-
-.settings-content-wrapper.small-margin {
-    margin-bottom: 0.5rem;
+    .monitor-toggle-btn .toggle-icon {
+        width: 24px;
+    }
 }

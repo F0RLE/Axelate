@@ -58,6 +58,51 @@ fn is_progress_log_line(line: &str) -> bool {
     line.contains("it/s") || line.contains("s/it") || line.contains('%')
 }
 
+fn is_qwen_model(model_path: Option<&str>) -> bool {
+    model_path.is_some_and(|path| path.to_ascii_lowercase().contains("qwen"))
+}
+
+fn has_arg(args: &[String], candidates: &[&str]) -> bool {
+    args.iter()
+        .any(|arg| candidates.iter().any(|candidate| arg == candidate))
+}
+
+fn push_arg_if_missing(args: &mut Vec<String>, candidates: &[&str], value: Option<&str>) {
+    if has_arg(args, candidates) {
+        return;
+    }
+
+    args.push(candidates[0].to_string());
+    if let Some(value) = value {
+        args.push(value.to_string());
+    }
+}
+
+fn build_llamacpp_args(config: &EngineConfig) -> Vec<String> {
+    let effective_context_size = config.context_size.max(4096);
+    let mut args = vec![
+        "--port".to_string(),
+        config.port.to_string(),
+        "--ctx-size".to_string(),
+        effective_context_size.to_string(),
+        "-ngl".to_string(),
+        config.gpu_layers.to_string(),
+    ];
+
+    // Desktop launcher is single-user. Force a single slot unless user explicitly overrides it.
+    push_arg_if_missing(&mut args, &["--parallel", "-np"], Some("1"));
+    push_arg_if_missing(&mut args, &["--reasoning", "-rea"], Some("off"));
+
+    if is_qwen_model(config.model_path.as_deref()) {
+        push_arg_if_missing(&mut args, &["--jinja"], None);
+        push_arg_if_missing(&mut args, &["--reasoning-format"], Some("deepseek"));
+        push_arg_if_missing(&mut args, &["--no-context-shift"], None);
+        push_arg_if_missing(&mut args, &["--flash-attn"], Some("on"));
+    }
+
+    args
+}
+
 impl EngineManager {
     /// Creates a new engine manager with the given event emitter.
     pub fn new(emitter: Arc<dyn EngineEventEmitter>) -> Self {
@@ -219,12 +264,7 @@ impl EngineManager {
         cmd.kill_on_drop(true);
 
         if config.engine_id == "llamacpp" {
-            cmd.arg("--port")
-                .arg(config.port.to_string())
-                .arg("--ctx-size")
-                .arg(config.context_size.to_string())
-                .arg("-ngl")
-                .arg(config.gpu_layers.to_string());
+            cmd.args(build_llamacpp_args(&config));
         } else if config.engine_id == "sdcpp" {
             cmd.arg("--listen-port").arg(config.port.to_string());
         } else {
@@ -481,4 +521,48 @@ impl EngineManager {
             ),
         })
     }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    fn sample_config(model_path: Option<&str>) -> EngineConfig {
+        EngineConfig {
+            engine_id: "llamacpp".to_string(),
+            port: 8081,
+            gpu_layers: -1,
+            context_size: 4096,
+            model_path: model_path.map(str::to_string),
+            extra_args: vec![],
+        }
+    }
+
+    #[test]
+    fn builds_single_slot_llamacpp_args_by_default() {
+        let args = build_llamacpp_args(&sample_config(None));
+        assert!(args.windows(2).any(|w| w == ["--parallel", "1"]));
+        assert!(args.windows(2).any(|w| w == ["--reasoning", "off"]));
+    }
+
+    #[test]
+    fn clamps_llamacpp_context_size_to_safe_minimum() {
+        let mut config = sample_config(None);
+        config.context_size = 1024;
+
+        let args = build_llamacpp_args(&config);
+        assert!(args.windows(2).any(|w| w == ["--ctx-size", "4096"]));
+    }
+
+    #[test]
+    fn adds_qwen_specific_llamacpp_args() {
+        let args = build_llamacpp_args(&sample_config(Some("Qwen3.5-9B-Q4_K_M.gguf")));
+        assert!(args.contains(&"--jinja".to_string()));
+        assert!(args.windows(2).any(|w| w == ["--reasoning-format", "deepseek"]));
+        assert!(args.contains(&"--no-context-shift".to_string()));
+        assert!(args.windows(2).any(|w| w == ["--flash-attn", "on"]));
+    }
+
 }

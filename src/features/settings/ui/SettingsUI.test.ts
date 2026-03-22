@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SettingsUI } from './SettingsUI';
+import { ModuleSettingsUI as SettingsUI } from './ModuleSettingsUI';
 import type { SettingsService } from '../services/SettingsService';
 import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
@@ -85,7 +85,7 @@ type SettingsUIPrivate = {
     destroy: () => void;
 };
 
-describe('SettingsUI lifecycle', () => {
+describe('ModuleSettingsUI lifecycle', () => {
     let settingsUI: SettingsUI | null = null;
 
     beforeEach(() => {
@@ -109,7 +109,12 @@ describe('SettingsUI lifecycle', () => {
             getCardWidth: vi.fn().mockReturnValue(undefined),
             getCardWidths: vi.fn().mockReturnValue({}),
         } as unknown as UISettingsService;
-        const aiSettings = {} as AISettingsService;
+        const aiSettings = {
+            getThinkingLevel: vi
+                .fn()
+                .mockImplementation((appId: string) => (appId === 'llamacpp' ? 'low' : 'high')),
+            setThinkingLevel: vi.fn(),
+        } as unknown as AISettingsService;
         const i18nUI = {
             applyTranslations: vi.fn(),
         } as unknown as I18nUI;

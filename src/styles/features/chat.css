@@ -82,6 +82,10 @@
     border-top-left-radius: 14px;
 }
 
+.hidden {
+    display: none !important;
+}
+
 .chat-message-actions {
     position: absolute;
     top: calc(100% + 0.28rem);
@@ -103,7 +107,9 @@
 }
 
 .chat-edit-own-btn,
-.chat-copy-own-btn {
+.chat-copy-own-btn,
+.chat-save-image-btn,
+.chat-open-image-folder-btn {
     width: 34px;
     height: 34px;
     display: flex;
@@ -132,7 +138,13 @@
 .chat-row.user:focus-within .chat-copy-own-btn,
 .chat-row.bot:hover .chat-copy-own-btn,
 .chat-row.bot:focus-within .chat-copy-own-btn,
+.chat-row.bot:hover .chat-save-image-btn,
+.chat-row.bot:focus-within .chat-save-image-btn,
+.chat-row.bot:hover .chat-open-image-folder-btn,
+.chat-row.bot:focus-within .chat-open-image-folder-btn,
 .chat-message-actions:hover .chat-copy-own-btn,
+.chat-message-actions:hover .chat-save-image-btn,
+.chat-message-actions:hover .chat-open-image-folder-btn,
 .chat-row.user:hover .chat-message-actions.is-last-editable .chat-edit-own-btn,
 .chat-row.user:focus-within .chat-message-actions.is-last-editable .chat-edit-own-btn,
 .chat-message-actions.is-last-editable:hover .chat-edit-own-btn {
@@ -142,7 +154,9 @@
 }
 
 .chat-edit-own-btn:hover,
-.chat-copy-own-btn:hover {
+.chat-copy-own-btn:hover,
+.chat-save-image-btn:hover,
+.chat-open-image-folder-btn:hover {
     background:
         linear-gradient(
             180deg,
@@ -155,18 +169,32 @@
 }
 
 .chat-edit-own-btn svg,
-.chat-copy-own-btn svg {
+.chat-copy-own-btn svg,
+.chat-save-image-btn svg,
+.chat-open-image-folder-btn svg {
     opacity: 0.9;
     pointer-events: none;
 }
 
-.chat-copy-own-btn.is-copied {
+.chat-copy-own-btn.is-copied,
+.chat-save-image-btn.is-saved {
     background: rgba(33, 136, 56, 0.18);
     border-color: rgba(33, 136, 56, 0.36);
     color: var(--success);
 }
 
-.chat-copy-own-btn.is-copied .icon-check {
+.chat-open-image-folder-btn.is-resetting {
+    background: rgba(255, 184, 0, 0.12);
+    border-color: rgba(255, 184, 0, 0.28);
+    color: #ffd166;
+}
+
+.chat-open-image-folder-btn.is-resetting .icon-trash {
+    animation: chatTrashSwap 0.2s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.chat-copy-own-btn.is-copied .icon-check,
+.chat-save-image-btn.is-saved .icon-check {
     animation: chatCopyCheckPop 0.24s cubic-bezier(0.2, 0.9, 0.2, 1) both;
 }
 
@@ -184,6 +212,17 @@
     100% {
         opacity: 1;
         transform: scale(1);
+    }
+}
+
+@keyframes chatTrashSwap {
+    0% {
+        transform: scale(0.82) rotate(-8deg);
+        opacity: 0.35;
+    }
+    100% {
+        transform: scale(1) rotate(0deg);
+        opacity: 1;
     }
 }
 
@@ -213,11 +252,96 @@
 }
 
 .chat-img {
-    max-width: 100%;
+    display: block;
+    width: auto;
+    max-width: min(100%, 360px);
+    max-height: 360px;
+    object-fit: cover;
     border-radius: 16px;
     margin-top: 0.6rem;
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 14px 26px rgba(0, 0, 0, 0.24);
+    cursor: zoom-in;
+}
+
+.chat-img-wrapper {
+    display: inline-block;
+    max-width: 100%;
+}
+
+.chat-image-viewer-open {
+    overflow: hidden;
+}
+
+.chat-image-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: rgba(7, 7, 12, 0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.chat-image-viewer.hidden {
+    display: none;
+}
+
+.chat-image-viewer-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: min(100%, 1400px);
+    height: min(100%, 1000px);
+}
+
+.chat-image-viewer-img {
+    display: block;
+    max-width: 92vw;
+    max-height: 90vh;
+    width: auto;
+    height: auto;
+    border-radius: 20px;
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+}
+
+.chat-image-viewer-close {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background:
+        linear-gradient(180deg, rgba(23, 23, 30, 0.92) 0%, rgba(23, 23, 30, 0.88) 100%),
+        rgba(25, 25, 33, 0.72);
+    color: rgba(255, 255, 255, 0.88);
+    cursor: pointer;
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease,
+        color 0.18s ease,
+        transform 0.18s ease;
+}
+
+.chat-image-viewer-close:hover {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(var(--primary-raw), 0.16) 0%,
+            rgba(var(--primary-raw), 0.1) 100%
+        ),
+        rgba(var(--background-raw), 0.12);
+    border-color: rgba(var(--primary-raw), 0.28);
+    color: #fff;
+    transform: translateY(-1px);
 }
 
 /* --- CHAT PAGE --- */

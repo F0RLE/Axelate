@@ -39,6 +39,7 @@ const mockCore = {
         getSelectedAIModel: vi.fn(),
         getLastActiveProvider: vi.fn(),
         getThinkingLevel: vi.fn().mockReturnValue('high'),
+        getLocalMaxOutputTokens: vi.fn().mockReturnValue(384),
     },
     chatController: {
         randomizeGreeting: vi.fn(),
@@ -874,6 +875,41 @@ describe('AIBridge', () => {
             expect((aiBridge as any)._chunkListeners.get('repeat')?.length).toBe(2);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             expect((aiBridge as any)._thoughtListeners.get('repeat')?.length).toBe(2);
+        });
+
+        it('should forward full local history and let backend handle context compaction', async () => {
+            const history: Array<{ role: 'user' | 'assistant'; content: string }> = [
+                { role: 'user', content: 'minus one' },
+                { role: 'assistant', content: 'reply minus one' },
+                { role: 'user', content: 'zero' },
+                { role: 'assistant', content: 'reply zero' },
+                { role: 'user', content: 'one' },
+                { role: 'assistant', content: 'reply one' },
+                { role: 'user', content: 'two' },
+                { role: 'assistant', content: 'reply two' },
+            ];
+            mockInvoke.mockImplementation(async (cmd: string) => {
+                await Promise.resolve();
+                if (cmd === 'start_engine') {
+                    return { id: 'llamacpp', endpoint: 'http://127.0.0.1:8081' };
+                }
+                if (cmd === 'send_chat_message') {
+                    return { ok: true, reply: { text: 'ok' } };
+                }
+                return null;
+            });
+
+            await aiBridge.startProvider('llamacpp');
+            await aiBridge.sendMessage('latest question', 'chat', [], history);
+
+            expect(mockInvoke).toHaveBeenCalledWith(
+                'send_chat_message',
+                expect.objectContaining({
+                    request: expect.objectContaining({
+                        messages: [...history, { role: 'user', content: 'latest question' }],
+                    }),
+                }),
+            );
         });
     });
 });

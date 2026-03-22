@@ -133,7 +133,7 @@ export class DownloadUI {
         const state = this._parseProgressState(progress);
 
         this._updateDownloadsLayout(els, state.hasActive);
-        this._updateEmptyText(els, state.hasActive);
+        this._updateEmptyText(els);
         this._updateProgressVisuals(els, state);
         this._updateStatus(els, state);
         this._updateEta(els, state);
@@ -188,8 +188,8 @@ export class DownloadUI {
     /**
      * Updates the empty state text visibility.
      */
-    private _updateEmptyText(els: { emptyText: HTMLElement | null }, hasActive: boolean): void {
-        if (els.emptyText) els.emptyText.classList.toggle('hidden', hasActive);
+    private _updateEmptyText(els: { emptyText: HTMLElement | null }): void {
+        if (els.emptyText) els.emptyText.classList.add('hidden');
     }
 
     /**
@@ -285,6 +285,18 @@ export class DownloadUI {
         return trimmed;
     }
 
+    private _displayModuleName(moduleId: string): string {
+        const knownNames: Record<string, string> = {
+            llamacpp: 'llama.cpp',
+            sdcpp: 'stable-diffusion.cpp',
+        };
+
+        const known = knownNames[moduleId.toLowerCase()];
+        if (known !== undefined) return known;
+
+        return moduleId.replace(/[_-]+/g, ' ').trim();
+    }
+
     /**
      * Formats bytes in GB, MB, or KB.
      */
@@ -360,7 +372,7 @@ export class DownloadUI {
         const mainCard = document.getElementById(DownloadUI.SELECTORS.MAIN_CARD);
         const emptyText = document.getElementById(DownloadUI.SELECTORS.EMPTY_TEXT);
         if (mainCard !== null) mainCard.classList.add('hidden');
-        if (emptyText !== null) emptyText.classList.remove('hidden');
+        if (emptyText !== null) emptyText.classList.add('hidden');
 
         // Ensure the dynamic list container exists
         this._ensureDynamicList();
@@ -602,7 +614,7 @@ export class DownloadUI {
 
         if (this._activeDownloads.size === 0) {
             list.innerHTML = '';
-            if (emptyText) emptyText.classList.remove('hidden');
+            if (emptyText) emptyText.classList.add('hidden');
             if (mainCard) mainCard.style.display = 'none';
             return;
         }
@@ -646,7 +658,7 @@ export class DownloadUI {
         if (pctEl) pctEl.textContent = pctText;
 
         this._patchStatusPill(card, state.status);
-        this._patchCardTranslations(card, state);
+        this._patchCardTranslations(card);
 
         // Stats
         const downloaded = state.downloaded ?? 0;
@@ -660,15 +672,11 @@ export class DownloadUI {
         // Message
         const itemLabel = card.querySelector('.downloads-item-label');
         if (itemLabel !== null) {
-            itemLabel.textContent = this._messageLabel(
-                state.status,
-                state.message,
-                card.dataset['moduleId'] ?? '',
-            );
+            itemLabel.textContent = this._displayModuleName(card.dataset['moduleId'] ?? '');
         }
     }
 
-    private _patchCardTranslations(card: HTMLElement, state: ModuleDownloadState): void {
+    private _patchCardTranslations(card: HTMLElement): void {
         const progressLabel = card.querySelector('.downloads-progress-label');
         if (progressLabel !== null) {
             progressLabel.textContent = this._i18n.t('ui.launcher.web.progress', 'Progress');
@@ -699,7 +707,7 @@ export class DownloadUI {
         const moduleId = card.dataset['moduleId'] ?? '';
         const itemLabel = card.querySelector('.downloads-item-label');
         if (itemLabel !== null) {
-            itemLabel.textContent = this._messageLabel(state.status, state.message, moduleId);
+            itemLabel.textContent = this._displayModuleName(moduleId);
         }
     }
 
@@ -757,7 +765,7 @@ export class DownloadUI {
                     </div>
                     <div class="downloads-meta-content">
                         <div class="downloads-label">${moduleId}</div>
-                        <div class="downloads-item-label">${this._messageLabel(state.status, state.message, moduleId)}</div>
+                        <div class="downloads-item-label">${this._displayModuleName(moduleId)}</div>
                     </div>
                 </div>
                 <div class="downloads-card-actions">

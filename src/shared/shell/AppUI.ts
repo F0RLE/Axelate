@@ -167,7 +167,7 @@ export class AppUI {
             }
 
             this._cardRenderer.updateCardContent(card, nextApp);
-            this._cardRenderer.updateCardAttributes(card, nextApp);
+            this._cardRenderer.updateCardAttributes(card, nextApp, nextCategory);
             this._updateMultiSlotBadge();
             this._resetDashboardSwitchStyles(card);
         }, 150);
@@ -222,6 +222,10 @@ export class AppUI {
 
     private _resolveCategoryFromCard(card: HTMLElement): string {
         const defaultCategory = card.id === 'ai-module-card' ? 'ai_text' : 'services';
+        const shownCapability = card.dataset['currentCapability'];
+        if (shownCapability !== undefined && shownCapability !== '') {
+            return shownCapability;
+        }
         const shownId = card.dataset['currentModule'];
         if (shownId === undefined) {
             return defaultCategory;
@@ -353,7 +357,7 @@ export class AppUI {
         if (cardLike instanceof HTMLElement) {
             this._cancelPendingDashboardSwitch();
             this._stopPreviousModule(cardLike, app);
-            this._cardRenderer.updateCardAttributes(cardLike, app);
+            this._cardRenderer.updateCardAttributes(cardLike, app, category);
 
             cardLike.classList.remove('empty');
             cardLike.classList.add('selected');
@@ -384,7 +388,7 @@ export class AppUI {
 
         const currentApp = this._selectedApps.get(category);
         if (currentApp) {
-            this._stopPreviousModule(cardLike, currentApp);
+            this._stopRemovedModule(category, currentApp);
             this._selectedApps.delete(category);
         }
 
@@ -394,6 +398,7 @@ export class AppUI {
         if (otherApp) {
             // Other slot still active — show that engine on the card
             this._cardRenderer.updateCardContent(cardLike, otherApp);
+            this._cardRenderer.updateCardAttributes(cardLike, otherApp, otherSlot);
             // Re-inject action buttons for the now-active slot so ✕ holds correct category
             this._refreshCardActions(cardLike, otherApp, otherSlot);
         } else {
@@ -404,12 +409,27 @@ export class AppUI {
         this._updateMultiSlotBadge();
     }
 
+    private _stopRemovedModule(category: string, app: IApp): void {
+        if (category.startsWith('ai')) {
+            const otherSlot = category === 'ai_text' ? 'ai_image' : 'ai_text';
+            const otherApp = this._selectedApps.get(otherSlot);
+            if (otherApp?.id === app.id) {
+                return;
+            }
+        }
+
+        void this._platformService.stop(app).catch((err: unknown) => {
+            tracer.warn(`[AppUI] Failed to stop removed module ${app.id}: ${String(err)}`);
+        });
+    }
+
     /** Resets a card element to its empty visual state (no module selected). */
     private _resetCardToEmpty(card: HTMLElement): void {
         card.classList.remove('selected', 'has-download', 'has-launch');
         card.classList.add('empty');
         delete card.dataset['currentModule'];
         delete card.dataset['currentModuleName'];
+        delete card.dataset['currentCapability'];
         const originalHtml = card.dataset['originalHtml'];
         if (originalHtml !== undefined && originalHtml !== '') {
             card.innerHTML = originalHtml;
@@ -474,7 +494,15 @@ export class AppUI {
 
         // Determine which is secondary (not currently shown on the card)
         const shownModule = card.dataset['currentModule'];
-        const secondaryApp = shownModule === textApp.id ? imageApp : textApp;
+        const shownCapability = card.dataset['currentCapability'];
+        const secondaryApp =
+            shownCapability === 'ai_text'
+                ? imageApp
+                : shownCapability === 'ai_image'
+                  ? textApp
+                  : shownModule === textApp.id
+                    ? imageApp
+                    : textApp;
 
         // Build badge using same pattern as _addSettingsBtn
         const badge = document.createElement('div');
@@ -489,7 +517,14 @@ export class AppUI {
         badge.addEventListener('click', (e) => {
             e.stopPropagation();
             e.stopImmediatePropagation();
-            const openCapability = shownModule === textApp.id ? 'ai_image' : 'ai_text';
+            const openCapability =
+                shownCapability === 'ai_text'
+                    ? 'ai_image'
+                    : shownCapability === 'ai_image'
+                      ? 'ai_text'
+                      : shownModule === textApp.id
+                        ? 'ai_image'
+                        : 'ai_text';
             this.openAppSelection(openCapability);
         });
 
@@ -645,7 +680,9 @@ export class AppUI {
             // Refresh logic remains in UI for now (Phase 1 can refactor this)
             const rawCategory = category.startsWith('ai') ? 'ai' : category;
             const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(rawCategory);
-            this.openAppSelection(category, allApps);
+            if (this._modalManager.isAppSelectionOpen()) {
+                this.openAppSelection(category, allApps);
+            }
         } catch (err: unknown) {
             tracer.error('[AppUI] Delete error:', err);
             const error = err as Error;

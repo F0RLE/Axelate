@@ -9,6 +9,9 @@ import type { ISettingsUIContext } from './SettingsContext';
 import { APP_PAGES } from '@/shared/config/AppPages';
 
 export class GeneralSettingsRenderer {
+    private readonly _cleanupFns: Array<() => void> = [];
+    private readonly _observers: ResizeObserver[] = [];
+
     constructor(private readonly _uiSettings: UISettingsService) {}
 
     /**
@@ -18,6 +21,24 @@ export class GeneralSettingsRenderer {
         tracer.info('[GeneralSettingsRenderer] Initializing...');
         this._initTaskbarToggles(context);
         this._initMonitorToggles(context);
+    }
+
+    public destroy(): void {
+        this._cleanupFns.splice(0).forEach((cleanup) => {
+            cleanup();
+        });
+        this._observers.splice(0).forEach((observer) => {
+            observer.disconnect();
+        });
+
+        const taskbar = document.getElementById('taskbar-toggles');
+        const monitors = document.getElementById('monitor-toggles');
+        if (taskbar !== null) {
+            delete taskbar.dataset['initialized'];
+        }
+        if (monitors !== null) {
+            delete monitors.dataset['initialized'];
+        }
     }
 
     /**
@@ -81,7 +102,7 @@ export class GeneralSettingsRenderer {
         container.innerHTML = '';
         container.appendChild(fragment);
 
-        container.addEventListener('click', (e) => {
+        const handleTaskbarClick = (e: Event) => {
             const target = e.target;
             if (!(target instanceof Element)) return;
             const item = target.closest('.monitor-toggle-btn');
@@ -92,6 +113,11 @@ export class GeneralSettingsRenderer {
                     this.toggleNavItem(pageId, item.classList.contains('active'));
                 }
             }
+        };
+
+        container.addEventListener('click', handleTaskbarClick);
+        this._cleanupFns.push(() => {
+            container.removeEventListener('click', handleTaskbarClick);
         });
 
         this._applyHiddenState(hiddenItems);
@@ -119,33 +145,12 @@ export class GeneralSettingsRenderer {
             const idx = hiddenItems.indexOf(pageId);
             if (idx > -1) hiddenItems.splice(idx, 1);
             if (navBtn instanceof HTMLElement) {
-                // Animate in: prepare hidden state first
-                navBtn.classList.add('nav-item-hiding');
-                navBtn.classList.remove('hidden');
-                // Force reflow
-                const _reflow = navBtn.offsetHeight;
-                if (_reflow) {
-                    /* no-op */
-                }
-
-                // Animate in using double rAF to guarantee transition start
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        navBtn.classList.remove('nav-item-hiding');
-                    });
-                });
+                this._showElement(navBtn, 'nav-item-hiding');
             }
         } else {
             if (!hiddenItems.includes(pageId)) hiddenItems.push(pageId);
             if (navBtn instanceof HTMLElement) {
-                // Animate out
-                navBtn.classList.add('nav-item-hiding');
-                setTimeout(() => {
-                    if (navBtn.classList.contains('nav-item-hiding')) {
-                        navBtn.classList.add('hidden');
-                        navBtn.classList.remove('nav-item-hiding');
-                    }
-                }, 350); // Match CSS transition (300ms) + buffer
+                this._hideElement(navBtn, 'nav-item-hiding');
             }
         }
         this._uiSettings.setHiddenNavItems(hiddenItems);
@@ -221,7 +226,7 @@ export class GeneralSettingsRenderer {
         container.innerHTML = '';
         container.appendChild(fragment);
 
-        container.addEventListener('click', (e) => {
+        const handleMonitorClick = (e: Event) => {
             const target = e.target;
             if (!(target instanceof Element)) return;
             const btn = target.closest('.monitor-toggle-btn');
@@ -232,6 +237,11 @@ export class GeneralSettingsRenderer {
                     this.toggleMonitorItem(mid, btn.classList.contains('active'));
                 }
             }
+        };
+
+        container.addEventListener('click', handleMonitorClick);
+        this._cleanupFns.push(() => {
+            container.removeEventListener('click', handleMonitorClick);
         });
 
         hiddenMonitors.forEach((id) => {
@@ -257,39 +267,24 @@ export class GeneralSettingsRenderer {
         if (enabled) {
             const idx = hidden.indexOf(id);
             if (idx > -1) hidden.splice(idx, 1);
+            this._updateMonitorPanelVisibility(true);
+            this._updateMonitorDivider(true);
             if (el instanceof HTMLElement) {
-                // Animate in: set hiding class first (starts invisible)
-                el.classList.add('hiding');
-                el.classList.remove('hidden');
-                // Force reflow
-                const _reflow = el.offsetHeight;
-                if (_reflow) {
-                    /* no-op */
-                }
-
-                // Animate in
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        el.classList.remove('hiding');
-                    });
-                });
+                this._showElement(el, 'hiding');
             }
         } else {
             if (!hidden.includes(id)) hidden.push(id);
             if (el instanceof HTMLElement) {
-                // Animate out
-                el.classList.add('hiding');
-                setTimeout(() => {
-                    el.classList.add('hidden');
-                    el.classList.remove('hiding');
-                }, 350);
+                this._hideElement(el, 'hiding', () => {
+                    this._updateMonitorPanelVisibility(true);
+                    this._updateMonitorDivider(true);
+                });
+            } else {
+                this._updateMonitorPanelVisibility(true);
+                this._updateMonitorDivider(true);
             }
         }
         this._uiSettings.setHiddenMonitors(hidden);
-
-        // Parallel update: Panel and Divider start animating immediately along with the item
-        this._updateMonitorPanelVisibility(true);
-        this._updateMonitorDivider(true);
     }
 
     /**
@@ -326,30 +321,59 @@ export class GeneralSettingsRenderer {
 
         if (shouldHide) {
             if (animate) {
-                divider.classList.add('hiding');
-                setTimeout(() => {
-                    divider.classList.add('hidden');
-                    divider.classList.remove('hiding');
-                }, 350);
+                this._hideElement(divider, 'hiding');
             } else {
                 divider.classList.add('hidden');
             }
         } else if (animate) {
-            divider.classList.add('hiding');
-            divider.classList.remove('hidden');
-            const _reflow = divider.offsetHeight;
-            if (_reflow) {
-                /* no-op */
-            }
-
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    divider.classList.remove('hiding');
-                });
-            });
+            this._showElement(divider, 'hiding');
         } else {
             divider.classList.remove('hidden');
         }
+    }
+
+    private _showElement(element: HTMLElement, transitionClass: string): void {
+        element.classList.add(transitionClass);
+        element.classList.remove('hidden');
+
+        // Force style flush so the transition starts from the collapsed state.
+        void element.offsetHeight;
+
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                element.classList.remove(transitionClass);
+            });
+        });
+    }
+
+    private _hideElement(
+        element: HTMLElement,
+        transitionClass: string,
+        onHidden?: () => void,
+    ): void {
+        if (element.classList.contains('hidden')) {
+            return;
+        }
+
+        const finalize = () => {
+            element.classList.add('hidden');
+            element.classList.remove(transitionClass);
+            onHidden?.();
+        };
+
+        const handleTransitionEnd = (event: TransitionEvent) => {
+            if (event.target !== element) {
+                return;
+            }
+            element.removeEventListener('transitionend', handleTransitionEnd);
+            finalize();
+        };
+
+        element.addEventListener('transitionend', handleTransitionEnd, { once: true });
+        this._cleanupFns.push(() => {
+            element.removeEventListener('transitionend', handleTransitionEnd);
+        });
+        element.classList.add(transitionClass);
     }
 
     /**
@@ -368,5 +392,6 @@ export class GeneralSettingsRenderer {
             }
         });
         ro.observe(el);
+        this._observers.push(ro);
     }
 }

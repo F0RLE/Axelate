@@ -290,8 +290,8 @@ fn main_score(name: &str) -> i32 {
 
     if let Some(cuda_track) = detect_cuda_track(&lower) {
         score += match cuda_track {
-            "cuda12" => 500,
-            "cuda13" => 450,
+            "cuda13" => 500,
+            "cuda12" => 450,
             _ => 400,
         };
     }
@@ -320,8 +320,8 @@ fn main_score(name: &str) -> i32 {
 
 fn runtime_score(name: &str) -> i32 {
     match detect_cuda_track(name) {
-        Some("cuda12") => 200,
-        Some("cuda13") => 180,
+        Some("cuda13") => 200,
+        Some("cuda12") => 180,
         Some(_) => 160,
         None => 0,
     }
@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn prefers_cuda12_bundle_over_cuda13_and_cpu_on_windows_x64() {
+    fn prefers_cuda13_bundle_over_cuda12_and_cpu_on_windows_x64() {
         let platform = Platform {
             os: PlatformOs::Windows,
             arch: PlatformArch::X64,
@@ -434,8 +434,8 @@ mod tests {
             .expect("expected a compatible llama.cpp bundle");
 
         assert_eq!(selected.len(), 2);
-        assert_eq!(selected[0].name, "cudart-llama-bin-win-cuda-12.4-x64.zip");
-        assert_eq!(selected[1].name, "llama-b8461-bin-win-cuda-12.4-x64.zip");
+        assert_eq!(selected[0].name, "cudart-llama-bin-win-cuda-13.1-x64.zip");
+        assert_eq!(selected[1].name, "llama-b8461-bin-win-cuda-13.1-x64.zip");
     }
 
     #[test]
