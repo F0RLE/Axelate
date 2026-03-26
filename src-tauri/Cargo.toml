@@ -86,7 +86,7 @@ hex     = "0.4.3"
 # --- AI & Logic Utilities ---
 tiktoken-rs = "0.9.1" # Token counting
 tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter", "json", "time"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json", "time"] }
 tracing-appender = "0.2.4"
 chrono      = { version = "0.4.44", features = ["serde"] }
 zip         = "7.2.0"
