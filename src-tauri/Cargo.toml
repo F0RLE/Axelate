@@ -98,7 +98,7 @@ uuid = { version = "1.22.0", features = ["v4", "serde"] }
 bitflags = { version = "2.11.0", features = ["serde"] }
 async-trait = "0.1.89"
 flate2 = "1.1.9"
-tar = "0.4.44"
+tar = "0.4.45"
 
 # --- Build Time ---
 [build-dependencies]
