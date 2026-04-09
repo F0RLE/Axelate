@@ -654,9 +654,7 @@ export class DownloadUI {
     private _refreshTranslations(): void {
         this._renderDynamicList();
 
-        const firstEntry = this._activeDownloads.entries().next().value as
-            | [string, ModuleDownloadState]
-            | undefined;
+        const firstEntry = this._getPrimaryDownloadEntry();
 
         if (firstEntry === undefined) {
             this.renderDownloadsProgress({ hasActive: false });
@@ -681,6 +679,20 @@ export class DownloadUI {
                     ? (firstDownload.error as string) || 'Unknown error'
                     : null,
         });
+    }
+
+    private _getPrimaryDownloadEntry(): [string, ModuleDownloadState] | undefined {
+        const activeStatuses = new Set(['connecting', 'downloading', 'extracting']);
+
+        for (const entry of this._activeDownloads.entries()) {
+            if (activeStatuses.has(entry[1].status)) {
+                return entry;
+            }
+        }
+
+        return this._activeDownloads.entries().next().value as
+            | [string, ModuleDownloadState]
+            | undefined;
     }
 
     /**

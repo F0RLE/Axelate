@@ -44,6 +44,7 @@ vi.mock('./services/ChatFileHandler', () => ({
     chatFileHandler: {
         clear: vi.fn(),
         setUpdateCallback: vi.fn(),
+        clearUpdateCallback: vi.fn(),
         hasFiles: vi.fn().mockReturnValue(false),
         getFiles: vi.fn().mockReturnValue([]),
     },
@@ -51,6 +52,23 @@ vi.mock('./services/ChatFileHandler', () => ({
 
 import { ChatController } from './chat';
 import { getTokenCount } from './utils/chatUtils';
+import { chatFileHandler } from './services/ChatFileHandler';
+
+type ChatControllerTestAccess = {
+    _chatHistory: Array<{ role: string; content: unknown; thought_signature?: string }>;
+    _voice: { stop: ReturnType<typeof vi.fn> };
+    _lockUI: (input: HTMLTextAreaElement | null) => unknown;
+    _handleChatResponse: (
+        response: { ok: boolean; message?: string; thought_signature?: string },
+        streamingHandle: null,
+    ) => Promise<void>;
+    _checkAIActive: (messageId: string | null) => Promise<boolean>;
+    _tryAutoStartAI: () => Promise<boolean>;
+    _loadHistory: () => Promise<void>;
+    _getFriendlyErrorMessage: (errorMsg: unknown, model?: string) => string;
+    clearChat: () => void;
+    destroy: () => void;
+};
 
 describe('ChatController', () => {
     const aiBridge = {
@@ -76,21 +94,29 @@ describe('ChatController', () => {
 
     it('should use fallback token estimate when reply token counting fails', async () => {
         vi.mocked(getTokenCount).mockRejectedValueOnce(new Error('token fail'));
-        const controller = new ChatController(aiBridge as never, i18n as never, soundService as never);
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
 
-        await (controller as any)._handleChatResponse({ ok: true, message: 'hello' }, null);
+        await controller._handleChatResponse({ ok: true, message: 'hello' }, null);
 
         expect(appendMessage).toHaveBeenCalledWith('assistant', 'hello', { tokens: 2 });
-        expect((controller as any)._chatHistory).toEqual([{ role: 'assistant', content: 'hello' }]);
+        expect(controller._chatHistory).toEqual([{ role: 'assistant', content: 'hello' }]);
     });
 
     it('should not append delayed inactive-ai error after ai becomes active', async () => {
         vi.useFakeTimers();
         aiBridge.isActive.mockReturnValue(false);
-        const controller = new ChatController(aiBridge as never, i18n as never, soundService as never);
-        (controller as any)._tryAutoStartAI = vi.fn().mockResolvedValue(false);
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+        controller._tryAutoStartAI = vi.fn().mockResolvedValue(false);
 
-        await (controller as any)._checkAIActive(null);
+        await controller._checkAIActive(null);
         aiBridge.isActive.mockReturnValue(true);
         vi.advanceTimersByTime(500);
 
@@ -101,10 +127,14 @@ describe('ChatController', () => {
     it('should clear pending inactive-ai error timeout when chat is cleared', async () => {
         vi.useFakeTimers();
         aiBridge.isActive.mockReturnValue(false);
-        const controller = new ChatController(aiBridge as never, i18n as never, soundService as never);
-        (controller as any)._tryAutoStartAI = vi.fn().mockResolvedValue(false);
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+        controller._tryAutoStartAI = vi.fn().mockResolvedValue(false);
 
-        await (controller as any)._checkAIActive(null);
+        await controller._checkAIActive(null);
         controller.clearChat();
         vi.advanceTimersByTime(500);
 
@@ -112,5 +142,139 @@ describe('ChatController', () => {
         expect(clearUi).toHaveBeenCalledTimes(1);
         expect(updateTokenCount).toHaveBeenCalledWith(0);
         vi.useRealTimers();
+    });
+
+    it('should clear file update callback on destroy', () => {
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        );
+
+        controller.init();
+        controller.destroy();
+
+        expect(chatFileHandler.clearUpdateCallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve thought signature in local assistant history', async () => {
+        vi.mocked(getTokenCount).mockResolvedValueOnce(5);
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+
+        await controller._handleChatResponse(
+            { ok: true, message: 'answer', thought_signature: 'sig-1' },
+            null,
+        );
+
+        expect(controller._chatHistory).toEqual([
+            { role: 'assistant', content: 'answer', thought_signature: 'sig-1' },
+        ]);
+    });
+
+    it('should restore multimodal history without flattening stored content', async () => {
+        aiBridge.getHistory.mockResolvedValueOnce([
+            {
+                role: 'user',
+                content: [
+                    { type: 'text', text: 'Look here' },
+                    {
+                        type: 'image_url',
+                        image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+                    },
+                ],
+            },
+        ]);
+
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+
+        await controller._loadHistory();
+
+        expect(controller._chatHistory[0]?.content).toEqual([
+            { type: 'text', text: 'Look here' },
+            {
+                type: 'image_url',
+                image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+            },
+        ]);
+        expect(appendMessage).toHaveBeenCalledWith('user', 'Look here', {
+            tokens: 0,
+            skipAnimation: true,
+            images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+        });
+    });
+
+    it('should localize local model memory errors', () => {
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+
+        const message = controller._getFriendlyErrorMessage(
+            'Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model.',
+            'llamacpp',
+        );
+
+        expect(message).toBe(
+            'Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model.',
+        );
+        expect(i18n.t).toHaveBeenCalledWith(
+            'ui.chat.error.local_model_memory',
+            'Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model.',
+        );
+    });
+
+    it('should initialize only once', () => {
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        );
+
+        controller.init();
+        controller.init();
+
+        expect(chatFileHandler.setUpdateCallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('should stop active voice recording on destroy', () => {
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+
+        controller.destroy();
+
+        expect(controller._voice.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not clear input text while ui is only locked', () => {
+        document.body.innerHTML = `
+            <textarea id="chat-input">keep me</textarea>
+            <button id="chat-send-btn"></button>
+            <button id="chat-voice-btn"></button>
+            <button id="chat-attach-btn"></button>
+        `;
+
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+
+        controller._lockUI(input);
+
+        expect(input?.value).toBe('keep me');
+        expect(input?.disabled).toBe(true);
     });
 });

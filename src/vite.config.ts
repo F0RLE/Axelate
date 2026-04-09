@@ -6,7 +6,13 @@ import pkg from './package.json';
 
 const tauriPlatform = process.env['TAURI_PLATFORM'];
 const buildTarget =
-    tauriPlatform === 'windows' ? 'chrome146' : tauriPlatform === 'macos' ? 'safari26' : 'safari26';
+    tauriPlatform === 'windows'
+        ? 'chrome110'
+        : tauriPlatform === 'macos'
+          ? 'safari15.4'
+          : tauriPlatform === 'linux'
+            ? 'safari16'
+            : 'es2022';
 
 const pruneFontsPlugin = {
     name: 'prune-fonts',
@@ -81,7 +87,10 @@ export default defineConfig({
     },
 
     build: {
-        // Align with current stable engine baselines used by the embedded runtimes.
+        // Match Tauri runtime baselines instead of the newest desktop browser.
+        // Windows: evergreen WebView2 with installer minimum version guard.
+        // macOS: Safari 15.4 baseline from the WebKit mapping in Tauri docs.
+        // Linux: WebKitGTK on modern distros maps roughly to Safari 16.
         target: buildTarget,
 
         minify: process.env['TAURI_DEBUG'] ? false : 'terser',

@@ -131,14 +131,34 @@ impl<'a> LifecycleExecutor<'a> {
         self.controller.register(self.module_id.clone(), child);
 
         tokio::spawn(async move {
-            // Wait for the exit and perform deterministic cleanup
-            // remove() returns the child handle, so only ONE of (this task OR stop())
-            // will actually get to handle the child and cleanup.
-            if let Some((_, mut child_entry)) = controller_registry.remove(&module_id) {
-                let _ = child_entry.wait().await;
-                tracing::info!(
-                    "Module {module_id} exited naturally and was cleaned up from registry"
-                );
+            loop {
+                let outcome = {
+                    let Some(mut child_entry) = controller_registry.get_mut(&module_id) else {
+                        return;
+                    };
+
+                    child_entry.try_wait()
+                };
+
+                match outcome {
+                    Ok(Some(_status)) => {
+                        controller_registry.remove(&module_id);
+                        tracing::info!(
+                            "Module {module_id} exited naturally and was cleaned up from registry"
+                        );
+                        return;
+                    }
+                    Ok(None) => {
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            "Failed to poll child status for module {module_id}: {error}"
+                        );
+                        controller_registry.remove(&module_id);
+                        return;
+                    }
+                }
             }
         });
 
@@ -256,5 +276,74 @@ impl<'a> LifecycleExecutor<'a> {
                 message: "Command timed out".to_string(),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::LifecycleExecutor;
+    use crate::domain::modules::controller::Controller;
+    use crate::domain::modules::lifecycle::{CommandDefinition, LifecycleScripts, ModuleManifest};
+    use std::time::Duration;
+
+    fn test_start_command() -> CommandDefinition {
+        #[cfg(target_os = "windows")]
+        {
+            CommandDefinition::Simple("ping -n 2 127.0.0.1 > nul".to_string())
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            CommandDefinition::Simple("sleep 1".to_string())
+        }
+    }
+
+    #[tokio::test]
+    async fn start_keeps_process_registered_until_exit() {
+        let controller = Controller::new();
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let module_id = format!("registry_test_{}", uuid::Uuid::new_v4());
+        let manifest = ModuleManifest {
+            api_version: "1".to_string(),
+            id: module_id.clone(),
+            name: "Registry Test".to_string(),
+            version: "1.0.0".to_string(),
+            description: String::new(),
+            entry: None,
+            dependencies: Vec::new(),
+            lifecycle: Some(LifecycleScripts {
+                init: None,
+                start: Some(test_start_command()),
+                stop: None,
+                health: None,
+            }),
+            config_schema: None,
+        };
+
+        let executor = LifecycleExecutor::new(&controller, module_id.clone(), temp_dir.path());
+        executor
+            .start(&manifest)
+            .await
+            .expect("start should succeed");
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            controller.registry.contains_key(&module_id),
+            "process must stay registered while still running"
+        );
+
+        for _ in 0..20 {
+            if !controller.registry.contains_key(&module_id) {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(150)).await;
+        }
+
+        if let Some(mut child) = controller.unregister(&module_id) {
+            let _ = child.kill().await;
+        }
+        panic!("process registry entry was not cleaned up after exit");
     }
 }

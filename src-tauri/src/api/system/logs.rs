@@ -5,7 +5,7 @@ use crate::infrastructure::logging::{self as logs, LogEntry};
 #[specta::specta]
 /// Retrieves log entries since a given timestamp
 pub fn get_logs(since: f64) -> Result<Vec<LogEntry>, AppError> {
-    Ok(logs::get_logs_since(since))
+    Ok(logs::get_frontend_logs_since(since))
 }
 
 #[tauri::command]

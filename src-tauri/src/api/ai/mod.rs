@@ -10,7 +10,7 @@ use crate::errors::AppError;
 use crate::infrastructure::config::ui_state::UiStateService;
 use crate::infrastructure::crypto::secure_storage::SecureStorage;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 use tauri::Emitter;
@@ -42,6 +42,49 @@ pub struct SavedChatImage {
     folder_path: String,
 }
 
+fn chat_image_root_dir() -> Result<PathBuf, AppError> {
+    let picture_dir = dirs::picture_dir()
+        .ok_or_else(|| AppError::NotFound("Pictures directory is unavailable".to_string()))?;
+    Ok(picture_dir.join("axelate"))
+}
+
+fn map_path_error(path: &Path, message: &str, error: &std::io::Error) -> AppError {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        return AppError::NotFound(format!("{message}: {}", path.display()));
+    }
+
+    AppError::Io(format!("{message}: {} ({error})", path.display()))
+}
+
+fn resolve_existing_path_within_root(
+    candidate: &Path,
+    root: &Path,
+    not_found_message: &str,
+) -> Result<PathBuf, AppError> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| map_path_error(root, "Image directory is unavailable", &error))?;
+    let canonical_candidate = candidate
+        .canonicalize()
+        .map_err(|error| map_path_error(candidate, not_found_message, &error))?;
+
+    if !canonical_candidate.starts_with(&canonical_root) {
+        return Err(AppError::Validation(format!(
+            "Path is outside chat image directory: {}",
+            candidate.display()
+        )));
+    }
+
+    Ok(canonical_candidate)
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct StreamChunkPayload {
+    request_id: String,
+    message_id: String,
+    content: String,
+}
+
 #[tauri::command]
 #[specta::specta]
 /// Sends a chat message to the AI provider and streams the response
@@ -53,6 +96,13 @@ pub async fn send_chat_message(
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<ChatResponse, AppError> {
     let mut request = request;
+    let request_id = request
+        .request_id
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    request.request_id = Some(request_id.clone());
+
     if !is_local_provider(&request.provider)
         && request
             .api_key
@@ -62,7 +112,7 @@ pub async fn send_chat_message(
         request.api_key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
     }
 
-    let sink = create_window_stream_sink(window);
+    let sink = create_window_stream_sink(window, request_id);
     ai_service::process_chat_request(request, &sessions, &config_service, &engine_manager, sink)
         .await
 }
@@ -218,10 +268,7 @@ pub fn save_chat_image_default(
     base64_data: String,
     mime_type: String,
 ) -> Result<SavedChatImage, AppError> {
-    let picture_dir = dirs::picture_dir()
-        .ok_or_else(|| AppError::NotFound("Pictures directory is unavailable".to_string()))?;
-
-    let target_dir = picture_dir.join("axelate");
+    let target_dir = chat_image_root_dir()?;
     std::fs::create_dir_all(&target_dir)?;
 
     let ext = match mime_type.to_ascii_lowercase().as_str() {
@@ -262,6 +309,9 @@ pub fn delete_chat_image(file_path: String) -> Result<(), AppError> {
         return Ok(());
     }
 
+    let target_dir = chat_image_root_dir()?;
+    let file = resolve_existing_path_within_root(&file, &target_dir, "Saved image does not exist")?;
+
     if !file.is_file() {
         return Err(AppError::Validation(format!(
             "Path is not a file: {}",
@@ -278,23 +328,55 @@ pub fn delete_chat_image(file_path: String) -> Result<(), AppError> {
 #[allow(clippy::needless_pass_by_value)]
 /// Opens the saved chat image folder in the system file manager.
 pub fn open_chat_image_location(file_path: String, folder_path: String) -> Result<(), AppError> {
-    let file = PathBuf::from(&file_path);
-    let path = PathBuf::from(&folder_path);
-    let open_folder_only = file == path || file.is_dir();
+    let requested_file = PathBuf::from(&file_path);
+    let requested_folder = PathBuf::from(&folder_path);
+    let open_folder_only = requested_file == requested_folder || requested_file.is_dir();
+    let target_dir = chat_image_root_dir()?;
 
-    if !open_folder_only && !file.is_file() {
-        return Err(AppError::NotFound(format!(
-            "Saved image does not exist: {}",
-            file.display()
-        )));
-    }
+    let file = if open_folder_only {
+        let folder = resolve_existing_path_within_root(
+            &requested_folder,
+            &target_dir,
+            "Image folder does not exist",
+        )?;
 
-    if !path.is_dir() {
-        return Err(AppError::NotFound(format!(
-            "Image folder does not exist: {}",
-            path.display()
-        )));
-    }
+        if !folder.is_dir() {
+            return Err(AppError::Validation(format!(
+                "Path is not a directory: {}",
+                folder.display()
+            )));
+        }
+
+        folder
+    } else {
+        let file = resolve_existing_path_within_root(
+            &requested_file,
+            &target_dir,
+            "Saved image does not exist",
+        )?;
+
+        if !file.is_file() {
+            return Err(AppError::Validation(format!(
+                "Path is not a file: {}",
+                file.display()
+            )));
+        }
+
+        file
+    };
+
+    let path = if open_folder_only {
+        file
+    } else {
+        file.parent()
+            .ok_or_else(|| {
+                AppError::Validation(format!(
+                    "Image file has no parent directory: {}",
+                    file.display()
+                ))
+            })?
+            .to_path_buf()
+    };
 
     #[cfg(target_os = "windows")]
     {
@@ -327,6 +409,45 @@ pub fn open_chat_image_location(file_path: String, folder_path: String) -> Resul
 
     command.spawn().map_err(|e| AppError::Io(e.to_string()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_existing_path_within_root;
+    use crate::errors::AppError;
+
+    #[test]
+    fn resolve_existing_path_within_root_allows_file_inside_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("axelate");
+        std::fs::create_dir_all(&root).expect("create root");
+        let file = root.join("image.png");
+        std::fs::write(&file, b"png").expect("write file");
+
+        let resolved = resolve_existing_path_within_root(&file, &root, "missing file")
+            .expect("path should resolve");
+
+        assert_eq!(
+            resolved,
+            file.canonicalize().expect("canonical file should exist")
+        );
+    }
+
+    #[test]
+    fn resolve_existing_path_within_root_rejects_path_outside_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("axelate");
+        std::fs::create_dir_all(&root).expect("create root");
+        let outside = temp_dir.path().join("outside.png");
+        std::fs::write(&outside, b"png").expect("write outside file");
+
+        let error = resolve_existing_path_within_root(&outside, &root, "missing file")
+            .expect_err("outside path must be rejected");
+
+        assert!(
+            matches!(error, AppError::Validation(message) if message.contains("outside chat image directory"))
+        );
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -459,18 +580,38 @@ fn percent_decode_path(value: &str) -> String {
     result
 }
 
-fn create_window_stream_sink(window: Window) -> Arc<dyn StreamSink> {
+fn create_window_stream_sink(window: Window, request_id: String) -> Arc<dyn StreamSink> {
     let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
     let sink: Arc<dyn StreamSink> = Arc::new(ChannelSink::new(tx));
 
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
-                StreamEvent::ChatChunk { content, .. } => {
-                    let _ = window.emit("ai:chat:chunk", content);
+                StreamEvent::ChatChunk {
+                    message_id,
+                    content,
+                } => {
+                    let _ = window.emit(
+                        "ai:chat:chunk",
+                        StreamChunkPayload {
+                            request_id: request_id.clone(),
+                            message_id,
+                            content,
+                        },
+                    );
                 }
-                StreamEvent::ThoughtChunk { content, .. } => {
-                    let _ = window.emit("ai:thought:chunk", content);
+                StreamEvent::ThoughtChunk {
+                    message_id,
+                    content,
+                } => {
+                    let _ = window.emit(
+                        "ai:thought:chunk",
+                        StreamChunkPayload {
+                            request_id: request_id.clone(),
+                            message_id,
+                            content,
+                        },
+                    );
                 }
                 StreamEvent::Done { usage, .. } => {
                     let _ = window.emit("ai:chat:done", usage);

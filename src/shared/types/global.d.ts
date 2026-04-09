@@ -4,19 +4,6 @@ import type { Core } from '@/app/init';
 
 export {};
 
-/** Secure Storage interface */
-interface SecureStorageAPI {
-    save: (_key: string, _value: string) => Promise<void>;
-}
-
-/** AxelateAPI interface */
-interface AxelateAPIInterface {
-    secureStorage: SecureStorageAPI;
-    minimize: () => Promise<void>;
-    toggleMaximize: () => Promise<void>;
-    close: () => Promise<void>;
-}
-
 interface ChatContentPart {
     type: 'text' | 'image_url' | 'file';
     text?: string;
@@ -117,18 +104,9 @@ declare global {
 
     // --- AI Bridge & Models ---
     var aiBridge: AIBridgeInterface;
-    var GPT_MODELS: Record<string, unknown>;
-    var GEMINI_MODELS: Record<string, unknown>;
-    var selectGPTModel: (_modelId: string) => void;
-    var selectGeminiModel: (_modelId: string) => void;
-    var saveGPTKey: (_key: string) => Promise<void>;
-    var saveGeminiKey: (_key: string) => Promise<void>;
-    var checkGPTKey: () => Promise<boolean>;
-    var checkGeminiKey: () => Promise<boolean>;
     var clearLogs: () => Promise<void>;
 
-    // --- AxelateAPI & Tauri ---
-    var axelateAPI: AxelateAPIInterface;
+    // --- Tauri ---
     var __TAURI__: {
         core: {
             invoke: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
@@ -150,27 +128,16 @@ declare global {
             LogicalSize: new (_width: number, _height: number) => { width: number; height: number };
         };
     };
-    interface ICatalogData {
-        ai: IApp[];
-        services: IApp[];
-        stars?: string[];
-    }
-
-    /** Helper for type-safe category access */
-    function getCatalogCategory(_category: string): IApp[];
-
     var __TAURI_INTERNALS__:
         | {
               invoke?: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
               transformCallback?: (cb: unknown, once?: boolean) => string;
           }
         | undefined;
-    var APP_DATA: ICatalogData; // Defined as ICatalogData in services
 
     // --- UI State & Navigation ---
     var uiState: UIStateInterface;
     var showPage: (_id: string, _btn?: HTMLElement | null, _isInitial?: boolean) => void;
-    var showPromptTab: (_tab: string, _btn?: HTMLElement) => void;
     var openAppSelection: (_category: string) => void;
     var closeAppSelection: () => void;
     var launchApp: (_id: string) => Promise<void>;
@@ -212,20 +179,9 @@ declare global {
         control: typeof control;
         updateDiagnostics: typeof updateDiagnostics;
         aiBridge: typeof aiBridge;
-        GPT_MODELS: typeof GPT_MODELS;
-        GEMINI_MODELS: typeof GEMINI_MODELS;
-        selectGPTModel: typeof selectGPTModel;
-        selectGeminiModel: typeof selectGeminiModel;
-        saveGPTKey: typeof saveGPTKey;
-        saveGeminiKey: typeof saveGeminiKey;
-        checkGPTKey: typeof checkGPTKey;
-        checkGeminiKey: typeof checkGeminiKey;
-        axelateAPI: typeof axelateAPI;
         __TAURI__: typeof __TAURI__;
-        APP_DATA: typeof APP_DATA;
         uiState: typeof uiState;
         showPage: typeof showPage;
-        showPromptTab: typeof showPromptTab;
         openAppSelection: typeof openAppSelection;
         closeAppSelection: typeof closeAppSelection;
         launchApp: typeof launchApp;
@@ -248,7 +204,6 @@ declare global {
         clearLogs: typeof clearLogs;
         setDebugTab: typeof setDebugTab;
         catalogService: typeof catalogService;
-        getCatalogCategory: typeof getCatalogCategory;
         __TAURI_INTERNALS__: typeof __TAURI_INTERNALS__;
     }
 }

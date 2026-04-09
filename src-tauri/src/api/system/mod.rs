@@ -8,6 +8,9 @@ pub mod health;
 pub mod logs;
 
 use crate::domain::monitoring::system_monitor::SystemMonitorService;
+use crate::domain::system::hardware_probe::{
+    GpuInfo, merge_probe_with_runtime_stats, probe_gpu_info,
+};
 use crate::errors::AppError;
 use crate::models::SystemStats;
 use std::sync::Arc;
@@ -24,15 +27,15 @@ pub async fn get_system_stats(
 
 #[tauri::command]
 #[specta::specta]
-/// Retrieves GPU model name or indicates if no GPU is present
+/// Retrieves GPU information and preferred runtime backend hint
 pub async fn get_gpu_info(
     monitor: State<'_, Arc<SystemMonitorService>>,
-) -> Result<String, AppError> {
+) -> Result<GpuInfo, AppError> {
     let stats = monitor.get_stats().await;
-    match stats.gpu {
-        Some(gpu) => Ok(gpu.name),
-        None => Ok("No Dedicated GPU Detected".to_string()),
-    }
+    Ok(merge_probe_with_runtime_stats(
+        probe_gpu_info().await,
+        stats.gpu.as_ref(),
+    ))
 }
 
 #[tauri::command]

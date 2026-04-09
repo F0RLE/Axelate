@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use crate::domain::engine::config::build_default_engine_config;
+use crate::domain::engine::config::{build_default_engine_config, merge_user_engine_config};
 use crate::infrastructure::config::engine_settings::load_engine_config_map;
 
 use super::session::ChatSessionManager;
@@ -143,7 +143,10 @@ pub async fn process_chat_request(
     };
 
     // 3. Dispatch to Provider
-    let request_id = uuid::Uuid::new_v4().to_string();
+    let request_id = request
+        .request_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let message_id = uuid::Uuid::new_v4().to_string();
     tracing::info!(
         "[AI] Starting request {} (msg {}) for model {}",
@@ -200,17 +203,51 @@ pub async fn process_chat_request(
 // Helpers
 // ==================================================================================
 
+/// Builds the outbound validation request without leaking secrets into the URL.
+fn build_validation_request(
+    client: &reqwest::Client,
+    provider: &str,
+    key: &str,
+) -> Result<reqwest::Request, crate::errors::AppError> {
+    let request = if provider == "gemini" && !key.starts_with("sk-or-") {
+        client
+            .get("https://generativelanguage.googleapis.com/v1beta/models")
+            .header("x-goog-api-key", key)
+    } else {
+        client
+            .get("https://openrouter.ai/api/v1/models")
+            .header("Authorization", format!("Bearer {key}"))
+    };
+
+    request
+        .build()
+        .map_err(|e| crate::errors::AppError::External {
+            request_id: None,
+            message: e.to_string(),
+        })
+}
+
 /// Validates an API key against OpenRouter (or generic OpenAI endpoint).
 pub async fn validate_api_key(
     provider: String,
     key: String,
 ) -> Result<bool, crate::errors::AppError> {
     let key = key.trim().to_string();
-    if key.is_empty() || key.chars().any(char::is_whitespace) {
+    if key.is_empty()
+        || key.chars().any(char::is_whitespace)
+        || key.contains("://")
+        || key.contains('/')
+        || key.contains('?')
+        || key.contains('&')
+    {
         return Ok(false);
     }
 
     let is_openrouter_key = key.starts_with("sk-or-");
+    if provider == "gemini" && !is_openrouter_key && !key.starts_with("AIza") {
+        return Ok(false);
+    }
+
     if provider != "gemini" && !is_openrouter_key {
         return Ok(false);
     }
@@ -223,25 +260,13 @@ pub async fn validate_api_key(
             message: e.to_string(),
         })?;
 
-    // OpenRouter / OpenAI Standard validation
-    let url = if provider == "gemini" && !is_openrouter_key {
-        // Fallback for legacy raw Gemini keys
-        format!("https://generativelanguage.googleapis.com/v1beta/models?key={key}")
-    } else {
-        "https://openrouter.ai/api/v1/models".to_string()
-    };
-
-    let mut req = client.get(&url);
-
-    if !url.contains("key=") {
-        req = req.header("Authorization", format!("Bearer {key}"));
-    }
+    let request = build_validation_request(&client, &provider, &key)?;
 
     // Explicitly drop key after building request
     std::mem::drop(key);
 
-    let res = req
-        .send()
+    let res = client
+        .execute(request)
         .await
         .map_err(|e| crate::errors::AppError::External {
             request_id: None,
@@ -600,10 +625,10 @@ async fn build_engine_config(
     def: &crate::domain::engine::types::EngineDefinition,
 ) -> Result<crate::domain::engine::types::EngineConfig, crate::errors::AppError> {
     let saved = load_engine_config_map().await?;
-    Ok(saved
-        .get(&def.id)
-        .cloned()
-        .unwrap_or_else(|| build_default_engine_config(def)))
+    Ok(saved.get(&def.id).map_or_else(
+        || build_default_engine_config(def),
+        |config| merge_user_engine_config(def, config),
+    ))
 }
 
 fn normalize_sdcpp_sampler(value: Option<&str>) -> String {
@@ -691,7 +716,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_api_key_rejects_obvious_non_keys() {
         assert!(
-            !validate_api_key("openrouter".to_string(), "".to_string())
+            !validate_api_key("openrouter".to_string(), String::new())
                 .await
                 .expect("empty key should not error")
         );
@@ -707,6 +732,44 @@ mod tests {
             !validate_api_key("openrouter".to_string(), "not a real key".to_string())
                 .await
                 .expect("whitespace key should not error")
+        );
+    }
+
+    #[test]
+    fn test_build_validation_request_keeps_gemini_key_out_of_url() {
+        let client = reqwest::Client::new();
+        let request = build_validation_request(&client, "gemini", "AIza-test-key")
+            .expect("gemini request should build");
+
+        assert_eq!(
+            request.url().as_str(),
+            "https://generativelanguage.googleapis.com/v1beta/models"
+        );
+        assert_eq!(
+            request
+                .headers()
+                .get("x-goog-api-key")
+                .expect("gemini header should exist"),
+            "AIza-test-key"
+        );
+    }
+
+    #[test]
+    fn test_build_validation_request_uses_bearer_for_openrouter_keys() {
+        let client = reqwest::Client::new();
+        let request = build_validation_request(&client, "openrouter", "sk-or-test")
+            .expect("openrouter request should build");
+
+        assert_eq!(
+            request.url().as_str(),
+            "https://openrouter.ai/api/v1/models"
+        );
+        assert_eq!(
+            request
+                .headers()
+                .get("Authorization")
+                .expect("authorization header should exist"),
+            "Bearer sk-or-test"
         );
     }
 

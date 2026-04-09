@@ -113,7 +113,7 @@ describe('MonitoringService', () => {
         // Fast-forward time to trigger interval
         await vi.advanceTimersByTimeAsync(1100);
 
-        expect(mockFetch).toHaveBeenCalledWith('/api/stats');
+        expect(mockFetch).toHaveBeenCalledWith('/api/monitoring/stats');
 
         vi.useRealTimers();
     });
@@ -154,7 +154,7 @@ describe('MonitoringService', () => {
 
         await service.startMonitoring();
         await vi.advanceTimersByTimeAsync(1100);
-        expect(mockFetch).toHaveBeenCalledWith('/api/stats');
+        expect(mockFetch).toHaveBeenCalledWith('/api/monitoring/stats');
         vi.useRealTimers();
     });
 

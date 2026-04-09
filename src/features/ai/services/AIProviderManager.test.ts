@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AIProviderManager } from '@/features/ai/services/AIProviderManager';
 import type { Core } from '@/app/init';
+import { getMostPowerfulModel, getModelData } from '@/features/ai/utils/catalogHelpers';
 
 // Mock catalogHelpers used internally
 vi.mock('@/features/ai/utils/catalogHelpers', () => ({
@@ -24,6 +25,9 @@ function createMockCore(
             saveSecureKey: vi.fn().mockResolvedValue(undefined),
             hasSecureKey: vi.fn(hasKeyFn),
         },
+        catalog: {
+            getCatalog: vi.fn().mockReturnValue({ ai: [], services: [] }),
+        },
         aiSettings: {
             setAiSessionId: vi.fn(),
             setSelectedAIModel: vi.fn(),
@@ -38,6 +42,8 @@ describe('AIProviderManager', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(getMostPowerfulModel).mockReturnValue('');
+        vi.mocked(getModelData).mockReturnValue(null);
         manager = new AIProviderManager();
     });
 
@@ -103,6 +109,7 @@ describe('AIProviderManager', () => {
             const result = await manager.startProvider('gemini');
             expect(result).toBe(false);
             expect(manager.isActive()).toBe(false);
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith('openrouter_api_key');
         });
 
         it('should succeed for local provider without a key', async () => {
@@ -187,6 +194,9 @@ describe('AIProviderManager', () => {
             await manager.refreshActiveApiKey();
 
             expect(manager.apiKey).toBeNull();
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenLastCalledWith(
+                'openrouter_api_key',
+            );
         });
 
         it('should do nothing if no active provider', async () => {

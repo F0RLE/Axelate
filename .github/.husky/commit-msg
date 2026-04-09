@@ -1,1 +1,3 @@
-npx --no -- commitlint --config .github/commitlint.config.js --edit "$1"
+#!/usr/bin/env sh
+repo_root="$(git rev-parse --show-toplevel)"
+npm --prefix "$repo_root/src" exec -- commitlint --config "$repo_root/.github/commitlint.config.js" --edit "$1"

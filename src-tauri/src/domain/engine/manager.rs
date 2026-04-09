@@ -8,6 +8,7 @@
 //! Within a slot, only one engine is loaded at a time (hot-swap).
 
 use std::collections::HashMap;
+use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -83,11 +84,11 @@ fn push_arg_if_missing(args: &mut Vec<String>, candidates: &[&str], value: Optio
     }
 }
 
-fn build_llamacpp_args(config: &EngineConfig) -> Vec<String> {
+fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
     let effective_context_size = config.context_size.max(4096);
     let mut args = vec![
         "--port".to_string(),
-        config.port.to_string(),
+        port.to_string(),
         "--ctx-size".to_string(),
         effective_context_size.to_string(),
         "-ngl".to_string(),
@@ -106,6 +107,52 @@ fn build_llamacpp_args(config: &EngineConfig) -> Vec<String> {
     }
 
     args
+}
+
+fn find_available_local_port(preferred_port: u16) -> Result<u16, AppError> {
+    const MAX_PORT_PROBES: u16 = 32;
+
+    for offset in 0..MAX_PORT_PROBES {
+        let candidate = preferred_port.saturating_add(offset);
+        if TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(AppError::Config(format!(
+        "No free localhost port found starting from {preferred_port}"
+    )))
+}
+
+fn classify_engine_start_failure(log: &str) -> Option<String> {
+    let normalized = log.to_ascii_lowercase();
+
+    if normalized.contains("out of memory")
+        || normalized.contains("cudamalloc failed")
+        || normalized.contains("failed to allocate compute")
+    {
+        return Some(
+            "Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model."
+                .to_string(),
+        );
+    }
+
+    if normalized.contains("paging file is too small")
+        || normalized.contains("cannot allocate memory")
+        || normalized.contains("bad_alloc")
+    {
+        return Some(
+            "Not enough system memory to start the local model. Close other apps or use a smaller model."
+                .to_string(),
+        );
+    }
+
+    None
+}
+
+async fn diagnose_engine_start_failure(stderr_path: &std::path::Path) -> Option<String> {
+    let raw = tokio::fs::read_to_string(stderr_path).await.ok()?;
+    classify_engine_start_failure(&raw)
 }
 
 fn spawn_log_reader<R>(
@@ -262,7 +309,6 @@ impl EngineManager {
             .first()
             .copied()
             .unwrap_or(Capability::Text);
-
         // Check if this exact engine AND model is already running in this slot
         {
             let slots = self.slots.lock().await;
@@ -312,7 +358,17 @@ impl EngineManager {
                 ))
             })?;
 
-        let endpoint = format!("http://localhost:{}", config.port);
+        let selected_port = find_available_local_port(definition.default_port)?;
+        if selected_port != definition.default_port {
+            info!(
+                engine = %config.engine_id,
+                requested_port = definition.default_port,
+                selected_port,
+                "Preferred port busy, selected next free localhost port"
+            );
+        }
+
+        let endpoint = format!("http://localhost:{selected_port}");
 
         self.emitter.emit_starting(&config.engine_id);
 
@@ -321,12 +377,12 @@ impl EngineManager {
         cmd.kill_on_drop(true);
 
         if config.engine_id == "llamacpp" {
-            cmd.args(build_llamacpp_args(&config));
+            cmd.args(build_llamacpp_args(&config, selected_port));
         } else if config.engine_id == "sdcpp" {
-            cmd.arg("--listen-port").arg(config.port.to_string());
+            cmd.arg("--listen-port").arg(selected_port.to_string());
         } else {
             // Default fallback for other engines
-            cmd.arg("--port").arg(config.port.to_string());
+            cmd.arg("--port").arg(selected_port.to_string());
         }
 
         if let Some(ref model) = config.model_path {
@@ -353,7 +409,7 @@ impl EngineManager {
         info!(
             engine = %config.engine_id,
             binary = %binary_path.display(),
-            port = config.port,
+            port = selected_port,
             slot = ?primary_cap,
             stdout = ?stdout_path.display(),
             stderr = ?stderr_path.display(),
@@ -402,11 +458,17 @@ impl EngineManager {
             }
             Err(e) => {
                 warn!(engine = %running.definition.id, error = %e, "Engine health check failed");
+                let diagnosed_message = diagnose_engine_start_failure(&stderr_path)
+                    .await
+                    .unwrap_or_else(|| e.to_string());
                 self.emitter
-                    .emit_error(&running.definition.id, &e.to_string());
+                    .emit_error(&running.definition.id, &diagnosed_message);
                 // Kill the process if health check fails
                 let _ = running.process.kill().await;
-                return Err(e);
+                return Err(AppError::External {
+                    request_id: None,
+                    message: diagnosed_message,
+                });
             }
         }
 
@@ -515,7 +577,6 @@ mod tests {
     fn sample_config(model_path: Option<&str>) -> EngineConfig {
         EngineConfig {
             engine_id: "llamacpp".to_string(),
-            port: 8081,
             gpu_layers: -1,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
@@ -525,7 +586,7 @@ mod tests {
 
     #[test]
     fn builds_single_slot_llamacpp_args_by_default() {
-        let args = build_llamacpp_args(&sample_config(None));
+        let args = build_llamacpp_args(&sample_config(None), 8081);
         assert!(args.windows(2).any(|w| w == ["--parallel", "1"]));
         assert!(args.windows(2).any(|w| w == ["--reasoning", "off"]));
     }
@@ -535,13 +596,13 @@ mod tests {
         let mut config = sample_config(None);
         config.context_size = 1024;
 
-        let args = build_llamacpp_args(&config);
+        let args = build_llamacpp_args(&config, 8081);
         assert!(args.windows(2).any(|w| w == ["--ctx-size", "4096"]));
     }
 
     #[test]
     fn adds_qwen_specific_llamacpp_args() {
-        let args = build_llamacpp_args(&sample_config(Some("Qwen3.5-9B-Q4_K_M.gguf")));
+        let args = build_llamacpp_args(&sample_config(Some("Qwen3.5-9B-Q4_K_M.gguf")), 8081);
         assert!(args.contains(&"--jinja".to_string()));
         assert!(
             args.windows(2)
@@ -549,5 +610,52 @@ mod tests {
         );
         assert!(args.contains(&"--no-context-shift".to_string()));
         assert!(args.windows(2).any(|w| w == ["--flash-attn", "on"]));
+    }
+
+    #[test]
+    fn picks_preferred_port_when_it_is_free() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let selected = find_available_local_port(port).unwrap();
+
+        assert_eq!(selected, port);
+    }
+
+    #[test]
+    fn skips_busy_port_and_uses_next_free_one() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let busy_port = listener.local_addr().unwrap().port();
+
+        let selected = find_available_local_port(busy_port).unwrap();
+
+        assert_eq!(selected, busy_port + 1);
+    }
+
+    #[test]
+    fn classifies_gpu_memory_failure_from_log() {
+        let message = classify_engine_start_failure(
+            "cudaMalloc failed: out of memory\nfailed to allocate compute buffers",
+        );
+
+        assert_eq!(
+            message.as_deref(),
+            Some(
+                "Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model."
+            )
+        );
+    }
+
+    #[test]
+    fn classifies_system_memory_failure_from_log() {
+        let message = classify_engine_start_failure("std::bad_alloc\nThe paging file is too small");
+
+        assert_eq!(
+            message.as_deref(),
+            Some(
+                "Not enough system memory to start the local model. Close other apps or use a smaller model."
+            )
+        );
     }
 }

@@ -11,7 +11,7 @@ import { type SettingsService } from '@/features/settings/services/SettingsServi
 import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { IAIModelData } from '../types/aiTypes';
-import { getModelData } from '../utils/catalogHelpers';
+import { getModelDataFromModels } from '../utils/catalogHelpers';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
@@ -75,12 +75,17 @@ interface IAIModelPricing {
  * @description Manages the lifecycle and rendering of AI-specific settings modules.
  */
 class AISettingsRenderer extends BaseComponent {
+    private static readonly _SHARED_API_KEY_PROVIDER = 'openrouter';
     private _settingsService: SettingsService | null = null;
     private _aiSettings: AISettingsService | null = null;
     private _tauri: TauriProvider | null = null;
-    private _checkTimeout: ReturnType<typeof setTimeout> | null = null;
     private _activeContainer: HTMLElement | null = null;
     private _renderAbortController: AbortController | null = null;
+    private readonly _modelsByProvider = new Map<string, IAIModelData[]>();
+    private readonly _buttonResetTimers = new Map<
+        HTMLButtonElement,
+        ReturnType<typeof setTimeout>
+    >();
 
     constructor() {
         super();
@@ -113,12 +118,8 @@ class AISettingsRenderer extends BaseComponent {
         this._aiSettings = null;
         this._tauri = null;
         this._activeContainer = null;
+        this._modelsByProvider.clear();
         this._cleanupRenderScope();
-
-        if (this._checkTimeout !== null) {
-            clearTimeout(this._checkTimeout);
-            this._checkTimeout = null;
-        }
     }
 
     /**
@@ -139,6 +140,7 @@ class AISettingsRenderer extends BaseComponent {
         const appId = app.id;
         const providerData = app.apiProviderData ?? {};
         const models = (providerData['models'] as IAIModelData[] | undefined) ?? [];
+        this._modelsByProvider.set(appId, models);
 
         const firstModel = models.length > 0 ? models[0] : undefined;
         const defaultModelId = firstModel ? firstModel.id : '';
@@ -421,7 +423,7 @@ class AISettingsRenderer extends BaseComponent {
      */
     public renderModelStats(appId: string, modelKey: string): string {
         const t = this._getTranslator();
-        const modelData = getModelData(appId, modelKey);
+        const modelData = this._getModelData(appId, modelKey);
         const stats = modelData?.stats;
 
         if (stats) {
@@ -493,6 +495,7 @@ class AISettingsRenderer extends BaseComponent {
 
         this._renderAbortController = new AbortController();
         const renderSignal = this._renderAbortController.signal;
+        const keyProviderId = this._getKeyProviderId(appId);
 
         const input = container.querySelector(`#${appId}-api-key-input`) as
             | HTMLInputElement
@@ -500,7 +503,7 @@ class AISettingsRenderer extends BaseComponent {
             | null;
 
         if (input !== null) {
-            const meta = await this._settingsService.getSecureKeyMeta('openrouter');
+            const meta = await this._settingsService.getSecureKeyMeta(keyProviderId);
             if (meta.exists) {
                 this._applyStoredKeyMask(input, meta.length);
             }
@@ -518,23 +521,16 @@ class AISettingsRenderer extends BaseComponent {
             if (normalizedValue !== target.value) {
                 target.value = normalizedValue;
             }
-            if (target.dataset['storedRevealed'] === 'true') {
-                delete target.dataset['storedMasked'];
-            }
-            delete target.dataset['storedRevealed'];
+            delete target.dataset['storedMasked'];
             target.dataset['keyDirty'] = 'true';
         });
 
         addListener(input, 'beforeinput', (event) => {
             const target = event.target as HTMLInputElement | HTMLTextAreaElement;
             const inputEvent = event as InputEvent;
-            const inputType = inputEvent.inputType ?? '';
+            const inputType = inputEvent.inputType;
 
-            if (
-                target.dataset['storedMasked'] === 'true' &&
-                target.dataset['storedRevealed'] !== 'true' &&
-                !inputType.startsWith('delete')
-            ) {
+            if (target.dataset['storedMasked'] === 'true' && !inputType.startsWith('delete')) {
                 this._clearStoredKeyMask(target);
             }
         });
@@ -546,14 +542,14 @@ class AISettingsRenderer extends BaseComponent {
         });
 
         addListener(container.querySelector(`#${appId}-key-toggle-btn`), 'click', () => {
-            void this.toggleKeyVisibility(appId);
+            this.toggleKeyVisibility(appId);
         });
 
         // Add handler for the OpenRouter link
         addListener(container.querySelector(`#${appId}-api-link`), 'click', (e) => {
             e.preventDefault();
             if (this._tauri) {
-                void this._tauri.openUrl('https://openrouter.ai/settings/keys');
+                void this._tauri.openUrl(this._getKeyProviderUrl(keyProviderId));
             }
         });
 
@@ -643,38 +639,21 @@ class AISettingsRenderer extends BaseComponent {
      * @param appId - Unique provider identifier
      * @sideeffect Modifies input type and innerHTML
      */
-    public async toggleKeyVisibility(appId: string): Promise<void> {
-        const input = document.getElementById(`${appId}-api-key-input`) as
-            | HTMLInputElement
-            | HTMLTextAreaElement
-            | null;
-        const btn = document.getElementById(`${appId}-key-toggle-btn`);
+    public toggleKeyVisibility(appId: string): void {
+        const input = this._queryActiveElement<HTMLInputElement | HTMLTextAreaElement>(
+            `#${appId}-api-key-input`,
+        );
+        const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-toggle-btn`);
 
         if (input !== null && btn !== null) {
             if (input.dataset['storedMasked'] === 'true') {
-                if (input.dataset['storedRevealed'] === 'true') {
-                    this._applyStoredKeyMask(input, input.value.length);
-                    btn.innerHTML = ICONS.HIDDEN;
-                    return;
-                }
-
-                const storedKey = await this._settingsService?.getSecureKey('openrouter');
-                if (storedKey === undefined || storedKey === null || storedKey.trim() === '') {
-                    this._showToast(
-                        this._getTranslator()(
-                            'ui.settings.key_invalid_check',
-                            'Key is invalid or missing',
-                        ),
-                        'error',
-                    );
-                    return;
-                }
-
-                input.value = storedKey;
-                input.classList.remove('is-masked');
-                input.dataset['storedRevealed'] = 'true';
-                delete input.dataset['keyDirty'];
-                btn.innerHTML = ICONS.VISIBLE;
+                this._showToast(
+                    this._getTranslator()(
+                        'ui.settings.stored_key_hidden',
+                        'Stored key stays hidden. Type a new key to replace it.',
+                    ),
+                    'info',
+                );
                 return;
             }
 
@@ -691,12 +670,13 @@ class AISettingsRenderer extends BaseComponent {
      * @sideeffect Updates button DOM state and displays toast notifications
      */
     public async checkKey(appId: string): Promise<void> {
-        const input = document.getElementById(`${appId}-api-key-input`) as
-            | HTMLInputElement
-            | HTMLTextAreaElement
-            | null;
-        const btn = document.getElementById(`${appId}-key-check-btn`) as HTMLButtonElement | null;
+        const input = this._queryActiveElement<HTMLInputElement | HTMLTextAreaElement>(
+            `#${appId}-api-key-input`,
+        );
+        const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-check-btn`);
         if (input === null || btn === null) return;
+
+        const keyProviderId = this._getKeyProviderId(appId);
 
         // Rate limiting check
         if (btn.disabled || btn.classList.contains('checking')) return;
@@ -710,9 +690,7 @@ class AISettingsRenderer extends BaseComponent {
         btn.disabled = true;
 
         try {
-            const isStoredMask =
-                input.dataset['storedMasked'] === 'true' &&
-                input.dataset['storedRevealed'] !== 'true';
+            const isStoredMask = input.dataset['storedMasked'] === 'true';
             const isDirtyReplacement = input.dataset['keyDirty'] === 'true';
             const key = input.value.trim();
             const shouldValidateTypedKey =
@@ -721,14 +699,14 @@ class AISettingsRenderer extends BaseComponent {
 
             let isValid = false;
             if (shouldValidateTypedKey) {
-                isValid = await this._validateKey(appId, key);
+                isValid = await this._validateKey(keyProviderId, key);
             } else if (shouldValidateStoredKey) {
-                isValid = Boolean(await this._settingsService?.validateStoredApiKey('openrouter'));
+                isValid = Boolean(await this._settingsService?.validateStoredApiKey(keyProviderId));
             }
 
             if (isValid) {
                 if (shouldValidateTypedKey && key !== '') {
-                    await this._settingsService?.saveSecureKey('openrouter', key);
+                    await this._settingsService?.saveSecureKey(keyProviderId, key);
                     this._applyStoredKeyMask(input, key.length);
                 }
                 this._updateKeyButtonState(btn, 'success', ICONS.CHECK);
@@ -745,16 +723,14 @@ class AISettingsRenderer extends BaseComponent {
             this._updateKeyButtonState(btn, 'error', ICONS.X);
             this._showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
         } finally {
-            // Enforcement of 3s cooldown before re-enabling
-            this._checkTimeout = setTimeout(() => {
-                this._checkTimeout = null;
-                if (!document.body.contains(btn)) return; // Don't update if removed from DOM
+            this._scheduleButtonReset(btn, () => {
+                if (!document.body.contains(btn)) return;
 
                 btn.disabled = false;
                 btn.style.width = '';
                 btn.classList.remove('success', 'error', 'checking');
                 btn.innerHTML = originalHtml;
-            }, 3000);
+            });
         }
     }
 
@@ -763,7 +739,6 @@ class AISettingsRenderer extends BaseComponent {
         length?: number,
     ): void {
         input.dataset['storedMasked'] = 'true';
-        delete input.dataset['storedRevealed'];
         delete input.dataset['keyDirty'];
         input.classList.remove('is-masked');
         input.value = this._buildStoredKeyMask(length);
@@ -775,7 +750,6 @@ class AISettingsRenderer extends BaseComponent {
 
     private _clearStoredKeyMask(input: HTMLInputElement | HTMLTextAreaElement): void {
         delete input.dataset['storedMasked'];
-        delete input.dataset['storedRevealed'];
         input.value = '';
         input.classList.add('is-masked');
         input.placeholder = this._getTranslator()(
@@ -792,14 +766,11 @@ class AISettingsRenderer extends BaseComponent {
     /**
      * Performs a network probe to validate credentials via Rust backend.
      */
-    private async _validateKey(_appId: string, key: string): Promise<boolean> {
-        if (!this._tauri) return false;
+    private async _validateKey(providerId: string, key: string): Promise<boolean> {
+        if (!this._settingsService) return false;
 
         try {
-            return await this._tauri.invoke<boolean>('validate_api_key', {
-                provider: 'openrouter',
-                key,
-            });
+            return await this._settingsService.validateApiKey(providerId, key);
         } catch (error) {
             tracer.error('[AISettingsRenderer] Key validation failed:', error);
             return false;
@@ -829,22 +800,20 @@ class AISettingsRenderer extends BaseComponent {
     public selectModel(appId: string, modelKey: string): void {
         this._aiSettings?.setSelectedAIModel(appId, modelKey);
 
-        const grid =
-            this._activeContainer?.querySelector('.ai-models-grid') ??
-            document.querySelector('.ai-models-grid');
+        const grid = this._queryActiveElement<HTMLElement>('.ai-models-grid');
         grid?.querySelectorAll('.ai-model-card').forEach((card) => {
             const cardKey = (card as HTMLElement).dataset['modelKey'];
             card.classList.toggle('selected', cardKey === modelKey);
         });
 
-        const modelData = getModelData(appId, modelKey);
+        const modelData = this._getModelData(appId, modelKey);
         const hasReasoning = modelData?.capabilities?.reasoning === true;
-        const thinkingSection = document.getElementById(`${appId}-thinking-section`);
-        if (thinkingSection) {
+        const thinkingSection = this._queryActiveElement<HTMLElement>(`#${appId}-thinking-section`);
+        if (thinkingSection !== null) {
             thinkingSection.style.display = hasReasoning ? 'block' : 'none';
         }
 
-        const statsArea = document.getElementById(`${appId}-model-stats`);
+        const statsArea = this._queryActiveElement<HTMLElement>(`#${appId}-model-stats`);
         if (statsArea !== null) {
             const t = this._getTranslator();
             const statsHtml = `
@@ -891,16 +860,50 @@ class AISettingsRenderer extends BaseComponent {
         }
     }
 
+    private _getKeyProviderId(_appId: string): string {
+        return AISettingsRenderer._SHARED_API_KEY_PROVIDER;
+    }
+
+    private _getKeyProviderUrl(providerId: string): string {
+        if (providerId === AISettingsRenderer._SHARED_API_KEY_PROVIDER) {
+            return 'https://openrouter.ai/settings/keys';
+        }
+
+        return '#';
+    }
+
+    private _queryActiveElement<T extends Element>(selector: string): T | null {
+        return this._activeContainer?.querySelector<T>(selector) ?? null;
+    }
+
+    private _scheduleButtonReset(btn: HTMLButtonElement, callback: () => void): void {
+        const existingTimer = this._buttonResetTimers.get(btn);
+        if (existingTimer !== undefined) {
+            clearTimeout(existingTimer);
+        }
+
+        const timer = setTimeout(() => {
+            this._buttonResetTimers.delete(btn);
+            callback();
+        }, 3000);
+
+        this._buttonResetTimers.set(btn, timer);
+    }
+
+    private _getModelData(appId: string, modelKey: string): IAIModelData | null {
+        return getModelDataFromModels(this._modelsByProvider.get(appId) ?? [], modelKey);
+    }
+
     private _cleanupRenderScope(): void {
         if (this._renderAbortController !== null) {
             this._renderAbortController.abort();
             this._renderAbortController = null;
         }
 
-        if (this._checkTimeout !== null) {
-            clearTimeout(this._checkTimeout);
-            this._checkTimeout = null;
+        for (const timer of this._buttonResetTimers.values()) {
+            clearTimeout(timer);
         }
+        this._buttonResetTimers.clear();
     }
 }
 

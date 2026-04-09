@@ -16,6 +16,7 @@ export class WindowUI {
     private _isSmallScreen = false;
     private _wasMaximizedOnSmallScreen = false;
     private _resizeTimeout: ReturnType<typeof setTimeout> | undefined;
+    private _resizeCheckVersion = 0;
     private _cleanupAbort: AbortController | null = null;
 
     private _splash: HTMLElement | null = null;
@@ -25,6 +26,7 @@ export class WindowUI {
     private _monitoringTimeout: ReturnType<typeof setTimeout> | null = null;
     private _splashTimeout: ReturnType<typeof setTimeout> | null = null;
     private _gracePeriodTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _zoomCheckTimeout: ReturnType<typeof setTimeout> | null = null;
     private _isInGracePeriod = true;
 
     constructor(
@@ -83,11 +85,14 @@ export class WindowUI {
         if (this._monitoringTimeout) clearTimeout(this._monitoringTimeout);
         if (this._splashTimeout) clearTimeout(this._splashTimeout);
         if (this._gracePeriodTimeout) clearTimeout(this._gracePeriodTimeout);
+        if (this._zoomCheckTimeout) clearTimeout(this._zoomCheckTimeout);
 
         this._resizeTimeout = undefined;
+        this._resizeCheckVersion += 1;
         this._monitoringTimeout = null;
         this._splashTimeout = null;
         this._gracePeriodTimeout = null;
+        this._zoomCheckTimeout = null;
         this._initialized = false;
         this._isSmallScreen = false;
         this._wasMaximizedOnSmallScreen = false;
@@ -113,7 +118,7 @@ export class WindowUI {
             'contextmenu',
             (e) => {
                 const target = e.target as HTMLElement;
-                if (target.closest('.allow-context-menu')) {
+                if (this._shouldAllowContextMenu(target)) {
                     return;
                 }
                 e.preventDefault();
@@ -155,10 +160,7 @@ export class WindowUI {
                     this._service
                         .changeZoom(delta)
                         .then(() => {
-                            // Ensure style recalculation happens before checking
-                            setTimeout(() => {
-                                this._checkWidth();
-                            }, 50);
+                            this._scheduleZoomWidthCheck();
                         })
                         .catch(() => {
                             /* ignore */
@@ -175,6 +177,18 @@ export class WindowUI {
         globalThis.addEventListener('resize', this._handleResize.bind(this), { signal });
     }
 
+    private _scheduleZoomWidthCheck(): void {
+        if (this._zoomCheckTimeout) {
+            clearTimeout(this._zoomCheckTimeout);
+        }
+
+        this._zoomCheckTimeout = setTimeout(() => {
+            this._zoomCheckTimeout = null;
+            if (!this._initialized) return;
+            this._checkWidth();
+        }, 50);
+    }
+
     /**
      * Handles window resize events with debouncing.
      */
@@ -185,20 +199,25 @@ export class WindowUI {
         if (this._resizeTimeout) {
             clearTimeout(this._resizeTimeout);
         }
+        const resizeCheckVersion = ++this._resizeCheckVersion;
         this._resizeTimeout = setTimeout(() => {
-            void this._performResizeCheck();
+            void this._performResizeCheck(resizeCheckVersion);
         }, 200);
     }
 
     /**
      * Performs a check on maximization state and window policy after resize.
      */
-    private async _performResizeCheck(): Promise<void> {
+    private async _performResizeCheck(resizeCheckVersion: number): Promise<void> {
         try {
             const [isMaximized, policy] = await Promise.all([
                 this._service.isMaximized(),
                 this._service.checkPolicy(),
             ]);
+
+            if (!this._initialized || resizeCheckVersion !== this._resizeCheckVersion) {
+                return;
+            }
 
             this.updateMaximizeIcon(isMaximized);
             this._handlePolicyAdjustments(policy, isMaximized);
@@ -217,6 +236,12 @@ export class WindowUI {
             e.key === 'F12' ||
             (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key.toUpperCase()))
         ) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        if (this._hasOpenDialog() && this._isWindowShortcut(e)) {
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -243,6 +268,28 @@ export class WindowUI {
             e.preventDefault();
             e.stopPropagation();
         }
+    }
+
+    private _shouldAllowContextMenu(target: HTMLElement | null): boolean {
+        if (!(target instanceof Element)) return false;
+
+        if (target.closest('.allow-context-menu')) return true;
+
+        return (
+            target.closest(
+                'input, textarea, select, option, [contenteditable="true"], [role="textbox"]',
+            ) !== null
+        );
+    }
+
+    private _hasOpenDialog(): boolean {
+        return document.querySelector('dialog[open]:not(.hidden)') !== null;
+    }
+
+    private _isWindowShortcut(e: KeyboardEvent): boolean {
+        if (e.key === 'F11' || e.key === 'F5') return true;
+        if (e.ctrlKey && ['r', 'R', 'к', 'К'].includes(e.key)) return true;
+        return e.ctrlKey && ['u', 'p', 's', 'f', 'g'].includes(e.key.toLowerCase());
     }
 
     /**

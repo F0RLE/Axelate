@@ -7,7 +7,6 @@ function createMockTauri(): TauriProvider {
         invoke: vi.fn().mockResolvedValue(undefined),
         isTauri: vi.fn(() => true),
         listen: vi.fn().mockResolvedValue(() => {}),
-        getSecureKey: vi.fn().mockResolvedValue(null),
         saveSecureKey: vi.fn().mockResolvedValue(undefined),
         hasSecureKey: vi.fn().mockResolvedValue(false),
         getSecureKeyMeta: vi.fn().mockResolvedValue({ exists: false, length: 0 }),
@@ -121,7 +120,13 @@ describe('SettingsService', () => {
 
     describe('loadGpuInfo', () => {
         it('should return GPU info from backend', async () => {
-            const gpuInfo = { detected: true, name: 'NVIDIA RTX 4090', cuda: true };
+            const gpuInfo = {
+                detected: true,
+                name: 'NVIDIA RTX 4090',
+                cuda: true,
+                backend: 'cuda',
+                memory: 24576,
+            };
             (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(gpuInfo);
             const result = await service.loadGpuInfo();
             expect(result).toEqual(gpuInfo);
@@ -160,28 +165,7 @@ describe('SettingsService', () => {
 
         it('should handle error gracefully', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
-            await expect(service.saveSecureKey('x', 'k')).resolves.toBeUndefined();
-        });
-    });
-
-    describe('getSecureKey', () => {
-        it('should load the stored key from backend', async () => {
-            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockResolvedValue('stored-key');
-
-            const result = await service.getSecureKey('openrouter');
-
-            expect(result).toBe('stored-key');
-            expect(tauri.getSecureKey).toHaveBeenCalledWith('openrouter_api_key');
-        });
-
-        it('should return null on error', async () => {
-            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(
-                new Error('fail'),
-            );
-
-            const result = await service.getSecureKey('openrouter');
-
-            expect(result).toBeNull();
+            await expect(service.saveSecureKey('x', 'k')).rejects.toThrow('fail');
         });
     });
 

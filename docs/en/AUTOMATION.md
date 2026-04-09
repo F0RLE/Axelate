@@ -1,81 +1,90 @@
-# Automation & Build Scripts
+# Automation
 
-Axelate uses a robust set of **PowerShell Core** scripts to manage the development lifecycle. These scripts are cross-platform (Windows/Linux/macOS) and enforce strict environment checks to ensure consistency.
+Axelate uses root proxy scripts plus PowerShell automation under `.github/scripts`.
 
-## 🚀 Quick Reference
+## Main commands
 
-| Command | Action | Scripts Used |
-| :--- | :--- | :--- |
-| `npm run dev` | **Start Dev Server**<br>Formats code -> Checks Environment -> Starts App | `dev.ps1` |
-| `npm run verify-all` | **Release Gate**<br>Full audit: Format + Lint + Typecheck + Test + Build Check | `verify-all.ps1` |
-| `npm run build` | **Production Build**<br>Compiles frontend + backend | `src/package.json` |
-| `npm run release` | **Release Flow**<br>Runs `verify-all` -> Builds Release Binary -> Opens Folder | `release.ps1` |
-| `npm run check-size` | **Audit Size**<br>Reports the `dist/` folder size | `check-size.js` |
-| `npm run clean` | **Deep Clean**<br>Removes `target/`, `dist/`, cache | `clear.ps1` |
+Run all commands from the repository root.
 
----
+| Command | What it does |
+| --- | --- |
+| `npm run install-deps` | install frontend dependencies into `src/node_modules` |
+| `npm run dev` | run the PowerShell dev flow |
+| `npm run tauri:dev` | start Tauri dev directly |
+| `npm run verify-all` | full verification gate |
+| `npm run build` | frontend production build |
+| `npm run tauri:build` | desktop production build |
+| `npm run clean` | clean build outputs and caches |
 
-## 🛠️ The Scripts
+## PowerShell scripts
 
-All core scripts are located in `.github/scripts/`. They are written in PowerShell 7+ syntax but run on standard Windows PowerShell 5.1 via the `pwsh` polyfills we implemented.
+Scripts live in `.github/scripts/`.
 
-### 1. Development Loop (`dev.ps1`)
-**Usage:** `npm run dev`
+### `common.ps1`
 
-This is your daily driver. It does more than just start the app:
-1. **Auto-Format:** Runs `prettier` on all source files.
-2. **Environment Check:** Verifies `cargo`, `node`, and `npm` are in PATH.
-3. **Execution:** Launches `tauri dev` with safe arguments.
+Shared helpers:
 
-> **Note:** If auto-formatting fails (e.g., syntax error), the script will warn you but attempt to proceed, preventing a hard crash during active debugging.
+- path setup
+- command execution
+- Windows SDK discovery
+- frontend dependency check
+- Specta binding sync
 
-### 2. The Release Gate (`verify-all.ps1`)
-**Usage:** `npm run verify-all`
+### `dev.ps1`
 
-**MUST PASS** before any Pull Request or Release. It enforces zero-tolerance policy:
-1. **Frontend Checks:**
-   - `npm run format:check` (Prettier)
-   - `npm run lint` (ESLint)
-   - `npm run typecheck` (TSC)
-   - `npm run check-size` (Bundle budget)
-2. **Backend Checks:**
-   - `cargo fmt -- --check` (Rustfmt)
-   - `cargo clippy` (Lints)
-   - `cargo test` (Unit tests)
+The development entrypoint used by `npm run dev`.
 
-If *any* step fails, the script exits immediately with an error code.
+Current behavior:
 
-### 3. Release Builder (`release.ps1`)
-**Usage:** `npm run release`
+1. check required tools
+2. find Windows SDK when needed
+3. install frontend dependencies if missing
+4. sync Rust to TypeScript bindings
+5. format frontend files
+6. start Tauri dev
 
-Automates the production build:
-1. Runs `verify-all` (aborts if failed).
-2. Runs `npm run tauri:build` with production flags.
-3. Opens the output folder containing the `.exe` / `.msi`.
+### `verify-all.ps1`
 
-### 4. Size Auditor (`src/scripts/check-size.js`)
-**Usage:** `npm run check-size`
+The release gate.
 
-A Node.js script that calculates the recursive size of the `dist/` folder (frontend bundle). It ensures we don't accidentally ship massive assets.
+Current order:
 
----
+1. `cargo fmt --check`
+2. `cargo clippy -- -D warnings`
+3. `cargo check --bins --verbose`
+4. `cargo test --lib --verbose`
+5. `npm ci` in `src`
+6. Specta binding sync
+7. frontend typecheck, lint, format check, tests
+8. frontend build
+9. size-budget check
 
-## 🔒 Security & Robustness
+### Other scripts
 
-We strictly adhere to the **Robust PowerShell Pattern**:
+- `clear.ps1` - cleanup
+- `release.ps1` - release helper
+- `update.ps1` - update helper
 
-1. **Strict Mode:** `Set-StrictMode -Version Latest` catch uninitialized variables.
-2. **Error Handling:** `$ErrorActionPreference = 'Stop'` ensures no silent failures.
-3. **Environment Isolation:** `Initialize-Environment` explicitly checks for tools (`rc.exe`, `cargo`) before running.
-4. **Path Safety:** All paths are resolved relative to `$PSScriptRoot`.
-5. **Cross-Platform:** `npm` vs `npm.cmd` is detected dynamically.
+## Git hooks
 
-## 📦 CI/CD Integration
+Hooks live in `.github/.husky`.
 
-GitHub Actions workflows should use `verify-all.ps1` as the single source of truth for CI checks.
+They use tooling from `src/node_modules`, not from a root npm dependency tree.
 
-```yaml
-- name: Verify Codebase
-  run: npm run verify-all
-  shell: powershell
+Current hooks:
+
+- `pre-commit`
+- `commit-msg`
+
+Git hook installation is handled by:
+
+```text
+src/scripts/setup-git-hooks.mjs
 ```
+
+## CI and release
+
+GitHub workflows live in `.github/workflows`.
+
+- `ci.yml` runs the verification pipeline
+- `release.yml` uses the official Tauri GitHub Action for releases

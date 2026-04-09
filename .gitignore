@@ -1,6 +1,7 @@
 # Axelate - .gitignore
 
 # Dependencies & Build
+node_modules/
 src/node_modules/
 src/dist/
 src/coverage/

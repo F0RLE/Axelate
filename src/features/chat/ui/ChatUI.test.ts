@@ -31,6 +31,7 @@ describe('ChatUI lifecycle', () => {
         messages.innerHTML = '<button class="chat-copy-own-btn" data-copy-text="hello"></button>';
 
         ui = new ChatUI();
+        await ui.init();
 
         const button = document.querySelector('.chat-copy-own-btn') as HTMLButtonElement;
         button.click();
@@ -363,6 +364,7 @@ describe('ChatUI lifecycle', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = new ChatUI();
+        await ui.init();
         ui.appendMessage('assistant', 'image', {
             images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
             skipAnimation: true,
@@ -395,6 +397,7 @@ describe('ChatUI lifecycle', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = new ChatUI();
+        await ui.init();
         ui.appendMessage('assistant', 'image', {
             images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
             skipAnimation: true,

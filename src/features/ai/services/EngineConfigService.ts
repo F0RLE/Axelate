@@ -14,7 +14,6 @@ import { tracer } from '@/infrastructure/logging/LoggerService';
 /** Subset of EngineConfig that the frontend can read and write. */
 export interface EngineConfig {
     engine_id: string;
-    port: number;
     gpu_layers: number;
     context_size: number;
     model_path: string | null;

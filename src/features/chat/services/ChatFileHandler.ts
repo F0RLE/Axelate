@@ -76,6 +76,10 @@ export class ChatFileHandler {
         this._onUpdate = callback;
     }
 
+    public clearUpdateCallback(): void {
+        this._onUpdate = null;
+    }
+
     /**
      * Add files to the attachment list
      *
@@ -192,6 +196,7 @@ export class ChatFileHandler {
                 content: string;
                 is_archive: boolean;
                 error?: string;
+                token_estimate?: number;
             }>('process_file_content', {
                 name: file.name,
                 data: bytes,
@@ -209,7 +214,7 @@ export class ChatFileHandler {
                         type: file.type || (result.is_archive ? 'application/zip' : 'text/plain'),
                         size: file.size,
                         data_base64: '',
-                        tokens: 0,
+                        tokens: result.token_estimate ?? 0,
                     },
                 };
             }
@@ -297,6 +302,22 @@ export class ChatFileHandler {
 
     public async getFileTokenEstimate(file: File): Promise<number> {
         if (file.type.startsWith('image/')) return 258;
+        if (this._bridge?.isTauri() === true) {
+            try {
+                const buffer = await file.arrayBuffer();
+                const bytes = Array.from(new Uint8Array(buffer));
+                const result = await this._bridge.invoke<{ token_estimate?: number }>(
+                    'process_file_content',
+                    {
+                        name: file.name,
+                        data: bytes,
+                    },
+                );
+                return result.token_estimate ?? 0;
+            } catch {
+                return 0;
+            }
+        }
         if (isTextFile(file)) {
             try {
                 const t = await readFileAsText(file);

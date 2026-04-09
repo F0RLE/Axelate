@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CatalogService } from '@/shared/services/CatalogService';
-import type { IModule, ICatalogData } from '@/shared/types/coreTypes';
+import type { IModule } from '@/shared/types/coreTypes';
 import type { AppConfig } from '@/shared/types/bindings';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import type { IBridge } from '@/shared/types/IBridge';
@@ -44,8 +44,6 @@ describe('CatalogService Integration', () => {
     let service: CatalogService;
 
     beforeEach(() => {
-        globalThis.APP_DATA = { ai: [], services: [] } as unknown as ICatalogData;
-        globalThis.getCatalogCategory = vi.fn().mockReturnValue([]);
         globalThis.dispatchEvent = vi.fn();
 
         mockBridge = createMockBridge() as unknown as {

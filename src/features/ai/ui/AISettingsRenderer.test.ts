@@ -6,12 +6,6 @@ vi.mock('dompurify', () => ({
     },
 }));
 
-const getModelDataMock = vi.fn();
-
-vi.mock('../utils/catalogHelpers', () => ({
-    getModelData: (appId: string, modelKey: string): unknown => getModelDataMock(appId, modelKey),
-}));
-
 vi.mock('@/shared/utils/globalAccessor', () => ({
     getGlobalWin: () => globalThis,
 }));
@@ -21,9 +15,9 @@ import { aiSettingsRenderer } from './AISettingsRenderer';
 describe('AISettingsRenderer', () => {
     const settingsService = {
         getSecureKeyMeta: vi.fn(),
-        getSecureKey: vi.fn(),
         saveSecureKey: vi.fn(),
         hasSecureKey: vi.fn(),
+        validateApiKey: vi.fn(),
         validateStoredApiKey: vi.fn(),
     };
 
@@ -63,19 +57,14 @@ describe('AISettingsRenderer', () => {
     beforeEach(async () => {
         document.body.innerHTML = `<div id="root"></div>`;
         settingsService.getSecureKeyMeta.mockResolvedValue({ exists: true, length: 16 });
-        settingsService.getSecureKey.mockResolvedValue('sk-or-test-secret');
         settingsService.saveSecureKey.mockResolvedValue(undefined);
         settingsService.hasSecureKey.mockResolvedValue(true);
+        settingsService.validateApiKey.mockResolvedValue(true);
         settingsService.validateStoredApiKey.mockResolvedValue(true);
         aiSettings.getSelectedAIModel.mockReturnValue('reasoner');
         aiSettings.getThinkingLevel.mockReturnValue('medium');
         tauri.invoke.mockResolvedValue(true);
         tauri.openUrl.mockResolvedValue(undefined);
-        getModelDataMock.mockImplementation((_appId: string, modelKey: string) =>
-            modelKey === 'reasoner'
-                ? { stats: { speed: 8, logic: 10, creative: 6 }, capabilities: { reasoning: true } }
-                : { capabilities: { reasoning: false } },
-        );
 
         (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
             key,
@@ -156,7 +145,7 @@ describe('AISettingsRenderer', () => {
         ).toHaveBeenCalled();
     });
 
-    it('reveals stored key on demand, re-masks it, and updates selected model stats', async () => {
+    it('keeps stored key hidden and updates selected model stats', async () => {
         const container = document.getElementById('root') as HTMLElement;
         await aiSettingsRenderer.render(container, {
             id: 'gpt',
@@ -167,15 +156,16 @@ describe('AISettingsRenderer', () => {
         const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
         expect(input.type).toBe('text');
         expect(input.dataset['storedMasked']).toBe('true');
-        await aiSettingsRenderer.toggleKeyVisibility('gpt');
-        expect(settingsService.getSecureKey).toHaveBeenCalledWith('openrouter');
-        expect(input.value).toBe('sk-or-test-secret');
-        expect(input.dataset['storedRevealed']).toBe('true');
-
-        await aiSettingsRenderer.toggleKeyVisibility('gpt');
-        expect(input.value).toBe('•••••••••••••••••');
+        aiSettingsRenderer.toggleKeyVisibility('gpt');
+        expect(input.value).toBe('••••••••••••••••');
         expect(input.dataset['storedMasked']).toBe('true');
         expect(input.dataset['storedRevealed']).toBeUndefined();
+        expect(
+            (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
+        ).toHaveBeenCalledWith(
+            'ui.settings.stored_key_hidden:Stored key stays hidden. Type a new key to replace it.',
+            'info',
+        );
 
         aiSettingsRenderer.selectModel('gpt', 'fast');
         expect(
@@ -212,7 +202,7 @@ describe('AISettingsRenderer', () => {
 
         input.value = 'valid-key';
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        tauri.invoke.mockResolvedValueOnce(true);
+        settingsService.validateApiKey.mockResolvedValueOnce(true);
         await aiSettingsRenderer.checkKey('gpt');
         expect(button.classList.contains('success')).toBe(true);
         expect(showToast).toHaveBeenCalledWith('ui.settings.key_valid:Key is valid', 'success');
@@ -225,7 +215,7 @@ describe('AISettingsRenderer', () => {
 
         input.value = 'bad-key';
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        tauri.invoke.mockRejectedValueOnce(new Error('boom'));
+        settingsService.validateApiKey.mockRejectedValueOnce(new Error('boom'));
         await aiSettingsRenderer.checkKey('gpt');
         expect(showToast).toHaveBeenCalledWith(
             'ui.settings.key_invalid_check:Key is invalid or missing',
@@ -237,7 +227,7 @@ describe('AISettingsRenderer', () => {
         input.value = 'https://reddit.com/r/not-a-key';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         settingsService.validateStoredApiKey.mockClear();
-        tauri.invoke.mockResolvedValueOnce(false);
+        settingsService.validateApiKey.mockResolvedValueOnce(false);
 
         await aiSettingsRenderer.checkKey('gpt');
 

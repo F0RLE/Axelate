@@ -3,6 +3,8 @@
  * @description Type definitions for the Chat module
  */
 
+import type { ChatContent } from '@/features/ai/types/aiTypes';
+
 /**
  * Roles for chat participants
  */
@@ -30,10 +32,10 @@ export interface IChatAttachment {
 export interface IChatMessage {
     /** Role of the sender */
     role: IChatRole;
-    /** Text content of the message */
-    content: string;
-    /** Optional file attachments */
-    attachments?: IChatAttachment[];
+    /** Message content, including multimodal payloads */
+    content: ChatContent;
+    /** Optional signature for reasoning-capable providers */
+    thought_signature?: string;
 }
 
 /**
@@ -57,6 +59,8 @@ export interface IChatResponse {
     error?: string;
     /** Model identifier used for response */
     model?: string;
+    /** Optional reasoning signature returned by backend */
+    thought_signature?: string;
 }
 
 /**

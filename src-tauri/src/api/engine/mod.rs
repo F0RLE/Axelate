@@ -4,7 +4,9 @@
 
 use std::sync::Arc;
 
-use crate::domain::engine::config::{build_default_engine_config, normalize_engine_config};
+use crate::domain::engine::config::{
+    build_default_engine_config, merge_user_engine_config, normalize_engine_config,
+};
 use crate::domain::engine::manager::EngineManager;
 use crate::domain::engine::types::{
     Capability, EngineConfig, EngineDefinition, EngineState, EngineStatus,
@@ -81,28 +83,33 @@ pub async fn get_engine_config(
     engine_id: String,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<crate::domain::engine::types::EngineConfig, AppError> {
-    let saved = load_engine_config_map().await?;
-    if let Some(config) = saved.get(&engine_id) {
-        return Ok(config.clone());
-    }
-
-    // Fall back to EngineDefinition defaults
     let def = engine_manager
         .get_definition(&engine_id)
         .await
         .ok_or_else(|| AppError::Config(format!("Unknown engine: {engine_id}")))?;
+
+    let saved = load_engine_config_map().await?;
+    if let Some(config) = saved.get(&engine_id) {
+        return Ok(merge_user_engine_config(&def, config));
+    }
 
     Ok(build_default_engine_config(&def))
 }
 
 #[tauri::command]
 #[specta::specta]
-/// Persists user engine config (port, gpu_layers, context_size, model_path, extra_args).
+/// Persists user engine config (gpu_layers, context_size, model_path, extra_args).
 pub async fn set_engine_config(
     config: crate::domain::engine::types::EngineConfig,
+    engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<(), AppError> {
+    let def = engine_manager
+        .get_definition(&config.engine_id)
+        .await
+        .ok_or_else(|| AppError::Config(format!("Unknown engine: {}", config.engine_id)))?;
+
     let mut map = load_engine_config_map().await.unwrap_or_default();
-    let normalized = normalize_engine_config(config);
+    let normalized = merge_user_engine_config(&def, &normalize_engine_config(config));
     map.insert(normalized.engine_id.clone(), normalized);
     save_engine_config_map(&map).await
 }

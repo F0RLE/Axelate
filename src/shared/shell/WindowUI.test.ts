@@ -221,6 +221,13 @@ describe('WindowUI lifecycle', () => {
         document.getElementById('context-target')?.dispatchEvent(allowedContext);
         expect(allowedContext.defaultPrevented).toBe(false);
 
+        const inputContext = new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+        });
+        document.getElementById('editor-input')?.dispatchEvent(inputContext);
+        expect(inputContext.defaultPrevented).toBe(false);
+
         const selectionBlocked = new Event('selectstart', { bubbles: true, cancelable: true });
         document.getElementById('plain-target')?.dispatchEvent(selectionBlocked);
         expect(selectionBlocked.defaultPrevented).toBe(true);
@@ -236,6 +243,43 @@ describe('WindowUI lifecycle', () => {
         });
         document.getElementById('plain-target')?.dispatchEvent(dblClick);
         expect(dblClick.defaultPrevented).toBe(true);
+    });
+
+    it('should block window-level shortcuts while a dialog is open', () => {
+        document.body.innerHTML = `
+            <div id="splash-screen" class="hidden"></div>
+            <dialog id="global-width-warning"></dialog>
+            <dialog id="module-settings-modal" open></dialog>
+            <button id="maximize-btn" title="Maximize"></button>
+            <div id="maximize-icon"></div>
+            <button id="sound-toggle-btn"><svg><use href="#icon-volume"></use></svg></button>
+        `;
+
+        ui = createWindowUI();
+        ui.init();
+
+        const service = (ui as unknown as { _service: WindowService })._service as unknown as {
+            toggleMaximize: ReturnType<typeof vi.fn>;
+        };
+
+        const maximizeEvent = new KeyboardEvent('keydown', {
+            key: 'F11',
+            bubbles: true,
+            cancelable: true,
+        });
+        document.dispatchEvent(maximizeEvent);
+        expect(maximizeEvent.defaultPrevented).toBe(true);
+        expect(service.toggleMaximize).not.toHaveBeenCalled();
+
+        const refreshEvent = new KeyboardEvent('keydown', {
+            key: 'r',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+        });
+        document.dispatchEvent(refreshEvent);
+        expect(refreshEvent.defaultPrevented).toBe(true);
+        expect(reloadSpy).not.toHaveBeenCalled();
     });
 
     it('should manage monitoring, wheel zoom, tooltip suppression and maximize icon rebuild', async () => {
@@ -306,6 +350,72 @@ describe('WindowUI lifecycle', () => {
             }),
         );
         await Promise.resolve();
+    });
+
+    it('should cancel pending zoom width check on destroy', async () => {
+        vi.useFakeTimers();
+        ui = createWindowUI();
+        ui.init();
+
+        const checkWidthSpy = vi.spyOn(ui as unknown as { _checkWidth: () => void }, '_checkWidth');
+        checkWidthSpy.mockClear();
+
+        document.dispatchEvent(
+            new WheelEvent('wheel', {
+                bubbles: true,
+                cancelable: true,
+                ctrlKey: true,
+                deltaY: -100,
+            }),
+        );
+        await Promise.resolve();
+
+        ui.destroy();
+        vi.advanceTimersByTime(60);
+
+        expect(checkWidthSpy).not.toHaveBeenCalled();
+    });
+
+    it('should ignore stale resize check results', async () => {
+        let releasePolicy!: (value: { isSmallScreen: boolean }) => void;
+        let releaseMaximized!: (value: boolean) => void;
+
+        ui = createWindowUI();
+        const service = (ui as unknown as { _service: WindowService })._service as unknown as {
+            checkPolicy: ReturnType<typeof vi.fn>;
+            isMaximized: ReturnType<typeof vi.fn>;
+        };
+
+        service.checkPolicy.mockImplementationOnce(
+            () =>
+                new Promise((resolve: (value: { isSmallScreen: boolean }) => void) => {
+                    releasePolicy = resolve;
+                }),
+        );
+        service.isMaximized.mockImplementationOnce(
+            () =>
+                new Promise((resolve: (value: boolean) => void) => {
+                    releaseMaximized = resolve;
+                }),
+        );
+
+        ui.init();
+        const updateMaximizeIconSpy = vi.spyOn(
+            ui as unknown as { updateMaximizeIcon: (isMaximized: boolean) => void },
+            'updateMaximizeIcon',
+        );
+
+        (ui as unknown as { _resizeCheckVersion: number })._resizeCheckVersion = 1;
+        const staleResizeCheck = (
+            ui as unknown as { _performResizeCheck: (resizeCheckVersion: number) => Promise<void> }
+        )._performResizeCheck(1);
+
+        ui.destroy();
+        releasePolicy({ isSmallScreen: true });
+        releaseMaximized(true);
+        await staleResizeCheck;
+
+        expect(updateMaximizeIconSpy).not.toHaveBeenCalled();
     });
 
     it('should apply small-screen protection, resize safely and close warnings when size recovers', async () => {

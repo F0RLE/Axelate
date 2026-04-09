@@ -956,6 +956,42 @@ describe('DownloadUI', () => {
             );
         });
 
+        it('should prefer active download entry over stale terminal entry on language change', () => {
+            const tMock = i18nService.t as ReturnType<typeof vi.fn>;
+            tMock.mockImplementation((key: string, def?: string) => {
+                const map: Record<string, string> = {
+                    'ui.downloads.status.in_progress': 'Загрузка',
+                    'ui.downloads.status.completed': 'Готово',
+                };
+                return map[key] ?? def ?? key;
+            });
+
+            ui.init();
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-old',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-new',
+                        progress: 0.5,
+                        status: 'downloading',
+                        message: 'Downloading...',
+                    },
+                }),
+            );
+
+            globalThis.dispatchEvent(new Event('language-changed'));
+
+            expect(document.getElementById('downloads-status')?.textContent).toBe('Загрузка');
+        });
+
         it('should patch error status pill on existing card (L613)', () => {
             ui.init();
 

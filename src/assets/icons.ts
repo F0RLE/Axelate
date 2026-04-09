@@ -259,14 +259,17 @@ export const svgIcons = `
                 viewBox="0 0 24 24"
                 fill="currentColor"
             >
-                <path d="M13 22h-2v-2H9v-2h2V6H9V4h2V2h2v20Zm-4-4H7v-2h2v2Zm10 0h-4v-2h4v2ZM7 10H5v4h2v2H3V8h4v2Zm14 6h-2V8h2v8Zm-4-2h-2v-4h2v4ZM9 8H7V6h2v2Zm10 0h-4V6h4v2Z"></path>
+                <path d="M3 9h4l5-4v14l-5-4H3V9Z"></path>
+                <path d="M16.5 8.5a1 1 0 0 1 1.4 0 5 5 0 0 1 0 7 1 1 0 1 1-1.4-1.4 3 3 0 0 0 0-4.2 1 1 0 0 1 0-1.4Z"></path>
+                <path d="M19.8 5.2a1 1 0 0 1 1.4 0 9.5 9.5 0 0 1 0 13.6 1 1 0 1 1-1.4-1.4 7.5 7.5 0 0 0 0-10.8 1 1 0 0 1 0-1.4Z"></path>
             </symbol>
             <symbol
                 id="icon-volume-x"
                 viewBox="0 0 24 24"
                 fill="currentColor"
             >
-                <path d="M11 2h2v20h-2v-2H9v-2h2V6H9V4h2zm-4 6H3v8h4v-2H5v-4h2zm8-2h4v2h-4zm4 10h-2v-2h2zm-2-8h2v2h-2zm-2 2h2v2h-2zm4 2h2v2h-2zm-6 0h2v2h-2z"></path>
+                <path d="M3 9h4l5-4v14l-5-4H3V9Z"></path>
+                <path d="M16.2 8.8a1 1 0 0 1 1.4 0L19 10.2l1.4-1.4a1 1 0 1 1 1.4 1.4L20.4 11.6l1.4 1.4a1 1 0 1 1-1.4 1.4L19 13l-1.4 1.4a1 1 0 1 1-1.4-1.4l1.4-1.4-1.4-1.4a1 1 0 0 1 0-1.4Z"></path>
             </symbol>
             <symbol
                 id="icon-marketplace"

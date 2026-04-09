@@ -56,6 +56,7 @@ export interface IChatRequest {
     model: string;
     messages: { role: string; content: ChatContent; thought_signature?: string | undefined }[];
     api_key: string | null;
+    request_id?: string;
     thinking_level?: 'off' | 'low' | 'medium' | 'high';
     max_tokens?: number | undefined;
     attachments?: { name: string; type: string; data_base64: string }[];
@@ -81,6 +82,8 @@ export interface IBridgeResponse {
     text?: string;
     error?: string;
     images?: string[];
+    thought_signature?: string;
+    model?: string;
 }
 
 export interface IImageGenerationRequest {

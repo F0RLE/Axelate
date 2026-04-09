@@ -18,6 +18,7 @@ type ModuleSettingsUIPrivate = {
     _getEngineConfigHtml: (
         app: Record<string, unknown>,
         config: Record<string, unknown> | null,
+        gpuInfo?: { backend?: string; detected?: boolean },
     ) => string;
     _bindEvents: () => void;
     _appendExtraArgs: (appId: string, groups: string[]) => number;
@@ -81,6 +82,10 @@ type ModuleSettingsUIPrivate = {
     ) => void;
     _renderEngineFieldRow: (container: HTMLElement, options: Record<string, unknown>) => void;
     _renderPerformanceModeFieldRow: (container: HTMLElement, appId: string) => void;
+    _renderLocalEngineConfig: (
+        container: HTMLElement,
+        app: Record<string, unknown>,
+    ) => Promise<void>;
     _resetDynamicModuleState: () => void;
     destroy: () => void;
 };
@@ -103,6 +108,13 @@ describe('ModuleSettingsUI lifecycle', () => {
         const service = {
             getSettings: vi.fn().mockReturnValue({}),
             saveSetting: vi.fn().mockResolvedValue(true),
+            loadGpuInfo: vi.fn().mockResolvedValue({
+                detected: true,
+                name: 'NVIDIA RTX 4090',
+                cuda: true,
+                backend: 'cuda',
+                memory: 24576,
+            }),
         } as unknown as SettingsService;
         const uiSettings = {
             setCardWidth: vi.fn(),
@@ -162,14 +174,77 @@ describe('ModuleSettingsUI lifecycle', () => {
             't:ui.settings.engine.model_not_selected:Model not selected',
         );
 
-        const imageHtml = ui._getEngineConfigHtml({ id: 'sdcpp', capability: 'image' }, null);
+        const imageHtml = ui._getEngineConfigHtml({ id: 'sdcpp', capability: 'image' }, null, {
+            detected: true,
+            backend: 'vulkan',
+        });
         const textHtml = ui._getEngineConfigHtml({ id: 'llamacpp', capability: 'text' }, {});
 
         expect(imageHtml).toContain('t:ui.settings.engine.generation_presets:Generation Presets');
+        expect(imageHtml).toContain('t:ui.settings.engine.runtime_bundle:Auto download package');
+        expect(imageHtml).toContain(
+            't:ui.settings.engine.runtime_bundle.vulkan:Vulkan (AMD / Intel / generic GPU)',
+        );
         expect(imageHtml).toContain(
             't:ui.settings.engine.config_unavailable:Engine config unavailable (Tauri not connected)',
         );
         expect(textHtml).toContain('t:ui.settings.engine.core_config:Core Config');
+    });
+
+    it('should render gpu layers and context size for llamacpp local settings', async () => {
+        const ui = createSettingsUI();
+        const container = document.createElement('div');
+        (
+            ui as unknown as {
+                _engineConfigService: { getConfig: ReturnType<typeof vi.fn> };
+            }
+        )._engineConfigService.getConfig = vi.fn().mockResolvedValue({
+            engine_id: 'llamacpp',
+            gpu_layers: 24,
+            context_size: 8192,
+            model_path: 'C:/models/llama.gguf',
+            extra_args: ['--flash-attn'],
+        });
+
+        await ui._renderLocalEngineConfig(container, { id: 'llamacpp', capability: 'text' });
+
+        const labels = Array.from(container.querySelectorAll('.local-engine-field-label')).map(
+            (node) => node.textContent,
+        );
+        expect(labels).toContain('t:ui.settings.engine.gpu_layers:GPU Layers');
+        expect(labels).toContain('t:ui.settings.engine.context_size:Context Window');
+    });
+
+    it('should render runtime package hint for sdcpp local settings', async () => {
+        const ui = createSettingsUI();
+        const container = document.createElement('div');
+        (
+            ui as unknown as {
+                _engineConfigService: { getConfig: ReturnType<typeof vi.fn> };
+            }
+        )._engineConfigService.getConfig = vi.fn().mockResolvedValue({
+            engine_id: 'sdcpp',
+            model_path: 'C:/models/sd.safetensors',
+            extra_args: [],
+        });
+        (
+            ui as unknown as {
+                _service: { loadGpuInfo: ReturnType<typeof vi.fn> };
+            }
+        )._service.loadGpuInfo = vi.fn().mockResolvedValue({
+            detected: false,
+            backend: 'cpu',
+            memory: 0,
+        });
+
+        await ui._renderLocalEngineConfig(container, { id: 'sdcpp', capability: 'image' });
+
+        expect(container.textContent).toContain(
+            't:ui.settings.engine.runtime_bundle:Auto download package',
+        );
+        expect(container.textContent).toContain(
+            't:ui.settings.engine.runtime_bundle.cpu:CPU (best supported instruction set)',
+        );
     });
 
     it('should close stale custom select overlays when another select opens', () => {
@@ -422,6 +497,31 @@ describe('ModuleSettingsUI lifecycle', () => {
         expect(document.querySelector('#save-indicator span')?.textContent).toBe(
             't:ui.settings.save_failed:Save failed',
         );
+    });
+
+    it('should cancel pending autosave timers when modal closes', async () => {
+        vi.useFakeTimers();
+        createSettingsUI();
+        document.body.innerHTML += '<div id="save-indicator"><span></span></div>';
+
+        const service = (
+            settingsUI as unknown as {
+                _service: { saveSetting: ReturnType<typeof vi.fn> };
+            }
+        )._service;
+
+        (
+            settingsUI as unknown as {
+                _debouncedSave: (key: string, value: string | number | boolean | null) => void;
+            }
+        )._debouncedSave('theme', 'dark');
+
+        settingsUI?.close();
+        vi.advanceTimersByTime(1000);
+        await Promise.resolve();
+
+        expect(service.saveSetting).not.toHaveBeenCalled();
+        expect(document.getElementById('save-indicator')?.classList.contains('show')).toBe(false);
     });
 
     it('should localize info button and browse button labels', () => {

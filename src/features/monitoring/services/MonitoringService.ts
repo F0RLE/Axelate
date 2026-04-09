@@ -133,7 +133,7 @@ export class MonitoringService {
         this.pollingInterval = g.setInterval(() => {
             void (async () => {
                 try {
-                    const res = await fetch('/api/stats');
+                    const res = await fetch('/api/monitoring/stats');
                     if (res.ok) {
                         const stats = (await res.json()) as ISystemStats;
                         this.notifyListeners(stats);

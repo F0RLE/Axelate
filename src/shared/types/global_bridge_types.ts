@@ -1,4 +1,4 @@
-import type { IApp, ICatalogData, IModuleDownloadState, ITauriInstance } from './coreTypes';
+import type { IApp, IModuleDownloadState, ITauriInstance } from './coreTypes';
 import type { IUIState } from '../services/state/UiStateStore';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { CatalogService } from '../services/CatalogService';
@@ -30,14 +30,12 @@ export interface IGlobalBridge {
     __TAURI_INTERNALS__?: unknown;
     uiState?: IUIState;
     errorHandler?: typeof errorHandler;
-    getCatalogCategory?: (cat: string) => IApp[];
     templateLoader?: {
         load: (id: string) => Promise<string>;
     };
     navigationService?: NavigationService;
     navigate?: (pageId: string) => void;
     catalogService?: CatalogService;
-    APP_DATA?: ICatalogData;
     [key: string]: unknown;
 }
 

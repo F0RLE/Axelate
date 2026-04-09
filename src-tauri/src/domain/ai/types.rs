@@ -49,6 +49,8 @@ pub struct ChatRequest {
     pub thinking_level: Option<String>,
     /// Optional max output tokens
     pub max_tokens: Option<u32>,
+    /// Client-generated request identifier for stream isolation
+    pub request_id: Option<String>,
     /// Session identifier for history tracking
     pub session_id: Option<String>,
 }
@@ -92,7 +94,7 @@ pub struct ChatSession {
     pub summary: Option<String>,
     /// Number of leading messages already folded into the persisted recap
     #[serde(default)]
-    pub summary_message_count: usize,
+    pub summary_message_count: u32,
     /// Last modification time (Unix timestamp)
     pub last_updated: f64,
 }

@@ -1,29 +1,35 @@
 use crate::domain::{
-    modules::controller as module_controller, monitoring::system_monitor::SystemMonitorService,
+    modules::controller as module_controller,
+    monitoring::system_monitor::SystemMonitorService,
+    system::hardware_probe::{merge_probe_with_runtime_stats, probe_gpu_info},
 };
-use crate::models::SystemStats;
+use crate::infrastructure::logging;
+use crate::models::{
+    SystemStats,
+    modules::{ConfigField, Module},
+};
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::State,
     http::{HeaderName, HeaderValue, Method},
     routing::{get, post},
 };
 use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use tauri::{AppHandle, Manager};
 use tower_http::cors::CorsLayer;
 
 #[derive(Clone)]
 struct AppState {
-    tauri_app: AppHandle,
-    config_service: std::sync::Arc<crate::domain::system::config_service::ConfigService>,
-    settings_service: crate::infrastructure::config::settings::SettingsService,
-    monitor_service: std::sync::Arc<SystemMonitorService>,
+    config: std::sync::Arc<crate::domain::system::config_service::ConfigService>,
+    settings: crate::infrastructure::config::settings::SettingsService,
+    monitor: std::sync::Arc<SystemMonitorService>,
 }
 
 /// Starts the HTTP API server on port 3000 for local access
 pub fn start_server(
-    app: AppHandle,
+    app: &AppHandle,
     settings_service: crate::infrastructure::config::settings::SettingsService,
 ) {
     let config_service = std::sync::Arc::clone(
@@ -32,12 +38,9 @@ pub fn start_server(
     );
 
     let state = AppState {
-        monitor_service: std::sync::Arc::clone(
-            app.state::<std::sync::Arc<SystemMonitorService>>().inner(),
-        ),
-        tauri_app: app,
-        config_service,
-        settings_service,
+        monitor: std::sync::Arc::clone(app.state::<std::sync::Arc<SystemMonitorService>>().inner()),
+        config: config_service,
+        settings: settings_service,
     };
 
     tauri::async_runtime::spawn(async move {
@@ -62,9 +65,11 @@ pub fn start_server(
         // Build Router
         let app = Router::new()
             .route("/api/health", get(health_handler))
+            .route("/api/stats", get(stats_handler))
             .route("/api/monitoring/stats", get(stats_handler))
+            .route("/api/logs", get(get_logs_handler))
+            .route("/api/logs/clear", post(clear_logs_handler))
             .route("/api/modules", get(get_modules_handler))
-            .route("/api/modules/{id}/control", post(control_module_handler))
             .route("/api/translations", get(translations_handler))
             .route("/api/gpu/info", get(gpu_info_handler))
             .route("/api/settings", get(get_settings_handler))
@@ -113,33 +118,8 @@ async fn health_handler() -> Json<Value> {
 
 async fn stats_handler(State(state): State<AppState>) -> Json<SystemStats> {
     // No logging here to prevent spamming logs every second
-    let snapshot = state.monitor_service.get_stats().await;
+    let snapshot = state.monitor.get_stats().await;
     Json(snapshot)
-}
-
-#[derive(serde::Deserialize)]
-struct ControlRequest {
-    action: String,
-}
-
-async fn control_module_handler(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(payload): Json<ControlRequest>,
-) -> Result<Json<Value>, crate::errors::AppError> {
-    tracing::info!(
-        "[Server] Module control request: id={} action={}",
-        id,
-        payload.action
-    );
-
-    let action_enum = payload.action.parse::<module_controller::ModuleAction>()?;
-
-    #[allow(clippy::redundant_clone)]
-    let res = module_controller::control(state.tauri_app.clone(), &id, action_enum).await?;
-
-    tracing::info!("[Server] Module control success: {res:?}");
-    Ok(Json(json!(res)))
 }
 
 // --- Web Support Handlers ---
@@ -149,6 +129,11 @@ use axum::extract::Query;
 #[derive(serde::Deserialize)]
 struct LangQuery {
     lang: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct LogsQuery {
+    since: Option<f64>,
 }
 
 async fn translations_handler(
@@ -181,50 +166,40 @@ async fn translations_handler(
     Ok(Json(json))
 }
 
+async fn get_logs_handler(Query(query): Query<LogsQuery>) -> Json<Value> {
+    Json(json!(logging::logger::get_frontend_logs_since(
+        query.since.unwrap_or(0.0)
+    )))
+}
+
+async fn clear_logs_handler() -> Json<Value> {
+    logging::logger::clear_logs();
+    Json(json!({ "success": true }))
+}
+
 #[allow(
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss
 )]
 async fn gpu_info_handler(State(state): State<AppState>) -> Json<Value> {
-    let snapshot = state.monitor_service.get_stats().await;
+    let snapshot = state.monitor.get_stats().await;
+    let probe = merge_probe_with_runtime_stats(probe_gpu_info().await, snapshot.gpu.as_ref());
 
-    if let Some(gpu) = snapshot.gpu {
-        let gpu_name = gpu.name;
-        let has_cuda = gpu_name.to_ascii_lowercase().contains("nvidia");
-        // Convert Bytes to MB
-        let memory_mb = if gpu.memory_total.is_finite() && gpu.memory_total > 0.0 {
-            let mb = gpu.memory_total / 1024.0 / 1024.0;
-            if mb >= u64::MAX as f64 {
-                u64::MAX
-            } else {
-                mb.floor() as u64
-            }
-        } else {
-            0
-        };
-
-        Json(json!({
-            "detected": true,
-            "name": gpu_name,
-            "cuda": has_cuda,
-            "memory": memory_mb
-        }))
-    } else {
-        Json(json!({
-            "detected": false,
-            "name": "Integrated / No GPU",
-            "cuda": false,
-            "memory": 0
-        }))
-    }
+    Json(json!({
+        "detected": probe.detected,
+        "name": probe.name,
+        "cuda": probe.cuda,
+        "backend": probe.backend,
+        "memory": probe.memory
+    }))
 }
 
 // Reuse infrastructure settings instead of duplicate persistence
 use crate::infrastructure::config::settings as infra_settings;
 
 async fn get_settings_handler(State(state): State<AppState>) -> Json<Value> {
-    match state.settings_service.get_settings().await {
+    match state.settings.get_settings().await {
         Ok(settings) => Json(serde_json::to_value(settings).unwrap_or_else(|_| json!({}))),
         Err(e) => {
             tracing::error!("[Server] Failed to load settings: {e}");
@@ -239,14 +214,77 @@ struct SaveSettingRequest {
     value: String,
 }
 
+fn is_allowed_public_setting_key(key: &str) -> bool {
+    matches!(key.trim().to_ascii_uppercase().as_str(), "LANGUAGE")
+}
+
+fn is_password_config_field(field: &ConfigField) -> bool {
+    field.field_type.trim().eq_ignore_ascii_case("password")
+}
+
+fn sanitize_public_module(module: Module) -> Value {
+    let password_keys: HashSet<String> = module
+        .config_schema
+        .as_ref()
+        .map(|schema| {
+            schema
+                .iter()
+                .filter_map(|(key, field)| is_password_config_field(field).then_some(key.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let sanitized_config: HashMap<String, Value> = module
+        .config
+        .into_iter()
+        .filter(|(key, _)| !password_keys.contains(key))
+        .collect();
+
+    let sanitized_schema = module.config_schema.map(|schema| {
+        schema
+            .into_iter()
+            .map(|(key, mut field)| {
+                if is_password_config_field(&field) {
+                    field.default = None;
+                }
+                (key, field)
+            })
+            .collect::<HashMap<_, _>>()
+    });
+
+    json!({
+        "id": module.id,
+        "name": module.name,
+        "description": module.description,
+        "version": module.version,
+        "author": module.author,
+        "category": module.category,
+        "icon": module.icon,
+        "installed": module.installed,
+        "local": module.local,
+        "enabled": module.enabled,
+        "status": module.status,
+        "isDeletable": module.is_deletable,
+        "config": sanitized_config,
+        "configSchema": sanitized_schema,
+    })
+}
+
 async fn save_setting_handler(
     State(state): State<AppState>,
     Json(payload): Json<SaveSettingRequest>,
 ) -> Json<Value> {
-    tracing::info!("[Server] Save setting: {} = {}", payload.key, payload.value);
+    tracing::info!("[Server] Save setting requested: {}", payload.key);
+
+    if !is_allowed_public_setting_key(&payload.key) {
+        return Json(json!({
+            "success": false,
+            "message": "Setting is not allowed through the public HTTP API"
+        }));
+    }
 
     match state
-        .settings_service
+        .settings
         .save_setting(&payload.key, &payload.value)
         .await
     {
@@ -260,7 +298,8 @@ async fn save_setting_handler(
 
 async fn get_modules_handler() -> Json<Value> {
     let modules = module_controller::get_all_modules().await;
-    Json(serde_json::to_value(modules).unwrap_or(json!([])))
+    let public_modules: Vec<Value> = modules.into_iter().map(sanitize_public_module).collect();
+    Json(Value::Array(public_modules))
 }
 
 async fn system_language_handler() -> Json<Value> {
@@ -273,7 +312,7 @@ async fn get_config_handler(
 ) -> Result<Json<Value>, crate::errors::AppError> {
     use crate::domain::modules::downloader;
 
-    let mut config = state.config_service.load_full_config()?;
+    let mut config = state.config.load_full_config()?;
 
     // Populate installed status
     for module in &mut config.catalog.ai {
@@ -284,4 +323,86 @@ async fn get_config_handler(
     }
 
     Ok(Json(serde_json::to_value(config)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LogsQuery, clear_logs_handler, get_logs_handler, sanitize_public_module};
+    use crate::models::modules::{ConfigField, Module};
+    use axum::extract::Query;
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    #[test]
+    fn sanitize_public_module_redacts_password_values_and_defaults() {
+        let mut config = HashMap::new();
+        config.insert("api_key".to_string(), json!("super-secret"));
+        config.insert("endpoint".to_string(), json!("http://localhost"));
+
+        let mut schema = HashMap::new();
+        schema.insert(
+            "api_key".to_string(),
+            ConfigField {
+                field_type: "password".to_string(),
+                label: "API key".to_string(),
+                default: Some(json!("seed-value")),
+                required: true,
+                options: None,
+            },
+        );
+        schema.insert(
+            "endpoint".to_string(),
+            ConfigField {
+                field_type: "text".to_string(),
+                label: "Endpoint".to_string(),
+                default: Some(json!("http://localhost")),
+                required: true,
+                options: None,
+            },
+        );
+
+        let module = Module {
+            id: "demo".to_string(),
+            name: "Demo".to_string(),
+            description: String::new(),
+            version: "1.0.0".to_string(),
+            author: String::new(),
+            category: "service".to_string(),
+            icon: String::new(),
+            path: "C:/demo".to_string(),
+            installed: true,
+            local: true,
+            enabled: true,
+            status: Some("running".to_string()),
+            is_deletable: true,
+            config,
+            config_schema: Some(schema),
+        };
+
+        let value = sanitize_public_module(module);
+        let config = value["config"].as_object().expect("config object");
+        let schema = value["configSchema"]
+            .as_object()
+            .expect("config schema object");
+
+        assert!(!config.contains_key("api_key"));
+        assert_eq!(config.get("endpoint"), Some(&json!("http://localhost")));
+        assert!(schema["api_key"]["default"].is_null());
+        assert_eq!(schema["endpoint"]["default"], json!("http://localhost"));
+    }
+
+    #[tokio::test]
+    async fn browser_log_routes_match_frontend_contract() {
+        crate::infrastructure::logging::logger::clear_logs();
+        crate::infrastructure::logging::logger::add_log("hello", "Test", "info");
+
+        let logs = get_logs_handler(Query(LogsQuery { since: Some(0.0) })).await;
+        let payload = logs.0.as_array().expect("logs payload should be array");
+        assert_eq!(payload.len(), 1);
+        assert_eq!(payload[0]["message"], json!("hello"));
+
+        let cleared = clear_logs_handler().await;
+        assert_eq!(cleared.0["success"], json!(true));
+        assert!(crate::infrastructure::logging::logger::get_logs_since(0.0).is_empty());
+    }
 }

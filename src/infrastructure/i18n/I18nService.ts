@@ -79,7 +79,7 @@ export class I18nService {
      */
     private async _getBrowserApiLanguage(): Promise<string | null> {
         try {
-            const res = await fetch('/api/system_language');
+            const res = await fetch('/api/system/language');
             if (res.ok) {
                 const data = (await res.json()) as { language?: string };
                 if (data.language !== undefined && data.language !== 'unknown')
@@ -164,7 +164,7 @@ export class I18nService {
                     },
                 });
             } else {
-                await fetch('/api/settings', {
+                await fetch('/api/settings/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ key: 'LANGUAGE', value: lang }),

@@ -102,7 +102,7 @@ export class FilePickerController {
             const selected = await open({
                 multiple: true,
                 title: this._i18n.t('ui.launcher.web.select_files', 'Select Files'),
-                ...(defaultPath ? { defaultPath } : {}),
+                ...(defaultPath !== null ? { defaultPath } : {}),
             });
 
             if (selected === null) return true;
@@ -113,7 +113,7 @@ export class FilePickerController {
 
             for (const p of paths) {
                 const file = await this._readNativeFile(p);
-                if (file) files.push(file);
+                if (file !== null) files.push(file);
             }
 
             if (files.length > 0) {
@@ -128,7 +128,9 @@ export class FilePickerController {
     }
 
     private async _resolveInitialDirectory(): Promise<string | null> {
-        if (this._lastSelectedDirectory) return this._lastSelectedDirectory;
+        if (this._lastSelectedDirectory !== null && this._lastSelectedDirectory !== '') {
+            return this._lastSelectedDirectory;
+        }
 
         try {
             return await desktopDir();
@@ -140,7 +142,7 @@ export class FilePickerController {
 
     private async _rememberLastSelectedDirectory(paths: string[]): Promise<void> {
         const firstPath = paths[0];
-        if (!firstPath) return;
+        if (firstPath === undefined || firstPath === '') return;
 
         try {
             this._lastSelectedDirectory = await dirname(firstPath);

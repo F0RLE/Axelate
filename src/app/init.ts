@@ -125,7 +125,20 @@ export class Core {
         this.settingsService = new SettingsService(this.tauriProvider);
 
         // 3. Init UI Handlers
-        this.appUI = new AppUI(this.modulePlatformService, this.navigation);
+        this.appUI = new AppUI(
+            this.modulePlatformService,
+            this.navigation,
+            (category: string): IApp[] => {
+                const catalog = this.catalog.getCatalog();
+                if (category === 'ai') {
+                    return catalog.ai;
+                }
+                if (category === 'services') {
+                    return catalog.services;
+                }
+                return [];
+            },
+        );
         this.i18nUI = new I18nUI(this.i18n);
         this.windowUI = new WindowUI(this.windowService, this.uiSettings, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
@@ -427,7 +440,8 @@ export class Core {
 
         // Catalog uses raw category ('ai' for both text/image slots, 'services' for services)
         const rawCategory = category.startsWith('ai') ? 'ai' : category;
-        const list = globalThis.getCatalogCategory(rawCategory);
+        const catalog = this.catalog.getCatalog();
+        const list = rawCategory === 'ai' ? catalog.ai : catalog.services;
         const fullApp = list.find((a: IApp) => a.id === savedAppId);
 
         if (fullApp !== undefined) {

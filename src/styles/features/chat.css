@@ -944,7 +944,9 @@
     padding: 0.08rem 0.58rem;
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.016);
     overflow: hidden;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease;
 }
 
 #chat-container:not(.has-messages) .chat-input-bar {
@@ -985,7 +987,10 @@
     justify-content: center;
     border-radius: 0;
     box-shadow: none !important;
-    transition: color 0.22s ease, transform 0.22s ease, opacity 0.22s ease;
+    transition:
+        color 0.22s ease,
+        transform 0.22s ease,
+        opacity 0.22s ease;
     color: var(--text-secondary);
     flex: 0 0 auto;
 }

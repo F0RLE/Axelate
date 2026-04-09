@@ -17,6 +17,8 @@ import { eventBus } from '@/shared/services/EventBus';
 import { VoiceController } from './controllers/VoiceController';
 import { FilePickerController } from './controllers/FilePickerController';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import { createMultimodalContent } from '@/features/ai/utils/chatRequestUtils';
+import type { ChatContent, ChatContentPart } from '@/features/ai/types/aiTypes';
 
 type StreamingMessageHandle = {
     update: (chunk: string) => void;
@@ -40,7 +42,11 @@ export class ChatController {
     private _historyLoadInFlight: Promise<void> | null = null;
     private _historyRetryTimeout: ReturnType<typeof setTimeout> | null = null;
     private _inactiveAiErrorTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _revealLatestMessageTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _revealLatestMessageFrame: number | null = null;
     private _eventsBound = false;
+    private _isInitialized = false;
+    private _isDestroyed = false;
     private _pageChangeUnsub: (() => void) | null = null;
     private _translationsLoadedUnsub: (() => void) | null = null;
     private _resizeAnimationFrame: number | null = null;
@@ -70,6 +76,10 @@ export class ChatController {
     // --- Lifecycle ---
 
     public init(): void {
+        if (this._isInitialized) return;
+        this._isInitialized = true;
+        this._isDestroyed = false;
+
         tracer.info('[Chat] Initializing TS Controller...');
         void this._ui.init().catch((err: unknown) => {
             tracer.error(`[Chat] UI init failed: ${String(err)}`);
@@ -112,6 +122,9 @@ export class ChatController {
     }
 
     public destroy(): void {
+        if (this._isDestroyed) return;
+        this._isDestroyed = true;
+        this._isInitialized = false;
         this._pageChangeUnsub?.();
         this._pageChangeUnsub = null;
         this._translationsLoadedUnsub?.();
@@ -133,6 +146,13 @@ export class ChatController {
             this._historyRetryTimeout = null;
         }
         this._clearInactiveAiErrorTimeout();
+        this._clearRevealLatestMessageTimeout();
+        if (this._revealLatestMessageFrame !== null) {
+            globalThis.cancelAnimationFrame(this._revealLatestMessageFrame);
+            this._revealLatestMessageFrame = null;
+        }
+        this._voice.stop();
+        chatFileHandler.clearUpdateCallback();
 
         this._ui.destroy();
     }
@@ -194,9 +214,16 @@ export class ChatController {
             const { attachments, combinedText } = await chatFileHandler.processForSend(text);
             const historyHead = this._chatHistory.slice(-40);
 
+            if (input) {
+                input.value = '';
+                this._scheduleAutoResizeInput();
+            }
             this._ui.updateTokenCount(0);
             this._ui.appendMessage('user', text, { attachments: attachments, tokens: tokenCount });
-            this._chatHistory.push({ role: 'user', content: combinedText });
+            this._chatHistory.push({
+                role: 'user',
+                content: createMultimodalContent(combinedText, attachments),
+            });
 
             this._ui.showTyping(typingId);
 
@@ -372,15 +399,22 @@ export class ChatController {
 
                 this._chatHistory = history
                     .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-                    .map((msg) => ({
-                        role: msg.role as 'user' | 'assistant',
-                        content: this._safeExtractText(msg.content),
-                    }));
+                    .map((msg) => {
+                        const historyMessage: IChatMessage = {
+                            role: msg.role as 'user' | 'assistant',
+                            content: msg.content,
+                        };
+                        if (msg.thought_signature !== undefined) {
+                            historyMessage.thought_signature = msg.thought_signature;
+                        }
+                        return historyMessage;
+                    });
 
                 this._chatHistory.forEach((msg) => {
-                    this._ui.appendMessage(msg.role, msg.content, {
+                    this._ui.appendMessage(msg.role, this._extractRenderableText(msg.content), {
                         tokens: 0,
                         skipAnimation: true,
+                        ...this._buildHistoryRenderOptions(msg.content),
                     });
                 });
             }
@@ -394,10 +428,18 @@ export class ChatController {
     }
 
     private _scheduleRevealLatestMessage(): void {
-        globalThis.requestAnimationFrame(() => {
+        this._clearRevealLatestMessageTimeout();
+        if (this._revealLatestMessageFrame !== null) {
+            globalThis.cancelAnimationFrame(this._revealLatestMessageFrame);
+        }
+        this._revealLatestMessageFrame = globalThis.requestAnimationFrame(() => {
+            this._revealLatestMessageFrame = null;
+            if (this._isDestroyed) return;
             this._ui.revealLatestMessage();
         });
-        globalThis.setTimeout(() => {
+        this._revealLatestMessageTimeout = globalThis.setTimeout(() => {
+            this._revealLatestMessageTimeout = null;
+            if (this._isDestroyed) return;
             this._ui.revealLatestMessage();
         }, ChatController._chatRevealFollowUpDelayMs);
     }
@@ -505,6 +547,13 @@ export class ChatController {
         }
     }
 
+    private _clearRevealLatestMessageTimeout(): void {
+        if (this._revealLatestMessageTimeout !== null) {
+            globalThis.clearTimeout(this._revealLatestMessageTimeout);
+            this._revealLatestMessageTimeout = null;
+        }
+    }
+
     private async _handleChatResponse(
         response: IChatResponse,
         streamingHandle?: {
@@ -526,7 +575,14 @@ export class ChatController {
                     this._ui.appendMessage('assistant', replyText, { tokens });
                 }
 
-                this._chatHistory.push({ role: 'assistant', content: replyText });
+                const assistantMessage: IChatMessage = {
+                    role: 'assistant',
+                    content: replyText,
+                };
+                if (response.thought_signature !== undefined) {
+                    assistantMessage.thought_signature = response.thought_signature;
+                }
+                this._chatHistory.push(assistantMessage);
             } else if (streamingHandle) {
                 streamingHandle.discard();
             }
@@ -552,6 +608,9 @@ export class ChatController {
     }
 
     private _safeExtractText(data: unknown): string {
+        if (Array.isArray(data)) {
+            return this._extractTextFromParts(data);
+        }
         if (typeof data === 'string') return data;
         if (data instanceof Error) return data.message;
 
@@ -560,6 +619,71 @@ export class ChatController {
         }
 
         return typeof data === 'number' || typeof data === 'boolean' ? String(data) : '';
+    }
+
+    private _extractRenderableText(content: ChatContent): string {
+        return this._safeExtractText(content);
+    }
+
+    private _buildHistoryRenderOptions(content: ChatContent): {
+        images?: Array<{ mime: string; data_base64: string }>;
+    } {
+        if (!Array.isArray(content)) {
+            return {};
+        }
+
+        const images = content
+            .map((part) => this._extractImagePart(part))
+            .filter((image): image is { mime: string; data_base64: string } => image !== null);
+
+        return images.length > 0 ? { images } : {};
+    }
+
+    private _extractTextFromParts(parts: unknown[]): string {
+        const textParts = parts
+            .map((part) => this._extractTextPart(part))
+            .filter((part): part is string => part !== '');
+
+        return textParts.join('\n').trim();
+    }
+
+    private _extractTextPart(part: unknown): string {
+        if (typeof part !== 'object' || part === null) {
+            return '';
+        }
+
+        const contentPart = part as Partial<ChatContentPart>;
+        if (contentPart.type === 'text' && typeof contentPart.text === 'string') {
+            return contentPart.text;
+        }
+
+        return '';
+    }
+
+    private _extractImagePart(part: unknown): { mime: string; data_base64: string } | null {
+        if (typeof part !== 'object' || part === null) {
+            return null;
+        }
+
+        const contentPart = part as Partial<ChatContentPart>;
+        if (contentPart.type !== 'image_url') {
+            return null;
+        }
+
+        const url = contentPart.image_url?.url;
+        if (typeof url !== 'string' || !url.startsWith('data:')) {
+            return null;
+        }
+
+        const match = /^data:([^;]+);base64,(.+)$/u.exec(url);
+        if (match === null) {
+            return null;
+        }
+
+        return {
+            mime: match[1] ?? 'application/octet-stream',
+            data_base64: match[2] ?? '',
+        };
     }
 
     private _getFriendlyErrorMessage(errorMsg: unknown, model?: string): string {
@@ -586,6 +710,26 @@ export class ChatController {
                     `Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).`,
                 )
                 .replace('{model}', modelName);
+        }
+
+        if (
+            msg.includes('not enough memory to start the local model') ||
+            (msg.includes('reduce context size') && msg.includes('gpu layers'))
+        ) {
+            return this._i18n.t(
+                'ui.chat.error.local_model_memory',
+                'Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model.',
+            );
+        }
+
+        if (
+            msg.includes('not enough system memory to start the local model') ||
+            msg.includes('close other apps')
+        ) {
+            return this._i18n.t(
+                'ui.chat.error.local_model_system_memory',
+                'Not enough system memory to start the local model. Close other apps or use a smaller model.',
+            );
         }
 
         if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('api key')) {
@@ -625,9 +769,7 @@ export class ChatController {
         const attachBtn = document.getElementById('chat-attach-btn') as HTMLButtonElement | null;
 
         if (input) {
-            input.value = '';
             input.disabled = true;
-            this._scheduleAutoResizeInput();
         }
         if (sendBtn) sendBtn.disabled = true;
         if (voiceBtn) voiceBtn.disabled = true;

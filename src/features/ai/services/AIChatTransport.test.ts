@@ -26,6 +26,17 @@ function makeRequest(overrides: Partial<IChatRequest> = {}): IChatRequest {
     };
 }
 
+function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+
+    return { promise, resolve, reject };
+}
+
 describe('AIChatTransport', () => {
     let transport: AIChatTransport;
     let mockCore: ReturnType<typeof createMockCore>;
@@ -77,7 +88,9 @@ describe('AIChatTransport', () => {
             const result = await transport.send(makeRequest());
 
             expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('send_chat_message', {
-                request: expect.any(Object) as unknown,
+                request: expect.objectContaining({
+                    request_id: expect.any(String) as unknown,
+                }) as unknown,
             });
             expect(result).toEqual({ ok: true, text: 'World' });
         });
@@ -270,11 +283,24 @@ describe('AIChatTransport', () => {
 
         it('should forward payload to listener when active', async () => {
             const listener = vi.fn();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (transport as any)._activeStreamRequestId = 'req-active';
 
             // Make listen call the callback immediately with payload
             mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: string) => void) => {
-                    cb('chunk-data');
+                (
+                    _event: string,
+                    cb: (payload: {
+                        request_id: string;
+                        message_id: string;
+                        content: string;
+                    }) => void,
+                ) => {
+                    cb({
+                        request_id: 'req-active',
+                        message_id: 'msg-1',
+                        content: 'chunk-data',
+                    });
                     return Promise.resolve(vi.fn());
                 },
             );
@@ -287,9 +313,17 @@ describe('AIChatTransport', () => {
 
         it('should unwrap object payload event shapes', async () => {
             const listener = vi.fn();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (transport as any)._activeStreamRequestId = 'req-active';
             mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: { payload: string }) => void) => {
-                    cb({ payload: 'wrapped-data' });
+                (_event: string, cb: (payload: { payload: Record<string, string> }) => void) => {
+                    cb({
+                        payload: {
+                            request_id: 'req-active',
+                            message_id: 'msg-2',
+                            content: 'wrapped-data',
+                        },
+                    });
                     return Promise.resolve(vi.fn());
                 },
             );
@@ -299,12 +333,88 @@ describe('AIChatTransport', () => {
             expect(listener).toHaveBeenCalledWith('wrapped-data');
         });
 
-        it('should NOT forward payload after unsubscribe', async () => {
+        it('should ignore stale request payloads after a new request starts', async () => {
             const listener = vi.fn();
-            const captured: { cb: ((payload: string) => void) | null } = { cb: null };
+            const captured: { cb: ((payload: unknown) => void) | null } = { cb: null };
+            const sendOne = deferred<{ ok: true; reply: { text: string } }>();
+            const sendTwo = deferred<{ ok: true; reply: { text: string } }>();
+            let invokeCount = 0;
 
             mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: string) => void) => {
+                (_event: string, cb: (payload: unknown) => void) => {
+                    captured.cb = cb;
+                    return Promise.resolve(vi.fn());
+                },
+            );
+            mockCore.tauriProvider.invoke.mockImplementation(() => {
+                invokeCount += 1;
+                return invokeCount === 1 ? sendOne.promise : sendTwo.promise;
+            });
+            const requestIdSpy = vi.spyOn(
+                transport as unknown as { _generateRequestId: () => string },
+                '_generateRequestId',
+            );
+            requestIdSpy.mockReturnValueOnce('req-old').mockReturnValueOnce('req-new');
+
+            invokeMethod(listener);
+            await vi.runAllTimersAsync();
+
+            const oldPromise = transport.send(makeRequest());
+            const newPromise = transport.send(makeRequest());
+
+            captured.cb?.({
+                request_id: 'req-old',
+                message_id: 'msg-old',
+                content: 'stale-chunk',
+            });
+            captured.cb?.({
+                request_id: 'req-new',
+                message_id: 'msg-new',
+                content: 'fresh-chunk',
+            });
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            expect(listener).toHaveBeenCalledWith('fresh-chunk');
+
+            sendOne.resolve({ ok: true, reply: { text: 'old-done' } });
+            await Promise.resolve();
+
+            captured.cb?.({
+                request_id: 'req-new',
+                message_id: 'msg-new-2',
+                content: 'fresh-after-old-done',
+            });
+            expect(listener).toHaveBeenCalledTimes(2);
+            expect(listener).toHaveBeenLastCalledWith('fresh-after-old-done');
+
+            sendTwo.resolve({ ok: true, reply: { text: 'new-done' } });
+            await expect(oldPromise).resolves.toEqual({ ok: true, text: 'old-done' });
+            await expect(newPromise).resolves.toEqual({ ok: true, text: 'new-done' });
+        });
+
+        it('should NOT forward payload after unsubscribe', async () => {
+            const listener = vi.fn();
+            const captured: {
+                cb:
+                    | ((payload: {
+                          request_id: string;
+                          message_id: string;
+                          content: string;
+                      }) => void)
+                    | null;
+            } = { cb: null };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (transport as any)._activeStreamRequestId = 'req-active';
+
+            mockCore.tauriProvider.listen.mockImplementation(
+                (
+                    _event: string,
+                    cb: (payload: {
+                        request_id: string;
+                        message_id: string;
+                        content: string;
+                    }) => void,
+                ) => {
                     captured.cb = cb;
                     return Promise.resolve(vi.fn());
                 },
@@ -314,7 +424,11 @@ describe('AIChatTransport', () => {
             await vi.runAllTimersAsync();
 
             unsub();
-            captured.cb?.('after-unsub');
+            captured.cb?.({
+                request_id: 'req-active',
+                message_id: 'msg-3',
+                content: 'after-unsub',
+            });
 
             expect(listener).not.toHaveBeenCalled();
         });

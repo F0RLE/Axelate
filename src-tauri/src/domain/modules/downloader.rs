@@ -2,7 +2,7 @@ use crate::errors::AppError;
 use crate::utils::paths::{LEGACY_MODULES_DIR, MODULES_DIR, TEMP_DIR};
 use chrono;
 use futures_util::StreamExt;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::copy;
 use std::path::{Path, PathBuf};
@@ -101,6 +101,60 @@ fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
     candidates
         .into_iter()
         .find(|path| path.exists() && path.is_dir())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TarEntryAction {
+    CopyFile,
+    CreateDirectory,
+    SkipMetadata,
+}
+
+fn normalize_archive_relative_path(path: &Path) -> Result<PathBuf, String> {
+    let mut normalized = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(part) => normalized.push(part),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => {
+                return Err(format!(
+                    "Security Violation: Invalid path {}",
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    Ok(normalized)
+}
+
+fn classify_tar_entry_type(
+    entry_type: tar::EntryType,
+    path: &Path,
+) -> Result<TarEntryAction, String> {
+    if entry_type.is_dir() {
+        return Ok(TarEntryAction::CreateDirectory);
+    }
+
+    if entry_type.is_file() || entry_type.is_contiguous() {
+        return Ok(TarEntryAction::CopyFile);
+    }
+
+    if entry_type.is_gnu_longname()
+        || entry_type.is_gnu_longlink()
+        || entry_type.is_pax_global_extensions()
+        || entry_type.is_pax_local_extensions()
+    {
+        return Ok(TarEntryAction::SkipMetadata);
+    }
+
+    Err(format!(
+        "Security Violation: Unsupported tar entry type for {}",
+        path.display()
+    ))
 }
 
 use std::sync::{Arc, Mutex};
@@ -612,6 +666,7 @@ impl ArchiveExtractor {
 
                 let mut current_total_size: u64 = 0;
                 let mut file_count: usize = 0;
+                let mut seen_entries = HashSet::new();
 
                 for entry_result in archive.entries().map_err(|e| e.to_string())? {
                     let mut entry = entry_result.map_err(|e| e.to_string())?;
@@ -623,28 +678,46 @@ impl ArchiveExtractor {
                         ));
                     }
 
-                    // Strict Security Filtering for Tar
-                    let path = entry.path().map_err(|e| e.to_string())?.into_owned();
-                    if path.is_absolute() || path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-                        return Err(format!("Security Violation: Invalid path {}", path.display()));
-                    }
+                    let raw_path = entry.path().map_err(|e| e.to_string())?.into_owned();
+                    let path = normalize_archive_relative_path(&raw_path)?;
+                    let entry_type = entry.header().entry_type();
+                    let action = classify_tar_entry_type(entry_type, &path)?;
 
-                    // Skip common single root folders (heuristic: skip first component if it's the same for all, though harder in streaming tar. Just dump flat or let next step handle it.)
-                    // For simplicity in .tar.gz, we just extract it inside the epath.
-                    let outpath = epath.join(&path);
-
-                    if entry.header().entry_type().is_dir() {
-                        fs::create_dir_all(&outpath).ok();
+                    if action == TarEntryAction::SkipMetadata || path.as_os_str().is_empty() {
                         continue;
                     }
 
-                    if let Some(p) = outpath.parent() {
-                        fs::create_dir_all(p).ok();
+                    if !seen_entries.insert(path.clone()) {
+                        return Err(format!(
+                            "Security Violation: Duplicate entry in archive: {}",
+                            path.display()
+                        ));
+                    }
+
+                    let outpath = epath.join(&path);
+                    if outpath == epath {
+                        continue;
+                    }
+
+                    if action == TarEntryAction::CreateDirectory {
+                        fs::create_dir_all(&outpath).map_err(|e| {
+                            format!("Failed to create directory {}: {e}", outpath.display())
+                        })?;
+                        continue;
+                    }
+
+                    if let Some(parent) = outpath.parent() {
+                        fs::create_dir_all(parent).map_err(|e| {
+                            format!("Failed to create directory {}: {e}", parent.display())
+                        })?;
                     }
 
                     let size = entry.header().size().unwrap_or(0);
                     if size > MAX_ARCHIVE_SINGLE_FILE_SIZE {
-                        return Err(format!("Security Violation: File {} size exceeds limit", path.display()));
+                        return Err(format!(
+                            "Security Violation: File {} size exceeds limit",
+                            path.display()
+                        ));
                     }
 
                     current_total_size += size;
@@ -655,7 +728,16 @@ impl ArchiveExtractor {
                         ));
                     }
 
-                    entry.unpack(&outpath).map_err(|e| format!("Unpack error for {}: {e}", path.display()))?;
+                    let mut outfile = fs::File::create(&outpath)
+                        .map_err(|e| format!("Failed to create file {}: {e}", outpath.display()))?;
+                    let copied = copy(&mut entry, &mut outfile)
+                        .map_err(|e| format!("Failed to extract {}: {e}", path.display()))?;
+                    if copied != size {
+                        return Err(format!(
+                            "Extraction aborted: Unexpected size for {} (expected {size}, got {copied})",
+                            path.display()
+                        ));
+                    }
                 }
             } else {
                 tracing::info!("Extracting .zip archive for {}", mid);
@@ -878,6 +960,63 @@ impl ArchiveExtractor {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{TarEntryAction, classify_tar_entry_type, normalize_archive_relative_path};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn normalize_archive_relative_path_rejects_traversal() {
+        let error = normalize_archive_relative_path(Path::new("../escape/file.txt"))
+            .expect_err("parent traversal must be rejected");
+
+        assert!(error.contains("Security Violation"));
+    }
+
+    #[test]
+    fn normalize_archive_relative_path_strips_current_dir_components() {
+        let normalized = normalize_archive_relative_path(Path::new("./nested/./file.txt"))
+            .expect("relative path should normalize");
+
+        assert_eq!(normalized, PathBuf::from("nested").join("file.txt"));
+    }
+
+    #[test]
+    fn classify_tar_entry_type_allows_regular_entries_and_skips_metadata() {
+        assert_eq!(
+            classify_tar_entry_type(tar::EntryType::file(), Path::new("file.txt"))
+                .expect("regular file should be allowed"),
+            TarEntryAction::CopyFile
+        );
+        assert_eq!(
+            classify_tar_entry_type(tar::EntryType::dir(), Path::new("dir"))
+                .expect("directory should be allowed"),
+            TarEntryAction::CreateDirectory
+        );
+        assert_eq!(
+            classify_tar_entry_type(tar::EntryType::new(b'x'), Path::new("pax"))
+                .expect("pax metadata should be skipped"),
+            TarEntryAction::SkipMetadata
+        );
+    }
+
+    #[test]
+    fn classify_tar_entry_type_rejects_link_like_entries() {
+        for entry_type in [
+            tar::EntryType::hard_link(),
+            tar::EntryType::symlink(),
+            tar::EntryType::character_special(),
+            tar::EntryType::block_special(),
+            tar::EntryType::fifo(),
+            tar::EntryType::new(b'S'),
+        ] {
+            let error = classify_tar_entry_type(entry_type, Path::new("bad"))
+                .expect_err("unsafe tar entry must be rejected");
+            assert!(error.contains("Unsupported tar entry type"));
+        }
+    }
+}
+
 fn build_temp_archive_path(module_id: &str, asset_index: usize, asset_name: &str) -> PathBuf {
     let safe_name: String = asset_name
         .chars()
@@ -938,7 +1077,14 @@ pub async fn download_module(
                 let assets = bundle
                     .assets
                     .into_iter()
-                    .map(|asset| (asset.name, asset.download_url, None, Some(asset.size)))
+                    .map(|asset| {
+                        (
+                            asset.name,
+                            asset.download_url,
+                            Some(asset.sha256),
+                            Some(asset.size),
+                        )
+                    })
                     .collect();
 
                 (Some(bundle.tag_name), assets)

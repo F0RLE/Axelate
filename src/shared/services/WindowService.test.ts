@@ -345,17 +345,6 @@ describe('WindowService', () => {
             await service.setMonitoringPaused(true);
             expect(mockBridge.invoke).not.toHaveBeenCalled();
         });
-
-        it('should call toggleMonitorBtn callback if present', async () => {
-            const toggleCb = vi.fn();
-            (globalThis as unknown as Record<string, unknown>)['toggleMonitorBtn'] = toggleCb;
-
-            await service.setMonitoringPaused(false);
-
-            // Should have set windowService on globalThis
-            const win = globalThis as unknown as { windowService?: WindowService };
-            expect(win.windowService).toBe(service);
-        });
     });
 
     // ---------------------------------------------------------- checkPolicy
@@ -599,28 +588,6 @@ describe('WindowService', () => {
                 x: 100,
                 y: 50,
             });
-        });
-    });
-
-    // ---------------------------------------------------------- _toggleMonitorPanel (via setMonitoringPaused)
-    describe('_toggleMonitorPanel', () => {
-        it('should dispatch monitor:toggle event when toggleMonitorBtn is called', async () => {
-            // Use an object property to avoid TypeScript narrowing the variable to 'never'
-            const captured: { fn: ((visible: boolean) => void) | null } = { fn: null };
-            (globalThis as unknown as Record<string, unknown>)['toggleMonitorBtn'] = (
-                fn: (visible: boolean) => void,
-            ) => {
-                captured.fn = fn;
-            };
-
-            const eventSpy = vi.spyOn(globalThis, 'dispatchEvent');
-            await service.setMonitoringPaused(false);
-
-            captured.fn?.(true);
-
-            const allCalls = eventSpy.mock.calls.map((c: [Event]) => c[0]);
-            const monitorEvent = allCalls.find((e: Event) => e.type === 'monitor:toggle');
-            expect(monitorEvent).toBeDefined();
         });
     });
 

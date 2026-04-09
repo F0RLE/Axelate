@@ -7,9 +7,6 @@ import { type IBridge } from '@/shared/types/IBridge';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 
 interface IWindowGlobal {
-    windowService?: WindowService;
-    toggleMonitorBtn?: (cb: (visible: boolean) => void) => void;
-    updateMonitorPanelVisibility?: (visible: boolean) => void;
     __TAURI__?: {
         window: {
             getCurrentWindow: () => {
@@ -305,11 +302,6 @@ export class WindowService {
         if (this._bridge.isTauri()) {
             try {
                 await this._bridge.invoke('set_monitoring_paused', { paused });
-                const win = globalThis as unknown as IWindowGlobal;
-                win.windowService = this;
-                win.toggleMonitorBtn?.((visible: boolean) => {
-                    this._toggleMonitorPanel(visible);
-                });
             } catch {
                 tracer.error('[WindowService] Failed to set monitoring state');
             }
@@ -403,15 +395,6 @@ export class WindowService {
             }
         }
         return false;
-    }
-
-    /**
-     * Dispatches a custom event to toggle the visibility of the monitoring panel.
-     */
-    private _toggleMonitorPanel(visible: boolean): void {
-        tracer.info(`[WindowService] toggleMonitorPanel: ${String(visible)}`);
-        const event = new CustomEvent('monitor:toggle', { detail: { visible } });
-        globalThis.dispatchEvent(event);
     }
 
     // --- Persistence ---

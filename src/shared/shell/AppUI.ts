@@ -79,6 +79,7 @@ export class AppUI {
     private readonly _skeletonManager: SkeletonManager;
     private readonly _platformService: ModulePlatformService;
     private readonly _selectedApps = new Map<string, IApp>();
+    private readonly _launchSelectionVersions = new Map<string, number>();
     private _pendingDashboardSwitchTimer: ReturnType<typeof setTimeout> | null = null;
     private _pendingDashboardSwitchCard: HTMLElement | null = null;
     private _actionFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -177,6 +178,7 @@ export class AppUI {
     constructor(
         platformService: ModulePlatformService,
         private readonly _navigation: NavigationService,
+        private readonly _catalogResolver: (category: string) => IApp[],
     ) {
         this._platformService = platformService;
         this._toastManager = new ToastManager();
@@ -387,6 +389,7 @@ export class AppUI {
         if (!(cardLike instanceof HTMLElement)) return;
 
         this._cancelPendingDashboardSwitch();
+        this._bumpLaunchSelectionVersion(category);
 
         const currentApp = this._selectedApps.get(category);
         if (currentApp) {
@@ -627,6 +630,7 @@ export class AppUI {
             win.uiState.removeSelectedModule(category);
             this._modalManager.updateSelection(null);
         } else {
+            const launchSelectionVersion = this._bumpLaunchSelectionVersion(category);
             // Update dashboard card directly with compound key (skipping win.selectApp which
             // always passes rawCategory='ai' and would overwrite the compound slot)
             this.updateModuleCard(category, app);
@@ -648,9 +652,54 @@ export class AppUI {
 
             // Auto-launch the selected module
             if (typeof win.launchApp === 'function') {
-                void (win.launchApp as (id: string) => Promise<void>)(app.id);
+                void this._launchSelectedApp(
+                    category,
+                    app,
+                    launchSelectionVersion,
+                    win.launchApp as (id: string) => Promise<void>,
+                );
             }
         }
+    }
+
+    private _bumpLaunchSelectionVersion(category: string): number {
+        const nextVersion = (this._launchSelectionVersions.get(category) ?? 0) + 1;
+        this._launchSelectionVersions.set(category, nextVersion);
+        return nextVersion;
+    }
+
+    private async _launchSelectedApp(
+        category: string,
+        app: IApp,
+        launchSelectionVersion: number,
+        launchApp: (id: string) => Promise<void>,
+    ): Promise<void> {
+        try {
+            await launchApp(app.id);
+        } catch (err: unknown) {
+            tracer.error(`[AppUI] Failed to launch selected module ${app.id}:`, err);
+            return;
+        }
+
+        const currentVersion = this._launchSelectionVersions.get(category);
+        const isCurrentSelection = this._selectedApps.get(category)?.id === app.id;
+        if (currentVersion === launchSelectionVersion && isCurrentSelection) {
+            return;
+        }
+
+        if (
+            category.startsWith('ai') &&
+            [...this._selectedApps.entries()].some(
+                ([slot, selectedApp]) =>
+                    slot !== category && slot.startsWith('ai') && selectedApp.id === app.id,
+            )
+        ) {
+            return;
+        }
+
+        await this._platformService.stop(app).catch((err: unknown) => {
+            tracer.warn(`[AppUI] Failed to stop stale launched module ${app.id}: ${String(err)}`);
+        });
     }
 
     /**
@@ -742,7 +791,11 @@ export class AppUI {
         }
 
         if (this._modalManager.isViewingCategory(category)) {
-            this._modalManager.refreshCurrentSelection();
+            const rawCategory = category.startsWith('ai') ? 'ai' : category;
+            this._modalManager.refreshCurrentSelection(
+                this._getCatalogApps(rawCategory),
+                this._selectedApps.get(category)?.id ?? null,
+            );
         }
     }
 
@@ -791,20 +844,27 @@ export class AppUI {
                 name: card.dataset['currentModuleName'] ?? prevId,
             } as IApp);
 
-        void this._platformService.stop(previousApp).then(() => {
-            const prevName = previousApp.name ?? card.dataset['currentModuleName'] ?? prevId;
-            if (!this._platformService.isApiModule(previousApp)) {
-                const win = getGlobalWin();
-                if (typeof win.showToast === 'function') {
-                    win.showToast(
-                        typeof win.t === 'function'
-                            ? win.t('ui.launcher.module.stopped', `${prevName} stopped`)
-                            : `${prevName} stopped`,
-                        'info',
-                    );
+        void this._platformService
+            .stop(previousApp)
+            .then(() => {
+                const prevName = previousApp.name ?? card.dataset['currentModuleName'] ?? prevId;
+                if (!this._platformService.isApiModule(previousApp)) {
+                    const win = getGlobalWin();
+                    if (typeof win.showToast === 'function') {
+                        win.showToast(
+                            typeof win.t === 'function'
+                                ? win.t('ui.launcher.module.stopped', `${prevName} stopped`)
+                                : `${prevName} stopped`,
+                            'info',
+                        );
+                    }
                 }
-            }
-        });
+            })
+            .catch((err: unknown) => {
+                tracer.warn(
+                    `[AppUI] Failed to stop previous module ${previousApp.id}: ${String(err)}`,
+                );
+            });
 
         tracer.info('[AppUI] Stopped previous module:', previousModuleId);
     }
@@ -821,13 +881,8 @@ export class AppUI {
     }
 
     private _getCatalogApps(category: string): IApp[] {
-        const win = getGlobalWin();
-        if (typeof win.getCatalogCategory !== 'function') {
-            return [];
-        }
-
         try {
-            return win.getCatalogCategory(category);
+            return this._catalogResolver(category);
         } catch (err: unknown) {
             tracer.warn(`[AppUI] Failed to read catalog category ${category}: ${String(err)}`);
             return [];
@@ -922,27 +977,6 @@ export class AppUI {
         };
         card.appendChild(closeBtn);
     }
-
-    // --- Prompt Tab Switching (for chat/settings) ---
-    public showPromptTab(tab: string, btn?: HTMLElement): void {
-        document.querySelectorAll('.prompt-tab-content').forEach((t) => {
-            (t as HTMLElement).style.display = 'none';
-        });
-
-        const targetTab = document.getElementById(`prompt-tab-${tab}`);
-        if (targetTab !== null) targetTab.style.display = 'block';
-
-        if (btn?.parentElement) {
-            btn.parentElement.querySelectorAll('button').forEach((b) => {
-                (b as HTMLElement).style.background = 'var(--surface)';
-                (b as HTMLElement).style.color = 'var(--text-secondary)';
-            });
-            btn.style.background = 'var(--primary)';
-            btn.style.color = 'white';
-        }
-    }
-    // --- New Private Helpers ---
-    // --- Private Helper Methods ---
 
     // --- Private Helper Methods ---
     // All previous helper methods have been moved to ModuleCardRenderer or ModalManager.

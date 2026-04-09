@@ -13,7 +13,41 @@ function setupDOM(): void {
         </div>
         <div id="home" class="page active"></div>
         <div id="settings" class="page"></div>
+        <dialog id="app-selection-modal" class="hidden"></dialog>
     `;
+}
+
+function dispatchWindowEventWithTarget(event: Event, target: EventTarget): void {
+    Object.defineProperty(event, 'target', {
+        configurable: true,
+        value: target,
+    });
+}
+
+function dispatchNavigationKey(
+    navigationUI: NavigationUI,
+    event: KeyboardEvent,
+    target: EventTarget,
+): void {
+    dispatchWindowEventWithTarget(event, target);
+    (
+        navigationUI as unknown as {
+            _keyDownHandler: ((e: KeyboardEvent) => void) | null;
+        }
+    )._keyDownHandler?.(event);
+}
+
+function dispatchNavigationMouse(
+    navigationUI: NavigationUI,
+    event: MouseEvent,
+    target: EventTarget,
+): void {
+    dispatchWindowEventWithTarget(event, target);
+    (
+        navigationUI as unknown as {
+            _mouseUpHandler: ((e: MouseEvent) => void) | null;
+        }
+    )._mouseUpHandler?.(event);
 }
 
 describe('NavigationUI', () => {
@@ -107,6 +141,96 @@ describe('NavigationUI', () => {
         expect(showPageSpy).not.toHaveBeenCalled();
     });
 
+    it('should ignore escape back actions while typing in editable controls', () => {
+        navigationUI.init();
+        const input = document.createElement('input');
+        document.body.appendChild(input);
+
+        const escapeEvent = new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        });
+        input.dispatchEvent(escapeEvent);
+
+        expect(navigationService.popBackAction).not.toHaveBeenCalled();
+    });
+
+    it('should ignore side mouse navigation from editable controls', () => {
+        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
+        navigationUI.init();
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+
+        textarea.dispatchEvent(
+            new MouseEvent('mouseup', {
+                button: 3,
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+
+        expect(navigationService.goBack).not.toHaveBeenCalled();
+        expect(showPageSpy).not.toHaveBeenCalled();
+    });
+
+    it('should allow escape back actions while focused on a button', () => {
+        navigationUI.init();
+        const button = document.createElement('button');
+        document.body.appendChild(button);
+        vi.mocked(navigationService.popBackAction).mockReturnValue(true);
+
+        const escapeEvent = new KeyboardEvent('keydown', {
+            key: 'Escape',
+            bubbles: true,
+            cancelable: true,
+        });
+        dispatchNavigationKey(navigationUI, escapeEvent, button);
+
+        expect(navigationService.popBackAction).toHaveBeenCalledTimes(1);
+        expect(escapeEvent.defaultPrevented).toBe(true);
+    });
+
+    it('should use side-button back actions from button targets instead of ignoring them', () => {
+        navigationUI.init();
+        const button = document.createElement('button');
+        document.body.appendChild(button);
+        vi.mocked(navigationService.popBackAction).mockReturnValue(true);
+
+        dispatchNavigationMouse(
+            navigationUI,
+            new MouseEvent('mouseup', {
+                button: 3,
+                bubbles: true,
+                cancelable: true,
+            }),
+            button,
+        );
+
+        expect(navigationService.popBackAction).toHaveBeenCalledTimes(1);
+        expect(navigationService.goBack).not.toHaveBeenCalled();
+    });
+
+    it('should not navigate page history while a dialog is open and no back action exists', () => {
+        navigationUI.init();
+        const dialog = document.getElementById('app-selection-modal') as HTMLDialogElement;
+        dialog.classList.remove('hidden');
+        dialog.setAttribute('open', '');
+
+        dispatchNavigationMouse(
+            navigationUI,
+            new MouseEvent('mouseup', {
+                button: 3,
+                bubbles: true,
+                cancelable: true,
+            }),
+            dialog,
+        );
+
+        expect(navigationService.popBackAction).toHaveBeenCalledTimes(1);
+        expect(navigationService.goBack).not.toHaveBeenCalled();
+    });
+
     it('should show target page, emit navigation payload and update active sidebar state', async () => {
         const emitSpy = vi.spyOn(eventBus, 'emit');
         const button = document.querySelector<HTMLElement>('.nav-btn');
@@ -122,6 +246,10 @@ describe('NavigationUI', () => {
             pageId: 'settings',
             previousPageId: 'home',
         });
+        const setCurrentPageMock = navigationService.setCurrentPage as ReturnType<typeof vi.fn>;
+        expect(setCurrentPageMock.mock.invocationCallOrder[0]).toBeLessThan(
+            emitSpy.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER,
+        );
     });
 
     it('should support silent and buttonless navigation and warn on missing pages', async () => {

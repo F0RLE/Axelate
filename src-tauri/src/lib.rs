@@ -230,7 +230,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     #[cfg(desktop)]
     setup_global_shortcut(app)?;
 
-    server::start_server(app.handle().clone(), settings_service);
+    server::start_server(app.handle(), settings_service);
     setup_system_tray(app)?;
 
     tracing::info!("Axelate is ready");
@@ -241,14 +241,13 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
 #[allow(unsafe_code, clippy::large_stack_frames, clippy::print_stderr)]
 /// Main entry point for the Tauri application
 pub fn run() {
-    // 1. Environment validation (WebView2, network)
+    // 1. Environment validation (platform webview/runtime prerequisites)
     {
         use crate::domain::system::startup::EnvironmentValidator;
-        use crate::infrastructure::system::startup::WindowsStartupInfrastructure;
+        use crate::infrastructure::system::startup::PlatformStartupInfrastructure;
         EnvironmentValidator::new(
-            Box::new(WindowsStartupInfrastructure),
-            Box::new(WindowsStartupInfrastructure),
-            Box::new(WindowsStartupInfrastructure),
+            Box::new(PlatformStartupInfrastructure),
+            crate::infrastructure::config::settings::get_language_sync(),
         )
         .validate();
     }

@@ -1,5 +1,6 @@
 //! GitHub release asset selection for platform-specific module bundles.
 
+use crate::domain::system::hardware_probe::{AcceleratorClass, probe_gpu_info};
 use crate::errors::AppError;
 use reqwest::Client;
 use serde::Deserialize;
@@ -13,6 +14,8 @@ pub struct ReleaseAsset {
     pub download_url: String,
     /// Asset size in bytes as reported by GitHub.
     pub size: u64,
+    /// Pinned SHA-256 digest for the asset payload.
+    pub sha256: String,
 }
 
 /// A platform-compatible bundle of assets selected from a GitHub release.
@@ -23,6 +26,8 @@ pub struct ReleaseBundle {
     /// One or more assets required to install the module on the current machine.
     pub assets: Vec<ReleaseAsset>,
 }
+
+const RELEASES_PER_PAGE: u8 = 100;
 
 #[derive(Clone, Debug, Deserialize)]
 struct Release {
@@ -40,12 +45,27 @@ struct Asset {
     name: String,
     browser_download_url: String,
     size: u64,
+    digest: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Platform {
     os: PlatformOs,
     arch: PlatformArch,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CpuTier {
+    Avx512,
+    Avx2,
+    Avx,
+    Baseline,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct HardwareProfile {
+    accelerator: AcceleratorClass,
+    cpu_tier: CpuTier,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -71,76 +91,101 @@ pub async fn fetch_release_bundle(
     module_id: &str,
 ) -> Result<ReleaseBundle, AppError> {
     let (owner, repo) = parse_repo(repo_url)?;
-    let api_url = format!("https://api.github.com/repos/{owner}/{repo}/releases?per_page=8");
-
-    let response = client
-        .get(&api_url)
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .send()
-        .await?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let retry_after = response
-            .headers()
-            .get(reqwest::header::RETRY_AFTER)
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_string);
-        let rate_limit_remaining = response
-            .headers()
-            .get("x-ratelimit-remaining")
-            .and_then(|value| value.to_str().ok());
-        let rate_limit_reset = response
-            .headers()
-            .get("x-ratelimit-reset")
-            .and_then(|value| value.to_str().ok());
-
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS
-            || (status == reqwest::StatusCode::FORBIDDEN
-                && rate_limit_remaining.is_some_and(|value| value == "0"))
-        {
-            let retry_hint = retry_after
-                .map(|seconds| format!(" Retry after {seconds} seconds."))
-                .or_else(|| {
-                    rate_limit_reset.map(|unix_ts| {
-                        format!(" GitHub rate limit resets at unix timestamp {unix_ts}.")
-                    })
-                })
-                .unwrap_or_default();
-
-            return Err(AppError::External {
-                request_id: None,
-                message: format!(
-                    "GitHub API rate limit reached while fetching releases for '{module_id}'.{retry_hint}"
-                ),
-            });
-        }
-
-        return Err(AppError::External {
-            request_id: None,
-            message: format!("Failed to fetch GitHub releases: {status}"),
-        });
-    }
-
-    let releases: Vec<Release> = response.json().await?;
     let platform = Platform::current();
+    let hardware = HardwareProfile::detect().await;
+    let mut page = 1_u32;
 
-    for release in releases {
-        if release.draft || release.prerelease {
-            continue;
+    loop {
+        let api_url = format!(
+            "https://api.github.com/repos/{owner}/{repo}/releases?per_page={RELEASES_PER_PAGE}&page={page}"
+        );
+
+        let response = client
+            .get(&api_url)
+            .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(map_release_fetch_error(
+                response.status(),
+                &response,
+                module_id,
+            ));
         }
 
-        if let Some(assets) = select_release_assets(module_id, platform, &release.assets) {
-            return Ok(ReleaseBundle {
-                tag_name: release.tag_name,
-                assets,
-            });
+        let releases: Vec<Release> = response.json().await?;
+        if releases.is_empty() {
+            break;
         }
+
+        for release in releases {
+            if release.draft || release.prerelease {
+                continue;
+            }
+
+            if let Some(assets) =
+                select_release_assets(module_id, platform, hardware, &release.assets)
+            {
+                return Ok(ReleaseBundle {
+                    tag_name: release.tag_name,
+                    assets,
+                });
+            }
+        }
+
+        page += 1;
     }
 
     Err(AppError::NotFound(format!(
         "No compatible release bundle found for module '{module_id}' on this platform"
     )))
+}
+
+fn map_release_fetch_error(
+    status: reqwest::StatusCode,
+    response: &reqwest::Response,
+    module_id: &str,
+) -> AppError {
+    let retry_after = response
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let rate_limit_remaining = response
+        .headers()
+        .get("x-ratelimit-remaining")
+        .and_then(|value| value.to_str().ok());
+    let rate_limit_reset = response
+        .headers()
+        .get("x-ratelimit-reset")
+        .and_then(|value| value.to_str().ok());
+
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || (status == reqwest::StatusCode::FORBIDDEN
+            && rate_limit_remaining.is_some_and(|value| value == "0"))
+    {
+        let retry_hint = retry_after
+            .map(|seconds| format!(" Retry after {seconds} seconds."))
+            .or_else(|| {
+                rate_limit_reset.map(|unix_ts| {
+                    format!(" GitHub rate limit resets at unix timestamp {unix_ts}.")
+                })
+            })
+            .unwrap_or_default();
+
+        return AppError::External {
+            request_id: None,
+            message: format!(
+                "GitHub API rate limit reached while fetching releases for '{module_id}'.{retry_hint}"
+            ),
+        };
+    }
+
+    AppError::External {
+        request_id: None,
+        message: format!("Failed to fetch GitHub releases: {status}"),
+    }
 }
 
 fn parse_repo(repo_url: &str) -> Result<(String, String), AppError> {
@@ -174,16 +219,24 @@ fn parse_repo(repo_url: &str) -> Result<(String, String), AppError> {
 fn select_release_assets(
     module_id: &str,
     platform: Platform,
+    hardware: HardwareProfile,
     assets: &[Asset],
 ) -> Option<Vec<ReleaseAsset>> {
     let runtime_candidates = runtime_assets(module_id, platform, assets);
-    let main_candidates = main_assets(module_id, platform, assets);
+    let main_candidates = main_assets(module_id, platform, hardware, assets);
 
     if main_candidates.is_empty() {
         return None;
     }
 
-    if platform.os == PlatformOs::Windows {
+    if platform.os == PlatformOs::Windows && hardware.accelerator == AcceleratorClass::NvidiaCuda {
+        let has_cuda_main = main_candidates.iter().copied().any(|idx| {
+            assets
+                .get(idx)
+                .and_then(|asset| detect_cuda_track(&asset.name))
+                .is_some()
+        });
+
         for main_idx in &main_candidates {
             let main = assets.get(*main_idx)?;
             if let Some(cuda_track) = detect_cuda_track(&main.name)
@@ -194,21 +247,27 @@ fn select_release_assets(
                 })
             {
                 return Some(vec![
-                    asset_to_release_asset(assets.get(runtime_idx)?),
-                    asset_to_release_asset(main),
+                    asset_to_release_asset(assets.get(runtime_idx)?)?,
+                    asset_to_release_asset(main)?,
                 ]);
             }
+
+            if detect_cuda_track(&main.name).is_some() {
+                continue;
+            }
+
+            if !has_cuda_main {
+                return Some(vec![asset_to_release_asset(main)?]);
+            }
+        }
+
+        if has_cuda_main {
+            return None;
         }
     }
 
-    let non_cuda_main = main_candidates.iter().copied().find(|idx| {
-        assets
-            .get(*idx)
-            .is_some_and(|asset| detect_cuda_track(&asset.name).is_none())
-    });
-
-    let selected_main = non_cuda_main.or_else(|| main_candidates.first().copied())?;
-    Some(vec![asset_to_release_asset(assets.get(selected_main)?)])
+    let selected_main = main_candidates.first().copied()?;
+    Some(vec![asset_to_release_asset(assets.get(selected_main)?)?])
 }
 
 fn runtime_assets(module_id: &str, platform: Platform, assets: &[Asset]) -> Vec<usize> {
@@ -231,7 +290,12 @@ fn runtime_assets(module_id: &str, platform: Platform, assets: &[Asset]) -> Vec<
     indices
 }
 
-fn main_assets(module_id: &str, platform: Platform, assets: &[Asset]) -> Vec<usize> {
+fn main_assets(
+    module_id: &str,
+    platform: Platform,
+    hardware: HardwareProfile,
+    assets: &[Asset],
+) -> Vec<usize> {
     let mut indices: Vec<usize> = assets
         .iter()
         .enumerate()
@@ -242,21 +306,30 @@ fn main_assets(module_id: &str, platform: Platform, assets: &[Asset]) -> Vec<usi
         .collect();
 
     indices.sort_by_key(|idx| {
-        std::cmp::Reverse(
-            assets
-                .get(*idx)
-                .map_or(i32::MIN, |asset| main_score(&asset.name)),
-        )
+        std::cmp::Reverse(assets.get(*idx).map_or(i32::MIN, |asset| {
+            main_score(module_id, &asset.name, hardware)
+        }))
     });
     indices
 }
 
-fn asset_to_release_asset(asset: &Asset) -> ReleaseAsset {
-    ReleaseAsset {
+fn parse_sha256_digest(digest: Option<&str>) -> Option<String> {
+    let value = digest?.trim();
+    let hash = value.strip_prefix("sha256:")?;
+    if hash.len() != 64 || !hash.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return None;
+    }
+
+    Some(hash.to_ascii_lowercase())
+}
+
+fn asset_to_release_asset(asset: &Asset) -> Option<ReleaseAsset> {
+    Some(ReleaseAsset {
         name: asset.name.clone(),
         download_url: asset.browser_download_url.clone(),
         size: asset.size,
-    }
+        sha256: parse_sha256_digest(asset.digest.as_deref())?,
+    })
 }
 
 fn is_runtime_asset(module_id: &str, name: &str) -> bool {
@@ -320,11 +393,86 @@ fn arch_matches(arch: PlatformArch, lower_name: &str) -> bool {
     }
 }
 
-fn main_score(name: &str) -> i32 {
+fn main_score(module_id: &str, name: &str, hardware: HardwareProfile) -> i32 {
     let lower = name.to_ascii_lowercase();
-    let mut score = 0;
+    let mut score = base_main_score(&lower);
 
-    if let Some(cuda_track) = detect_cuda_track(&lower) {
+    match hardware.accelerator {
+        AcceleratorClass::NvidiaCuda => {
+            if detect_cuda_track(&lower).is_some() {
+                score += 1_000;
+            }
+            if lower.contains("vulkan")
+                || lower.contains("rocm")
+                || lower.contains("hip")
+                || lower.contains("sycl")
+                || lower.contains("openvino")
+            {
+                score -= 200;
+            }
+        }
+        AcceleratorClass::AmdGpu => {
+            if module_id == "llamacpp" && (lower.contains("hip") || lower.contains("rocm")) {
+                score += 1_300;
+            } else if lower.contains("vulkan") {
+                score += 800;
+            }
+            if detect_cuda_track(&lower).is_some()
+                || lower.contains("sycl")
+                || lower.contains("openvino")
+            {
+                score -= 500;
+            }
+        }
+        AcceleratorClass::IntelGpu => {
+            if module_id == "llamacpp" && (lower.contains("sycl") || lower.contains("openvino")) {
+                score += 1_300;
+            } else if lower.contains("vulkan") {
+                score += 800;
+            }
+            if detect_cuda_track(&lower).is_some()
+                || lower.contains("hip")
+                || lower.contains("rocm")
+            {
+                score -= 500;
+            }
+        }
+        AcceleratorClass::GenericGpu => {
+            if lower.contains("vulkan") {
+                score += 1_000;
+            }
+            if lower.contains("sycl") || lower.contains("openvino") {
+                score += 300;
+            }
+            if detect_cuda_track(&lower).is_some()
+                || lower.contains("hip")
+                || lower.contains("rocm")
+            {
+                score -= 500;
+            }
+        }
+        AcceleratorClass::CpuOnly => {
+            if detect_cuda_track(&lower).is_some()
+                || lower.contains("vulkan")
+                || lower.contains("rocm")
+                || lower.contains("hip")
+                || lower.contains("sycl")
+                || lower.contains("openvino")
+            {
+                score -= 1_000;
+            }
+
+            score += cpu_feature_score(&lower, hardware.cpu_tier);
+        }
+        AcceleratorClass::Unknown => {}
+    }
+
+    score
+}
+
+fn base_main_score(lower: &str) -> i32 {
+    let mut score = 0;
+    if let Some(cuda_track) = detect_cuda_track(lower) {
         score += match cuda_track {
             "cuda13" => 500,
             "cuda12" => 450,
@@ -352,6 +500,24 @@ fn main_score(name: &str) -> i32 {
     }
 
     score
+}
+
+fn cpu_feature_score(lower: &str, cpu_tier: CpuTier) -> i32 {
+    match cpu_tier {
+        CpuTier::Avx512 if lower.contains("avx512") => 700,
+        CpuTier::Avx512 if lower.contains("avx2") => 600,
+        CpuTier::Avx512 if lower.contains("avx") => 500,
+        CpuTier::Avx2 if lower.contains("avx2") => 700,
+        CpuTier::Avx2 if lower.contains("avx") => 600,
+        CpuTier::Avx if lower.contains("avx") => 700,
+        CpuTier::Avx512 | CpuTier::Avx2 | CpuTier::Avx
+            if lower.contains("noavx") || lower.contains("cpu") =>
+        {
+            300
+        }
+        CpuTier::Baseline if lower.contains("noavx") || lower.contains("cpu") => 700,
+        _ => 0,
+    }
 }
 
 fn runtime_score(name: &str) -> i32 {
@@ -400,6 +566,35 @@ impl Platform {
     }
 }
 
+impl HardwareProfile {
+    async fn detect() -> Self {
+        let probe = probe_gpu_info().await;
+        Self {
+            accelerator: probe.accelerator_class(),
+            cpu_tier: CpuTier::current(),
+        }
+    }
+}
+
+impl CpuTier {
+    fn current() -> Self {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            if std::arch::is_x86_feature_detected!("avx512f") {
+                return Self::Avx512;
+            }
+            if std::arch::is_x86_feature_detected!("avx2") {
+                return Self::Avx2;
+            }
+            if std::arch::is_x86_feature_detected!("avx") {
+                return Self::Avx;
+            }
+        }
+
+        Self::Baseline
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,6 +604,10 @@ mod tests {
         let platform = Platform {
             os: PlatformOs::Windows,
             arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuTier::Avx2,
         };
 
         let incomplete_latest = vec![
@@ -421,14 +620,21 @@ mod tests {
             asset("sd-master-5265a5e-bin-win-avx2-x64.zip"),
         ];
 
-        assert!(select_release_assets("sdcpp", platform, &incomplete_latest).is_none());
+        assert!(select_release_assets("sdcpp", platform, hardware, &incomplete_latest).is_none());
 
-        let selected = select_release_assets("sdcpp", platform, &complete_previous)
-            .expect("expected a compatible sdcpp bundle");
+        let selected = select_release_assets("sdcpp", platform, hardware, &complete_previous);
+        assert!(selected.is_some(), "expected a compatible sdcpp bundle");
+        let selected = selected.unwrap_or_default();
 
         assert_eq!(selected.len(), 2);
-        assert_eq!(selected[0].name, "cudart-sd-bin-win-cu12-x64.zip");
-        assert_eq!(selected[1].name, "sd-master-5265a5e-bin-win-cuda12-x64.zip");
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("cudart-sd-bin-win-cu12-x64.zip")
+        );
+        assert_eq!(
+            selected.get(1).map(|asset| asset.name.as_str()),
+            Some("sd-master-5265a5e-bin-win-cuda12-x64.zip")
+        );
     }
 
     #[test]
@@ -437,18 +643,29 @@ mod tests {
             os: PlatformOs::Windows,
             arch: PlatformArch::X64,
         };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuTier::Avx2,
+        };
         let assets = vec![
             asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
             asset("llama-b8461-bin-win-cuda-12.4-x64.zip"),
             asset("llama-b8461-bin-win-avx2-x64.zip"),
         ];
 
-        let selected = select_release_assets("llamacpp", platform, &assets)
-            .expect("expected a compatible llama.cpp bundle");
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets);
+        assert!(selected.is_some(), "expected a compatible llama.cpp bundle");
+        let selected = selected.unwrap_or_default();
 
         assert_eq!(selected.len(), 2);
-        assert_eq!(selected[0].name, "cudart-llama-bin-win-cuda-12.4-x64.zip");
-        assert_eq!(selected[1].name, "llama-b8461-bin-win-cuda-12.4-x64.zip");
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("cudart-llama-bin-win-cuda-12.4-x64.zip")
+        );
+        assert_eq!(
+            selected.get(1).map(|asset| asset.name.as_str()),
+            Some("llama-b8461-bin-win-cuda-12.4-x64.zip")
+        );
     }
 
     #[test]
@@ -456,6 +673,10 @@ mod tests {
         let platform = Platform {
             os: PlatformOs::Windows,
             arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuTier::Avx2,
         };
         let assets = vec![
             asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
@@ -466,12 +687,19 @@ mod tests {
             asset("llama-b8461-bin-win-vulkan-x64.zip"),
         ];
 
-        let selected = select_release_assets("llamacpp", platform, &assets)
-            .expect("expected a compatible llama.cpp bundle");
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets);
+        assert!(selected.is_some(), "expected a compatible llama.cpp bundle");
+        let selected = selected.unwrap_or_default();
 
         assert_eq!(selected.len(), 2);
-        assert_eq!(selected[0].name, "cudart-llama-bin-win-cuda-13.1-x64.zip");
-        assert_eq!(selected[1].name, "llama-b8461-bin-win-cuda-13.1-x64.zip");
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("cudart-llama-bin-win-cuda-13.1-x64.zip")
+        );
+        assert_eq!(
+            selected.get(1).map(|asset| asset.name.as_str()),
+            Some("llama-b8461-bin-win-cuda-13.1-x64.zip")
+        );
     }
 
     #[test]
@@ -480,9 +708,154 @@ mod tests {
             os: PlatformOs::Windows,
             arch: PlatformArch::X64,
         };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuTier::Avx2,
+        };
         let assets = vec![asset("cudart-sd-bin-win-cu12-x64.zip")];
 
-        assert!(select_release_assets("sdcpp", platform, &assets).is_none());
+        assert!(select_release_assets("sdcpp", platform, hardware, &assets).is_none());
+    }
+
+    #[test]
+    fn rejects_release_bundle_when_selected_asset_has_no_digest() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuTier::Avx2,
+        };
+        let assets = vec![
+            asset_without_digest("cudart-llama-bin-win-cuda-12.4-x64.zip"),
+            asset("llama-b8461-bin-win-cuda-12.4-x64.zip"),
+        ];
+
+        assert!(select_release_assets("llamacpp", platform, hardware, &assets).is_none());
+    }
+
+    #[test]
+    fn skips_incomplete_windows_cuda_release_when_runtime_pair_is_missing() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuTier::Avx2,
+        };
+        let assets = vec![
+            asset("llama-b8726-bin-win-cuda-13.1-x64.zip"),
+            asset("llama-b8726-bin-win-cpu-x64.zip"),
+        ];
+
+        assert!(select_release_assets("llamacpp", platform, hardware, &assets).is_none());
+    }
+
+    #[test]
+    fn prefers_vulkan_bundle_for_non_nvidia_windows_gpu() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::GenericGpu,
+            cpu_tier: CpuTier::Avx2,
+        };
+        let assets = vec![
+            asset("cudart-sd-bin-win-cu12-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-cuda12-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-vulkan-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-avx2-x64.zip"),
+        ];
+
+        let selected = select_release_assets("sdcpp", platform, hardware, &assets)
+            .expect("expected compatible sdcpp bundle");
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("sd-master-560-e8323ca-bin-win-vulkan-x64.zip")
+        );
+    }
+
+    #[test]
+    fn prefers_cpu_bundle_when_no_gpu_acceleration_is_detected() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::CpuOnly,
+            cpu_tier: CpuTier::Avx2,
+        };
+        let assets = vec![
+            asset("cudart-sd-bin-win-cu12-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-cuda12-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-vulkan-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-avx2-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-noavx-x64.zip"),
+        ];
+
+        let selected = select_release_assets("sdcpp", platform, hardware, &assets)
+            .expect("expected compatible sdcpp bundle");
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("sd-master-560-e8323ca-bin-win-avx2-x64.zip")
+        );
+    }
+
+    #[test]
+    fn prefers_llamacpp_hip_bundle_for_amd_gpu() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::AmdGpu,
+            cpu_tier: CpuTier::Avx2,
+        };
+        let assets = vec![
+            asset("llama-b8724-bin-win-vulkan-x64.zip"),
+            asset("llama-b8724-bin-win-hip-radeon-x64.zip"),
+            asset("llama-b8724-bin-win-cpu-x64.zip"),
+        ];
+
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets)
+            .expect("expected compatible llama.cpp bundle");
+
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("llama-b8724-bin-win-hip-radeon-x64.zip")
+        );
+    }
+
+    #[test]
+    fn prefers_llamacpp_sycl_bundle_for_intel_gpu() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::IntelGpu,
+            cpu_tier: CpuTier::Avx2,
+        };
+        let assets = vec![
+            asset("llama-b8724-bin-win-vulkan-x64.zip"),
+            asset("llama-b8724-bin-win-sycl-x64.zip"),
+            asset("llama-b8724-bin-win-cpu-x64.zip"),
+        ];
+
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets)
+            .expect("expected compatible llama.cpp bundle");
+
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("llama-b8724-bin-win-sycl-x64.zip")
+        );
     }
 
     fn asset(name: &str) -> Asset {
@@ -490,6 +863,16 @@ mod tests {
             name: name.to_string(),
             browser_download_url: format!("https://example.com/{name}"),
             size: 1024,
+            digest: Some(format!("sha256:{}", "a".repeat(64))),
+        }
+    }
+
+    fn asset_without_digest(name: &str) -> Asset {
+        Asset {
+            name: name.to_string(),
+            browser_download_url: format!("https://example.com/{name}"),
+            size: 1024,
+            digest: None,
         }
     }
 }

@@ -8,7 +8,6 @@ describe('EngineConfigService', () => {
 
     const config: EngineConfig = {
         engine_id: 'llamacpp',
-        port: 8080,
         gpu_layers: 33,
         context_size: 8192,
         model_path: 'C:/models/model.gguf',

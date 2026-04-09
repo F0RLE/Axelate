@@ -24,12 +24,13 @@ const mockCore = {
         invoke: mockInvoke,
         listen: mockListen,
         isTauri: vi.fn().mockReturnValue(true),
-        hasSecureKey: vi.fn(async (key: string) => {
-            return await mockInvoke('has_secure_key', { service: key });
+        hasSecureKey: vi.fn(async (key: string): Promise<boolean> => {
+            const value: unknown = await mockInvoke('has_secure_key', { service: key });
+            return value === true;
         }),
-        getSecureKey: vi.fn(async (key: string) => {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-            return await mockInvoke('get_secure_key', { service: key });
+        getSecureKey: vi.fn(async (key: string): Promise<string | null> => {
+            const value: unknown = await mockInvoke('get_secure_key', { service: key });
+            return typeof value === 'string' ? value : null;
         }),
         saveSecureKey: vi.fn(async (key: string, val: string) => {
             await mockInvoke('save_secure_key', { service: key, key: val });
@@ -67,11 +68,35 @@ vi.stubGlobal('tracer', {
 
 import { AIBridge } from '@/features/ai/services/AIBridge';
 
+function mockStoredApiKey(value: string = 'sk-test-key'): void {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+        await Promise.resolve();
+        if (cmd === 'has_secure_key') return true;
+        if (cmd === 'get_secure_key') return value;
+        return null;
+    });
+}
+
 describe('AIBridge', () => {
     let aiBridge: AIBridge;
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockInvoke.mockReset();
+        mockInvoke.mockResolvedValue(null);
+        mockListen.mockReset();
+        mockListen.mockResolvedValue(() => {
+            /* no-op */
+        });
+        mockEmit.mockReset();
+        mockCore.tauriProvider.isTauri.mockReset();
+        mockCore.tauriProvider.isTauri.mockReturnValue(true);
+        mockCore.aiSettings.getSelectedAIModel.mockReset();
+        mockCore.aiSettings.getSelectedAIModel.mockReturnValue(undefined);
+        mockCore.aiSettings.getThinkingLevel.mockReset();
+        mockCore.aiSettings.getThinkingLevel.mockReturnValue('high');
+        mockCore.aiSettings.getLocalMaxOutputTokens.mockReset();
+        mockCore.aiSettings.getLocalMaxOutputTokens.mockReturnValue(384);
         (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
         localStorage.clear();
         aiBridge = new AIBridge();
@@ -208,7 +233,7 @@ describe('AIBridge', () => {
         });
 
         it('should stop previous provider when starting new one', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
 
             await aiBridge.startProvider('gemini');
             await aiBridge.startProvider('gpt');
@@ -238,7 +263,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- stopProvider
     describe('stopProvider', () => {
         it('should deactivate the provider', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             aiBridge.stopProvider();
@@ -248,7 +273,7 @@ describe('AIBridge', () => {
         });
 
         it('should clear state on stop', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             aiBridge.stopProvider();
@@ -263,7 +288,7 @@ describe('AIBridge', () => {
             aiBridge.onChunk('test', handler);
             aiBridge.onThought('test', handler);
 
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
             aiBridge.stopProvider();
 
@@ -591,7 +616,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- getState
     describe('getState', () => {
         it('should return current bridge state', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             const state = aiBridge.getState();
@@ -613,7 +638,7 @@ describe('AIBridge', () => {
         });
 
         it('should return true when provider is active', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             expect(aiBridge.isActive()).toBe(true);
@@ -623,7 +648,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- getActiveProvider
     describe('getActiveProvider', () => {
         it('should return provider details when active', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             const provider = aiBridge.getActiveProvider();
@@ -789,7 +814,7 @@ describe('AIBridge', () => {
     describe('sendMessage missing API key path', () => {
         it('should return missing-key error when apiKey is null and provider is non-local', async () => {
             // Activate a provider so activeProviderId !== null
-            mockInvoke.mockResolvedValue('sk-key');
+            mockStoredApiKey('sk-key');
             await aiBridge.startProvider('gemini');
 
             type ManagerWithApiKey = {
@@ -814,7 +839,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- sendMessage catch block (lines 189-191)
     describe('sendMessage pipeline catch block', () => {
         it('should return ok:false error when transport.send throws', async () => {
-            mockInvoke.mockResolvedValue('sk-key');
+            mockStoredApiKey('sk-key');
             await aiBridge.startProvider('gemini');
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -829,7 +854,7 @@ describe('AIBridge', () => {
         });
 
         it('should return generic error message for non-Error throws', async () => {
-            mockInvoke.mockResolvedValue('sk-key');
+            mockStoredApiKey('sk-key');
             await aiBridge.startProvider('gemini');
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

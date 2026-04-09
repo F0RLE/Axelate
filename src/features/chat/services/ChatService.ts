@@ -44,10 +44,17 @@ export class ChatService {
                 };
             }
 
-            return {
+            const result: IChatResponse = {
                 ok: true,
                 message: response.text ?? '',
             };
+            if (response.thought_signature !== undefined) {
+                result.thought_signature = response.thought_signature;
+            }
+            if (response.model !== undefined) {
+                result.model = response.model;
+            }
+            return result;
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : 'Unknown error';
             tracer.error('[ChatService] Error:', e);

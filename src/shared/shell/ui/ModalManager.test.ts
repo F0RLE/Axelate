@@ -160,6 +160,47 @@ describe('ModalManager lifecycle', () => {
         ).toHaveBeenCalledTimes(1);
     });
 
+    it('should refresh using newly provided app snapshots', () => {
+        modalManager = createManager();
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: false } as IApp],
+            'svc-a',
+        );
+
+        modalManager.refreshCurrentSelection(
+            [{ id: 'svc-b', name: 'Service B', installed: true } as IApp],
+            'svc-b',
+        );
+
+        expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
+        expect(
+            document.querySelector('#app-modal-list .app-card')?.getAttribute('data-app-id'),
+        ).toBe('svc-b');
+        expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Remove');
+    });
+
+    it('should rerender current selection without reopening modal shell', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: false } as IApp],
+            'svc-a',
+        );
+        modalManager.refreshCurrentSelection(
+            [{ id: 'svc-b', name: 'Service B', installed: false } as IApp],
+            'svc-b',
+        );
+
+        expect(modal.showModal).toHaveBeenCalledTimes(1);
+        expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
+        expect(
+            document.querySelector('#app-modal-list .app-card')?.getAttribute('data-app-id'),
+        ).toBe('svc-b');
+    });
+
     it('should not re-show modal or duplicate back action when reopening an already open modal', () => {
         modalManager = createManager();
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
@@ -208,11 +249,26 @@ describe('ModalManager lifecycle', () => {
             'txt-1',
         );
 
+        (modalManager as unknown as { _currentFilter: 'text' | 'image' })._currentFilter = 'image';
+        (
+            modalManager as unknown as {
+                _applyImageFilterAvailability: (
+                    apps: IApp[],
+                    t: (key: string, defaultText: string) => string,
+                ) => void;
+            }
+        )._applyImageFilterAvailability(
+            [{ id: 'txt-1', name: 'Only Text', installed: true, capability: 'text' } as IApp],
+            (_key, defaultText) => defaultText,
+        );
+
         const imageBtn = document.getElementById('filter-image-btn') as HTMLButtonElement;
+        const textBtn = document.getElementById('filter-text-btn') as HTMLButtonElement;
         expect(imageBtn.disabled).toBe(true);
         expect(imageBtn.title).toBe('Coming soon');
+        expect(textBtn.classList.contains('active')).toBe(true);
+        expect(imageBtn.classList.contains('active')).toBe(false);
 
-        (modalManager as unknown as { _currentFilter: 'text' | 'image' })._currentFilter = 'image';
         (
             modalManager as unknown as { _populateAppList: (...args: unknown[]) => void }
         )._populateAppList(
@@ -221,9 +277,10 @@ describe('ModalManager lifecycle', () => {
             'ai',
             null,
         );
-        expect(document.querySelector('#app-modal-list span')?.textContent).toContain(
-            'No applications found',
-        );
+        expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
+        expect(
+            document.querySelector('#app-modal-list .app-card')?.getAttribute('data-app-id'),
+        ).toBe('txt-1');
     });
 
     it('should sort by stable module id priority instead of localized names', () => {

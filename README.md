@@ -1,111 +1,74 @@
-<div align="center">
-  <br />
-  <img src="src-tauri/icons/icon.png" alt="Axelate Logo" width="160" height="160" />
-  <br />
+# Axelate
 
-  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
-  <p style="font-size: 1.1em; color: #888; font-style: italic;">The Secure Environment for Next-Generation AI Agents</p>
+Axelate is a desktop launcher for AI workflows built with Rust, Tauri v2, and vanilla TypeScript.
+Right now the project focuses on three things:
 
-  <br />
+- chat through OpenRouter
+- local engine management for `llama.cpp` and `stable-diffusion.cpp`
+- secure local storage and native desktop integration
 
-  <!-- Primary Call to Action -->
-  <a href="https://github.com/F0RLE/Axelate/releases">
-    <img src="https://img.shields.io/badge/Download_Axelate-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
-  </a>
+## Current stack
 
-  <br />
-  <br />
+- backend: Rust + Tokio + Tauri v2
+- frontend: vanilla TypeScript + Vite
+- type bridge: Specta
+- local HTTP/SSE: Axum
 
-  <!-- Navigation Bar -->
-  <p>
-    <a href="docs/ru/ROADMAP.md"><img src="https://img.shields.io/badge/Russian-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Russian"/></a>
-    &nbsp;
-    <a href="docs/zh/README_CN.md"><img src="https://img.shields.io/badge/Chinese-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Chinese"/></a>
-    &nbsp;
-    <a href="docs/en/architecture.md"><img src="https://img.shields.io/badge/Documentation-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
-  </p>
-  <p>
-    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.5-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
-    &nbsp;
-    <img src="https://img.shields.io/badge/Status-Public_Beta-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
-  </p>
+## Repository layout
 
-  <br />
-</div>
+```text
+Axelate/
+├── src/         frontend app and all npm dependencies
+├── src-tauri/   Rust backend, Tauri config, exporter binary
+├── docs/        project documentation
+└── .github/     scripts, workflows, git hooks
+```
 
-> [!IMPORTANT]
-> **Axelate is currently in Public Beta (v0.1.5 / 0.1.x).**
->
-> This is pre-release software. Features may be experimental, and APIs are subject to change without notice. No stable release is currently available.
+`src/` is the only npm project with real dependencies. The root `package.json` is only a proxy for convenience.
 
----
+## Developer setup
 
-<div align="center">
+### Requirements
 
-## ✨ Experience the Future
+- Node.js 20+
+- npm 10+
+- Rust stable
+- Windows: Visual Studio Build Tools + Windows SDK
 
-**Axelate** is a dedicated, hardware-secured workspace for your professional AI agents.
-<br>Built for those who refuse to compromise on **privacy**, **speed**, or **control**.
+### Install
 
-</div>
+```bash
+git clone https://github.com/F0RLE/Axelate.git
+cd Axelate
+npm run install-deps
+```
 
-<br>
+### Run in development
 
-<div align="center">
+```bash
+npm run dev
+```
 
-| 🛡️ Hardware-Bound Security | ⚡ Native Performance | 🧩 Isolated Modules |
-| :---: | :---: | :---: |
-| Your data is encrypted using **AES-256-GCM** keys derived from your physical motherboard serial. Theft-proof by design. | Powered by a hybrid **Rust Kernel** + **V8 Shell**. Zero latency, instant startup, and minimal resource footprint. | Run coding agents, data analysts, and creative tools in strict isolation. No cross-contamination. |
+Useful root commands:
 
-</div>
+- `npm run dev` - start the full desktop app in dev mode
+- `npm run tauri:dev` - run Tauri dev directly
+- `npm run verify-all` - full project verification gate
+- `npm run build` - frontend production build
+- `npm run tauri:build` - desktop production build
 
----
+## Notes
 
-<h2 align="center">🚀 Getting Started</h2>
+- Rust types are the source of truth. TypeScript bindings are generated from Rust.
+- The backend chooses a free localhost port for local engines automatically.
+- Frontend dependencies live in `src/node_modules` only.
 
-<div align="center">
+## Docs
 
-<p>
-  <b>1. Download</b> the installer from the <a href="https://github.com/F0RLE/Axelate/releases">Releases Page</a>.
-  <br>
-  <b>2. Run</b> `Axelate Setup.exe`.
-  <br>
-  <b>3. Initialize</b> your secure vault and start installing modules.
-</p>
-
-</div>
-
----
-
-<h2 align="center">👩‍💻 For Developers</h2>
-
-Axelate is built on a "Pass-Through" architecture that gives frontend modules direct access to Rust system services.
-
-<div align="center">
-
-[![Developer Cookbook](https://img.shields.io/badge/📖_Developer_Cookbook-Read-31303a?style=flat-square)](docs/en/development.md)
-[![Architecture Spec](https://img.shields.io/badge/🏗️_Architecture_Spec-Deep_Dive-31303a?style=flat-square)](docs/en/architecture.md)
-[![Contributing](https://img.shields.io/badge/🤝_Contribution_Guidelines-Read-31303a?style=flat-square)](CONTRIBUTING.md)
-
-</div>
-
----
-
-<div align="center">
-
-<br>
-
-  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
-  &nbsp;
-  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
-  &nbsp;
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
-
-<br>
-<br>
-
-<img src="https://img.shields.io/badge/Made_with_❤️_by_Axelate_Team-31303a?style=flat-square" alt="Made with Love" />
-
-<sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
-
-</div>
+- [Getting Started](docs/en/getting-started.md)
+- [Architecture](docs/en/architecture.md)
+- [Automation](docs/en/AUTOMATION.md)
+- [Coding Standards](docs/en/CODING_STANDARDS.md)
+- [File Tree](docs/en/FileTree.md)
+- [Русское описание проекта](docs/ru/VISION.md)
+- [中文简介](docs/zh/README_CN.md)

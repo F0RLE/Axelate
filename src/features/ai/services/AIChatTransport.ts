@@ -24,6 +24,12 @@ function extractError(error: unknown): string {
     return JSON.stringify(error);
 }
 
+interface IStreamChunkEnvelope {
+    request_id: string;
+    message_id: string;
+    content: string;
+}
+
 export interface IChatTransport {
     init(): Promise<void>;
     send(request: IChatRequest): Promise<IBridgeResponse>;
@@ -42,6 +48,7 @@ export interface IChatTransport {
 export class AIChatTransport implements IChatTransport {
     private _core: Core | null = null;
     private readonly _unlisteners = new Set<() => void>();
+    private _activeStreamRequestId: string | null = null;
 
     public setCore(core: Core): void {
         this._core = core;
@@ -65,10 +72,17 @@ export class AIChatTransport implements IChatTransport {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
+        const requestId = this._generateRequestId();
+        const requestWithId: IChatRequest = {
+            ...request,
+            request_id: requestId,
+        };
+        this._activeStreamRequestId = requestId;
+
         try {
             return await this._runWithTimeout(
                 this._core.tauriProvider
-                    .invoke<IChatResponse>('send_chat_message', { request })
+                    .invoke<IChatResponse>('send_chat_message', { request: requestWithId })
                     .then((response) => this._normalizeResponse(response)),
                 90000,
                 'AI request timed out',
@@ -77,6 +91,8 @@ export class AIChatTransport implements IChatTransport {
             const errorMsg = extractError(error);
             tracer.error('[AIChatTransport] IPC error:', error);
             return { ok: false, error: errorMsg };
+        } finally {
+            this._clearActiveRequest(requestId);
         }
     }
 
@@ -162,12 +178,20 @@ export class AIChatTransport implements IChatTransport {
         this._unlisteners.add(cleanup);
 
         void this._core.tauriProvider
-            .listen<string>(eventName, (event: unknown) => {
-                const chunk =
-                    typeof event === 'object' && event !== null && 'payload' in event
-                        ? (event as { payload: string }).payload
-                        : (event as string);
-                if (isActive) listener(chunk);
+            .listen<unknown>(eventName, (event: unknown) => {
+                const payload = this._parseStreamPayload(event);
+                if (payload === null) {
+                    tracer.warn(`[AIChatTransport] Ignoring malformed ${eventName} payload`);
+                    return;
+                }
+
+                if (
+                    isActive &&
+                    this._activeStreamRequestId !== null &&
+                    payload.request_id === this._activeStreamRequestId
+                ) {
+                    listener(payload.content);
+                }
             })
             .then((fn) => {
                 if (isActive) {
@@ -205,13 +229,71 @@ export class AIChatTransport implements IChatTransport {
 
     private _normalizeResponse(response: IChatResponse): IBridgeResponse {
         if (response.ok && response.reply) {
-            return { ok: true, text: response.reply.text };
+            const normalized: IBridgeResponse = {
+                ok: true,
+                text: response.reply.text,
+            };
+            if (response.thought_signature !== undefined) {
+                normalized.thought_signature = response.thought_signature;
+            }
+            if (response.model !== undefined) {
+                normalized.model = response.model;
+            }
+            return normalized;
         }
-        return { ok: false, error: extractError(response.error) };
+        const normalized: IBridgeResponse = {
+            ok: false,
+            error: extractError(response.error),
+        };
+        if (response.model !== undefined) {
+            normalized.model = response.model;
+        }
+        return normalized;
+    }
+
+    private _generateRequestId(): string {
+        if (typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+
+        return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    private _clearActiveRequest(requestId: string): void {
+        if (this._activeStreamRequestId === requestId) {
+            this._activeStreamRequestId = null;
+        }
+    }
+
+    private _parseStreamPayload(event: unknown): IStreamChunkEnvelope | null {
+        const candidate =
+            typeof event === 'object' && event !== null && 'payload' in event
+                ? (event as { payload: unknown }).payload
+                : event;
+
+        if (typeof candidate !== 'object' || candidate === null) {
+            return null;
+        }
+
+        const payload = candidate as Record<string, unknown>;
+        if (
+            typeof payload['request_id'] !== 'string' ||
+            typeof payload['message_id'] !== 'string' ||
+            typeof payload['content'] !== 'string'
+        ) {
+            return null;
+        }
+
+        return {
+            request_id: payload['request_id'],
+            message_id: payload['message_id'],
+            content: payload['content'],
+        };
     }
 
     public destroy(): void {
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.clear();
+        this._activeStreamRequestId = null;
     }
 }

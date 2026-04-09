@@ -14,10 +14,8 @@ if (Test-Path $CargoBin) {
 Write-Header "Starting Axelate (Dev Mode)"
 
 # Install if needed
-if (-not (Test-Path "$SRC_DIR/node_modules")) {
-    Write-Step "Installing frontend dependencies..."
-    Exec $NPM @("install") $SRC_DIR
-}
+Ensure-FrontendDependencies
+Sync-FrontendBindings
 
 # Auto-format
 Write-Step "Auto-formatting code..."

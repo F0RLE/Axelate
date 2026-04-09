@@ -17,7 +17,6 @@ import type { WindowService } from '@/shared/services/WindowService';
 import type { WindowUI } from '@/shared/shell/WindowUI';
 import type { IApp } from '@/shared/types/coreTypes';
 import type { IAICatalogApp } from '@/features/ai/types/aiTypes';
-import { container } from './CoreContainer';
 import { resolveProviderModel } from '@/features/ai/utils/catalogHelpers';
 import { aiBridge } from '@/features/ai/services/AIBridge';
 
@@ -52,9 +51,7 @@ export class GlobalBridge {
      */
     public init(): void {
         this._setupFetchInterceptor();
-        this._setupAxelateAPI();
         this._exposeCoreGlobals();
-        this._syncCatalogToGlobal();
     }
 
     public destroy(): void {
@@ -81,25 +78,10 @@ export class GlobalBridge {
             'showSkeletonLoaders',
             'hideSkeletonLoaders',
             'setButtonLoading',
-            'showPromptTab',
-            'getCatalogCategory',
-            'axelateAPI',
         ] as const;
         for (const key of keys) {
             Reflect.deleteProperty(globalThis, key);
         }
-        Reflect.deleteProperty(globalThis, 'APP_DATA');
-    }
-
-    /**
-     * Sync catalog data to globalThis.APP_DATA for backward compat.
-     */
-    private _syncCatalogToGlobal(): void {
-        const catalogData = this._core.catalog.getCatalog();
-        (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = catalogData;
-
-        // Expose getCatalogCategory via container
-        globalThis.getCatalogCategory = (cat: string) => container.getCatalogCategory(cat);
     }
 
     /**
@@ -216,45 +198,6 @@ export class GlobalBridge {
         win.setButtonLoading = (b: HTMLButtonElement | null, l: boolean): void => {
             if (b) this._core.appUI.setButtonLoading(b, l);
         };
-        win.showPromptTab = (tab: string, btn?: HTMLElement): void => {
-            this._core.appUI.showPromptTab(tab, btn);
-        };
-    }
-
-    /**
-     * Setup the axelateAPI bridge for legacy module compatibility.
-     */
-    private _setupAxelateAPI(): void {
-        const win = globalThis;
-        win.axelateAPI = {
-            minimize: async () => {
-                if (this._core.tauriProvider.isTauri())
-                    await this._core.tauriProvider.invoke('minimize_window');
-                else this._core.tracer.debug('[AxelateAPI] minimize (no Tauri)');
-            },
-            toggleMaximize: async () => {
-                if (this._core.tauriProvider.isTauri())
-                    await this._core.tauriProvider.invoke('toggle_maximize');
-                else this._core.tracer.debug('[AxelateAPI] toggleMaximize (no Tauri)');
-            },
-            close: async () => {
-                if (this._core.tauriProvider.isTauri())
-                    await this._core.tauriProvider.invoke('close_window');
-                else this._core.tracer.debug('[AxelateAPI] close (no Tauri)');
-            },
-            secureStorage: {
-                save: async (service: string, key: string) => {
-                    if (this._core.tauriProvider.isTauri()) {
-                        await this._core.tauriProvider.invoke('save_secure_key', { service, key });
-                    } else {
-                        this._core.tracer.warn(
-                            `[AxelateAPI] Secure storage not available in web mode. Key not persisted for: ${service}`,
-                        );
-                        // Security: Do not persist keys in localStorage/sessionStorage
-                    }
-                },
-            },
-        };
     }
 
     private _setupFetchInterceptor(): void {
@@ -283,18 +226,19 @@ export class GlobalBridge {
                     url = input.url;
                 }
 
-                if (!url.includes('/api/')) {
+                const pathname = this._getInterceptableApiPath(url);
+                if (pathname === null) {
                     return await boundFetch(input, init);
                 }
 
-                if (url.includes('/api/log')) {
+                if (pathname === '/api/log') {
                     return new Response(JSON.stringify({ success: true }), {
                         status: 200,
                         headers: { 'Content-Type': 'application/json' },
                     });
                 }
 
-                if (url.includes('/api/chat/send') && this._core.tauriProvider.isTauri()) {
+                if (pathname === '/api/chat/send' && this._core.tauriProvider.isTauri()) {
                     return await this._handleChatRequest(init);
                 }
 
@@ -306,6 +250,28 @@ export class GlobalBridge {
                 throw err;
             }
         };
+    }
+
+    private _getInterceptableApiPath(url: string): string | null {
+        try {
+            if (url.startsWith('/')) {
+                return new URL(url, 'http://localhost').pathname;
+            }
+
+            const parsed = new URL(url);
+            const isLocalHost =
+                parsed.hostname === 'localhost' ||
+                parsed.hostname === '127.0.0.1' ||
+                parsed.hostname === 'ipc.localhost';
+
+            if (!isLocalHost) {
+                return null;
+            }
+
+            return parsed.pathname.startsWith('/api/') ? parsed.pathname : null;
+        } catch {
+            return null;
+        }
     }
 
     /**

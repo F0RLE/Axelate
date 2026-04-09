@@ -10,6 +10,7 @@ export interface IGpuInfo {
     detected: boolean;
     name?: string;
     cuda?: boolean;
+    backend?: 'cuda' | 'vulkan' | 'cpu' | string;
     memory?: number;
 }
 
@@ -104,20 +105,7 @@ export class SettingsService {
             });
         } catch (e) {
             tracer.error('[SettingsService] Failed to save secure key:', e);
-        }
-    }
-
-    /**
-     * Retrieves the actual stored API key.
-     * Use sparingly for explicit reveal flows only.
-     */
-    public async getSecureKey(provider: string): Promise<string | null> {
-        const storageKey = `${provider}_api_key`;
-        try {
-            return await this._tauri.getSecureKey(storageKey);
-        } catch (e) {
-            tracer.error('[SettingsService] Failed to get secure key:', e);
-            return null;
+            throw e;
         }
     }
 

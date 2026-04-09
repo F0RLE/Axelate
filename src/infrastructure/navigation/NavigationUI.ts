@@ -42,10 +42,11 @@ export class NavigationUI {
 
         // Bind global keyboard shortcuts (Escape = Back)
         this._keyDownHandler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                if (this._service.popBackAction()) {
-                    e.preventDefault();
-                }
+            if (e.key !== 'Escape') return;
+            if (e.defaultPrevented || this._isTextEntryTarget(e.target)) return;
+
+            if (this._service.popBackAction()) {
+                e.preventDefault();
             }
         };
 
@@ -56,25 +57,59 @@ export class NavigationUI {
     private _handleMouseNavigation(e: MouseEvent): void {
         if (!this._shouldHandleMouseNavigation(e)) return;
 
-        e.preventDefault();
-        e.stopPropagation();
-
         if (e.button === NavigationUI._BACK_BUTTON) {
-            if (this._service.popBackAction()) return;
+            if (this._service.popBackAction()) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            if (this._hasOpenDialog()) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            e.preventDefault();
+            e.stopPropagation();
             this._navigateHistory(this._service.goBack());
             return;
         }
 
-        if (this._service.popForwardAction()) return;
+        if (this._service.popForwardAction()) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        if (this._hasOpenDialog()) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
         this._navigateHistory(this._service.goForward());
     }
 
     private _shouldHandleMouseNavigation(e: MouseEvent): boolean {
         if (e.defaultPrevented) return false;
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
-        return (
-            e.button === NavigationUI._BACK_BUTTON || e.button === NavigationUI._FORWARD_BUTTON
-        );
+        if (this._isTextEntryTarget(e.target)) return false;
+        return e.button === NavigationUI._BACK_BUTTON || e.button === NavigationUI._FORWARD_BUTTON;
+    }
+
+    private _isTextEntryTarget(target: EventTarget | null): boolean {
+        if (!(target instanceof Element)) return false;
+
+        if (target.closest('[contenteditable="true"]')) return true;
+
+        return target.closest('input, textarea, select, option, [role="textbox"]') !== null;
+    }
+
+    private _hasOpenDialog(): boolean {
+        return document.querySelector('dialog[open]:not(.hidden)') !== null;
     }
 
     private _navigateHistory(pageId: string | undefined): void {
@@ -133,17 +168,16 @@ export class NavigationUI {
             b.removeAttribute('aria-current');
         });
 
-        // Emit navigation event
-        const navPayload: { pageId: string; previousPageId?: string } = { pageId };
-        if (previousPageId !== undefined) navPayload.previousPageId = previousPageId;
-        eventBus.emit('page:change', navPayload);
-
         // 3. Show target page
         const target = document.getElementById(pageId) ?? document.getElementById(`page-${pageId}`);
 
         if (target) {
             target.classList.add('active');
             this._service.setCurrentPage(pageId, isHistoryNav);
+
+            const navPayload: { pageId: string; previousPageId?: string } = { pageId };
+            if (previousPageId !== undefined) navPayload.previousPageId = previousPageId;
+            eventBus.emit('page:change', navPayload);
         } else {
             tracer.warn(`[NavigationUI] Page not found: ${pageId}`);
         }

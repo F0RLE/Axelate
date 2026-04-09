@@ -138,11 +138,21 @@ export class CoreContainer {
 
     /** Catalog category resolver — replaces globalThis.getCatalogCategory */
     getCatalogCategory(category: string): IApp[] {
-        const catalog = this._services.catalog?.getCatalog();
-        if (!catalog) return [];
+        const services = this._services as Partial<Pick<CoreServices, 'catalog'>>;
+        const catalogService = services.catalog;
+        if (catalogService === undefined) return [];
+
+        const catalog = catalogService.getCatalog() as unknown;
+        if (typeof catalog !== 'object' || catalog === null) {
+            return [];
+        }
+
+        const typedCatalog = catalog as { ai?: IApp[]; services?: IApp[] };
+        const aiCatalog = Array.isArray(typedCatalog.ai) ? typedCatalog.ai : [];
+        const servicesCatalog = Array.isArray(typedCatalog.services) ? typedCatalog.services : [];
         const lowCat = category.toLowerCase();
-        if (lowCat === 'ai' || lowCat === 'ai_text' || lowCat === 'ai_image') return catalog.ai;
-        if (lowCat === 'services') return catalog.services;
+        if (lowCat === 'ai' || lowCat === 'ai_text' || lowCat === 'ai_image') return aiCatalog;
+        if (lowCat === 'services') return servicesCatalog;
         return [];
     }
 }

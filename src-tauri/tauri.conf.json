@@ -48,6 +48,15 @@
         "publisher": "Axelate Team",
         "copyright": "Copyright © 2026 Axelate",
         "active": true,
+        "windows": {
+            "webviewInstallMode": {
+                "type": "downloadBootstrapper",
+                "silent": true
+            },
+            "nsis": {
+                "minimumWebview2Version": "110.0.1531.0"
+            }
+        },
         "targets": [
             "msi",
             "nsis"

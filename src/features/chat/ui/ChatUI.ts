@@ -44,6 +44,7 @@ export class ChatUI {
     private _imageViewerOverlay: HTMLElement | null = null;
     private _imageViewerImage: HTMLImageElement | null = null;
     private readonly _uiTimeouts = new Set<ReturnType<typeof setTimeout>>();
+    private readonly _attachmentObjectUrls = new Set<string>();
 
     private static readonly _downloadIcon = DOMPurify.sanitize(`
         <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -147,8 +148,6 @@ export class ChatUI {
         };
 
         marked.use({ renderer });
-
-        document.addEventListener('click', this._boundDocumentClick);
     }
 
     /**
@@ -157,6 +156,7 @@ export class ChatUI {
     public async init(): Promise<void> {
         if (this._isInitialized || this._isDestroyed) return;
         this._isInitialized = true;
+        document.addEventListener('click', this._boundDocumentClick);
         // Bind AI events
         await this._bindAiEvents();
     }
@@ -220,6 +220,7 @@ export class ChatUI {
         this._imageViewerOverlay?.remove();
         this._imageViewerOverlay = null;
         this._imageViewerImage = null;
+        this._revokeAttachmentObjectUrls();
 
         for (const timeout of this._typingTimeouts.values()) {
             clearTimeout(timeout);
@@ -314,7 +315,6 @@ export class ChatUI {
 
         this._appendAttachments(bubble, opts['attachments'] as IChatAttachment[]);
         this._appendImages(bubble, opts['images'] as { mime: string; data_base64: string }[]);
-        this._appendMeta(bubble, opts['tokens'] as number | undefined);
         if (actions !== null) {
             bubble.appendChild(actions.actionBar);
             if (role === 'assistant') {
@@ -364,6 +364,98 @@ export class ChatUI {
         let accumulatedText = '';
         let renderCounter = 0;
         let lastRenderTime = Date.now();
+        let renderVersion = 0;
+        let isDiscarded = false;
+        let renderTimer: ReturnType<typeof setTimeout> | null = null;
+        let pendingScrollToBottom = false;
+
+        const isStreamingTargetLive = (version: number): boolean =>
+            !this._isDestroyed &&
+            !isDiscarded &&
+            version === renderVersion &&
+            row.isConnected &&
+            textNode.isConnected;
+
+        const renderMarkdown = (
+            sourceText: string,
+            version: number,
+            scrollToBottom = false,
+        ): void => {
+            try {
+                const parseResult = marked.parse(sourceText);
+                if (parseResult instanceof Promise) {
+                    void parseResult
+                        .then((rawHtml) => {
+                            if (!isStreamingTargetLive(version)) return;
+                            textNode.innerHTML = DOMPurify.sanitize(rawHtml);
+                            if (scrollToBottom) this._scrollToBottom();
+                        })
+                        .catch(() => {
+                            if (!isStreamingTargetLive(version)) return;
+                            textNode.textContent = sourceText;
+                            if (scrollToBottom) this._scrollToBottom();
+                        });
+                    return;
+                }
+
+                if (!isStreamingTargetLive(version)) return;
+                textNode.innerHTML = DOMPurify.sanitize(parseResult);
+                if (scrollToBottom) this._scrollToBottom();
+            } catch {
+                if (!isStreamingTargetLive(version)) return;
+                textNode.textContent = sourceText;
+                if (scrollToBottom) this._scrollToBottom();
+            }
+        };
+
+        const flushRender = (scrollToBottom = false): void => {
+            const version = ++renderVersion;
+
+            try {
+                if (
+                    accumulatedText.length < 50 &&
+                    !accumulatedText.includes('`') &&
+                    !accumulatedText.includes('\n')
+                ) {
+                    if (!isStreamingTargetLive(version)) return;
+                    textNode.textContent = accumulatedText;
+                    if (scrollToBottom) this._scrollToBottom();
+                } else {
+                    renderMarkdown(accumulatedText, version, scrollToBottom);
+                }
+            } catch {
+                if (!isStreamingTargetLive(version)) return;
+                textNode.textContent = accumulatedText;
+                if (scrollToBottom) this._scrollToBottom();
+            }
+
+            lastRenderTime = Date.now();
+        };
+
+        const scheduleRender = (immediate = false, scrollToBottom = false): void => {
+            pendingScrollToBottom ||= scrollToBottom;
+
+            if (renderTimer !== null) {
+                if (!immediate) return;
+                clearTimeout(renderTimer);
+                renderTimer = null;
+            }
+
+            const runRender = () => {
+                renderTimer = null;
+                const shouldScroll = pendingScrollToBottom;
+                pendingScrollToBottom = false;
+                flushRender(shouldScroll);
+            };
+
+            if (immediate) {
+                runRender();
+                return;
+            }
+
+            const delay = Math.max(0, 100 - (Date.now() - lastRenderTime));
+            renderTimer = globalThis.setTimeout(runRender, delay);
+        };
 
         return {
             textNode,
@@ -382,33 +474,7 @@ export class ChatUI {
                 const shouldRender =
                     renderCounter <= 3 || now - lastRenderTime > 100 || renderCounter % 4 === 0;
 
-                if (shouldRender) {
-                    try {
-                        // For very short text or first few chunks, skip full Markdown parse for speed
-                        if (
-                            accumulatedText.length < 50 &&
-                            !accumulatedText.includes('`') &&
-                            !accumulatedText.includes('\n')
-                        ) {
-                            textNode.textContent = accumulatedText;
-                        } else {
-                            // marked.parse can return a Promise if async plugins are used
-                            const parseResult = marked.parse(accumulatedText);
-                            if (parseResult instanceof Promise) {
-                                void parseResult.then((rawHtml) => {
-                                    textNode.innerHTML = DOMPurify.sanitize(rawHtml);
-                                });
-                            } else {
-                                textNode.innerHTML = DOMPurify.sanitize(parseResult);
-                            }
-                        }
-                    } catch {
-                        textNode.textContent = accumulatedText;
-                    }
-                    lastRenderTime = now;
-                }
-
-                this._scrollToBottom(true);
+                scheduleRender(shouldRender, true);
             },
             replace: (text: string) => {
                 accumulatedText = text;
@@ -416,50 +482,34 @@ export class ChatUI {
                     copyBtn.dataset['copyText'] = accumulatedText;
                 }
                 renderCounter++;
-                const now = Date.now();
-
-                try {
-                    const parseResult = marked.parse(text);
-                    if (parseResult instanceof Promise) {
-                        void parseResult.then((rawHtml) => {
-                            textNode.innerHTML = DOMPurify.sanitize(rawHtml);
-                        });
-                    } else {
-                        textNode.innerHTML = DOMPurify.sanitize(parseResult);
-                    }
-                } catch {
-                    textNode.textContent = text;
-                }
-
-                lastRenderTime = now;
-                this._scrollToBottom(true);
+                scheduleRender(true, true);
             },
             discard: () => {
+                isDiscarded = true;
+                renderVersion += 1;
+                if (renderTimer !== null) {
+                    clearTimeout(renderTimer);
+                    renderTimer = null;
+                }
                 row.remove();
             },
             finalize: (fullContent: unknown, finalOpts: Record<string, unknown> = {}) => {
                 const safeFullContent = this._safeExtractText(fullContent);
                 if (safeFullContent.trim() === '') {
+                    isDiscarded = true;
+                    renderVersion += 1;
+                    if (renderTimer !== null) {
+                        clearTimeout(renderTimer);
+                        renderTimer = null;
+                    }
                     row.remove();
                     return;
                 }
+                accumulatedText = safeFullContent;
                 if (copyBtn instanceof HTMLElement) {
                     copyBtn.dataset['copyText'] = safeFullContent;
                 }
-
-                try {
-                    const parseResult = marked.parse(safeFullContent);
-                    if (parseResult instanceof Promise) {
-                        void parseResult.then((finalHtml) => {
-                            textNode.innerHTML = DOMPurify.sanitize(finalHtml);
-                            this._scrollToBottom();
-                        });
-                    } else {
-                        textNode.innerHTML = DOMPurify.sanitize(parseResult);
-                    }
-                } catch {
-                    textNode.textContent = safeFullContent;
-                }
+                scheduleRender(true, true);
 
                 if (finalOpts['attachments'] !== undefined) {
                     this._appendAttachments(bubble, finalOpts['attachments'] as IChatAttachment[]);
@@ -475,7 +525,6 @@ export class ChatUI {
                     }
                 }
 
-                this._appendMeta(bubble, finalOpts['tokens'] as number | undefined);
                 if (actions !== null && !bubble.contains(actions.actionBar)) {
                     bubble.appendChild(actions.actionBar);
                 }
@@ -513,7 +562,7 @@ export class ChatUI {
 
     public revealLatestMessage(): void {
         this._scrollToBottom();
-        globalThis.setTimeout(() => {
+        this._setManagedTimeout(() => {
             this._scrollToBottom();
         }, 120);
     }
@@ -1119,18 +1168,11 @@ export class ChatUI {
         }
     }
 
-    /**
-     * Appends metadata (time and tokens) to a message bubble.
-     */
-    private _appendMeta(bubble: HTMLElement, tokens?: number): void {
-        void bubble;
-        void tokens;
-    }
-
     public updateAttachments(files: File[], onRemove: (index: number) => void): void {
         if (!this._attachmentsContainer) return;
         const renderVersion = ++this._attachmentRenderVersion;
 
+        this._revokeAttachmentObjectUrls();
         this._attachmentsContainer.innerHTML = '';
         if (!files.length) {
             this._attachmentsContainer.classList.add('hidden');
@@ -1176,30 +1218,67 @@ export class ChatUI {
             return;
         }
         const name = this._shortenFileName(f.name);
+        if (isImage) {
+            const objectUrl = URL.createObjectURL(f);
+            this._attachmentObjectUrls.add(objectUrl);
 
-        const contentHtml = isImage
-            ? (() => {
-                  const objectUrl = URL.createObjectURL(f);
-                  const badgeHtml =
-                      fileTokens > 0 ? `<div class="media-badge">${String(fileTokens)}</div>` : '';
-                  return `<img src="${objectUrl}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px; opacity: 0.9;" alt="${DOMPurify.sanitize(name)}" onload="URL.revokeObjectURL(this.src)">${badgeHtml}`;
-              })()
-            : this._createFilePillHtml(f.name, fileTokens, name);
+            const imageEl = document.createElement('img');
+            imageEl.src = objectUrl;
+            imageEl.alt = name;
+            imageEl.style.width = '100%';
+            imageEl.style.height = '100%';
+            imageEl.style.objectFit = 'cover';
+            imageEl.style.borderRadius = '10px';
+            imageEl.style.opacity = '0.9';
 
-        card.innerHTML = `
-            ${contentHtml}
-            <button type="button" class="media-remove" title="${getGlobalWin().t('ui.launcher.web.remove_attachment', 'Remove attachment')}">×</button>
-        `;
-
-        const btn: HTMLElement | null = card.querySelector('.media-remove');
-        if (btn !== null) {
-            btn.onclick = (e) => {
-                e.stopPropagation();
-                onRemove(idx);
+            const releaseObjectUrl = (): void => {
+                this._releaseAttachmentObjectUrl(objectUrl);
+                imageEl.onload = null;
+                imageEl.onerror = null;
             };
+
+            imageEl.onload = releaseObjectUrl;
+            imageEl.onerror = releaseObjectUrl;
+            card.appendChild(imageEl);
+
+            if (fileTokens > 0) {
+                const badge = document.createElement('div');
+                badge.className = 'media-badge';
+                badge.textContent = String(fileTokens);
+                card.appendChild(badge);
+            }
+        } else {
+            card.innerHTML = this._createFilePillHtml(f.name, fileTokens, name);
         }
 
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'media-remove';
+        btn.title = getGlobalWin().t('ui.launcher.web.remove_attachment', 'Remove attachment');
+        btn.textContent = '×';
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            onRemove(idx);
+        };
+        card.appendChild(btn);
+
         this._attachmentsContainer.appendChild(card);
+    }
+
+    private _revokeAttachmentObjectUrls(): void {
+        for (const objectUrl of this._attachmentObjectUrls) {
+            URL.revokeObjectURL(objectUrl);
+        }
+        this._attachmentObjectUrls.clear();
+    }
+
+    private _releaseAttachmentObjectUrl(objectUrl: string): void {
+        if (!this._attachmentObjectUrls.has(objectUrl)) {
+            return;
+        }
+
+        URL.revokeObjectURL(objectUrl);
+        this._attachmentObjectUrls.delete(objectUrl);
     }
 
     private _createFilePillHtml(originalName: string, tokens: number, displayName: string): string {

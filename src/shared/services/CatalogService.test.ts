@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CatalogService } from './CatalogService';
-import type { IModule, ICatalogData } from '@/shared/types/coreTypes';
+import type { IModule } from '@/shared/types/coreTypes';
 import type { AppConfig } from '@/shared/types/bindings';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import type { IBridge } from '@/shared/types/IBridge';
@@ -53,9 +53,6 @@ describe('CatalogService', () => {
     let service: CatalogService;
 
     beforeEach(() => {
-        // Mock global window object
-        globalThis.APP_DATA = { ai: [], services: [] } as unknown as ICatalogData;
-        globalThis.getCatalogCategory = vi.fn().mockReturnValue([]);
         globalThis.dispatchEvent = vi.fn();
 
         mockBridge = createMockBridge() as unknown as {
@@ -72,12 +69,7 @@ describe('CatalogService', () => {
     });
 
     describe('Initialization', () => {
-        it('should correctly expose global sync points on instantiation', () => {
-            expect(globalThis.APP_DATA).toBeDefined();
-            expect(typeof globalThis.getCatalogCategory).toBe('function');
-
-            // CatalogService no longer sets getCatalogCategory directly (moved to GlobalBridge)
-            // Verify service methods work instead
+        it('should correctly initialize catalog state on instantiation', () => {
             const catalog = service.getCatalog();
             expect(Array.isArray(catalog.ai)).toBe(true);
             expect(Array.isArray(catalog.services)).toBe(true);

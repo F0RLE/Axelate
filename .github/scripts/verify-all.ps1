@@ -13,8 +13,11 @@ Exec $CARGO @("fmt", "--check") $TAURI_DIR
 Write-Step "Backend: Clippy (Strict Linting)"
 Exec $CARGO @("clippy", "--", "-D", "warnings") $TAURI_DIR
 
-Write-Step "Backend: Tests"
-Exec $CARGO @("test", "--verbose") $TAURI_DIR
+Write-Step "Backend: App Compile Check"
+Exec $CARGO @("check", "--bins", "--verbose") $TAURI_DIR
+
+Write-Step "Backend: Library Tests"
+Exec $CARGO @("test", "--lib", "--verbose") $TAURI_DIR
 
 Write-Success "Backend Verified"
 
@@ -23,6 +26,7 @@ Write-Step "Frontend: Clean Install (CI simulation)"
 Exec $NPM @("ci") $SRC_DIR
 
 Write-Step "Frontend: Checks"
+Sync-FrontendBindings
 Exec $NPM @("run", "typecheck") $SRC_DIR
 Exec $NPM @("run", "lint") $SRC_DIR
 Exec $NPM @("run", "format:check") $SRC_DIR

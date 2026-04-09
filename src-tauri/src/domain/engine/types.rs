@@ -88,9 +88,6 @@ fn default_version() -> String {
 pub struct EngineConfig {
     /// Engine identifier (matches EngineDefinition.id)
     pub engine_id: String,
-    /// Port to bind (local engines)
-    #[serde(default = "default_port")]
-    pub port: u16,
     /// Number of GPU layers (-1 = all)
     #[serde(default = "default_gpu_layers")]
     pub gpu_layers: i32,

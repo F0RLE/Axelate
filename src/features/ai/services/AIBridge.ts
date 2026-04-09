@@ -61,12 +61,14 @@ export class AIBridge implements IAIBridge {
             return;
         }
 
+        const core = this._core;
+
         try {
             await this._transport.init();
             await this._manager.init();
 
-            if (this._core?.tauriProvider.isTauri() === true) {
-                const unlistenLog = await this._core.tauriProvider.listen<{
+            if (core.tauriProvider.isTauri()) {
+                const unlistenLog = await core.tauriProvider.listen<{
                     engine_id: string;
                     line: string;
                 }>('ai:engine:log', (payload) => {

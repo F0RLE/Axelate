@@ -237,10 +237,7 @@ impl ChatSessionManager {
         let mut session = self.sessions.get_mut(session_id)?;
         let user_index = session.history.iter().rposition(|msg| msg.role == "user")?;
 
-        let removed_text = match &session.history.get(user_index)?.content {
-            serde_json::Value::String(text) => text.clone(),
-            other => serde_json::to_string(other).ok()?,
-        };
+        let removed_text = extract_message_text(&session.history.get(user_index)?.content)?;
 
         session.history.truncate(user_index);
         session.summary = None;
@@ -281,17 +278,19 @@ impl ChatSessionManager {
             .checked_sub(LOCAL_RECENT_TURNS)
             .and_then(|index| turn_ranges.get(index))
             .map_or(0, |(start, _)| *start);
+        let persisted_summary_count =
+            usize::try_from(session.summary_message_count).unwrap_or(usize::MAX);
 
-        if recent_start_index < session.summary_message_count {
+        if recent_start_index < persisted_summary_count {
             session.summary = None;
             session.summary_message_count = 0;
             self.dirty.store(true, Ordering::Relaxed);
         }
 
-        if recent_start_index > session.summary_message_count {
+        if recent_start_index > persisted_summary_count {
             if let Some(new_summary_slice) = session
                 .history
-                .get(session.summary_message_count..recent_start_index)
+                .get(persisted_summary_count..recent_start_index)
             {
                 let summary_lines = build_summary_lines(new_summary_slice);
                 if !summary_lines.is_empty() {
@@ -301,7 +300,8 @@ impl ChatSessionManager {
                         summary_budget,
                         model,
                     );
-                    session.summary_message_count = recent_start_index;
+                    session.summary_message_count =
+                        u32::try_from(recent_start_index).unwrap_or(u32::MAX);
                     self.dirty.store(true, Ordering::Relaxed);
                 }
             }
@@ -363,6 +363,33 @@ fn messages_equivalent(left: &ChatMessage, right: &ChatMessage) -> bool {
     left.role == right.role
         && left.content == right.content
         && left.thought_signature == right.thought_signature
+}
+
+fn extract_message_text(content: &serde_json::Value) -> Option<String> {
+    match content {
+        serde_json::Value::String(text) => Some(text.clone()),
+        serde_json::Value::Array(parts) => {
+            let text = parts
+                .iter()
+                .filter_map(|part| {
+                    let object = part.as_object()?;
+                    if object.get("type").and_then(serde_json::Value::as_str) != Some("text") {
+                        return None;
+                    }
+                    object
+                        .get("text")
+                        .and_then(serde_json::Value::as_str)
+                        .map(ToOwned::to_owned)
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string();
+
+            if text.is_empty() { None } else { Some(text) }
+        }
+        other => serde_json::to_string(other).ok(),
+    }
 }
 
 fn find_history_overlap(existing: &[ChatMessage], incoming: &[ChatMessage]) -> usize {
@@ -683,6 +710,34 @@ mod tests {
         assert_eq!(history[0].role, "user");
         assert_eq!(history[1].role, "assistant");
         assert!(manager.dirty.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_rewind_last_turn_extracts_text_from_multimodal_content() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+        };
+
+        manager.merge_request_messages(
+            "session-1",
+            &[ChatMessage {
+                id: "msg-1".to_string(),
+                role: "user".to_string(),
+                content: serde_json::json!([
+                    { "type": "text", "text": "look here" },
+                    {
+                        "type": "image_url",
+                        "image_url": { "url": "data:image/png;base64,ZmFrZQ==" }
+                    }
+                ]),
+                thought_signature: None,
+            }],
+        );
+
+        let removed = manager.rewind_last_turn("session-1");
+
+        assert_eq!(removed.as_deref(), Some("look here"));
     }
 
     #[test]

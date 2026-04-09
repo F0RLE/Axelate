@@ -110,6 +110,38 @@ pub fn get_logs_since(since: f64) -> Vec<LogEntry> {
     }
 }
 
+fn is_frontend_relevant_log(entry: &LogEntry) -> bool {
+    let message = entry.message.to_ascii_uppercase();
+    let source = entry.source.to_ascii_uppercase();
+
+    let is_bot_source = source.contains("CHATSERVICE")
+        || source.contains("AIBRIDGE")
+        || source.contains("AI_SERVICE");
+
+    let is_ai_noise = message.contains("GEMINI_ERROR")
+        || message.contains("ERROR 429")
+        || message.contains("ERROR 400")
+        || message.contains("ERROR 403")
+        || message.contains("ERROR 500")
+        || message.contains("QUOTA")
+        || message.contains("PERMISSION_DENIED")
+        || message.contains("INVALID_ARGUMENT")
+        || message.contains("DEADLINE_EXCEEDED")
+        || message.contains("FAILED_PRECONDITION")
+        || message.contains("UNAVAILABLE")
+        || message.contains("INTERNAL_ERROR");
+
+    !(is_bot_source || is_ai_noise)
+}
+
+/// Retrieves frontend-facing log entries since a timestamp with noisy AI chatter removed.
+pub fn get_frontend_logs_since(since: f64) -> Vec<LogEntry> {
+    get_logs_since(since)
+        .into_iter()
+        .filter(is_frontend_relevant_log)
+        .collect()
+}
+
 /// Clears all log entries from the store
 pub fn clear_logs() {
     if let Ok(mut store) = LOG_STORE.lock() {

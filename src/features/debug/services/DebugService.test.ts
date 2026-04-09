@@ -44,13 +44,11 @@ describe('DebugService', () => {
         expect(logs[0]?.message).toBe('Test log 1');
     });
 
-    it('should filter noisy AI logs', async () => {
-        const noisyLogs: ILogEntry[] = [
-            { timestamp: 100, source: 'CHATSERVICE', level: 'INFO', message: 'Noise' },
+    it('should trust backend-filtered log payloads without extra frontend filtering', async () => {
+        const filteredLogs: ILogEntry[] = [
             { timestamp: 200, source: 'TEST', level: 'ERROR', message: 'Real Error' },
-            { timestamp: 300, source: 'GEMINI', level: 'ERROR', message: 'ERROR 429' },
         ];
-        setupTauri(bridge, true, noisyLogs);
+        setupTauri(bridge, true, filteredLogs);
 
         const logs = await service.fetchLogs();
 
@@ -166,12 +164,8 @@ describe('DebugService', () => {
         expect(logs).toHaveLength(1);
     });
 
-    it('should return empty when all logs are filtered (L90)', async () => {
-        const allNoisy: ILogEntry[] = [
-            { timestamp: 100, source: 'CHATSERVICE', level: 'INFO', message: 'filtered' },
-            { timestamp: 200, source: 'AIBRIDGE', level: 'INFO', message: 'filtered' },
-        ];
-        setupTauri(bridge, true, allNoisy);
+    it('should return empty when backend returns no new logs', async () => {
+        setupTauri(bridge, true, []);
         const logs = await service.fetchLogs();
         expect(logs).toHaveLength(0);
     });

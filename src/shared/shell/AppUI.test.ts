@@ -19,15 +19,6 @@ describe('AppUI lifecycle', () => {
         document.body.innerHTML = '';
         (
             globalThis as unknown as {
-                APP_DATA: { ai: unknown[]; services: unknown[]; stars: unknown[] };
-            }
-        ).APP_DATA = {
-            ai: [],
-            services: [],
-            stars: [],
-        };
-        (
-            globalThis as unknown as {
                 uiState: {
                     removeSelectedModule: ReturnType<typeof vi.fn>;
                     updateState: ReturnType<typeof vi.fn>;
@@ -95,7 +86,16 @@ describe('AppUI lifecycle', () => {
             removeBackAction: vi.fn(),
         } as unknown as NavigationService;
 
-        return new AppUI(platformServiceMock as unknown as ModulePlatformService, navigation);
+        return new AppUI(
+            platformServiceMock as unknown as ModulePlatformService,
+            navigation,
+            (category: string) => {
+                const globals = globalThis as unknown as {
+                    getCatalogCategory: ReturnType<typeof vi.fn>;
+                };
+                return (globals.getCatalogCategory as unknown as (key: string) => IApp[])(category);
+            },
+        );
     }
 
     function mountAiCard(currentModule = 'text-model'): HTMLElement {
@@ -234,7 +234,7 @@ describe('AppUI lifecycle', () => {
         appUI = null;
     });
 
-    it('should delegate modal opening and prompt tab switching', () => {
+    it('should delegate modal opening', () => {
         appUI = createAppUI();
         const modalOpenSpy = vi.spyOn(
             (
@@ -245,28 +245,12 @@ describe('AppUI lifecycle', () => {
             'openAppSelection',
         );
 
-        document.body.innerHTML = `
-            <div id="prompt-tab-chat" class="prompt-tab-content" style="display:block"></div>
-            <div id="prompt-tab-settings" class="prompt-tab-content"></div>
-            <div><button id="tab-a"></button><button id="tab-b"></button></div>
-        `;
-
         appUI.openAppSelection('ai', [{ id: 'gpt', installed: true } as IApp]);
         expect(modalOpenSpy).toHaveBeenCalledWith(
             'ai_text',
             [{ id: 'gpt', installed: true }],
             undefined,
         );
-
-        const btn = document.getElementById('tab-b') as HTMLElement;
-        appUI.showPromptTab('settings', btn);
-        expect((document.getElementById('prompt-tab-chat') as HTMLElement).style.display).toBe(
-            'none',
-        );
-        expect((document.getElementById('prompt-tab-settings') as HTMLElement).style.display).toBe(
-            'block',
-        );
-        expect(btn.style.background).toBe('var(--primary)');
     });
 
     it('should update and clear module cards while managing ai slots', () => {
@@ -356,6 +340,37 @@ describe('AppUI lifecycle', () => {
         appUI.updateModuleCard('services', newApp);
 
         expect(platformServiceMock.stop).toHaveBeenCalledWith(oldApp);
+    });
+
+    it('should swallow stop errors when switching away from a previous module', async () => {
+        appUI = createAppUI();
+        platformServiceMock.stop.mockRejectedValueOnce(new Error('stop failed'));
+        document.body.innerHTML = `
+            <div id="services-module-card" class="selected">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        const oldApp = { id: 'svc-old', name: 'Old Service', installed: true } as IApp;
+        const newApp = { id: 'svc-new', name: 'New Service', installed: true } as IApp;
+
+        (
+            globalThis as unknown as {
+                getCatalogCategory: ReturnType<typeof vi.fn>;
+            }
+        ).getCatalogCategory.mockImplementation((category: string) =>
+            category === 'services' ? [oldApp, newApp] : [],
+        );
+
+        appUI.updateModuleCard('services', oldApp);
+
+        expect(() => {
+            appUI?.updateModuleCard('services', newApp);
+        }).not.toThrow();
+
+        await Promise.resolve();
     });
 
     it('should reset services card instead of showing an AI module when clearing services', () => {
@@ -549,6 +564,59 @@ describe('AppUI lifecycle', () => {
         expect(mockedGlobals.showToast).not.toHaveBeenCalled();
     });
 
+    it('should stop stale launched module after quick reselection', async () => {
+        appUI = createAppUI();
+
+        let releaseFirstLaunch!: () => void;
+        const firstLaunchPromise = new Promise<void>((resolve) => {
+            releaseFirstLaunch = resolve;
+        });
+        const launchApp = vi
+            .fn<(...args: [string]) => Promise<void>>()
+            .mockImplementationOnce(async () => firstLaunchPromise)
+            .mockResolvedValueOnce(undefined);
+        (globalThis as unknown as { launchApp: typeof launchApp }).launchApp = launchApp;
+
+        const privateAppUI = appUI as unknown as {
+            _performSelectionAction: (category: string, app: IApp) => void;
+        };
+        const firstApp = {
+            id: 'svc-a',
+            name: 'Service A',
+            type: 'local',
+            icon: 'A',
+            desc: 'A',
+            installed: true,
+        } as IApp;
+        const secondApp = {
+            id: 'svc-b',
+            name: 'Service B',
+            type: 'local',
+            icon: 'B',
+            desc: 'B',
+            installed: true,
+        } as IApp;
+
+        document.body.innerHTML = `
+            <div id="services-module-card" class="empty">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        privateAppUI._performSelectionAction('services', firstApp);
+        privateAppUI._performSelectionAction('services', secondApp);
+
+        releaseFirstLaunch();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(launchApp).toHaveBeenNthCalledWith(1, 'svc-a');
+        expect(launchApp).toHaveBeenNthCalledWith(2, 'svc-b');
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(firstApp);
+    });
+
     it('should not reopen modal after delete if app selection was already closed', async () => {
         appUI = createAppUI();
 
@@ -626,10 +694,8 @@ describe('AppUI lifecycle', () => {
         expect(refreshSpy).not.toHaveBeenCalled();
     });
 
-    it('should resolve app by id from catalog helper without APP_DATA fallback', () => {
+    it('should resolve app by id from injected catalog resolver', () => {
         appUI = createAppUI();
-
-        delete (globalThis as Record<string, unknown>)['APP_DATA'];
         (
             globalThis as unknown as {
                 getCatalogCategory: ReturnType<typeof vi.fn>;

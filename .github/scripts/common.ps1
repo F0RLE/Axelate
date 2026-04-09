@@ -80,3 +80,15 @@ function Find-WindowsSDK {
         Write-ErrorMsg "rc.exe not found. Install Windows 10/11 SDK."
     }
 }
+
+function Ensure-FrontendDependencies {
+    if (-not (Test-Path (Join-Path $script:SRC_DIR "node_modules"))) {
+        Write-Step "Installing frontend dependencies..."
+        Exec $script:NPM @("ci") $script:SRC_DIR
+    }
+}
+
+function Sync-FrontendBindings {
+    Write-Step "Syncing Rust -> TypeScript bindings..."
+    Exec $script:NPM @("run", "bindings:sync") $script:SRC_DIR
+}

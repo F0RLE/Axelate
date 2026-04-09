@@ -20,54 +20,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: src/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
-      - name: Install dependencies (frontend)
-        run: |
-          cd src
-          npm install
-
-      - name: Install dependencies (backend)
-        run: |
-          # Tauri CLI is typically needed, or we use npm run tauri
-          # npm install handled it
-          echo "Dependencies installed"
-
-      - name: Build App
-        run: |
-          cd src
-          npm run tauri:build
-
-      - name: Create Release Branch content
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release_artifact
-          # Try to find the bundle first (Installer)
-          $installer = Get-ChildItem -Path "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-
-          if ($installer) {
-              Write-Host "Found Installer: $($installer.Name)"
-              Copy-Item -Path $installer.FullName -Destination "release_artifact/"
-          } else {
-              # Fallback to raw exe
-              $exe = Get-ChildItem -Path "src-tauri/target/release" -Filter "*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Axelate*" } | Select-Object -First 1
-              if ($exe) {
-                   Write-Host "Found Raw EXE: $($exe.Name)"
-                   Copy-Item -Path $exe.FullName -Destination "release_artifact/"
-              } else {
-                   Write-Host "Error: No executable found in target/release or bundles."
-                   Get-ChildItem -Path "src-tauri/target" -Recurse
-                   exit 1
-              }
-          }
-
-      - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
         with:
-          files: release_artifact/*.exe
+          workspaces: "src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: |
+          cd src
+          npm ci
+
+      - name: Build and publish with official Tauri action
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+        with:
+          projectPath: src
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Axelate {0}', github.ref_name) || '' }}
+          releaseDraft: false
+          prerelease: false

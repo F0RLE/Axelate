@@ -431,8 +431,11 @@ describe('I18nService', () => {
             await vi.runAllTimersAsync();
             await loadPromise;
             expect(fetchMock).toHaveBeenCalledWith(
-                '/api/settings',
-                expect.objectContaining({ method: 'POST' }),
+                '/api/settings/save',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({ key: 'LANGUAGE', value: 'zh' }),
+                }),
             );
         });
     });

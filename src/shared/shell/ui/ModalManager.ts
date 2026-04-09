@@ -17,6 +17,7 @@ export class ModalManager {
     private _overlayClickModal: HTMLDialogElement | null = null;
     private _filterPopulateTimer: ReturnType<typeof setTimeout> | null = null;
     private _filterStyleResetTimer: ReturnType<typeof setTimeout> | null = null;
+    private _filterTransitionVersion = 0;
     // Keeps reference for potential future cleanup
     private readonly _progressHandler: (e: Event) => void;
     private readonly _boundOverlayClick = (e: MouseEvent) => {
@@ -129,13 +130,7 @@ export class ModalManager {
         }
         // Otherwise keep whatever was previously selected (e.g. when refreshing)
 
-        this._updateAppModalTitle(category);
-
-        this._updateSidebar(category.startsWith('ai') ? 'ai' : category, category, apps);
-        this._populateAppList(listEl, apps, category, this._currentSelectedAppId);
-
-        // Calculate needed width for any language dynamically
-        this._updateDynamicSidebarWidth();
+        this._renderSelectionState(category, apps, this._currentSelectedAppId);
 
         if (modal.open && !modal.classList.contains('hidden')) {
             this._overlayClickModal = modal;
@@ -191,15 +186,24 @@ export class ModalManager {
         return modal !== null && modal.open && !modal.classList.contains('hidden');
     }
 
-    public refreshCurrentSelection(): void {
-        if (this._currentCategory !== null && this._currentApps.length > 0) {
-            if (this.isAppSelectionOpen()) {
-                this.openAppSelection(
-                    this._currentCategory,
-                    this._currentApps,
-                    this._currentSelectedAppId ?? undefined,
-                );
-            }
+    public refreshCurrentSelection(apps?: IApp[], selectedAppId?: string | null): void {
+        if (apps !== undefined) {
+            this._currentApps = apps;
+        }
+        if (selectedAppId !== undefined) {
+            this._currentSelectedAppId = selectedAppId;
+        }
+
+        if (this._currentCategory === null || this._currentApps.length === 0) {
+            return;
+        }
+
+        if (this.isAppSelectionOpen()) {
+            this._renderSelectionState(
+                this._currentCategory,
+                this._currentApps,
+                this._currentSelectedAppId,
+            );
         }
     }
 
@@ -267,6 +271,11 @@ export class ModalManager {
         t: (key: string, defaultText: string) => string,
     ): void {
         const hasImageApps = apps.some((app) => app.capability === 'image');
+        if (!hasImageApps && this._currentFilter === 'image') {
+            this._currentFilter = 'text';
+        }
+
+        const textBtn = document.getElementById('filter-text-btn') as HTMLButtonElement | null;
         const imgBtn = document.getElementById('filter-image-btn') as HTMLButtonElement | null;
         if (imgBtn === null) return;
 
@@ -274,6 +283,8 @@ export class ModalManager {
         imgBtn.style.opacity = hasImageApps ? '' : '0.4';
         imgBtn.style.cursor = hasImageApps ? '' : 'not-allowed';
         imgBtn.title = hasImageApps ? '' : t('ui.launcher.web.coming_soon', 'Coming soon');
+        if (textBtn) textBtn.classList.toggle('active', this._currentFilter === 'text');
+        imgBtn.classList.toggle('active', this._currentFilter === 'image');
     }
 
     private _bindFilterEvents(category: string): void {
@@ -295,6 +306,7 @@ export class ModalManager {
             const listEl = document.getElementById('app-modal-list');
             if (listEl) {
                 this._cancelPendingFilterTransition();
+                const transitionVersion = ++this._filterTransitionVersion;
                 listEl.style.willChange = 'opacity, transform';
                 listEl.style.transition =
                     'opacity 0.24s cubic-bezier(0.4, 0, 0.2, 1), transform 0.24s cubic-bezier(0.4, 0, 0.2, 1)';
@@ -303,6 +315,14 @@ export class ModalManager {
 
                 this._filterPopulateTimer = setTimeout(() => {
                     this._filterPopulateTimer = null;
+                    if (
+                        transitionVersion !== this._filterTransitionVersion ||
+                        !this.isAppSelectionOpen() ||
+                        this._currentCategory !== category ||
+                        document.getElementById('app-modal-list') !== listEl
+                    ) {
+                        return;
+                    }
                     this._populateAppList(
                         listEl,
                         this._currentApps,
@@ -314,6 +334,12 @@ export class ModalManager {
                     listEl.style.transform = 'translateY(0)';
                     this._filterStyleResetTimer = setTimeout(() => {
                         this._filterStyleResetTimer = null;
+                        if (
+                            transitionVersion !== this._filterTransitionVersion ||
+                            document.getElementById('app-modal-list') !== listEl
+                        ) {
+                            return;
+                        }
                         listEl.style.willChange = 'auto';
                     }, 300);
                 }, 200);
@@ -335,6 +361,7 @@ export class ModalManager {
     }
 
     private _cancelPendingFilterTransition(): void {
+        this._filterTransitionVersion += 1;
         if (this._filterPopulateTimer !== null) {
             clearTimeout(this._filterPopulateTimer);
             this._filterPopulateTimer = null;
@@ -352,6 +379,20 @@ export class ModalManager {
         listEl.style.removeProperty('transition');
         listEl.style.removeProperty('opacity');
         listEl.style.removeProperty('transform');
+    }
+
+    private _renderSelectionState(
+        category: string,
+        apps: IApp[],
+        selectedAppId: string | null,
+    ): void {
+        const listEl = document.getElementById('app-modal-list');
+        if (!(listEl instanceof HTMLElement)) return;
+
+        this._updateAppModalTitle(category);
+        this._updateSidebar(category.startsWith('ai') ? 'ai' : category, category, apps);
+        this._populateAppList(listEl, apps, category, selectedAppId);
+        this._updateDynamicSidebarWidth();
     }
 
     private _populateAppList(

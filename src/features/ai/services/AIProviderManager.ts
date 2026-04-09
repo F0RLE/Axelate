@@ -1,6 +1,7 @@
 import type { Core } from '@/app/init';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
+import type { IAICatalogApp } from '../types/aiTypes';
 
 export class AIProviderManager {
     private _core: Core | null = null;
@@ -103,7 +104,11 @@ export class AIProviderManager {
 
     public get maxOutputTokens(): number | undefined {
         if (this._activeProviderId === null) return undefined;
-        const modelData = getModelData(this._activeProviderId, this._model);
+        const modelData = getModelData(
+            this._getAiCatalogApps(),
+            this._activeProviderId,
+            this._model,
+        );
         return modelData?.maxOutputTokens ?? undefined;
     }
 
@@ -156,17 +161,18 @@ export class AIProviderManager {
     private _getPersistedModel(providerId: string): string | null {
         if (!this._core) return null;
         const persistedModel = this._core.aiSettings.getSelectedAIModel(providerId);
-        if (persistedModel === undefined || persistedModel === null) {
+        if (typeof persistedModel !== 'string' || persistedModel.trim() === '') {
             return null;
         }
 
-        const normalizedModel = persistedModel.trim();
-        return normalizedModel === '' ? null : normalizedModel;
+        return persistedModel.trim();
     }
 
     private _getDefaultModel(providerId: string): string {
-        const catalogModel = getMostPowerfulModel(providerId);
-        if (catalogModel !== null && catalogModel.trim() !== '') return catalogModel;
+        const catalogModel = getMostPowerfulModel(this._getAiCatalogApps(), providerId);
+        if (typeof catalogModel === 'string' && catalogModel.trim() !== '') {
+            return catalogModel;
+        }
 
         const fallbacks: Record<string, string> = {
             gpt: 'gpt-5.4',
@@ -182,6 +188,32 @@ export class AIProviderManager {
 
     private _resolveModel(providerId: string): string {
         return this._getPersistedModel(providerId) ?? this._getDefaultModel(providerId);
+    }
+
+    private _getAiCatalogApps(): IAICatalogApp[] {
+        const catalogService = (
+            this._core as (Partial<Pick<Core, 'catalog'>> & { catalog?: unknown }) | null
+        )?.catalog;
+        if (!this._isCatalogService(catalogService)) return [];
+
+        const catalog = catalogService.getCatalog() as unknown;
+        if (typeof catalog !== 'object' || catalog === null) {
+            return [];
+        }
+
+        const aiCatalog = (catalog as { ai?: IAICatalogApp[] }).ai;
+        return Array.isArray(aiCatalog) ? aiCatalog : [];
+    }
+
+    private _isCatalogService(
+        value: unknown,
+    ): value is { getCatalog: () => { ai?: IAICatalogApp[] } } {
+        return (
+            typeof value === 'object' &&
+            value !== null &&
+            'getCatalog' in value &&
+            typeof (value as { getCatalog?: unknown }).getCatalog === 'function'
+        );
     }
 
     private async _getSecureVal(key: string): Promise<string | null> {

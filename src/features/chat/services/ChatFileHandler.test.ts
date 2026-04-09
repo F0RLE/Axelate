@@ -158,6 +158,16 @@ describe('ChatFileHandler', () => {
             handler.clear();
             expect(callback).toHaveBeenCalledTimes(1);
         });
+
+        it('should stop notifying after callback is cleared', () => {
+            const callback = vi.fn();
+            handler.setUpdateCallback(callback);
+            handler.clearUpdateCallback();
+
+            handler.addFiles([createFile('f.txt', 'data')]);
+
+            expect(callback).not.toHaveBeenCalled();
+        });
     });
 
     // ---------------------------------------------------------- processForSend (web fallback)
@@ -224,6 +234,7 @@ describe('ChatFileHandler', () => {
                 name: 'doc.txt',
                 content: 'extracted text',
                 is_archive: false,
+                token_estimate: 7,
             });
 
             handler.addFiles([createBackendFile('doc.txt', 'raw')]);
@@ -235,6 +246,7 @@ describe('ChatFileHandler', () => {
             );
             expect(result.combinedText).toContain('extracted text');
             expect(result.attachments).toHaveLength(1);
+            expect(result.attachments[0]?.tokens).toBe(7);
         });
 
         it('should handle backend error in result', async () => {
@@ -256,6 +268,7 @@ describe('ChatFileHandler', () => {
                 name: 'project.zip',
                 content: 'extracted archive content',
                 is_archive: true,
+                token_estimate: 12,
             });
 
             handler.addFiles([createBackendFile('project.zip', 'zip data', 'application/zip')]);
@@ -263,6 +276,7 @@ describe('ChatFileHandler', () => {
 
             expect(result.attachments).toHaveLength(1);
             expect(result.attachments[0]?.type).toBe('application/zip');
+            expect(result.attachments[0]?.tokens).toBe(12);
         });
 
         it('should handle image file sent to backend with no content', async () => {
@@ -270,6 +284,7 @@ describe('ChatFileHandler', () => {
                 name: 'photo.png',
                 content: '',
                 is_archive: false,
+                token_estimate: 0,
             });
             (readFileAsBase64 as unknown as Mock).mockResolvedValue('imgBase64');
 
@@ -285,6 +300,7 @@ describe('ChatFileHandler', () => {
                 name: 'binary.bin',
                 content: '',
                 is_archive: false,
+                token_estimate: 0,
             });
 
             handler.addFiles([createBackendFile('binary.bin', 'data', 'application/octet-stream')]);
@@ -308,6 +324,7 @@ describe('ChatFileHandler', () => {
                 name: 'pkg.tar.gz',
                 content: 'archive content',
                 is_archive: true,
+                token_estimate: 5,
             });
 
             const file = createBackendFile('pkg.tar.gz', 'data', '');
@@ -326,6 +343,7 @@ describe('ChatFileHandler', () => {
                 name: 'readme',
                 content: 'some readme text',
                 is_archive: false,
+                token_estimate: 3,
             });
 
             const file = createBackendFile('readme', 'data', '');
@@ -365,11 +383,11 @@ describe('ChatFileHandler', () => {
         });
 
         it('should include token estimate for attached text files', async () => {
-            (isTextFile as unknown as Mock).mockReturnValue(true);
-            (readFileAsText as unknown as Mock).mockResolvedValue('some text content');
-            (getTokenCount as unknown as Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(11);
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.invoke.mockResolvedValue({ token_estimate: 11 });
+            (getTokenCount as unknown as Mock).mockResolvedValueOnce(1);
 
-            handler.addFiles([createFile('doc.txt', 'content')]);
+            handler.addFiles([createBackendFile('doc.txt', 'content')]);
             const tokens = await handler.getTotalTokenEstimate('base');
 
             expect(tokens).toBe(12);
@@ -400,6 +418,16 @@ describe('ChatFileHandler', () => {
         it('should return 258 for image files', async () => {
             const tokens = await handler.getFileTokenEstimate(createImageFile());
             expect(tokens).toBe(258);
+        });
+
+        it('should use backend token estimate in Tauri mode', async () => {
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.invoke.mockResolvedValue({ token_estimate: 42 });
+
+            const tokens = await handler.getFileTokenEstimate(
+                createBackendFile('a.txt', 'content'),
+            );
+            expect(tokens).toBe(42);
         });
 
         it('should read text file and count tokens', async () => {

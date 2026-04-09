@@ -4,6 +4,18 @@
 #[cfg(all(windows, not(test)))]
 use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
 
+#[cfg(not(windows))]
+fn normalize_supported_language(language: &str) -> String {
+    let lower = language.trim().to_ascii_lowercase();
+    if lower.starts_with("ru") {
+        "ru".to_string()
+    } else if lower.starts_with("zh") {
+        "zh".to_string()
+    } else {
+        "en".to_string()
+    }
+}
+
 /// Detect system UI language using Windows API
 /// Returns language code: "ru", "zh", or "en" (default)
 pub fn detect_system_language() -> String {
@@ -16,27 +28,21 @@ pub fn detect_system_language() -> String {
         match lang_id {
             0x19 => "ru".to_string(), // Russian
             0x04 => "zh".to_string(), // Chinese
-            0x07 => "de".to_string(), // German
-            0x0C => "fr".to_string(), // French
-            0x0A => "es".to_string(), // Spanish
-            0x11 => "ja".to_string(), // Japanese
-            0x12 => "ko".to_string(), // Korean
             _ => "en".to_string(),    // English (default)
         }
     }
 
-    #[cfg(any(not(windows), test))]
+    #[cfg(test)]
     {
         "en".to_string()
     }
 
     #[cfg(not(windows))]
     {
-        // Fallback for non-Windows platforms
-        std::env::var("LANG")
-            .ok()
-            .and_then(|lang| lang.split('_').next().map(|s| s.to_lowercase()))
-            .unwrap_or_else(|| "en".to_string())
+        std::env::var("LC_ALL")
+            .or_else(|_| std::env::var("LANG"))
+            .map(|lang| normalize_supported_language(&lang))
+            .unwrap_or_else(|_| "en".to_string())
     }
 }
 
