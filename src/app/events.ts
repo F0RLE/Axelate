@@ -53,85 +53,100 @@ export class EventHandler {
      */
     private _initGlobalDelegation(): void {
         this._addListener(document.body, 'click', (e: Event): void => {
-            void (async (): Promise<void> => {
-                const target = e.target;
-                if (!(target instanceof Element)) return;
+            const target = e.target;
+            if (!(target instanceof Element)) return;
 
-                // 1. Navigation Logic [data-page]
-                const navBtn = target.closest('[data-page]');
-                if (navBtn instanceof HTMLElement) {
-                    const pageId = navBtn.dataset['page'];
-                    if (pageId !== undefined) {
-                        e.preventDefault();
-                        tracer.debug(`[EventHandler] Navigating to: ${pageId}`);
-                        void this._core.navigationUI.showPage(pageId, navBtn);
-                        return;
-                    }
-                }
-
-                // 2. Language Switcher Trigger (header)
-                const trigger = target.closest('#current-lang-trigger');
-                if (trigger) {
-                    e.preventDefault();
-                    this._core.i18nUI.toggleMenu();
-                    return;
-                }
-
-                // 3. Language Selection [data-lang]
-                const langBtn = target.closest('.lang-btn[data-lang]');
-                if (langBtn instanceof HTMLElement) {
-                    const lang = langBtn.dataset['lang'];
-                    if (lang !== undefined) {
-                        e.preventDefault();
-                        tracer.debug(`[EventHandler] Switching language to: ${lang}`);
-                        await this._core.i18nUI.setLanguage(lang);
-                        return;
-                    }
-                }
-
-                // 4. Window Controls (Moved to direct listeners)
-                const addBtn = target.closest('#ai-module-add-btn, #services-module-add-btn');
-                if (addBtn instanceof HTMLElement) {
-                    e.stopPropagation();
-                    const type = addBtn.id === 'ai-module-add-btn' ? 'ai' : 'services';
-                    this._core.appUI.openAppSelection(type);
-                    return;
-                }
-
-                const moduleCard = target.closest('#ai-module-card, #services-module-card');
-                if (moduleCard instanceof HTMLElement) {
-                    if (
-                        target.closest(
-                            '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
-                        )
-                    ) {
-                        return;
-                    }
-                    const type = moduleCard.id === 'ai-module-card' ? 'ai' : 'services';
-                    this._core.appUI.openAppSelection(type);
-                    return;
-                }
-
-                if (target.closest('#clear-chat-btn')) {
-                    this._core.chatController.clearChat();
-                    return;
-                }
-
-                if (target.closest('#chat-attach-btn')) {
-                    void this._core.chatController.pickChatFiles();
-                    return;
-                }
-
-                if (target.closest('#chat-voice-btn')) {
-                    this._core.chatController.toggleVoiceInput();
-                    return;
-                }
-
-                if (target.closest('#chat-send-btn')) {
-                    void this._core.chatController.sendChat();
-                }
-            })();
+            void this._handleGlobalClick(e, target);
         });
+    }
+
+    private async _handleGlobalClick(e: Event, target: Element): Promise<void> {
+        if (await this._handleNavigationClick(e, target)) return;
+        if (this._handleLanguageMenuToggle(e, target)) return;
+        if (await this._handleLanguageSelection(e, target)) return;
+        if (this._handleModuleAddClick(e, target)) return;
+        if (this._handleModuleCardClick(target)) return;
+        await this._handleChatActionClick(target);
+    }
+
+    private async _handleNavigationClick(e: Event, target: Element): Promise<boolean> {
+        const navBtn = target.closest('[data-page]');
+        if (!(navBtn instanceof HTMLElement)) return false;
+
+        const pageId = navBtn.dataset['page'];
+        if (pageId === undefined) return false;
+
+        e.preventDefault();
+        tracer.debug(`[EventHandler] Navigating to: ${pageId}`);
+        await this._core.navigationUI.showPage(pageId, navBtn);
+        return true;
+    }
+
+    private _handleLanguageMenuToggle(e: Event, target: Element): boolean {
+        const trigger = target.closest('#current-lang-trigger');
+        if (trigger === null) return false;
+
+        e.preventDefault();
+        this._core.i18nUI.toggleMenu();
+        return true;
+    }
+
+    private async _handleLanguageSelection(e: Event, target: Element): Promise<boolean> {
+        const langBtn = target.closest('.lang-btn[data-lang]');
+        if (!(langBtn instanceof HTMLElement)) return false;
+
+        const lang = langBtn.dataset['lang'];
+        if (lang === undefined) return false;
+
+        e.preventDefault();
+        tracer.debug(`[EventHandler] Switching language to: ${lang}`);
+        await this._core.i18nUI.setLanguage(lang);
+        return true;
+    }
+
+    private _handleModuleAddClick(e: Event, target: Element): boolean {
+        const addBtn = target.closest('#ai-module-add-btn, #services-module-add-btn');
+        if (!(addBtn instanceof HTMLElement)) return false;
+
+        e.stopPropagation();
+        const type = addBtn.id === 'ai-module-add-btn' ? 'ai' : 'services';
+        this._core.appUI.openAppSelection(type);
+        return true;
+    }
+
+    private _handleModuleCardClick(target: Element): boolean {
+        const moduleCard = target.closest('#ai-module-card, #services-module-card');
+        if (!(moduleCard instanceof HTMLElement)) return false;
+
+        const actionTarget = target.closest(
+            '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
+        );
+        if (actionTarget !== null) return true;
+
+        const type = moduleCard.id === 'ai-module-card' ? 'ai' : 'services';
+        this._core.appUI.openAppSelection(type);
+        return true;
+    }
+
+    private async _handleChatActionClick(target: Element): Promise<void> {
+        if (target.closest('#clear-chat-btn') !== null) {
+            this._core.chatController.clearChat();
+            return;
+        }
+
+        if (target.closest('#chat-attach-btn') !== null) {
+            await this._core.chatController.pickChatFiles();
+            return;
+        }
+
+        if (target.closest('#chat-voice-btn') !== null) {
+            this._core.chatController.toggleVoiceInput();
+            return;
+        }
+
+        if (target.closest('#chat-send-btn') !== null) {
+            await this._core.chatController.sendChat();
+        }
     }
 
     /**

@@ -375,17 +375,20 @@ export class WindowUI {
         const policy = await this._service.checkPolicy();
         this._isSmallScreen = policy.isSmallScreen;
 
-        if (this._isSmallScreen) {
-            const isMaximized = await this._service.isMaximized();
-            if (!isMaximized) {
-                this._service.toggleMaximize().catch(() => {
-                    /* ignore */
-                });
-                this._wasMaximizedOnSmallScreen = true;
-            } else {
-                this._wasMaximizedOnSmallScreen = false;
-            }
+        if (!this._isSmallScreen) {
+            return;
         }
+
+        const isMaximized = await this._service.isMaximized();
+        if (isMaximized) {
+            this._wasMaximizedOnSmallScreen = false;
+            return;
+        }
+
+        this._service.toggleMaximize().catch(() => {
+            /* ignore */
+        });
+        this._wasMaximizedOnSmallScreen = true;
     }
 
     /**

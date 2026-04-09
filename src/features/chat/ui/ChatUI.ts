@@ -289,6 +289,13 @@ export class ChatUI {
         return typeof data === 'number' || typeof data === 'boolean' ? String(data) : '';
     }
 
+    private _extractErrorMessage(error: unknown): string {
+        if (error instanceof Error) return error.message;
+        if (typeof error === 'string') return error;
+
+        return String(error);
+    }
+
     /**
      * Appends a new message to the chat container.
      */
@@ -1144,7 +1151,7 @@ export class ChatUI {
         try {
             await invoke('open_chat_image_location', { filePath, folderPath });
         } catch (e) {
-            const message = e instanceof Error ? e.message : typeof e === 'string' ? e : String(e);
+            const message = this._extractErrorMessage(e);
             const normalized = message.toLowerCase();
             const isMissing =
                 normalized.includes('does not exist') ||

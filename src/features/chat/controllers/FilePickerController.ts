@@ -105,23 +105,23 @@ export class FilePickerController {
                 ...(defaultPath !== null ? { defaultPath } : {}),
             });
 
-            if (selected === null) return true;
+            if (selected !== null) {
+                const paths = Array.isArray(selected) ? selected : [selected];
+                await this._rememberLastSelectedDirectory(paths);
+                const files: File[] = [];
 
-            const paths = Array.isArray(selected) ? selected : [selected];
-            await this._rememberLastSelectedDirectory(paths);
-            const files: File[] = [];
-
-            for (const p of paths) {
-                const file = await this._readNativeFile(p);
-                if (file === null) {
-                    continue;
+                for (const p of paths) {
+                    const file = await this._readNativeFile(p);
+                    if (file === null) {
+                        continue;
+                    }
+                    files.push(file);
                 }
-                files.push(file);
-            }
 
-            if (files.length > 0) {
-                chatFileHandler.addFiles(files);
-                void this.updateTokenCount();
+                if (files.length > 0) {
+                    chatFileHandler.addFiles(files);
+                    void this.updateTokenCount();
+                }
             }
             return true;
         } catch (err) {

@@ -265,7 +265,7 @@ export class DownloadUI {
         const known = knownNames[moduleId.toLowerCase()];
         if (known !== undefined) return known;
 
-        return moduleId.replace(/[_-]+/g, ' ').trim();
+        return moduleId.replaceAll(/[_-]+/g, ' ').trim();
     }
 
     /**
@@ -444,37 +444,51 @@ export class DownloadUI {
         const infoCard = document.querySelector<HTMLElement>(DownloadUI.SELECTORS.INFO_CARD);
 
         if (this._activeDownloads.size === 0) {
-            list.innerHTML = '';
-            if (emptyText) emptyText.classList.add('hidden');
-            if (mainCard) mainCard.style.display = 'none';
-            if (infoCard) infoCard.classList.add('hidden');
+            this._clearDynamicList(list);
+            this._hideLegacyDownloadCards(emptyText, mainCard, infoCard);
             return;
         }
 
-        // Hide empty text and legacy card when dynamic list is shown
-        if (emptyText) emptyText.classList.add('hidden');
-        if (mainCard) mainCard.style.display = 'none';
-        if (infoCard) infoCard.classList.add('hidden');
+        this._hideLegacyDownloadCards(emptyText, mainCard, infoCard);
+        this._removeInactiveDownloadCards(list);
+        this._syncActiveDownloadCards(list);
+    }
 
-        // Remove cards whose downloads are no longer tracked
+    private _clearDynamicList(list: HTMLElement): void {
+        list.innerHTML = '';
+    }
+
+    private _hideLegacyDownloadCards(
+        emptyText: HTMLElement | null,
+        mainCard: HTMLElement | null,
+        infoCard: HTMLElement | null,
+    ): void {
+        if (emptyText !== null) emptyText.classList.add('hidden');
+        if (mainCard !== null) mainCard.style.display = 'none';
+        if (infoCard !== null) infoCard.classList.add('hidden');
+    }
+
+    private _removeInactiveDownloadCards(list: HTMLElement): void {
         const existingCards = list.querySelectorAll<HTMLElement>('.download-item-card');
         for (const card of existingCards) {
-            const mid: string = card.dataset['moduleId'] ?? '';
-            if (!this._activeDownloads.has(mid)) {
+            const moduleId = card.dataset['moduleId'] ?? '';
+            if (!this._activeDownloads.has(moduleId)) {
                 card.remove();
             }
         }
+    }
 
-        // Add or update cards
+    private _syncActiveDownloadCards(list: HTMLElement): void {
         for (const [moduleId, state] of this._activeDownloads) {
             const existing = list.querySelector<HTMLElement>(
                 `.download-item-card[data-module-id="${moduleId}"]`,
             );
-            if (existing) {
+            if (existing !== null) {
                 this._patchCard(existing, state);
-            } else {
-                list.appendChild(this._renderSingleCard(moduleId, state));
+                continue;
             }
+
+            list.appendChild(this._renderSingleCard(moduleId, state));
         }
     }
 
@@ -690,9 +704,8 @@ export class DownloadUI {
             }
         }
 
-        return this._activeDownloads.entries().next().value as
-            | [string, ModuleDownloadState]
-            | undefined;
+        const firstEntry = this._activeDownloads.entries().next();
+        return firstEntry.done === true ? undefined : firstEntry.value;
     }
 
     /**
