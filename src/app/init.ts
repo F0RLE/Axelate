@@ -368,12 +368,11 @@ export class Core {
     private _applyPlatformTheme(): void {
         const body = document.body;
         const userAgent = navigator.userAgent.toLowerCase();
-        const platform = navigator.platform.toLowerCase();
 
         let detectedPlatform = 'windows';
-        if (platform.includes('mac') || userAgent.includes('mac os')) {
+        if (userAgent.includes('mac os') || userAgent.includes('macintosh')) {
             detectedPlatform = 'macos';
-        } else if (platform.includes('linux') || userAgent.includes('linux')) {
+        } else if (userAgent.includes('linux')) {
             detectedPlatform = 'linux';
         }
 

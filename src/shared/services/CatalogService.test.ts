@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CatalogService } from './CatalogService';
+import type { CatalogService } from './CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
-import type { IBridge } from '@/shared/types/IBridge';
 import {
     createCatalogHarness,
     createMockAppConfig,
@@ -279,7 +278,7 @@ describe('CatalogService', () => {
             const origDev = import.meta.env['DEV'];
             (import.meta.env as Record<string, unknown>)['DEV'] = false;
 
-            const s = new CatalogService(mockBridge as unknown as IBridge);
+            const { service: s } = createCatalogHarness();
             expect(s).toBeDefined();
 
             (import.meta.env as Record<string, unknown>)['DEV'] = origDev;
