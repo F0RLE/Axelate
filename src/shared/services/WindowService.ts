@@ -10,7 +10,6 @@ interface IWindowGlobal {
     windowService?: WindowService;
     toggleMonitorBtn?: (cb: (visible: boolean) => void) => void;
     updateMonitorPanelVisibility?: (visible: boolean) => void;
-    updateSpeedDisplay?: (up: number, down: number) => void;
     __TAURI__?: {
         window: {
             getCurrentWindow: () => {
@@ -61,6 +60,7 @@ export class WindowService {
     private _moveUnlisten: (() => void) | null = null;
     private _windowListenersInitialized = false;
     private _webWheelHandler: ((e: WheelEvent) => void) | null = null;
+    private _isDestroyed = false;
     private readonly _boundWindowResize = () => {
         this._scheduleSaveWindowState();
     };
@@ -71,6 +71,7 @@ export class WindowService {
      * Initializes the window service by retrieving the current zoom level from the host.
      */
     public async init(initialConfig?: IWindowConfig, initialZoom?: number): Promise<void> {
+        this._isDestroyed = false;
         // Load fallback from UISettingsService (injected before init) or default to 1
         const fallbackZoom = this._uiSettingsService?.getZoomLevel() ?? 1;
 
@@ -118,6 +119,7 @@ export class WindowService {
     }
 
     public destroy(): void {
+        this._isDestroyed = true;
         if (this._saveWindowTimer !== null) {
             clearTimeout(this._saveWindowTimer);
             this._saveWindowTimer = null;
@@ -426,8 +428,36 @@ export class WindowService {
 
         // Tauri move event (if supported) covers window dragging
         void this._bridge.listen('tauri://move', this._boundWindowResize).then((unlisten) => {
+            if (this._isDestroyed) {
+                unlisten();
+                return;
+            }
             this._moveUnlisten = unlisten;
         });
+    }
+
+    /**
+     * Schedules a debounced save of the window state.
+     * Exposed for StateManager registration.
+     */
+    public scheduleSave(): void {
+        this._scheduleSaveWindowState();
+    }
+
+    /**
+     * Persists the current window state (size, position, maximized) to the backend.
+     * Exposed for StateManager registration.
+     */
+    public async saveAsync(): Promise<void> {
+        await this._saveWindowState();
+    }
+
+    /**
+     * Immediate window state save (fire-and-forget).
+     * Exposed for StateManager registration.
+     */
+    public saveImmediate(): void {
+        void this._saveWindowState();
     }
 
     /**

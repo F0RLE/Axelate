@@ -15,5 +15,5 @@ pub use ai_service::{
     process_chat_request, validate_api_key,
 };
 pub use session::ChatSessionManager;
-pub use streaming::{AiProvider, OpenRouterProvider, StreamEvent, StreamSink, WindowSink};
+pub use streaming::{AiProvider, ChannelSink, OpenRouterProvider, StreamEvent, StreamSink};
 pub use types::{ImageGenerationRequest, ImageGenerationResponse};

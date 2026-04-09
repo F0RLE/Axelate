@@ -547,6 +547,28 @@ async getSecureKey(service: string) : Promise<Result<string | null, AppError>> {
 }
 },
 /**
+ * Checks whether a non-empty API key exists in secure storage
+ */
+async hasSecureKey(service: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("has_secure_key", { service }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Returns non-sensitive metadata for a stored key without exposing the secret.
+ */
+async getSecureKeyMeta(service: string) : Promise<Result<SecureKeyMeta, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_secure_key_meta", { service }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Sends a chat message to the AI provider and streams the response
  */
 async sendChatMessage(request: ChatRequest) : Promise<Result<ChatResponse, AppError>> {
@@ -563,6 +585,17 @@ async sendChatMessage(request: ChatRequest) : Promise<Result<ChatResponse, AppEr
 async validateApiKey(provider: string, key: string) : Promise<Result<boolean, AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("validate_api_key", { provider, key }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Validates the stored OpenRouter API key without exposing it to the frontend
+ */
+async validateStoredApiKey(provider: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("validate_stored_api_key", { provider }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1967,6 +2000,18 @@ file_path: string;
  * Absolute path to the folder containing the saved image.
  */
 folder_path: string }
+/**
+ * Non-sensitive metadata for a securely stored key.
+ */
+export type SecureKeyMeta = { 
+/**
+ * Whether a non-empty key exists for the requested service.
+ */
+exists: boolean; 
+/**
+ * Character length of the stored key, if present.
+ */
+length: number }
 /**
  * Currently selected module in UI
  */

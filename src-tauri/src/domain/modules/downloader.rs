@@ -103,11 +103,7 @@ fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
         .find(|path| path.exists() && path.is_dir())
 }
 
-use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
-
-/// Global downloader service instance
-pub static DOWNLOADER: LazyLock<DownloaderService> = LazyLock::new(DownloaderService::new);
 
 /// Downloader service for managing module downloads
 #[derive(Debug)]
@@ -409,12 +405,7 @@ impl NetworkClient {
                 window_bytes = 0;
                 let snapshot =
                     build_progress_snapshot(bytes_downloaded, total_size, aggregate_context);
-                #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-                let progress = if snapshot.total > 0 {
-                    (snapshot.downloaded as f64 / snapshot.total as f64) as f32
-                } else {
-                    -1.0
-                };
+                let progress = compute_progress(snapshot);
                 emit_progress(ProgressEvent {
                     app: task.app,
                     module_id: task.module_id,
@@ -429,12 +420,7 @@ impl NetworkClient {
         }
 
         let snapshot = build_progress_snapshot(bytes_downloaded, total_size, aggregate_context);
-        #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-        let progress = if snapshot.total > 0 {
-            (snapshot.downloaded as f64 / snapshot.total as f64) as f32
-        } else {
-            -1.0
-        };
+        let progress = compute_progress(snapshot);
 
         emit_progress(ProgressEvent {
             app: task.app,
@@ -482,6 +468,15 @@ fn build_progress_snapshot(
     ProgressSnapshot {
         downloaded: asset_downloaded,
         total: asset_total.max(asset_downloaded),
+    }
+}
+
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+fn compute_progress(snapshot: ProgressSnapshot) -> f32 {
+    if snapshot.total > 0 {
+        (snapshot.downloaded as f64 / snapshot.total as f64) as f32
+    } else {
+        -1.0
     }
 }
 
@@ -856,16 +851,30 @@ impl ArchiveExtractor {
             let _ = serde_json::to_writer_pretty(m_file, &manifest);
         }
 
+        let backup_path = TEMP_DIR.join(format!("{module_id}_backup_{}", uuid::Uuid::new_v4()));
+
         if final_path.exists() {
-            fs::remove_dir_all(&final_path)
-                .map_err(|e| AppError::Io(format!("Failed to remove old module version: {e}")))?;
+            fs::rename(&final_path, &backup_path).map_err(|e| {
+                AppError::Io(format!("Failed to move old module version to backup: {e}"))
+            })?;
         }
 
-        fs::rename(extraction_path, &final_path).map_err(|e| {
-            AppError::Io(format!(
-                "Atomic install failed during move: {e}. Attempting manual copy..."
-            ))
-        })
+        if let Err(e) = fs::rename(extraction_path, &final_path) {
+            if backup_path.exists() {
+                let _ = fs::rename(&backup_path, &final_path);
+            }
+
+            return Err(AppError::Io(format!(
+                "Atomic install failed during move: {e}"
+            )));
+        }
+
+        if backup_path.exists() {
+            fs::remove_dir_all(&backup_path)
+                .map_err(|e| AppError::Io(format!("Failed to remove old module backup: {e}")))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -1083,10 +1092,4 @@ fn emit_progress(event: ProgressEvent<'_>) {
 /// Checks if a module is installed (wrapper)
 pub fn check_module_installed(module_id: &str) -> bool {
     is_module_installed(module_id)
-}
-
-/// Lists files in a module directory (stub)
-pub fn list_module_files(_module_id: String) -> Result<Vec<String>, AppError> {
-    // Basic stub or implementation
-    Ok(vec![])
 }

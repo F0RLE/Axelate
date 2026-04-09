@@ -10,6 +10,7 @@
  */
 
 import DOMPurify from 'dompurify';
+import { open } from '@tauri-apps/plugin-dialog';
 import { type IGlobalBridge } from '@/shared/types/global_bridge_types';
 
 type EngineFieldType = 'number' | 'text' | 'select' | 'password' | 'textarea';
@@ -39,8 +40,7 @@ import { type SettingsService } from '../services/SettingsService';
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { IApp, IConfigField } from '@/shared/types/coreTypes';
-import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
-import type { ISettingsUIContext } from './SettingsContext';
+import type { IModuleSettingsUIContext } from './SettingsContext';
 import { createField } from './components/FieldFactory';
 import { CardResizer } from './components/CardResizer';
 import { type I18nUI } from '@/infrastructure/i18n/I18nUI';
@@ -51,9 +51,8 @@ import { EngineConfigService, type EngineConfig } from '@/features/ai/services/E
 type SettingValue = string | number | boolean | null;
 export class ModuleSettingsUI {
     private readonly _unsubscribers: (() => void)[] = [];
-    private _context!: ISettingsUIContext;
+    private _context!: IModuleSettingsUIContext;
     private _resizer: CardResizer | null = null;
-    private readonly _generalRenderer: GeneralSettingsRenderer;
     private readonly _engineConfigService: EngineConfigService;
     private readonly _saveTimeouts: Map<string, ReturnType<typeof setTimeout>> = new Map();
     private readonly _extraArgsControls = new Map<string, ExtraArgsControl>();
@@ -123,7 +122,6 @@ export class ModuleSettingsUI {
         private readonly _tauri: TauriProvider,
         private readonly _navigation: NavigationService,
     ) {
-        this._generalRenderer = new GeneralSettingsRenderer(_uiSettings);
         this._engineConfigService = new EngineConfigService(_tauri);
     }
     /**
@@ -144,31 +142,8 @@ export class ModuleSettingsUI {
                 ((m: string, s: string) => {
                     tracer.info(m, s);
                 }),
-            toggleNavItem: (id: string, en: boolean) => {
-                this._generalRenderer.toggleNavItem(id, en);
-            },
-            toggleMonitorItem: (id: string, en: boolean) => {
-                this._generalRenderer.toggleMonitorItem(id, en);
-            },
             i18nUI: this._i18nUI,
         };
-
-        // Wait for settings template to be injected
-        let attempts = 0;
-        let container = document.getElementById('settings-grid');
-        while (container === null && attempts < 50) {
-            await new Promise((r) => setTimeout(r, 100));
-            container = document.getElementById('settings-grid');
-            attempts++;
-        }
-
-        if (container === null) {
-            tracer.error(
-                '[SettingsUI] Settings container "settings-grid" not found after 5s. Rendering failed.',
-            );
-        } else {
-            tracer.info('[SettingsUI] Settings container found. Initializing renderers.');
-        }
 
         // 0. Subscribe to navigation events
         const unsub = eventBus.on('page:change', () => {
@@ -177,7 +152,6 @@ export class ModuleSettingsUI {
         this._unsubscribers.push(unsub);
 
         // 1. Load Data
-        this._generalRenderer.init(this._context);
         this._loadCardWidths();
         this._bindEvents();
 
@@ -237,7 +211,7 @@ export class ModuleSettingsUI {
         const container = document.getElementById('module-config-modal-active');
 
         if (modal && modal.open && container !== null && currentApp !== undefined) {
-            tracer.debug('[SettingsUI] Refreshing active module settings:', currentApp.id);
+            tracer.debug('[ModuleSettingsUI] Refreshing active module settings:', currentApp.id);
 
             const title = document.getElementById('module-settings-title');
             const suffix = this._context.t('ui.settings.header_suffix', 'Settings');
@@ -274,17 +248,20 @@ export class ModuleSettingsUI {
         aiSettingsRenderer.destroy();
         const win = getGlobalWin();
         if (typeof this._previousOpenModuleSettings === 'function') {
-            win.openModuleSettings = this._previousOpenModuleSettings as typeof win.openModuleSettings;
+            win.openModuleSettings = this
+                ._previousOpenModuleSettings as typeof win.openModuleSettings;
         } else {
             delete (win as unknown as Record<string, unknown>)['openModuleSettings'];
         }
         if (typeof this._previousSetCardWidth === 'function') {
-            (win as unknown as IGlobalBridge)['setCardWidth'] =
-                this._previousSetCardWidth as (btn: HTMLElement, width: string) => void;
+            (win as unknown as IGlobalBridge)['setCardWidth'] = this._previousSetCardWidth as (
+                btn: HTMLElement,
+                width: string,
+            ) => void;
         } else {
             delete (win as unknown as Record<string, unknown>)['setCardWidth'];
         }
-        tracer.info('[SettingsUI] Destroyed.');
+        tracer.info('[ModuleSettingsUI] Destroyed.');
     }
 
     /**
@@ -323,6 +300,11 @@ export class ModuleSettingsUI {
             return;
         }
 
+        if (app.id.includes('telegram')) {
+            this._renderTelegramBotState(container);
+            return;
+        }
+
         // Local engine — render real config from backend
         if (app.type === 'local') {
             await this._renderLocalEngineConfig(container, app);
@@ -331,11 +313,6 @@ export class ModuleSettingsUI {
 
         if (app.type === 'api') {
             await this._renderUniversalApiSettings(container, app);
-            return;
-        }
-
-        if (app.id.includes('telegram')) {
-            this._renderEmptyState(container, app);
             return;
         }
 
@@ -390,6 +367,49 @@ export class ModuleSettingsUI {
     }
 
     /**
+     * Renders a dedicated placeholder for the Telegram bot module.
+     * The launcher should not expose internal bot configuration here.
+     */
+    private _renderTelegramBotState(container: HTMLElement): void {
+        const t = this._context.t;
+
+        container.innerHTML = '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'ai-module-config universal-api-theme';
+        wrapper.style.display = 'flex';
+        wrapper.style.flexDirection = 'column';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'center';
+        wrapper.style.width = '100%';
+        wrapper.style.padding = '2rem 0';
+        wrapper.style.gap = '0.85rem';
+
+        const title = document.createElement('div');
+        title.style.textAlign = 'center';
+        title.style.color = 'var(--text-primary)';
+        title.style.fontSize = '1.05rem';
+        title.style.fontWeight = '600';
+        title.dataset['i18n'] = 'ui.settings.telegram_stub_title';
+        title.textContent = t('ui.settings.telegram_stub_title', 'Telegram Bot');
+
+        const textDiv = document.createElement('div');
+        textDiv.style.textAlign = 'center';
+        textDiv.style.color = 'var(--text-secondary)';
+        textDiv.style.fontSize = '1rem';
+        textDiv.style.opacity = '0.78';
+        textDiv.style.maxWidth = '32rem';
+        textDiv.dataset['i18n'] = 'ui.settings.telegram_stub_desc';
+        textDiv.textContent = t(
+            'ui.settings.telegram_stub_desc',
+            'This module does not use launcher settings yet.',
+        );
+
+        wrapper.appendChild(title);
+        wrapper.appendChild(textDiv);
+        container.appendChild(wrapper);
+    }
+
+    /**
      * Renders engine config form for local engines (llamacpp, sdcpp, etc.).
      * Loads the persisted EngineConfig from Tauri, renders fields, saves on change.
      */
@@ -439,22 +459,40 @@ export class ModuleSettingsUI {
 
         const corePrimary = container.querySelector(`#local-engine-core-primary-${app.id}`);
         if (!(corePrimary instanceof HTMLElement)) return;
-        this._renderEngineFieldRow(corePrimary, {
-            label: t('ui.settings.engine.model_path', 'Model Path (*.gguf, *.safetensors)'),
-            key: 'model_path',
-            type: 'text',
-            isEngineConfig: true,
-            placeholder: String.raw`e.g. C:\Models\model` + modelExt,
-            isFile: true,
-            isImage,
-            fullWidth: true,
-            appId: app.id,
-            config,
-        });
+        if (isImage) {
+            const splitRow = document.createElement('div');
+            splitRow.className = 'local-engine-split-row';
+
+            this._renderEngineFieldRow(splitRow, {
+                label: t('ui.settings.engine.model_path', 'Model Path (*.gguf, *.safetensors)'),
+                key: 'model_path',
+                type: 'text',
+                isEngineConfig: true,
+                placeholder: String.raw`e.g. C:\Models\model` + modelExt,
+                isFile: true,
+                isImage,
+                appId: app.id,
+                config,
+            });
+
+            this._renderPerformanceModeFieldRow(splitRow, app.id);
+            corePrimary.appendChild(splitRow);
+        } else {
+            this._renderEngineFieldRow(corePrimary, {
+                label: t('ui.settings.engine.model_path', 'Model Path (*.gguf, *.safetensors)'),
+                key: 'model_path',
+                type: 'text',
+                isEngineConfig: true,
+                placeholder: String.raw`e.g. C:\Models\model` + modelExt,
+                isFile: true,
+                isImage,
+                fullWidth: true,
+                appId: app.id,
+                config,
+            });
+        }
 
         if (isImage) {
-            this._renderPerformanceModeToggle(corePrimary, app.id);
-
             this._renderEngineFieldRow(corePrimary, {
                 label: t('ui.settings.engine.extra_args', 'Extra Arguments'),
                 key: 'extra_args',
@@ -488,7 +526,6 @@ export class ModuleSettingsUI {
                 isEngineConfig: false,
                 placeholder: 'e.g. score_9, score_8_up...',
                 defaultValue: '',
-                fullWidth: true,
                 appId: app.id,
                 config,
             });
@@ -499,10 +536,10 @@ export class ModuleSettingsUI {
                 isEngineConfig: false,
                 placeholder: 'e.g. score_4, text, watermark...',
                 defaultValue: '',
-                fullWidth: true,
                 appId: app.id,
                 config,
             });
+            this._syncPromptTextareaHeights(promptsGroup);
             this._renderEngineFieldRow(sizeGroup, {
                 label: t('ui.settings.engine.sd_width', 'Width (px)'),
                 key: `${app.id}_width`,
@@ -540,7 +577,7 @@ export class ModuleSettingsUI {
                 config,
             });
             this._renderEngineFieldRow(samplingGroup, {
-                label: t('ui.settings.engine.sd_cfg', 'Guidance'),
+                label: t('ui.settings.engine.sd_cfg', 'CFG'),
                 key: `${app.id}_cfg_scale`,
                 type: 'number',
                 isEngineConfig: false,
@@ -634,22 +671,51 @@ export class ModuleSettingsUI {
                 appId: app.id,
                 config,
             });
-        } else {
-            if (app.id !== 'llamacpp') {
-                this._renderEngineFieldRow(corePrimary, {
-                    label: t('ui.settings.engine.context_size', 'Context Window'),
-                    key: 'context_size',
-                    type: 'number',
-                    isEngineConfig: true,
-                    placeholder: 'e.g. 4096',
-                    defaultValue: 4096,
-                    min: 512,
-                    max: 128000,
-                    appId: app.id,
-                    config,
-                });
-            }
+        } else if (app.id !== 'llamacpp') {
+            this._renderEngineFieldRow(corePrimary, {
+                label: t('ui.settings.engine.context_size', 'Context Window'),
+                key: 'context_size',
+                type: 'number',
+                isEngineConfig: true,
+                placeholder: 'e.g. 4096',
+                defaultValue: 4096,
+                min: 512,
+                max: 128000,
+                appId: app.id,
+                config,
+            });
         }
+    }
+
+    private _syncPromptTextareaHeights(container: HTMLElement): void {
+        const textareas = Array.from(
+            container.querySelectorAll<HTMLTextAreaElement>('.local-engine-input--textarea'),
+        );
+        if (textareas.length < 2) return;
+
+        const sync = () => {
+            let maxHeight = 0;
+            textareas.forEach((textarea) => {
+                textarea.style.height = 'auto';
+                const extra = textarea.offsetHeight - textarea.clientHeight;
+                const nextHeight = textarea.scrollHeight + extra;
+                if (nextHeight > maxHeight) {
+                    maxHeight = nextHeight;
+                }
+            });
+            textareas.forEach((textarea) => {
+                textarea.style.height = `${maxHeight}px`;
+            });
+        };
+
+        textareas.forEach((textarea) => {
+            textarea.addEventListener('input', sync);
+            this._registerModuleCleanup(() => {
+                textarea.removeEventListener('input', sync);
+            });
+        });
+
+        requestAnimationFrame(sync);
     }
 
     private _escapeHtml(value: string): string {
@@ -665,7 +731,7 @@ export class ModuleSettingsUI {
         if (modelPath.trim() === '') {
             return this._context.t('ui.settings.engine.model_not_selected', 'Model not selected');
         }
-        const normalized = modelPath.replace(/\\/g, '/');
+        const normalized = modelPath.replaceAll('\\', '/');
         return normalized.split('/').pop() ?? modelPath;
     }
 
@@ -687,7 +753,7 @@ export class ModuleSettingsUI {
                         </div>
                         <div class="local-engine-generation-grid local-engine-generation-grid--image">
                             <div class="local-engine-panel-card local-engine-panel-card--prompts">
-                                <div id="local-engine-prompts-${app.id}" class="local-engine-field-stack"></div>
+                                <div id="local-engine-prompts-${app.id}" class="local-engine-field-grid"></div>
                             </div>
                             <div class="local-engine-control-grid">
                                 <div class="local-engine-panel-card local-engine-panel-card--compact">
@@ -696,7 +762,9 @@ export class ModuleSettingsUI {
                                             t('ui.settings.engine.group_size', 'Image Size'),
                                         )}</h4>
                                     </div>
-                                    <div id="local-engine-size-${app.id}" class="local-engine-field-grid"></div>
+                                    <div class="local-engine-group-body">
+                                        <div id="local-engine-size-${app.id}" class="local-engine-field-grid"></div>
+                                    </div>
                                 </div>
                                 <div class="local-engine-panel-card local-engine-panel-card--compact">
                                     <div class="local-engine-group-header">
@@ -704,7 +772,9 @@ export class ModuleSettingsUI {
                                             t('ui.settings.engine.group_sampling', 'Sampling'),
                                         )}</h4>
                                     </div>
-                                    <div id="local-engine-sampling-${app.id}" class="local-engine-field-grid"></div>
+                                    <div class="local-engine-group-body">
+                                        <div id="local-engine-sampling-${app.id}" class="local-engine-field-grid"></div>
+                                    </div>
                                 </div>
                                 <div class="local-engine-panel-card local-engine-panel-card--compact">
                                     <div class="local-engine-group-header">
@@ -712,7 +782,9 @@ export class ModuleSettingsUI {
                                             t('ui.settings.engine.group_batch', 'Batch & Seed'),
                                         )}</h4>
                                     </div>
-                                    <div id="local-engine-batch-${app.id}" class="local-engine-field-grid"></div>
+                                    <div class="local-engine-group-body">
+                                        <div id="local-engine-batch-${app.id}" class="local-engine-field-grid"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -731,12 +803,7 @@ export class ModuleSettingsUI {
                                     t('ui.settings.engine.core_config', 'Core Config'),
                                 )}</h3>
                             </div>
-                            <div class="local-engine-form-grid local-engine-form-grid--single">
-                                <div class="local-engine-panel-card local-engine-panel-card--hero local-engine-panel-card--flat">
-                                    <div class="local-engine-spotlight"></div>
-                                    <div id="local-engine-core-primary-${app.id}" class="local-engine-field-stack local-engine-field-stack--tight"></div>
-                                </div>
-                            </div>
+                            <div id="local-engine-core-primary-${app.id}" class="local-engine-field-stack local-engine-field-stack--tight"></div>
                             ${warnHtml}
                         </div>
                     </section>
@@ -744,6 +811,47 @@ export class ModuleSettingsUI {
                 </div>
             </div>
         `;
+    }
+
+    private _createEngineFieldControl(options: {
+        type: EngineFieldType;
+        key: string;
+        isEngineConfig: boolean;
+        appId: string;
+        placeholder?: string;
+        min?: number;
+        max?: number;
+        options?: string[];
+    }): {
+        input: HTMLElement;
+        engineInput: EngineInputElement;
+        customSelect: CustomSelectControl | null;
+        extraArgsControl: ExtraArgsControl | null;
+    } {
+        if (options.type === 'select') {
+            const customSelect = this._createCustomSelectField(options);
+            return {
+                input: customSelect.root,
+                engineInput: customSelect.input,
+                customSelect,
+                extraArgsControl: null,
+            };
+        } else if (options.isEngineConfig && options.key === 'extra_args') {
+            const extraArgsControl = this._createExtraArgsField(options);
+            this._extraArgsControls.set(options.appId, extraArgsControl);
+            return {
+                input: extraArgsControl.root,
+                engineInput: extraArgsControl.input,
+                customSelect: null,
+                extraArgsControl,
+            };
+        } else if (options.type === 'textarea') {
+            const input = this._createTextAreaField(options);
+            return { input, engineInput: input, customSelect: null, extraArgsControl: null };
+        } else {
+            const input = this._createTextInputField(options);
+            return { input, engineInput: input, customSelect: null, extraArgsControl: null };
+        }
     }
 
     // eslint-disable-next-line @typescript-eslint/max-params
@@ -782,34 +890,17 @@ export class ModuleSettingsUI {
         const inputWrapper = document.createElement('div');
         inputWrapper.className = 'local-engine-input-row';
 
-        let input: HTMLElement;
-        let engineInput: EngineInputElement;
-        let customSelect: CustomSelectControl | null = null;
-        let extraArgsControl: ExtraArgsControl | null = null;
-
-        if (options.type === 'select') {
-            customSelect = this._createCustomSelectField(options);
-            input = customSelect.root;
-            engineInput = customSelect.input;
-        } else if (options.isEngineConfig && options.key === 'extra_args') {
-            extraArgsControl = this._createExtraArgsField(options);
-            input = extraArgsControl.root;
-            engineInput = extraArgsControl.input;
-            this._extraArgsControls.set(options.appId, extraArgsControl);
-        } else if (options.type === 'textarea') {
-            input = this._createTextAreaField(options);
-            engineInput = input as HTMLTextAreaElement;
-        } else {
-            input = this._createTextInputField(options);
-            engineInput = input as HTMLInputElement;
-        }
+        const { input, engineInput, customSelect, extraArgsControl } =
+            this._createEngineFieldControl(options);
 
         this._setupEngineFieldInitialValue(engineInput, options);
         this._setupEngineFieldEvents(engineInput, options);
+
         customSelect?.syncDisplay();
         if (customSelect !== null) {
+            const cs = customSelect;
             this._registerModuleCleanup(() => {
-                customSelect.destroy();
+                cs.destroy();
             });
         }
         extraArgsControl?.syncTokens();
@@ -843,13 +934,31 @@ export class ModuleSettingsUI {
             );
             infoBtn.setAttribute('aria-label', infoText);
             infoBtn.title = infoText;
-            infoBtn.textContent = 'i';
+            infoBtn.textContent = '+';
             infoBtn.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 this._toggleEngineInfoPopover(infoBtn, options.appId);
             });
             inputWrapper.appendChild(infoBtn);
+
+            if (
+                options.isEngineConfig &&
+                options.key === 'extra_args' &&
+                extraArgsControl !== null
+            ) {
+                // Allow clicking anywhere in the tags area (that isn't a chip) to open the menu
+                const eac = extraArgsControl;
+                eac.root.style.cursor = 'pointer';
+                eac.root.addEventListener('click', (event) => {
+                    const target = event.target as Node;
+                    if (target === eac.root || target === eac.root.firstChild) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        this._toggleEngineInfoPopover(infoBtn, options.appId);
+                    }
+                });
+            }
         }
 
         row.appendChild(labelRow);
@@ -863,9 +972,9 @@ export class ModuleSettingsUI {
         container.appendChild(row);
     }
 
-    private _renderPerformanceModeToggle(container: HTMLElement, appId: string): void {
+    private _renderPerformanceModeFieldRow(container: HTMLElement, appId: string): void {
         const row = document.createElement('div');
-        row.className = 'local-engine-field-row full-width';
+        row.className = 'local-engine-field-row';
 
         const labelRow = document.createElement('div');
         labelRow.className = 'local-engine-label-row';
@@ -878,30 +987,28 @@ export class ModuleSettingsUI {
         lbl.className = 'local-engine-field-label';
         labelRow.appendChild(lbl);
 
+        // inputWrapper acts as the outer glass container
         const inputWrapper = document.createElement('div');
-        inputWrapper.className = 'local-engine-input-row';
+        inputWrapper.className = 'local-engine-performance-toggle';
 
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'local-engine-performance-toggle';
+        const statusLabel = document.createElement('span');
+        statusLabel.className = 'local-engine-performance-toggle-status local-engine-perf-status';
 
-        const title = document.createElement('span');
-        title.className = 'local-engine-performance-toggle-title';
-        title.textContent = this._context.t(
-            'ui.settings.engine.performance_mode_title',
-            'Close launcher during generation',
-        );
+        const switchLabel = document.createElement('label');
+        switchLabel.className = 'switch';
+        switchLabel.style.pointerEvents = 'none'; // whole row is clickable
 
-        const status = document.createElement('span');
-        status.className = 'local-engine-performance-toggle-status';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
 
-        const updateState = (enabled: boolean) => {
-            toggle.classList.toggle('active', enabled);
-            toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-            status.textContent = enabled
-                ? this._context.t('ui.common.enabled', 'Enabled')
-                : this._context.t('ui.common.disabled', 'Disabled');
-        };
+        const slider = document.createElement('span');
+        slider.className = 'slider';
+
+        switchLabel.appendChild(checkbox);
+        switchLabel.appendChild(slider);
+
+        inputWrapper.appendChild(statusLabel);
+        inputWrapper.appendChild(switchLabel);
 
         const settings = this._service.getSettings() as Record<
             string,
@@ -909,17 +1016,24 @@ export class ModuleSettingsUI {
         >;
         let enabled =
             String(settings[`${appId}_performance_mode`] ?? 'false').toLowerCase() === 'true';
-        updateState(enabled);
 
-        toggle.append(title, status);
-        toggle.addEventListener('click', () => {
+        const sync = () => {
+            statusLabel.textContent = enabled
+                ? this._context.t('ui.common.enabled', 'Enabled')
+                : this._context.t('ui.common.disabled', 'Disabled');
+            inputWrapper.classList.toggle('is-enabled', enabled);
+            checkbox.checked = enabled;
+        };
+        sync();
+
+        inputWrapper.addEventListener('click', () => {
             enabled = !enabled;
-            updateState(enabled);
+            sync();
             this._debouncedSave(`${appId}_performance_mode`, enabled);
         });
 
-        inputWrapper.appendChild(toggle);
-        row.append(labelRow, inputWrapper);
+        row.appendChild(labelRow);
+        row.appendChild(inputWrapper);
         container.appendChild(row);
     }
 
@@ -936,14 +1050,6 @@ export class ModuleSettingsUI {
 
         const chips = document.createElement('div');
         chips.className = 'local-engine-tags-chips';
-
-        const textInput = document.createElement('input');
-        textInput.type = 'text';
-        textInput.className = 'local-engine-tags-input';
-        textInput.placeholder = this._context.t(
-            'ui.settings.engine.extra_args.placeholder',
-            'Add flag and press Enter',
-        );
 
         const parseGroups = (raw: string): string[] => {
             const tokens = raw
@@ -963,7 +1069,7 @@ export class ModuleSettingsUI {
                     !next.startsWith('-')
                 ) {
                     groups.push(`${current} ${next}`);
-                    index += 1;
+                    index += 1; // for-loop also does +1 → total skip = 2 (current + next)
                     continue;
                 }
 
@@ -987,68 +1093,44 @@ export class ModuleSettingsUI {
 
         const getGroups = (): string[] => parseGroups(hiddenInput.value);
 
+        let syncTokens: () => void;
+
         const setGroups = (groups: string[]) => {
             hiddenInput.value = flattenGroups(groups);
-            syncTokens();
+            if (syncTokens !== undefined) syncTokens();
             hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
             hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
         };
 
-        const commitInputValue = () => {
-            const nextGroups = parseGroups(textInput.value);
-            if (nextGroups.length === 0) return;
-            setGroups([...getGroups(), ...nextGroups]);
-            textInput.value = '';
+        const createChip = (group: string, index: number) => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'local-engine-tag-chip';
+            chip.title = this._context.t('ui.settings.engine.extra_args.remove', 'Remove');
+
+            const label = document.createElement('span');
+            label.className = 'local-engine-tag-chip-label';
+            label.textContent = group;
+
+            const remove = document.createElement('span');
+            remove.className = 'local-engine-tag-chip-remove';
+            remove.textContent = '×';
+
+            chip.append(label, remove);
+            chip.addEventListener('click', () => {
+                const updated = getGroups().filter((_, groupIndex) => groupIndex !== index);
+                setGroups(updated);
+            });
+            chips.appendChild(chip);
         };
 
-        const syncTokens = () => {
+        syncTokens = () => {
             chips.innerHTML = '';
             const groups = getGroups();
-
-            groups.forEach((group, index) => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'local-engine-tag-chip';
-                chip.title = this._context.t('ui.settings.engine.extra_args.remove', 'Remove');
-
-                const label = document.createElement('span');
-                label.className = 'local-engine-tag-chip-label';
-                label.textContent = group;
-
-                const remove = document.createElement('span');
-                remove.className = 'local-engine-tag-chip-remove';
-                remove.textContent = 'x';
-
-                chip.append(label, remove);
-                chip.addEventListener('click', () => {
-                    const updated = getGroups().filter((_, groupIndex) => groupIndex !== index);
-                    setGroups(updated);
-                });
-                chips.appendChild(chip);
-            });
+            groups.forEach((group, index) => createChip(group, index));
         };
 
-        textInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                commitInputValue();
-                return;
-            }
-
-            if (event.key === 'Backspace' && textInput.value === '') {
-                const groups = getGroups();
-                if (groups.length > 0) {
-                    event.preventDefault();
-                    setGroups(groups.slice(0, -1));
-                }
-            }
-        });
-
-        textInput.addEventListener('blur', () => {
-            commitInputValue();
-        });
-
-        root.append(chips, textInput, hiddenInput);
+        root.append(chips, hiddenInput);
 
         return { input: hiddenInput, root, syncTokens, getGroups, setGroups };
     }
@@ -1090,9 +1172,6 @@ export class ModuleSettingsUI {
     }
 
     private _openEngineInfoPopover(anchor: HTMLButtonElement, appId: string): void {
-        const modal =
-            (document.getElementById('module-settings-modal') as HTMLDialogElement | null) ??
-            document.body;
         const docs = this._getEngineExtraArgDocs(appId);
 
         const popover = document.createElement('div');
@@ -1162,21 +1241,6 @@ export class ModuleSettingsUI {
 
             meta.append(flag, desc);
 
-            const copyBtn = document.createElement('button');
-            copyBtn.type = 'button';
-            copyBtn.className = 'local-engine-args-copy-btn';
-            copyBtn.textContent = this._context.t('ui.launcher.web.copy', 'Copy');
-            copyBtn.addEventListener('click', async (event) => {
-                event.stopPropagation();
-                await this._copyTextToClipboard(item.flag);
-                this._context.showToast(
-                    this._context
-                        .t('ui.settings.engine.extra_args.flag_copied', '{flag} copied')
-                        .replace('{flag}', item.flag),
-                    'success',
-                );
-            });
-
             const addFlag = () => {
                 const added = this._appendExtraArgs(appId, [item.flag]);
                 this._context.showToast(
@@ -1202,33 +1266,48 @@ export class ModuleSettingsUI {
                 }
             });
 
-            row.append(meta, copyBtn);
+            row.append(meta);
             list.appendChild(row);
         });
 
         popover.append(title, subtitle, actions, list);
-        modal.appendChild(popover);
+        const modal = document.getElementById('module-settings-modal');
+        if (modal === null) {
+            document.body.appendChild(popover);
+        } else {
+            modal.appendChild(popover);
+            modal.classList.add('popover-open');
+        }
+
+        popover.style.opacity = '0';
+        popover.style.transition = 'opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (popover.isConnected) {
+                    popover.style.opacity = '1';
+                }
+            });
+        });
 
         const updatePosition = () => {
-            const rect = anchor.getBoundingClientRect();
-            const popRect = popover.getBoundingClientRect();
+            const appModal = modal?.querySelector('.app-modal');
+            const targetRect = (appModal ?? modal ?? document.body).getBoundingClientRect();
             const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-            const desiredWidth = Math.min(420, viewportWidth - 32);
-            const left = Math.min(
-                viewportWidth - desiredWidth - 16,
-                Math.max(16, rect.right - desiredWidth),
-            );
-            const openUpward =
-                rect.bottom + popRect.height + 16 > viewportHeight && rect.top > popRect.height;
-            const top = openUpward
-                ? Math.max(16, rect.top - popRect.height - 10)
-                : Math.min(viewportHeight - popRect.height - 16, rect.bottom + 10);
 
-            popover.style.width = `${desiredWidth}px`;
-            popover.style.left = `${left}px`;
-            popover.style.top = `${top}px`;
-            popover.dataset['placement'] = openUpward ? 'top' : 'bottom';
+            const panelWidth = 328;
+            const margin = 16;
+
+            // Horizontal position
+            let panelLeft = targetRect.right + 16;
+            if (panelLeft + panelWidth > viewportWidth - margin) {
+                panelLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+            }
+
+            // Match modal's vertical bounds
+            popover.style.width = `${panelWidth}px`;
+            popover.style.left = `${panelLeft}px`;
+            popover.style.top = `${targetRect.top}px`;
+            popover.style.height = `${targetRect.height}px`;
         };
 
         const handleDocumentClick = (event: MouseEvent) => {
@@ -1246,6 +1325,9 @@ export class ModuleSettingsUI {
 
         const handleReposition = () => {
             if (this._activeEngineInfoPopover === popover) {
+                if (modal !== null) {
+                    modal.classList.add('popover-open');
+                }
                 updatePosition();
             }
         };
@@ -1263,14 +1345,31 @@ export class ModuleSettingsUI {
             window.removeEventListener('scroll', handleReposition, true);
         };
 
-        requestAnimationFrame(updatePosition);
+        const startTime = performance.now();
+        const syncAnimation = (time: number) => {
+            if (this._activeEngineInfoPopover === popover) {
+                updatePosition();
+                if (time - startTime < 400) {
+                    requestAnimationFrame(syncAnimation);
+                }
+            }
+        };
+        requestAnimationFrame(syncAnimation);
     }
 
     private _closeEngineInfoPopover(): void {
         this._activeEngineInfoCleanup?.();
         this._activeEngineInfoCleanup = null;
-        this._activeEngineInfoPopover?.remove();
+
+        const popover = this._activeEngineInfoPopover;
         this._activeEngineInfoPopover = null;
+
+        const modal = document.getElementById('module-settings-modal');
+        if (modal !== null) {
+            modal.classList.remove('popover-open');
+        }
+
+        popover?.remove();
     }
 
     private _getEngineExtraArgDocs(appId: string): {
@@ -1285,10 +1384,6 @@ export class ModuleSettingsUI {
                     'These go into Extra Arguments as startup flags. Generation fields like steps, sampler, scheduler and seed are already controlled by the launcher UI.',
                 items: [
                     { flag: '--fa', description: 'Enable flash attention globally.' },
-                    {
-                        flag: '--threads 8',
-                        description: 'Set an explicit CPU thread count for generation.',
-                    },
                     {
                         flag: '--vae-tiling',
                         description: 'Use tiled VAE decoding to reduce VRAM usage.',
@@ -1339,28 +1434,11 @@ export class ModuleSettingsUI {
         };
     }
 
-    private async _copyTextToClipboard(text: string): Promise<void> {
-        try {
-            await navigator.clipboard.writeText(text);
-        } catch {
-            const helper = document.createElement('textarea');
-            helper.value = text;
-            helper.setAttribute('readonly', 'true');
-            helper.style.position = 'fixed';
-            helper.style.opacity = '0';
-            document.body.appendChild(helper);
-            helper.select();
-            document.execCommand('copy');
-            helper.remove();
-        }
-    }
-
     private _createCustomSelectField(options: { options?: string[] }): CustomSelectControl {
         const root = document.createElement('div');
         root.className = 'local-engine-select';
-        const overlayHost =
-            (document.getElementById('module-settings-modal') as HTMLElement | null) ??
-            document.body;
+        const overlayHost: HTMLElement =
+            document.getElementById('module-settings-modal') ?? document.body;
         const controller = new AbortController();
         const signal = controller.signal;
 
@@ -1417,7 +1495,7 @@ export class ModuleSettingsUI {
 
         const syncDisplay = () => {
             valueEl.textContent =
-                hiddenInput.value !== '' ? hiddenInput.value : (options.options?.[0] ?? '');
+                hiddenInput.value === '' ? (options.options?.[0] ?? '') : hiddenInput.value;
             menu.querySelectorAll('.local-engine-select-option').forEach((node) => {
                 if (node instanceof HTMLButtonElement) {
                     node.classList.toggle('selected', node.textContent === valueEl.textContent);
@@ -1525,6 +1603,33 @@ export class ModuleSettingsUI {
         if (options.placeholder !== undefined && options.placeholder !== '') {
             textArea.placeholder = options.placeholder;
         }
+
+        const autoResize = () => {
+            textArea.style.height = 'auto';
+            const extra = textArea.offsetHeight - textArea.clientHeight;
+            textArea.style.height = `${textArea.scrollHeight + extra}px`;
+        };
+
+        textArea.addEventListener('input', autoResize);
+
+        // Intercept programmatic value changes to trigger resize
+        const valueDesc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+        if (valueDesc?.set) {
+            Object.defineProperty(textArea, 'value', {
+                set(v: string) {
+                    valueDesc.set?.call(textArea, v);
+                    // Defer resize just in case it's not in the DOM yet
+                    requestAnimationFrame(autoResize);
+                },
+                get() {
+                    return valueDesc.get?.call(textArea);
+                },
+            });
+        }
+
+        // We can't guarantee it's visible yet, so request a resize when possible
+        requestAnimationFrame(autoResize);
+
         return textArea;
     }
 
@@ -1558,35 +1663,47 @@ export class ModuleSettingsUI {
         },
     ): void {
         if (options.isEngineConfig) {
-            if (options.config !== null) {
-                const configObj = options.config as unknown as Record<
-                    string,
-                    string | number | string[] | undefined
-                >;
-                let val = configObj[options.key];
-                if (val !== undefined) {
-                    if (options.key === 'extra_args' && Array.isArray(val)) {
-                        val = val.join(' ');
-                    }
-                    input.value = String(val);
-                    if ('title' in input) {
-                        input.title = String(val);
-                    }
-                }
-            }
+            this._setInitialEngineConfigValue(input, options);
         } else {
-            const savedSettings = this._service.getSettings() as unknown as Record<
-                string,
-                string | number | undefined
-            >;
-            const val =
-                savedSettings[options.key] ??
-                this._getLegacySettingsAliasValue(savedSettings, options.key);
-            if (val !== undefined) {
-                input.value = String(val);
-            } else if (options.defaultValue !== undefined) {
-                input.value = String(options.defaultValue);
+            this._setInitialEngineSettingsValue(input, options);
+        }
+    }
+
+    private _setInitialEngineConfigValue(
+        input: EngineInputElement,
+        options: { key: string; config: EngineConfig | null },
+    ): void {
+        if (options.config === null) return;
+        const configObj = options.config as unknown as Record<
+            string,
+            string | number | string[] | undefined
+        >;
+        let val = configObj[options.key];
+        if (val !== undefined && val !== null) {
+            if (options.key === 'extra_args' && Array.isArray(val)) {
+                val = val.join(' ');
             }
+            const strVal = String(val);
+            input.value = strVal;
+            if ('title' in input) {
+                input.title = strVal;
+            }
+        }
+    }
+
+    private _setInitialEngineSettingsValue(
+        input: EngineInputElement,
+        options: { key: string; defaultValue?: number | string },
+    ): void {
+        type SavedSettingsRecord = Record<string, string | number | undefined>;
+        const savedSettings = this._service.getSettings() as unknown as SavedSettingsRecord;
+        const val =
+            savedSettings[options.key] ??
+            this._getLegacySettingsAliasValue(savedSettings, options.key);
+        if (val !== undefined) {
+            input.value = String(val);
+        } else if (options.defaultValue !== undefined) {
+            input.value = String(options.defaultValue);
         }
     }
 
@@ -1675,15 +1792,11 @@ export class ModuleSettingsUI {
         },
     ): void {
         input.addEventListener('focus', () => {
-            input.style.borderColor = 'rgba(255,255,255,0.16)';
-            input.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.045)';
-            input.style.background = 'rgba(255,255,255,0.045)';
+            input.parentElement?.classList.add('focused');
         });
 
         input.addEventListener('blur', () => {
-            input.style.borderColor = 'var(--border-color)';
-            input.style.boxShadow = 'none';
-            input.style.background = 'rgba(0,0,0,0.18)';
+            input.parentElement?.classList.remove('focused');
         });
 
         const handleSave = () => this._handleEngineFieldSave(input, options);
@@ -1765,7 +1878,6 @@ export class ModuleSettingsUI {
 
         browseBtn.onclick = async () => {
             try {
-                const { open } = await import('@tauri-apps/plugin-dialog');
                 const extName = isImage ? 'SafeTensors' : 'GGUF Models';
                 const extFilter = isImage ? 'safetensors' : 'gguf';
 
@@ -1785,7 +1897,7 @@ export class ModuleSettingsUI {
                     input.dispatchEvent(new Event('change'));
                 }
             } catch (e) {
-                tracer.error('[SettingsUI] Failed to open file dialog', e);
+                tracer.error('[ModuleSettingsUI] Failed to open file dialog', e);
             }
         };
 
@@ -1976,7 +2088,7 @@ export class ModuleSettingsUI {
                     this._hideSaveIndicator();
                 }
             } catch (err) {
-                tracer.error(`[SettingsUI] Failed to autosave setting ${key}:`, err);
+                tracer.error(`[ModuleSettingsUI] Failed to autosave setting ${key}:`, err);
                 const indicator = document.getElementById('save-indicator');
                 if (indicator) {
                     indicator.classList.add('show');

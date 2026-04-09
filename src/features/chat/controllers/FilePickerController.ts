@@ -11,10 +11,14 @@ import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { ChatUI } from '../ui/ChatUI';
 
 // Tauri imports — only used at runtime if in Tauri context
+import { desktopDir, dirname } from '@tauri-apps/api/path';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 
 export class FilePickerController {
+    private _tokenEstimateRequestId = 0;
+    private _lastSelectedDirectory: string | null = null;
+
     constructor(
         private readonly _i18n: I18nService,
         private readonly _ui: ChatUI,
@@ -52,8 +56,28 @@ export class FilePickerController {
     public async updateTokenCount(overrideText?: string): Promise<void> {
         const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         const text = overrideText ?? (input ? input.value : '');
-        const count = await getTokenCount(text);
-        this._ui.updateTokenCount(count);
+        const requestId = ++this._tokenEstimateRequestId;
+
+        try {
+            const count = await chatFileHandler.getTotalTokenEstimate(text);
+            if (requestId !== this._tokenEstimateRequestId) return;
+            this._ui.updateTokenCount(count);
+        } catch (error) {
+            tracer.error('[FilePickerController] Failed to update token count:', error);
+            if (requestId !== this._tokenEstimateRequestId) return;
+            try {
+                const fallbackCount = await getTokenCount(text);
+                if (requestId !== this._tokenEstimateRequestId) return;
+                this._ui.updateTokenCount(fallbackCount);
+            } catch (fallbackError) {
+                tracer.error(
+                    '[FilePickerController] Fallback token count failed, using rough estimate:',
+                    fallbackError,
+                );
+                if (requestId !== this._tokenEstimateRequestId) return;
+                this._ui.updateTokenCount(Math.max(0, Math.ceil(text.trim().length / 4)));
+            }
+        }
     }
 
     /**
@@ -74,14 +98,17 @@ export class FilePickerController {
 
     private async _pickNative(): Promise<boolean> {
         try {
+            const defaultPath = await this._resolveInitialDirectory();
             const selected = await open({
                 multiple: true,
                 title: this._i18n.t('ui.launcher.web.select_files', 'Select Files'),
+                ...(defaultPath ? { defaultPath } : {}),
             });
 
             if (selected === null) return true;
 
             const paths = Array.isArray(selected) ? selected : [selected];
+            await this._rememberLastSelectedDirectory(paths);
             const files: File[] = [];
 
             for (const p of paths) {
@@ -97,6 +124,31 @@ export class FilePickerController {
         } catch (err) {
             tracer.error('[FilePickerController] Native file picker failed:', err);
             return false;
+        }
+    }
+
+    private async _resolveInitialDirectory(): Promise<string | null> {
+        if (this._lastSelectedDirectory) return this._lastSelectedDirectory;
+
+        try {
+            return await desktopDir();
+        } catch (err) {
+            tracer.warn('[FilePickerController] Failed to resolve desktop directory:', err);
+            return null;
+        }
+    }
+
+    private async _rememberLastSelectedDirectory(paths: string[]): Promise<void> {
+        const firstPath = paths[0];
+        if (!firstPath) return;
+
+        try {
+            this._lastSelectedDirectory = await dirname(firstPath);
+        } catch (err) {
+            tracer.warn(
+                `[FilePickerController] Failed to resolve selected directory: ${firstPath}`,
+                err,
+            );
         }
     }
 

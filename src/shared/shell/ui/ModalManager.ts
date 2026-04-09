@@ -29,16 +29,22 @@ export class ModalManager {
     private readonly _onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void;
     // Called when user switches filter tab — returns the selected app ID for that capability
     private readonly _onFilterChange: (capability: 'text' | 'image') => string | null;
+    private readonly _onDownloadRequest: (app: IApp) => Promise<void>;
+    private readonly _onCancelDownloadRequest: (app: IApp) => Promise<void>;
 
     constructor(
         cardRenderer: ModuleCardRenderer,
         onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void,
         onFilterChange: (capability: 'text' | 'image') => string | null,
+        onDownloadRequest: (app: IApp) => Promise<void>,
+        onCancelDownloadRequest: (app: IApp) => Promise<void>,
         private readonly _navigation: NavigationService,
     ) {
         this._cardRenderer = cardRenderer;
         this._onAppInteraction = onAppInteraction;
         this._onFilterChange = onFilterChange;
+        this._onDownloadRequest = onDownloadRequest;
+        this._onCancelDownloadRequest = onCancelDownloadRequest;
 
         // Per-module throttle state: maps moduleId → last render timestamp
         const _throttleMap = new Map<string, number>();
@@ -195,6 +201,10 @@ export class ModalManager {
                 );
             }
         }
+    }
+
+    public isViewingCategory(category: string): boolean {
+        return this.isAppSelectionOpen() && this._currentCategory === category;
     }
 
     // --- Helpers ---
@@ -414,11 +424,9 @@ export class ModalManager {
     }
 
     /**
-     * Triggers a module download via the global bridge (win.downloadModule).
-     * Uses ModuleService under the hood which handles progress events.
+     * Triggers a module download or cancellation via injected AppUI callbacks.
      */
     private _handleDownload(app: IApp): void {
-        const win = getGlobalWin();
         if (app.repoUrl === undefined || app.repoUrl === '') {
             tracer.warn(`[ModalManager] No repoUrl for module: ${app.id}`);
             return;
@@ -433,18 +441,14 @@ export class ModalManager {
             tracer.info(`[ModalManager] Cancelling download for: ${app.id}`);
             void (async () => {
                 try {
-                    if (typeof win.cancelDownloadModule === 'function') {
-                        await win.cancelDownloadModule(app.id);
-                    }
-                    if (typeof win.deleteModule === 'function') {
-                        await win.deleteModule(app.id);
-                    }
+                    await this._onCancelDownloadRequest(app);
                     if (card !== null && card !== undefined)
                         ModuleCardRenderer.clearDownloadProgress(card);
                     // Reset UI label
                     const pct = btn.querySelector<HTMLElement>('.download-pct');
                     if (pct) pct.style.display = 'none';
                     const label = btn.querySelector<HTMLElement>('.download-label');
+                    const win = getGlobalWin();
                     const defaultText =
                         typeof win.t === 'function'
                             ? win.t('ui.launcher.module.download', 'Download')
@@ -460,19 +464,8 @@ export class ModalManager {
             return;
         }
 
-        if (typeof win.downloadModule !== 'function') {
-            tracer.warn('[ModalManager] win.downloadModule not available');
-            return;
-        }
         tracer.info(`[ModalManager] Starting download: ${app.id}`);
-        void (
-            win.downloadModule as (
-                id: string,
-                url: string,
-                hash?: string,
-                dlType?: string,
-            ) => Promise<void>
-        )(app.id, app.repoUrl, app.expectedHash, app.dlType);
+        void this._onDownloadRequest(app);
     }
 
     /**

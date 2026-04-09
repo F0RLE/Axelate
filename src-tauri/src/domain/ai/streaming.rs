@@ -48,20 +48,20 @@ pub trait StreamSink: Send + Sync {
     fn emit(&self, event: StreamEvent);
 }
 
-/// Tauri-specific implementation of StreamSink using a bounded channel
+/// Channel-backed implementation of `StreamSink`.
 #[derive(Debug)]
-pub struct WindowSink {
+pub struct ChannelSink {
     tx: mpsc::Sender<StreamEvent>,
 }
 
-impl WindowSink {
-    /// Creates a new WindowSink with the provided channel sender
+impl ChannelSink {
+    /// Creates a new channel sink with the provided sender.
     pub const fn new(tx: mpsc::Sender<StreamEvent>) -> Self {
         Self { tx }
     }
 }
 
-impl StreamSink for WindowSink {
+impl StreamSink for ChannelSink {
     fn emit(&self, event: StreamEvent) {
         // Use try_send to avoid blocking the provider if the UI consumer is slow.
         if let Err(e) = self.tx.try_send(event) {
@@ -95,6 +95,7 @@ pub trait AiProvider: Send + Sync {
 #[derive(Debug)]
 pub struct OpenRouterProvider {
     base_url: String,
+    client: Client,
 }
 
 impl OpenRouterProvider {
@@ -102,6 +103,7 @@ impl OpenRouterProvider {
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.to_string(),
+            client: Client::new(),
         }
     }
 }
@@ -125,13 +127,6 @@ impl AiProvider for OpenRouterProvider {
                 ));
             }
         }
-
-        let client = Client::builder()
-            .build()
-            .map_err(|e| crate::errors::AppError::External {
-                request_id: Some(request_id.clone()),
-                message: e.to_string(),
-            })?;
 
         let mut payload = serde_json::Map::new();
         payload.insert(
@@ -158,6 +153,7 @@ impl AiProvider for OpenRouterProvider {
         payload.insert("stream".to_string(), serde_json::Value::Bool(true));
 
         if let Some(level) = &req.thinking_level
+            && level != "off"
             && !self.base_url.contains("localhost")
             && !self.base_url.contains("127.0.0.1")
         {
@@ -180,7 +176,8 @@ impl AiProvider for OpenRouterProvider {
         let res: reqwest::Response = loop {
             attempts += 1;
 
-            let request_builder = client
+            let request_builder = self
+                .client
                 .post(&endpoint)
                 .header("Authorization", format!("Bearer {api_key}"))
                 .header("Content-Type", "application/json")

@@ -26,7 +26,7 @@ type ErrorCallback = (_error: IErrorInfo) => void;
 // Local type definition for global extending
 // IErrorHandlerGlobal removed
 
-class ErrorHandler {
+export class ErrorHandler {
     private _initialized = false;
     private _errorLog: IErrorInfo[] = [];
     private readonly _maxLogSize = 100;

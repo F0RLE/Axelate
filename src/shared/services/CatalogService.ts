@@ -9,37 +9,10 @@ import type { AppConfig, ModuleItem, ApiProvider } from '@/shared/types/bindings
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
 
-    constructor(private readonly _bridge: IBridge) {
-        // Architectural compliance Section 51
-        this._initGlobalExposures();
-    }
-
-    /**
-     * Initializes global access patterns only where necessary.
-     */
-    private _initGlobalExposures(): void {
-        const win = getGlobalWin();
-
-        // KISS: Use dev-only global for debugging
-        if (import.meta.env.DEV) {
-            (win as unknown as Record<string, unknown>)['__DEV_CATALOG'] = this;
-        }
-
-        // Sync with global APP_DATA for downstream components
-        win.APP_DATA = this._appData;
-
-        // Expose category resolver for AppUI type safety
-        win.getCatalogCategory = (cat: string): IApp[] => {
-            if (cat === 'ai') return this._appData.ai;
-            if (cat === 'services') return this._appData.services;
-            return [];
-        };
-    }
+    constructor(private readonly _bridge: IBridge) {}
 
     /**
      * Asynchronously loads the application catalog from the Tauri backend.
@@ -76,8 +49,6 @@ export class CatalogService {
 
             // Final check for fallbacks
             this._ensureFallbacks();
-
-            this._syncToGlobal();
 
             tracer.info(
                 `[CatalogService] Catalog hydrated successfully. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
@@ -192,12 +163,18 @@ export class CatalogService {
         const mergeAppSchema = (app: IApp) => {
             const isApi =
                 app.type === 'api' || config.apiProviders.some((p: ApiProvider) => p.id === app.id);
+            const installedModule = installedMap.get(app.id.toLowerCase());
 
             if (isApi) {
                 app.installed = true;
             } else if (app.type === 'local' && engineInstallMap.has(app.id.toLowerCase())) {
                 // Use real-time detection from is_engine_installed()
                 app.installed = engineInstallMap.get(app.id.toLowerCase()) ?? false;
+            } else if (app.type === 'local' && installedModule) {
+                // Non-engine local modules should render as installed immediately.
+                // Otherwise the modal first paints the "download" style and only then
+                // flips after a late async install check.
+                app.installed = true;
             }
 
             const provider = config.apiProviders.find((p: ApiProvider) => p.id === app.id);
@@ -205,9 +182,11 @@ export class CatalogService {
                 app.apiProviderData = provider as unknown as Record<string, unknown>;
             }
 
-            const inst = installedMap.get(app.id.toLowerCase());
-            if (inst?.configSchema) {
-                app.configSchema = inst.configSchema as unknown as Record<string, IConfigField>;
+            if (installedModule?.configSchema) {
+                app.configSchema = installedModule.configSchema as unknown as Record<
+                    string,
+                    IConfigField
+                >;
             }
         };
 
@@ -261,18 +240,6 @@ export class CatalogService {
             this._appData.ai.find((a) => a.id === id) ??
             this._appData.services.find((s) => s.id === id)
         );
-    }
-
-    /**
-     * Synchronizes internal state to global state.
-     */
-    private _syncToGlobal(): void {
-        const globalAppData = globalThis.APP_DATA;
-        globalAppData.ai = this._appData.ai;
-        globalAppData.services = this._appData.services;
-        if (this._appData.stars !== undefined) {
-            globalAppData.stars = this._appData.stars;
-        }
     }
 
     /**

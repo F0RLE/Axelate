@@ -9,6 +9,8 @@ function createMockTauri(): TauriProvider {
         listen: vi.fn().mockResolvedValue(() => {}),
         getSecureKey: vi.fn().mockResolvedValue(null),
         saveSecureKey: vi.fn().mockResolvedValue(undefined),
+        hasSecureKey: vi.fn().mockResolvedValue(false),
+        getSecureKeyMeta: vi.fn().mockResolvedValue({ exists: false, length: 0 }),
     } as unknown as TauriProvider;
 }
 
@@ -163,22 +165,23 @@ describe('SettingsService', () => {
     });
 
     describe('getSecureKey', () => {
-        it('should return key from backend', async () => {
-            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue('secret-key');
-            const result = await service.getSecureKey('gemini');
-            expect(result).toBe('secret-key');
+        it('should load the stored key from backend', async () => {
+            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockResolvedValue('stored-key');
+
+            const result = await service.getSecureKey('openrouter');
+
+            expect(result).toBe('stored-key');
+            expect(tauri.getSecureKey).toHaveBeenCalledWith('openrouter_api_key');
         });
 
-        it('should return empty string when null', async () => {
-            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-            const result = await service.getSecureKey('gemini');
-            expect(result).toBe('');
-        });
+        it('should return null on error', async () => {
+            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(
+                new Error('fail'),
+            );
 
-        it('should return empty string on error', async () => {
-            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
-            const result = await service.getSecureKey('gemini');
-            expect(result).toBe('');
+            const result = await service.getSecureKey('openrouter');
+
+            expect(result).toBeNull();
         });
     });
 
@@ -192,6 +195,70 @@ describe('SettingsService', () => {
         it('should return false on error', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
             const result = await service.validateApiKey('gemini', 'key');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('hasSecureKey', () => {
+        it('should return true when a stored key exists', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+
+            const result = await service.hasSecureKey('gemini');
+
+            expect(result).toBe(true);
+            expect(tauri.invoke).toHaveBeenCalledWith('has_secure_key', {
+                service: 'gemini_api_key',
+            });
+        });
+
+        it('should return false on error', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+
+            const result = await service.hasSecureKey('gemini');
+
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('getSecureKeyMeta', () => {
+        it('should return key metadata from backend', async () => {
+            const meta = { exists: true, length: 24 };
+            (tauri.getSecureKeyMeta as ReturnType<typeof vi.fn>).mockResolvedValue(meta);
+
+            const result = await service.getSecureKeyMeta('gemini');
+
+            expect(result).toEqual(meta);
+            expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('gemini_api_key');
+        });
+
+        it('should return empty metadata on error', async () => {
+            (tauri.getSecureKeyMeta as ReturnType<typeof vi.fn>).mockRejectedValue(
+                new Error('fail'),
+            );
+
+            const result = await service.getSecureKeyMeta('gemini');
+
+            expect(result).toEqual({ exists: false, length: 0 });
+        });
+    });
+
+    describe('validateStoredApiKey', () => {
+        it('should validate the stored key via backend', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+
+            const result = await service.validateStoredApiKey('openrouter');
+
+            expect(result).toBe(true);
+            expect(tauri.invoke).toHaveBeenCalledWith('validate_stored_api_key', {
+                provider: 'openrouter',
+            });
+        });
+
+        it('should return false when stored-key validation fails', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+
+            const result = await service.validateStoredApiKey('openrouter');
+
             expect(result).toBe(false);
         });
     });

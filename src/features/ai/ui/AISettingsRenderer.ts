@@ -19,17 +19,17 @@ import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 
 const ICONS = {
     VISIBLE:
-        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
-    HIDDEN: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>',
-    CHECK: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
-    X: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+        '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><use href="#icon-eye"></use></svg>',
+    HIDDEN: '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><use href="#icon-eye-off"></use></svg>',
+    CHECK: '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><use href="#icon-check"></use></svg>',
+    X: '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><use href="#icon-close"></use></svg>',
     SPINNER:
-        '<svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" style="opacity: 0.2;"></circle><path d="M4 12a8 8 0 0 1 8-8" style="opacity: 0.8;"></path></svg>',
+        '<svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><use href="#icon-clock"></use></svg>',
 } as const;
 
 const PURIFY_CONFIG = {
     USE_PROFILES: { html: true, svg: true },
-    ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g'],
+    ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g', 'use'],
     ADD_ATTR: [
         'viewBox',
         'd',
@@ -50,6 +50,7 @@ const PURIFY_CONFIG = {
         'height',
         'style',
         'class',
+        'href',
     ],
 };
 // Types
@@ -79,6 +80,7 @@ class AISettingsRenderer extends BaseComponent {
     private _tauri: TauriProvider | null = null;
     private _checkTimeout: ReturnType<typeof setTimeout> | null = null;
     private _activeContainer: HTMLElement | null = null;
+    private _renderAbortController: AbortController | null = null;
 
     constructor() {
         super();
@@ -111,6 +113,7 @@ class AISettingsRenderer extends BaseComponent {
         this._aiSettings = null;
         this._tauri = null;
         this._activeContainer = null;
+        this._cleanupRenderScope();
 
         if (this._checkTimeout !== null) {
             clearTimeout(this._checkTimeout);
@@ -130,6 +133,8 @@ class AISettingsRenderer extends BaseComponent {
             tracer.error('[AISettingsRenderer] Not initialized. Call init() first.');
             return;
         }
+
+        this._cleanupRenderScope();
 
         const appId = app.id;
         const providerData = app.apiProviderData ?? {};
@@ -169,7 +174,7 @@ class AISettingsRenderer extends BaseComponent {
                                 </h3>
                             </div>
                             <div class="ai-key-input-row">
-                                <input type="password" id="${appId}-api-key-input" value="" placeholder="${t('ui.settings.enter_key_placeholder', 'Enter your API key here')}" data-i18n-placeholder="ui.settings.enter_key_placeholder">
+                                <input id="${appId}-api-key-input" class="ai-key-editor is-masked" type="text" placeholder="${t('ui.settings.enter_key_placeholder', 'Enter your API key here')}" data-i18n-placeholder="ui.settings.enter_key_placeholder" spellcheck="false" autocomplete="off" />
                                 <button id="${appId}-key-toggle-btn" class="ai-icon-btn" aria-label="Toggle password visibility" data-i18n-aria-label="ui.settings.toggle_visibility">${ICONS.HIDDEN}</button>
                                 <button id="${appId}-key-check-btn" class="ai-check-btn" data-i18n="ui.gpt.key_check_btn">${t('ui.gpt.key_check_btn', 'Check')}</button>
                             </div>
@@ -189,58 +194,7 @@ class AISettingsRenderer extends BaseComponent {
                         </div>
                     </section>
 
-                    ${
-                        appId === 'gemini' ||
-                        appId === 'claude' ||
-                        appId === 'gpt' ||
-                        appId === 'deepseek'
-                            ? (() => {
-                                  const savedLevel = this._aiSettings?.getThinkingLevel(appId);
-                                  const isLow = savedLevel === 'low';
-                                  const isMedium = savedLevel === 'medium';
-                                  const isHigh = savedLevel === 'high' || savedLevel === undefined;
-
-                                  const selectedModelData = models.find((m) => m.id === savedModel);
-                                  const hasReasoning =
-                                      selectedModelData?.capabilities?.reasoning === true;
-
-                                  return `
-                        <!-- 3. THINKING LEVEL SECTION (WINDOW) -->
-                        <section id="${appId}-thinking-section" class="thinking-level-section" aria-labelledby="${appId}-thinking-title" style="display: ${hasReasoning ? 'block' : 'none'};">
-                            <div class="ai-content-panel">
-                                <div class="settings-card-header-center">
-                                    <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
-                                    <div class="thinking-level-desc" data-i18n="ui.settings.gemini.thinking_desc">${t('ui.settings.gemini.thinking_desc', 'Control reasoning depth')}</div>
-                                </div>
-                                <div id="${appId}-thinking-grid" class="thinking-grid three-col" role="radiogroup" aria-label="Thinking Level">
-                                    <div class="thinking-option-card ${isLow ? 'selected' : ''}" 
-                                        role="radio" 
-                                        aria-checked="${String(isLow)}" 
-                                        tabindex="0"
-                                        data-value="low">
-                                        <div class="thinking-option-title" data-i18n="ui.settings.thinking.low">${t('ui.settings.thinking.low', 'Low')}</div>
-                                    </div>
-                                    <div class="thinking-option-card ${isMedium ? 'selected' : ''}" 
-                                        role="radio" 
-                                        aria-checked="${String(isMedium)}" 
-                                        tabindex="0"
-                                        data-value="medium">
-                                        <div class="thinking-option-title" data-i18n="ui.settings.thinking.medium">${t('ui.settings.thinking.medium', 'Medium')}</div>
-                                    </div>
-                                    <div class="thinking-option-card ${isHigh ? 'selected' : ''}" 
-                                        role="radio" 
-                                        aria-checked="${String(isHigh)}" 
-                                        tabindex="0"
-                                        data-value="high">
-                                        <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-                        `;
-                              })()
-                            : ''
-                    }
+                    ${this._renderThinkingSection(appId, savedModel, models, t)}
 
                     <!-- 4. STATS SECTION (CLEAN) -->
                     <section id="${appId}-model-stats" class="ai-stats-section" aria-live="polite">
@@ -257,6 +211,70 @@ class AISettingsRenderer extends BaseComponent {
 
         container.innerHTML = DOMPurify.sanitize(rawHtml, PURIFY_CONFIG);
         await this._bindEvents(container, appId);
+    }
+
+    /**
+     * Renders the thinking level section, or empty string if not applicable.
+     */
+    private _renderThinkingSection(
+        appId: string,
+        savedModel: string,
+        models: IAIModelData[],
+        t: TranslateFunc,
+    ): string {
+        const supportsThinking =
+            appId === 'gemini' || appId === 'claude' || appId === 'gpt' || appId === 'deepseek';
+        if (!supportsThinking) return '';
+
+        const savedLevel = this._aiSettings?.getThinkingLevel(appId);
+        const isOff = savedLevel === 'off';
+        const isLow = savedLevel === 'low';
+        const isMedium = savedLevel === 'medium';
+        const isHigh = savedLevel === 'high';
+
+        const selectedModelData = models.find((m) => m.id === savedModel);
+        const hasReasoning = selectedModelData?.capabilities?.reasoning === true;
+
+        return `
+            <!-- 3. THINKING LEVEL SECTION (WINDOW) -->
+            <section id="${appId}-thinking-section" class="thinking-level-section" aria-labelledby="${appId}-thinking-title" style="display: ${hasReasoning ? 'block' : 'none'};">
+                <div class="ai-content-panel">
+                    <div class="settings-card-header-center">
+                        <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
+                    </div>
+                    <div id="${appId}-thinking-grid" class="thinking-grid four-col" role="radiogroup" aria-label="Thinking Level">
+                        <div class="thinking-option-card ${isOff ? 'selected' : ''}"
+                            role="radio"
+                            aria-checked="${String(isOff)}"
+                            tabindex="0"
+                            data-value="off">
+                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.off">${t('ui.settings.thinking.off', 'Off')}</div>
+                        </div>
+                        <div class="thinking-option-card ${isLow ? 'selected' : ''}"
+                            role="radio"
+                            aria-checked="${String(isLow)}"
+                            tabindex="0"
+                            data-value="low">
+                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.low">${t('ui.settings.thinking.low', 'Low')}</div>
+                        </div>
+                        <div class="thinking-option-card ${isMedium ? 'selected' : ''}"
+                            role="radio"
+                            aria-checked="${String(isMedium)}"
+                            tabindex="0"
+                            data-value="medium">
+                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.medium">${t('ui.settings.thinking.medium', 'Medium')}</div>
+                        </div>
+                        <div class="thinking-option-card ${isHigh ? 'selected' : ''}"
+                            role="radio"
+                            aria-checked="${String(isHigh)}"
+                            tabindex="0"
+                            data-value="high">
+                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
     }
 
     /**
@@ -431,7 +449,6 @@ class AISettingsRenderer extends BaseComponent {
                         <div class="stat-stars">${this._renderStars(stats.creative)}</div>
                     </div>
                 </div>
-                <div class="stats-note">${t('ui.settings.model_stats_note', 'Stats describe the selected model. Thinking level changes response style, not the base model rating.')}</div>
             `;
         }
 
@@ -474,29 +491,62 @@ class AISettingsRenderer extends BaseComponent {
     private async _bindEvents(container: HTMLElement, appId: string): Promise<void> {
         if (!this._settingsService) return;
 
-        const input = container.querySelector<HTMLInputElement>(`#${appId}-api-key-input`);
+        this._renderAbortController = new AbortController();
+        const renderSignal = this._renderAbortController.signal;
 
-        const savedKey = await this._settingsService.getSecureKey('openrouter');
-        if (input !== null && savedKey !== '') input.value = savedKey;
+        const input = container.querySelector(`#${appId}-api-key-input`) as
+            | HTMLInputElement
+            | HTMLTextAreaElement
+            | null;
+
+        if (input !== null) {
+            const meta = await this._settingsService.getSecureKeyMeta('openrouter');
+            if (meta.exists) {
+                this._applyStoredKeyMask(input, meta.length);
+            }
+        }
 
         const addListener = (element: Element | null, type: string, fn: EventListener): void => {
-            if (element !== null && this._abortController !== null) {
-                element.addEventListener(type, fn, { signal: this._abortController.signal });
+            if (element !== null) {
+                element.addEventListener(type, fn, { signal: renderSignal });
             }
         };
 
         addListener(input, 'input', (event) => {
-            if (this._settingsService) {
-                // eslint-disable-next-line @typescript-eslint/no-floating-promises
-                this._settingsService.saveSecureKey(
-                    'openrouter',
-                    (event.target as HTMLInputElement).value,
-                );
+            const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+            const normalizedValue = target.value.replace(/[\r\n]+/g, '');
+            if (normalizedValue !== target.value) {
+                target.value = normalizedValue;
+            }
+            if (target.dataset['storedRevealed'] === 'true') {
+                delete target.dataset['storedMasked'];
+            }
+            delete target.dataset['storedRevealed'];
+            target.dataset['keyDirty'] = 'true';
+        });
+
+        addListener(input, 'beforeinput', (event) => {
+            const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+            const inputEvent = event as InputEvent;
+            const inputType = inputEvent.inputType ?? '';
+
+            if (
+                target.dataset['storedMasked'] === 'true' &&
+                target.dataset['storedRevealed'] !== 'true' &&
+                !inputType.startsWith('delete')
+            ) {
+                this._clearStoredKeyMask(target);
+            }
+        });
+
+        addListener(input, 'keydown', (event) => {
+            if ((event as KeyboardEvent).key === 'Enter') {
+                event.preventDefault();
             }
         });
 
         addListener(container.querySelector(`#${appId}-key-toggle-btn`), 'click', () => {
-            this.toggleKeyVisibility(appId);
+            void this.toggleKeyVisibility(appId);
         });
 
         // Add handler for the OpenRouter link
@@ -529,10 +579,10 @@ class AISettingsRenderer extends BaseComponent {
         };
 
         container.addEventListener('click', handleModelSelection, {
-            signal: this._abortController?.signal as AbortSignal,
+            signal: renderSignal,
         });
         container.addEventListener('keydown', handleModelSelection, {
-            signal: this._abortController?.signal as AbortSignal,
+            signal: renderSignal,
         });
 
         const thinkingGrid = container.querySelector(`#${appId}-thinking-grid`);
@@ -566,7 +616,7 @@ class AISettingsRenderer extends BaseComponent {
                     (event) => {
                         updateThinking(event.currentTarget as HTMLElement);
                     },
-                    { signal: this._abortController?.signal as AbortSignal },
+                    { signal: renderSignal },
                 );
                 btn.addEventListener(
                     'keydown',
@@ -576,7 +626,7 @@ class AISettingsRenderer extends BaseComponent {
                             updateThinking(event.currentTarget as HTMLElement);
                         }
                     },
-                    { signal: this._abortController?.signal as AbortSignal },
+                    { signal: renderSignal },
                 );
             });
         }
@@ -593,14 +643,44 @@ class AISettingsRenderer extends BaseComponent {
      * @param appId - Unique provider identifier
      * @sideeffect Modifies input type and innerHTML
      */
-    public toggleKeyVisibility(appId: string): void {
-        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
+    public async toggleKeyVisibility(appId: string): Promise<void> {
+        const input = document.getElementById(`${appId}-api-key-input`) as
+            | HTMLInputElement
+            | HTMLTextAreaElement
+            | null;
         const btn = document.getElementById(`${appId}-key-toggle-btn`);
 
         if (input !== null && btn !== null) {
-            const isPassword = input.type === 'password';
-            input.type = isPassword ? 'text' : 'password';
-            btn.innerHTML = isPassword ? ICONS.VISIBLE : ICONS.HIDDEN;
+            if (input.dataset['storedMasked'] === 'true') {
+                if (input.dataset['storedRevealed'] === 'true') {
+                    this._applyStoredKeyMask(input, input.value.length);
+                    btn.innerHTML = ICONS.HIDDEN;
+                    return;
+                }
+
+                const storedKey = await this._settingsService?.getSecureKey('openrouter');
+                if (storedKey === undefined || storedKey === null || storedKey.trim() === '') {
+                    this._showToast(
+                        this._getTranslator()(
+                            'ui.settings.key_invalid_check',
+                            'Key is invalid or missing',
+                        ),
+                        'error',
+                    );
+                    return;
+                }
+
+                input.value = storedKey;
+                input.classList.remove('is-masked');
+                input.dataset['storedRevealed'] = 'true';
+                delete input.dataset['keyDirty'];
+                btn.innerHTML = ICONS.VISIBLE;
+                return;
+            }
+
+            const isMasked = input.classList.contains('is-masked');
+            input.classList.toggle('is-masked', !isMasked);
+            btn.innerHTML = isMasked ? ICONS.VISIBLE : ICONS.HIDDEN;
         }
     }
 
@@ -611,7 +691,10 @@ class AISettingsRenderer extends BaseComponent {
      * @sideeffect Updates button DOM state and displays toast notifications
      */
     public async checkKey(appId: string): Promise<void> {
-        const input = document.getElementById(`${appId}-api-key-input`) as HTMLInputElement | null;
+        const input = document.getElementById(`${appId}-api-key-input`) as
+            | HTMLInputElement
+            | HTMLTextAreaElement
+            | null;
         const btn = document.getElementById(`${appId}-key-check-btn`) as HTMLButtonElement | null;
         if (input === null || btn === null) return;
 
@@ -619,13 +702,6 @@ class AISettingsRenderer extends BaseComponent {
         if (btn.disabled || btn.classList.contains('checking')) return;
 
         const t = this._getTranslator();
-        const key = input.value.trim();
-
-        if (!key) {
-            this._showToast(t('ui.settings.key_invalid', 'Invalid Key'), 'error');
-            return;
-        }
-
         const originalHtml = btn.innerHTML;
         const originalWidth = btn.offsetWidth;
         btn.style.width = `${String(originalWidth)}px`;
@@ -634,13 +710,35 @@ class AISettingsRenderer extends BaseComponent {
         btn.disabled = true;
 
         try {
-            const isValid = await this._validateKey(appId, key);
+            const isStoredMask =
+                input.dataset['storedMasked'] === 'true' &&
+                input.dataset['storedRevealed'] !== 'true';
+            const isDirtyReplacement = input.dataset['keyDirty'] === 'true';
+            const key = input.value.trim();
+            const shouldValidateTypedKey =
+                (isDirtyReplacement && key !== '') || (!isStoredMask && key !== '');
+            const shouldValidateStoredKey = !isDirtyReplacement && isStoredMask && key !== '';
+
+            let isValid = false;
+            if (shouldValidateTypedKey) {
+                isValid = await this._validateKey(appId, key);
+            } else if (shouldValidateStoredKey) {
+                isValid = Boolean(await this._settingsService?.validateStoredApiKey('openrouter'));
+            }
+
             if (isValid) {
+                if (shouldValidateTypedKey && key !== '') {
+                    await this._settingsService?.saveSecureKey('openrouter', key);
+                    this._applyStoredKeyMask(input, key.length);
+                }
                 this._updateKeyButtonState(btn, 'success', ICONS.CHECK);
                 this._showToast(t('ui.settings.key_valid', 'Key is valid'), 'success');
             } else {
                 this._updateKeyButtonState(btn, 'error', ICONS.X);
-                this._showToast(t('ui.settings.key_invalid_check', 'Key is invalid'), 'error');
+                this._showToast(
+                    t('ui.settings.key_invalid_check', 'Key is invalid or missing'),
+                    'error',
+                );
             }
         } catch (error: unknown) {
             tracer.error('[AISettingsRenderer] Key check failed:', error);
@@ -658,6 +756,37 @@ class AISettingsRenderer extends BaseComponent {
                 btn.innerHTML = originalHtml;
             }, 3000);
         }
+    }
+
+    private _applyStoredKeyMask(
+        input: HTMLInputElement | HTMLTextAreaElement,
+        length?: number,
+    ): void {
+        input.dataset['storedMasked'] = 'true';
+        delete input.dataset['storedRevealed'];
+        delete input.dataset['keyDirty'];
+        input.classList.remove('is-masked');
+        input.value = this._buildStoredKeyMask(length);
+        input.placeholder = this._getTranslator()(
+            'ui.settings.stored_key_placeholder',
+            'Stored locally. Type to replace.',
+        );
+    }
+
+    private _clearStoredKeyMask(input: HTMLInputElement | HTMLTextAreaElement): void {
+        delete input.dataset['storedMasked'];
+        delete input.dataset['storedRevealed'];
+        input.value = '';
+        input.classList.add('is-masked');
+        input.placeholder = this._getTranslator()(
+            'ui.settings.enter_key_placeholder',
+            'Enter your API key here',
+        );
+    }
+
+    private _buildStoredKeyMask(length?: number): string {
+        const count = typeof length === 'number' && length > 0 ? length : 16;
+        return '•'.repeat(count);
     }
 
     /**
@@ -759,6 +888,18 @@ class AISettingsRenderer extends BaseComponent {
         const globalContext = getGlobalWin();
         if (typeof globalContext.showToast === 'function') {
             (globalContext.showToast as (m: string, t: string) => void)(message, type);
+        }
+    }
+
+    private _cleanupRenderScope(): void {
+        if (this._renderAbortController !== null) {
+            this._renderAbortController.abort();
+            this._renderAbortController = null;
+        }
+
+        if (this._checkTimeout !== null) {
+            clearTimeout(this._checkTimeout);
+            this._checkTimeout = null;
         }
     }
 }

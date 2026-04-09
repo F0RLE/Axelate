@@ -1,4 +1,4 @@
-import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { SecureKeyMeta, TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { IApp } from '@/shared/types/coreTypes';
 
 import { tracer } from '@/infrastructure/logging/LoggerService';
@@ -108,18 +108,44 @@ export class SettingsService {
     }
 
     /**
-     * Get API key from secure storage.
+     * Retrieves the actual stored API key.
+     * Use sparingly for explicit reveal flows only.
      */
-    public async getSecureKey(provider: string): Promise<string> {
+    public async getSecureKey(provider: string): Promise<string | null> {
         const storageKey = `${provider}_api_key`;
         try {
-            const value = await this._tauri.invoke<string | null>('get_secure_key', {
-                service: storageKey,
-            });
-            return value ?? '';
+            return await this._tauri.getSecureKey(storageKey);
         } catch (e) {
             tracer.error('[SettingsService] Failed to get secure key:', e);
-            return '';
+            return null;
+        }
+    }
+
+    /**
+     * Checks whether a secure API key exists without exposing the secret value.
+     */
+    public async hasSecureKey(provider: string): Promise<boolean> {
+        const storageKey = `${provider}_api_key`;
+        try {
+            return await this._tauri.invoke<boolean>('has_secure_key', {
+                service: storageKey,
+            });
+        } catch (e) {
+            tracer.error('[SettingsService] Failed to check secure key presence:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Returns non-sensitive metadata for a stored key.
+     */
+    public async getSecureKeyMeta(provider: string): Promise<SecureKeyMeta> {
+        const storageKey = `${provider}_api_key`;
+        try {
+            return await this._tauri.getSecureKeyMeta(storageKey);
+        } catch (e) {
+            tracer.error('[SettingsService] Failed to get secure key metadata:', e);
+            return { exists: false, length: 0 };
         }
     }
 
@@ -134,6 +160,20 @@ export class SettingsService {
             });
         } catch (e) {
             tracer.error('[SettingsService] API Key validation failed:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Validates the stored secure API key entirely on the backend.
+     */
+    public async validateStoredApiKey(provider: string): Promise<boolean> {
+        try {
+            return await this._tauri.invoke<boolean>('validate_stored_api_key', {
+                provider,
+            });
+        } catch (e) {
+            tracer.error('[SettingsService] Stored API key validation failed:', e);
             return false;
         }
     }

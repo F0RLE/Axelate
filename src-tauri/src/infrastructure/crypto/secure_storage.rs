@@ -107,10 +107,30 @@ impl SecureStorage {
         Self::encrypt_and_save(&data)
     }
 
+    /// Saves an encrypted key without blocking the async runtime.
+    pub async fn save_key_async(service: String, value: String) -> Result<(), AppError> {
+        tauri::async_runtime::spawn_blocking(move || Self::save_key(service, value))
+            .await
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Secure storage task join failure: {e}"),
+            })?
+    }
+
     /// Retrieves an encrypted key from secure storage
     pub fn get_key(service: &str) -> Result<Option<String>, AppError> {
         let data = Self::load_data()?;
         Ok(data.keys.get(service).cloned())
+    }
+
+    /// Retrieves an encrypted key without blocking the async runtime.
+    pub async fn get_key_async(service: String) -> Result<Option<String>, AppError> {
+        tauri::async_runtime::spawn_blocking(move || Self::get_key(&service))
+            .await
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Secure storage task join failure: {e}"),
+            })?
     }
 
     /// Removes an encrypted key from secure storage
@@ -122,6 +142,16 @@ impl SecureStorage {
             Self::encrypt_and_save(&data)?;
         }
         Ok(())
+    }
+
+    /// Removes an encrypted key without blocking the async runtime.
+    pub async fn remove_key_async(service: String) -> Result<(), AppError> {
+        tauri::async_runtime::spawn_blocking(move || Self::remove_key(&service))
+            .await
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Secure storage task join failure: {e}"),
+            })?
     }
 
     fn load_data() -> Result<SecureData, AppError> {

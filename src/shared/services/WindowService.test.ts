@@ -761,6 +761,24 @@ describe('WindowService', () => {
 
             expect(unlisten).toHaveBeenCalledTimes(1);
         });
+
+        it('should immediately unlisten late tauri://move listener if destroyed before registration resolves', async () => {
+            const unlisten = vi.fn();
+            let resolveListen!: (value: () => void) => void;
+            mockBridge.listen.mockImplementation(
+                () =>
+                    new Promise<() => void>((resolve) => {
+                        resolveListen = resolve;
+                    }),
+            );
+
+            await service.init(mockWindowConfig, 1);
+            service.destroy();
+            resolveListen(unlisten);
+            await Promise.resolve();
+
+            expect(unlisten).toHaveBeenCalledTimes(1);
+        });
     });
 
     // ---------------------------------------------------------- _getInitialZoomWithFallback valid zoom (lines 468-471)

@@ -10,7 +10,6 @@ import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
 import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
-import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import type { WindowService } from '@/shared/services/WindowService';
 import type { WindowUI } from '@/shared/shell/WindowUI';
 import { tracer } from '@/infrastructure/logging/LoggerService';
@@ -22,7 +21,6 @@ export interface ICoreEvents {
     readonly downloadUI: DownloadUI;
     readonly i18nUI: I18nUI;
     readonly navigationUI: NavigationUI;
-    readonly settingsUI: SettingsUI;
     readonly moduleSettingsUI: ModuleSettingsUI;
     readonly windowService: WindowService;
     readonly windowUI: WindowUI;
@@ -31,7 +29,6 @@ export interface ICoreEvents {
 export class EventHandler {
     private readonly _core: ICoreEvents;
     private _unsubscribers: (() => void)[] = [];
-    private readonly _cleanupAbort: AbortController = new AbortController();
 
     constructor(core: ICoreEvents) {
         this._core = core;
@@ -44,10 +41,7 @@ export class EventHandler {
         this._initGlobalDelegation();
         this._initWindowControls();
 
-        this._initDownloadsPage();
-        this._initAppModuleCards();
         this._initAppSelectionModal();
-        this._initChatPage();
         this._initLanguageModal();
         this._initModuleSettingsModal();
 
@@ -60,8 +54,8 @@ export class EventHandler {
     private _initGlobalDelegation(): void {
         this._addListener(document.body, 'click', (e: Event): void => {
             void (async (): Promise<void> => {
-                const target = e.target as HTMLElement | null;
-                if (!target) return;
+                const target = e.target;
+                if (!(target instanceof Element)) return;
 
                 // 1. Navigation Logic [data-page]
                 const navBtn = target.closest('[data-page]');
@@ -96,6 +90,46 @@ export class EventHandler {
                 }
 
                 // 4. Window Controls (Moved to direct listeners)
+                const addBtn = target.closest('#ai-module-add-btn, #services-module-add-btn');
+                if (addBtn instanceof HTMLElement) {
+                    e.stopPropagation();
+                    const type = addBtn.id === 'ai-module-add-btn' ? 'ai' : 'services';
+                    this._core.appUI.openAppSelection(type);
+                    return;
+                }
+
+                const moduleCard = target.closest('#ai-module-card, #services-module-card');
+                if (moduleCard instanceof HTMLElement) {
+                    if (
+                        target.closest(
+                            '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
+                        )
+                    ) {
+                        return;
+                    }
+                    const type = moduleCard.id === 'ai-module-card' ? 'ai' : 'services';
+                    this._core.appUI.openAppSelection(type);
+                    return;
+                }
+
+                if (target.closest('#clear-chat-btn')) {
+                    this._core.chatController.clearChat();
+                    return;
+                }
+
+                if (target.closest('#chat-attach-btn')) {
+                    void this._core.chatController.pickChatFiles();
+                    return;
+                }
+
+                if (target.closest('#chat-voice-btn')) {
+                    this._core.chatController.toggleVoiceInput();
+                    return;
+                }
+
+                if (target.closest('#chat-send-btn')) {
+                    void this._core.chatController.sendChat();
+                }
             })();
         });
     }
@@ -104,7 +138,6 @@ export class EventHandler {
      * Cleans up all event listeners.
      */
     public destroy(): void {
-        this._cleanupAbort.abort();
         this._unsubscribers.forEach((fn) => {
             fn();
         });
@@ -128,76 +161,12 @@ export class EventHandler {
         }
     }
 
-    private _initDownloadsPage(): void {}
-
-    private _initAppModuleCards(): void {
-        // Use event delegation because the module cards live in a template
-        // that is loaded asynchronously AFTER this init runs.
-        // Direct getElementById would return null at init time.
-        this._addListener(document.body, 'click', (e): void => {
-            const ev = e as MouseEvent;
-            const target = ev.target;
-            if (!(target instanceof HTMLElement)) return;
-
-            // Check if click is inside a module add button (has priority)
-            const addBtn = target.closest('#ai-module-add-btn, #services-module-add-btn');
-            if (addBtn instanceof HTMLElement) {
-                ev.stopPropagation();
-                const type = addBtn.id === 'ai-module-add-btn' ? 'ai' : 'services';
-                this._core.appUI.openAppSelection(type);
-                return;
-            }
-
-            // Check if click is inside a module card
-            const card = target.closest('#ai-module-card, #services-module-card');
-            if (card instanceof HTMLElement) {
-                // Skip if clicked on action elements inside the card
-                if (
-                    target.closest(
-                        '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
-                    )
-                ) {
-                    return;
-                }
-                const type = card.id === 'ai-module-card' ? 'ai' : 'services';
-                this._core.appUI.openAppSelection(type);
-            }
-        });
-    }
-
     private _initAppSelectionModal(): void {
         this._addListener(document.getElementById('close-app-selection-btn'), 'click', () => {
             this._core.appUI.closeAppSelection();
         });
         this._addListener(document.getElementById('close-app-selection-btn-alt'), 'click', () => {
             this._core.appUI.closeAppSelection();
-        });
-    }
-
-    private _initChatPage(): void {
-        // All chat elements live in chat.html which is loaded asynchronously —
-        // getElementById returns null at init time, so direct binding silently fails.
-        // Use delegation on document.body for both click and keydown.
-
-        this._addListener(document.body, 'click', (e: Event) => {
-            const target = (e as MouseEvent).target as HTMLElement | null;
-            if (!target) return;
-
-            if (target.closest('#clear-chat-btn')) {
-                this._core.chatController.clearChat();
-                return;
-            }
-            if (target.closest('#chat-attach-btn')) {
-                void this._core.chatController.pickChatFiles();
-                return;
-            }
-            if (target.closest('#chat-voice-btn')) {
-                this._core.chatController.toggleVoiceInput();
-                return;
-            }
-            if (target.closest('#chat-send-btn')) {
-                void this._core.chatController.sendChat();
-            }
         });
     }
 
@@ -223,7 +192,8 @@ export class EventHandler {
 
     private _initWindowControls(): void {
         const handler = (e: Event): void => {
-            const target = e.target as HTMLElement;
+            const target = e.target;
+            if (!(target instanceof Element)) return;
 
             // Minimize
             if (target.closest('#minimize-btn')) {

@@ -381,11 +381,13 @@ describe('AIChatTransport', () => {
     // ---------------------------------------------------------- destroy
     describe('destroy', () => {
         it('should call all registered unlisteners', () => {
-            // Manually push mock fns to _unlisteners (white-box)
+            // Manually seed mock fns into _unlisteners (white-box)
             const fn1 = vi.fn();
             const fn2 = vi.fn();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (transport as any)._unlisteners.push(fn1, fn2);
+            (transport as any)._unlisteners.add(fn1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (transport as any)._unlisteners.add(fn2);
 
             transport.destroy();
 
@@ -393,12 +395,12 @@ describe('AIChatTransport', () => {
             expect(fn2).toHaveBeenCalledOnce();
         });
 
-        it('should clear unlisteners array after destroy', () => {
+        it('should clear unlisteners set after destroy', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (transport as any)._unlisteners.push(vi.fn());
+            (transport as any)._unlisteners.add(vi.fn());
             transport.destroy();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((transport as any)._unlisteners).toHaveLength(0);
+            expect((transport as any)._unlisteners.size).toBe(0);
         });
 
         it('should be safe to call destroy multiple times', () => {

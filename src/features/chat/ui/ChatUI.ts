@@ -32,6 +32,7 @@ type SavedChatImage = {
 
 export class ChatUI {
     private static readonly _imageResetDelayMs = 250;
+    private _lastTokenCount = 0;
     private _lastEditableUserActionBar: HTMLElement | null = null;
     private _editMessageHandler: ((text: string) => void | Promise<void>) | null = null;
     private readonly _boundDocumentClick: (e: Event) => void;
@@ -39,36 +40,34 @@ export class ChatUI {
     private _retryStatusUnlisten: (() => void) | null = null;
     private _isInitialized = false;
     private _isDestroyed = false;
+    private _attachmentRenderVersion = 0;
     private _imageViewerOverlay: HTMLElement | null = null;
     private _imageViewerImage: HTMLImageElement | null = null;
+    private readonly _uiTimeouts = new Set<ReturnType<typeof setTimeout>>();
 
     private static readonly _downloadIcon = DOMPurify.sanitize(`
-        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M21 15v4h-2v-4zm-2 4v2H5v-2zM5 15v4H3v-4zm8-12v14h-2V3z"></path>
+            <path d="M7 11v2h10v-2zm2 2v2h2v-2zm4 0v2h2v-2z"></path>
+            <path d="M15 11v2h2v-2z"></path>
         </svg>
     `);
 
     private static readonly _folderIcon = DOMPurify.sanitize(`
-        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M4 4h6v2H4zm0 14h16v2H4zM20 8h2v10h-2zM2 6h2v12H2zm8 0h10v2H10z"></path>
         </svg>
     `);
 
     private static readonly _checkIcon = DOMPurify.sanitize(`
-        <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
+        <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M10 18H8v-2h2v2Zm-2-2H6v-2h2v2Zm4-2v2h-2v-2h2Zm-6 0H4v-2h2v2Zm8 0h-2v-2h2v2Zm2-2h-2v-2h2v2Zm2-2h-2V8h2v2Zm2-2h-2V6h2v2Z"></path>
         </svg>
     `);
 
     private static readonly _trashIcon = DOMPurify.sanitize(`
-        <svg class="icon-trash" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
+        <svg class="icon-trash" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M6 7h2v2H6zm14 0h2v10h-2zM8 5h12v2H8zM4 9h2v2H4zm-2 2h2v2H2zm2 2h2v2H4zm2 2h2v2H6zm2 2h12v2H8zm6-6h2v2h-2zm2 2h2v2h-2zm0-4h2v2h-2zm-4 4h2v2h-2zm0-4h2v2h-2z"></path>
         </svg>
     `);
 
@@ -136,9 +135,8 @@ export class ChatUI {
                      <span class="code-lang">${language}</span>
                      <button class="code-copy-btn" title="${getGlobalWin().t('ui.launcher.web.copy_code', 'Copy code')}">
                         <!-- Simple Copy Icon -->
-                        <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        <svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M4 6h2v14H4zm2 14h12v2H6zM18 6h2v14h-2zM6 4h2v2H6zm10 0h2v2h-2zm-6-2h4v2h-4zm0 4h4v2h-4zM8 2h2v6H8zm6 0h2v6h-2z"></path>
                         </svg>
                         <span>${getGlobalWin().t('ui.launcher.web.copy', 'Copy')}</span>
                      </button>
@@ -218,6 +216,7 @@ export class ChatUI {
         document.removeEventListener('keydown', this._boundImageViewerKeydown);
         this._retryStatusUnlisten?.();
         this._retryStatusUnlisten = null;
+        document.body.classList.remove('chat-image-viewer-open');
         this._imageViewerOverlay?.remove();
         this._imageViewerOverlay = null;
         this._imageViewerImage = null;
@@ -226,6 +225,10 @@ export class ChatUI {
             clearTimeout(timeout);
         }
         this._typingTimeouts.clear();
+        for (const timeout of this._uiTimeouts.values()) {
+            clearTimeout(timeout);
+        }
+        this._uiTimeouts.clear();
         this._lastEditableUserActionBar = null;
         this._editMessageHandler = null;
     }
@@ -539,9 +542,8 @@ export class ChatUI {
         copyBtn.dataset['copyText'] = content;
         copyBtn.title = getGlobalWin().t('ui.launcher.web.copy', 'Copy');
         copyBtn.innerHTML = DOMPurify.sanitize(`
-            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M4 6h2v14H4zm2 14h12v2H6zM18 6h2v14h-2zM6 4h2v2H6zm10 0h2v2h-2zm-6-2h4v2h-4zm0 4h4v2h-4zM8 2h2v6H8zm6 0h2v6h-2z"></path>
             </svg>
         `);
         if (!hasImageActions) {
@@ -556,9 +558,8 @@ export class ChatUI {
             editBtn.dataset['editText'] = content;
             editBtn.title = getGlobalWin().t('ui.launcher.web.edit_last', 'Edit last message');
             editBtn.innerHTML = DOMPurify.sanitize(`
-                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 20h9"></path>
-                    <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M15 2h4v2h-4zm-2 2h2v2h-2zm-2 2h2v2h-2zM9 8h2v2H9zM7 10h2v2H7zm-2 2h2v2H5zm-2 2h2v6h6v-2H7v-4H5zm10 2h8v2h-8z"></path>
                 </svg>
             `);
             actionBar.appendChild(editBtn);
@@ -630,7 +631,7 @@ export class ChatUI {
     }
 
     private _scheduleBubbleImageActions(bubble: HTMLElement, actionBar: HTMLElement): void {
-        globalThis.setTimeout(() => {
+        this._setManagedTimeout(() => {
             const image = this._extractImageFromBubble(bubble);
             if (image !== null) {
                 this._ensureImageActionButtons(actionBar, image);
@@ -837,9 +838,9 @@ export class ChatUI {
         );
 
         if (
-            typeof result?.file_path === 'string' &&
+            typeof result.file_path === 'string' &&
             result.file_path.length > 0 &&
-            typeof result?.folder_path === 'string' &&
+            typeof result.folder_path === 'string' &&
             result.folder_path.length > 0
         ) {
             return {
@@ -907,9 +908,8 @@ export class ChatUI {
         overlay.className = 'chat-image-viewer hidden';
         overlay.innerHTML = DOMPurify.sanitize(`
             <button type="button" class="chat-image-viewer-close" aria-label="Close image preview">
-                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                    <path d="M5 4h2v2H5zm12 0h2v2h-2zM7 6h2v2H7zm8 0h2v2h-2zM9 8h2v2H9zm4 0h2v2h-2zM11 10h2v4h-2zM9 14h2v2H9zm4 0h2v2h-2zM7 16h2v2H7zm8 0h2v2h-2zM5 18h2v2H5zm12 0h2v2h-2z"></path>
                 </svg>
             </button>
             <div class="chat-image-viewer-stage">
@@ -963,7 +963,10 @@ export class ChatUI {
     ): void {
         const t = getGlobalWin().t;
 
-        globalThis.setTimeout(() => {
+        this._setManagedTimeout(() => {
+            if (this._isDestroyed || !document.body.contains(saveBtn)) {
+                return;
+            }
             saveBtn.disabled = false;
             saveBtn.classList.remove('chat-save-image-btn', 'is-saved');
             saveBtn.classList.add('chat-open-image-folder-btn');
@@ -1126,6 +1129,7 @@ export class ChatUI {
 
     public updateAttachments(files: File[], onRemove: (index: number) => void): void {
         if (!this._attachmentsContainer) return;
+        const renderVersion = ++this._attachmentRenderVersion;
 
         this._attachmentsContainer.innerHTML = '';
         if (!files.length) {
@@ -1142,7 +1146,7 @@ export class ChatUI {
         const hiddenCount = files.length - maxVisible;
 
         visibleFiles.forEach((f, idx) => {
-            void this._renderPendingAttachment(f, idx, onRemove);
+            void this._renderPendingAttachment(f, idx, onRemove, renderVersion);
         });
 
         if (hiddenCount > 0) {
@@ -1157,12 +1161,20 @@ export class ChatUI {
         f: File,
         idx: number,
         onRemove: (idx: number) => void,
+        renderVersion: number,
     ): Promise<void> {
         const card = document.createElement('div');
         const isImage = f.type.startsWith('image/');
         card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
         const fileTokens = await chatFileHandler.getFileTokenEstimate(f);
+        if (
+            this._isDestroyed ||
+            renderVersion !== this._attachmentRenderVersion ||
+            !(this._attachmentsContainer instanceof HTMLElement)
+        ) {
+            return;
+        }
         const name = this._shortenFileName(f.name);
 
         const contentHtml = isImage
@@ -1187,9 +1199,7 @@ export class ChatUI {
             };
         }
 
-        if (this._attachmentsContainer) {
-            this._attachmentsContainer.appendChild(card);
-        }
+        this._attachmentsContainer.appendChild(card);
     }
 
     private _createFilePillHtml(originalName: string, tokens: number, displayName: string): string {
@@ -1352,21 +1362,33 @@ export class ChatUI {
         btn.classList.add('is-copied');
 
         btn.innerHTML = DOMPurify.sanitize(`
-            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
+            <svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M10 18H8v-2h2v2Zm-2-2H6v-2h2v2Zm4-2v2h-2v-2h2Zm-6 0H4v-2h2v2Zm8 0h-2v-2h2v2Zm2-2h-2v-2h2v2Zm2-2h-2V8h2v2Zm2-2h-2V6h2v2Z"></path>
             </svg>
         `);
 
-        setTimeout(() => {
+        this._setManagedTimeout(() => {
+            if (this._isDestroyed || !document.body.contains(btn)) {
+                return;
+            }
             btn.classList.remove('is-copied');
             btn.innerHTML = originalHtml;
         }, 1200);
+    }
+
+    private _setManagedTimeout(callback: () => void, delayMs: number): void {
+        const timeout = globalThis.setTimeout(() => {
+            this._uiTimeouts.delete(timeout);
+            callback();
+        }, delayMs);
+        this._uiTimeouts.add(timeout);
     }
 
     /**
      * Updates the token count display.
      */
     public updateTokenCount(count: number): void {
+        this._lastTokenCount = count;
         const el = document.getElementById('chat-token-count');
         if (el === null) return;
 
@@ -1487,10 +1509,7 @@ export class ChatUI {
 
         // 3. Token count (if visible)
         if (this._tokenCount?.classList.contains('visible') === true) {
-            const count = Number.parseInt(this._tokenCount.textContent || '0', 10);
-            if (!Number.isNaN(count)) {
-                this.updateTokenCount(count);
-            }
+            this.updateTokenCount(this._lastTokenCount);
         }
     }
 }

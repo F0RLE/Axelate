@@ -24,6 +24,9 @@ const mockCore = {
         invoke: mockInvoke,
         listen: mockListen,
         isTauri: vi.fn().mockReturnValue(true),
+        hasSecureKey: vi.fn(async (key: string) => {
+            return await mockInvoke('has_secure_key', { service: key });
+        }),
         getSecureKey: vi.fn(async (key: string) => {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-return
             return await mockInvoke('get_secure_key', { service: key });
@@ -102,9 +105,34 @@ describe('AIBridge', () => {
 
     // ---------------------------------------------------------- init
     describe('init', () => {
+        it('should abort initialization when core dependency is missing', async () => {
+            const bridge2 = new AIBridge();
+
+            await bridge2.init();
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((bridge2 as any)._initialized).toBe(false);
+        });
+
         it('should be callable without errors', async () => {
             // Already initialized in beforeEach, second call should be no-op
             await expect(aiBridge.init()).resolves.not.toThrow();
+        });
+
+        it('should clean up transport state when initialization fails', async () => {
+            const bridge2 = new AIBridge();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            bridge2.setCore(mockCore as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const transportDestroySpy = vi.spyOn((bridge2 as any)._transport, 'destroy');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn((bridge2 as any)._transport, 'init').mockRejectedValue(new Error('boom'));
+
+            await bridge2.init();
+
+            expect(transportDestroySpy).toHaveBeenCalled();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((bridge2 as any)._initialized).toBe(false);
         });
 
         it('should broadcast chunks and thoughts via transport callbacks', async () => {
@@ -158,8 +186,8 @@ describe('AIBridge', () => {
         it('should activate provider with valid API key', async () => {
             mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
                 await Promise.resolve();
-                if (cmd === 'get_secure_key' && args?.['service'] === 'openrouter_api_key')
-                    return 'sk-test-key-12345';
+                if (cmd === 'has_secure_key' && args?.['service'] === 'openrouter_api_key')
+                    return true;
                 return null;
             });
 
@@ -229,7 +257,7 @@ describe('AIBridge', () => {
             expect(state.activeProviderId).toBeNull();
         });
 
-        it('should clear all listeners on stop', async () => {
+        it('should preserve UI listeners on stop so a later provider restart can reuse them', async () => {
             const handler = vi.fn();
             aiBridge.onMessage('test', handler);
             aiBridge.onChunk('test', handler);
@@ -239,7 +267,27 @@ describe('AIBridge', () => {
             await aiBridge.startProvider('gemini');
             aiBridge.stopProvider();
 
-            // Listeners should be cleared — no way to assert directly but no errors
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastResponse('after-stop', 'chat');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastChunk('after-stop-chunk');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastThought('after-stop-thought');
+
+            expect(handler).toHaveBeenCalledWith('after-stop', 'chat');
+            expect(handler).toHaveBeenCalledWith('after-stop-chunk');
+            expect(handler).toHaveBeenCalledWith('after-stop-thought');
+        });
+    });
+
+    describe('destroy', () => {
+        it('should destroy transport regardless of concrete implementation checks', () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const transportDestroySpy = vi.spyOn((aiBridge as any)._transport, 'destroy');
+
+            aiBridge.destroy();
+
+            expect(transportDestroySpy).toHaveBeenCalled();
         });
     });
 
@@ -254,6 +302,7 @@ describe('AIBridge', () => {
         it('should invoke backend when provider is active', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message')
                     return { ok: true, reply: { text: 'Hello back!' } };
@@ -277,9 +326,9 @@ describe('AIBridge', () => {
             // First call (startProvider) returns a key; subsequent calls (sendMessage refresh) return null
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
-                if (cmd === 'get_secure_key') {
+                if (cmd === 'has_secure_key') {
                     callCount++;
-                    return callCount === 1 ? 'sk-test-key' : null;
+                    return callCount === 1;
                 }
                 return null;
             });
@@ -293,6 +342,7 @@ describe('AIBridge', () => {
         it('should handle transport error', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') throw new Error('Transport broke');
                 return null;
@@ -311,6 +361,7 @@ describe('AIBridge', () => {
 
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message')
                     return { ok: true, reply: { text: 'result text' } };
@@ -326,6 +377,7 @@ describe('AIBridge', () => {
         it('should handle backend error response without broadcasting', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') return { ok: false, error: 'Rate limited' };
                 return null;
@@ -341,6 +393,7 @@ describe('AIBridge', () => {
         it('should send with custom source parameter', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') return { ok: true, reply: { text: 'result' } };
                 return null;
@@ -355,6 +408,7 @@ describe('AIBridge', () => {
         it('should handle non-Error throw from pipeline', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') {
                     throw new Error('string-error'); // non-Error throw path: Error wraps the string
@@ -682,6 +736,7 @@ describe('AIBridge', () => {
             // Simulate: manager.apiKey is NOT null but startProvider returned false
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'existing-key';
                 return false; // startProvider will call this + manager will throw
             });
@@ -832,10 +887,6 @@ describe('AIBridge', () => {
                 get: () => 'test-key',
             });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            vi.spyOn((tempBridge as any)._manager, 'resolveActiveApiKey').mockResolvedValue(
-                'test-key',
-            );
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((tempBridge as any)._manager, 'isActive').mockReturnValue(true);
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -851,6 +902,7 @@ describe('AIBridge', () => {
         it('should handle an empty error string in backend mismatch logic (Line 218)', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') return { ok: false, error: '' }; // Empty error
                 return null;
@@ -902,12 +954,14 @@ describe('AIBridge', () => {
             await aiBridge.startProvider('llamacpp');
             await aiBridge.sendMessage('latest question', 'chat', [], history);
 
+            const requestMatcher = expect.objectContaining({
+                messages: [...history, { role: 'user', content: 'latest question' }],
+            }) as unknown;
+
             expect(mockInvoke).toHaveBeenCalledWith(
                 'send_chat_message',
                 expect.objectContaining({
-                    request: expect.objectContaining({
-                        messages: [...history, { role: 'user', content: 'latest question' }],
-                    }),
+                    request: requestMatcher,
                 }),
             );
         });

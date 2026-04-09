@@ -3,20 +3,22 @@ use crate::domain::ai::{
     self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
 };
+use crate::domain::ai::{ChannelSink, StreamEvent, StreamSink};
 use crate::domain::engine::manager::EngineManager;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
 use crate::infrastructure::config::ui_state::UiStateService;
+use crate::infrastructure::crypto::secure_storage::SecureStorage;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use tauri::Emitter;
 use tauri::{Manager, State, Window};
+use tokio::sync::mpsc;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
-#[cfg(target_os = "windows")]
-use windows::core::Interface;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Com::{
     CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
@@ -28,6 +30,8 @@ use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Shell::{IShellWindows, IWebBrowser2, ShellWindows};
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{SW_RESTORE, SetForegroundWindow, ShowWindow};
+#[cfg(target_os = "windows")]
+use windows::core::Interface;
 
 /// Result of saving a generated chat image to disk.
 #[derive(Debug, serde::Serialize, specta::Type)]
@@ -48,7 +52,18 @@ pub async fn send_chat_message(
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<ChatResponse, AppError> {
-    ai_service::process_chat_request(window, request, &sessions, &config_service, &engine_manager)
+    let mut request = request;
+    if !is_local_provider(&request.provider)
+        && request
+            .api_key
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+    {
+        request.api_key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
+    }
+
+    let sink = create_window_stream_sink(window);
+    ai_service::process_chat_request(request, &sessions, &config_service, &engine_manager, sink)
         .await
 }
 
@@ -57,6 +72,20 @@ pub async fn send_chat_message(
 /// Validates an API key for the specified provider
 pub async fn validate_api_key(provider: String, key: String) -> Result<bool, AppError> {
     ai_service::validate_api_key(provider, key).await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Validates the stored OpenRouter API key without exposing it to the frontend
+pub async fn validate_stored_api_key(provider: String) -> Result<bool, AppError> {
+    let key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
+    if let Some(key) = key
+        && !key.trim().is_empty()
+    {
+        return ai_service::validate_api_key(provider, key).await;
+    }
+
+    Ok(false)
 }
 
 #[tauri::command]
@@ -130,6 +159,7 @@ pub async fn generate_image(
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)]
 /// Starts image generation as a detached backend task and restores the window on completion.
 pub async fn generate_image_background(
     app: tauri::AppHandle,
@@ -150,15 +180,14 @@ pub async fn generate_image_background(
 
     tauri::async_runtime::spawn(async move {
         crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");
-        let result =
-            ai_service::process_image_request(
-                request,
-                &sessions,
-                &config_service,
-                &engine_manager,
-                &settings_service,
-            )
-            .await;
+        let result = ai_service::process_image_request(
+            request,
+            &sessions,
+            &config_service,
+            &engine_manager,
+            &settings_service,
+        )
+        .await;
 
         if let Err(error) = &result {
             tracing::error!("Background image generation failed: {error}");
@@ -183,6 +212,7 @@ pub async fn generate_image_background(
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
 /// Saves a chat image to the default Pictures/axelate directory and returns the final path.
 pub fn save_chat_image_default(
     base64_data: String,
@@ -224,6 +254,7 @@ pub fn save_chat_image_default(
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
 /// Deletes a previously saved chat image from disk.
 pub fn delete_chat_image(file_path: String) -> Result<(), AppError> {
     let file = PathBuf::from(&file_path);
@@ -244,6 +275,7 @@ pub fn delete_chat_image(file_path: String) -> Result<(), AppError> {
 
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
 /// Opens the saved chat image folder in the system file manager.
 pub fn open_chat_image_location(file_path: String, folder_path: String) -> Result<(), AppError> {
     let file = PathBuf::from(&file_path);
@@ -299,11 +331,14 @@ pub fn open_chat_image_location(file_path: String, folder_path: String) -> Resul
 
 #[cfg(target_os = "windows")]
 #[allow(unsafe_code)]
-fn try_activate_existing_explorer_window(target_folder: &std::path::Path) -> Result<bool, AppError> {
+fn try_activate_existing_explorer_window(
+    target_folder: &std::path::Path,
+) -> Result<bool, AppError> {
     let coinit = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
     let should_uninitialize = coinit.is_ok();
     if let Err(err) = coinit.ok() {
-        const RPC_E_CHANGED_MODE: windows::core::HRESULT = windows::core::HRESULT(0x8001_0106u32 as i32);
+        const RPC_E_CHANGED_MODE: windows::core::HRESULT =
+            windows::core::HRESULT(0x8001_0106u32.cast_signed());
         if err.code() != RPC_E_CHANGED_MODE {
             return Err(AppError::External {
                 request_id: None,
@@ -313,18 +348,18 @@ fn try_activate_existing_explorer_window(target_folder: &std::path::Path) -> Res
     }
 
     let result = (|| {
-        let shell_windows: IShellWindows =
-            unsafe { CoCreateInstance(&ShellWindows, None, CLSCTX_ALL) }
-                .map_err(|err| AppError::External {
-                    request_id: None,
-                    message: format!("Failed to access ShellWindows: {err}"),
-                })?;
+        let shell_windows: IShellWindows = unsafe {
+            CoCreateInstance(&ShellWindows, None, CLSCTX_ALL)
+        }
+        .map_err(|err| AppError::External {
+            request_id: None,
+            message: format!("Failed to access ShellWindows: {err}"),
+        })?;
 
-        let count = unsafe { shell_windows.Count() }
-            .map_err(|err| AppError::External {
-                request_id: None,
-                message: format!("Failed to enumerate Explorer windows: {err}"),
-            })?;
+        let count = unsafe { shell_windows.Count() }.map_err(|err| AppError::External {
+            request_id: None,
+            message: format!("Failed to enumerate Explorer windows: {err}"),
+        })?;
 
         let target_url = normalize_windows_explorer_url(&folder_path_to_file_url(target_folder));
 
@@ -349,11 +384,10 @@ fn try_activate_existing_explorer_window(target_folder: &std::path::Path) -> Res
                 continue;
             }
 
-            let hwnd_value = unsafe { browser.HWND() }
-                .map_err(|err| AppError::External {
-                    request_id: None,
-                    message: format!("Failed to get Explorer window handle: {err}"),
-                })?;
+            let hwnd_value = unsafe { browser.HWND() }.map_err(|err| AppError::External {
+                request_id: None,
+                message: format!("Failed to get Explorer window handle: {err}"),
+            })?;
             let hwnd = HWND(hwnd_value.0 as *mut core::ffi::c_void);
 
             unsafe {
@@ -403,18 +437,61 @@ fn percent_decode_path(value: &str) -> String {
     let mut index = 0;
 
     while index < bytes.len() {
-        if bytes[index] == b'%' && index + 2 < bytes.len() {
-            let hex = &value[index + 1..index + 3];
-            if let Ok(parsed) = u8::from_str_radix(hex, 16) {
-                result.push(parsed as char);
-                index += 3;
-                continue;
+        let Some(&byte) = bytes.get(index) else {
+            break;
+        };
+
+        if byte == b'%' {
+            let next_index = index + 3;
+            if let Some(hex) = value.get(index + 1..next_index) {
+                if let Ok(parsed) = u8::from_str_radix(hex, 16) {
+                    result.push(parsed as char);
+                    index = next_index;
+                    continue;
+                }
             }
         }
 
-        result.push(bytes[index] as char);
+        result.push(byte as char);
         index += 1;
     }
 
     result
+}
+
+fn create_window_stream_sink(window: Window) -> Arc<dyn StreamSink> {
+    let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
+    let sink: Arc<dyn StreamSink> = Arc::new(ChannelSink::new(tx));
+
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                StreamEvent::ChatChunk { content, .. } => {
+                    let _ = window.emit("ai:chat:chunk", content);
+                }
+                StreamEvent::ThoughtChunk { content, .. } => {
+                    let _ = window.emit("ai:thought:chunk", content);
+                }
+                StreamEvent::Done { usage, .. } => {
+                    let _ = window.emit("ai:chat:done", usage);
+                }
+            }
+        }
+    });
+
+    sink
+}
+
+fn is_local_provider(provider: &str) -> bool {
+    !matches!(
+        provider,
+        "gpt"
+            | "gemini"
+            | "openai"
+            | "openrouter"
+            | "anthropic"
+            | "mistral"
+            | "claude"
+            | "deepseek"
+    )
 }

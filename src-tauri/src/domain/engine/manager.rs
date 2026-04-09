@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use std::fs::File;
+use tokio::io::AsyncRead;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
@@ -72,7 +73,11 @@ fn push_arg_if_missing(args: &mut Vec<String>, candidates: &[&str], value: Optio
         return;
     }
 
-    args.push(candidates[0].to_string());
+    let Some(candidate) = candidates.first() else {
+        return;
+    };
+
+    args.push((*candidate).to_string());
     if let Some(value) = value {
         args.push(value.to_string());
     }
@@ -101,6 +106,58 @@ fn build_llamacpp_args(config: &EngineConfig) -> Vec<String> {
     }
 
     args
+}
+
+fn spawn_log_reader<R>(
+    mut stream: R,
+    mut file: Option<File>,
+    emitter: Arc<dyn EngineEventEmitter>,
+    engine_id: String,
+) where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        use std::io::Write;
+        use tokio::io::AsyncReadExt;
+
+        let mut buf = [0u8; 1024];
+        let mut current_line = String::new();
+
+        while let Ok(n) = stream.read(&mut buf).await {
+            if n == 0 {
+                break;
+            }
+            let Some(bytes) = buf.get(..n) else {
+                break;
+            };
+            let chunk = String::from_utf8_lossy(bytes);
+            for c in chunk.chars() {
+                if c == '\n' || c == '\r' {
+                    if !current_line.is_empty() {
+                        if let Some(ref mut f) = file {
+                            let mut line_nl = current_line.clone();
+                            line_nl.push('\n');
+                            let _ = f.write_all(line_nl.as_bytes());
+                        }
+                        let trimmed = current_line.trim();
+                        if is_progress_log_line(trimmed) {
+                            emitter.emit_log(&engine_id, trimmed);
+                        }
+                        current_line.clear();
+                    }
+                } else {
+                    current_line.push(c);
+                }
+            }
+        }
+
+        if !current_line.is_empty() {
+            let trimmed = current_line.trim();
+            if is_progress_log_line(trimmed) {
+                emitter.emit_log(&engine_id, trimmed);
+            }
+        }
+    });
 }
 
 impl EngineManager {
@@ -310,96 +367,22 @@ impl EngineManager {
         })?;
 
         // Spawn stdout/stderr readers
-        let emitter_clone = Arc::clone(&self.emitter);
-        let engine_id_clone = config.engine_id.clone();
-        if let Some(mut stdout) = process.stdout.take() {
-            let mut file = stdout_file;
-            tokio::spawn(async move {
-                use std::io::Write;
-                use tokio::io::AsyncReadExt;
-                let mut buf = [0u8; 1024];
-                let mut current_line = String::new();
-                while let Ok(n) = stdout.read(&mut buf).await {
-                    if n == 0 {
-                        break;
-                    }
-                    let Some(bytes) = buf.get(..n) else {
-                        break;
-                    };
-                    let chunk = String::from_utf8_lossy(bytes);
-                    for c in chunk.chars() {
-                        if c == '\n' || c == '\r' {
-                            if !current_line.is_empty() {
-                                if let Some(ref mut f) = file {
-                                    let mut line_nl = current_line.clone();
-                                    line_nl.push('\n');
-                                    let _ = f.write_all(line_nl.as_bytes());
-                                }
-                                let trimmed = current_line.trim();
-                                if is_progress_log_line(trimmed) {
-                                    emitter_clone.emit_log(&engine_id_clone, trimmed);
-                                }
-                                current_line.clear();
-                            }
-                        } else {
-                            current_line.push(c);
-                        }
-                    }
-                }
-
-                if !current_line.is_empty() {
-                    let trimmed = current_line.trim();
-                    if is_progress_log_line(trimmed) {
-                        emitter_clone.emit_log(&engine_id_clone, trimmed);
-                    }
-                }
-            });
+        if let Some(stdout) = process.stdout.take() {
+            spawn_log_reader(
+                stdout,
+                stdout_file,
+                Arc::clone(&self.emitter),
+                config.engine_id.clone(),
+            );
         }
 
-        let emitter_clone2 = Arc::clone(&self.emitter);
-        let engine_id_clone2 = config.engine_id.clone();
-        if let Some(mut stderr) = process.stderr.take() {
-            let mut file = stderr_file;
-            tokio::spawn(async move {
-                use std::io::Write;
-                use tokio::io::AsyncReadExt;
-                let mut buf = [0u8; 1024];
-                let mut current_line = String::new();
-                while let Ok(n) = stderr.read(&mut buf).await {
-                    if n == 0 {
-                        break;
-                    }
-                    let Some(bytes) = buf.get(..n) else {
-                        break;
-                    };
-                    let chunk = String::from_utf8_lossy(bytes);
-                    for c in chunk.chars() {
-                        if c == '\n' || c == '\r' {
-                            if !current_line.is_empty() {
-                                if let Some(ref mut f) = file {
-                                    let mut line_nl = current_line.clone();
-                                    line_nl.push('\n');
-                                    let _ = f.write_all(line_nl.as_bytes());
-                                }
-                                let trimmed = current_line.trim();
-                                if is_progress_log_line(trimmed) {
-                                    emitter_clone2.emit_log(&engine_id_clone2, trimmed);
-                                }
-                                current_line.clear();
-                            }
-                        } else {
-                            current_line.push(c);
-                        }
-                    }
-                }
-
-                if !current_line.is_empty() {
-                    let trimmed = current_line.trim();
-                    if is_progress_log_line(trimmed) {
-                        emitter_clone2.emit_log(&engine_id_clone2, trimmed);
-                    }
-                }
-            });
+        if let Some(stderr) = process.stderr.take() {
+            spawn_log_reader(
+                stderr,
+                stderr_file,
+                Arc::clone(&self.emitter),
+                config.engine_id.clone(),
+            );
         }
 
         let mut running = RunningEngine {
@@ -560,9 +543,11 @@ mod tests {
     fn adds_qwen_specific_llamacpp_args() {
         let args = build_llamacpp_args(&sample_config(Some("Qwen3.5-9B-Q4_K_M.gguf")));
         assert!(args.contains(&"--jinja".to_string()));
-        assert!(args.windows(2).any(|w| w == ["--reasoning-format", "deepseek"]));
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--reasoning-format", "deepseek"])
+        );
         assert!(args.contains(&"--no-context-shift".to_string()));
         assert!(args.windows(2).any(|w| w == ["--flash-attn", "on"]));
     }
-
 }

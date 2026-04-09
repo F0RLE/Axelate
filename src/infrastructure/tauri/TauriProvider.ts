@@ -6,6 +6,10 @@ import type { IBridge } from '@/shared/types/IBridge';
 import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
 // No local types needed, using global.d.ts
+export interface SecureKeyMeta {
+    exists: boolean;
+    length: number;
+}
 
 export class TauriProvider implements IBridge {
     private _isTauriDetected: boolean | null = null;
@@ -191,6 +195,31 @@ export class TauriProvider implements IBridge {
         }
     }
 
+    /**
+     * Check whether a non-empty key exists in secure storage.
+     */
+    public async hasSecureKey(service: string): Promise<boolean> {
+        try {
+            return await this.invoke<boolean>('has_secure_key', { service });
+        } catch (e) {
+            tracer.error(
+                `[TauriProvider] Secure presence check failed for ${service}: ${String(e)}`,
+            );
+            return false;
+        }
+    }
+
+    public async getSecureKeyMeta(service: string): Promise<SecureKeyMeta> {
+        try {
+            return await this.invoke<SecureKeyMeta>('get_secure_key_meta', { service });
+        } catch (e) {
+            tracer.error(
+                `[TauriProvider] Secure metadata lookup failed for ${service}: ${String(e)}`,
+            );
+            return { exists: false, length: 0 };
+        }
+    }
+
     private _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
         tracer.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
 
@@ -236,6 +265,8 @@ export class TauriProvider implements IBridge {
                 appMemory: 0,
             } satisfies Bindings.SystemStats,
             validate_api_key: true,
+            has_secure_key: false,
+            get_secure_key_meta: { exists: false, length: 0 } satisfies SecureKeyMeta,
             save_setting: true,
         };
 

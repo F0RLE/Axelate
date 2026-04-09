@@ -1,4 +1,6 @@
-use crate::domain::{modules::controller as module_controller, monitoring::system_monitor};
+use crate::domain::{
+    modules::controller as module_controller, monitoring::system_monitor::SystemMonitorService,
+};
 use crate::models::SystemStats;
 use axum::{
     Json, Router,
@@ -16,6 +18,7 @@ struct AppState {
     tauri_app: AppHandle,
     config_service: std::sync::Arc<crate::domain::system::config_service::ConfigService>,
     settings_service: crate::infrastructure::config::settings::SettingsService,
+    monitor_service: std::sync::Arc<SystemMonitorService>,
 }
 
 /// Starts the HTTP API server on port 3000 for local access
@@ -29,6 +32,9 @@ pub fn start_server(
     );
 
     let state = AppState {
+        monitor_service: std::sync::Arc::clone(
+            app.state::<std::sync::Arc<SystemMonitorService>>().inner(),
+        ),
         tauri_app: app,
         config_service,
         settings_service,
@@ -65,27 +71,37 @@ pub fn start_server(
             .route("/api/settings/save", post(save_setting_handler))
             .route("/api/config", get(get_config_handler))
             .route("/api/system/language", get(system_language_handler))
-            .route("/api/control", post(general_control_handler))
             .layer(cors)
             .with_state(state);
 
-        // Bind to 127.0.0.1 for local access only initially (safer & less firewall issues)
-        let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-        tracing::debug!("[Server] HTTP Server listening on http://{addr}");
-
-        // SAFETY: Binding to a port might fail if occupied, but inside tokio::spawn
-        // we can't easily propagate errors up. We log and exit the thread.
-        match tokio::net::TcpListener::bind(addr).await {
+        match bind_local_listener().await {
             Ok(listener) => {
+                let addr = listener
+                    .local_addr()
+                    .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 0)));
+                tracing::debug!("[Server] HTTP Server listening on http://{addr}");
                 if let Err(e) = axum::serve(listener, app).await {
                     tracing::error!("[Server] Fatal error serving HTTP: {e}");
                 }
             }
             Err(e) => {
-                tracing::error!("[Server] Failed to bind to port 3000: {e}");
+                tracing::error!("[Server] Failed to bind local HTTP server: {e}");
             }
         }
     });
+}
+
+async fn bind_local_listener() -> std::io::Result<tokio::net::TcpListener> {
+    let preferred = SocketAddr::from(([127, 0, 0, 1], 3000));
+    match tokio::net::TcpListener::bind(preferred).await {
+        Ok(listener) => Ok(listener),
+        Err(error) => {
+            tracing::warn!(
+                "[Server] Failed to bind preferred port 3000: {error}. Falling back to an ephemeral localhost port."
+            );
+            tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).await
+        }
+    }
 }
 
 // Handlers
@@ -95,10 +111,10 @@ async fn health_handler() -> Json<Value> {
     Json(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") }))
 }
 
-async fn stats_handler() -> Json<SystemStats> {
+async fn stats_handler(State(state): State<AppState>) -> Json<SystemStats> {
     // No logging here to prevent spamming logs every second
-    let stats = system_monitor::get_stats().await;
-    Json(stats)
+    let snapshot = state.monitor_service.get_stats().await;
+    Json(snapshot)
 }
 
 #[derive(serde::Deserialize)]
@@ -170,10 +186,12 @@ async fn translations_handler(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss
 )]
-async fn gpu_info_handler() -> Json<Value> {
-    let stats = system_monitor::get_stats().await;
+async fn gpu_info_handler(State(state): State<AppState>) -> Json<Value> {
+    let snapshot = state.monitor_service.get_stats().await;
 
-    if let Some(gpu) = stats.gpu {
+    if let Some(gpu) = snapshot.gpu {
+        let gpu_name = gpu.name;
+        let has_cuda = gpu_name.to_ascii_lowercase().contains("nvidia");
         // Convert Bytes to MB
         let memory_mb = if gpu.memory_total.is_finite() && gpu.memory_total > 0.0 {
             let mb = gpu.memory_total / 1024.0 / 1024.0;
@@ -188,8 +206,8 @@ async fn gpu_info_handler() -> Json<Value> {
 
         Json(json!({
             "detected": true,
-            "name": gpu.name,
-            "cuda": true, // Presence of NVML usually implies CUDA support
+            "name": gpu_name,
+            "cuda": has_cuda,
             "memory": memory_mb
         }))
     } else {
@@ -266,19 +284,4 @@ async fn get_config_handler(
     }
 
     Ok(Json(serde_json::to_value(config)?))
-}
-
-#[derive(serde::Deserialize)]
-struct GeneralControlRequest {
-    action: String,
-    service: String,
-}
-
-async fn general_control_handler(Json(payload): Json<GeneralControlRequest>) -> Json<Value> {
-    tracing::info!(
-        "[Server] General control: {} {}",
-        payload.action,
-        payload.service
-    );
-    Json(json!({ "success": true }))
 }

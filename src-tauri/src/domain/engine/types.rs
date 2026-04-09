@@ -160,29 +160,6 @@ pub struct SlotStatus {
     pub engine: EngineStatus,
 }
 
-/// Request source for queue priority
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "lowercase")]
-pub enum RequestSource {
-    /// User chat (highest priority)
-    Chat,
-    /// Script / service call
-    Script,
-}
-
-/// Queued request
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct QueuedRequest {
-    /// Unique request ID
-    pub id: String,
-    /// Required capability
-    pub capability: Capability,
-    /// Who sent the request
-    pub source: RequestSource,
-    /// Request payload (text prompt, image params, etc.)
-    pub payload: serde_json::Value,
-}
-
 const fn default_port() -> u16 {
     8081
 }

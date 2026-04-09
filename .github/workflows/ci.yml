@@ -69,7 +69,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
-          components: clippy
+          components: clippy, llvm-tools-preview
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
@@ -101,3 +101,17 @@ jobs:
           cd src-tauri
           cargo audit
         continue-on-error: true  # Don't fail CI, but report issues
+
+      - name: Install Coverage Tool
+        run: cargo install cargo-llvm-cov --locked --quiet
+
+      - name: Generate Rust Coverage Report
+        run: |
+          cd src-tauri
+          cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload Rust Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-lcov
+          path: src-tauri/lcov.info

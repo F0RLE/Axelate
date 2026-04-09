@@ -22,6 +22,20 @@ class TestComponent extends BaseComponent {
     }
 }
 
+class FailingComponent extends BaseComponent {
+    public readonly initHook = vi.fn();
+    public readonly destroyHook = vi.fn();
+
+    protected onInit(): void {
+        this.initHook();
+        throw new Error('init failed');
+    }
+
+    protected onDestroy(): void {
+        this.destroyHook();
+    }
+}
+
 describe('BaseComponent', () => {
     afterEach(() => {
         document.body.innerHTML = '';
@@ -69,5 +83,16 @@ describe('BaseComponent', () => {
 
         expect(component.visible('visible-node')).toBe(true);
         expect(component.visible('missing-node')).toBe(false);
+    });
+
+    it('resets init state after failed initialization so retry can work', async () => {
+        const component = new FailingComponent();
+
+        await component.init();
+        await component.init();
+
+        expect(component.initHook).toHaveBeenCalledTimes(2);
+        component.destroy();
+        expect(component.destroyHook).not.toHaveBeenCalled();
     });
 });

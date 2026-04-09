@@ -11,12 +11,6 @@ export class AIProviderManager {
     // Session Management
     private _sessionId: string = 'default';
 
-    // Optional properties for AI requests
-    public thinking_level?: 'low' | 'medium' | 'high';
-    public max_tokens?: number;
-    public attachments?: { name: string; type: string; data_base64: string }[];
-    public session_id?: string;
-
     public setCore(core: Core): void {
         this._core = core;
     }
@@ -47,17 +41,17 @@ export class AIProviderManager {
         }
 
         try {
-            const apiKey = await this._resolveApiKey(providerId);
             const isLocal = this._isLocalProvider(providerId);
+            const hasApiKey = await this._resolveHasApiKey(providerId);
 
-            if (apiKey === '' && !isLocal) {
+            if (!hasApiKey && !isLocal) {
                 return false;
             }
 
-            const model = this._getPersistedModel(providerId) ?? this._getDefaultModel(providerId);
+            const model = this._resolveModel(providerId);
 
             this._activeProviderId = providerId;
-            this._hasApiKey = isLocal || apiKey !== '';
+            this._hasApiKey = isLocal || hasApiKey;
             this._model = model;
 
             // Persist state
@@ -127,28 +121,17 @@ export class AIProviderManager {
      */
     public async refreshActiveApiKey(): Promise<void> {
         if (this._activeProviderId !== null) {
-            const freshKey = await this._resolveApiKey(this._activeProviderId);
-            this._hasApiKey = this._isLocalProvider(this._activeProviderId) || freshKey !== '';
+            const hasApiKey = await this._resolveHasApiKey(this._activeProviderId);
+            this._hasApiKey = this._isLocalProvider(this._activeProviderId) || hasApiKey;
         }
-    }
-
-    public async resolveActiveApiKey(): Promise<string | null> {
-        if (this._activeProviderId === null || this._isLocalProvider(this._activeProviderId)) {
-            return null;
-        }
-
-        const apiKey = await this._resolveApiKey(this._activeProviderId);
-        return apiKey === '' ? null : apiKey;
     }
 
     // --- Private Helpers ---
 
-    private async _resolveApiKey(providerId: string): Promise<string> {
-        if (this._isLocalProvider(providerId)) return '';
+    private async _resolveHasApiKey(providerId: string): Promise<boolean> {
+        if (this._isLocalProvider(providerId)) return false;
 
-        // Unified Key Management: remote providers all use openrouter
-        const keyName = 'openrouter_api_key';
-        return (await this._getSecureVal(keyName)) ?? '';
+        return await this._hasSecureVal('openrouter_api_key');
     }
 
     /**
@@ -172,19 +155,33 @@ export class AIProviderManager {
 
     private _getPersistedModel(providerId: string): string | null {
         if (!this._core) return null;
-        return this._core.aiSettings.getSelectedAIModel(providerId) ?? null;
+        const persistedModel = this._core.aiSettings.getSelectedAIModel(providerId);
+        if (persistedModel === undefined || persistedModel === null) {
+            return null;
+        }
+
+        const normalizedModel = persistedModel.trim();
+        return normalizedModel === '' ? null : normalizedModel;
     }
 
     private _getDefaultModel(providerId: string): string {
         const catalogModel = getMostPowerfulModel(providerId);
-        if (catalogModel) return catalogModel;
+        if (catalogModel !== null && catalogModel.trim() !== '') return catalogModel;
 
         const fallbacks: Record<string, string> = {
             gpt: 'gpt-5.4',
             gemini: 'gemini-3-pro',
             local: 'llama-4-maverick',
         };
-        return fallbacks[providerId] ?? '';
+        if (this._isLocalProvider(providerId)) {
+            return 'default';
+        }
+
+        return fallbacks[providerId] ?? 'default';
+    }
+
+    private _resolveModel(providerId: string): string {
+        return this._getPersistedModel(providerId) ?? this._getDefaultModel(providerId);
     }
 
     private async _getSecureVal(key: string): Promise<string | null> {
@@ -192,6 +189,15 @@ export class AIProviderManager {
             return await this._core.tauriProvider.getSecureKey(key);
         }
         return null;
+    }
+
+    private async _hasSecureVal(key: string): Promise<boolean> {
+        if (this._core && typeof this._core.tauriProvider.hasSecureKey === 'function') {
+            return Boolean(await this._core.tauriProvider.hasSecureKey(key));
+        }
+
+        const value = await this._getSecureVal(key);
+        return value !== null && value.trim() !== '';
     }
 
     private async _saveSecureVal(key: string, value: string): Promise<void> {

@@ -35,7 +35,7 @@ export function constructChatRequest(
         model: string;
         apiKey: string | null;
         sessionId: string;
-        thinkingLevel?: 'low' | 'medium' | 'high';
+        thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
         maxTokens?: number | undefined;
     },
 ): IChatRequest {
@@ -60,7 +60,7 @@ export function constructChatRequest(
         attachments,
     };
 
-    if (thinkingLevel !== undefined) {
+    if (thinkingLevel !== undefined && thinkingLevel !== 'off') {
         request.thinking_level = thinkingLevel;
     }
 

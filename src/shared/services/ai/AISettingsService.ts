@@ -20,7 +20,7 @@ export class AISettingsService {
             return savedLevel;
         }
 
-        return LOCAL_LOW_THINKING_DEFAULTS.has(appId) ? 'low' : 'high';
+        return LOCAL_LOW_THINKING_DEFAULTS.has(appId) ? 'low' : 'off';
     }
 
     public setThinkingLevel(appId: string, level: ThinkingLevel): void {

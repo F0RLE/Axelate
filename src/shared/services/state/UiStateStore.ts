@@ -1,13 +1,15 @@
 /**
  * @module shared/services/state/UiStateStore
  * @description Centralized store and persistence logic for the unified UI State.
+ * Persistence is coordinated by StateManager — this class exposes saveAsync/saveImmediate
+ * for registration as a StateManager target.
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
 
-export type ThinkingLevel = 'low' | 'medium' | 'high';
+export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
 
 export interface IUIState {
     sidebar_collapsed: boolean;
@@ -57,19 +59,9 @@ export class UiStateStore {
     private _isDirty = false;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly _STORAGE_KEY = 'axelate_ui_state';
-    private readonly _boundVisibilityChange = () => {
-        if (document.hidden) {
-            void this.saveAsync();
-        }
-    };
-    private readonly _boundBeforeUnload = () => {
-        this.saveImmediate();
-    };
     private _isDestroyed = false;
 
-    constructor(private readonly _bridge: IBridge) {
-        this._initAutoSave();
-    }
+    constructor(private readonly _bridge: IBridge) {}
 
     public async loadState(): Promise<IUIState> {
         try {
@@ -188,11 +180,6 @@ export class UiStateStore {
         }
     }
 
-    private _initAutoSave(): void {
-        document.addEventListener('visibilitychange', this._boundVisibilityChange);
-        globalThis.addEventListener('beforeunload', this._boundBeforeUnload);
-    }
-
     public destroy(): void {
         if (this._isDestroyed) return;
         this._isDestroyed = true;
@@ -201,8 +188,5 @@ export class UiStateStore {
             globalThis.clearTimeout(this._autoSaveTimer);
             this._autoSaveTimer = null;
         }
-
-        document.removeEventListener('visibilitychange', this._boundVisibilityChange);
-        globalThis.removeEventListener('beforeunload', this._boundBeforeUnload);
     }
 }

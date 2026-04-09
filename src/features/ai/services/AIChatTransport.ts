@@ -32,6 +32,7 @@ export interface IChatTransport {
     onStream(listener: (chunk: string) => void): () => void;
     onThought(listener: (chunk: string) => void): () => void;
     setCore(core: Core): void;
+    destroy(): void;
 }
 
 /**
@@ -40,7 +41,7 @@ export interface IChatTransport {
  */
 export class AIChatTransport implements IChatTransport {
     private _core: Core | null = null;
-    private readonly _unlisteners: (() => void)[] = [];
+    private readonly _unlisteners = new Set<() => void>();
 
     public setCore(core: Core): void {
         this._core = core;
@@ -64,18 +65,14 @@ export class AIChatTransport implements IChatTransport {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
-        const timeoutPromise = new Promise<IBridgeResponse>((_, reject) => {
-            setTimeout(() => {
-                reject(new Error('AI request timed out'));
-            }, 90000);
-        });
-
         try {
-            const invokePromise = this._core.tauriProvider
-                .invoke<IChatResponse>('send_chat_message', { request })
-                .then((response) => this._normalizeResponse(response));
-
-            return await Promise.race([invokePromise, timeoutPromise]);
+            return await this._runWithTimeout(
+                this._core.tauriProvider
+                    .invoke<IChatResponse>('send_chat_message', { request })
+                    .then((response) => this._normalizeResponse(response)),
+                90000,
+                'AI request timed out',
+            );
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             tracer.error('[AIChatTransport] IPC error:', error);
@@ -91,23 +88,19 @@ export class AIChatTransport implements IChatTransport {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
-        const timeoutPromise = new Promise<IBridgeResponse>((_, reject) => {
-            setTimeout(() => {
-                reject(new Error('Image generation requested timed out'));
-            }, 300000); // 5 mins timeout for images
-        });
-
         try {
-            const invokePromise = this._core.tauriProvider
-                .invoke<IImageGenerationResponse>('generate_image', { request })
-                .then((response) => {
-                    if (response.ok && response.images.length > 0) {
-                        return { ok: true, images: response.images };
-                    }
-                    return { ok: false, error: response.error ?? 'Failed to generate image' };
-                });
-
-            return await Promise.race([invokePromise, timeoutPromise]);
+            return await this._runWithTimeout(
+                this._core.tauriProvider
+                    .invoke<IImageGenerationResponse>('generate_image', { request })
+                    .then((response) => {
+                        if (response.ok && response.images.length > 0) {
+                            return { ok: true, images: response.images };
+                        }
+                        return { ok: false, error: response.error ?? 'Failed to generate image' };
+                    }),
+                300000,
+                'Image generation requested timed out',
+            );
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             tracer.error('[AIChatTransport] IPC image error:', error);
@@ -157,6 +150,17 @@ export class AIChatTransport implements IChatTransport {
         let unlistenFn: (() => void) | undefined;
         let isActive = true;
 
+        const cleanup = (): void => {
+            if (!isActive) {
+                return;
+            }
+            isActive = false;
+            if (unlistenFn) unlistenFn();
+            this._unlisteners.delete(cleanup);
+        };
+
+        this._unlisteners.add(cleanup);
+
         void this._core.tauriProvider
             .listen<string>(eventName, (event: unknown) => {
                 const chunk =
@@ -171,12 +175,32 @@ export class AIChatTransport implements IChatTransport {
                 } else {
                     fn(); // If already cancelled, clean up immediately
                 }
+            })
+            .catch((error: unknown) => {
+                tracer.error(`[AIChatTransport] Failed to listen for ${eventName}:`, error);
+                this._unlisteners.delete(cleanup);
             });
 
-        return () => {
-            isActive = false;
-            if (unlistenFn) unlistenFn();
-        };
+        return cleanup;
+    }
+
+    private async _runWithTimeout<T>(
+        operation: Promise<T>,
+        timeoutMs: number,
+        timeoutMessage: string,
+    ): Promise<T> {
+        let timeoutId!: ReturnType<typeof setTimeout>;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                reject(new Error(timeoutMessage));
+            }, timeoutMs);
+        });
+
+        try {
+            return await Promise.race([operation, timeoutPromise]);
+        } finally {
+            clearTimeout(timeoutId);
+        }
     }
 
     private _normalizeResponse(response: IChatResponse): IBridgeResponse {
@@ -188,6 +212,6 @@ export class AIChatTransport implements IChatTransport {
 
     public destroy(): void {
         this._unlisteners.forEach((fn) => fn());
-        this._unlisteners.length = 0;
+        this._unlisteners.clear();
     }
 }

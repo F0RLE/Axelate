@@ -3,6 +3,7 @@ use crate::infrastructure::persistence::json_store::JsonStore;
 use crate::utils::paths::CONFIG_DIR;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::fs;
 use std::path::PathBuf;
 
 /// Scaling constants
@@ -207,5 +208,30 @@ pub fn calculate_adaptive_zoom(height: u32) -> f64 {
 
 /// Synchronously loads window settings from disk.
 pub fn load_window_settings() -> WindowSettings {
-    JsonStore::load_sync(&settings_file()).unwrap_or_default()
+    load_window_settings_bootstrap(&settings_file())
+}
+
+fn load_window_settings_bootstrap(path: &std::path::Path) -> WindowSettings {
+    if !path.exists() {
+        return WindowSettings::default();
+    }
+
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) => {
+            tracing::error!(
+                "Failed to read window settings at {}, resetting to defaults: {error}",
+                path.display()
+            );
+            return WindowSettings::default();
+        }
+    };
+
+    serde_json::from_str(&content).unwrap_or_else(|error| {
+        tracing::error!(
+            "Failed to parse window settings at {}, resetting to defaults: {error}",
+            path.display()
+        );
+        WindowSettings::default()
+    })
 }

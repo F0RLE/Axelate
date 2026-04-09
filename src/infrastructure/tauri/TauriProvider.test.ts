@@ -329,6 +329,54 @@ describe('TauriProvider', () => {
         });
     });
 
+    // ---------------------------------------------------------- hasSecureKey
+    describe('hasSecureKey', () => {
+        it('should return key presence when invoke succeeds', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(true);
+
+            const result = await provider.hasSecureKey('openai_api');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('has_secure_key', {
+                service: 'openai_api',
+            });
+            expect(result).toBe(true);
+        });
+
+        it('should return false when invoke fails', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Presence check failed'),
+            );
+
+            const result = await provider.hasSecureKey('unknown_service');
+
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('getSecureKeyMeta', () => {
+        it('should return non-sensitive metadata when invoke succeeds', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce({
+                exists: true,
+                length: 24,
+            });
+
+            const result = await provider.getSecureKeyMeta('openai_api');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('get_secure_key_meta', {
+                service: 'openai_api',
+            });
+            expect(result).toEqual({ exists: true, length: 24 });
+        });
+
+        it('should return empty metadata when invoke fails', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(new Error('meta fail'));
+
+            const result = await provider.getSecureKeyMeta('unknown_service');
+
+            expect(result).toEqual({ exists: false, length: 0 });
+        });
+    });
+
     // ---------------------------------------------------------- writeToClipboard
     describe('writeToClipboard', () => {
         it('should call clipboard plugin in Tauri', async () => {

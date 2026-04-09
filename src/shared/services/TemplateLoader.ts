@@ -18,7 +18,7 @@ import { tracer } from '@/infrastructure/logging/LoggerService';
  * @class TemplateLoader
  * @description Manages template lifecycle and secure DOM injection.
  */
-class TemplateLoader {
+export class TemplateLoader {
     private readonly _cache = new Map<string, string>();
     private _initialized = false;
 
@@ -33,7 +33,7 @@ class TemplateLoader {
      */
     public init(): void {
         if (this._initialized) {
-            tracer.warn('[TemplateLoader] Already initialized');
+            tracer.debug('[TemplateLoader] Already initialized');
             return;
         }
 

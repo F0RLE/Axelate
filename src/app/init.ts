@@ -21,7 +21,6 @@ import { EventHandler } from './events';
 import { UiStateStore } from '@/shared/services/state/UiStateStore';
 import { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { AISettingsService } from '@/shared/services/ai/AISettingsService';
-import { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import { Particles } from '@/shared/shell/Particles';
 import { MonitoringService } from '@/features/monitoring/services/MonitoringService';
@@ -34,6 +33,10 @@ import { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
 import { aiBridge } from '@/features/ai/services/AIBridge';
 import { ChatController } from '@/features/chat/chat';
 import { ModulePlatformService } from '@/shared/services/ModulePlatformService';
+import { container } from './CoreContainer';
+import { eventBus } from '@/shared/services/EventBus';
+import { errorHandler } from '@/shared/services/ErrorHandler';
+import { StateManager } from '@/shared/services/StateManager';
 
 export class Core {
     // Services - Made public for EventHandler and GlobalBridge
@@ -48,7 +51,6 @@ export class Core {
     public readonly stateStore: UiStateStore;
     public readonly uiSettings: UISettingsService;
     public readonly aiSettings: AISettingsService;
-    public readonly downloadSettings: DownloadSettingsService;
     public readonly moduleSettings: ModuleSettingsService;
     public readonly particles: Particles;
     public readonly monitoringService: MonitoringService;
@@ -58,6 +60,7 @@ export class Core {
     public readonly settingsService: SettingsService;
     public readonly chatController: ChatController;
     public readonly modulePlatformService: ModulePlatformService;
+    public readonly stateManager: StateManager;
 
     // UI
     public readonly appUI: AppUI;
@@ -102,7 +105,6 @@ export class Core {
         this.stateStore = new UiStateStore(this.tauriProvider);
         this.uiSettings = new UISettingsService(this.stateStore);
         this.aiSettings = new AISettingsService(this.stateStore);
-        this.downloadSettings = new DownloadSettingsService(this.stateStore, this.tauriProvider);
         this.moduleSettings = new ModuleSettingsService(this.stateStore);
         this.moduleService = new ModuleService(this.tauriProvider);
         this.modulePlatformService = new ModulePlatformService(() => this.moduleService);
@@ -128,7 +130,7 @@ export class Core {
         this.windowUI = new WindowUI(this.windowService, this.uiSettings, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
         this.sidebarUI = new SidebarUI(this.uiSettings, this.soundService);
-        this.downloadUI = new DownloadUI(this.downloadSettings, this.i18n, this.navigation);
+        this.downloadUI = new DownloadUI(this.i18n);
         this.downloadUI.setOnCancel((moduleId: string) => {
             void this.modulePlatformService.cancelDownload(moduleId);
         });
@@ -161,6 +163,65 @@ export class Core {
         aiBridge.setCore(this);
 
         this.chatController = new ChatController(aiBridge, this.i18n, this.soundService);
+
+        // StateManager — centralized persistence coordinator
+        this.stateManager = new StateManager();
+        this.stateManager.register({
+            name: 'ui-state',
+            saveAsync: () => this.stateStore.saveAsync(),
+            saveImmediate: () => this.stateStore.saveImmediate(),
+        });
+        this.stateManager.register({
+            name: 'window-state',
+            saveAsync: () => this.windowService.saveAsync(),
+            saveImmediate: () => this.windowService.saveImmediate(),
+        });
+        this.stateManager.init();
+
+        // Register all services in DI container (replaces globalThis pollution)
+        container.registerServices({
+            core: this,
+            tauriProvider: this.tauriProvider,
+            tracer: this.tracer,
+            stateStore: this.stateStore,
+            uiSettings: this.uiSettings,
+            aiSettings: this.aiSettings,
+            moduleSettings: this.moduleSettings,
+            moduleService: this.moduleService,
+            modulePlatformService: this.modulePlatformService,
+            windowService: this.windowService,
+            i18n: this.i18n,
+            catalog: this.catalog,
+            navigation: this.navigation,
+            soundService: this.soundService,
+            monitoringService: this.monitoringService,
+            debugService: this.debugService,
+            settingsService: this.settingsService,
+            chatController: this.chatController,
+        });
+
+        container.registerUI({
+            appUI: this.appUI,
+            i18nUI: this.i18nUI,
+            windowUI: this.windowUI,
+            navigationUI: this.navigationUI,
+            sidebarUI: this.sidebarUI,
+            downloadUI: this.downloadUI,
+            settingsUI: this.settingsUI,
+            moduleSettingsUI: this.moduleSettingsUI,
+            monitoringUI: this.monitoringUI,
+            debugUI: this.debugUI,
+            particles: this.particles,
+        });
+
+        container.registerInfra({
+            templateLoader,
+            eventBus,
+            errorHandler,
+            stateManager: this.stateManager,
+        });
+
+        container.lock();
     }
 
     /**
@@ -296,6 +357,9 @@ export class Core {
         this._isInitialized = false;
         this._initPromise = null;
 
+        // StateManager handles all persistence saves (beforeunload + visibilitychange)
+        this.stateManager.destroy();
+
         globalThis.removeEventListener('keydown', this._boundGlobalShortcutKeydown);
         this._eventHandler.destroy();
         this.chatController.destroy();
@@ -316,6 +380,7 @@ export class Core {
         this.soundService.destroy();
         this.stateStore.destroy();
         aiBridge.destroy();
+        this._bridge.destroy();
     }
 
     /**

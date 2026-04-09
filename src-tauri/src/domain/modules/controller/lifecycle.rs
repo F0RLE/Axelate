@@ -9,6 +9,30 @@ use std::time::Duration;
 use tokio::process::Command;
 use tokio::time::timeout;
 
+fn build_command(cmd: CommandDefinition) -> Command {
+    match cmd {
+        CommandDefinition::Simple(script) => {
+            #[cfg(target_os = "windows")]
+            {
+                let mut command = Command::new("cmd");
+                command.args(["/C", &script]);
+                command
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let mut command = Command::new("sh");
+                command.args(["-c", &script]);
+                command
+            }
+        }
+        CommandDefinition::Structured { program, args } => {
+            let mut command = Command::new(program);
+            command.args(args);
+            command
+        }
+    }
+}
+
 /// Orchestrates the lifecycle transitions for a module
 #[derive(Debug)]
 pub struct LifecycleExecutor<'a> {
@@ -83,27 +107,7 @@ impl<'a> LifecycleExecutor<'a> {
             })?;
 
         // 4. Spawn process
-        let mut builder = match start_cmd {
-            CommandDefinition::Simple(script) => {
-                #[cfg(target_os = "windows")]
-                {
-                    let mut c = Command::new("cmd");
-                    c.args(["/C", &script]);
-                    c
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    let mut c = Command::new("sh");
-                    c.args(["-c", &script]);
-                    c
-                }
-            }
-            CommandDefinition::Structured { program, args } => {
-                let mut c = Command::new(program);
-                c.args(args);
-                c
-            }
-        };
+        let mut builder = build_command(start_cmd);
 
         builder
             .current_dir(self.module_path)
@@ -231,27 +235,7 @@ impl<'a> LifecycleExecutor<'a> {
         cmd: CommandDefinition,
         limit: Duration,
     ) -> Result<String, AppError> {
-        let mut builder = match cmd {
-            CommandDefinition::Simple(script) => {
-                #[cfg(target_os = "windows")]
-                {
-                    let mut c = Command::new("cmd");
-                    c.args(["/C", &script]);
-                    c
-                }
-                #[cfg(not(target_os = "windows"))]
-                {
-                    let mut c = Command::new("sh");
-                    c.args(["-c", &script]);
-                    c
-                }
-            }
-            CommandDefinition::Structured { program, args } => {
-                let mut c = Command::new(program);
-                c.args(args);
-                c
-            }
-        };
+        let mut builder = build_command(cmd);
 
         builder.current_dir(self.module_path);
 

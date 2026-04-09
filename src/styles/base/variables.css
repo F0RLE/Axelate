@@ -19,6 +19,7 @@
 
 :root {
     /* Color Components (for rgba usage) */
+    --background-raw: 17, 16, 21;
     --primary-raw: 138, 43, 226;
     --success-raw: 33, 136, 56;
     --danger-raw: 194, 33, 49;

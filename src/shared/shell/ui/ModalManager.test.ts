@@ -72,6 +72,8 @@ describe('ModalManager lifecycle', () => {
             new ModuleCardRenderer(),
             interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
             onFilterChange ?? (() => null),
+            vi.fn().mockResolvedValue(undefined),
+            vi.fn().mockResolvedValue(undefined),
             navigation,
         );
     }
@@ -293,26 +295,17 @@ describe('ModalManager lifecycle', () => {
         ).toBe(true);
     });
 
-    it('should cancel and start downloads through the global bridge helpers', async () => {
-        modalManager = createManager();
-        (
-            globalThis as unknown as {
-                cancelDownloadModule: ReturnType<typeof vi.fn>;
-                deleteModule: ReturnType<typeof vi.fn>;
-                downloadModule: ReturnType<typeof vi.fn>;
-                t: (key: string, fallback: string) => string;
-            }
-        ).cancelDownloadModule = vi.fn().mockResolvedValue(undefined);
-        (
-            globalThis as unknown as {
-                deleteModule: ReturnType<typeof vi.fn>;
-            }
-        ).deleteModule = vi.fn().mockResolvedValue(undefined);
-        (
-            globalThis as unknown as {
-                downloadModule: ReturnType<typeof vi.fn>;
-            }
-        ).downloadModule = vi.fn().mockResolvedValue(undefined);
+    it('should cancel and start downloads through injected callbacks', async () => {
+        const onDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        const onCancelDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        modalManager = new ModalManager(
+            new ModuleCardRenderer(),
+            interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
+            () => null,
+            onDownloadRequest,
+            onCancelDownloadRequest,
+            navigation,
+        );
 
         const list = document.getElementById('app-modal-list') as HTMLElement;
         list.innerHTML = `
@@ -335,13 +328,9 @@ describe('ModalManager lifecycle', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(
-            (globalThis as unknown as { cancelDownloadModule: ReturnType<typeof vi.fn> })
-                .cancelDownloadModule,
-        ).toHaveBeenCalledWith('gpt');
-        expect(
-            (globalThis as unknown as { deleteModule: ReturnType<typeof vi.fn> }).deleteModule,
-        ).toHaveBeenCalledWith('gpt');
+        expect(onCancelDownloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'gpt' }),
+        );
         expect(document.querySelector('.download-label')?.textContent).toBe('Download');
 
         list.innerHTML = `<div class="app-card" data-app-id="svc"><button class="download-btn"></button></div>`;
@@ -353,25 +342,22 @@ describe('ModalManager lifecycle', () => {
             expectedHash: 'abc',
             dlType: 'github',
         } as IApp);
-        expect(
-            (globalThis as unknown as { downloadModule: ReturnType<typeof vi.fn> }).downloadModule,
-        ).toHaveBeenCalledWith('svc', 'https://example.com/service.zip', 'abc', 'github');
+        expect(onDownloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: 'svc',
+                repoUrl: 'https://example.com/service.zip',
+                expectedHash: 'abc',
+                dlType: 'github',
+            }),
+        );
     });
 
-    it('should handle missing repo, missing download bridge and dynamic sidebar widths', () => {
+    it('should handle missing repo and dynamic sidebar widths', () => {
         modalManager = createManager();
         const handleDownload = (modalManager as unknown as { _handleDownload: (app: IApp) => void })
             ._handleDownload;
 
         handleDownload.call(modalManager, { id: 'empty', name: 'Empty', installed: false } as IApp);
-
-        delete (globalThis as Record<string, unknown>)['downloadModule'];
-        handleDownload.call(modalManager, {
-            id: 'svc',
-            name: 'Service',
-            installed: false,
-            repoUrl: 'https://example.com/service.zip',
-        } as IApp);
 
         const spans = document.querySelectorAll<HTMLElement>(
             '#app-modal-sidebar .category-filter-btn span',

@@ -1,5 +1,7 @@
 /// Repository for configuration data
 pub mod config_repository;
+/// Persisted engine settings
+pub mod engine_settings;
 /// General settings management
 pub mod settings;
 /// Theme configuration

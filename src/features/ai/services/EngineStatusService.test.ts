@@ -43,6 +43,12 @@ describe('EngineStatusService', () => {
         expect(webCore.tauriProvider.listen).not.toHaveBeenCalled();
     });
 
+    it('does not register duplicate listeners on repeated init', () => {
+        service.init();
+        service.init();
+        expect(core.tauriProvider.listen).toHaveBeenCalledTimes(4);
+    });
+
     it('tracks starting, ready, swapping and error events on selected cards', () => {
         document.body.innerHTML = `
             <div class="app-card selected" data-app-id="llamacpp">

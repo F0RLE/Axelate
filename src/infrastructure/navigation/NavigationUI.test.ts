@@ -41,23 +41,20 @@ describe('NavigationUI', () => {
     });
 
     it('should be idempotent across repeated init calls', () => {
-        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
-        const button = document.querySelector<HTMLElement>('.nav-btn');
-
         navigationUI.init();
         navigationUI.init();
-        button?.click();
 
-        expect(showPageSpy).toHaveBeenCalledTimes(1);
+        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
+
+        expect(navigationService.goBack).toHaveBeenCalledTimes(1);
     });
 
-    it('should remove sidebar and global listeners on destroy', () => {
+    it('should remove global listeners on destroy', () => {
         const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
 
         navigationUI.init();
         navigationUI.destroy();
 
-        document.querySelector<HTMLElement>('.nav-btn')?.click();
         globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
         globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
@@ -67,15 +64,13 @@ describe('NavigationUI', () => {
     });
 
     it('should allow re-init after destroy without duplicating listeners', () => {
-        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
-
         navigationUI.init();
         navigationUI.destroy();
         navigationUI.init();
 
-        document.querySelector<HTMLElement>('.nav-btn')?.click();
+        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
 
-        expect(showPageSpy).toHaveBeenCalledTimes(1);
+        expect(navigationService.goBack).toHaveBeenCalledTimes(1);
     });
 
     it('should handle back, forward and escape navigation branches', () => {
@@ -98,6 +93,18 @@ describe('NavigationUI', () => {
         });
         globalThis.dispatchEvent(escapeEvent);
         expect(escapeEvent.defaultPrevented).toBe(true);
+    });
+
+    it('should ignore side-button navigation with modifier keys', () => {
+        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
+        navigationUI.init();
+
+        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3, ctrlKey: true }));
+        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 4, shiftKey: true }));
+
+        expect(navigationService.goBack).not.toHaveBeenCalled();
+        expect(navigationService.goForward).not.toHaveBeenCalled();
+        expect(showPageSpy).not.toHaveBeenCalled();
     });
 
     it('should show target page, emit navigation payload and update active sidebar state', async () => {

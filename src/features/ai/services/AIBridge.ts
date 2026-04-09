@@ -42,9 +42,7 @@ export class AIBridge implements IAIBridge {
      */
     public setCore(core: Core): void {
         this._core = core;
-        if (this._transport instanceof AIChatTransport) {
-            this._transport.setCore(core);
-        }
+        this._transport.setCore(core);
         this._manager.setCore(core);
         this._engineStatus.setCore(core);
     }
@@ -58,10 +56,15 @@ export class AIBridge implements IAIBridge {
             return;
         }
 
-        await this._transport.init();
-        await this._manager.init();
+        if (this._core === null) {
+            tracer.error('[AIBridge] Initialization aborted: Core dependency is missing');
+            return;
+        }
 
         try {
+            await this._transport.init();
+            await this._manager.init();
+
             if (this._core?.tauriProvider.isTauri() === true) {
                 const unlistenLog = await this._core.tauriProvider.listen<{
                     engine_id: string;
@@ -110,6 +113,7 @@ export class AIBridge implements IAIBridge {
             this._engineStatus.init();
         } catch (error: unknown) {
             tracer.error('[AIBridge] Critical IPC initialization failure:', error);
+            this._cleanupTransportState();
         }
     }
 
@@ -172,10 +176,6 @@ export class AIBridge implements IAIBridge {
     public stopProvider(): void {
         tracer.info('[AIBridge] Explicitly stopping provider and clearing inactivity timers');
         this._manager.stopProvider();
-        this._listeners.clear();
-        this._chunkListeners.clear();
-        this._replaceChunkListeners.clear();
-        this._thoughtListeners.clear();
         this._clearInactivityTimer();
 
         // Also shut down the backend slots if we're explicitly stopped
@@ -271,16 +271,16 @@ export class AIBridge implements IAIBridge {
                 content: createMultimodalContent(text, attachments),
             };
 
-            const requestApiKey = await this._manager.resolveActiveApiKey();
-            if (requestApiKey === null && this._manager.isActive() === false) {
+            if (this._manager.isActive() === false) {
                 return this._handleMissingApiKey(source);
             }
 
-            const isLocalProvider = requestApiKey === null;
+            const isLocalProvider = this._manager.apiKey === null;
             const thinkingLevel =
                 this._core && !isLocalProvider
                     ? this._core.aiSettings.getThinkingLevel(providerId)
                     : undefined;
+            const effectiveThinkingLevel = thinkingLevel === 'off' ? undefined : thinkingLevel;
             const maxTokens = isLocalProvider ? undefined : this._manager.maxOutputTokens;
 
             const requestConfig: {
@@ -288,17 +288,17 @@ export class AIBridge implements IAIBridge {
                 model: string;
                 apiKey: string | null;
                 sessionId: string;
-                thinkingLevel?: 'low' | 'medium' | 'high';
+                thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
                 maxTokens?: number;
             } = {
                 providerId,
-                model: this._manager.model,
-                apiKey: requestApiKey,
+                model: this._manager.model || 'default',
+                apiKey: null,
                 sessionId: this._manager.sessionId,
             };
 
-            if (thinkingLevel !== undefined) {
-                requestConfig.thinkingLevel = thinkingLevel;
+            if (effectiveThinkingLevel !== undefined) {
+                requestConfig.thinkingLevel = effectiveThinkingLevel;
             }
 
             if (maxTokens !== undefined) {
@@ -504,14 +504,11 @@ export class AIBridge implements IAIBridge {
 
     public destroy(): void {
         this._manager.stopProvider();
-        this._unlisteners.forEach((fn) => {
-            fn();
-        });
-        this._unlisteners.length = 0;
+        this._cleanupTransportState();
         this._listeners.clear();
         this._chunkListeners.clear();
         this._replaceChunkListeners.clear();
-        this._initialized = false;
+        this._thoughtListeners.clear();
         tracer.info('[AIBridge] Resource released');
     }
 
@@ -546,6 +543,17 @@ export class AIBridge implements IAIBridge {
             );
             this.stopProvider();
         }, this.INACTIVITY_TIMEOUT_MS);
+    }
+
+    private _cleanupTransportState(): void {
+        this._unlisteners.forEach((fn) => {
+            fn();
+        });
+        this._unlisteners.length = 0;
+        this._transport.destroy();
+        this._engineStatus.destroy();
+        this._clearInactivityTimer();
+        this._initialized = false;
     }
 }
 

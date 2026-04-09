@@ -1,16 +1,17 @@
 //! AI Service implementation — Service Orchestrator
 //!
 //! Orchestrates chat requests: resolves provider config, dispatches via the
-//! `AiProvider` trait, and bridges streaming events to the Tauri window.
+//! `AiProvider` trait, and emits streaming events through an abstract sink.
 //!
 //! DTOs → [`types`] · Session management → [`session`] · Streaming → [`streaming`]
 
 use std::sync::Arc;
-use tauri::Emitter;
-use tokio::sync::mpsc;
+
+use crate::domain::engine::config::build_default_engine_config;
+use crate::infrastructure::config::engine_settings::load_engine_config_map;
 
 use super::session::ChatSessionManager;
-use super::streaming::{AiProvider, OpenRouterProvider, StreamEvent, WindowSink};
+use super::streaming::{AiProvider, OpenRouterProvider, StreamEvent, StreamSink};
 pub use super::types::{
     ChatMessage, ChatReply, ChatRequest, ChatResponse, ChatSession, TokenUsage,
 };
@@ -21,11 +22,11 @@ pub use super::types::{
 
 /// Dispatches a chat request to the appropriate provider (cloud or local engine).
 pub async fn process_chat_request(
-    window: tauri::Window,
     request: ChatRequest,
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    sink: Arc<dyn StreamSink>,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     // 1. Session Management
     let mut messages_context = request.messages.clone();
@@ -47,31 +48,29 @@ pub async fn process_chat_request(
         );
 
         // Slot empty, occupied by a different engine, or different model — start or reuse
-        let mut config = crate::api::engine::load_engine_config_map()
-            .ok()
-            .and_then(|map| map.get(&def.id).cloned())
-            .unwrap_or_else(|| crate::domain::engine::types::EngineConfig {
-                engine_id: def.id.clone(),
-                port: def.default_port,
-                gpu_layers: def.default_gpu_layers,
-                context_size: def.default_context_size,
-                model_path: None,
-                extra_args: vec![],
-            });
+        let mut config = build_engine_config(&def).await?;
 
         // Override model_path from request if frontend provided one
-        if !request.model.is_empty() {
+        if !request.model.is_empty() && request.model != "default" {
             config.model_path = Some(request.model.clone());
         }
 
+        if config.model_path.as_deref() == Some("default") {
+            config.model_path = None;
+        }
+
         let local_context_size = usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
+        let local_model_for_context = config
+            .model_path
+            .clone()
+            .unwrap_or_else(|| request.model.clone());
         let status = engine_manager.start(config).await?;
         base_url = format!("{}/v1", status.endpoint);
         is_local_engine = true;
 
         if let Some(sid) = &request.session_id {
             messages_context =
-                sessions.build_local_context(sid, local_context_size, &request.model);
+                sessions.build_local_context(sid, local_context_size, &local_model_for_context);
         }
 
         tracing::info!(
@@ -154,28 +153,7 @@ pub async fn process_chat_request(
     );
 
     // 3.1 Setup Bounded Channel
-    let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
-    let sink: Arc<dyn super::streaming::StreamSink> = Arc::new(WindowSink::new(tx));
-
     let provider: Box<dyn AiProvider> = Box::new(OpenRouterProvider::new(&base_url));
-
-    // 3.2 Spawn Sink Processor (UI Bridge)
-    let window_for_task = window.clone();
-    tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                StreamEvent::ChatChunk { content, .. } => {
-                    let _ = window_for_task.emit("ai:chat:chunk", content);
-                }
-                StreamEvent::ThoughtChunk { content, .. } => {
-                    let _ = window_for_task.emit("ai:thought:chunk", content);
-                }
-                StreamEvent::Done { usage, .. } => {
-                    let _ = window_for_task.emit("ai:chat:done", usage);
-                }
-            }
-        }
-    });
 
     // 3.3 Execute with 90s Timeout
     let sink_clone = Arc::clone(&sink);
@@ -227,6 +205,16 @@ pub async fn validate_api_key(
     provider: String,
     key: String,
 ) -> Result<bool, crate::errors::AppError> {
+    let key = key.trim().to_string();
+    if key.is_empty() || key.chars().any(char::is_whitespace) {
+        return Ok(false);
+    }
+
+    let is_openrouter_key = key.starts_with("sk-or-");
+    if provider != "gemini" && !is_openrouter_key {
+        return Ok(false);
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -236,7 +224,7 @@ pub async fn validate_api_key(
         })?;
 
     // OpenRouter / OpenAI Standard validation
-    let url = if provider == "gemini" && !key.starts_with("sk-or-") {
+    let url = if provider == "gemini" && !is_openrouter_key {
         // Fallback for legacy raw Gemini keys
         format!("https://generativelanguage.googleapis.com/v1beta/models?key={key}")
     } else {
@@ -318,17 +306,7 @@ pub async fn process_image_request(
         );
 
         // Slot empty, occupied by a different engine, or different model — start or reuse
-        let mut config = crate::api::engine::load_engine_config_map()
-            .ok()
-            .and_then(|map| map.get(&def.id).cloned())
-            .unwrap_or_else(|| crate::domain::engine::types::EngineConfig {
-                engine_id: def.id.clone(),
-                port: def.default_port,
-                gpu_layers: def.default_gpu_layers,
-                context_size: def.default_context_size,
-                model_path: None,
-                extra_args: vec![],
-            });
+        let mut config = build_engine_config(&def).await?;
 
         // If the request provides a specific (valid) model path, override the config.
         // Frontend sends "default" when no specific model is selected in the chat UI,
@@ -501,35 +479,40 @@ async fn apply_image_request_defaults(
     }
 
     request.negative_prompt = request.negative_prompt.or_else(|| {
-        resolve_string_setting(&settings, &settings_key, &request.provider, "negative_prompt")
+        resolve_string_setting(
+            &settings,
+            &settings_key,
+            &request.provider,
+            "negative_prompt",
+        )
     });
     request.steps = request
         .steps
         .or_else(|| resolve_u32_setting(&settings, &settings_key, &request.provider, "steps"));
-    request.cfg_scale = request.cfg_scale.or_else(|| {
-        resolve_f32_setting(&settings, &settings_key, &request.provider, "cfg_scale")
-    });
+    request.cfg_scale = request
+        .cfg_scale
+        .or_else(|| resolve_f32_setting(&settings, &settings_key, &request.provider, "cfg_scale"));
     request.width = request
         .width
         .or_else(|| resolve_u32_setting(&settings, &settings_key, &request.provider, "width"));
     request.height = request
         .height
         .or_else(|| resolve_u32_setting(&settings, &settings_key, &request.provider, "height"));
-    request.sampler = request.sampler.or_else(|| {
-        resolve_string_setting(&settings, &settings_key, &request.provider, "sampler")
-    });
+    request.sampler = request
+        .sampler
+        .or_else(|| resolve_string_setting(&settings, &settings_key, &request.provider, "sampler"));
     request.seed = request
         .seed
         .or_else(|| resolve_i32_setting(&settings, &settings_key, &request.provider, "seed"));
-    request.batch_size = request.batch_size.or_else(|| {
-        resolve_u32_setting(&settings, &settings_key, &request.provider, "batch_size")
-    });
+    request.batch_size = request
+        .batch_size
+        .or_else(|| resolve_u32_setting(&settings, &settings_key, &request.provider, "batch_size"));
     request.scheduler = request.scheduler.or_else(|| {
         resolve_string_setting(&settings, &settings_key, &request.provider, "scheduler")
     });
-    request.clip_skip = request.clip_skip.or_else(|| {
-        resolve_i32_setting(&settings, &settings_key, &request.provider, "clip_skip")
-    });
+    request.clip_skip = request
+        .clip_skip
+        .or_else(|| resolve_i32_setting(&settings, &settings_key, &request.provider, "clip_skip"));
 
     Ok(request)
 }
@@ -611,6 +594,16 @@ fn build_setting_candidates(prefix: &str, suffix: &str) -> [String; 3] {
         format!("{prefix}_{}", suffix.to_lowercase()),
         format!("{prefix}_{}", suffix.replace('_', "")),
     ]
+}
+
+async fn build_engine_config(
+    def: &crate::domain::engine::types::EngineDefinition,
+) -> Result<crate::domain::engine::types::EngineConfig, crate::errors::AppError> {
+    let saved = load_engine_config_map().await?;
+    Ok(saved
+        .get(&def.id)
+        .cloned()
+        .unwrap_or_else(|| build_default_engine_config(def)))
 }
 
 fn normalize_sdcpp_sampler(value: Option<&str>) -> String {
@@ -695,12 +688,37 @@ mod tests {
         assert!(count <= 15, "Should not wildly over-count 9 words");
     }
 
+    #[tokio::test]
+    async fn test_validate_api_key_rejects_obvious_non_keys() {
+        assert!(
+            !validate_api_key("openrouter".to_string(), "".to_string())
+                .await
+                .expect("empty key should not error")
+        );
+        assert!(
+            !validate_api_key(
+                "openrouter".to_string(),
+                "https://reddit.com/r/not-a-key".to_string()
+            )
+            .await
+            .expect("url-like key should not error")
+        );
+        assert!(
+            !validate_api_key("openrouter".to_string(), "not a real key".to_string())
+                .await
+                .expect("whitespace key should not error")
+        );
+    }
+
     #[test]
     fn test_resolve_image_setting_prefers_settings_key() {
         let mut extra_settings = HashMap::new();
         extra_settings.insert("custom_sd_steps".to_string(), "30".to_string());
         extra_settings.insert("sdcpp_steps".to_string(), "20".to_string());
-        extra_settings.insert("custom_sd_positiveprompt".to_string(), "portrait".to_string());
+        extra_settings.insert(
+            "custom_sd_positiveprompt".to_string(),
+            "portrait".to_string(),
+        );
 
         let settings = AppSettings {
             extra_settings,

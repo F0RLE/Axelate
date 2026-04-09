@@ -15,10 +15,11 @@ import { type SoundService } from '@/shared/services/SoundService';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationUI {
-    private _sidebarClickHandler: ((e: MouseEvent) => void) | null = null;
     private _mouseUpHandler: ((e: MouseEvent) => void) | null = null;
     private _keyDownHandler: ((e: KeyboardEvent) => void) | null = null;
     private _initialized = false;
+    private static readonly _BACK_BUTTON = 3;
+    private static readonly _FORWARD_BUTTON = 4;
 
     constructor(
         private readonly _service: NavigationService,
@@ -26,52 +27,17 @@ export class NavigationUI {
     ) {}
 
     /**
-     * Initializes click listeners for all [data-page] navigation buttons.
-     * Re-binds listeners directly to ensure they work after template injection.
+     * Initializes non-click navigation handlers.
+     * Page-button click delegation is owned by `EventHandler`.
      */
     public init(): void {
         if (this._initialized) return;
         this._initialized = true;
         tracer.debug('[NavigationUI] Navigation initialized.');
 
-        // 1. Delegate clicks on the sidebar wrapper rather than individual buttons
-        const sidebar = document.getElementById('sidebar');
-        this._sidebarClickHandler = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            const btn = target.closest('.nav-btn');
-            if (btn instanceof HTMLElement) {
-                const pageId = btn.dataset['page'];
-                if (pageId !== undefined && pageId !== '') {
-                    e.preventDefault();
-                    void this.showPage(pageId, btn);
-                }
-            }
-        };
-        if (sidebar) {
-            sidebar.addEventListener('click', this._sidebarClickHandler);
-        }
-
-        // 2. Bind global mouse navigation (Button 3 = Back, Button 4 = Forward)
+        // Bind global mouse navigation (Button 3 = Back, Button 4 = Forward)
         this._mouseUpHandler = (e: MouseEvent) => {
-            if (e.button === 3) {
-                // Back button
-                e.preventDefault();
-                if (this._service.popBackAction()) return;
-
-                const backPageId = this._service.goBack();
-                if (backPageId !== undefined && backPageId !== '') {
-                    void this.showPage(backPageId, null, false, true);
-                }
-            } else if (e.button === 4) {
-                // Forward button
-                e.preventDefault();
-                if (this._service.popForwardAction()) return;
-
-                const forwardPageId = this._service.goForward();
-                if (forwardPageId !== undefined && forwardPageId !== '') {
-                    void this.showPage(forwardPageId, null, false, true);
-                }
-            }
+            this._handleMouseNavigation(e);
         };
 
         // Bind global keyboard shortcuts (Escape = Back)
@@ -87,15 +53,40 @@ export class NavigationUI {
         globalThis.addEventListener('keydown', this._keyDownHandler);
     }
 
+    private _handleMouseNavigation(e: MouseEvent): void {
+        if (!this._shouldHandleMouseNavigation(e)) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (e.button === NavigationUI._BACK_BUTTON) {
+            if (this._service.popBackAction()) return;
+            this._navigateHistory(this._service.goBack());
+            return;
+        }
+
+        if (this._service.popForwardAction()) return;
+        this._navigateHistory(this._service.goForward());
+    }
+
+    private _shouldHandleMouseNavigation(e: MouseEvent): boolean {
+        if (e.defaultPrevented) return false;
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+        return (
+            e.button === NavigationUI._BACK_BUTTON || e.button === NavigationUI._FORWARD_BUTTON
+        );
+    }
+
+    private _navigateHistory(pageId: string | undefined): void {
+        if (pageId !== undefined && pageId !== '') {
+            void this.showPage(pageId, null, false, true);
+        }
+    }
+
     /**
      * Cleanup listeners.
      */
     public destroy(): void {
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar && this._sidebarClickHandler) {
-            sidebar.removeEventListener('click', this._sidebarClickHandler);
-        }
-        this._sidebarClickHandler = null;
         if (this._mouseUpHandler) {
             globalThis.removeEventListener('mouseup', this._mouseUpHandler);
             this._mouseUpHandler = null;

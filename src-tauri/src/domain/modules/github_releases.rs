@@ -80,9 +80,45 @@ pub async fn fetch_release_bundle(
         .await?;
 
     if !response.status().is_success() {
+        let status = response.status();
+        let retry_after = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        let rate_limit_remaining = response
+            .headers()
+            .get("x-ratelimit-remaining")
+            .and_then(|value| value.to_str().ok());
+        let rate_limit_reset = response
+            .headers()
+            .get("x-ratelimit-reset")
+            .and_then(|value| value.to_str().ok());
+
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS
+            || (status == reqwest::StatusCode::FORBIDDEN
+                && rate_limit_remaining.is_some_and(|value| value == "0"))
+        {
+            let retry_hint = retry_after
+                .map(|seconds| format!(" Retry after {seconds} seconds."))
+                .or_else(|| {
+                    rate_limit_reset.map(|unix_ts| {
+                        format!(" GitHub rate limit resets at unix timestamp {unix_ts}.")
+                    })
+                })
+                .unwrap_or_default();
+
+            return Err(AppError::External {
+                request_id: None,
+                message: format!(
+                    "GitHub API rate limit reached while fetching releases for '{module_id}'.{retry_hint}"
+                ),
+            });
+        }
+
         return Err(AppError::External {
             request_id: None,
-            message: format!("Failed to fetch GitHub releases: {}", response.status()),
+            message: format!("Failed to fetch GitHub releases: {status}"),
         });
     }
 

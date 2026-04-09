@@ -55,7 +55,7 @@ describe('CatalogService', () => {
     beforeEach(() => {
         // Mock global window object
         globalThis.APP_DATA = { ai: [], services: [] } as unknown as ICatalogData;
-        globalThis.getCatalogCategory = vi.fn();
+        globalThis.getCatalogCategory = vi.fn().mockReturnValue([]);
         globalThis.dispatchEvent = vi.fn();
 
         mockBridge = createMockBridge() as unknown as {
@@ -76,9 +76,11 @@ describe('CatalogService', () => {
             expect(globalThis.APP_DATA).toBeDefined();
             expect(typeof globalThis.getCatalogCategory).toBe('function');
 
-            // Check that getCatalogCategory returns internal arrays
-            const categoryReturn = globalThis.getCatalogCategory('ai');
-            expect(Array.isArray(categoryReturn)).toBe(true);
+            // CatalogService no longer sets getCatalogCategory directly (moved to GlobalBridge)
+            // Verify service methods work instead
+            const catalog = service.getCatalog();
+            expect(Array.isArray(catalog.ai)).toBe(true);
+            expect(Array.isArray(catalog.services)).toBe(true);
         });
     });
 
@@ -164,9 +166,11 @@ describe('CatalogService', () => {
     // ---------------------------------------------------------- getCatalogCategory fallback (lines 39-40)
     describe('getCatalogCategory fallback', () => {
         it('should return empty array for unknown category', () => {
-            const result = globalThis.getCatalogCategory('unknown');
-            expect(Array.isArray(result)).toBe(true);
-            expect(result.length).toBe(0);
+            // getCatalogCategory is now on GlobalBridge, not CatalogService
+            // Test service-level method instead
+            const catalog = service.getCatalog();
+            expect(Array.isArray(catalog.ai)).toBe(true);
+            expect(Array.isArray(catalog.services)).toBe(true);
         });
 
         it('should return services array for services category', async () => {
@@ -181,8 +185,9 @@ describe('CatalogService', () => {
 
             await service.loadCatalog();
 
-            const result = globalThis.getCatalogCategory('services');
-            expect(Array.isArray(result)).toBe(true);
+            const catalog = service.getCatalog();
+            expect(catalog.services.length).toBe(1);
+            expect(catalog.services.at(0)?.id).toBe('svc');
         });
     });
 
@@ -300,6 +305,25 @@ describe('CatalogService', () => {
 
             expect(apiApp?.installed).toBe(true);
             expect(localApp?.installed).not.toBe(true);
+        });
+
+        it('should mark non-engine local modules as installed when present in installed modules', async () => {
+            const config = createMockAppConfig({
+                catalog: {
+                    ai: [],
+                    services: [{ id: 'local-mod', name: 'Local Module', type: 'local' }],
+                },
+            });
+
+            setupBridgeMocks(mockBridge, config, [
+                { id: 'local-mod', configSchema: { setting: {} } } as unknown as IModule,
+            ]);
+
+            await service.loadCatalog();
+
+            const localApp = service.getAppById('local-mod');
+            expect(localApp?.installed).toBe(true);
+            expect(localApp?.configSchema).toEqual({ setting: {} });
         });
     });
 

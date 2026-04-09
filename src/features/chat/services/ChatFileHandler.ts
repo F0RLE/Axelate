@@ -83,8 +83,20 @@ export class ChatFileHandler {
      * @sideeffect Updates internal state and triggers UI updates if listeners are present
      */
     public addFiles(newFiles: FileList | File[]): void {
-        const filesArray = Array.from(newFiles);
-        this._files.push(...filesArray);
+        const filesArray = Array.from(newFiles).filter((file) => file.name !== '');
+        if (filesArray.length === 0) return;
+
+        const existingKeys = new Set(this._files.map((file) => this._getFileKey(file)));
+        const uniqueFiles = filesArray.filter((file) => {
+            const key = this._getFileKey(file);
+            if (existingKeys.has(key)) return false;
+            existingKeys.add(key);
+            return true;
+        });
+
+        if (uniqueFiles.length === 0) return;
+
+        this._files.push(...uniqueFiles);
         this._notifyUpdate();
     }
 
@@ -261,11 +273,9 @@ export class ChatFileHandler {
     // Removed private ZIP methods (_processZipFile, _extractZipEntries, _validateZipEntry, etc.)
 
     public async getTotalTokenEstimate(baseText: string): Promise<number> {
-        // Simple approximation logic
         let total = await getTokenCount(baseText);
         for (const file of this._files) {
-            if (file.type.startsWith('image/')) total += 258;
-            // For text files, we rely on backend processing usually.
+            total += await this.getFileTokenEstimate(file);
         }
         return total;
     }
@@ -305,6 +315,10 @@ export class ChatFileHandler {
         if (this._onUpdate) {
             this._onUpdate(this._files, this.removeFile.bind(this));
         }
+    }
+
+    private _getFileKey(file: File): string {
+        return `${file.name}:${file.size}:${file.type}:${file.lastModified}`;
     }
 }
 

@@ -350,7 +350,7 @@ describe('WindowUI lifecycle', () => {
         });
 
         uiLocal.init();
-        await Promise.resolve();
+        await vi.runAllTimersAsync();
         expect(service.toggleMaximize).toHaveBeenCalled();
         (
             uiLocal as unknown as {
@@ -384,5 +384,24 @@ describe('WindowUI lifecycle', () => {
         await (
             uiLocal as unknown as { _performResizeCheck: () => Promise<void> }
         )._performResizeCheck();
+    });
+
+    it('should not toggle maximize on small-screen init if window is already maximized', async () => {
+        const uiLocal = createWindowUI();
+        ui = uiLocal;
+        const service = (uiLocal as unknown as { _service: WindowService })._service as unknown as {
+            checkPolicy: ReturnType<typeof vi.fn>;
+            isMaximized: ReturnType<typeof vi.fn>;
+            toggleMaximize: ReturnType<typeof vi.fn>;
+        };
+
+        service.checkPolicy.mockResolvedValue({ isSmallScreen: true });
+        service.isMaximized.mockResolvedValue(true);
+
+        uiLocal.init();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(service.toggleMaximize).not.toHaveBeenCalled();
     });
 });

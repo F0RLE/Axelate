@@ -10,6 +10,8 @@ pub mod filesystem;
 pub mod http;
 /// Logging infrastructure
 pub mod logging;
+/// Monitoring infrastructure
+pub mod monitoring;
 /// Persistence infrastructure
 pub mod persistence;
 /// System infrastructure

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ModuleSettingsUI as SettingsUI } from './ModuleSettingsUI';
+import { ModuleSettingsUI } from './ModuleSettingsUI';
 import type { SettingsService } from '../services/SettingsService';
 import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
@@ -7,7 +7,7 @@ import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 
-type SettingsUIPrivate = {
+type ModuleSettingsUIPrivate = {
     _context: {
         t: (key: string, defaultValue?: string) => string;
         showToast: ReturnType<typeof vi.fn>;
@@ -80,13 +80,13 @@ type SettingsUIPrivate = {
         isImage: boolean,
     ) => void;
     _renderEngineFieldRow: (container: HTMLElement, options: Record<string, unknown>) => void;
-    _renderPerformanceModeToggle: (container: HTMLElement, appId: string) => void;
+    _renderPerformanceModeFieldRow: (container: HTMLElement, appId: string) => void;
     _resetDynamicModuleState: () => void;
     destroy: () => void;
 };
 
 describe('ModuleSettingsUI lifecycle', () => {
-    let settingsUI: SettingsUI | null = null;
+    let settingsUI: ModuleSettingsUI | null = null;
 
     beforeEach(() => {
         document.body.innerHTML = '<dialog id="module-settings-modal"></dialog>';
@@ -99,7 +99,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         document.body.innerHTML = '';
     });
 
-    function createSettingsUI(): SettingsUIPrivate {
+    function createSettingsUI(): ModuleSettingsUIPrivate {
         const service = {
             getSettings: vi.fn().mockReturnValue({}),
             saveSetting: vi.fn().mockResolvedValue(true),
@@ -125,9 +125,16 @@ describe('ModuleSettingsUI lifecycle', () => {
             removeBackAction: vi.fn(),
         } as unknown as NavigationService;
 
-        settingsUI = new SettingsUI(service, uiSettings, aiSettings, i18nUI, tauri, navigation);
+        settingsUI = new ModuleSettingsUI(
+            service,
+            uiSettings,
+            aiSettings,
+            i18nUI,
+            tauri,
+            navigation,
+        );
 
-        const privateUI = settingsUI as unknown as SettingsUIPrivate;
+        const privateUI = settingsUI as unknown as ModuleSettingsUIPrivate;
         (
             privateUI as unknown as {
                 _engineConfigService: { setConfig: ReturnType<typeof vi.fn> };
@@ -216,11 +223,8 @@ describe('ModuleSettingsUI lifecycle', () => {
         const ui = createSettingsUI();
         const control = ui._createExtraArgsField({});
 
-        const input = control.root.querySelector('.local-engine-tags-input');
-        expect(input).toBeInstanceOf(HTMLInputElement);
-        expect((input as HTMLInputElement).placeholder).toBe(
-            't:ui.settings.engine.extra_args.placeholder:Add flag and press Enter',
-        );
+        const hiddenInput = control.root.querySelector('.local-engine-tags-value');
+        expect(hiddenInput).toBeInstanceOf(HTMLInputElement);
 
         control.setGroups(['--ctx-size 4096']);
 
@@ -258,9 +262,12 @@ describe('ModuleSettingsUI lifecycle', () => {
         (popover.querySelector('.local-engine-args-copy-all') as HTMLButtonElement).click();
         expect(ui._context.showToast).toHaveBeenCalled();
 
-        (popover.querySelector('.local-engine-args-copy-btn') as HTMLButtonElement).click();
+        // Click on the first flag item (no more separate Add button — entire card is clickable)
+        const firstItem = popover.querySelector('.local-engine-args-item') as HTMLElement;
+        expect(firstItem).toBeTruthy();
+        firstItem.click();
         await Promise.resolve();
-        expect(clipboardWrite).toHaveBeenCalled();
+        expect(ui._context.showToast).toHaveBeenCalled();
 
         ui._toggleEngineInfoPopover(anchor, 'llamacpp');
         expect(document.querySelector('.local-engine-args-popover')).toBeNull();
@@ -455,22 +462,18 @@ describe('ModuleSettingsUI lifecycle', () => {
         const ui = createSettingsUI();
         const container = document.createElement('div');
 
-        ui._renderPerformanceModeToggle(container, 'sdcpp');
+        ui._renderPerformanceModeFieldRow(container, 'sdcpp');
 
         const label = container.querySelector('.local-engine-field-label');
-        const title = container.querySelector('.local-engine-performance-toggle-title');
-        const status = container.querySelector('.local-engine-performance-toggle-status');
-        const toggle = container.querySelector(
-            '.local-engine-performance-toggle',
-        ) as HTMLButtonElement | null;
+        const status = container.querySelector('.local-engine-perf-status');
+        const checkbox = container.querySelector(
+            'input[type="checkbox"]',
+        ) as HTMLInputElement | null;
 
         expect(label?.textContent).toBe('t:ui.settings.engine.performance_mode:Performance Mode');
-        expect(title?.textContent).toBe(
-            't:ui.settings.engine.performance_mode_title:Close launcher during generation',
-        );
         expect(status?.textContent).toBe('t:ui.common.disabled:Disabled');
 
-        toggle?.click();
+        checkbox?.click();
         expect(status?.textContent).toBe('t:ui.common.enabled:Enabled');
     });
 

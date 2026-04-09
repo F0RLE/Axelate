@@ -66,7 +66,7 @@ use app::{
 use domain::ai::ChatSessionManager;
 use domain::ai::custom_model_service;
 use domain::engine::manager::EngineManager;
-use domain::monitoring::system_monitor;
+use domain::monitoring::system_monitor::SystemMonitorService;
 use infrastructure::{
     config::{
         settings::SettingsService, ui_state::UiStateService, window_settings::WindowSettingsService,
@@ -136,8 +136,11 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         bootstrap::get_app_bootstrap_data,
         secure::save_secure_key,
         secure::get_secure_key,
+        secure::has_secure_key,
+        secure::get_secure_key_meta,
         ai::send_chat_message,
         ai::validate_api_key,
+        ai::validate_stored_api_key,
         ai::clear_chat_history,
         ai::get_chat_history,
         ai::rewind_last_turn,
@@ -189,6 +192,8 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     let sessions = std::sync::Arc::new(ChatSessionManager::new());
     sessions.start_saver();
     app.manage(sessions);
+    let monitor_service = std::sync::Arc::new(SystemMonitorService::new());
+    app.manage(std::sync::Arc::clone(&monitor_service));
 
     // Engine manager (local AI engine lifecycle)
     let tauri_emitter = std::sync::Arc::new(
@@ -215,7 +220,12 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
 
     crate::utils::paths::init_filesystem().ok();
 
-    system_monitor::start_monitoring(app.handle().clone(), 2000);
+    let monitor_emitter = std::sync::Arc::new(
+        crate::infrastructure::monitoring::tauri_emitter::TauriMonitoringEmitter::new(
+            app.handle().clone(),
+        ),
+    );
+    monitor_service.start_monitoring(monitor_emitter, 2000);
 
     #[cfg(desktop)]
     setup_global_shortcut(app)?;
@@ -269,7 +279,9 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                     let _ = window.set_always_on_top(false);
                 }
-                system_monitor::set_paused(false);
+                if let Some(monitor) = app.try_state::<std::sync::Arc<SystemMonitorService>>() {
+                    monitor.set_paused(false);
+                }
             } else {
                 create_main_window(app);
             }
@@ -298,9 +310,14 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(|_window, event| {
+        .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
-                system_monitor::set_paused(true);
+                if let Some(monitor) = window
+                    .app_handle()
+                    .try_state::<std::sync::Arc<SystemMonitorService>>()
+                {
+                    monitor.set_paused(true);
+                }
                 crate::utils::memory::trim_memory();
             }
         })

@@ -13,11 +13,16 @@ vi.mock('@/features/ai/utils/catalogHelpers', () => ({
 
 function createMockCore(
     getKeyFn: (k: string) => Promise<string | null> = () => Promise.resolve(null),
+    hasKeyFn: (k: string) => Promise<boolean> = async (key: string) => {
+        const value = await getKeyFn(key);
+        return value !== null && value !== '';
+    },
 ): Core {
     return {
         tauriProvider: {
             getSecureKey: vi.fn(getKeyFn),
             saveSecureKey: vi.fn().mockResolvedValue(undefined),
+            hasSecureKey: vi.fn(hasKeyFn),
         },
         aiSettings: {
             setAiSessionId: vi.fn(),
@@ -170,32 +175,22 @@ describe('AIProviderManager', () => {
     // ---------------------------------------------------------- refreshActiveApiKey
     describe('refreshActiveApiKey', () => {
         it('should update apiKey if it changed', async () => {
-            let callCount = 0;
-            const mockCore = createMockCore(() => {
-                callCount++;
-                return Promise.resolve(callCount === 1 ? 'original-key' : 'new-key');
-            });
+            let hasKey = true;
+            const mockCore = createMockCore(
+                () => Promise.resolve('original-key'),
+                () => Promise.resolve(hasKey),
+            );
             manager.setCore(mockCore);
             await manager.startProvider('gemini');
 
+            hasKey = false;
             await manager.refreshActiveApiKey();
 
-            expect(manager.apiKey).toBe('[secure]');
+            expect(manager.apiKey).toBeNull();
         });
 
         it('should do nothing if no active provider', async () => {
             await manager.refreshActiveApiKey();
-        });
-    });
-
-    describe('resolveActiveApiKey', () => {
-        it('should return the active provider key only on demand', async () => {
-            const mockCore = createMockCore(() => Promise.resolve('sk-live-key'));
-            manager.setCore(mockCore);
-            await manager.startProvider('gemini');
-
-            await expect(manager.resolveActiveApiKey()).resolves.toBe('sk-live-key');
-            expect(manager.apiKey).toBe('[secure]');
         });
     });
 
@@ -264,7 +259,18 @@ describe('AIProviderManager', () => {
             const result = await manager.startProvider('local');
             expect(result).toBe(true);
             // Model comes from _getDefaultModel since _getPersistedModel returned null
-            expect(manager.model).toBe('llama-4-maverick');
+            expect(manager.model).toBe('default');
+        });
+
+        it('should ignore empty persisted models and fall back to a non-empty default', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(''));
+            vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('');
+            manager.setCore(mockCore);
+
+            const result = await manager.startProvider('llamacpp');
+
+            expect(result).toBe(true);
+            expect(manager.model).toBe('default');
         });
     });
 });

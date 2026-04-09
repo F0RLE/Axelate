@@ -1,20 +1,13 @@
 /**
  * @module downloader/ui/DownloadUI
- * @description UI management for the downloader module, including progress tracking and settings
+ * @description UI management for the downloader module, including progress tracking
  */
 
 import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types/coreTypes';
-import type { DownloadProgress, DownloadSettings } from '../types/downloaderTypes';
-import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
+import type { DownloadProgress } from '../types/downloaderTypes';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
-import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
 
 export class DownloadUI {
-    private _settings: DownloadSettings = {
-        limitEnabled: false,
-        maxSpeed: 50,
-    };
-
     private static readonly SELECTORS = {
         PROGRESS_BAR: 'downloads-progress-bar',
         PROGRESS_TEXT: 'downloads-progress-text',
@@ -29,32 +22,12 @@ export class DownloadUI {
         BODY: 'downloads-body',
         HEADER: '.downloads-header',
         CONTAINER: 'downloads-container',
-        OVERLAY: 'download-settings-overlay',
-        TOGGLE: 'download-speed-limit-toggle',
-        SLIDER: 'download-speed-slider',
-        SPEED_VALUE: 'speed-limit-value',
-        SPEED_CONTROLS: 'speed-limit-controls',
-        MODEL_DOWNLOAD_MODAL: 'model-download-modal',
-        MODEL_NAME: 'download-model-name',
-        MODAL_PROGRESS_BAR: 'download-progress-bar',
-        MODAL_PROGRESS_TEXT: 'download-progress-text',
-        MODAL_SPEED: 'download-speed-text',
-        MODAL_DOWNLOADED: 'download-downloaded',
-        MODAL_TOTAL: 'download-total',
-        SD_MODEL_URL_FIELD: 'field-sd-model-url',
         DYNAMIC_LIST: 'downloads-dynamic-list',
+        INFO_CARD: '.downloads-info-card',
     };
 
     private _boundHandleUpdate: ((e: Event) => void) | null = null;
     private readonly _terminalCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    private readonly _boundSettingsToggleChange = () => {
-        this.saveSettings();
-    };
-    private readonly _boundSettingsSliderInput = (e: Event) => {
-        const val = (e.target as HTMLInputElement).value;
-        this.updateSpeedDisplay(val);
-        this.saveSettings();
-    };
     private readonly _boundLanguageChanged = () => {
         this._refreshTranslations();
     };
@@ -63,13 +36,7 @@ export class DownloadUI {
     private _onCancel: ((moduleId: string) => void) | null = null;
     private _initialized = false;
 
-    constructor(
-        private readonly _downloadSettings: DownloadSettingsService,
-        private readonly _i18n: I18nService,
-        private readonly _navigation: NavigationService,
-    ) {
-        this.loadSettings();
-    }
+    constructor(private readonly _i18n: I18nService) {}
 
     /**
      * Sets the cancel callback (injected after construction to avoid circular deps).
@@ -85,7 +52,6 @@ export class DownloadUI {
         if (this._initialized) return;
         this._initialized = true;
         this.startDownloadsPolling();
-        this._initSettingsListeners();
         globalThis.addEventListener('language-changed', this._boundLanguageChanged);
     }
 
@@ -99,7 +65,6 @@ export class DownloadUI {
             this._boundHandleUpdate = null;
         }
         globalThis.removeEventListener('language-changed', this._boundLanguageChanged);
-        this._removeSettingsListeners();
         this._clearTerminalCleanupTimers();
         this._initialized = false;
     }
@@ -119,9 +84,11 @@ export class DownloadUI {
             etaEl: document.getElementById(DownloadUI.SELECTORS.ETA),
             mainCard: document.getElementById(DownloadUI.SELECTORS.MAIN_CARD),
             emptyText: document.getElementById(DownloadUI.SELECTORS.EMPTY_TEXT),
+            infoCard: document.querySelector<HTMLElement>(DownloadUI.SELECTORS.INFO_CARD),
             downloadsBody: document.getElementById(DownloadUI.SELECTORS.BODY),
             downloadsHeader: document.querySelector<HTMLElement>(DownloadUI.SELECTORS.HEADER),
             downloadsContainer: document.getElementById(DownloadUI.SELECTORS.CONTAINER),
+            pageDownloads: document.getElementById('page-downloads'),
         };
     }
 
@@ -169,18 +136,22 @@ export class DownloadUI {
     private _updateDownloadsLayout(
         els: {
             mainCard: HTMLElement | null;
+            infoCard: HTMLElement | null;
             downloadsBody: HTMLElement | null;
             downloadsHeader: HTMLElement | null;
             downloadsContainer: HTMLElement | null;
+            pageDownloads: HTMLElement | null;
         },
         hasActive: boolean,
     ): void {
         if (els.mainCard) els.mainCard.classList.toggle('hidden', !hasActive);
+        if (els.infoCard) els.infoCard.classList.add('hidden');
         if (els.downloadsBody) els.downloadsBody.classList.toggle('empty-state', !hasActive);
         if (els.downloadsHeader) {
             els.downloadsHeader.classList.toggle('compact', hasActive);
             els.downloadsHeader.classList.toggle('full', !hasActive);
         }
+        if (els.pageDownloads) els.pageDownloads.classList.toggle('active-download', hasActive);
         if (els.downloadsContainer)
             els.downloadsContainer.classList.toggle('active-download', hasActive);
     }
@@ -429,136 +400,6 @@ export class DownloadUI {
         globalThis.addEventListener('download-progress-update', this._boundHandleUpdate);
     }
 
-    /**
-     * Loads download settings from UI state.
-     */
-    public loadSettings(): void {
-        this._settings = this._downloadSettings.getDownloadSettings();
-    }
-
-    /**
-     * Saves download settings to UI state.
-     */
-    public saveSettings(): void {
-        const toggle = document.getElementById(
-            DownloadUI.SELECTORS.TOGGLE,
-        ) as HTMLInputElement | null;
-        const slider = document.getElementById(
-            DownloadUI.SELECTORS.SLIDER,
-        ) as HTMLInputElement | null;
-        const controls = document.getElementById(DownloadUI.SELECTORS.SPEED_CONTROLS);
-
-        if (toggle instanceof HTMLInputElement && slider instanceof HTMLInputElement) {
-            this._settings.limitEnabled = toggle.checked;
-            this._settings.maxSpeed = Number.parseInt(slider.value, 10);
-
-            if (controls instanceof HTMLElement) {
-                controls.classList.toggle('opacity-100', this._settings.limitEnabled);
-                controls.classList.toggle('opacity-50', !this._settings.limitEnabled);
-                controls.style.opacity = this._settings.limitEnabled ? '1' : '0.5';
-                controls.style.pointerEvents = this._settings.limitEnabled ? 'auto' : 'none';
-            }
-
-            toggle.style.background = toggle.checked ? 'var(--primary)' : 'var(--bg-light)';
-
-            this._downloadSettings.setDownloadSettings(
-                this._settings.limitEnabled,
-                this._settings.maxSpeed,
-            );
-        }
-    }
-
-    /**
-     * Updates the custom speed display label.
-     */
-    public updateSpeedDisplay(value: string | number): void {
-        const display = document.getElementById(DownloadUI.SELECTORS.SPEED_VALUE);
-        const slider = document.getElementById(
-            DownloadUI.SELECTORS.SLIDER,
-        ) as HTMLInputElement | null;
-        if (display !== null) display.textContent = value.toString();
-
-        if (slider !== null) {
-            const val = typeof value === 'string' ? Number.parseInt(value, 10) : value;
-            const percent = ((val - 1) / (200 - 1)) * 100;
-            slider.style.background = `linear-gradient(to right, var(--primary) ${percent.toString()}%, var(--bg-light) ${percent.toString()}%)`;
-        }
-    }
-
-    /**
-     * Opens the download settings overlay.
-     */
-    public openSettings(): void {
-        this.loadSettings();
-        const overlay = document.getElementById(
-            DownloadUI.SELECTORS.OVERLAY,
-        ) as HTMLDialogElement | null;
-        const toggle = document.getElementById(
-            DownloadUI.SELECTORS.TOGGLE,
-        ) as HTMLInputElement | null;
-        const slider = document.getElementById(
-            DownloadUI.SELECTORS.SLIDER,
-        ) as HTMLInputElement | null;
-        const controls = document.getElementById(DownloadUI.SELECTORS.SPEED_CONTROLS);
-
-        if (toggle !== null) {
-            toggle.checked = this._settings.limitEnabled;
-            toggle.style.background = toggle.checked ? 'var(--primary)' : 'var(--bg-light)';
-        }
-        if (slider !== null) {
-            slider.value = this._settings.maxSpeed.toString();
-            this.updateSpeedDisplay(this._settings.maxSpeed);
-        }
-        if (controls !== null) {
-            controls.style.opacity = this._settings.limitEnabled ? '1' : '0.5';
-            controls.style.pointerEvents = this._settings.limitEnabled ? 'auto' : 'none';
-        }
-        if (overlay) {
-            this._navigation.pushBackAction(
-                'download-settings-overlay',
-                () => {
-                    this.closeSettings();
-                },
-                () => {
-                    this.openSettings();
-                },
-            );
-            overlay.showModal();
-        }
-    }
-
-    /**
-     * Closes the download settings overlay.
-     */
-    public closeSettings(): void {
-        this._navigation.removeBackAction('download-settings-overlay');
-        const overlay = document.getElementById(
-            DownloadUI.SELECTORS.OVERLAY,
-        ) as HTMLDialogElement | null;
-        if (overlay?.open === true) overlay.close();
-    }
-
-    /**
-     * Binds native setting input listeners.
-     */
-    private _initSettingsListeners(): void {
-        const toggle = document.getElementById(DownloadUI.SELECTORS.TOGGLE);
-        const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER);
-
-        toggle?.removeEventListener('change', this._boundSettingsToggleChange);
-        slider?.removeEventListener('input', this._boundSettingsSliderInput);
-        toggle?.addEventListener('change', this._boundSettingsToggleChange);
-        slider?.addEventListener('input', this._boundSettingsSliderInput);
-    }
-
-    private _removeSettingsListeners(): void {
-        const toggle = document.getElementById(DownloadUI.SELECTORS.TOGGLE);
-        const slider = document.getElementById(DownloadUI.SELECTORS.SLIDER);
-
-        toggle?.removeEventListener('change', this._boundSettingsToggleChange);
-        slider?.removeEventListener('input', this._boundSettingsSliderInput);
-    }
-
     private _clearTerminalCleanupTimers(): void {
         for (const moduleId of this._terminalCleanupTimers.keys()) {
             this._clearTerminalCleanupTimer(moduleId);
@@ -571,17 +412,6 @@ export class DownloadUI {
 
         clearTimeout(timer);
         this._terminalCleanupTimers.delete(moduleId);
-    }
-
-    /**
-     * Hides the model download modal.
-     */
-    public hideModelDownloadModal(): void {
-        const modal = document.getElementById(DownloadUI.SELECTORS.MODEL_DOWNLOAD_MODAL);
-        if (modal) {
-            modal.classList.add('hidden');
-            modal.classList.remove('show');
-        }
     }
 
     // ─── Dynamic Multi-Download List ───────────────────────────
@@ -611,17 +441,20 @@ export class DownloadUI {
 
         const emptyText = document.getElementById(DownloadUI.SELECTORS.EMPTY_TEXT);
         const mainCard = document.getElementById(DownloadUI.SELECTORS.MAIN_CARD);
+        const infoCard = document.querySelector<HTMLElement>(DownloadUI.SELECTORS.INFO_CARD);
 
         if (this._activeDownloads.size === 0) {
             list.innerHTML = '';
             if (emptyText) emptyText.classList.add('hidden');
             if (mainCard) mainCard.style.display = 'none';
+            if (infoCard) infoCard.classList.add('hidden');
             return;
         }
 
         // Hide empty text and legacy card when dynamic list is shown
         if (emptyText) emptyText.classList.add('hidden');
         if (mainCard) mainCard.style.display = 'none';
+        if (infoCard) infoCard.classList.add('hidden');
 
         // Remove cards whose downloads are no longer tracked
         const existingCards = list.querySelectorAll<HTMLElement>('.download-item-card');

@@ -1,19 +1,26 @@
-use std::sync::LazyLock;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use sysinfo::{Disks, Networks, System};
-use tauri::{AppHandle, Emitter};
 use tokio::sync::RwLock;
 
 use crate::domain::monitoring::gpu_collector::GpuCollector;
 use crate::models::system::{CpuStats, DiskStats, NetworkStats, RamStats, SystemStats};
 
-static IS_PAUSED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
-static INTERVAL_MS: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(1000));
-static LATEST_STATS: LazyLock<RwLock<SystemStats>> =
-    LazyLock::new(|| RwLock::new(SystemStats::default()));
-static MONITOR_HANDLE: LazyLock<RwLock<Option<tauri::async_runtime::JoinHandle<()>>>> =
-    LazyLock::new(|| RwLock::new(None));
+/// Event sink for delivering fresh system statistics to external layers.
+pub trait SystemStatsEmitter: Send + Sync {
+    /// Emits a fresh system statistics snapshot.
+    fn emit_stats(&self, stats: &SystemStats);
+}
+
+/// Shared monitoring service state.
+#[derive(Debug)]
+pub struct SystemMonitorService {
+    is_paused: AtomicBool,
+    interval_ms: AtomicU64,
+    latest_stats: RwLock<SystemStats>,
+    monitor_handle: RwLock<Option<tauri::async_runtime::JoinHandle<()>>>,
+}
 
 /// High-level system monitor that coordinates all metrics collection
 #[derive(Debug)]
@@ -90,84 +97,95 @@ impl SystemWrap {
     }
 }
 
-/// Starts the background monitoring task
-pub fn start_monitoring(app: AppHandle, interval_ms: u64) {
-    INTERVAL_MS.store(interval_ms, Ordering::Relaxed);
-
-    // Expert: Consolidate handle management into a single async block to prevent
-    // race conditions between multiple start/stop calls.
-    tauri::async_runtime::spawn(async move {
-        // 1. Acquire write lock to manage handle life cycle
-        let mut handle_guard = MONITOR_HANDLE.write().await;
-
-        // 2. Stop existing task if any
-        if let Some(old_handle) = handle_guard.take() {
-            old_handle.abort();
-        }
-
-        // 3. Start the new monitoring loop
-        let loop_handle = tauri::async_runtime::spawn(async move {
-            let mut monitor = SystemMonitor::new();
-            monitor.system.refresh_all();
-
-            // Initial stats for immediate availability
-            let stats = monitor.collect_stats();
-            if let Ok(mut cache) = LATEST_STATS.try_write() {
-                *cache = stats;
-            }
-
-            loop {
-                let current_interval = INTERVAL_MS.load(Ordering::Relaxed);
-                tokio::time::sleep(Duration::from_millis(current_interval)).await;
-
-                if IS_PAUSED.load(Ordering::Relaxed) {
-                    continue;
-                }
-
-                let stats = monitor.collect_stats();
-
-                // Broadcast stats
-                {
-                    let mut cache = LATEST_STATS.write().await;
-                    *cache = stats.clone();
-                }
-                let _ = app.emit("system_stats", stats);
-            }
-        });
-
-        // 4. Store the new handle while still holding the lock
-        *handle_guard = Some(loop_handle);
-    });
-}
-
-/// Stops the background monitoring task
-pub fn stop_monitoring() {
-    tauri::async_runtime::spawn(async {
-        let mut h = MONITOR_HANDLE.write().await;
-        if let Some(handle) = h.take() {
-            handle.abort();
-        }
-    });
-}
-
-/// Update interval at runtime
-pub fn set_interval(ms: u64) {
-    INTERVAL_MS.store(ms, Ordering::Relaxed);
-}
-
-/// Pauses or resumes monitoring
-pub fn set_paused(paused: bool) {
-    IS_PAUSED.store(paused, Ordering::Relaxed);
-}
-
-/// Retrieves the current system statistics (cached)
-pub async fn get_stats() -> SystemStats {
-    LATEST_STATS.read().await.clone()
-}
-
-impl Default for SystemMonitor {
+impl Default for SystemMonitorService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl SystemMonitorService {
+    /// Creates a new managed monitoring service.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            is_paused: AtomicBool::new(false),
+            interval_ms: AtomicU64::new(1000),
+            latest_stats: RwLock::new(SystemStats::default()),
+            monitor_handle: RwLock::new(None),
+        }
+    }
+
+    /// Starts or restarts the background monitoring loop.
+    pub fn start_monitoring(
+        self: &Arc<Self>,
+        emitter: Arc<dyn SystemStatsEmitter>,
+        interval_ms: u64,
+    ) {
+        self.interval_ms.store(interval_ms, Ordering::Relaxed);
+        let service = Arc::clone(self);
+
+        tauri::async_runtime::spawn(async move {
+            let mut handle_guard = service.monitor_handle.write().await;
+
+            if let Some(old_handle) = handle_guard.take() {
+                old_handle.abort();
+            }
+
+            let loop_service = Arc::clone(&service);
+            let loop_handle = tauri::async_runtime::spawn(async move {
+                let mut monitor = SystemMonitor::new();
+                monitor.system.refresh_all();
+
+                let stats = monitor.collect_stats();
+                if let Ok(mut cache) = loop_service.latest_stats.try_write() {
+                    *cache = stats;
+                }
+
+                loop {
+                    let current_interval = loop_service.interval_ms.load(Ordering::Relaxed);
+                    tokio::time::sleep(Duration::from_millis(current_interval)).await;
+
+                    if loop_service.is_paused.load(Ordering::Relaxed) {
+                        continue;
+                    }
+
+                    let stats = monitor.collect_stats();
+                    {
+                        let mut cache = loop_service.latest_stats.write().await;
+                        *cache = stats.clone();
+                    }
+                    emitter.emit_stats(&stats);
+                }
+            });
+
+            *handle_guard = Some(loop_handle);
+        });
+    }
+
+    /// Stops the background monitoring task.
+    pub fn stop_monitoring(self: &Arc<Self>) {
+        let service = Arc::clone(self);
+        tauri::async_runtime::spawn(async move {
+            let mut handle = service.monitor_handle.write().await;
+            if let Some(task) = handle.take() {
+                task.abort();
+            }
+        });
+    }
+
+    /// Updates the monitoring interval at runtime.
+    pub fn set_interval(&self, ms: u64) {
+        self.interval_ms.store(ms, Ordering::Relaxed);
+    }
+
+    /// Pauses or resumes monitoring.
+    pub fn set_paused(&self, paused: bool) {
+        self.is_paused.store(paused, Ordering::Relaxed);
+    }
+
+    /// Returns the latest cached statistics snapshot.
+    pub async fn get_stats(&self) -> SystemStats {
+        self.latest_stats.read().await.clone()
     }
 }
 

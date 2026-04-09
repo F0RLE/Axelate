@@ -6,7 +6,6 @@ export {};
 
 /** Secure Storage interface */
 interface SecureStorageAPI {
-    get: (_key: string) => Promise<string | null>;
     save: (_key: string, _value: string) => Promise<void>;
 }
 
@@ -81,8 +80,6 @@ interface UIStateInterface {
     setSidebarCollapsed: (_collapsed: boolean) => void;
     getLastPage: () => string;
     setLastPage: (_page: string) => void;
-    getDownloadSettings: () => { limitEnabled: boolean; maxSpeed: number };
-    setDownloadSettings: (_limitEnabled: boolean, _maxSpeed: number) => void;
     getResolutionZoom: (_resKey: string) => number | undefined;
     setResolutionZoom: (_resKey: string, _zoom: number) => void;
     getZoomLevel: () => number;
@@ -96,12 +93,7 @@ declare global {
     function t(_key: string, _def?: string, _params?: Record<string, unknown>): string;
     var currentLang: string;
     var setLanguage: (_lang: string) => Promise<void>;
-    var changeLanguage: (_lang: string) => Promise<void>;
-    var toggleLangMenu: () => void;
-    var toggleSidebarLangMenu: () => void;
     var applyTranslations: () => void;
-    var initEmojiFlags: () => void;
-    var updateLangButtons: () => void;
 
     // --- Core Services & Logging ---
     var tracer: {
@@ -119,9 +111,7 @@ declare global {
     var catalogService: ICatalogService;
     var core: unknown;
     var control: (_action: string, _service: string) => Promise<boolean>;
-    var controlModule: (_id: string, _action: string) => Promise<boolean>;
     var updateDiagnostics: () => Promise<void>;
-    var updateState: () => void;
     var setLogView: (_view: string, _btn: HTMLElement) => void;
     var __APP_VERSION__: string;
 
@@ -135,12 +125,10 @@ declare global {
     var saveGeminiKey: (_key: string) => Promise<void>;
     var checkGPTKey: () => Promise<boolean>;
     var checkGeminiKey: () => Promise<boolean>;
-    var checkGeminiKey: () => Promise<boolean>;
     var clearLogs: () => Promise<void>;
 
     // --- AxelateAPI & Tauri ---
     var axelateAPI: AxelateAPIInterface;
-    var __TAURI_INTERNALS__: unknown;
     var __TAURI__: {
         core: {
             invoke: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
@@ -185,7 +173,6 @@ declare global {
     var showPromptTab: (_tab: string, _btn?: HTMLElement) => void;
     var openAppSelection: (_category: string) => void;
     var closeAppSelection: () => void;
-    var selectApp: (_category: string, _app: IApp) => Promise<void>;
     var launchApp: (_id: string) => Promise<void>;
     var setDebugTab: (_tabId: string, _btn: HTMLElement) => void;
 
@@ -196,22 +183,14 @@ declare global {
         _duration?: number,
         _title?: string | null,
     ) => void;
-    var showActionFeedback: (_type?: string) => void;
     var showSkeletonLoaders: (_id: string, _count?: number) => void;
     var hideSkeletonLoaders: (_id: string, _count?: number) => void;
     var setButtonLoading: (_btn: HTMLButtonElement | null, _loading: boolean) => void;
 
     // --- Module & Download Management ---
-    var downloadModule: (_id: string, _url: string, _hash?: string) => Promise<void>;
-    var cancelDownloadModule: (_id: string) => Promise<boolean>;
-    var deleteModule: (_id: string) => Promise<void>;
     var checkModuleInstalled: (_id: string) => Promise<boolean>;
     var openModuleSettings: (_app: IApp) => void;
     var closeModuleSettings: () => void;
-    var openDownloadSettings: () => void;
-    var closeDownloadSettings: () => void;
-    var saveDownloadSettings: () => void;
-    var updateSpeedDisplay: (_speed: string) => void;
     var moduleDownloadState: Record<string, unknown>;
     var diskUtil: {
         getFreeSpace: (_path: string) => Promise<number>;
@@ -223,19 +202,15 @@ declare global {
     var toggleMaximizeWindow: () => Promise<void>;
     var hideToTray: () => Promise<void>;
     var confirmClose: () => Promise<void>;
-    var hideSplashScreen: () => void;
 
     interface Window {
         t: typeof t;
         currentLang: typeof currentLang;
         setLanguage: typeof setLanguage;
-        changeLanguage: typeof changeLanguage;
         tracer: typeof tracer;
         core: typeof core;
         control: typeof control;
-        controlModule: typeof controlModule;
         updateDiagnostics: typeof updateDiagnostics;
-        updateState: typeof updateState;
         aiBridge: typeof aiBridge;
         GPT_MODELS: typeof GPT_MODELS;
         GEMINI_MODELS: typeof GEMINI_MODELS;
@@ -253,39 +228,25 @@ declare global {
         showPromptTab: typeof showPromptTab;
         openAppSelection: typeof openAppSelection;
         closeAppSelection: typeof closeAppSelection;
-        selectApp: typeof selectApp;
         launchApp: typeof launchApp;
         showToast: typeof showToast;
-        showActionFeedback: typeof showActionFeedback;
         showSkeletonLoaders: typeof showSkeletonLoaders;
         hideSkeletonLoaders: typeof hideSkeletonLoaders;
         setButtonLoading: typeof setButtonLoading;
-        downloadModule: typeof downloadModule;
-        cancelDownloadModule: typeof cancelDownloadModule;
-        deleteModule: typeof deleteModule;
         checkModuleInstalled: typeof checkModuleInstalled;
         openModuleSettings: typeof openModuleSettings;
         closeModuleSettings: typeof closeModuleSettings;
-        openDownloadSettings: typeof openDownloadSettings;
-        closeDownloadSettings: typeof closeDownloadSettings;
         diskUtil: typeof diskUtil;
         formatBytes: typeof formatBytes;
         minimizeWindow: typeof minimizeWindow;
         toggleMaximizeWindow: typeof toggleMaximizeWindow;
         hideToTray: typeof hideToTray;
         confirmClose: typeof confirmClose;
-        hideSplashScreen: typeof hideSplashScreen;
-        toggleLangMenu: typeof toggleLangMenu;
-        toggleSidebarLangMenu: typeof toggleSidebarLangMenu;
         applyTranslations: typeof applyTranslations;
-        initEmojiFlags: typeof initEmojiFlags;
-        updateLangButtons: typeof updateLangButtons;
         setLogView: typeof setLogView;
         sendChat: typeof sendChat;
         clearLogs: typeof clearLogs;
         setDebugTab: typeof setDebugTab;
-        saveDownloadSettings: typeof saveDownloadSettings;
-        updateSpeedDisplay: typeof updateSpeedDisplay;
         catalogService: typeof catalogService;
         getCatalogCategory: typeof getCatalogCategory;
         __TAURI_INTERNALS__: typeof __TAURI_INTERNALS__;

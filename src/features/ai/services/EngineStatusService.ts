@@ -34,6 +34,7 @@ interface EngineStartingPayload {
 export class EngineStatusService {
     private _core: Core | null = null;
     private readonly _unlisteners: (() => void)[] = [];
+    private _initialized = false;
 
     /** engine_id → endpoint for all currently-ready engines */
     private readonly _activeSlots = new Map<string, string>();
@@ -43,6 +44,9 @@ export class EngineStatusService {
     }
 
     public init(): void {
+        if (this._initialized) {
+            return;
+        }
         if (this._core?.tauriProvider.isTauri() !== true) return;
 
         this._unlisteners.push(
@@ -72,12 +76,14 @@ export class EngineStatusService {
         );
 
         tracer.info('[EngineStatusService] Listening for engine events');
+        this._initialized = true;
     }
 
     public destroy(): void {
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.length = 0;
         this._activeSlots.clear();
+        this._initialized = false;
     }
 
     /** Returns a snapshot of all currently active engine IDs */

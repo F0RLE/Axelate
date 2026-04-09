@@ -508,12 +508,16 @@ body.ui-hidden .modal-backdrop {
 
 /* Specific Model Card Styles (different from module-card) */
 .model-card-premium {
-    background: var(--card-bg);
-    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.007);
+    border: 1px solid rgba(255, 255, 255, 0.03);
     border-radius: var(--radius-lg);
     padding: 1.5rem 1.5rem 2rem 1.5rem; /* Standard padding */
     display: flex;
-    transition: all 0.3s ease;
+    transition:
+        transform 0.24s ease,
+        background-color 0.24s ease,
+        border-color 0.24s ease,
+        box-shadow 0.24s ease;
     flex-direction: column;
     align-items: center;
     text-align: center;
@@ -523,14 +527,44 @@ body.ui-hidden .modal-backdrop {
     height: auto !important; /* Allow growth */
     min-height: 280px; /* Base height */
     justify-content: flex-start;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.012);
+}
+
+.model-card-premium::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%) scaleX(0.35);
+    transform-origin: center top;
+    width: 54%;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--primary);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 6;
+    transition:
+        opacity 0.22s ease,
+        transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.model-card-premium.selected {
+    background: rgba(255, 255, 255, 0.007) !important;
+    border-color: rgba(255, 255, 255, 0.03) !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.012) !important;
+}
+
+.model-card-premium.selected::before {
+    transform: translateX(-50%) scaleX(1);
+    opacity: 0.92;
 }
 
 .model-card-premium:hover {
-    background: var(--card-bg-hover);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.018);
+    border-color: rgba(255, 255, 255, 0.05);
     transform: translateY(-4px);
-    box-shadow: var(--premium-shadow);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.016);
 }
 
 /* Ensure content is above the ::before background effect */
@@ -550,18 +584,14 @@ body.ui-hidden .modal-backdrop {
     width: 80px;
     height: 80px;
     border-radius: 18px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    background: transparent;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-top: 1.5rem;
     margin-bottom: 1rem;
     transition: transform 0.4s ease;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.model-card-premium:hover .model-icon-wrapper {
-    border-color: rgba(138, 43, 226, 0.3);
+    border: none;
 }
 
 .model-card-premium svg {
@@ -581,14 +611,14 @@ body.ui-hidden .modal-backdrop {
     color: #fff;
 }
 
-.model-icon-wrapper > div {
+.model-icon-wrapper > :is(div, span) {
     font-size: 3.2rem;
     line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
-    height: 100%;
+    width: auto;
+    height: auto;
 }
 
 /* Modal Icons Unification */
@@ -659,6 +689,11 @@ body.ui-hidden .modal-backdrop {
     height: 88px;
     border-radius: 20px;
     margin-top: 1rem;
+    transition:
+        width 0.22s ease,
+        height 0.22s ease,
+        border-radius 0.22s ease,
+        margin-top 0.22s ease;
 }
 
 /* Disable hover effects on selected card icon */
@@ -673,12 +708,19 @@ body.ui-hidden .modal-backdrop {
 .model-card-premium.selected .model-card-title {
     font-size: 1.4rem;
     margin-bottom: 0.8rem;
+    transition:
+        font-size 0.22s ease,
+        margin-bottom 0.22s ease;
 }
 
 .model-card-premium.selected .model-card-desc {
     font-size: 1rem;
     line-height: 1.5;
     margin-bottom: 1.5rem; /* Add space before button */
+    transition:
+        font-size 0.22s ease,
+        line-height 0.22s ease,
+        margin-bottom 0.22s ease;
 }
 
 .model-card-premium .model-card-action.active-module-btn {
@@ -831,19 +873,7 @@ body.ui-hidden .modal-backdrop {
     display: inline-block;
 }
 
-/* Specific Card Accents */
-.model-card-premium.ai .model-icon-wrapper {
-    background: linear-gradient(135deg, rgba(138, 43, 226, 0.1), rgba(0, 200, 255, 0.1));
-}
-.model-card-premium.image-gen .model-icon-wrapper {
-    background: linear-gradient(135deg, rgba(255, 0, 128, 0.1), rgba(138, 43, 226, 0.1));
-}
-.model-card-premium.text-gen .model-icon-wrapper {
-    background: linear-gradient(135deg, rgba(0, 255, 136, 0.1), rgba(0, 200, 255, 0.1));
-}
-.model-card-premium.services .model-icon-wrapper {
-    background: linear-gradient(135deg, rgba(255, 180, 0, 0.1), rgba(255, 100, 0, 0.1));
-}
+/* Specific card icon accent backgrounds removed to keep launcher cards clean */
 
 @media (max-width: 1200px) {
     .models-grid {
@@ -876,7 +906,7 @@ body.ui-hidden .modal-backdrop {
     color: var(--text-primary) !important;
 
     /* Standard transparent overlay style (matches .modal-overlay) */
-    background: rgba(0, 0, 0, 0.05) !important; /* Force transparent background */
+    background: transparent !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 
@@ -912,30 +942,43 @@ body.snapping .modal-backdrop {
     transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.modal-backdrop.popover-open {
+    transition:
+        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.modal-backdrop.popover-open .app-modal {
+    transform: none;
+    margin-right: 344px; /* Space for the 320px popover + gap */
+    max-width: min(1300px, calc(100% - 380px)); /* Use 100% of backdrop to preserve left margin */
+    transition:
+        margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .app-modal {
-    /* Glassmorphism: Semi-transparent background with blur */
-    background: rgba(26, 25, 32, 0.85); /* Semi-transparent bg-med */
-    backdrop-filter: blur(16px) saturate(120%);
-    -webkit-backdrop-filter: blur(16px) saturate(120%);
-
-    border: 1px solid rgba(255, 255, 255, 0.05); /* Soft border like before */
-    border-radius: 20px;
-    width: 95%; /* Make it take more space */
-    max-width: 1300px; /* Increase max width for spacing */
-    /* Increased height constraint to prevent squeezing */
-    max-height: calc((100vh / var(--app-zoom, 1)) - (120px / var(--app-zoom, 1)));
-
+    background: rgba(var(--background-raw), 0.08);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.038);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.012);
+    border-radius: 24px;
+    width: 95%;
+    max-width: 1320px;
+    max-height: calc((100vh - 80px) / var(--app-zoom, 1));
+    height: auto;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-
-    /* Animation State */
     opacity: 1;
     transform: scale(1) translateY(0) translateZ(0);
-    /* Stable transition - avoiding 'all' to prevent unwanted jumping */
     transition:
-        opacity 0.3s ease,
-        transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1),
+        opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         backdrop-filter 0.3s ease,
         -webkit-backdrop-filter 0.3s ease;
 
@@ -1008,20 +1051,21 @@ body.snapping .modal-backdrop {
 }
 .app-modal-header {
     padding: 0 1.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+    background: transparent;
     display: flex;
     justify-content: center;
     align-items: center;
     position: relative;
-    min-height: 52px;
-    height: 52px;
+    min-height: 66px;
+    height: 66px;
     flex-shrink: 0;
 }
 
 .app-modal-title {
-    font-size: 1.15rem;
-    font-weight: 700;
-    font-family: 'Monocraft', monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: var(--app-font-family), monospace;
     color: var(--text-primary);
     margin: 0;
     text-align: center;
@@ -1040,11 +1084,12 @@ body.snapping .modal-backdrop {
 .app-modal-tab-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 12px;
-    padding: 5px 6px;
+    gap: 0.35rem;
+    background: rgba(24, 23, 31, 0.84);
+    border: none;
+    border-radius: 14px;
+    padding: 0.3rem;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .app-modal-tab-row.hidden {
@@ -1052,14 +1097,14 @@ body.snapping .modal-backdrop {
 }
 
 .app-modal-tab {
-    font-family: 'Monocraft', monospace;
-    font-size: 0.78rem;
+    font-family: var(--app-font-family), monospace;
+    font-size: 0.86rem;
     font-weight: 600;
     color: var(--text-secondary);
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 10px;
-    padding: 0.35rem 1rem;
+    border-radius: 11px;
+    padding: 0.48rem 1.15rem;
     cursor: pointer;
     transition:
         background 0.22s cubic-bezier(0.4, 0, 0.2, 1),
@@ -1072,15 +1117,17 @@ body.snapping .modal-backdrop {
 
 .app-modal-tab:hover:not(:disabled):not(.active) {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
+    border-color: transparent;
 }
 
 .app-modal-tab.active {
-    background: var(--primary);
+    background: rgba(var(--primary-raw), 0.1);
     color: #fff;
     border-color: transparent;
-    box-shadow: 0 2px 10px rgba(var(--primary-raw), 0.4);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.026),
+        0 0 0 1px rgba(var(--primary-raw), 0.055);
 }
 
 .app-modal-tab:disabled {
@@ -1090,14 +1137,14 @@ body.snapping .modal-backdrop {
 
 .app-close-btn {
     position: absolute;
-    top: 0;
-    right: 0;
+    top: 6px;
+    right: 6px;
     background: transparent;
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    width: 52px;
-    height: 52px;
+    width: 60px;
+    height: 60px;
     padding: 0;
     display: flex;
     align-items: center;
@@ -1118,8 +1165,8 @@ body.snapping .modal-backdrop {
 }
 
 .app-close-btn svg {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.55rem;
+    height: 1.55rem;
     stroke: currentColor;
     fill: none;
     pointer-events: none;
@@ -1129,6 +1176,7 @@ body.snapping .modal-backdrop {
     flex-direction: row;
     flex: 1;
     overflow: hidden;
+    background: transparent;
 }
 
 .app-modal.with-sidebar {
@@ -1274,10 +1322,10 @@ body.snapping .modal-backdrop {
 /* removed hover expansion logic for span */
 
 .app-grid {
-    padding: 1.5rem 1.5rem; /* Restored left padding since bottom bar layout */
+    padding: 1.35rem 1.35rem 1.45rem;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+    gap: 1.1rem;
     overflow-y: auto;
     flex: 1;
     min-height: 0;
@@ -1292,10 +1340,10 @@ body.snapping .modal-backdrop {
 /* High specificity to ensure ALL cards have the exact same height for grid uniformity */
 #app-grid .app-card,
 .app-grid .app-card {
-    background: rgba(255, 255, 255, 0.03) !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-    border-radius: 12px !important; /* Unified squircle rounding */
-    padding: 1.5rem 1.25rem !important;
+    background: rgba(255, 255, 255, 0.007) !important;
+    border: 1px solid rgba(255, 255, 255, 0.03) !important;
+    border-radius: 18px !important;
+    padding: 1.35rem 1.1rem !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -1304,28 +1352,25 @@ body.snapping .modal-backdrop {
 
     /* Allowing height to grow naturally with text while maintaining a base baseline */
     height: auto !important;
-    min-height: 320px !important;
+    min-height: 292px !important;
     flex-shrink: 0 !important;
     position: relative !important;
     overflow: hidden !important; /* Ensure overlay stays within card corners */
 
-    /* Premium Hover Transition */
     transition:
-        transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-        background-color 0.4s ease !important;
+        transform 0.24s ease,
+        box-shadow 0.24s ease,
+        background-color 0.24s ease,
+        border-color 0.24s ease !important;
     will-change: transform, box-shadow;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
+    box-shadow: none;
 }
 
 .app-card:hover .app-icon-wrapper,
 .app-card:hover .app-card-title {
-    /* Translate down to visually center in the space vacated by the description */
-    transform: translateY(18px);
-    transition:
-        transform 0.6s cubic-bezier(0.22, 1, 0.36, 1),
-        opacity 0.6s ease !important;
+    transform: none;
 }
 
 .app-card:hover .app-delete-badge,
@@ -1347,16 +1392,19 @@ body.snapping .modal-backdrop {
 /* Base transition for smooth centering */
 .app-icon-wrapper,
 .app-card-title {
-    transform: translateY(0);
+    transform: none;
     transition:
-        transform 0.6s cubic-bezier(0.22, 1, 0.36, 1),
-        opacity 0.6s ease;
+        opacity 0.25s ease,
+        color 0.25s ease,
+        filter 0.25s ease;
 }
 
 .app-card:hover {
-    transform: translateY(-12px) translateZ(0);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-2px) translateZ(0);
+    box-shadow: none !important;
     z-index: 20;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+    background: rgba(255, 255, 255, 0.018) !important;
 }
 
 /* High specificity for cards in grid */
@@ -1364,8 +1412,8 @@ body.snapping .modal-backdrop {
 .app-grid .app-card:hover,
 #app-grid .app-card:focus-within,
 .app-grid .app-card:focus-within {
-    transform: translateY(-12px) translateZ(0) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    transform: translateY(-2px) translateZ(0) !important;
+    box-shadow: none !important;
     z-index: 20;
 }
 
@@ -1373,46 +1421,50 @@ body.snapping .modal-backdrop {
 /* Cards in modal - Force Smooth Animation */
 #app-modal-list .app-card {
     position: relative;
-    /* Snappy but smooth 'Axelate' style transition */
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-    padding: 3rem 1.25rem 1.5rem !important; /* Extra top padding to clear badges */
+    transition:
+        transform 0.24s ease,
+        box-shadow 0.24s ease,
+        background-color 0.24s ease,
+        border-color 0.24s ease !important;
+    padding: 2.5rem 1.1rem 1.2rem !important;
     will-change: transform;
-    /* Explicit start state matching hover structure */
     transform: translateY(0) translateZ(0);
     cursor: pointer;
-    backface-visibility: hidden; /* Prevent flickering */
+    backface-visibility: hidden;
 }
 
 #app-modal-list .app-card:hover,
 #app-modal-list .app-card:focus-within {
-    transform: translateY(-6px) translateZ(0) !important;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+    transform: translateY(-2px) translateZ(0) !important;
+    box-shadow: none !important;
     z-index: 20;
 }
 
 /* Define missing keyframes for card entrance */
 
 .app-icon-wrapper {
-    width: 70px; /* Slightly smaller for density */
-    height: 70px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    background: transparent;
+    border: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 1.25rem !important; /* Extra spacing to title */
+    margin-bottom: 1rem !important;
     margin-top: 0 !important;
-    font-size: 2rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    font-size: 1.8rem;
+    box-shadow: none;
     flex-shrink: 0;
 }
 
 .app-card-title {
-    font-size: 1.35rem; /* Noticeably larger title per request */
-    font-weight: 700; /* Bolder text */
+    font-size: 1.18rem;
+    font-weight: 600;
+    font-family: var(--app-font-family), monospace;
     color: var(--text-primary);
     margin-bottom: 0px !important;
-    min-height: 2.5rem !important;
+    min-height: 2.2rem !important;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1420,10 +1472,11 @@ body.snapping .modal-backdrop {
 }
 
 .app-card-desc {
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    font-family: var(--app-font-family), monospace;
     color: var(--text-secondary);
-    line-height: 1.4;
-    margin-top: 0.75rem !important;
+    line-height: 1.46;
+    margin-top: 0.65rem !important;
     margin-bottom: 0px !important;
     cursor: pointer;
 
@@ -1554,7 +1607,7 @@ body.snapping .modal-backdrop {
     font-size: 1rem !important;
     font-weight: 700 !important;
     border-radius: 12px !important;
-    box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3) !important;
+    box-shadow: none !important;
 
     background: var(--primary) !important;
     color: white !important;
@@ -1576,7 +1629,7 @@ body.snapping .modal-backdrop {
 .app-card-hover-actions .download-btn:hover {
     transform: scale(1.03) translateY(-1px) !important;
     background: var(--primary-hover) !important;
-    box-shadow: 0 6px 20px rgba(138, 43, 226, 0.4) !important;
+    box-shadow: none !important;
 }
 
 /* Specifically style the "Remove" (Secondary) Button to be red */
@@ -1617,44 +1670,40 @@ body.snapping .modal-backdrop {
 }
 
 .app-card.selected {
-    border: 1px solid transparent !important; /* Keep base card border clear */
+    border-color: rgba(255, 255, 255, 0.03) !important;
+    background: rgba(255, 255, 255, 0.007) !important;
     box-shadow: none !important;
-    --selected-border-color: rgba(138, 43, 226, 0.4);
+    --selected-border-color: rgba(var(--primary-raw), 0);
+    transform: translateY(-1px) translateZ(0);
 }
 
 .app-card.selected:hover {
-    --selected-border-color: rgba(220, 53, 69, 0.4); /* Dimmed red on hover */
+    --selected-border-color: rgba(var(--primary-raw), 0);
 }
 
-/* Pseudo element creates the crawling dashed line via conic gradient and mask */
-.app-card.selected::before {
+.app-card::before {
     content: '';
     position: absolute;
-    top: 0px;
-    left: 0px;
-    bottom: 0px;
-    right: 0px;
-    border-radius: 12px;
-    padding: 1px; /* 1px very thin padding */
-    background: repeating-conic-gradient(
-        from var(--border-angle),
-        var(--selected-border-color) 0deg,
-        var(--selected-border-color) 4deg,
-        transparent 4deg,
-        transparent 8deg
-    );
-    -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%) scaleX(0.35);
+    transform-origin: center top;
+    width: 54%;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--primary);
+    opacity: 0;
     pointer-events: none;
     z-index: 5;
-    animation: spinDashed 45s linear infinite; /* Ultra slow pace around the circle */
-    transition: --selected-border-color 0.3s ease; /* Smooth color transition */
+    animation: none;
+    transition:
+        opacity 0.22s ease,
+        transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.app-card.selected::before {
+    transform: translateX(-50%) scaleX(1);
+    opacity: 0.92;
 }
 
 /* ============================================================
@@ -2056,56 +2105,60 @@ body.snapping .modal-backdrop {
 
 /* --- Selected Module Card Style (has a module chosen) --- */
 .model-card-premium.selected:hover {
-    /* Keep movement, remove other visual changes */
-    background: var(--card-bg) !important;
-    border-color: var(--glass-border) !important;
+    background: rgba(255, 255, 255, 0.018) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
     transform: translateY(-4px) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.016) !important;
     cursor: pointer !important;
 }
 
 /* --- Empty Module Card Style (no module chosen yet) --- */
 .model-card-premium.empty {
-    background: repeating-linear-gradient(
-        45deg,
-        rgba(255, 255, 255, 0.01),
-        rgba(255, 255, 255, 0.01) 10px,
-        rgba(255, 255, 255, 0.02) 10px,
-        rgba(255, 255, 255, 0.02) 20px
-    );
-    border: 2px dashed rgba(255, 255, 255, 0.15);
-    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
-    transition: all 0.3s ease;
+    background: rgba(var(--background-raw), 0.065);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.012);
+    transition:
+        transform 0.24s ease,
+        background-color 0.24s ease,
+        border-color 0.24s ease,
+        box-shadow 0.24s ease;
 }
 
 .model-card-premium.empty .model-icon-wrapper {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px dashed rgba(255, 255, 255, 0.1);
-    filter: grayscale(1);
-    opacity: 0.7;
+    background: transparent;
+    border: none;
+    filter: saturate(0.92);
+    opacity: 0.9;
 }
 
 .model-card-premium.empty .model-card-title {
-    color: var(--text-muted);
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.model-card-premium.empty .model-card-desc {
+    color: rgba(255, 255, 255, 0.58);
 }
 
 .model-card-premium.empty:hover {
-    background: rgba(138, 43, 226, 0.05); /* tint purple */
-    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.018);
+    border-color: rgba(var(--primary-raw), 0.08);
     cursor: pointer;
-    transform: translateY(-2px);
+    transform: translateY(-4px);
+    box-shadow:
+        inset -1px 0 0 rgba(255, 255, 255, 0.016),
+        0 0 0 1px rgba(var(--primary-raw), 0.04);
 }
 
 .model-card-premium.empty:hover .model-icon-wrapper {
-    filter: grayscale(0);
+    filter: none;
     opacity: 1;
-    border-color: rgba(255, 255, 255, 0.2);
+    background: transparent;
 }
 
 .model-card-premium.empty .model-card-action {
-    background: transparent;
-    border: 1px solid var(--primary);
-    color: var(--primary);
+    background: rgba(255, 255, 255, 0.007);
+    border: none;
+    color: rgba(255, 255, 255, 0.82);
 
     /* Hidden by default, behaves like standard cards */
     opacity: 0;
@@ -2123,7 +2176,7 @@ body.snapping .modal-backdrop {
 }
 
 .model-card-premium.empty:hover .model-card-action {
-    background: var(--primary);
+    background: rgba(var(--primary-raw), 0.085);
     color: white;
     opacity: 1;
     transform: translateY(0);
@@ -2590,6 +2643,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     padding: 1.5rem;
     overflow-y: auto;
     flex: 1;
+    min-height: 0;
 }
 
 .module-settings-empty {

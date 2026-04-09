@@ -56,7 +56,7 @@ export interface IChatRequest {
     model: string;
     messages: { role: string; content: ChatContent; thought_signature?: string | undefined }[];
     api_key: string | null;
-    thinking_level?: 'low' | 'medium' | 'high';
+    thinking_level?: 'off' | 'low' | 'medium' | 'high';
     max_tokens?: number | undefined;
     attachments?: { name: string; type: string; data_base64: string }[];
     session_id?: string;

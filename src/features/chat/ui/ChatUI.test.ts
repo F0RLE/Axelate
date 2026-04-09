@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ChatUI } from './ChatUI';
+import { chatFileHandler } from '../services/ChatFileHandler';
 
 describe('ChatUI lifecycle', () => {
     let ui: ChatUI | null = null;
@@ -101,6 +102,28 @@ describe('ChatUI lifecycle', () => {
         );
     });
 
+    it('should refresh token count from internal state instead of parsing rendered text', () => {
+        document.body.innerHTML = `
+            <div id="chat-messages"></div>
+            <div id="chat-token-count" class="visible">broken localized token text</div>
+            <textarea id="chat-input" data-i18n-placeholder="ui.launcher.web.chat_placeholder"></textarea>
+            <button id="clear-chat-btn"><span class="chat-clear-text"></span></button>
+            <button id="chat-attach-btn"></button>
+            <button id="chat-voice-btn"></button>
+            <button id="chat-send-btn"></button>
+        `;
+
+        ui = new ChatUI();
+        ui.updateTokenCount(12);
+
+        const tokenEl = document.getElementById('chat-token-count') as HTMLElement;
+        tokenEl.textContent = 'непарсимое значение';
+
+        ui.refreshTranslations();
+
+        expect(tokenEl.textContent).toBe('12 t:ui.launcher.web.tokens:tokens');
+    });
+
     it('should remove orphan streaming message when finalized without answer text', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
@@ -127,6 +150,34 @@ describe('ChatUI lifecycle', () => {
         expect(messages.scrollTop).toBe(640);
         vi.runAllTimers();
         expect(messages.scrollTop).toBe(640);
+    });
+
+    it('should ignore stale attachment renders after attachments were cleared', async () => {
+        let resolveTokens: ((value: number) => void) | null = null;
+        vi.spyOn(chatFileHandler, 'getFileTokenEstimate').mockImplementation(
+            () =>
+                new Promise<number>((resolve) => {
+                    resolveTokens = resolve;
+                }),
+        );
+
+        document.body.innerHTML = `
+            <div id="chat-messages"></div>
+            <div id="chat-container"></div>
+            <div id="chat-attachments"></div>
+        `;
+
+        ui = new ChatUI();
+        const file = new File(['content'], 'late.txt', { type: 'text/plain' });
+
+        ui.updateAttachments([file], () => {});
+        ui.updateAttachments([], () => {});
+
+        (resolveTokens as ((value: number) => void) | null)?.(7);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.querySelector('.chat-media-card')).toBeNull();
     });
 
     it('should save generated chat images to the default axelate pictures folder', async () => {
@@ -338,5 +389,30 @@ describe('ChatUI lifecycle', () => {
         await Promise.resolve();
 
         expect(overlay.classList.contains('hidden')).toBe(true);
+    });
+
+    it('should remove image viewer body state on destroy', async () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = new ChatUI();
+        ui.appendMessage('assistant', 'image', {
+            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
+            skipAnimation: true,
+        });
+
+        const image = document.querySelector('.chat-img');
+        if (!(image instanceof HTMLImageElement)) {
+            throw new Error('chat image not found');
+        }
+
+        image.click();
+        await Promise.resolve();
+
+        expect(document.body.classList.contains('chat-image-viewer-open')).toBe(true);
+
+        ui.destroy();
+        ui = null;
+
+        expect(document.body.classList.contains('chat-image-viewer-open')).toBe(false);
     });
 });

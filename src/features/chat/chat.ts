@@ -26,6 +26,9 @@ type StreamingMessageHandle = {
 };
 
 export class ChatController {
+    private static readonly _historyRetryDelayMs = 300;
+    private static readonly _chatRevealFollowUpDelayMs = 120;
+
     private readonly _service: ChatService;
     private readonly _ui: ChatUI;
     private readonly _voice: VoiceController;
@@ -35,11 +38,12 @@ export class ChatController {
     private _isSending = false;
     private _historyLoaded = false;
     private _historyLoadInFlight: Promise<void> | null = null;
+    private _historyRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _inactiveAiErrorTimeout: ReturnType<typeof setTimeout> | null = null;
     private _eventsBound = false;
     private _pageChangeUnsub: (() => void) | null = null;
     private _translationsLoadedUnsub: (() => void) | null = null;
     private _resizeAnimationFrame: number | null = null;
-    private _lastInputHeight = '';
     private readonly _boundFileInputChange = (e: Event) => this._filePicker.handleFileSelect(e);
     private readonly _boundChatInputKeydown = (e: KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -47,7 +51,10 @@ export class ChatController {
             void this.sendChat();
         }
     };
-    private readonly _boundChatInputInput = () => this._scheduleAutoResizeInput();
+    private readonly _boundChatInputInput = () => {
+        this._scheduleAutoResizeInput();
+        void this._filePicker.updateTokenCount();
+    };
 
     constructor(
         private readonly _aiBridge: AIBridge,
@@ -94,12 +101,7 @@ export class ChatController {
                 this.randomizeGreeting();
                 this._ui.refreshTranslations();
                 void this._ensureHistoryLoaded();
-                globalThis.requestAnimationFrame(() => {
-                    this._ui.revealLatestMessage();
-                });
-                globalThis.setTimeout(() => {
-                    this._ui.revealLatestMessage();
-                }, 120);
+                this._scheduleRevealLatestMessage();
             }
         });
 
@@ -114,6 +116,7 @@ export class ChatController {
         this._pageChangeUnsub = null;
         this._translationsLoadedUnsub?.();
         this._translationsLoadedUnsub = null;
+        this._eventsBound = false;
 
         const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
         fileInput?.removeEventListener('change', this._boundFileInputChange);
@@ -125,6 +128,11 @@ export class ChatController {
             globalThis.cancelAnimationFrame(this._resizeAnimationFrame);
             this._resizeAnimationFrame = null;
         }
+        if (this._historyRetryTimeout !== null) {
+            globalThis.clearTimeout(this._historyRetryTimeout);
+            this._historyRetryTimeout = null;
+        }
+        this._clearInactiveAiErrorTimeout();
 
         this._ui.destroy();
     }
@@ -141,6 +149,7 @@ export class ChatController {
             if (chatInput) {
                 chatInput.value += (chatInput.value ? ' ' : '') + text;
                 this._scheduleAutoResizeInput();
+                void this._filePicker.updateTokenCount(chatInput.value);
             }
         });
     }
@@ -150,9 +159,11 @@ export class ChatController {
     }
 
     public clearChat(): void {
+        this._clearInactiveAiErrorTimeout();
         this._chatHistory = [];
         chatFileHandler.clear();
         this._ui.clear();
+        this._ui.updateTokenCount(0);
         this._scheduleAutoResizeInput();
         void this._aiBridge.clearHistory().catch((e: unknown) => {
             tracer.error('[Chat] Failed to clear persisted history:', e);
@@ -191,20 +202,20 @@ export class ChatController {
 
             let streamingHandle: StreamingMessageHandle | null = null;
 
-            this._aiBridge.onChunk(listenerId, (chunk) => {
-                if (!streamingHandle) {
+            const ensureStreamingHandle = (): StreamingMessageHandle => {
+                if (streamingHandle === null) {
                     this._ui.removeTyping(typingId);
                     streamingHandle = this._ui.createStreamingMessage('assistant');
                 }
-                streamingHandle.update(chunk);
+                return streamingHandle;
+            };
+
+            this._aiBridge.onChunk(listenerId, (chunk) => {
+                ensureStreamingHandle().update(chunk);
             });
 
             this._aiBridge.onReplaceChunk(listenerId, (chunk) => {
-                if (!streamingHandle) {
-                    this._ui.removeTyping(typingId);
-                    streamingHandle = this._ui.createStreamingMessage('assistant');
-                }
-                streamingHandle.replace(chunk);
+                ensureStreamingHandle().replace(chunk);
             });
 
             const response = await this._service.sendMessage(
@@ -213,15 +224,11 @@ export class ChatController {
                 attachments,
             );
 
-            this._aiBridge.removeChunkListener(listenerId);
-            this._aiBridge.removeReplaceChunkListener(listenerId);
-            this._ui.removeTyping(typingId);
+            this._cleanupStreamingState(listenerId, typingId);
 
             await this._handleChatResponse(response, streamingHandle);
         } catch (e: unknown) {
-            this._aiBridge.removeChunkListener(listenerId);
-            this._aiBridge.removeReplaceChunkListener(listenerId);
-            this._ui.removeTyping(typingId);
+            this._cleanupStreamingState(listenerId, typingId);
             this._handleError(e);
         } finally {
             this._unlockUI(uiElements);
@@ -289,15 +296,24 @@ export class ChatController {
         }
 
         if (this._aiBridge.getSessionId() === 'default') {
-            globalThis.setTimeout(() => {
+            this._historyRetryTimeout ??= globalThis.setTimeout(() => {
+                this._historyRetryTimeout = null;
                 void this._ensureHistoryLoaded();
-            }, 300);
+            }, ChatController._historyRetryDelayMs);
             return;
         }
 
+        if (this._historyRetryTimeout !== null) {
+            globalThis.clearTimeout(this._historyRetryTimeout);
+            this._historyRetryTimeout = null;
+        }
+
         this._historyLoadInFlight = this._loadHistory();
-        await this._historyLoadInFlight;
-        this._historyLoadInFlight = null;
+        try {
+            await this._historyLoadInFlight;
+        } finally {
+            this._historyLoadInFlight = null;
+        }
     }
 
     private async _editLastTurn(text: string): Promise<void> {
@@ -321,14 +337,14 @@ export class ChatController {
 
     private _rewindLocalHistory(): void {
         while (this._chatHistory.length > 0) {
-            const lastMessage = this._chatHistory[this._chatHistory.length - 1];
+            const lastMessage = this._chatHistory.at(-1);
             if (lastMessage?.role === 'user') {
                 break;
             }
             this._chatHistory.pop();
         }
 
-        const lastMessage = this._chatHistory[this._chatHistory.length - 1];
+        const lastMessage = this._chatHistory.at(-1);
         if (lastMessage?.role === 'user') {
             this._chatHistory.pop();
         }
@@ -346,31 +362,50 @@ export class ChatController {
     }
 
     private async _loadHistory(): Promise<void> {
-        const history = await this._aiBridge.getHistory();
-        this._historyLoaded = true;
-        if (Array.isArray(history) && history.length > 0) {
-            tracer.info(
-                `[ChatController] Restoring ${String(history.length)} messages from persistence`,
-            );
+        try {
+            const history = await this._aiBridge.getHistory();
+            this._historyLoaded = true;
+            if (Array.isArray(history) && history.length > 0) {
+                tracer.info(
+                    `[ChatController] Restoring ${String(history.length)} messages from persistence`,
+                );
 
-            this._chatHistory = history
-                .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-                .map((msg) => ({
-                    role: msg.role as 'user' | 'assistant',
-                    content: this._safeExtractText(msg.content),
-                }));
+                this._chatHistory = history
+                    .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+                    .map((msg) => ({
+                        role: msg.role as 'user' | 'assistant',
+                        content: this._safeExtractText(msg.content),
+                    }));
 
-            this._chatHistory.forEach((msg) => {
-                this._ui.appendMessage(msg.role, msg.content, {
-                    tokens: 0,
-                    skipAnimation: true,
+                this._chatHistory.forEach((msg) => {
+                    this._ui.appendMessage(msg.role, msg.content, {
+                        tokens: 0,
+                        skipAnimation: true,
+                    });
                 });
-            });
-        }
+            }
 
-        if (this._consumePendingChatReveal()) {
-            this._ui.revealLatestMessage();
+            if (this._consumePendingChatReveal()) {
+                this._scheduleRevealLatestMessage();
+            }
+        } catch (error: unknown) {
+            tracer.error('[ChatController] Failed to restore persisted history:', error);
         }
+    }
+
+    private _scheduleRevealLatestMessage(): void {
+        globalThis.requestAnimationFrame(() => {
+            this._ui.revealLatestMessage();
+        });
+        globalThis.setTimeout(() => {
+            this._ui.revealLatestMessage();
+        }, ChatController._chatRevealFollowUpDelayMs);
+    }
+
+    private _cleanupStreamingState(listenerId: string, typingId: string): void {
+        this._aiBridge.removeChunkListener(listenerId);
+        this._aiBridge.removeReplaceChunkListener(listenerId);
+        this._ui.removeTyping(typingId);
     }
 
     private _consumePendingChatReveal(): boolean {
@@ -433,14 +468,23 @@ export class ChatController {
     }
 
     private async _checkAIActive(input: HTMLTextAreaElement | null): Promise<boolean> {
-        if (this._aiBridge.isActive()) return true;
+        if (this._aiBridge.isActive()) {
+            this._clearInactiveAiErrorTimeout();
+            return true;
+        }
 
         const started = await this._tryAutoStartAI();
-        if (started) return true;
+        if (started) {
+            this._clearInactiveAiErrorTimeout();
+            return true;
+        }
 
-        const text = input ? input.value.trim() : '';
-        if (text !== '') this._ui.appendMessage('user', text);
-        setTimeout(() => {
+        this._clearInactiveAiErrorTimeout();
+        this._inactiveAiErrorTimeout = globalThis.setTimeout(() => {
+            this._inactiveAiErrorTimeout = null;
+            if (this._aiBridge.isActive()) {
+                return;
+            }
             this._ui.appendMessage(
                 'assistant',
                 this._i18n.t(
@@ -450,8 +494,15 @@ export class ChatController {
                 { error: true },
             );
         }, 500);
-        if (input) input.value = '';
+        input?.focus();
         return false;
+    }
+
+    private _clearInactiveAiErrorTimeout(): void {
+        if (this._inactiveAiErrorTimeout !== null) {
+            globalThis.clearTimeout(this._inactiveAiErrorTimeout);
+            this._inactiveAiErrorTimeout = null;
+        }
     }
 
     private async _handleChatResponse(
@@ -467,7 +518,7 @@ export class ChatController {
             const replyText = this._safeExtractText(rawReply);
 
             if (replyText !== '') {
-                const tokens = await getTokenCount(replyText);
+                const tokens = await this._estimateReplyTokens(replyText);
 
                 if (streamingHandle) {
                     streamingHandle.finalize(replyText, { tokens });
@@ -559,6 +610,15 @@ export class ChatController {
         this._ui.appendMessage('assistant', msgStr, { error: true });
     }
 
+    private async _estimateReplyTokens(text: string): Promise<number> {
+        try {
+            return await getTokenCount(text);
+        } catch (error: unknown) {
+            tracer.error('[Chat] Failed to estimate reply tokens, using fallback:', error);
+            return Math.max(1, Math.ceil(text.trim().length / 4));
+        }
+    }
+
     private _lockUI(input: HTMLTextAreaElement | null) {
         const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement | null;
         const voiceBtn = document.getElementById('chat-voice-btn') as HTMLButtonElement | null;
@@ -582,7 +642,7 @@ export class ChatController {
         voiceBtn: HTMLButtonElement | null;
         attachBtn: HTMLButtonElement | null;
     }) {
-        if (els.input) {
+        if (els.input && document.body.contains(els.input)) {
             els.input.disabled = false;
             els.input.focus();
         }
@@ -607,12 +667,7 @@ export class ChatController {
             el.style.height = 'auto';
             const newHeight = Math.min(el.scrollHeight, 200);
             const nextHeight = `${String(newHeight)}px`;
-            if (this._lastInputHeight !== nextHeight) {
-                el.style.height = nextHeight;
-                this._lastInputHeight = nextHeight;
-            } else {
-                el.style.height = nextHeight;
-            }
+            el.style.height = nextHeight;
         }
     }
 }

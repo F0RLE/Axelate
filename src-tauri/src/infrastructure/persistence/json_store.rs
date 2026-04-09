@@ -1,7 +1,6 @@
 use crate::domain::filesystem::service::FileService;
 use crate::errors::AppError;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -21,29 +20,6 @@ impl JsonStore {
     /// Creates a new JsonStore with a specific FileService implementation
     pub fn new(file_service: Arc<dyn FileService>) -> Self {
         Self { file_service }
-    }
-
-    /// Loads a JSON file synchronously (Safe for app bootstrap)
-    pub fn load_sync<T>(path: &Path) -> Result<T, AppError>
-    where
-        T: for<'de> Deserialize<'de> + Default,
-    {
-        if !path.exists() {
-            return Ok(T::default());
-        }
-
-        let content = fs::read_to_string(path).map_err(|e| AppError::Io(e.to_string()))?;
-        match serde_json::from_str(&content) {
-            Ok(data) => Ok(data),
-            Err(e) => {
-                // Note: Can't use tracing here if initialized late, but standard log usually works
-                tracing::error!(
-                    "Failed to parse JSON at {}, resetting to defaults: {e}",
-                    path.display()
-                );
-                Ok(T::default())
-            }
-        }
     }
 
     /// Loads a JSON file asynchronously (Preferred for runtime).

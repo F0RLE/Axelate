@@ -1,0 +1,158 @@
+/**
+ * @module app/CoreContainer
+ * @description Centralized DI container. Replaces globalThis pollution.
+ * All services register here. Legacy globalThis accessors remain as thin proxies
+ * that delegate to the container (backward compat during migration).
+ */
+
+import type { Core } from './init';
+import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { ModuleService } from '@/shared/services/ModuleService';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import type { WindowService } from '@/shared/services/WindowService';
+import type { CatalogService } from '@/shared/services/CatalogService';
+import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
+import type { SoundService } from '@/shared/services/SoundService';
+import type { UiStateStore } from '@/shared/services/state/UiStateStore';
+import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
+import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
+import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
+import type { MonitoringService } from '@/features/monitoring/services/MonitoringService';
+import type { DebugService } from '@/features/debug/services/DebugService';
+import type { SettingsService } from '@/features/settings/services/SettingsService';
+import type { ChatController } from '@/features/chat/chat';
+import type { ModulePlatformService } from '@/shared/services/ModulePlatformService';
+import type { AppUI } from '@/shared/shell/AppUI';
+import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
+import type { WindowUI } from '@/shared/shell/WindowUI';
+import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
+import type { SidebarUI } from '@/shared/shell/SidebarUI';
+import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
+import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
+import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
+import type { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
+import type { DebugUI } from '@/features/debug/ui/DebugUI';
+import type { Particles } from '@/shared/shell/Particles';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { TemplateLoader } from '@/shared/services/TemplateLoader';
+import type { EventBus } from '@/shared/services/EventBus';
+import type { ErrorHandler } from '@/shared/services/ErrorHandler';
+import type { StateManager } from '@/shared/services/StateManager';
+import type { IApp } from '@/shared/types/coreTypes';
+
+export interface CoreServices {
+    core: Core;
+    tauriProvider: TauriProvider;
+    tracer: LoggerService;
+    stateStore: UiStateStore;
+    uiSettings: UISettingsService;
+    aiSettings: AISettingsService;
+    moduleSettings: ModuleSettingsService;
+    moduleService: ModuleService;
+    modulePlatformService: ModulePlatformService;
+    windowService: WindowService;
+    i18n: I18nService;
+    catalog: CatalogService;
+    navigation: NavigationService;
+    soundService: SoundService;
+    monitoringService: MonitoringService;
+    debugService: DebugService;
+    settingsService: SettingsService;
+    chatController: ChatController;
+}
+
+export interface CoreUI {
+    appUI: AppUI;
+    i18nUI: I18nUI;
+    windowUI: WindowUI;
+    navigationUI: NavigationUI;
+    sidebarUI: SidebarUI;
+    downloadUI: DownloadUI;
+    settingsUI: SettingsUI;
+    moduleSettingsUI: ModuleSettingsUI;
+    monitoringUI: MonitoringUI;
+    debugUI: DebugUI;
+    particles: Particles;
+}
+
+export interface CoreInfrastructure {
+    templateLoader: TemplateLoader;
+    eventBus: EventBus;
+    errorHandler: ErrorHandler;
+    stateManager: StateManager;
+}
+
+export interface CoreContainerShape {
+    services: CoreServices;
+    ui: CoreUI;
+    infra: CoreInfrastructure;
+}
+
+export class CoreContainer {
+    private _services = {} as CoreServices;
+    private _ui = {} as CoreUI;
+    private _infra = {} as CoreInfrastructure;
+    private _locked = false;
+
+    get services(): CoreServices {
+        return this._services;
+    }
+
+    get ui(): CoreUI {
+        return this._ui;
+    }
+
+    get infra(): CoreInfrastructure {
+        return this._infra;
+    }
+
+    get isLocked(): boolean {
+        return this._locked;
+    }
+
+    registerServices(services: CoreServices): void {
+        if (this._locked) return;
+        Object.assign(this._services, services);
+    }
+
+    registerUI(ui: CoreUI): void {
+        if (this._locked) return;
+        Object.assign(this._ui, ui);
+    }
+
+    registerInfra(infra: CoreInfrastructure): void {
+        if (this._locked) return;
+        Object.assign(this._infra, infra);
+    }
+
+    lock(): void {
+        this._locked = true;
+    }
+
+    reset(): void {
+        this._locked = false;
+        this._services = {} as CoreServices;
+        this._ui = {} as CoreUI;
+        this._infra = {} as CoreInfrastructure;
+    }
+
+    /** Catalog category resolver — replaces globalThis.getCatalogCategory */
+    getCatalogCategory(category: string): IApp[] {
+        const catalog = this._services.catalog?.getCatalog();
+        if (!catalog) return [];
+        const lowCat = category.toLowerCase();
+        if (lowCat === 'ai' || lowCat === 'ai_text' || lowCat === 'ai_image') return catalog.ai;
+        if (lowCat === 'services') return catalog.services;
+        return [];
+    }
+}
+
+export const container = new CoreContainer();
+
+/**
+ * Typed accessor — replaces getGlobalWin() pattern.
+ * Returns container with full type safety.
+ */
+export function getContainer(): CoreContainer {
+    return container;
+}

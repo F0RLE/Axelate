@@ -329,10 +329,15 @@ export class WindowUI {
         this._isSmallScreen = policy.isSmallScreen;
 
         if (this._isSmallScreen) {
-            this._service.toggleMaximize().catch(() => {
-                /* ignore */
-            });
-            this._wasMaximizedOnSmallScreen = true;
+            const isMaximized = await this._service.isMaximized();
+            if (!isMaximized) {
+                this._service.toggleMaximize().catch(() => {
+                    /* ignore */
+                });
+                this._wasMaximizedOnSmallScreen = true;
+            } else {
+                this._wasMaximizedOnSmallScreen = false;
+            }
         }
     }
 

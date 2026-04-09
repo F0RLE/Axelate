@@ -1,7 +1,7 @@
 //! System tray setup and event handling
 
 use crate::app::window::{create_main_window, show_and_focus_window};
-use crate::domain::monitoring::system_monitor;
+use crate::domain::monitoring::system_monitor::SystemMonitorService;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
@@ -160,7 +160,11 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
                 "show" => {
                     if let Some(window) = app.get_webview_window("main") {
                         show_and_focus_window(&window);
-                        system_monitor::set_paused(false);
+                        if let Some(monitor) =
+                            app.try_state::<std::sync::Arc<SystemMonitorService>>()
+                        {
+                            monitor.set_paused(false);
+                        }
                     } else {
                         // Does not exist: Create it.
                         // It will show ITSELF when the frontend is ready (to avoid white flash).
@@ -170,7 +174,9 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
                 "quit" => {
                     // Graceful shutdown
                     IS_QUITTING.store(true, Ordering::Relaxed);
-                    system_monitor::stop_monitoring();
+                    if let Some(monitor) = app.try_state::<std::sync::Arc<SystemMonitorService>>() {
+                        std::sync::Arc::clone(&*monitor).stop_monitoring();
+                    }
 
                     // Force immediate save of all chat history before exit.
                     let sessions_arc = app
@@ -198,7 +204,9 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
                     show_and_focus_window(&window);
-                    system_monitor::set_paused(false);
+                    if let Some(monitor) = app.try_state::<std::sync::Arc<SystemMonitorService>>() {
+                        monitor.set_paused(false);
+                    }
                 } else {
                     create_main_window(app);
                 }

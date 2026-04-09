@@ -189,6 +189,11 @@ export class AppUI {
             },
             // When user switches tab in modal, return the previously-selected app ID for that slot
             (capability) => this._selectedApps.get(`ai_${capability}`)?.id ?? null,
+            async (app) => await this._platformService.download(app),
+            async (app) => {
+                await this._platformService.cancelDownload(app.id);
+                await this._platformService.delete(app);
+            },
             this._navigation,
         );
 
@@ -203,6 +208,7 @@ export class AppUI {
     public destroy(): void {
         this._cancelPendingDashboardSwitch();
         this._clearActionFeedbackTimer();
+        this._selectedApps.clear();
         globalThis.removeEventListener('language-changed', this._boundLanguageChanged);
         this._pageChangeUnsub();
         document.body.removeEventListener('contextmenu', this._boundDashboardContextMenu);
@@ -323,11 +329,7 @@ export class AppUI {
      */
     public openAppSelection(category: string, apps?: IApp[]): void {
         const rawCategory = category.startsWith('ai') ? 'ai' : category;
-        let appsToRender = apps;
-        if (!appsToRender) {
-            const win = getGlobalWin();
-            appsToRender = (win.getCatalogCategory as (cat: string) => IApp[])(rawCategory);
-        }
+        const appsToRender = apps ?? this._getCatalogApps(rawCategory);
 
         // Preserve AI compound categories for the modal filter tabs.
         // Non-AI categories must keep their own category, otherwise service modals
@@ -356,7 +358,7 @@ export class AppUI {
 
         if (cardLike instanceof HTMLElement) {
             this._cancelPendingDashboardSwitch();
-            this._stopPreviousModule(cardLike, app);
+            this._stopPreviousModule(cardLike, app, category);
             this._cardRenderer.updateCardAttributes(cardLike, app, category);
 
             cardLike.classList.remove('empty');
@@ -392,15 +394,17 @@ export class AppUI {
             this._selectedApps.delete(category);
         }
 
-        // Only visually reset the card if the other AI slot is also empty
-        const otherSlot = category === 'ai_text' ? 'ai_image' : 'ai_text';
-        const otherApp = this._selectedApps.get(otherSlot);
-        if (otherApp) {
-            // Other slot still active — show that engine on the card
-            this._cardRenderer.updateCardContent(cardLike, otherApp);
-            this._cardRenderer.updateCardAttributes(cardLike, otherApp, otherSlot);
-            // Re-inject action buttons for the now-active slot so ✕ holds correct category
-            this._refreshCardActions(cardLike, otherApp, otherSlot);
+        if (category.startsWith('ai')) {
+            const otherSlot = category === 'ai_text' ? 'ai_image' : 'ai_text';
+            const otherApp = this._selectedApps.get(otherSlot);
+            if (otherApp) {
+                // Other AI slot still active — show that engine on the shared AI card
+                this._cardRenderer.updateCardContent(cardLike, otherApp);
+                this._cardRenderer.updateCardAttributes(cardLike, otherApp, otherSlot);
+                this._refreshCardActions(cardLike, otherApp, otherSlot);
+            } else {
+                this._resetCardToEmpty(cardLike);
+            }
         } else {
             this._resetCardToEmpty(cardLike);
         }
@@ -495,14 +499,10 @@ export class AppUI {
         // Determine which is secondary (not currently shown on the card)
         const shownModule = card.dataset['currentModule'];
         const shownCapability = card.dataset['currentCapability'];
-        const secondaryApp =
-            shownCapability === 'ai_text'
-                ? imageApp
-                : shownCapability === 'ai_image'
-                  ? textApp
-                  : shownModule === textApp.id
-                    ? imageApp
-                    : textApp;
+        let secondaryApp = textApp;
+        if (shownCapability === 'ai_text' || shownModule === textApp.id) {
+            secondaryApp = imageApp;
+        }
 
         // Build badge using same pattern as _addSettingsBtn
         const badge = document.createElement('div');
@@ -517,14 +517,10 @@ export class AppUI {
         badge.addEventListener('click', (e) => {
             e.stopPropagation();
             e.stopImmediatePropagation();
-            const openCapability =
-                shownCapability === 'ai_text'
-                    ? 'ai_image'
-                    : shownCapability === 'ai_image'
-                      ? 'ai_text'
-                      : shownModule === textApp.id
-                        ? 'ai_image'
-                        : 'ai_text';
+            let openCapability = 'ai_text';
+            if (shownCapability === 'ai_text' || shownModule === textApp.id) {
+                openCapability = 'ai_image';
+            }
             this.openAppSelection(openCapability);
         });
 
@@ -628,6 +624,7 @@ export class AppUI {
         if (alreadySelected) {
             // Deselect: clear dashboard card and remove from tracked selection
             this.clearModuleCard(category);
+            win.uiState.removeSelectedModule(category);
             this._modalManager.updateSelection(null);
         } else {
             // Update dashboard card directly with compound key (skipping win.selectApp which
@@ -667,7 +664,6 @@ export class AppUI {
 
     private async _handleDeleteModule(app: IApp, category: string): Promise<void> {
         tracer.info('[AppUI] Remove module clicked:', app.id);
-        const win = getGlobalWin();
         try {
             await this._platformService.delete(app);
             app.installed = false;
@@ -679,7 +675,7 @@ export class AppUI {
 
             // Refresh logic remains in UI for now (Phase 1 can refactor this)
             const rawCategory = category.startsWith('ai') ? 'ai' : category;
-            const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(rawCategory);
+            const allApps = this._getCatalogApps(rawCategory);
             if (this._modalManager.isAppSelectionOpen()) {
                 this.openAppSelection(category, allApps);
             }
@@ -698,7 +694,7 @@ export class AppUI {
 
     private async _handleDownloadModule(
         app: IApp,
-        _category: string,
+        category: string,
         btn: HTMLElement | null,
     ): Promise<void> {
         tracer.info('[AppUI] Download module clicked:', app.id);
@@ -724,13 +720,13 @@ export class AppUI {
 
         try {
             await this._platformService.download(app);
-            this._onModalDownloadSuccess(btn, app);
+            this._onModalDownloadSuccess(btn, app, category);
         } catch (err: unknown) {
             this._onModalDownloadError(btn, err);
         }
     }
 
-    private _onModalDownloadSuccess(btn: HTMLElement | null, app: IApp): void {
+    private _onModalDownloadSuccess(btn: HTMLElement | null, app: IApp, category: string): void {
         app.installed = true;
         if (btn !== null) {
             btn.classList.remove('downloading', 'indeterminate');
@@ -745,7 +741,9 @@ export class AppUI {
             this._markCardAsInstalled(card, app);
         }
 
-        this._modalManager.refreshCurrentSelection();
+        if (this._modalManager.isViewingCategory(category)) {
+            this._modalManager.refreshCurrentSelection();
+        }
     }
 
     private _onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
@@ -764,7 +762,7 @@ export class AppUI {
         this.showToast(typeof win.t === 'function' ? win.t(msg, fallback) : fallback, 'error');
     }
 
-    private _stopPreviousModule(card: HTMLElement, app: IApp): void {
+    private _stopPreviousModule(card: HTMLElement, app: IApp, category: string): void {
         const previousModuleId = card.dataset['currentModule'];
         if (
             previousModuleId === undefined ||
@@ -773,9 +771,17 @@ export class AppUI {
         )
             return;
 
-        const actionBtn = card.querySelector('.model-card-action');
-        if (!(actionBtn instanceof HTMLElement)) return;
-        if (actionBtn.dataset['running'] !== 'true') return;
+        if (category.startsWith('ai')) {
+            const isStillSelectedInAnotherAiSlot = [...this._selectedApps.entries()].some(
+                ([slot, selectedApp]) =>
+                    slot !== category &&
+                    slot.startsWith('ai') &&
+                    selectedApp.id === previousModuleId,
+            );
+            if (isStillSelectedInAnotherAiSlot) {
+                return;
+            }
+        }
 
         const prevId = previousModuleId;
         const previousApp =
@@ -810,9 +816,22 @@ export class AppUI {
             }
         }
 
-        const catalog = globalThis.APP_DATA;
-        const allApps = [...catalog.ai, ...catalog.services];
+        const allApps = [...this._getCatalogApps('ai'), ...this._getCatalogApps('services')];
         return allApps.find((catalogApp) => catalogApp.id === appId);
+    }
+
+    private _getCatalogApps(category: string): IApp[] {
+        const win = getGlobalWin();
+        if (typeof win.getCatalogCategory !== 'function') {
+            return [];
+        }
+
+        try {
+            return win.getCatalogCategory(category);
+        } catch (err: unknown) {
+            tracer.warn(`[AppUI] Failed to read catalog category ${category}: ${String(err)}`);
+            return [];
+        }
     }
 
     // _updateCardAttributes removed (delegated to ModuleCardRenderer)

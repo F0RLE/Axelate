@@ -329,6 +329,58 @@ describe('AppUI lifecycle', () => {
         expect(platformServiceMock.stop).toHaveBeenCalledWith(serviceApp);
     });
 
+    it('should stop the previous services module when switching cards without action button running state', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="services-module-card" class="selected">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        const oldApp = { id: 'svc-old', name: 'Old Service', installed: true } as IApp;
+        const newApp = { id: 'svc-new', name: 'New Service', installed: true } as IApp;
+
+        (
+            globalThis as unknown as {
+                getCatalogCategory: ReturnType<typeof vi.fn>;
+            }
+        ).getCatalogCategory.mockImplementation((category: string) =>
+            category === 'services' ? [oldApp, newApp] : [],
+        );
+
+        appUI.updateModuleCard('services', oldApp);
+        platformServiceMock.stop.mockClear();
+
+        appUI.updateModuleCard('services', newApp);
+
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(oldApp);
+    });
+
+    it('should reset services card instead of showing an AI module when clearing services', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="services-module-card" class="selected">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        const serviceApp = { id: 'svc', name: 'Service', installed: true } as IApp;
+        const textApp = { id: 'ai-text', name: 'Text AI', installed: true } as IApp;
+
+        appUI.updateModuleCard('services', serviceApp);
+        appUI.updateModuleCard('ai_text', textApp);
+
+        const card = document.getElementById('services-module-card') as HTMLElement;
+        appUI.clearModuleCard('services');
+
+        expect(card.classList.contains('empty')).toBe(true);
+        expect(card.dataset['currentModule']).toBeUndefined();
+    });
+
     it('should not stop an AI provider if the same provider remains selected in the other AI slot', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
@@ -347,6 +399,57 @@ describe('AppUI lifecycle', () => {
         appUI.clearModuleCard('ai_text');
 
         expect(platformServiceMock.stop).not.toHaveBeenCalled();
+    });
+
+    it('should not stop the currently shown AI engine when selecting another AI slot on the shared card', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="selected">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+                <div class="model-card-action" data-running="true"></div>
+            </div>
+        `;
+
+        const card = document.getElementById('ai-module-card') as HTMLElement;
+        card.dataset['currentModule'] = 'text-model';
+        card.dataset['currentModuleName'] = 'Text Model';
+
+        const textApp = { id: 'text-model', name: 'Text Model', installed: true } as IApp;
+        const imageApp = { id: 'image-model', name: 'Image Model', installed: true } as IApp;
+
+        appUI.updateModuleCard('ai_text', textApp);
+        platformServiceMock.stop.mockClear();
+
+        appUI.updateModuleCard('ai_image', imageApp);
+
+        expect(platformServiceMock.stop).not.toHaveBeenCalled();
+    });
+
+    it('should remove persisted selection when deselecting the same app from modal flow', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="services-module-card" class="selected">
+                <div class="model-icon-wrapper"></div>
+                <div class="model-card-title"></div>
+                <div class="model-card-desc"></div>
+            </div>
+        `;
+
+        const serviceApp = { id: 'svc', name: 'Service', installed: true } as IApp;
+        appUI.updateModuleCard('services', serviceApp);
+
+        (
+            appUI as unknown as {
+                _performSelectionAction: (category: string, app: IApp) => void;
+            }
+        )._performSelectionAction('services', serviceApp);
+
+        const mockedGlobals = globalThis as unknown as {
+            uiState: { removeSelectedModule: ReturnType<typeof vi.fn> };
+        };
+        expect(mockedGlobals.uiState.removeSelectedModule).toHaveBeenCalledWith('services');
     });
 
     it('should track the shown AI capability on the shared dashboard card', () => {
@@ -414,10 +517,14 @@ describe('AppUI lifecycle', () => {
     it('should handle modal download success and error', () => {
         appUI = createAppUI();
         const privateAppUI = appUI as unknown as {
-            _onModalDownloadSuccess: (btn: HTMLElement | null, app: IApp) => void;
+            _onModalDownloadSuccess: (btn: HTMLElement | null, app: IApp, category: string) => void;
             _onModalDownloadError: (btn: HTMLElement | null, err: unknown) => void;
-            _modalManager: { refreshCurrentSelection: ReturnType<typeof vi.fn> };
+            _modalManager: {
+                refreshCurrentSelection: ReturnType<typeof vi.fn>;
+                isViewingCategory: ReturnType<typeof vi.fn>;
+            };
         };
+        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(true);
         const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
 
         const card = document.createElement('div');
@@ -432,7 +539,7 @@ describe('AppUI lifecycle', () => {
         card.appendChild(btn);
 
         const app = { id: 'local-app', name: 'Local App', installed: false } as IApp;
-        privateAppUI._onModalDownloadSuccess(btn, app);
+        privateAppUI._onModalDownloadSuccess(btn, app, 'services');
         expect(app.installed).toBe(true);
         expect(btn.classList.contains('downloading')).toBe(false);
         expect(refreshSpy).toHaveBeenCalled();
@@ -493,5 +600,48 @@ describe('AppUI lifecycle', () => {
         );
 
         expect(reopenSpy).toHaveBeenCalledWith('services', refreshedApps);
+    });
+
+    it('should not refresh modal after download success when viewing another category', () => {
+        appUI = createAppUI();
+
+        const privateAppUI = appUI as unknown as {
+            _onModalDownloadSuccess: (btn: HTMLElement | null, app: IApp, category: string) => void;
+            _modalManager: {
+                isViewingCategory: (category: string) => boolean;
+                refreshCurrentSelection: () => void;
+            };
+        };
+
+        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(false);
+        const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
+
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading indeterminate';
+        const app = { id: 'local-app', name: 'Local App', installed: false } as IApp;
+
+        privateAppUI._onModalDownloadSuccess(btn, app, 'services');
+
+        expect(app.installed).toBe(true);
+        expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
+    it('should resolve app by id from catalog helper without APP_DATA fallback', () => {
+        appUI = createAppUI();
+
+        delete (globalThis as Record<string, unknown>)['APP_DATA'];
+        (
+            globalThis as unknown as {
+                getCatalogCategory: ReturnType<typeof vi.fn>;
+            }
+        ).getCatalogCategory.mockImplementation((category: string) =>
+            category === 'services' ? [{ id: 'svc', name: 'Service', installed: true }] : [],
+        );
+
+        const resolved = (
+            appUI as unknown as { _resolveAppById: (appId: string) => IApp | undefined }
+        )._resolveAppById('svc');
+
+        expect(resolved?.id).toBe('svc');
     });
 });

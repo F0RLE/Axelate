@@ -2,6 +2,7 @@ use crate::errors::AppError;
 use crate::infrastructure::persistence::json_store::JsonStore;
 use crate::models::UIState;
 use crate::utils::paths::FILE_UI_STATE;
+use std::fs;
 
 /// Service for managing UI state with DI support.
 #[derive(Debug, Clone)]
@@ -28,5 +29,30 @@ impl UiStateService {
 
 /// Get UI state from file synchronously (For startup/bootstrap only)
 pub fn get_ui_state_sync() -> UIState {
-    JsonStore::load_sync(&FILE_UI_STATE).unwrap_or_default()
+    load_ui_state_bootstrap(&FILE_UI_STATE)
+}
+
+fn load_ui_state_bootstrap(path: &std::path::Path) -> UIState {
+    if !path.exists() {
+        return UIState::default();
+    }
+
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) => {
+            tracing::error!(
+                "Failed to read UI state at {}, resetting to defaults: {error}",
+                path.display()
+            );
+            return UIState::default();
+        }
+    };
+
+    serde_json::from_str(&content).unwrap_or_else(|error| {
+        tracing::error!(
+            "Failed to parse UI state at {}, resetting to defaults: {error}",
+            path.display()
+        );
+        UIState::default()
+    })
 }

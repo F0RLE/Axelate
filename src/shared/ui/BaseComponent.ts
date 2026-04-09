@@ -21,6 +21,10 @@ export abstract class BaseComponent {
             await this.onInit();
         } catch (err) {
             tracer.error(`[${this.constructor.name}] Init failed:`, err);
+            this._abortController.abort();
+            this._abortController = null;
+            this._elementCache.clear();
+            this._isInit = false;
         }
     }
 

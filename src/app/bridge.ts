@@ -1,6 +1,7 @@
 /**
  * @module core/boot/GlobalBridge
- * @description Exposes core functionality to the global window object
+ * @description Exposes core functionality to the global window object.
+ * Uses CoreContainer for internal access, maintains backward compat on globalThis.
  */
 
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
@@ -16,7 +17,7 @@ import type { WindowService } from '@/shared/services/WindowService';
 import type { WindowUI } from '@/shared/shell/WindowUI';
 import type { IApp } from '@/shared/types/coreTypes';
 import type { IAICatalogApp } from '@/features/ai/types/aiTypes';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import { container } from './CoreContainer';
 import { resolveProviderModel } from '@/features/ai/utils/catalogHelpers';
 import { aiBridge } from '@/features/ai/services/AIBridge';
 
@@ -36,10 +37,11 @@ export interface ICoreBridge {
 
 /**
  * GlobalBridge handles the exposure of core services to the global window object.
- * This decouples legacy bridge logic and boilerplate from the main Core orchestrator.
+ * Uses CoreContainer for internal access, maintains backward compat on globalThis.
  */
 export class GlobalBridge {
     private readonly _core: ICoreBridge;
+    private _originalFetch: typeof globalThis.fetch | null = null;
 
     constructor(core: ICoreBridge) {
         this._core = core;
@@ -47,34 +49,65 @@ export class GlobalBridge {
 
     /**
      * Initialize the bridge by setting up globals and interceptors.
-     * @sideeffect Modifies globalThis and intercepts floor fetch
      */
     public init(): void {
         this._setupFetchInterceptor();
         this._setupAxelateAPI();
         this._exposeCoreGlobals();
+        this._syncCatalogToGlobal();
+    }
+
+    public destroy(): void {
+        if (this._originalFetch !== null) {
+            globalThis.fetch = this._originalFetch;
+            this._originalFetch = null;
+        }
+
+        const keys = [
+            'checkModuleInstalled',
+            't',
+            'currentLang',
+            'setLanguage',
+            'applyTranslations',
+            'minimizeWindow',
+            'toggleMaximizeWindow',
+            'hideToTray',
+            'confirmClose',
+            'showPage',
+            'openAppSelection',
+            'closeAppSelection',
+            'launchApp',
+            'showToast',
+            'showSkeletonLoaders',
+            'hideSkeletonLoaders',
+            'setButtonLoading',
+            'showPromptTab',
+            'getCatalogCategory',
+            'axelateAPI',
+        ] as const;
+        for (const key of keys) {
+            Reflect.deleteProperty(globalThis, key);
+        }
+        Reflect.deleteProperty(globalThis, 'APP_DATA');
+    }
+
+    /**
+     * Sync catalog data to globalThis.APP_DATA for backward compat.
+     */
+    private _syncCatalogToGlobal(): void {
+        const catalogData = this._core.catalog.getCatalog();
+        (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = catalogData;
+
+        // Expose getCatalogCategory via container
+        globalThis.getCatalogCategory = (cat: string) => container.getCatalogCategory(cat);
     }
 
     /**
      * Expose core functions to globalThis for use by legacy JS modules and UI.
-     * @sideeffect Pollutes globalThis namespace with core methods
      */
     private _exposeCoreGlobals(): void {
         const win = globalThis;
 
-        // Module management
-        win.downloadModule = (
-            id: string,
-            url: string,
-            hash?: string,
-            dlType?: string,
-        ): Promise<void> => this._core.moduleService.downloadModule(id, url, hash, dlType);
-        win.cancelDownloadModule = async (id: string): Promise<boolean> => {
-            return await this._core.moduleService.cancelDownload(id);
-        };
-        win.deleteModule = async (id: string): Promise<void> => {
-            await this._core.moduleService.deleteModule(id);
-        };
         win.checkModuleInstalled = (id: string): Promise<boolean> =>
             this._core.moduleService.checkInstalled(id);
 
@@ -92,22 +125,8 @@ export class GlobalBridge {
         win.setLanguage = async (lang: string): Promise<void> => {
             await this._core.i18nUI.setLanguage(lang);
         };
-
-        // UI Language controls
-        win.toggleLangMenu = (): void => {
-            this._core.i18nUI.toggleMenu();
-        };
-        win.toggleSidebarLangMenu = (): void => {
-            this._core.i18nUI.toggleSidebarLangMenu();
-        };
         win.applyTranslations = (): void => {
             this._core.i18nUI.applyTranslations();
-        };
-        win.initEmojiFlags = (): void => {
-            this._core.i18nUI.initEmojiFlags();
-        };
-        win.updateLangButtons = (): void => {
-            this._core.i18nUI.updateSwitcherUI();
         };
 
         // Window Controls
@@ -115,13 +134,6 @@ export class GlobalBridge {
         win.toggleMaximizeWindow = (): Promise<void> => this._core.windowService.toggleMaximize();
         win.hideToTray = (): Promise<void> => this._core.windowService.hideToTray();
         win.confirmClose = (): Promise<void> => this._core.windowService.close();
-        win.hideSplashScreen = (): void => {
-            this._core.windowUI.hideSplashScreen();
-        };
-        win.changeLanguage = async (lang: string): Promise<void> => {
-            await this._core.i18nUI.setLanguage(lang);
-        };
-
         // Navigation and Selection
         win.showPage = (id: string, btn?: HTMLElement | null, isInitial?: boolean): void => {
             void this._core.navigationUI.showPage(id, btn, isInitial);
@@ -148,23 +160,6 @@ export class GlobalBridge {
         };
         win.closeAppSelection = () => {
             this._core.appUI.closeAppSelection();
-        };
-
-        win.selectApp = (category: string, app: IApp): Promise<void> => {
-            this._core.appUI.updateModuleCard(category, app);
-            const uiState = getGlobalWin().uiState;
-            if (typeof uiState.setSelectedModule === 'function') {
-                uiState.setSelectedModule(category, {
-                    id: app.id,
-                    name: app.name ?? '',
-                    nameKey: app.nameKey ?? '',
-                    icon: app.icon ?? '',
-                    type: app.type ?? 'local',
-                    descKey: app.descKey ?? '',
-                    desc: app.desc ?? '',
-                });
-            }
-            return Promise.resolve();
         };
 
         // App Launching
@@ -208,18 +203,9 @@ export class GlobalBridge {
         };
 
         // Module Control and State Updates
-        win.controlModule = (id: string, action: string): Promise<boolean> =>
-            this._core.moduleService.control(id, action);
-        win.updateState = (): void => {
-            // No-op for now, or could trigger state refresh if needed
-        };
-
         // UI Feedback and Utilities
         win.showToast = (m: string, t?: string, d?: number, title?: string | null): void => {
             this._core.appUI.showToast(m, t, d, title ?? null);
-        };
-        win.showActionFeedback = (t?: string): void => {
-            this._core.appUI.showActionFeedback(t);
         };
         win.showSkeletonLoaders = (id: string, c?: number): void => {
             this._core.appUI.showSkeletonLoaders(id, c ?? 0);
@@ -233,21 +219,10 @@ export class GlobalBridge {
         win.showPromptTab = (tab: string, btn?: HTMLElement): void => {
             this._core.appUI.showPromptTab(tab, btn);
         };
-
-        // Ensure getCatalogCategory is available and robust
-        const g = getGlobalWin();
-        g.getCatalogCategory = (cat: string) => {
-            const lowCat = cat.toLowerCase();
-            const catalog = this._core.catalog.getCatalog();
-            if (lowCat === 'ai' || lowCat === 'ai_text' || lowCat === 'ai_image') return catalog.ai;
-            if (lowCat === 'services') return catalog.services;
-            return [];
-        };
     }
 
     /**
      * Setup the axelateAPI bridge for legacy module compatibility.
-     * @sideeffect Exposes axelateAPI on globalThis
      */
     private _setupAxelateAPI(): void {
         const win = globalThis;
@@ -278,13 +253,6 @@ export class GlobalBridge {
                         // Security: Do not persist keys in localStorage/sessionStorage
                     }
                 },
-                get: async (service: string): Promise<string | null> => {
-                    if (this._core.tauriProvider.isTauri()) {
-                        return await this._core.tauriProvider.invoke('get_secure_key', { service });
-                    } else {
-                        return null;
-                    }
-                },
             },
         };
     }
@@ -299,6 +267,8 @@ export class GlobalBridge {
             );
             return;
         }
+
+        this._originalFetch = originalFetch;
 
         const boundFetch = originalFetch.bind(g);
 

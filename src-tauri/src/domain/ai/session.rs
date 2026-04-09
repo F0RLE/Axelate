@@ -5,6 +5,7 @@
 
 use dashmap::DashMap;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -14,7 +15,8 @@ use super::types::{ChatMessage, ChatReply, ChatSession};
 
 const LOCAL_CONTEXT_RESERVE_TOKENS: usize = 1024;
 const LOCAL_RECENT_TURNS: usize = 3;
-const LOCAL_SUMMARY_BUDGET_RATIO: f32 = 0.28;
+const LOCAL_SUMMARY_BUDGET_NUMERATOR: usize = 28;
+const LOCAL_SUMMARY_BUDGET_DENOMINATOR: usize = 100;
 const LOCAL_MIN_SUMMARY_TOKENS: usize = 160;
 
 /// Manages persistence and retrieval of chat sessions.
@@ -185,9 +187,9 @@ impl ChatSessionManager {
             });
 
         let overlap = find_history_overlap(&entry.history, incoming_messages);
-        entry
-            .history
-            .extend_from_slice(&incoming_messages[overlap..]);
+        if let Some(new_messages) = incoming_messages.get(overlap..) {
+            entry.history.extend_from_slice(new_messages);
+        }
         entry.last_updated = Self::current_timestamp();
         self.dirty.store(true, Ordering::Relaxed);
 
@@ -257,9 +259,8 @@ impl ChatSessionManager {
         context_size: usize,
         model: &str,
     ) -> Vec<ChatMessage> {
-        let mut session = match self.sessions.get_mut(session_id) {
-            Some(session) => session,
-            None => return Vec::new(),
+        let Some(mut session) = self.sessions.get_mut(session_id) else {
+            return Vec::new();
         };
 
         if session.history.is_empty() {
@@ -267,16 +268,19 @@ impl ChatSessionManager {
         }
 
         let context_size = context_size.max(4096);
-        let available_budget = context_size.saturating_sub(LOCAL_CONTEXT_RESERVE_TOKENS).max(512);
-        let summary_budget = ((available_budget as f32) * LOCAL_SUMMARY_BUDGET_RATIO) as usize;
+        let available_budget = context_size
+            .saturating_sub(LOCAL_CONTEXT_RESERVE_TOKENS)
+            .max(512);
+        let summary_budget = available_budget.saturating_mul(LOCAL_SUMMARY_BUDGET_NUMERATOR)
+            / LOCAL_SUMMARY_BUDGET_DENOMINATOR;
         let summary_budget = summary_budget.max(LOCAL_MIN_SUMMARY_TOKENS);
 
         let turn_ranges = group_turn_ranges(&session.history);
-        let recent_start_index = if turn_ranges.len() > LOCAL_RECENT_TURNS {
-            turn_ranges[turn_ranges.len() - LOCAL_RECENT_TURNS].0
-        } else {
-            0
-        };
+        let recent_start_index = turn_ranges
+            .len()
+            .checked_sub(LOCAL_RECENT_TURNS)
+            .and_then(|index| turn_ranges.get(index))
+            .map_or(0, |(start, _)| *start);
 
         if recent_start_index < session.summary_message_count {
             session.summary = None;
@@ -285,17 +289,21 @@ impl ChatSessionManager {
         }
 
         if recent_start_index > session.summary_message_count {
-            let new_summary_slice = &session.history[session.summary_message_count..recent_start_index];
-            let summary_lines = build_summary_lines(new_summary_slice);
-            if !summary_lines.is_empty() {
-                session.summary = merge_summary(
-                    session.summary.as_deref(),
-                    &summary_lines,
-                    summary_budget,
-                    model,
-                );
-                session.summary_message_count = recent_start_index;
-                self.dirty.store(true, Ordering::Relaxed);
+            if let Some(new_summary_slice) = session
+                .history
+                .get(session.summary_message_count..recent_start_index)
+            {
+                let summary_lines = build_summary_lines(new_summary_slice);
+                if !summary_lines.is_empty() {
+                    session.summary = merge_summary(
+                        session.summary.as_deref(),
+                        &summary_lines,
+                        summary_budget,
+                        model,
+                    );
+                    session.summary_message_count = recent_start_index;
+                    self.dirty.store(true, Ordering::Relaxed);
+                }
             }
         }
 
@@ -317,14 +325,16 @@ impl ChatSessionManager {
         }
 
         let mut kept_recent: Vec<ChatMessage> = Vec::new();
-        let recent_turn_ranges = if turn_ranges.len() > LOCAL_RECENT_TURNS {
-            &turn_ranges[turn_ranges.len() - LOCAL_RECENT_TURNS..]
-        } else {
-            &turn_ranges[..]
-        };
+        let recent_turn_ranges = turn_ranges
+            .len()
+            .checked_sub(LOCAL_RECENT_TURNS)
+            .and_then(|start| turn_ranges.get(start..))
+            .unwrap_or(&turn_ranges);
 
         for (start, end) in recent_turn_ranges.iter().rev() {
-            let turn = &session.history[*start..*end];
+            let Some(turn) = session.history.get(*start..*end) else {
+                continue;
+            };
             let turn_tokens = estimate_messages_tokens(turn, model);
             if used_tokens + turn_tokens > available_budget {
                 continue;
@@ -359,8 +369,12 @@ fn find_history_overlap(existing: &[ChatMessage], incoming: &[ChatMessage]) -> u
     let max_overlap = existing.len().min(incoming.len());
 
     for overlap in (1..=max_overlap).rev() {
-        let existing_suffix = &existing[existing.len() - overlap..];
-        let incoming_prefix = &incoming[..overlap];
+        let Some(existing_suffix) = existing.get(existing.len() - overlap..) else {
+            continue;
+        };
+        let Some(incoming_prefix) = incoming.get(..overlap) else {
+            continue;
+        };
 
         if existing_suffix
             .iter()
@@ -447,7 +461,9 @@ fn build_summary_lines(messages: &[ChatMessage]) -> Vec<String> {
     let mut lines = Vec::new();
 
     for (start, end) in group_turn_ranges(messages) {
-        let turn = &messages[start..end];
+        let Some(turn) = messages.get(start..end) else {
+            continue;
+        };
         let user_text = turn
             .iter()
             .find(|message| message.role == "user")
@@ -497,7 +513,11 @@ fn summarize_content(content: &serde_json::Value) -> String {
                 if !merged.is_empty() {
                     merged.push(' ');
                 }
-                merged.push_str(&format!("{image_count} image{}", if image_count == 1 { "" } else { "s" }));
+                let _ = write!(
+                    merged,
+                    "{image_count} image{}",
+                    if image_count == 1 { "" } else { "s" }
+                );
             }
             merged
         }
@@ -714,7 +734,10 @@ mod tests {
 
         assert_eq!(runtime_context.len(), 3);
         assert_eq!(persisted.len(), 3);
-        assert_eq!(persisted[2].content, serde_json::Value::String("next".to_string()));
+        assert_eq!(
+            persisted[2].content,
+            serde_json::Value::String("next".to_string())
+        );
     }
 
     #[test]
@@ -841,10 +864,16 @@ mod tests {
                 .contains("Conversation recap from earlier turns")
         );
 
-        let stored = manager.sessions.get("session-1").expect("session should exist");
+        let stored = manager
+            .sessions
+            .get("session-1")
+            .expect("session should exist");
         assert!(stored.summary.is_some());
         assert_eq!(stored.summary_message_count, 2);
-        assert_eq!(context[1].content, serde_json::Value::String("zero".to_string()));
+        assert_eq!(
+            context[1].content,
+            serde_json::Value::String("zero".to_string())
+        );
     }
 
     #[test]
@@ -884,7 +913,10 @@ mod tests {
         );
 
         let removed = manager.rewind_last_turn("session-1");
-        let stored = manager.sessions.get("session-1").expect("session should exist");
+        let stored = manager
+            .sessions
+            .get("session-1")
+            .expect("session should exist");
 
         assert_eq!(removed.as_deref(), Some("second"));
         assert_eq!(stored.summary, None);

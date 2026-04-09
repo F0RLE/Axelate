@@ -20,8 +20,11 @@ import { aiSettingsRenderer } from './AISettingsRenderer';
 
 describe('AISettingsRenderer', () => {
     const settingsService = {
+        getSecureKeyMeta: vi.fn(),
         getSecureKey: vi.fn(),
         saveSecureKey: vi.fn(),
+        hasSecureKey: vi.fn(),
+        validateStoredApiKey: vi.fn(),
     };
 
     const aiSettings = {
@@ -59,8 +62,11 @@ describe('AISettingsRenderer', () => {
 
     beforeEach(async () => {
         document.body.innerHTML = `<div id="root"></div>`;
-        settingsService.getSecureKey.mockResolvedValue('secret-key');
+        settingsService.getSecureKeyMeta.mockResolvedValue({ exists: true, length: 16 });
+        settingsService.getSecureKey.mockResolvedValue('sk-or-test-secret');
         settingsService.saveSecureKey.mockResolvedValue(undefined);
+        settingsService.hasSecureKey.mockResolvedValue(true);
+        settingsService.validateStoredApiKey.mockResolvedValue(true);
         aiSettings.getSelectedAIModel.mockReturnValue('reasoner');
         aiSettings.getThinkingLevel.mockReturnValue('medium');
         tauri.invoke.mockResolvedValue(true);
@@ -106,7 +112,7 @@ describe('AISettingsRenderer', () => {
         expect(container.textContent).toContain('No additional settings required for this module.');
     });
 
-    it('renders provider settings, hydrates secure key and handles interactions', async () => {
+    it('renders provider settings without hydrating the secure key and handles interactions', async () => {
         const container = document.getElementById('root') as HTMLElement;
 
         await aiSettingsRenderer.render(container, {
@@ -124,13 +130,15 @@ describe('AISettingsRenderer', () => {
             '.thinking-option-card[data-value="high"]',
         ) as HTMLElement;
 
-        expect(input.value).toBe('secret-key');
+        expect(input.value).toBe('••••••••••••••••');
+        expect(input.dataset['storedMasked']).toBe('true');
         expect(container.querySelectorAll('.ai-model-card')).toHaveLength(2);
         expect(container.textContent).toContain('Ctx: 128K');
 
+        input.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
         input.value = 'new-secret';
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('openrouter', 'new-secret');
+        expect(settingsService.saveSecureKey).not.toHaveBeenCalled();
 
         link.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         expect(tauri.openUrl).toHaveBeenCalledWith('https://openrouter.ai/settings/keys');
@@ -148,7 +156,7 @@ describe('AISettingsRenderer', () => {
         ).toHaveBeenCalled();
     });
 
-    it('toggles password visibility and updates selected model stats', async () => {
+    it('reveals stored key on demand, re-masks it, and updates selected model stats', async () => {
         const container = document.getElementById('root') as HTMLElement;
         await aiSettingsRenderer.render(container, {
             id: 'gpt',
@@ -157,8 +165,17 @@ describe('AISettingsRenderer', () => {
         } as never);
 
         const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
-        aiSettingsRenderer.toggleKeyVisibility('gpt');
         expect(input.type).toBe('text');
+        expect(input.dataset['storedMasked']).toBe('true');
+        await aiSettingsRenderer.toggleKeyVisibility('gpt');
+        expect(settingsService.getSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(input.value).toBe('sk-or-test-secret');
+        expect(input.dataset['storedRevealed']).toBe('true');
+
+        await aiSettingsRenderer.toggleKeyVisibility('gpt');
+        expect(input.value).toBe('•••••••••••••••••');
+        expect(input.dataset['storedMasked']).toBe('true');
+        expect(input.dataset['storedRevealed']).toBeUndefined();
 
         aiSettingsRenderer.selectModel('gpt', 'fast');
         expect(
@@ -188,23 +205,45 @@ describe('AISettingsRenderer', () => {
         const showToast = (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> })
             .showToast;
 
-        input.value = '   ';
+        input.value = '••••••••••••••••';
         await aiSettingsRenderer.checkKey('gpt');
-        expect(showToast).toHaveBeenCalledWith('ui.settings.key_invalid:Invalid Key', 'error');
+        expect(showToast).toHaveBeenCalledWith('ui.settings.key_valid:Key is valid', 'success');
+        vi.advanceTimersByTime(3000);
 
         input.value = 'valid-key';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         tauri.invoke.mockResolvedValueOnce(true);
         await aiSettingsRenderer.checkKey('gpt');
         expect(button.classList.contains('success')).toBe(true);
         expect(showToast).toHaveBeenCalledWith('ui.settings.key_valid:Key is valid', 'success');
+        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('openrouter', 'valid-key');
+        expect(input.value).toBe('•••••••••');
+        expect(input.dataset['storedMasked']).toBe('true');
 
         vi.advanceTimersByTime(3000);
         expect(button.disabled).toBe(false);
 
+        input.value = 'bad-key';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         tauri.invoke.mockRejectedValueOnce(new Error('boom'));
         await aiSettingsRenderer.checkKey('gpt');
         expect(showToast).toHaveBeenCalledWith(
-            'ui.settings.key_invalid_check:Key is invalid',
+            'ui.settings.key_invalid_check:Key is invalid or missing',
+            'error',
+        );
+
+        vi.advanceTimersByTime(3000);
+        input.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+        input.value = 'https://reddit.com/r/not-a-key';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        settingsService.validateStoredApiKey.mockClear();
+        tauri.invoke.mockResolvedValueOnce(false);
+
+        await aiSettingsRenderer.checkKey('gpt');
+
+        expect(settingsService.validateStoredApiKey).not.toHaveBeenCalled();
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_invalid_check:Key is invalid or missing',
             'error',
         );
     });

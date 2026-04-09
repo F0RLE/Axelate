@@ -120,8 +120,9 @@ export class ModuleCardRenderer {
 
     private _injectCoreContent(clone: DocumentFragment, app: IApp): void {
         const iconWrapper = clone.querySelector('.app-icon-wrapper');
-        if (iconWrapper)
-            iconWrapper.innerHTML = DOMPurify.sanitize(app.icon ?? '❓', this._purifyConfig);
+        if (iconWrapper) {
+            iconWrapper.innerHTML = this._getSanitizedIconMarkup(app);
+        }
 
         const titleEl = clone.querySelector('.app-card-title');
         if (titleEl) titleEl.textContent = this._getAppName(app);
@@ -473,9 +474,9 @@ export class ModuleCardRenderer {
         const iconWrapper = card.querySelector('.model-icon-wrapper');
         if (iconWrapper === null) return;
 
-        iconWrapper.innerHTML = DOMPurify.sanitize(
-            `<div>${app.icon ?? '📦'}</div>`,
-            this._purifyConfig,
+        iconWrapper.innerHTML = this._getSanitizedIconMarkup(
+            app,
+            (icon) => `<span class="model-icon-glyph">${icon}</span>`,
         );
     }
 
@@ -569,6 +570,16 @@ export class ModuleCardRenderer {
         const g = getGlobalWin();
         if (typeof g.t === 'function') return g.t(key, app.desc ?? '');
         return app.desc ?? '';
+    }
+
+    private _getSanitizedIconMarkup(
+        app: IApp,
+        wrap?: (icon: string) => string,
+        fallback = '❓',
+    ): string {
+        const icon = app.icon ?? fallback;
+        const markup = wrap?.(icon) ?? icon;
+        return DOMPurify.sanitize(markup, this._purifyConfig);
     }
 
     private _getAppTypeBadgeHtml(isApi: boolean, isInstalled: boolean): string {

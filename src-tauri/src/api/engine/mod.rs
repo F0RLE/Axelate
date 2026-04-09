@@ -4,24 +4,16 @@
 
 use std::sync::Arc;
 
+use crate::domain::engine::config::{build_default_engine_config, normalize_engine_config};
 use crate::domain::engine::manager::EngineManager;
 use crate::domain::engine::types::{
     Capability, EngineConfig, EngineDefinition, EngineState, EngineStatus,
 };
 use crate::errors::AppError;
+use crate::infrastructure::config::engine_settings::{
+    load_engine_config_map, save_engine_config_map,
+};
 use tauri::State;
-
-const MIN_LLAMACPP_CONTEXT_SIZE: u32 = 4096;
-
-fn normalize_engine_config(
-    mut config: crate::domain::engine::types::EngineConfig,
-) -> crate::domain::engine::types::EngineConfig {
-    if config.engine_id == "llamacpp" && config.context_size < MIN_LLAMACPP_CONTEXT_SIZE {
-        config.context_size = MIN_LLAMACPP_CONTEXT_SIZE;
-    }
-
-    config
-}
 
 #[tauri::command]
 #[specta::specta]
@@ -89,7 +81,7 @@ pub async fn get_engine_config(
     engine_id: String,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<crate::domain::engine::types::EngineConfig, AppError> {
-    let saved = load_engine_config_map()?;
+    let saved = load_engine_config_map().await?;
     if let Some(config) = saved.get(&engine_id) {
         return Ok(config.clone());
     }
@@ -100,70 +92,17 @@ pub async fn get_engine_config(
         .await
         .ok_or_else(|| AppError::Config(format!("Unknown engine: {engine_id}")))?;
 
-    Ok(normalize_engine_config(crate::domain::engine::types::EngineConfig {
-        engine_id: def.id,
-        port: def.default_port,
-        gpu_layers: def.default_gpu_layers,
-        context_size: def.default_context_size,
-        model_path: None,
-        extra_args: vec![],
-    }))
+    Ok(build_default_engine_config(&def))
 }
 
 #[tauri::command]
 #[specta::specta]
 /// Persists user engine config (port, gpu_layers, context_size, model_path, extra_args).
-pub fn set_engine_config(
+pub async fn set_engine_config(
     config: crate::domain::engine::types::EngineConfig,
 ) -> Result<(), AppError> {
-    let mut map = load_engine_config_map().unwrap_or_default();
+    let mut map = load_engine_config_map().await.unwrap_or_default();
     let normalized = normalize_engine_config(config);
     map.insert(normalized.engine_id.clone(), normalized);
-    save_engine_config_map(&map)
-}
-
-// ──────────────────────────────────────────────────────
-// Internal helpers — read/write engine_config.json atomically
-// ──────────────────────────────────────────────────────
-
-type EngineConfigMap =
-    std::collections::HashMap<String, crate::domain::engine::types::EngineConfig>;
-
-pub(crate) fn load_engine_config_map() -> Result<EngineConfigMap, AppError> {
-    let path = &*crate::utils::paths::FILE_ENGINE_CONFIG;
-    if !path.exists() {
-        return Ok(EngineConfigMap::default());
-    }
-    let raw = std::fs::read_to_string(path).map_err(|e| AppError::Io(e.to_string()))?;
-    let mut map: EngineConfigMap =
-        serde_json::from_str(&raw).map_err(|e| AppError::Serialization(e.to_string()))?;
-
-    for config in map.values_mut() {
-        if config.engine_id == "llamacpp" && config.context_size < MIN_LLAMACPP_CONTEXT_SIZE {
-            config.context_size = MIN_LLAMACPP_CONTEXT_SIZE;
-        }
-    }
-
-    Ok(map)
-}
-
-fn save_engine_config_map(map: &EngineConfigMap) -> Result<(), AppError> {
-    let path = &*crate::utils::paths::FILE_ENGINE_CONFIG;
-    let tmp = path.with_extension("tmp");
-
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| AppError::Io(e.to_string()))?;
-    }
-
-    let json =
-        serde_json::to_string_pretty(map).map_err(|e| AppError::Serialization(e.to_string()))?;
-    std::fs::write(&tmp, &json).map_err(|e| AppError::Io(e.to_string()))?;
-
-    // Atomic rename (Windows fallback: remove + rename)
-    if let Err(e) = std::fs::rename(&tmp, path) {
-        let _ = std::fs::remove_file(path);
-        std::fs::rename(&tmp, path).map_err(|_| AppError::Io(e.to_string()))?;
-    }
-
-    Ok(())
+    save_engine_config_map(&map).await
 }

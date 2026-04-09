@@ -6,7 +6,7 @@
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
-import type { ISettingsUIContext } from './SettingsContext';
+import type { IAppSettingsUIContext } from './SettingsContext';
 import type { SettingsService } from '../services/SettingsService';
 import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
@@ -16,7 +16,7 @@ import type { NavigationService } from '@/infrastructure/navigation/NavigationSe
 
 export class SettingsUI {
     private readonly _generalRenderer: GeneralSettingsRenderer;
-    private _context!: ISettingsUIContext;
+    private _context!: IAppSettingsUIContext;
     private _isInitialized = false;
     private _isDestroyed = false;
 

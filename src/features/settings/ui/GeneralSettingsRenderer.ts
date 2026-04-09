@@ -5,7 +5,7 @@
 
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 import { tracer } from '@/infrastructure/logging/LoggerService';
-import type { ISettingsUIContext } from './SettingsContext';
+import type { IAppSettingsUIContext } from './SettingsContext';
 import { APP_PAGES } from '@/shared/config/AppPages';
 
 export class GeneralSettingsRenderer {
@@ -17,7 +17,7 @@ export class GeneralSettingsRenderer {
     /**
      * Initializes the general settings renderer.
      */
-    public init(context: ISettingsUIContext): void {
+    public init(context: IAppSettingsUIContext): void {
         tracer.info('[GeneralSettingsRenderer] Initializing...');
         this._initTaskbarToggles(context);
         this._initMonitorToggles(context);
@@ -44,14 +44,14 @@ export class GeneralSettingsRenderer {
     /**
      * Initializes taskbar visibility toggles.
      */
-    private _initTaskbarToggles(context: ISettingsUIContext) {
+    private _initTaskbarToggles(context: IAppSettingsUIContext) {
         const container = document.getElementById('taskbar-toggles');
         if (!container) {
             tracer.warn('[GeneralSettingsRenderer] #taskbar-toggles not found');
             return;
         }
         if (container.dataset['initialized'] === 'true') {
-            tracer.info('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
+            tracer.debug('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
             return;
         }
         container.dataset['initialized'] = 'true';
@@ -159,17 +159,14 @@ export class GeneralSettingsRenderer {
     /**
      * Initializes system monitor toggles.
      */
-    /**
-     * Initializes system monitor toggles.
-     */
-    private _initMonitorToggles(context: ISettingsUIContext) {
+    private _initMonitorToggles(context: IAppSettingsUIContext) {
         const container = document.getElementById('monitor-toggles');
         if (!container) {
             tracer.warn('[GeneralSettingsRenderer] #monitor-toggles not found');
             return;
         }
         if (container.dataset['initialized'] === 'true') {
-            tracer.info('[GeneralSettingsRenderer] #monitor-toggles already initialized');
+            tracer.debug('[GeneralSettingsRenderer] #monitor-toggles already initialized');
             return;
         }
         container.dataset['initialized'] = 'true';
@@ -276,8 +273,12 @@ export class GeneralSettingsRenderer {
             if (!hidden.includes(id)) hidden.push(id);
             if (el instanceof HTMLElement) {
                 this._hideElement(el, 'hiding', () => {
-                    this._updateMonitorPanelVisibility(true);
-                    this._updateMonitorDivider(true);
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            this._updateMonitorPanelVisibility(true);
+                            this._updateMonitorDivider(true);
+                        });
+                    });
                 });
             } else {
                 this._updateMonitorPanelVisibility(true);
@@ -366,11 +367,18 @@ export class GeneralSettingsRenderer {
                 return;
             }
             element.removeEventListener('transitionend', handleTransitionEnd);
+            globalThis.clearTimeout(fallbackTimer);
             finalize();
         };
 
+        const fallbackTimer = globalThis.setTimeout(() => {
+            element.removeEventListener('transitionend', handleTransitionEnd);
+            finalize();
+        }, 360);
+
         element.addEventListener('transitionend', handleTransitionEnd, { once: true });
         this._cleanupFns.push(() => {
+            globalThis.clearTimeout(fallbackTimer);
             element.removeEventListener('transitionend', handleTransitionEnd);
         });
         element.classList.add(transitionClass);

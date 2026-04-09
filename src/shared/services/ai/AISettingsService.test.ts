@@ -19,8 +19,8 @@ describe('AISettingsService', () => {
         expect(service.getSelectedAIModel('gemini')).toBe('gemini-pro');
     });
 
-    it('should get thinking level (default high for cloud providers)', () => {
-        expect(service.getThinkingLevel('gemini')).toBe('high');
+    it('should get thinking level (default off for cloud providers)', () => {
+        expect(service.getThinkingLevel('gemini')).toBe('off');
     });
 
     it('should default llamacpp thinking level to low', () => {

@@ -100,6 +100,13 @@ describe('ChatFileHandler', () => {
             handler.addFiles([createFile('b.txt', 'b')]);
             expect(handler.getCount()).toBe(2);
         });
+
+        it('should ignore duplicate files with the same identity', () => {
+            const file = createFile('dup.txt', 'same');
+            handler.addFiles([file, file]);
+
+            expect(handler.getCount()).toBe(1);
+        });
     });
 
     // ---------------------------------------------------------- removeFile
@@ -355,6 +362,17 @@ describe('ChatFileHandler', () => {
             handler.addFiles([createImageFile()]);
             const withImage = await handler.getTotalTokenEstimate('Hello');
             expect(withImage).toBe(baseTokens + 258);
+        });
+
+        it('should include token estimate for attached text files', async () => {
+            (isTextFile as unknown as Mock).mockReturnValue(true);
+            (readFileAsText as unknown as Mock).mockResolvedValue('some text content');
+            (getTokenCount as unknown as Mock).mockResolvedValueOnce(1).mockResolvedValueOnce(11);
+
+            handler.addFiles([createFile('doc.txt', 'content')]);
+            const tokens = await handler.getTotalTokenEstimate('base');
+
+            expect(tokens).toBe(12);
         });
     });
 

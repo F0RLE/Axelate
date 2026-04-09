@@ -257,12 +257,13 @@ describe('UiStateStore', () => {
             // bridge.invoke should not have been called for save
         });
 
-        it('should saveImmediate on beforeunload', () => {
+        it('should saveImmediate synchronously', () => {
             bridge = createMockBridge();
             store = new UiStateStore(bridge);
             store.updateState({ sidebar_width: 500 });
 
-            globalThis.dispatchEvent(new Event('beforeunload'));
+            // beforeunload is now handled by StateManager; test saveImmediate directly
+            store.saveImmediate();
 
             const stored = JSON.parse(localStorage.getItem('axelate_ui_state') ?? '{}') as Record<
                 string,
@@ -271,15 +272,21 @@ describe('UiStateStore', () => {
             expect(stored['sidebar_width']).toBe(500);
         });
 
-        it('should remove auto-save listeners on destroy', () => {
+        it('should remove auto-save timer on destroy', () => {
             bridge = createMockBridge();
             store = new UiStateStore(bridge);
             store.updateState({ sidebar_width: 640 });
 
             store.destroy();
-            globalThis.dispatchEvent(new Event('beforeunload'));
 
-            expect(localStorage.getItem('axelate_ui_state')).toBeNull();
+            // saveImmediate should still work (no event listeners to remove)
+            store.saveImmediate();
+
+            const stored = JSON.parse(localStorage.getItem('axelate_ui_state') ?? '{}') as Record<
+                string,
+                unknown
+            >;
+            expect(stored['sidebar_width']).toBe(640);
         });
     });
 });

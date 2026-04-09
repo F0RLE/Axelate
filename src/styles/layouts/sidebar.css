@@ -5,9 +5,7 @@
     display: flex;
     flex-direction: column;
     justify-content: flex-start !important; /* Managed by auto-margins for better control */
-    background:
-        linear-gradient(180deg, rgba(18, 18, 28, 0.12) 0%, rgba(18, 18, 28, 0.06) 100%),
-        rgba(var(--background-raw), 0.045) !important;
+    background: rgba(var(--background-raw), 0.065) !important;
     backdrop-filter: blur(2px);
     font-family: var(--app-font-family) !important; /* Global brand font restorated */
     /* Improved border rendering to avoid subpixel gaps */
@@ -490,12 +488,13 @@
 .nav-btn.nav-item-hiding,
 .nav-btn.hidden {
     display: flex !important;
-    opacity: 0;
-    height: 0;
-    max-height: 0;
-    margin-bottom: 0;
-    padding: 0;
-    border: none;
+    opacity: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
     pointer-events: none;
     transform: scale(0.95);
     overflow: hidden;
@@ -520,13 +519,7 @@
 }
 
 .nav-btn.active {
-    background:
-        linear-gradient(
-            180deg,
-            rgba(var(--primary-raw), 0.075) 0%,
-            rgba(var(--primary-raw), 0.04) 100%
-        ),
-        rgba(255, 255, 255, 0.012);
+    background: rgba(var(--primary-raw), 0.085);
     color: white;
     font-weight: 600;
     border: none;

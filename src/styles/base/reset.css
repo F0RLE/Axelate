@@ -32,6 +32,16 @@ body {
     opacity: 1;
     /* Changed for splash screen handling */
     transition: opacity 0.5s ease-in;
+    position: relative;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--bg-dark);
+    pointer-events: none;
+    z-index: -2;
 }
 
 /* Globals moved to top */
