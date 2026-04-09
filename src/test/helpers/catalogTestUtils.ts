@@ -1,6 +1,9 @@
 import { vi } from 'vitest';
+import { CatalogService } from '@/shared/services/CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
 import type { AppConfig } from '@/shared/types/bindings';
+import type { IBridge } from '@/shared/types/IBridge';
+import { createMockBridge } from '@/test/mocks/mockBridge';
 
 export function createMockAppConfig(overrides?: unknown): AppConfig {
     return {
@@ -40,4 +43,22 @@ export function setupFetchMock(webConfig: AppConfig, moduleOk: boolean, moduleJs
             json: () => Promise.resolve(moduleJson),
         });
     }) as unknown as typeof fetch;
+}
+
+export type MockCatalogBridge = {
+    isTauri: ReturnType<typeof vi.fn>;
+    invoke: ReturnType<typeof vi.fn>;
+    listen: ReturnType<typeof vi.fn>;
+};
+
+export function createCatalogHarness(): {
+    mockBridge: MockCatalogBridge;
+    service: CatalogService;
+} {
+    globalThis.dispatchEvent = vi.fn();
+
+    const mockBridge = createMockBridge() as unknown as MockCatalogBridge;
+    const service = new CatalogService(mockBridge as unknown as IBridge);
+
+    return { mockBridge, service };
 }

@@ -2,32 +2,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CatalogService } from './CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
-import type { IBridge } from '@/shared/types/IBridge';
-import { createMockBridge } from '@/test/mocks/mockBridge';
 import {
+    createCatalogHarness,
     createMockAppConfig,
     setupBridgeMocks,
     setupFetchMock,
+    type MockCatalogBridge,
 } from '@/test/helpers/catalogTestUtils';
 
 describe('CatalogService', () => {
-    let mockBridge: {
-        isTauri: ReturnType<typeof vi.fn>;
-        invoke: ReturnType<typeof vi.fn>;
-        listen: ReturnType<typeof vi.fn>;
-    };
+    let mockBridge: MockCatalogBridge;
     let service: CatalogService;
 
     beforeEach(() => {
-        globalThis.dispatchEvent = vi.fn();
-
-        mockBridge = createMockBridge() as unknown as {
-            isTauri: ReturnType<typeof vi.fn>;
-            invoke: ReturnType<typeof vi.fn>;
-            listen: ReturnType<typeof vi.fn>;
-        };
-
-        service = new CatalogService(mockBridge as unknown as IBridge);
+        ({ mockBridge, service } = createCatalogHarness());
     });
 
     afterEach(() => {

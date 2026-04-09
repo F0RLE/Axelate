@@ -179,9 +179,9 @@
 }
 
 .chat-open-image-folder-btn.is-resetting {
-    background: rgba(255, 184, 0, 0.12);
-    border-color: rgba(255, 184, 0, 0.28);
-    color: #fff8e1;
+    background: rgba(118, 78, 0, 0.42);
+    border-color: rgba(255, 196, 64, 0.52);
+    color: #fff6d5;
 }
 
 .chat-open-image-folder-btn.is-resetting .icon-trash {

@@ -77,6 +77,16 @@ function mockStoredApiKey(value: string = 'sk-test-key'): void {
     });
 }
 
+function mockBackendChatResponse(result: unknown): void {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+        await Promise.resolve();
+        if (cmd === 'has_secure_key') return true;
+        if (cmd === 'get_secure_key') return 'sk-test-key';
+        if (cmd === 'send_chat_message') return result;
+        return null;
+    });
+}
+
 describe('AIBridge', () => {
     let aiBridge: AIBridge;
 
@@ -400,13 +410,7 @@ describe('AIBridge', () => {
         });
 
         it('should handle backend error response without broadcasting', async () => {
-            mockInvoke.mockImplementation(async (cmd: string) => {
-                await Promise.resolve();
-                if (cmd === 'has_secure_key') return true;
-                if (cmd === 'get_secure_key') return 'sk-test-key';
-                if (cmd === 'send_chat_message') return { ok: false, error: 'Rate limited' };
-                return null;
-            });
+            mockBackendChatResponse({ ok: false, error: 'Rate limited' });
 
             await aiBridge.startProvider('gemini');
             const result = await aiBridge.sendMessage('Hello');
@@ -925,13 +929,7 @@ describe('AIBridge', () => {
         });
 
         it('should handle an empty error string in backend mismatch logic (Line 218)', async () => {
-            mockInvoke.mockImplementation(async (cmd: string) => {
-                await Promise.resolve();
-                if (cmd === 'has_secure_key') return true;
-                if (cmd === 'get_secure_key') return 'sk-test-key';
-                if (cmd === 'send_chat_message') return { ok: false, error: '' }; // Empty error
-                return null;
-            });
+            mockBackendChatResponse({ ok: false, error: '' });
 
             await aiBridge.startProvider('gemini');
             const result = await aiBridge.sendMessage('Hello');

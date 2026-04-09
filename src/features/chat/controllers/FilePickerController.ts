@@ -107,7 +107,7 @@ export class FilePickerController {
                 multiple: true,
                 title: this._i18n.t('ui.launcher.web.select_files', 'Select Files'),
             };
-            if (defaultPath !== null) {
+            if (typeof defaultPath === 'string' && defaultPath !== '') {
                 dialogOptions.defaultPath = defaultPath;
             }
 
