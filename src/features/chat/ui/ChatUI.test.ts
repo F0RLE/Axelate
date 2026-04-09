@@ -6,6 +6,72 @@ import { chatFileHandler } from '../services/ChatFileHandler';
 
 const savedImageFilePath = String.raw`C:\Users\FORLE\Pictures\axelate\axelate_image.png`;
 const savedImageFolderPath = String.raw`C:\Users\FORLE\Pictures\axelate`;
+const assistantImagePayload = {
+    images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
+    skipAnimation: true,
+};
+
+async function flushPromises(count = 1): Promise<void> {
+    for (let index = 0; index < count; index += 1) {
+        await Promise.resolve();
+    }
+}
+
+function renderImageChatBody(): void {
+    document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+}
+
+function requireSaveImageButton(): HTMLButtonElement {
+    const saveButton = document.querySelector('.chat-save-image-btn');
+    if (!(saveButton instanceof HTMLButtonElement)) {
+        throw new TypeError('save image button not found');
+    }
+
+    return saveButton;
+}
+
+function requireChatImage(): HTMLImageElement {
+    const image = document.querySelector('.chat-img');
+    if (!(image instanceof HTMLImageElement)) {
+        throw new TypeError('chat image not found');
+    }
+
+    return image;
+}
+
+function requireImageViewer(): { overlay: HTMLElement; preview: HTMLImageElement } {
+    const overlay = document.querySelector('.chat-image-viewer');
+    const preview = document.querySelector('.chat-image-viewer-img');
+    if (!(overlay instanceof HTMLElement) || !(preview instanceof HTMLImageElement)) {
+        throw new TypeError('image viewer not found');
+    }
+
+    return { overlay, preview };
+}
+
+async function renderAssistantImage(ui: ChatUI, initialize = false): Promise<void> {
+    renderImageChatBody();
+    if (initialize) {
+        await ui.init();
+    }
+
+    ui.appendMessage('assistant', 'image', assistantImagePayload);
+}
+
+async function saveGeneratedImage(saveButton: HTMLButtonElement): Promise<void> {
+    vi.mocked(invoke).mockResolvedValueOnce({
+        file_path: savedImageFilePath,
+        folder_path: savedImageFolderPath,
+    });
+    saveButton.click();
+    await flushPromises(2);
+}
+
+async function convertSaveButtonToFolderAction(saveButton: HTMLButtonElement): Promise<void> {
+    await saveGeneratedImage(saveButton);
+    vi.advanceTimersByTime(300);
+    await flushPromises();
+}
 
 describe('ChatUI lifecycle', () => {
     let ui: ChatUI | null = null;
@@ -193,28 +259,13 @@ describe('ChatUI lifecycle', () => {
             }
         ).showToast = showToast;
 
-        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
-
         ui = new ChatUI();
-        ui.appendMessage('assistant', 'image', {
-            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
-            skipAnimation: true,
-        });
+        await renderAssistantImage(ui);
 
         expect(document.querySelector('.chat-copy-own-btn')).toBeNull();
 
-        const saveButton = document.querySelector('.chat-save-image-btn');
-        if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new TypeError('save image button not found');
-        }
-
-        vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: savedImageFilePath,
-            folder_path: savedImageFolderPath,
-        });
-        saveButton.click();
-        await Promise.resolve();
-        await Promise.resolve();
+        const saveButton = requireSaveImageButton();
+        await saveGeneratedImage(saveButton);
 
         expect(invoke).toHaveBeenCalledWith('save_chat_image_default', {
             base64Data: 'dGVzdA==',
@@ -233,33 +284,15 @@ describe('ChatUI lifecycle', () => {
 
     it('should open saved image folder from chat action bar', async () => {
         vi.useFakeTimers();
-        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
-
         ui = new ChatUI();
-        ui.appendMessage('assistant', 'image', {
-            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
-            skipAnimation: true,
-        });
+        await renderAssistantImage(ui);
 
-        const saveButton = document.querySelector('.chat-save-image-btn');
-        if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new TypeError('save image button not found');
-        }
-
-        vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: savedImageFilePath,
-            folder_path: savedImageFolderPath,
-        });
-        saveButton.click();
-        await Promise.resolve();
-        await Promise.resolve();
-
-        vi.advanceTimersByTime(300);
-        await Promise.resolve();
+        const saveButton = requireSaveImageButton();
+        await convertSaveButtonToFolderAction(saveButton);
 
         vi.mocked(invoke).mockResolvedValueOnce(undefined);
         saveButton.click();
-        await Promise.resolve();
+        await flushPromises();
 
         expect(invoke).toHaveBeenLastCalledWith('open_chat_image_location', {
             filePath: savedImageFilePath,
@@ -277,34 +310,15 @@ describe('ChatUI lifecycle', () => {
             }
         ).showToast = showToast;
 
-        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
-
         ui = new ChatUI();
-        ui.appendMessage('assistant', 'image', {
-            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
-            skipAnimation: true,
-        });
+        await renderAssistantImage(ui);
 
-        const saveButton = document.querySelector('.chat-save-image-btn');
-        if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new TypeError('save image button not found');
-        }
-
-        vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: savedImageFilePath,
-            folder_path: savedImageFolderPath,
-        });
-        saveButton.click();
-        await Promise.resolve();
-        await Promise.resolve();
-
-        vi.advanceTimersByTime(300);
-        await Promise.resolve();
+        const saveButton = requireSaveImageButton();
+        await convertSaveButtonToFolderAction(saveButton);
 
         vi.mocked(invoke).mockRejectedValueOnce(new TypeError('Saved image does not exist'));
         saveButton.click();
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushPromises(2);
 
         expect(saveButton.classList.contains('chat-save-image-btn')).toBe(true);
         expect(saveButton.classList.contains('chat-open-image-folder-btn')).toBe(false);
@@ -321,29 +335,11 @@ describe('ChatUI lifecycle', () => {
 
     it('should delete saved image and restore download button on right click', async () => {
         vi.useFakeTimers();
-        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
-
         ui = new ChatUI();
-        ui.appendMessage('assistant', 'image', {
-            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
-            skipAnimation: true,
-        });
+        await renderAssistantImage(ui);
 
-        const saveButton = document.querySelector('.chat-save-image-btn');
-        if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new TypeError('save image button not found');
-        }
-
-        vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: savedImageFilePath,
-            folder_path: savedImageFolderPath,
-        });
-        saveButton.click();
-        await Promise.resolve();
-        await Promise.resolve();
-
-        vi.advanceTimersByTime(300);
-        await Promise.resolve();
+        const saveButton = requireSaveImageButton();
+        await convertSaveButtonToFolderAction(saveButton);
 
         saveButton.dispatchEvent(
             new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }),
@@ -352,8 +348,7 @@ describe('ChatUI lifecycle', () => {
         expect(saveButton.classList.contains('is-trash-state')).toBe(true);
 
         vi.advanceTimersByTime(300);
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushPromises(2);
 
         expect(invoke).toHaveBeenLastCalledWith('delete_chat_image', {
             filePath: savedImageFilePath,
@@ -364,55 +359,31 @@ describe('ChatUI lifecycle', () => {
     });
 
     it('should open image preview on thumbnail click and close on backdrop click', async () => {
-        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
-
         ui = new ChatUI();
-        await ui.init();
-        ui.appendMessage('assistant', 'image', {
-            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
-            skipAnimation: true,
-        });
+        await renderAssistantImage(ui, true);
 
-        const image = document.querySelector('.chat-img');
-        if (!(image instanceof HTMLImageElement)) {
-            throw new TypeError('chat image not found');
-        }
-
+        const image = requireChatImage();
         image.click();
-        await Promise.resolve();
+        await flushPromises();
 
-        const overlay = document.querySelector('.chat-image-viewer');
-        const preview = document.querySelector('.chat-image-viewer-img');
-        if (!(overlay instanceof HTMLElement) || !(preview instanceof HTMLImageElement)) {
-            throw new TypeError('image viewer not found');
-        }
+        const { overlay, preview } = requireImageViewer();
 
         expect(overlay.classList.contains('hidden')).toBe(false);
         expect(preview.src.startsWith('data:image/png;base64,dGVzdA==')).toBe(true);
 
         overlay.click();
-        await Promise.resolve();
+        await flushPromises();
 
         expect(overlay.classList.contains('hidden')).toBe(true);
     });
 
     it('should remove image viewer body state on destroy', async () => {
-        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
-
         ui = new ChatUI();
-        await ui.init();
-        ui.appendMessage('assistant', 'image', {
-            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
-            skipAnimation: true,
-        });
+        await renderAssistantImage(ui, true);
 
-        const image = document.querySelector('.chat-img');
-        if (!(image instanceof HTMLImageElement)) {
-            throw new TypeError('chat image not found');
-        }
-
+        const image = requireChatImage();
         image.click();
-        await Promise.resolve();
+        await flushPromises();
 
         expect(document.body.classList.contains('chat-image-viewer-open')).toBe(true);
 

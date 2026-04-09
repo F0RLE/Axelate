@@ -1,48 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CatalogService } from './CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
-import type { AppConfig } from '@/shared/types/bindings';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import type { IBridge } from '@/shared/types/IBridge';
 import { createMockBridge } from '@/test/mocks/mockBridge';
-
-function createMockAppConfig(overrides?: unknown): AppConfig {
-    return {
-        catalog: { ai: [], services: [] },
-        apiProviders: [],
-        autoStartModules: [],
-        ...(overrides as Record<string, unknown>),
-    } as unknown as AppConfig;
-}
-
-function setupBridgeMocks(
-    bridge: { isTauri: ReturnType<typeof vi.fn>; invoke: ReturnType<typeof vi.fn> },
-    config: AppConfig | null,
-    modules: IModule[] = [],
-) {
-    bridge.isTauri.mockReturnValue(true);
-    bridge.invoke.mockImplementation((cmd: string) => {
-        if (cmd === 'get_config') return Promise.resolve(config);
-        if (cmd === 'get_modules') return Promise.resolve(modules);
-        return Promise.resolve(undefined);
-    });
-}
-
-function setupFetchMock(webConfig: AppConfig, moduleOk: boolean, moduleJson: unknown[]) {
-    return vi.fn().mockImplementation((url: string) => {
-        if (url === '/api/config') {
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve(webConfig),
-            });
-        }
-        // /api/modules
-        return Promise.resolve({
-            ok: moduleOk,
-            json: () => Promise.resolve(moduleJson),
-        });
-    }) as unknown as typeof fetch;
-}
+import {
+    createMockAppConfig,
+    setupBridgeMocks,
+    setupFetchMock,
+} from '@/test/helpers/catalogTestUtils';
 
 describe('CatalogService', () => {
     let mockBridge: {

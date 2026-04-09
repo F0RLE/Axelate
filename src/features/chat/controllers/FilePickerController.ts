@@ -99,11 +99,19 @@ export class FilePickerController {
     private async _pickNative(): Promise<boolean> {
         try {
             const defaultPath = await this._resolveInitialDirectory();
-            const selected = await open({
+            const dialogOptions: {
+                multiple: boolean;
+                title: string;
+                defaultPath?: string;
+            } = {
                 multiple: true,
                 title: this._i18n.t('ui.launcher.web.select_files', 'Select Files'),
-                ...(defaultPath !== null ? { defaultPath } : {}),
-            });
+            };
+            if (defaultPath !== null) {
+                dialogOptions.defaultPath = defaultPath;
+            }
+
+            const selected = await open(dialogOptions);
 
             if (selected !== null) {
                 const paths = Array.isArray(selected) ? selected : [selected];
