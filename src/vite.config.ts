@@ -5,14 +5,21 @@ import { fileURLToPath, URL } from 'node:url';
 import pkg from './package.json';
 
 const tauriPlatform = process.env['TAURI_PLATFORM'];
-const buildTarget =
-    tauriPlatform === 'windows'
-        ? 'chrome110'
-        : tauriPlatform === 'macos'
-          ? 'safari15.4'
-          : tauriPlatform === 'linux'
-            ? 'safari16'
-            : 'es2022';
+
+function resolveBuildTarget(platform: string | undefined): string {
+    switch (platform) {
+        case 'windows':
+            return 'chrome110';
+        case 'macos':
+            return 'safari15.4';
+        case 'linux':
+            return 'safari16';
+        default:
+            return 'es2022';
+    }
+}
+
+const buildTarget = resolveBuildTarget(tauriPlatform);
 
 const pruneFontsPlugin = {
     name: 'prune-fonts',

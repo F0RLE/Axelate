@@ -113,7 +113,10 @@ export class FilePickerController {
 
             for (const p of paths) {
                 const file = await this._readNativeFile(p);
-                if (file !== null) files.push(file);
+                if (file === null) {
+                    continue;
+                }
+                files.push(file);
             }
 
             if (files.length > 0) {

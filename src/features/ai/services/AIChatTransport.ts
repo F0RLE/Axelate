@@ -49,6 +49,7 @@ export class AIChatTransport implements IChatTransport {
     private _core: Core | null = null;
     private readonly _unlisteners = new Set<() => void>();
     private _activeStreamRequestId: string | null = null;
+    private _requestCounter = 0;
 
     public setCore(core: Core): void {
         this._core = core;
@@ -256,7 +257,18 @@ export class AIChatTransport implements IChatTransport {
             return crypto.randomUUID();
         }
 
-        return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+        if (typeof crypto.getRandomValues === 'function') {
+            const randomBuffer = new Uint32Array(2);
+            crypto.getRandomValues(randomBuffer);
+            const firstPart = randomBuffer[0];
+            const secondPart = randomBuffer[1];
+            if (firstPart !== undefined && secondPart !== undefined) {
+                return `req_${firstPart.toString(36)}_${secondPart.toString(36)}`;
+            }
+        }
+
+        this._requestCounter += 1;
+        return `req_${Date.now().toString(36)}_${this._requestCounter.toString(36)}`;
     }
 
     private _clearActiveRequest(requestId: string): void {

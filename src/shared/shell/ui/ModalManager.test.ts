@@ -175,7 +175,9 @@ describe('ModalManager lifecycle', () => {
 
         expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
         expect(
-            document.querySelector('#app-modal-list .app-card')?.getAttribute('data-app-id'),
+            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
+                'appId'
+            ],
         ).toBe('svc-b');
         expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Remove');
     });
@@ -197,7 +199,9 @@ describe('ModalManager lifecycle', () => {
         expect(modal.showModal).toHaveBeenCalledTimes(1);
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
         expect(
-            document.querySelector('#app-modal-list .app-card')?.getAttribute('data-app-id'),
+            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
+                'appId'
+            ],
         ).toBe('svc-b');
     });
 
@@ -279,7 +283,9 @@ describe('ModalManager lifecycle', () => {
         );
         expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
         expect(
-            document.querySelector('#app-modal-list .app-card')?.getAttribute('data-app-id'),
+            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
+                'appId'
+            ],
         ).toBe('txt-1');
     });
 

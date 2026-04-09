@@ -590,10 +590,6 @@
     order: 1;
 }
 
-#chat-container:not(.has-messages) .chat-input-bar {
-    order: 2;
-}
-
 #chat-container.has-messages #chat-token-count {
     order: 0;
     padding: 0 12px;
@@ -950,6 +946,7 @@
 }
 
 #chat-container:not(.has-messages) .chat-input-bar {
+    order: 2;
     gap: 0;
     min-height: 3.45rem;
     padding: 0.08rem 0.24rem 0.08rem 0.3rem;

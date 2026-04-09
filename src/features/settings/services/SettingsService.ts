@@ -10,7 +10,7 @@ export interface IGpuInfo {
     detected: boolean;
     name?: string;
     cuda?: boolean;
-    backend?: 'cuda' | 'vulkan' | 'cpu' | string;
+    backend?: string;
     memory?: number;
 }
 

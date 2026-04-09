@@ -225,92 +225,10 @@ export class AIBridge implements IAIBridge {
             const isImageProvider = providerId === 'sdcpp' || providerId === 'stable-diffusion';
 
             if (isImageProvider) {
-                const settings = this._core?.settingsService.getSettings() as
-                    | Record<string, unknown>
-                    | undefined;
-
-                const selectedImageModule = this._core?.stateStore.getSelectedModule('ai_image');
-                const settingsKey = selectedImageModule?.id ?? providerId;
-                const performanceMode = this._isImagePerformanceModeEnabled(settings, settingsKey);
-
-                const request: IImageGenerationRequest = {
-                    provider: providerId,
-                    prompt: text,
-                    original_prompt: text,
-                    model: this._manager.model || 'default',
-                    settings_key: settingsKey,
-                    session_id: this._manager.sessionId,
-                };
-                this._broadcastReplaceChunk('🎨 Generating image...\n');
-
-                if (performanceMode) {
-                    const backgroundResponse =
-                        await this._transport.generateImageBackground(request);
-                    if (!backgroundResponse.ok) {
-                        return this._handleTransportResponse(backgroundResponse, source);
-                    }
-
-                    this._showToast(
-                        globalThis.t('ui.ai.performance_mode_active', 'Performance mode active'),
-                        'success',
-                    );
-                    await this._core?.windowService.close();
-                    return { ok: true, text: '' };
-                }
-
-                const imgResponse = await this._transport.generateImage(request);
-                if (imgResponse.ok && imgResponse.images && imgResponse.images.length > 0) {
-                    const mdImage = `![Generated Image](${imgResponse.images[0]})`;
-                    this._core?.chatController.randomizeGreeting();
-                    this._broadcastResponse(mdImage, source);
-                    return { ok: true, text: mdImage };
-                }
-                return this._handleTransportResponse(imgResponse, source);
+                return await this._sendImageMessage(providerId, text, source);
             }
 
-            const newMessage: IChatMessage = {
-                role: 'user',
-                content: createMultimodalContent(text, attachments),
-            };
-
-            if (this._manager.isActive() === false) {
-                return this._handleMissingApiKey(source);
-            }
-
-            const isLocalProvider = this._manager.apiKey === null;
-            const thinkingLevel =
-                this._core && !isLocalProvider
-                    ? this._core.aiSettings.getThinkingLevel(providerId)
-                    : undefined;
-            const effectiveThinkingLevel = thinkingLevel === 'off' ? undefined : thinkingLevel;
-            const maxTokens = isLocalProvider ? undefined : this._manager.maxOutputTokens;
-
-            const requestConfig: {
-                providerId: string;
-                model: string;
-                apiKey: string | null;
-                sessionId: string;
-                thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
-                maxTokens?: number;
-            } = {
-                providerId,
-                model: this._manager.model || 'default',
-                apiKey: null,
-                sessionId: this._manager.sessionId,
-            };
-
-            if (effectiveThinkingLevel !== undefined) {
-                requestConfig.thinkingLevel = effectiveThinkingLevel;
-            }
-
-            if (maxTokens !== undefined) {
-                requestConfig.maxTokens = maxTokens;
-            }
-
-            const request = constructChatRequest(history, newMessage, attachments, requestConfig);
-            const response = await this._transport.send(request);
-
-            return this._handleTransportResponse(response, source);
+            return await this._sendTextMessage(providerId, text, attachments, history, source);
         } catch (error: unknown) {
             const errorMsg =
                 error instanceof Error
@@ -319,6 +237,110 @@ export class AIBridge implements IAIBridge {
             tracer.error('[AIBridge] Messaging pipeline error:', error);
             return { ok: false, error: errorMsg };
         }
+    }
+
+    private async _sendImageMessage(
+        providerId: string,
+        text: string,
+        source: MessageSource,
+    ): Promise<IBridgeResponse> {
+        const settings = this._core?.settingsService.getSettings() as
+            | Record<string, unknown>
+            | undefined;
+        const selectedImageModule = this._core?.stateStore.getSelectedModule('ai_image');
+        const settingsKey = selectedImageModule?.id ?? providerId;
+        const performanceMode = this._isImagePerformanceModeEnabled(settings, settingsKey);
+
+        const request: IImageGenerationRequest = {
+            provider: providerId,
+            prompt: text,
+            original_prompt: text,
+            model: this._manager.model || 'default',
+            settings_key: settingsKey,
+            session_id: this._manager.sessionId,
+        };
+
+        this._broadcastReplaceChunk('🎨 Generating image...\n');
+
+        if (performanceMode) {
+            const backgroundResponse = await this._transport.generateImageBackground(request);
+            if (!backgroundResponse.ok) {
+                return this._handleTransportResponse(backgroundResponse, source);
+            }
+
+            this._showToast(
+                globalThis.t('ui.ai.performance_mode_active', 'Performance mode active'),
+                'success',
+            );
+            await this._core?.windowService.close();
+            return { ok: true, text: '' };
+        }
+
+        const imageResponse = await this._transport.generateImage(request);
+        if (imageResponse.ok && imageResponse.images && imageResponse.images.length > 0) {
+            const markdownImage = `![Generated Image](${imageResponse.images[0]})`;
+            this._core?.chatController.randomizeGreeting();
+            this._broadcastResponse(markdownImage, source);
+            return { ok: true, text: markdownImage };
+        }
+
+        return this._handleTransportResponse(imageResponse, source);
+    }
+
+    private async _sendTextMessage(
+        providerId: string,
+        text: string,
+        attachments: { name: string; type: string; data_base64: string }[],
+        history: IChatMessage[],
+        source: MessageSource,
+    ): Promise<IBridgeResponse> {
+        const newMessage: IChatMessage = {
+            role: 'user',
+            content: createMultimodalContent(text, attachments),
+        };
+
+        if (this._manager.isActive() === false) {
+            return this._handleMissingApiKey(source);
+        }
+
+        const request = constructChatRequest(history, newMessage, attachments, {
+            providerId,
+            model: this._manager.model || 'default',
+            apiKey: null,
+            sessionId: this._manager.sessionId,
+            ...this._resolveRequestOptions(providerId),
+        });
+
+        const response = await this._transport.send(request);
+        return this._handleTransportResponse(response, source);
+    }
+
+    private _resolveRequestOptions(providerId: string): {
+        thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
+        maxTokens?: number;
+    } {
+        const isLocalProvider = this._manager.apiKey === null;
+        const thinkingLevel =
+            this._core && !isLocalProvider
+                ? this._core.aiSettings.getThinkingLevel(providerId)
+                : undefined;
+        const effectiveThinkingLevel = thinkingLevel === 'off' ? undefined : thinkingLevel;
+        const maxTokens = isLocalProvider ? undefined : this._manager.maxOutputTokens;
+
+        const requestOptions: {
+            thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
+            maxTokens?: number;
+        } = {};
+
+        if (effectiveThinkingLevel !== undefined) {
+            requestOptions.thinkingLevel = effectiveThinkingLevel;
+        }
+
+        if (maxTokens !== undefined) {
+            requestOptions.maxTokens = maxTokens;
+        }
+
+        return requestOptions;
     }
 
     private _handleMissingApiKey(source: MessageSource): IBridgeResponse {

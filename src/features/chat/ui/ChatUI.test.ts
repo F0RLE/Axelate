@@ -4,6 +4,9 @@ import { listen } from '@tauri-apps/api/event';
 import { ChatUI } from './ChatUI';
 import { chatFileHandler } from '../services/ChatFileHandler';
 
+const savedImageFilePath = String.raw`C:\Users\FORLE\Pictures\axelate\axelate_image.png`;
+const savedImageFolderPath = String.raw`C:\Users\FORLE\Pictures\axelate`;
+
 describe('ChatUI lifecycle', () => {
     let ui: ChatUI | null = null;
 
@@ -202,12 +205,12 @@ describe('ChatUI lifecycle', () => {
 
         const saveButton = document.querySelector('.chat-save-image-btn');
         if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new Error('save image button not found');
+            throw new TypeError('save image button not found');
         }
 
         vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: 'C:\\Users\\FORLE\\Pictures\\axelate\\axelate_image.png',
-            folder_path: 'C:\\Users\\FORLE\\Pictures\\axelate',
+            file_path: savedImageFilePath,
+            folder_path: savedImageFolderPath,
         });
         saveButton.click();
         await Promise.resolve();
@@ -240,12 +243,12 @@ describe('ChatUI lifecycle', () => {
 
         const saveButton = document.querySelector('.chat-save-image-btn');
         if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new Error('save image button not found');
+            throw new TypeError('save image button not found');
         }
 
         vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: 'C:\\Users\\FORLE\\Pictures\\axelate\\axelate_image.png',
-            folder_path: 'C:\\Users\\FORLE\\Pictures\\axelate',
+            file_path: savedImageFilePath,
+            folder_path: savedImageFolderPath,
         });
         saveButton.click();
         await Promise.resolve();
@@ -259,8 +262,8 @@ describe('ChatUI lifecycle', () => {
         await Promise.resolve();
 
         expect(invoke).toHaveBeenLastCalledWith('open_chat_image_location', {
-            filePath: 'C:\\Users\\FORLE\\Pictures\\axelate\\axelate_image.png',
-            folderPath: 'C:\\Users\\FORLE\\Pictures\\axelate',
+            filePath: savedImageFilePath,
+            folderPath: savedImageFolderPath,
         });
         vi.useRealTimers();
     });
@@ -284,12 +287,12 @@ describe('ChatUI lifecycle', () => {
 
         const saveButton = document.querySelector('.chat-save-image-btn');
         if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new Error('save image button not found');
+            throw new TypeError('save image button not found');
         }
 
         vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: 'C:\\Users\\FORLE\\Pictures\\axelate\\axelate_image.png',
-            folder_path: 'C:\\Users\\FORLE\\Pictures\\axelate',
+            file_path: savedImageFilePath,
+            folder_path: savedImageFolderPath,
         });
         saveButton.click();
         await Promise.resolve();
@@ -298,7 +301,7 @@ describe('ChatUI lifecycle', () => {
         vi.advanceTimersByTime(300);
         await Promise.resolve();
 
-        vi.mocked(invoke).mockRejectedValueOnce(new Error('Saved image does not exist'));
+        vi.mocked(invoke).mockRejectedValueOnce(new TypeError('Saved image does not exist'));
         saveButton.click();
         await Promise.resolve();
         await Promise.resolve();
@@ -306,8 +309,8 @@ describe('ChatUI lifecycle', () => {
         expect(saveButton.classList.contains('chat-save-image-btn')).toBe(true);
         expect(saveButton.classList.contains('chat-open-image-folder-btn')).toBe(false);
         expect(invoke).toHaveBeenLastCalledWith('open_chat_image_location', {
-            filePath: 'C:\\Users\\FORLE\\Pictures\\axelate',
-            folderPath: 'C:\\Users\\FORLE\\Pictures\\axelate',
+            filePath: savedImageFolderPath,
+            folderPath: savedImageFolderPath,
         });
         expect(showToast).toHaveBeenCalledWith(
             't:ui.chat.image_missing_resave:Image was removed, save it again',
@@ -328,12 +331,12 @@ describe('ChatUI lifecycle', () => {
 
         const saveButton = document.querySelector('.chat-save-image-btn');
         if (!(saveButton instanceof HTMLButtonElement)) {
-            throw new Error('save image button not found');
+            throw new TypeError('save image button not found');
         }
 
         vi.mocked(invoke).mockResolvedValueOnce({
-            file_path: 'C:\\Users\\FORLE\\Pictures\\axelate\\axelate_image.png',
-            folder_path: 'C:\\Users\\FORLE\\Pictures\\axelate',
+            file_path: savedImageFilePath,
+            folder_path: savedImageFolderPath,
         });
         saveButton.click();
         await Promise.resolve();
@@ -353,7 +356,7 @@ describe('ChatUI lifecycle', () => {
         await Promise.resolve();
 
         expect(invoke).toHaveBeenLastCalledWith('delete_chat_image', {
-            filePath: 'C:\\Users\\FORLE\\Pictures\\axelate\\axelate_image.png',
+            filePath: savedImageFilePath,
         });
         expect(saveButton.classList.contains('chat-save-image-btn')).toBe(true);
         expect(saveButton.classList.contains('chat-open-image-folder-btn')).toBe(false);
@@ -372,7 +375,7 @@ describe('ChatUI lifecycle', () => {
 
         const image = document.querySelector('.chat-img');
         if (!(image instanceof HTMLImageElement)) {
-            throw new Error('chat image not found');
+            throw new TypeError('chat image not found');
         }
 
         image.click();
@@ -381,7 +384,7 @@ describe('ChatUI lifecycle', () => {
         const overlay = document.querySelector('.chat-image-viewer');
         const preview = document.querySelector('.chat-image-viewer-img');
         if (!(overlay instanceof HTMLElement) || !(preview instanceof HTMLImageElement)) {
-            throw new Error('image viewer not found');
+            throw new TypeError('image viewer not found');
         }
 
         expect(overlay.classList.contains('hidden')).toBe(false);
@@ -405,7 +408,7 @@ describe('ChatUI lifecycle', () => {
 
         const image = document.querySelector('.chat-img');
         if (!(image instanceof HTMLImageElement)) {
-            throw new Error('chat image not found');
+            throw new TypeError('chat image not found');
         }
 
         image.click();

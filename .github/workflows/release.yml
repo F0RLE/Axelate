@@ -37,7 +37,7 @@ jobs:
           npm ci
 
       - name: Build and publish with official Tauri action
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

@@ -1124,13 +1124,13 @@ export class ChatUI {
         folderPath: string,
     ): Promise<void> {
         const g = getGlobalWin();
-        const handleMissing = (): void => {
+        const handleMissing = async (): Promise<void> => {
             this._restoreFolderButtonToSave(saveBtn);
-            void invoke('open_chat_image_location', { filePath: folderPath, folderPath }).catch(
-                () => {
-                    /* ignore fallback folder-open errors */
-                },
-            );
+            try {
+                await invoke('open_chat_image_location', { filePath: folderPath, folderPath });
+            } catch {
+                /* ignore fallback folder-open errors */
+            }
             if (typeof g.showToast === 'function') {
                 g.showToast(
                     typeof g.t === 'function'
@@ -1152,7 +1152,7 @@ export class ChatUI {
                 normalized.includes('saved image does not exist') ||
                 normalized.includes('not_found');
             if (isMissing) {
-                handleMissing();
+                await handleMissing();
                 return;
             }
 

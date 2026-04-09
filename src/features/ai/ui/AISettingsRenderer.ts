@@ -517,7 +517,7 @@ class AISettingsRenderer extends BaseComponent {
 
         addListener(input, 'input', (event) => {
             const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-            const normalizedValue = target.value.replace(/[\r\n]+/g, '');
+            const normalizedValue = target.value.replaceAll(/[\r\n]+/g, '');
             if (normalizedValue !== target.value) {
                 target.value = normalizedValue;
             }

@@ -338,7 +338,7 @@ export class GeneralSettingsRenderer {
         element.classList.remove('hidden');
 
         // Force style flush so the transition starts from the collapsed state.
-        void element.offsetHeight;
+        element.getBoundingClientRect();
 
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
