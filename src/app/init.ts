@@ -258,6 +258,7 @@ export class Core {
 
     private async _runInit(): Promise<void> {
         this.tracer.debug('[Core] Init sequence started.');
+        this._applyPlatformTheme();
 
         this._bridge.init();
         this._eventHandler.init();
@@ -362,6 +363,21 @@ export class Core {
         this.windowUI.hideSplashScreen();
 
         this.tracer.info('[Core] Ready.');
+    }
+
+    private _applyPlatformTheme(): void {
+        const body = document.body;
+        const userAgent = navigator.userAgent.toLowerCase();
+        const platform = navigator.platform.toLowerCase();
+
+        let detectedPlatform = 'windows';
+        if (platform.includes('mac') || userAgent.includes('mac os')) {
+            detectedPlatform = 'macos';
+        } else if (platform.includes('linux') || userAgent.includes('linux')) {
+            detectedPlatform = 'linux';
+        }
+
+        body.dataset['platform'] = detectedPlatform;
     }
 
     public destroy(): void {

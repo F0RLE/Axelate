@@ -122,6 +122,26 @@ body.maximized .close-btn {
     align-self: stretch;
     height: 100%;
     -webkit-app-region: no-drag;
+    margin-left: -0.35rem;
+}
+
+body {
+    --header-left-control-width: 38px;
+    --header-left-sound-offset: 4px;
+    --header-left-divider-top: 18%;
+    --header-left-divider-height: 64%;
+}
+
+body[data-platform='macos'] {
+    --header-left-control-width: 40px;
+    --header-left-sound-offset: 4px;
+    --header-left-divider-top: 16%;
+    --header-left-divider-height: 68%;
+}
+
+body[data-platform='linux'] {
+    --header-left-control-width: 38px;
+    --header-left-sound-offset: 4px;
 }
 
 /* Language Switcher - Slide Out Redesign (now inside header) */
@@ -145,13 +165,17 @@ body.maximized .close-btn {
     border: none !important;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        background-color 0.18s ease,
+        color 0.18s ease,
+        opacity 0.18s ease;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     padding: 0;
+    padding-left: var(--header-left-sound-offset);
     -webkit-app-region: no-drag;
-    width: 46px;
+    width: var(--header-left-control-width);
     height: 100%;
     border-radius: 0;
     position: relative;
@@ -175,6 +199,7 @@ body.maximized .close-btn {
     fill: none;
     pointer-events: none;
     display: block;
+    transform: translateX(-1px);
 }
 
 .sound-toggle-btn.muted {
@@ -199,7 +224,10 @@ body.maximized .close-btn {
     opacity: 0;
     visibility: hidden;
     transform: translateX(0);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        opacity 0.2s ease,
+        visibility 0.2s ease,
+        transform 0.2s ease;
 
     /* Layout */
     position: absolute;
@@ -227,13 +255,16 @@ body.maximized .close-btn {
     border: none !important;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        background-color 0.18s ease,
+        color 0.18s ease,
+        opacity 0.18s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     -webkit-app-region: no-drag;
-    width: 46px;
+    width: var(--header-left-control-width);
     height: 100%;
     border-radius: 0;
     position: relative;
@@ -281,16 +312,37 @@ body.maximized .close-btn {
 .header-left-group .sound-toggle-btn::after {
     content: '';
     position: absolute;
-    top: 18%;
+    top: var(--header-left-divider-top);
     right: 0;
     width: 1px;
-    height: 64%;
+    height: var(--header-left-divider-height);
     background: rgba(255, 255, 255, 0.035);
 }
 
 .lang-switcher-root > .current-lang-trigger::after,
 .lang-menu-items .lang-btn:last-child::after {
     display: none;
+}
+
+body[data-platform='macos'] .header-left-group .sound-toggle-btn,
+body[data-platform='macos'] .header-left-group .lang-btn,
+body[data-platform='macos'] .lang-menu-items {
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.045),
+        rgba(255, 255, 255, 0.02)
+    ) !important;
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+body[data-platform='macos'] .header-left-group .sound-toggle-btn:hover,
+body[data-platform='macos'] .header-left-group .lang-btn:hover {
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.03)
+    ) !important;
 }
 
 /* Flag icons (SVG, avoids OS emoji font issues showing GB/RU as text) */

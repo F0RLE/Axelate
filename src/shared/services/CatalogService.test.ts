@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CatalogService } from './CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
+import type { IBridge } from '@/shared/types/IBridge';
 import {
     createCatalogHarness,
     createMockAppConfig,

@@ -49,22 +49,54 @@
 }
 
 .module-card {
-    background: var(--card-bg);
-    border: 1px solid var(--glass-border);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+        rgba(18, 17, 24, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: var(--radius-lg);
     padding: 1.75rem;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+    box-shadow:
+        0 18px 48px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px) saturate(118%);
+    -webkit-backdrop-filter: blur(8px) saturate(118%);
 }
 
 .module-card:hover {
     transform: translateY(-4px);
-    background: var(--card-bg-hover);
-    border-color: rgba(var(--primary-raw), 0.3);
-    box-shadow: var(--premium-shadow);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.03)),
+        rgba(22, 20, 30, 0.84);
+    border-color: rgba(var(--primary-raw), 0.22);
+    box-shadow:
+        0 24px 56px rgba(0, 0, 0, 0.26),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+body[data-platform='macos'] .module-card {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+        rgba(19, 18, 26, 0.62);
+    border-color: rgba(255, 255, 255, 0.11);
+    box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+body[data-platform='macos'] .module-card:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.045)),
+        rgba(24, 22, 32, 0.66);
+}
+
+body[data-platform='linux'] .module-card {
+    backdrop-filter: blur(6px) saturate(112%);
+    -webkit-backdrop-filter: blur(6px) saturate(112%);
 }
 
 .module-header {
@@ -508,8 +540,10 @@ body.ui-hidden .modal-backdrop {
 
 /* Specific Model Card Styles (different from module-card) */
 .model-card-premium {
-    background: rgba(255, 255, 255, 0.007);
-    border: 1px solid rgba(255, 255, 255, 0.03);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.014)),
+        rgba(16, 16, 22, 0.74);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--radius-lg);
     padding: 1.5rem 1.5rem 2rem 1.5rem; /* Standard padding */
     display: flex;
@@ -527,7 +561,11 @@ body.ui-hidden .modal-backdrop {
     height: auto !important; /* Allow growth */
     min-height: 280px; /* Base height */
     justify-content: flex-start;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.012);
+    box-shadow:
+        0 18px 42px rgba(0, 0, 0, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px) saturate(120%);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
 }
 
 .model-card-premium::before {
@@ -550,9 +588,13 @@ body.ui-hidden .modal-backdrop {
 }
 
 .model-card-premium.selected {
-    background: rgba(255, 255, 255, 0.007) !important;
-    border-color: rgba(255, 255, 255, 0.03) !important;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.012) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018)),
+        rgba(16, 16, 22, 0.78) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    box-shadow:
+        0 20px 48px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
 }
 
 .model-card-premium.selected::before {
@@ -561,10 +603,36 @@ body.ui-hidden .modal-backdrop {
 }
 
 .model-card-premium:hover {
-    background: rgba(255, 255, 255, 0.018);
-    border-color: rgba(255, 255, 255, 0.05);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.024)),
+        rgba(22, 21, 30, 0.82);
+    border-color: rgba(255, 255, 255, 0.09);
     transform: translateY(-4px);
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.016);
+    box-shadow:
+        0 24px 54px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+body[data-platform='macos'] .model-card-premium {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.022)),
+        rgba(18, 18, 26, 0.58);
+    border-color: rgba(255, 255, 255, 0.09);
+    box-shadow:
+        0 24px 58px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(14px) saturate(145%);
+    -webkit-backdrop-filter: blur(14px) saturate(145%);
+}
+
+body[data-platform='windows'] .model-card-premium {
+    backdrop-filter: blur(7px) saturate(118%);
+    -webkit-backdrop-filter: blur(7px) saturate(118%);
+}
+
+body[data-platform='linux'] .model-card-premium {
+    backdrop-filter: blur(6px) saturate(112%);
+    -webkit-backdrop-filter: blur(6px) saturate(112%);
 }
 
 /* Ensure content is above the ::before background effect */
@@ -2105,18 +2173,26 @@ body.snapping .modal-backdrop {
 
 /* --- Selected Module Card Style (has a module chosen) --- */
 .model-card-premium.selected:hover {
-    background: rgba(255, 255, 255, 0.018) !important;
-    border-color: rgba(255, 255, 255, 0.05) !important;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+        rgba(20, 20, 28, 0.8) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
     transform: translateY(-4px) !important;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.016) !important;
+    box-shadow:
+        0 22px 46px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
     cursor: pointer !important;
 }
 
 /* --- Empty Module Card Style (no module chosen yet) --- */
 .model-card-premium.empty {
-    background: rgba(var(--background-raw), 0.065);
-    border: 1px solid rgba(255, 255, 255, 0.03);
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.012);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.014)),
+        rgba(16, 16, 22, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow:
+        0 16px 34px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
     transition:
         transform 0.24s ease,
         background-color 0.24s ease,
@@ -2140,13 +2216,15 @@ body.snapping .modal-backdrop {
 }
 
 .model-card-premium.empty:hover {
-    background: rgba(255, 255, 255, 0.018);
-    border-color: rgba(var(--primary-raw), 0.08);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.018)),
+        rgba(20, 20, 27, 0.78);
+    border-color: rgba(255, 255, 255, 0.06);
     cursor: pointer;
     transform: translateY(-4px);
     box-shadow:
-        inset -1px 0 0 rgba(255, 255, 255, 0.016),
-        0 0 0 1px rgba(var(--primary-raw), 0.04);
+        0 20px 42px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .model-card-premium.empty:hover .model-icon-wrapper {
@@ -2176,7 +2254,7 @@ body.snapping .modal-backdrop {
 }
 
 .model-card-premium.empty:hover .model-card-action {
-    background: rgba(var(--primary-raw), 0.085);
+    background: rgba(255, 255, 255, 0.085);
     color: white;
     opacity: 1;
     transform: translateY(0);
