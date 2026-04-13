@@ -644,15 +644,15 @@ export class ChatUI {
         let finalImage: ChatImagePayload | null = null;
 
         const setProgressFromStatus = (text: string): void => {
-            const match = /(\d+)\s*\/\s*(\d+)/u.exec(text);
-            if (match === null) {
+            const dividerIndex = text.indexOf('/');
+            if (dividerIndex < 0) {
                 progressFill.style.width = '';
                 progress.classList.remove('is-complete');
                 return;
             }
 
-            const current = Number.parseInt(match[1] ?? '0', 10);
-            const total = Number.parseInt(match[2] ?? '0', 10);
+            const current = Number.parseInt(text.slice(0, dividerIndex).trim(), 10);
+            const total = Number.parseInt(text.slice(dividerIndex + 1).trim(), 10);
             if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) {
                 progressFill.style.width = '';
                 progress.classList.remove('is-complete');

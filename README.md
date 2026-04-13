@@ -92,10 +92,9 @@ Axelate uses Rust for domain logic and a thin TypeScript shell for the desktop U
 Axelate/
 ├── src/         frontend app and npm dependencies
 ├── src-tauri/   Rust backend and Tauri configuration
-├── scripts/     shared cross-platform workflow runner
+├── .github/     workflows, templates, helpers, workflow runner
 ├── launchers/   optional double-click entrypoints by platform
-├── docs/        project documentation
-└── .github/     workflows, templates, legacy PowerShell helpers
+└── docs/        project documentation
 ```
 
 `src/` is the only npm project with real dependencies. The root `package.json` only proxies commands.
@@ -103,21 +102,20 @@ Axelate/
 ### Common commands
 
 ```bash
-npm run install-deps
+npm run setup
 npm run dev
-npm run dev:webview
-npm run dev:inspect
-npm run dev:release-like
 npm run verify
 npm run build
-npm run test
+npm run clear
 ```
 
+`npm run setup` is the first-run command. It checks local prerequisites, installs `src/node_modules`, and configures Git hooks.
+`npm run doctor` only checks the local machine/toolchain state without changing anything.
 `npm run dev`, `npm run dev:webview`, `npm run dev:app`, and `npm run tauri:dev` start the frontend inside the Tauri desktop WebView with Rust IPC enabled.
 `npm run dev:inspect` also opens desktop DevTools and enables WebView remote debugging on port `9223` for automation tools.
 `npm run dev:release-like` rebuilds the frontend and starts Tauri against the built static assets without Vite HMR.
-Use `launchers/*/dev-app.*` for desktop runtime checks and `launchers/*/dev-inspect.*` when you want deep inspection.
-Use `launchers/*/dev-release-like.*` when you want a closer-to-release desktop smoke test.
+`launchers/*/dev.*` is the kept double-click development entrypoint and opens the inspect-enabled desktop dev flow.
+`npm run clear` removes build artifacts and frontend caches when you want to reset the workspace state.
 
 On Windows, install WebView2 Runtime, Windows SDK, and Microsoft C++ Build Tools first.
 Portable Node/Rust toolchains are supported through `AXELATE_DEPS_DIR`, `./.deps`, or `%USERPROFILE%/Axelate-deps`.

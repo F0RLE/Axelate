@@ -1924,7 +1924,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "manual local archive debug helper; requires AXELATE_DEBUG_7Z"]
     fn debug_extract_local_comfyui_archive() {
         let archive_path = std::env::var("AXELATE_DEBUG_7Z").expect("AXELATE_DEBUG_7Z missing");
         let mut archive =

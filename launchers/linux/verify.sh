@@ -8,4 +8,4 @@ if [[ ! -x "$NODE_BIN" ]]; then
   NODE_BIN="node"
 fi
 
-"$NODE_BIN" scripts/workflow.mjs verify "$@"
+"$NODE_BIN" .github/scripts/workflow.mjs verify "$@"

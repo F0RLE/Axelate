@@ -498,16 +498,24 @@ export class ModuleSettingsUI {
     private _getComfyUiBaseUrl(): string {
         const settings = this._service.getSettings() as Record<string, string | undefined>;
         const raw = settings['comfyui_base_url']?.trim() ?? '';
+        const trimTrailingSlashes = (value: string): string => {
+            let end = value.length;
+            while (end > 0 && value[end - 1] === '/') {
+                end -= 1;
+            }
+
+            return value.slice(0, end);
+        };
 
         if (raw === '') {
             return 'http://127.0.0.1:8188';
         }
 
         if (raw.startsWith('http://') || raw.startsWith('https://')) {
-            return raw.replace(/\/+$/, '');
+            return trimTrailingSlashes(raw);
         }
 
-        return `http://${raw.replace(/\/+$/, '')}`;
+        return `http://${trimTrailingSlashes(raw)}`;
     }
 
     /**

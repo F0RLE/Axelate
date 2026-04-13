@@ -16,7 +16,7 @@ This document describes the current codebase structure and runtime flow.
 Axelate/
 ├── src/
 ├── src-tauri/
-├── scripts/
+├── .github/
 ├── launchers/
 ├── docs/
 └── .github/
@@ -123,7 +123,7 @@ The user does not choose engine ports manually.
 Project verification is centered around:
 
 - root scripts in `package.json`
-- the shared runner in `scripts/workflow.mjs`
+- the shared runner in `.github/scripts/workflow.mjs`
 - optional launchers in `launchers/`
 - legacy PowerShell helpers in `.github/scripts`
 - GitHub workflows in `.github/workflows`

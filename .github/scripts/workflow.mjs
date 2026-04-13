@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, rmSync } from 'node:fs';
-import os from 'node:os';
+import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
-
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, '..', '..');
-const srcDir = path.join(repoRoot, 'src');
-const tauriDir = path.join(repoRoot, 'src-tauri');
-const releaseLikeTauriConfig = path.join(tauriDir, 'tauri.release-like.conf.json');
-const isWindows = process.platform === 'win32';
+import {
+    buildCommandInvocation,
+    commandExists,
+    createToolEnvironment,
+    isWindows,
+    releaseLikeTauriConfig,
+    repoRoot,
+    srcDir,
+    tauriDir,
+    windowsCmdExecutable,
+} from './lib/tooling-paths.mjs';
 
 const rawArgs = process.argv.slice(2);
 const taskIndex = rawArgs.findIndex((arg) => !arg.startsWith('--'));
@@ -39,321 +41,12 @@ function fail(message) {
     process.exit(1);
 }
 
-function currentPathKey(env) {
-    return Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'Path';
-}
-
-function prependPathEntries(env, entries) {
-    const pathKey = currentPathKey(env);
-    const existing = String(env[pathKey] ?? '')
-        .split(path.delimiter)
-        .filter(Boolean);
-    const normalized = new Set(
-        existing.map((entry) => (isWindows ? entry.toLowerCase() : entry)),
-    );
-
-    for (const entry of entries) {
-        if (!entry || !existsSync(entry)) {
-            continue;
-        }
-
-        const normalizedEntry = isWindows ? entry.toLowerCase() : entry;
-        if (normalized.has(normalizedEntry)) {
-            continue;
-        }
-
-        existing.unshift(entry);
-        normalized.add(normalizedEntry);
-    }
-
-    env[pathKey] = existing.join(path.delimiter);
-    env.PATH = env[pathKey];
-}
-
-function resolveDepsDir() {
-    const candidates = [
-        process.env.AXELATE_DEPS_DIR,
-        path.join(repoRoot, '.deps'),
-        path.join(os.homedir(), 'Axelate-deps'),
-    ].filter(Boolean);
-
-    return candidates.find((candidate) => existsSync(candidate)) ?? null;
-}
-
-function commandExists(command, env) {
-    const lookup = isWindows ? 'where.exe' : 'which';
-    const result = spawnSync(lookup, [command], {
-        env,
-        stdio: ['ignore', 'ignore', 'ignore'],
-    });
-
-    return result.status === 0;
-}
-
-function resolveExecutable(command, env) {
-    if (!isWindows || path.isAbsolute(command) || command.includes(path.sep)) {
-        return command;
-    }
-
-    const result = spawnSync('where.exe', [command], {
-        encoding: 'utf8',
-        env,
-        stdio: ['ignore', 'pipe', 'ignore'],
-    });
-
-    if (result.status !== 0 || !result.stdout) {
-        return command;
-    }
-
-    const matches = result.stdout
-        .split(/\r?\n/u)
-        .map((line) => line.trim())
-        .filter(Boolean);
-
-    if (matches.length === 0) {
-        return command;
-    }
-
-    const preferredExtensions = ['.exe', '.com', '.cmd', '.bat'];
-    for (const extension of preferredExtensions) {
-        const match = matches.find((candidate) => candidate.toLowerCase().endsWith(extension));
-        if (match) {
-            return match;
-        }
-    }
-
-    return matches[0];
-}
-
-function quoteForCmd(value) {
-    if (value.length === 0) {
-        return '""';
-    }
-
-    if (!/[ \t"&()^[\]{}=;!'+,`~]/u.test(value)) {
-        return value;
-    }
-
-    return `"${value.replaceAll('"', '""')}"`;
-}
-
-function buildInvocation(command, args, env) {
-    const executable = resolveExecutable(command, env);
-    const extension = path.extname(executable).toLowerCase();
-
-    if (isWindows && (extension === '.cmd' || extension === '.bat')) {
-        const commandLine = [executable, ...args].map(quoteForCmd).join(' ');
-        return {
-            command: 'cmd.exe',
-            args: ['/d', '/s', '/c', commandLine],
-        };
-    }
-
-    return {
-        command: executable,
-        args,
-    };
-}
-
-function findVsDevCmd() {
-    if (!isWindows) {
-        return null;
-    }
-
-    const candidates = [];
-    const programFilesX86 = process.env['ProgramFiles(x86)'];
-    const vswhere =
-        programFilesX86 === undefined
-            ? null
-            : path.join(
-                  programFilesX86,
-                  'Microsoft Visual Studio',
-                  'Installer',
-                  'vswhere.exe',
-              );
-
-    if (vswhere && existsSync(vswhere)) {
-        const result = spawnSync(
-            vswhere,
-            [
-                '-latest',
-                '-products',
-                '*',
-                '-requires',
-                'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-                '-property',
-                'installationPath',
-            ],
-            {
-                encoding: 'utf8',
-                stdio: ['ignore', 'pipe', 'ignore'],
-            },
-        );
-
-        const installPath = result.stdout?.trim();
-        if (result.status === 0 && installPath) {
-            candidates.push(path.join(installPath, 'Common7', 'Tools', 'VsDevCmd.bat'));
-        }
-    }
-
-    candidates.push(
-        path.join(
-            'C:',
-            'Program Files',
-            'Microsoft Visual Studio',
-            '18',
-            'Insiders',
-            'Common7',
-            'Tools',
-            'VsDevCmd.bat',
-        ),
-        path.join(
-            'C:',
-            'Program Files',
-            'Microsoft Visual Studio',
-            '2022',
-            'BuildTools',
-            'Common7',
-            'Tools',
-            'VsDevCmd.bat',
-        ),
-        path.join(
-            'C:',
-            'Program Files',
-            'Microsoft Visual Studio',
-            '2022',
-            'Community',
-            'Common7',
-            'Tools',
-            'VsDevCmd.bat',
-        ),
-        path.join(
-            'C:',
-            'Program Files',
-            'Microsoft Visual Studio',
-            '2022',
-            'Professional',
-            'Common7',
-            'Tools',
-            'VsDevCmd.bat',
-        ),
-        path.join(
-            'C:',
-            'Program Files',
-            'Microsoft Visual Studio',
-            '2022',
-            'Enterprise',
-            'Common7',
-            'Tools',
-            'VsDevCmd.bat',
-        ),
-    );
-
-    return candidates.find((candidate) => existsSync(candidate)) ?? null;
-}
-
-function withMsvcEnvironment(env) {
-    if (!isWindows || commandExists('cl.exe', env)) {
-        return env;
-    }
-
-    const vsDevCmd = findVsDevCmd();
-    if (!vsDevCmd) {
-        return env;
-    }
-
-    const result = spawnSync(
-        'cmd.exe',
-        ['/d', '/s', '/c', `""${vsDevCmd}" -arch=x64 -host_arch=x64 >nul && set"`],
-        {
-            encoding: 'utf8',
-            env,
-            stdio: ['ignore', 'pipe', 'ignore'],
-        },
-    );
-
-    if (result.status !== 0 || !result.stdout) {
-        return env;
-    }
-
-    const nextEnv = { ...env };
-    for (const line of result.stdout.split(/\r?\n/u)) {
-        const separatorIndex = line.indexOf('=');
-        if (separatorIndex <= 0) {
-            continue;
-        }
-
-        const key = line.slice(0, separatorIndex);
-        const value = line.slice(separatorIndex + 1);
-        nextEnv[key] = value;
-    }
-
-    return nextEnv;
-}
-
-function withWindowsSdk(env) {
-    if (!isWindows || commandExists('rc.exe', env)) {
-        return env;
-    }
-
-    const programFilesX86 = process.env['ProgramFiles(x86)'];
-    if (!programFilesX86) {
-        return env;
-    }
-
-    const sdkBinRoot = path.join(programFilesX86, 'Windows Kits', '10', 'bin');
-    if (!existsSync(sdkBinRoot)) {
-        return env;
-    }
-
-    const versionDirs = readdirSync(sdkBinRoot, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => path.join(sdkBinRoot, entry.name, 'x64'))
-        .filter((candidate) => existsSync(path.join(candidate, 'rc.exe')))
-        .sort()
-        .reverse();
-
-    if (versionDirs.length === 0) {
-        return env;
-    }
-
-    const nextEnv = { ...env };
-    prependPathEntries(nextEnv, [versionDirs[0]]);
-    return nextEnv;
-}
-
 function toolEnv() {
     if (cachedEnv) {
         return cachedEnv;
     }
 
-    const env = { ...process.env };
-    const depsDir = resolveDepsDir();
-    const pathEntries = [];
-
-    if (depsDir) {
-        const cargoHome = path.join(depsDir, 'rust', 'cargo-home');
-        const rustupHome = path.join(depsDir, 'rust', 'rustup-home');
-
-        pathEntries.push(
-            path.join(depsDir, 'bin'),
-            path.join(depsDir, 'node'),
-            path.join(depsDir, 'Tools', 'PowerShell', '7.6.0'),
-            path.join(cargoHome, 'bin'),
-        );
-
-        if (existsSync(cargoHome)) {
-            env.CARGO_HOME = cargoHome;
-        }
-
-        if (existsSync(rustupHome)) {
-            env.RUSTUP_HOME = rustupHome;
-        }
-    }
-
-    prependPathEntries(env, pathEntries);
-
-    cachedEnv = withWindowsSdk(withMsvcEnvironment(env));
+    cachedEnv = createToolEnvironment();
     return cachedEnv;
 }
 
@@ -367,7 +60,7 @@ function run(command, args = [], options = {}) {
     const cwd = options.cwd ?? repoRoot;
     const env = options.env ?? toolEnv();
     const allowFailure = options.allowFailure ?? false;
-    const invocation = buildInvocation(command, args, env);
+    const invocation = buildCommandInvocation(command, args, env);
 
     log(describe(invocation.command, invocation.args, cwd));
     if (dryRun) {
@@ -407,6 +100,100 @@ function withEnvOverrides(overrides = {}) {
         ...toolEnv(),
         ...overrides,
     };
+}
+
+function checkCommand(label, command, args = ['--version'], options = {}) {
+    const cwd = options.cwd ?? repoRoot;
+    const env = options.env ?? toolEnv();
+    const invocation = buildCommandInvocation(command, args, env);
+    const result = spawnSync(invocation.command, invocation.args, {
+        cwd,
+        env,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false,
+    });
+
+    return {
+        ok: !result.error && result.status === 0,
+        label,
+        required: options.required ?? true,
+        details:
+            result.stdout?.trim() ||
+            result.stderr?.trim() ||
+            result.error?.message ||
+            'not available',
+    };
+}
+
+function checkPath(label, targetPath, details) {
+    return {
+        ok: existsSync(targetPath),
+        label,
+        required: true,
+        details,
+    };
+}
+
+function checkAvailableCommand(label, command, env = toolEnv(), required = true) {
+    const available = commandExists(command, env);
+    return {
+        ok: available,
+        label,
+        required,
+        details: available ? `${command} available` : `${command} not available`,
+    };
+}
+
+function printDoctorResult(result) {
+    const status = result.ok ? 'OK' : result.required ? 'MISS' : 'WARN';
+    console.log(`[doctor] ${status} ${result.label}: ${result.details}`);
+}
+
+function runDoctor() {
+    const env = toolEnv();
+    const results = [
+        checkCommand('git', 'git'),
+        checkCommand('node', 'node'),
+        checkCommand('npm', 'npm'),
+        checkCommand('cargo', 'cargo'),
+        checkCommand('rustc', 'rustc'),
+    ];
+
+    if (isWindows) {
+        results.push(
+            checkPath(
+                'WebView2 Runtime',
+                path.join(
+                    process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)',
+                    'Microsoft',
+                    'EdgeWebView',
+                    'Application',
+                ),
+                'Microsoft Edge WebView2 Runtime',
+            ),
+        );
+        results.push(
+            checkAvailableCommand(
+                'MSVC compiler',
+                'cl',
+                env,
+                false,
+            ),
+        );
+        results.push(checkAvailableCommand('Windows SDK rc.exe', 'rc', env));
+    }
+
+    for (const result of results) {
+        printDoctorResult(result);
+    }
+
+    const failed = results.filter((result) => result.required && !result.ok);
+    if (failed.length > 0) {
+        fail(`Doctor found ${String(failed.length)} missing prerequisite(s).`);
+    }
+
+    log('Doctor passed.');
 }
 
 function runTauriDev(args = [], envOverrides = {}) {
@@ -514,10 +301,14 @@ function runReleaseBinary() {
 }
 
 function verifyProject() {
-    run('cargo', ['fmt', '--check'], { cwd: tauriDir });
-    run('cargo', ['clippy', '--', '-D', 'warnings'], { cwd: tauriDir });
-    run('cargo', ['check', '--bins', '--verbose'], { cwd: tauriDir });
-    run('cargo', ['test', '--lib', '--verbose'], { cwd: tauriDir });
+    runDoctor();
+    cleanArtifacts();
+    run('cargo', ['fmt', '--all', '--check'], { cwd: tauriDir });
+    run('cargo', ['clippy', '--all-targets', '--all-features', '--', '-D', 'warnings'], {
+        cwd: tauriDir,
+    });
+    run('cargo', ['check', '--all-targets', '--all-features', '--verbose'], { cwd: tauriDir });
+    run('cargo', ['test', '--all-targets', '--all-features', '--verbose'], { cwd: tauriDir });
     run('npm', ['ci'], { cwd: srcDir });
     run('npm', ['run', 'format'], { cwd: srcDir });
     run('npm', ['run', 'typecheck'], { cwd: srcDir });
@@ -526,6 +317,13 @@ function verifyProject() {
     run('npm', ['run', 'test'], { cwd: srcDir });
     run('npm', ['run', 'build'], { cwd: srcDir });
     run('npm', ['run', 'check-size'], { cwd: srcDir });
+}
+
+function setupProject() {
+    runDoctor();
+    run('npm', ['ci'], { cwd: srcDir });
+    runNode(path.join(srcDir, 'scripts', 'setup-git-hooks.mjs'));
+    log('Setup completed. Use `npm run dev` to start development.');
 }
 
 const tasks = {
@@ -539,6 +337,7 @@ Tasks:
   dev:inspect    Start the desktop app with DevTools and WebView remote debugging
   dev:release-like  Start the desktop app with built static assets (release-like)
   build          Build the frontend bundle
+  clear          Remove build artifacts and caches
   preview        Preview the frontend bundle
   tauri:dev      Alias for desktop app development mode
   tauri:build    Build the desktop app
@@ -552,6 +351,8 @@ Tasks:
   test:watch     Run frontend tests in watch mode
   typecheck      Run frontend type checks
   verify         Run the full local verification pipeline
+  doctor         Check local development prerequisites
+  setup          Validate prerequisites, install frontend deps, and configure hooks
   install-deps   Install frontend dependencies
   update         Update npm and cargo dependencies, then verify
   prepare        Configure Git hooks
@@ -596,6 +397,9 @@ Tasks:
     },
     build() {
         run('npm', ['--prefix', 'src', 'run', 'build']);
+    },
+    clear() {
+        cleanArtifacts();
     },
     preview() {
         run('npm', withPassthroughArgs(['--prefix', 'src', 'run', 'preview']));
@@ -642,6 +446,12 @@ Tasks:
     },
     verify() {
         verifyProject();
+    },
+    doctor() {
+        runDoctor();
+    },
+    setup() {
+        setupProject();
     },
     'verify-all'() {
         verifyProject();

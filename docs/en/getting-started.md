@@ -54,10 +54,11 @@ From the repository root:
 ```bash
 git clone https://github.com/F0RLE/Axelate.git
 cd Axelate
-npm run install-deps
+npm run setup
 ```
 
-`npm run install-deps` installs frontend dependencies into `src/node_modules`.
+`npm run setup` is the canonical first-run command.
+It checks the local toolchain, installs frontend dependencies into `src/node_modules`, and configures Git hooks.
 The root package is only a proxy and should not have its own dependency tree.
 
 ## Development
@@ -68,7 +69,15 @@ Recommended:
 npm run dev
 ```
 
-This runs the shared Node workflow, resolves portable tools when available, syncs Specta bindings, and starts Tauri.
+Before development, you can run:
+
+```bash
+npm run doctor
+```
+
+This validates the local environment without changing files.
+
+`npm run dev` runs the shared Node workflow, resolves portable tools when available, syncs Specta bindings, and starts Tauri.
 
 Direct commands:
 
@@ -99,11 +108,13 @@ From the repository root:
 
 ```bash
 npm run build
+npm run clear
 npm run tauri:build
 npm run release
 ```
 
 `npm run build` builds the frontend only.
+`npm run clear` removes build outputs and frontend/tool caches.
 `npm run tauri:build` builds the desktop application.
 `npm run release` runs the repository verification pipeline first, then creates the Tauri release bundle.
 
@@ -145,13 +156,14 @@ npm run verify
 
 This checks:
 
-- `cargo fmt --check`
-- `cargo clippy -- -D warnings`
-- `cargo check --bins`
-- `cargo test --lib`
+- doctor prerequisites first
+- build artifacts are cleaned before verification
+- `cargo fmt --all --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo check --all-targets --all-features`
+- `cargo test --all-targets --all-features`
 - frontend typecheck, lint, format check, tests, build, size budget
-- `npm run release` for the release-oriented path
-- optional legacy release security checks with `pwsh -ExecutionPolicy Bypass -File .\.github\scripts\verify-all.ps1 -IncludeReleaseSecurity`
+- fresh frontend dependency install with `npm ci`
 
 ## Common issues
 

@@ -6,7 +6,7 @@ This is a maintained overview, not an exhaustive dump of every file.
 Axelate/
 |-- .github/
 |   |-- .husky/        git hooks
-|   |-- scripts/       legacy PowerShell helpers
+|   |-- scripts/       workflow runner and helper scripts
 |   `-- workflows/     CI and release workflows
 |-- docs/
 |   |-- en/            English docs
@@ -16,8 +16,6 @@ Axelate/
 |   |-- windows/       double-click launchers for Windows
 |   |-- macos/         double-click launchers for macOS
 |   `-- linux/         double-click launchers for Linux
-|-- scripts/
-|   `-- workflow.mjs   shared cross-platform task runner
 |-- src/
 |   |-- app/           frontend startup and composition
 |   |-- assets/        icons, logos, fonts
@@ -49,3 +47,4 @@ Axelate/
 - the root package does not own a second dependency tree
 - generated TypeScript bindings are emitted from Rust and belong under `src/shared/types/`
 - `launchers/` is optional convenience only; the canonical interface is still `npm run ...`
+- the shared root workflow runner lives in `.github/scripts/workflow.mjs`

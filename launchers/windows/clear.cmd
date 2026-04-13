@@ -4,9 +4,9 @@ cd /d "%~dp0\..\.."
 
 set "NODE_BIN=%USERPROFILE%\Axelate-deps\node\node.exe"
 if exist "%NODE_BIN%" (
-    "%NODE_BIN%" scripts\workflow.mjs dev:release-like %*
+    "%NODE_BIN%" .github\scripts\workflow.mjs clear %*
 ) else (
-    node scripts\workflow.mjs dev:release-like %*
+    node .github\scripts\workflow.mjs clear %*
 )
 
 if errorlevel 1 pause

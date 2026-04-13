@@ -1,8 +1,2 @@
 #!/usr/bin/env sh
-repo_root="$(git rev-parse --show-toplevel)"
-
-npm --prefix src run lint
-npm --prefix src run format:check
-npm --prefix src run test
-cd "$repo_root/src-tauri" && cargo fmt -- --check
-cd "$repo_root/src-tauri" && cargo clippy -- -D warnings
+"${0%/*}/_/run-hook.sh" pre-commit "$@"
