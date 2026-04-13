@@ -37,16 +37,16 @@ It is responsible for:
 - running root commands in a cross-platform way
 - keeping `npm run ...` as the canonical interface
 
-## Optional launchers
+## Optional convenience scripts
 
-Double-click launchers live in:
+Double-click scripts live in:
 
-- `launchers/windows`
-- `launchers/macos`
-- `launchers/linux`
+- `scripts/windows`
+- `scripts/macos`
+- `scripts/linux`
 
 These are convenience wrappers only.
-The kept launcher set is intentionally small:
+The kept script set is intentionally small:
 
 - `dev.*` for inspect-enabled desktop development
 - `build.*` for builds

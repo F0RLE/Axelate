@@ -1,6 +1,6 @@
-# Launchers
+# Scripts
 
-Double-click launchers live here to keep the repository root clean.
+Double-click convenience scripts live here to keep the repository root clean.
 
 Current launcher set:
 - `dev.*` is the kept development launcher and starts the inspect-enabled desktop dev flow.

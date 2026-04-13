@@ -93,7 +93,7 @@ Axelate/
 ├── src/         frontend app and npm dependencies
 ├── src-tauri/   Rust backend and Tauri configuration
 ├── .github/     workflows, templates, helpers, workflow runner
-├── launchers/   optional double-click entrypoints by platform
+├── scripts/     optional double-click entrypoints by platform
 └── docs/        project documentation
 ```
 
@@ -114,12 +114,12 @@ npm run clear
 `npm run dev`, `npm run dev:webview`, `npm run dev:app`, and `npm run tauri:dev` start the frontend inside the Tauri desktop WebView with Rust IPC enabled.
 `npm run dev:inspect` also opens desktop DevTools and enables WebView remote debugging on port `9223` for automation tools.
 `npm run dev:release-like` rebuilds the frontend and starts Tauri against the built static assets without Vite HMR.
-`launchers/*/dev.*` is the kept double-click development entrypoint and opens the inspect-enabled desktop dev flow.
+`scripts/*/dev.*` is the kept double-click development entrypoint and opens the inspect-enabled desktop dev flow.
 `npm run clear` removes build artifacts and frontend caches when you want to reset the workspace state.
 
 On Windows, install WebView2 Runtime, Windows SDK, and Microsoft C++ Build Tools first.
 Portable Node/Rust toolchains are supported through `AXELATE_DEPS_DIR`, `./.deps`, or `%USERPROFILE%/Axelate-deps`.
-Double-click launchers are grouped under `launchers/windows`, `launchers/macos`, and `launchers/linux`.
+Double-click scripts are grouped under `scripts/windows`, `scripts/macos`, and `scripts/linux`.
 Release packaging uses the same Windows prerequisites and will only pass after `npm run verify` is green.
 
 ### Current product scope

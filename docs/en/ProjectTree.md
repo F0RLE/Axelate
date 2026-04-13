@@ -12,10 +12,10 @@ Axelate/
 |   |-- en/            English docs
 |   |-- ru/            Russian docs
 |   `-- zh/            Chinese docs
-|-- launchers/
-|   |-- windows/       double-click launchers for Windows
-|   |-- macos/         double-click launchers for macOS
-|   `-- linux/         double-click launchers for Linux
+|-- scripts/
+|   |-- windows/       double-click scripts for Windows
+|   |-- macos/         double-click scripts for macOS
+|   `-- linux/         double-click scripts for Linux
 |-- src/
 |   |-- app/           frontend startup and composition
 |   |-- assets/        icons, logos, fonts
@@ -46,5 +46,5 @@ Axelate/
 - frontend dependencies live in `src/node_modules`
 - the root package does not own a second dependency tree
 - generated TypeScript bindings are emitted from Rust and belong under `src/shared/types/`
-- `launchers/` is optional convenience only; the canonical interface is still `npm run ...`
+- `scripts/` is optional convenience only; the canonical interface is still `npm run ...`
 - the shared root workflow runner lives in `.github/scripts/workflow.mjs`

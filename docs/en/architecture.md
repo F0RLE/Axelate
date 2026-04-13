@@ -17,7 +17,7 @@ Axelate/
 ├── src/
 ├── src-tauri/
 ├── .github/
-├── launchers/
+├── scripts/
 ├── docs/
 └── .github/
 ```
@@ -124,7 +124,7 @@ Project verification is centered around:
 
 - root scripts in `package.json`
 - the shared runner in `.github/scripts/workflow.mjs`
-- optional launchers in `launchers/`
+- optional convenience scripts in `scripts/`
 - legacy PowerShell helpers in `.github/scripts`
 - GitHub workflows in `.github/workflows`
 
