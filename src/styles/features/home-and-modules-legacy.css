@@ -2318,7 +2318,7 @@ body.snapping .modal-backdrop {
 }
 
 .model-card-premium.empty:hover .model-card-action {
-    background: rgba(255, 255, 255, 0.085);
+    background: rgba(116, 54, 184, 0.92);
     color: white;
     opacity: 1;
     transform: translateY(0);

@@ -134,7 +134,7 @@ function quoteForCmd(value) {
         return value;
     }
 
-    return `"${value.replace(/"/gu, '""')}"`;
+    return `"${value.replaceAll('"', '""')}"`;
 }
 
 function buildInvocation(command, args, env) {
@@ -359,7 +359,8 @@ function toolEnv() {
 
 function describe(command, args, cwd) {
     const renderedArgs = args.map((arg) => (/\s/u.test(arg) ? `"${arg}"` : arg)).join(' ');
-    return `${cwd}> ${command}${renderedArgs ? ` ${renderedArgs}` : ''}`;
+    const renderedSuffix = renderedArgs.length > 0 ? ` ${renderedArgs}` : '';
+    return `${cwd}> ${command}${renderedSuffix}`;
 }
 
 function run(command, args = [], options = {}) {
@@ -487,14 +488,17 @@ function openPath(targetPath) {
 }
 
 function runReleaseBinary() {
-    const candidates = isWindows
-        ? [
-              path.join(tauriDir, 'target', 'release', 'Axelate.exe'),
-              path.join(tauriDir, 'target', 'x86_64-pc-windows-msvc', 'release', 'Axelate.exe'),
-          ]
-        : process.platform === 'darwin'
-          ? [path.join(tauriDir, 'target', 'release', 'bundle', 'macos', 'Axelate.app')]
-          : [path.join(tauriDir, 'target', 'release', 'axelate')];
+    let candidates;
+    if (isWindows) {
+        candidates = [
+            path.join(tauriDir, 'target', 'release', 'Axelate.exe'),
+            path.join(tauriDir, 'target', 'x86_64-pc-windows-msvc', 'release', 'Axelate.exe'),
+        ];
+    } else if (process.platform === 'darwin') {
+        candidates = [path.join(tauriDir, 'target', 'release', 'bundle', 'macos', 'Axelate.app')];
+    } else {
+        candidates = [path.join(tauriDir, 'target', 'release', 'axelate')];
+    }
 
     const artifact = candidates.find((candidate) => existsSync(candidate));
     if (!artifact) {

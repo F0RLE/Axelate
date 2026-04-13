@@ -1051,14 +1051,17 @@ export class ChatUI {
     }
 
     private _safeImageMime(type: string, ext: string): string {
-        const candidate = type.length > 0 ? type : ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
+        let candidate = type;
+        if (candidate.length === 0) {
+            candidate = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
+        }
         return /^image\/(?:png|jpe?g|gif|webp|bmp|avif|svg\+xml)$/iu.test(candidate)
             ? candidate
             : 'image/png';
     }
 
     private _safeBase64Data(data: string): string {
-        const normalized = data.replace(/\s+/gu, '');
+        const normalized = data.replaceAll(/\s+/gu, '');
         return /^[A-Za-z0-9+/]+={0,2}$/u.test(normalized) ? normalized : '';
     }
 
@@ -1109,7 +1112,7 @@ export class ChatUI {
 
                 wrapper.appendChild(el);
                 if (insertionTarget instanceof HTMLElement) {
-                    bubble.insertBefore(wrapper, insertionTarget);
+                    insertionTarget.before(wrapper);
                 } else {
                     bubble.appendChild(wrapper);
                 }

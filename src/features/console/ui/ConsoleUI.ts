@@ -9,9 +9,9 @@ export class ConsoleUI {
     private _hasRenderedLogs = false;
     private _dropzoneResetTimeout: ReturnType<typeof setTimeout> | null = null;
     private _pageChangeUnsub: (() => void) | null = null;
-    private _previousSetDebugTab = globalThis.setDebugTab;
-    private _previousSetLogView = globalThis.setLogView;
-    private _previousClearLogs = globalThis.clearLogs;
+    private readonly _previousSetDebugTab = globalThis.setDebugTab;
+    private readonly _previousSetLogView = globalThis.setLogView;
+    private readonly _previousClearLogs = globalThis.clearLogs;
     private readonly _boundSetDebugTab = (tabId: string, btn: HTMLElement) => {
         this.setTab(tabId, btn);
     };
@@ -255,49 +255,32 @@ export class ConsoleUI {
 
     public async copyLogs(): Promise<void> {
         const logs = this.service.getLogs();
-        const text = logs
-            .map((log) => log.message.trim())
-            .filter((message) => message.length > 0)
-            .join('\n');
+        const text = logs.map((log) => log.message.trim()).filter(Boolean).join('\n');
 
-        if (!text) {
-            if (typeof globalThis.showToast === 'function') {
-                const msg =
-                    typeof globalThis.t === 'function'
-                        ? globalThis.t('ui.debug.logs_empty', 'No logs to copy')
-                        : 'No logs to copy';
-                globalThis.showToast(msg, 'warning', 1500);
-            }
+        if (text.length === 0) {
+            this._showToast('ui.debug.logs_empty', 'No logs to copy', 'warning', 1500);
             return;
         }
 
         try {
-            const isTauri = (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-            if (isTauri !== undefined) {
-                try {
-                    await invoke('plugin:clipboard-manager|write_text', { text });
-                } catch {
-                    await this._copyWithBrowserApi(text);
-                }
-            } else {
-                await this._copyWithBrowserApi(text);
-            }
-
-            if (typeof globalThis.showToast === 'function') {
-                const msg =
-                    typeof globalThis.t === 'function'
-                        ? globalThis.t('ui.debug.logs_copied', 'Logs copied')
-                        : 'Logs copied';
-                globalThis.showToast(msg, 'success', 1500);
-            }
+            await this._writeTextToClipboard(text);
+            this._showToast('ui.debug.logs_copied', 'Logs copied', 'success', 1500);
         } catch {
-            if (typeof globalThis.showToast === 'function') {
-                const msg =
-                    typeof globalThis.t === 'function'
-                        ? globalThis.t('ui.debug.logs_copy_failed', 'Failed to copy logs')
-                        : 'Failed to copy logs';
-                globalThis.showToast(msg, 'error', 1800);
-            }
+            this._showToast('ui.debug.logs_copy_failed', 'Failed to copy logs', 'error', 1800);
+        }
+    }
+
+    private async _writeTextToClipboard(text: string): Promise<void> {
+        const isTauri = (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+        if (isTauri === undefined) {
+            await this._copyWithBrowserApi(text);
+            return;
+        }
+
+        try {
+            await invoke('plugin:clipboard-manager|write_text', { text });
+        } catch {
+            await this._copyWithBrowserApi(text);
         }
     }
 
@@ -307,16 +290,21 @@ export class ConsoleUI {
             return;
         }
 
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.setAttribute('readonly', 'true');
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        textarea.style.pointerEvents = 'none';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        textarea.remove();
+        throw new Error('Clipboard API is unavailable');
+    }
+
+    private _showToast(
+        key: string,
+        fallback: string,
+        type: 'success' | 'error' | 'warning',
+        duration: number,
+    ): void {
+        if (typeof globalThis.showToast !== 'function') {
+            return;
+        }
+
+        const message = typeof globalThis.t === 'function' ? globalThis.t(key, fallback) : fallback;
+        globalThis.showToast(message, type, duration);
     }
 
     public destroy(): void {

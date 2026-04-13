@@ -657,61 +657,109 @@ export class ChatController {
         } | null,
         imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
-        if (response.ok) {
-            const rawReply = response.message ?? response.reply?.text ?? '';
-            const replyText = this._safeExtractText(rawReply);
-            const generatedImages = response.reply?.images ?? [];
-
-            if (generatedImages.length > 0) {
-                const caption = replyText || this._i18n.t('ui.chat.image_ready', 'Generated image');
-
-                if (imageHandle !== null && imageHandle !== undefined) {
-                    imageHandle.finalize({ text: caption, images: generatedImages });
-                } else {
-                    this._ui.appendMessage('assistant', caption, { images: generatedImages });
-                }
-
-                const assistantMessage: IChatMessage = {
-                    role: 'assistant',
-                    content: this._buildGeneratedImageContent(generatedImages, replyText),
-                };
-                if (response.thought_signature !== undefined) {
-                    assistantMessage.thought_signature = response.thought_signature;
-                }
-                this._chatHistory.push(assistantMessage);
-                return;
-            }
-
-            if (replyText !== '') {
-                const tokens = await this._estimateReplyTokens(replyText);
-
-                if (streamingHandle) {
-                    streamingHandle.finalize(replyText, { tokens });
-                } else {
-                    this._ui.appendMessage('assistant', replyText, { tokens });
-                }
-
-                const assistantMessage: IChatMessage = {
-                    role: 'assistant',
-                    content: replyText,
-                };
-                if (response.thought_signature !== undefined) {
-                    assistantMessage.thought_signature = response.thought_signature;
-                }
-                this._chatHistory.push(assistantMessage);
-            } else if (streamingHandle) {
-                streamingHandle.discard();
-            } else if (imageHandle !== null && imageHandle !== undefined) {
-                imageHandle.discard();
-            }
-        } else {
-            const friendlyMsg = this._getFriendlyErrorMessage(response.error ?? '', response.model);
-            if (imageHandle !== null && imageHandle !== undefined) {
-                imageHandle.fail(friendlyMsg);
-            } else {
-                this._handleError(friendlyMsg, response.model);
-            }
+        if (!response.ok) {
+            this._handleFailedChatResponse(response, imageHandle);
+            return;
         }
+
+        await this._handleSuccessfulChatResponse(response, streamingHandle, imageHandle);
+    }
+
+    private async _handleSuccessfulChatResponse(
+        response: IChatResponse,
+        streamingHandle?: {
+            update: (chunk: string) => void;
+            finalize: (text: string, stats?: Record<string, unknown>) => void;
+            discard: () => void;
+        } | null,
+        imageHandle?: ImageGenerationHandle | null,
+    ): Promise<void> {
+        const rawReply = response.message ?? response.reply?.text ?? '';
+        const replyText = this._safeExtractText(rawReply);
+        const generatedImages = response.reply?.images ?? [];
+
+        if (generatedImages.length > 0) {
+            this._handleGeneratedImages(response, replyText, generatedImages, imageHandle);
+            return;
+        }
+
+        if (replyText !== '') {
+            await this._handleTextReply(response, replyText, streamingHandle);
+            return;
+        }
+
+        if (streamingHandle) {
+            streamingHandle.discard();
+            return;
+        }
+
+        if (imageHandle !== null && imageHandle !== undefined) {
+            imageHandle.discard();
+        }
+    }
+
+    private _handleGeneratedImages(
+        response: IChatResponse,
+        replyText: string,
+        generatedImages: { mime: string; data_base64: string }[],
+        imageHandle?: ImageGenerationHandle | null,
+    ): void {
+        const caption = replyText || this._i18n.t('ui.chat.image_ready', 'Generated image');
+
+        if (imageHandle !== null && imageHandle !== undefined) {
+            imageHandle.finalize({ text: caption, images: generatedImages });
+        } else {
+            this._ui.appendMessage('assistant', caption, { images: generatedImages });
+        }
+
+        this._pushAssistantMessage(
+            this._buildGeneratedImageContent(generatedImages, replyText),
+            response.thought_signature,
+        );
+    }
+
+    private async _handleTextReply(
+        response: IChatResponse,
+        replyText: string,
+        streamingHandle?: {
+            update: (chunk: string) => void;
+            finalize: (text: string, stats?: Record<string, unknown>) => void;
+            discard: () => void;
+        } | null,
+    ): Promise<void> {
+        const tokens = await this._estimateReplyTokens(replyText);
+
+        if (streamingHandle) {
+            streamingHandle.finalize(replyText, { tokens });
+        } else {
+            this._ui.appendMessage('assistant', replyText, { tokens });
+        }
+
+        this._pushAssistantMessage(replyText, response.thought_signature);
+    }
+
+    private _pushAssistantMessage(content: IChatMessage['content'], thoughtSignature?: string): void {
+        const assistantMessage: IChatMessage = {
+            role: 'assistant',
+            content,
+        };
+        if (thoughtSignature !== undefined) {
+            assistantMessage.thought_signature = thoughtSignature;
+        }
+        this._chatHistory.push(assistantMessage);
+    }
+
+    private _handleFailedChatResponse(
+        response: IChatResponse,
+        imageHandle?: ImageGenerationHandle | null,
+    ): void {
+        const friendlyMsg = this._getFriendlyErrorMessage(response.error ?? '', response.model);
+        if (imageHandle !== null && imageHandle !== undefined) {
+            imageHandle.fail(friendlyMsg);
+            return;
+        }
+
+        this._handleError(friendlyMsg, response.model);
     }
 
     private _extractFromObject(obj: Record<string, unknown>): string {
