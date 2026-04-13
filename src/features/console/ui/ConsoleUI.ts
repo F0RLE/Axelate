@@ -255,7 +255,10 @@ export class ConsoleUI {
 
     public async copyLogs(): Promise<void> {
         const logs = this.service.getLogs();
-        const text = logs.map((log) => log.message.trim()).filter(Boolean).join('\n');
+        const text = logs
+            .map((log) => log.message.trim())
+            .filter(Boolean)
+            .join('\n');
 
         if (text.length === 0) {
             this._showToast('ui.debug.logs_empty', 'No logs to copy', 'warning', 1500);

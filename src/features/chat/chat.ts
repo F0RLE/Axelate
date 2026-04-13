@@ -738,7 +738,10 @@ export class ChatController {
         this._pushAssistantMessage(replyText, response.thought_signature);
     }
 
-    private _pushAssistantMessage(content: IChatMessage['content'], thoughtSignature?: string): void {
+    private _pushAssistantMessage(
+        content: IChatMessage['content'],
+        thoughtSignature?: string,
+    ): void {
         const assistantMessage: IChatMessage = {
             role: 'assistant',
             content,
