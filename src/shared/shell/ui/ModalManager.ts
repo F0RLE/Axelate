@@ -138,8 +138,13 @@ export class ModalManager {
             return;
         }
 
+        // Prevent Chromium from painting an intermediate frame with stale/default dialog visuals.
+        modal.style.visibility = 'hidden';
         modal.classList.remove('hidden');
         modal.showModal();
+        requestAnimationFrame(() => {
+            modal.style.removeProperty('visibility');
+        });
 
         // Add smooth hiding for main content
         const container = document.querySelector('.models-container');
@@ -174,6 +179,7 @@ export class ModalManager {
                 modal.close();
             }
             modal.classList.add('hidden');
+            modal.style.removeProperty('visibility');
         }
 
         // Restore main content visibility
@@ -309,9 +315,9 @@ export class ModalManager {
                 const transitionVersion = ++this._filterTransitionVersion;
                 listEl.style.willChange = 'opacity, transform';
                 listEl.style.transition =
-                    'opacity 0.24s cubic-bezier(0.4, 0, 0.2, 1), transform 0.24s cubic-bezier(0.4, 0, 0.2, 1)';
-                listEl.style.opacity = '0';
-                listEl.style.transform = 'translateY(4px)';
+                    'opacity 0.14s cubic-bezier(0.22, 1, 0.36, 1), transform 0.14s cubic-bezier(0.22, 1, 0.36, 1)';
+                listEl.style.opacity = '0.72';
+                listEl.style.transform = 'translateY(6px) scale(0.992)';
 
                 this._filterPopulateTimer = setTimeout(() => {
                     this._filterPopulateTimer = null;
@@ -331,7 +337,7 @@ export class ModalManager {
                     );
                     listEl.getBoundingClientRect();
                     listEl.style.opacity = '1';
-                    listEl.style.transform = 'translateY(0)';
+                    listEl.style.transform = 'translateY(0) scale(1)';
                     this._filterStyleResetTimer = setTimeout(() => {
                         this._filterStyleResetTimer = null;
                         if (
@@ -341,8 +347,8 @@ export class ModalManager {
                             return;
                         }
                         listEl.style.willChange = 'auto';
-                    }, 300);
-                }, 200);
+                    }, 180);
+                }, 110);
             }
         };
 

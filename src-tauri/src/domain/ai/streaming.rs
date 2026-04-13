@@ -5,7 +5,6 @@
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use rand::Rng;
 use reqwest::{Client, StatusCode};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -196,7 +195,7 @@ impl AiProvider for OpenRouterProvider {
                         && attempts <= MAX_RETRIES
                     {
                         let base_wait = 2u64.pow(attempts);
-                        let jitter = rand::rng().random_range(0..500);
+                        let jitter = rand::random_range(0..500);
                         tokio::time::sleep(std::time::Duration::from_millis(
                             base_wait * 1000 + jitter,
                         ))
@@ -208,7 +207,7 @@ impl AiProvider for OpenRouterProvider {
                 Err(e) => {
                     if attempts <= MAX_RETRIES {
                         let base_wait = 2u64.pow(attempts);
-                        let jitter = rand::rng().random_range(0..500);
+                        let jitter = rand::random_range(0..500);
                         tokio::time::sleep(std::time::Duration::from_millis(
                             base_wait * 1000 + jitter,
                         ))

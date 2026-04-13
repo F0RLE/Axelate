@@ -43,11 +43,32 @@ function dispatchNavigationMouse(
     target: EventTarget,
 ): void {
     dispatchWindowEventWithTarget(event, target);
+    if (event.type === 'mouseup') {
+        (
+            navigationUI as unknown as {
+                _mouseUpHandler: ((e: MouseEvent) => void) | null;
+            }
+        )._mouseUpHandler?.(event);
+        return;
+    }
+
     (
         navigationUI as unknown as {
-            _mouseUpHandler: ((e: MouseEvent) => void) | null;
+            _mouseDownHandler: ((e: MouseEvent) => void) | null;
         }
-    )._mouseUpHandler?.(event);
+    )._mouseDownHandler?.(event);
+}
+
+function dispatchNativeSuppressionMouse(
+    navigationUI: NavigationUI,
+    handler: '_mouseUpHandler' | '_auxClickHandler',
+    event: MouseEvent,
+    target: EventTarget,
+): void {
+    dispatchWindowEventWithTarget(event, target);
+    (navigationUI as unknown as Record<typeof handler, ((e: MouseEvent) => void) | null>)[
+        handler
+    ]?.(event);
 }
 
 describe('NavigationUI', () => {
@@ -78,7 +99,7 @@ describe('NavigationUI', () => {
         navigationUI.init();
         navigationUI.init();
 
-        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 3 }));
 
         expect(navigationService.goBack).toHaveBeenCalledTimes(1);
     });
@@ -89,7 +110,9 @@ describe('NavigationUI', () => {
         navigationUI.init();
         navigationUI.destroy();
 
-        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 3 }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 3 }));
+        globalThis.dispatchEvent(new MouseEvent('auxclick', { button: 3 }));
         globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
         expect(showPageSpy).not.toHaveBeenCalled();
@@ -97,12 +120,87 @@ describe('NavigationUI', () => {
         expect(navigationService.popBackAction).not.toHaveBeenCalled();
     });
 
+    it('should navigate on side-button mousedown before WebView native navigation can run', () => {
+        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
+        navigationUI.init();
+        const button = document.createElement('button');
+        document.body.appendChild(button);
+
+        const mouseDown = new MouseEvent('mousedown', {
+            button: 3,
+            bubbles: true,
+            cancelable: true,
+        });
+
+        dispatchNavigationMouse(navigationUI, mouseDown, button);
+
+        expect(mouseDown.defaultPrevented).toBe(true);
+        expect(navigationService.goBack).toHaveBeenCalledTimes(1);
+        expect(showPageSpy).toHaveBeenCalledWith('home', null, false, true);
+    });
+
+    it('should suppress duplicate side-button mouseup and auxclick without executing app navigation', () => {
+        navigationUI.init();
+        const button = document.createElement('button');
+        document.body.appendChild(button);
+
+        dispatchNavigationMouse(
+            navigationUI,
+            new MouseEvent('mousedown', {
+                button: 3,
+                bubbles: true,
+                cancelable: true,
+            }),
+            button,
+        );
+
+        const mouseUp = new MouseEvent('mouseup', {
+            button: 3,
+            bubbles: true,
+            cancelable: true,
+        });
+        const auxClick = new MouseEvent('auxclick', {
+            button: 4,
+            bubbles: true,
+            cancelable: true,
+        });
+
+        dispatchNativeSuppressionMouse(navigationUI, '_mouseUpHandler', mouseUp, button);
+        dispatchNativeSuppressionMouse(navigationUI, '_auxClickHandler', auxClick, button);
+
+        expect(mouseUp.defaultPrevented).toBe(true);
+        expect(auxClick.defaultPrevented).toBe(true);
+        expect(navigationService.goBack).toHaveBeenCalledTimes(1);
+        expect(navigationService.goForward).not.toHaveBeenCalled();
+        expect(navigationService.popBackAction).toHaveBeenCalledTimes(1);
+        expect(navigationService.popForwardAction).not.toHaveBeenCalled();
+    });
+
+    it('should handle side-button mouseup when mousedown is not delivered', () => {
+        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
+        navigationUI.init();
+        const button = document.createElement('button');
+        document.body.appendChild(button);
+
+        const mouseUp = new MouseEvent('mouseup', {
+            button: 3,
+            bubbles: true,
+            cancelable: true,
+        });
+
+        dispatchNavigationMouse(navigationUI, mouseUp, button);
+
+        expect(mouseUp.defaultPrevented).toBe(true);
+        expect(navigationService.goBack).toHaveBeenCalledTimes(1);
+        expect(showPageSpy).toHaveBeenCalledWith('home', null, false, true);
+    });
+
     it('should allow re-init after destroy without duplicating listeners', () => {
         navigationUI.init();
         navigationUI.destroy();
         navigationUI.init();
 
-        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 3 }));
 
         expect(navigationService.goBack).toHaveBeenCalledTimes(1);
     });
@@ -111,8 +209,8 @@ describe('NavigationUI', () => {
         const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
         navigationUI.init();
 
-        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3 }));
-        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 4 }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 3 }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 4 }));
 
         expect(navigationService.goBack).toHaveBeenCalled();
         expect(navigationService.goForward).toHaveBeenCalled();
@@ -133,8 +231,8 @@ describe('NavigationUI', () => {
         const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
         navigationUI.init();
 
-        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 3, ctrlKey: true }));
-        globalThis.dispatchEvent(new MouseEvent('mouseup', { button: 4, shiftKey: true }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 3, ctrlKey: true }));
+        globalThis.dispatchEvent(new MouseEvent('mousedown', { button: 4, shiftKey: true }));
 
         expect(navigationService.goBack).not.toHaveBeenCalled();
         expect(navigationService.goForward).not.toHaveBeenCalled();
@@ -174,6 +272,24 @@ describe('NavigationUI', () => {
         expect(showPageSpy).not.toHaveBeenCalled();
     });
 
+    it('should use side-button back actions from editable controls', () => {
+        navigationUI.init();
+        const textarea = document.createElement('textarea');
+        document.body.appendChild(textarea);
+        vi.mocked(navigationService.popBackAction).mockReturnValue(true);
+
+        const event = new MouseEvent('mouseup', {
+            button: 3,
+            bubbles: true,
+            cancelable: true,
+        });
+        dispatchNavigationMouse(navigationUI, event, textarea);
+
+        expect(navigationService.popBackAction).toHaveBeenCalledTimes(1);
+        expect(navigationService.goBack).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(true);
+    });
+
     it('should allow escape back actions while focused on a button', () => {
         navigationUI.init();
         const button = document.createElement('button');
@@ -199,7 +315,7 @@ describe('NavigationUI', () => {
 
         dispatchNavigationMouse(
             navigationUI,
-            new MouseEvent('mouseup', {
+            new MouseEvent('mousedown', {
                 button: 3,
                 bubbles: true,
                 cancelable: true,
@@ -219,7 +335,7 @@ describe('NavigationUI', () => {
 
         dispatchNavigationMouse(
             navigationUI,
-            new MouseEvent('mouseup', {
+            new MouseEvent('mousedown', {
                 button: 3,
                 bubbles: true,
                 cancelable: true,
@@ -229,6 +345,43 @@ describe('NavigationUI', () => {
 
         expect(navigationService.popBackAction).toHaveBeenCalledTimes(1);
         expect(navigationService.goBack).not.toHaveBeenCalled();
+    });
+
+    it('should prefer page forward history before reopening modal forward actions', () => {
+        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
+        vi.mocked(navigationService.goForward)
+            .mockReturnValueOnce('modules')
+            .mockReturnValueOnce(undefined);
+        vi.mocked(navigationService.popForwardAction).mockReturnValue(true);
+
+        navigationUI.init();
+        const button = document.createElement('button');
+        document.body.appendChild(button);
+
+        dispatchNavigationMouse(
+            navigationUI,
+            new MouseEvent('mousedown', {
+                button: 4,
+                bubbles: true,
+                cancelable: true,
+            }),
+            button,
+        );
+
+        expect(showPageSpy).toHaveBeenCalledWith('modules', null, false, true);
+        expect(navigationService.popForwardAction).not.toHaveBeenCalled();
+
+        dispatchNavigationMouse(
+            navigationUI,
+            new MouseEvent('mousedown', {
+                button: 4,
+                bubbles: true,
+                cancelable: true,
+            }),
+            button,
+        );
+
+        expect(navigationService.popForwardAction).toHaveBeenCalledTimes(1);
     });
 
     it('should show target page, emit navigation payload and update active sidebar state', async () => {

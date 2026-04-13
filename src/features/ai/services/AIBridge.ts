@@ -5,6 +5,7 @@ import type {
     MessageSource,
     IChunkHandler,
     IImageGenerationRequest,
+    IImageGenerationPreview,
 } from '../types/aiTypes';
 import type { Core } from '@/app/init';
 import { constructChatRequest, createMultimodalContent } from '../utils/chatRequestUtils';
@@ -89,17 +90,11 @@ export class AIBridge implements IAIBridge {
                 this._unlisteners.push(unlistenLog);
 
                 const unlistenChunk = this._transport.onStream((payload: string) => {
-                    tracer.debug(
-                        `[AIBridge] Stream chunk received (${String(payload.length)} chars)`,
-                    );
                     this._broadcastChunk(payload);
                 });
                 this._unlisteners.push(unlistenChunk);
 
                 const unlistenThought = this._transport.onThought((payload: string) => {
-                    tracer.debug(
-                        `[AIBridge] Thought chunk received (${String(payload.length)} chars)`,
-                    );
                     this._broadcastThought(payload);
                 });
                 this._unlisteners.push(unlistenThought);
@@ -129,12 +124,18 @@ export class AIBridge implements IAIBridge {
         if (started && this._core?.tauriProvider.isTauri() === true) {
             this._resetInactivityTimer();
             // Free up VRAM: Stop text if starting image, stop image if starting text
-            const isImageProvider = providerId === 'sdcpp' || providerId === 'stable-diffusion';
+            const isImageProvider = this._isImageProvider(providerId);
+            const isManagedLocalImageEngine = this._isManagedLocalImageEngine(providerId);
             try {
                 if (isImageProvider) {
                     await this._core.tauriProvider.invoke('stop_engine_slot', {
                         capability: 'text',
                     });
+                    if (!isManagedLocalImageEngine) {
+                        await this._core.tauriProvider.invoke('stop_engine_slot', {
+                            capability: 'image',
+                        });
+                    }
                 } else {
                     await this._core.tauriProvider.invoke('stop_engine_slot', {
                         capability: 'image',
@@ -222,7 +223,7 @@ export class AIBridge implements IAIBridge {
             this._resetInactivityTimer();
 
             const providerId = this._manager.activeProviderId;
-            const isImageProvider = providerId === 'sdcpp' || providerId === 'stable-diffusion';
+            const isImageProvider = this._isImageProvider(providerId);
 
             if (isImageProvider) {
                 return await this._sendImageMessage(providerId, text, source);
@@ -278,10 +279,12 @@ export class AIBridge implements IAIBridge {
 
         const imageResponse = await this._transport.generateImage(request);
         if (imageResponse.ok && imageResponse.images && imageResponse.images.length > 0) {
-            const markdownImage = `![Generated Image](${imageResponse.images[0]})`;
             this._core?.chatController.randomizeGreeting();
-            this._broadcastResponse(markdownImage, source);
-            return { ok: true, text: markdownImage };
+            return {
+                ok: true,
+                text: '',
+                images: imageResponse.images,
+            };
         }
 
         return this._handleTransportResponse(imageResponse, source);
@@ -497,6 +500,36 @@ export class AIBridge implements IAIBridge {
         }
     }
 
+    public async cancelImageGeneration(): Promise<void> {
+        if (this._core?.tauriProvider.isTauri() !== true) {
+            return;
+        }
+
+        const providerId = this._manager.activeProviderId;
+        if (providerId === null || !this._isImageProvider(providerId)) {
+            return;
+        }
+
+        await this._core.tauriProvider.invoke('cancel_image_generation', {
+            provider: providerId,
+        });
+    }
+
+    public async getImageGenerationPreview(): Promise<IImageGenerationPreview | null> {
+        if (this._core?.tauriProvider.isTauri() !== true) {
+            return null;
+        }
+
+        try {
+            return await this._core.tauriProvider.invoke<IImageGenerationPreview | null>(
+                'get_image_generation_preview',
+            );
+        } catch (error: unknown) {
+            tracer.debug('[AIBridge] Image preview fetch skipped:', error);
+            return null;
+        }
+    }
+
     public async rewindLastTurn(): Promise<string | null> {
         if (this._core?.tauriProvider.isTauri() !== true) {
             return null;
@@ -520,6 +553,16 @@ export class AIBridge implements IAIBridge {
             activeProviderId: this._manager.activeProviderId,
             isRunning: this._manager.isActive(),
         };
+    }
+
+    private _isImageProvider(providerId: string): boolean {
+        return (
+            providerId === 'sdcpp' || providerId === 'stable-diffusion' || providerId === 'comfyui'
+        );
+    }
+
+    private _isManagedLocalImageEngine(providerId: string): boolean {
+        return providerId === 'sdcpp' || providerId === 'stable-diffusion';
     }
 
     public getSessionId(): string {

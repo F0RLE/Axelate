@@ -1,9 +1,14 @@
 //! Lightweight hardware probe used for runtime bundle selection and settings hints.
 
 use crate::models::system::GpuStats;
+use nvml_wrapper::{Nvml, cuda_driver_version_major, cuda_driver_version_minor};
 use serde_json::Value;
 use std::collections::HashSet;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use tokio::process::Command;
+use tokio::sync::OnceCell;
+
+static GPU_PROBE_CACHE: OnceCell<GpuInfo> = OnceCell::const_new();
 
 /// Coarse accelerator class used to map systems to release bundle families.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,6 +27,39 @@ pub enum AcceleratorClass {
     Unknown,
 }
 
+/// Coarse CPU instruction tier used to select compatible CPU release bundles.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CpuInstructionTier {
+    /// CPU supports AVX-512 foundation instructions.
+    Avx512,
+    /// CPU supports AVX2 instructions.
+    Avx2,
+    /// CPU supports AVX instructions.
+    Avx,
+    /// No known x86 AVX feature tier is available.
+    Baseline,
+}
+
+impl CpuInstructionTier {
+    /// Detects the best supported CPU instruction tier for the current process.
+    pub fn current() -> Self {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            if std::arch::is_x86_feature_detected!("avx512f") {
+                return Self::Avx512;
+            }
+            if std::arch::is_x86_feature_detected!("avx2") {
+                return Self::Avx2;
+            }
+            if std::arch::is_x86_feature_detected!("avx") {
+                return Self::Avx;
+            }
+        }
+
+        Self::Baseline
+    }
+}
+
 /// Public system GPU probe result used by the frontend and downloader.
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
 pub struct GpuInfo {
@@ -35,6 +73,10 @@ pub struct GpuInfo {
     pub backend: String,
     /// Total GPU memory in megabytes, when available.
     pub memory: u32,
+    /// CUDA driver major version, when available.
+    pub cuda_driver_major: Option<u32>,
+    /// CUDA driver minor version, when available.
+    pub cuda_driver_minor: Option<u32>,
 }
 
 impl GpuInfo {
@@ -99,6 +141,13 @@ pub fn merge_probe_with_runtime_stats(mut probe: GpuInfo, gpu: Option<&GpuStats>
 
 /// Probes the current system for a primary GPU and a matching runtime hint.
 pub async fn probe_gpu_info() -> GpuInfo {
+    GPU_PROBE_CACHE
+        .get_or_init(probe_gpu_info_uncached)
+        .await
+        .clone()
+}
+
+async fn probe_gpu_info_uncached() -> GpuInfo {
     #[cfg(target_os = "windows")]
     {
         probe_gpu_from_names(probe_windows_gpu_names().await)
@@ -139,41 +188,45 @@ fn default_probe() -> GpuInfo {
         cuda: false,
         backend: "cpu".to_string(),
         memory: 0,
+        cuda_driver_major: None,
+        cuda_driver_minor: None,
     }
 }
 
 async fn probe_windows_gpu_names() -> Option<Vec<String>> {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-Command",
-                "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
-            ])
-            .output()
+        tokio::task::spawn_blocking(query_windows_gpu_names_wmi)
             .await
-            .ok()?;
-
-        if !output.status.success() {
-            return None;
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let names = stdout
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(str::to_string)
-            .collect::<Vec<_>>();
-
-        Some(names)
+            .ok()?
     }
 
     #[cfg(not(target_os = "windows"))]
     {
         None
     }
+}
+
+#[cfg(target_os = "windows")]
+fn query_windows_gpu_names_wmi() -> Option<Vec<String>> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct VideoController {
+        name: Option<String>,
+    }
+
+    let connection = wmi::WMIConnection::new().ok()?;
+    let controllers: Vec<VideoController> = connection
+        .raw_query("SELECT Name FROM Win32_VideoController")
+        .ok()?;
+    let names = controllers
+        .into_iter()
+        .filter_map(|controller| controller.name)
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect::<Vec<_>>();
+
+    Some(names)
 }
 
 #[cfg(target_os = "macos")]
@@ -203,20 +256,24 @@ async fn probe_linux_lspci_names() -> Option<Vec<String>> {
 
 #[cfg(target_os = "linux")]
 async fn probe_linux_drm_names() -> Option<Vec<String>> {
-    let output = Command::new("sh")
-        .args([
-            "-c",
-            "for f in /sys/class/drm/card*/device/vendor /sys/class/drm/renderD*/device/vendor; do [ -f \"$f\" ] && cat \"$f\"; done",
-        ])
-        .output()
-        .await
-        .ok()?;
+    let mut entries = tokio::fs::read_dir("/sys/class/drm").await.ok()?;
+    let mut names = Vec::new();
 
-    if !output.status.success() {
-        return None;
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let filename = entry.file_name().to_string_lossy().to_string();
+        if !(filename.starts_with("card") || filename.starts_with("renderD")) {
+            continue;
+        }
+
+        let vendor_path = entry.path().join("device").join("vendor");
+        if let Ok(vendor_id) = tokio::fs::read_to_string(vendor_path).await {
+            if let Some(name) = linux_vendor_name(vendor_id.trim()) {
+                names.push(name.to_string());
+            }
+        }
     }
 
-    parse_linux_vendor_ids(&String::from_utf8_lossy(&output.stdout))
+    normalize_names(names)
 }
 
 fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
@@ -257,6 +314,11 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
     };
 
     let detected = !is_software_adapter(&primary_name);
+    let (cuda_driver_major, cuda_driver_minor) = if backend == "cuda" {
+        detect_cuda_driver_version()
+    } else {
+        (None, None)
+    };
     GpuInfo {
         detected,
         name: primary_name,
@@ -267,7 +329,22 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
             "cpu".to_string()
         },
         memory: 0,
+        cuda_driver_major,
+        cuda_driver_minor,
     }
+}
+
+fn detect_cuda_driver_version() -> (Option<u32>, Option<u32>) {
+    let Ok(nvml) = Nvml::init() else {
+        return (None, None);
+    };
+    let Ok(version) = nvml.sys_cuda_driver_version() else {
+        return (None, None);
+    };
+
+    let major = u32::try_from(cuda_driver_version_major(version)).ok();
+    let minor = u32::try_from(cuda_driver_version_minor(version)).ok();
+    (major, minor)
 }
 
 fn gpu_name_priority(name: &str) -> i32 {
@@ -388,15 +465,22 @@ fn parse_linux_vendor_ids(raw: &str) -> Option<Vec<String>> {
     let mut names = Vec::new();
 
     for line in raw.lines().map(str::trim).filter(|line| !line.is_empty()) {
-        match line.to_ascii_lowercase().as_str() {
-            "0x10de" => names.push("NVIDIA GPU".to_string()),
-            "0x1002" | "0x1022" => names.push("AMD GPU".to_string()),
-            "0x8086" => names.push("Intel GPU".to_string()),
-            _ => {}
+        if let Some(name) = linux_vendor_name(line) {
+            names.push(name.to_string());
         }
     }
 
     normalize_names(names)
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn linux_vendor_name(vendor_id: &str) -> Option<&'static str> {
+    match vendor_id.to_ascii_lowercase().as_str() {
+        "0x10de" => Some("NVIDIA GPU"),
+        "0x1002" | "0x1022" => Some("AMD GPU"),
+        "0x8086" => Some("Intel GPU"),
+        _ => None,
+    }
 }
 
 #[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(dead_code))]
@@ -413,6 +497,7 @@ fn normalize_names(names: Vec<String>) -> Option<Vec<String>> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
 
@@ -481,6 +566,8 @@ mod tests {
             cuda: false,
             backend: "cuda".to_string(),
             memory: 0,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let gpu = GpuStats {
             usage: 0,

@@ -106,6 +106,12 @@ export default defineConfig({
                 drop_console: true,
                 drop_debugger: true,
             },
+            mangle: {
+                toplevel: true,
+            },
+            format: {
+                comments: false,
+            },
         },
         sourcemap: Boolean(process.env['TAURI_DEBUG']),
 

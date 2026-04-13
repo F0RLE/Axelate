@@ -5,6 +5,7 @@
 
 interface IParticlesGlobal {
     screen: Screen;
+    __TAURI_INTERNALS__?: unknown;
 }
 
 export class Particles {
@@ -45,6 +46,8 @@ export class Particles {
 
     constructor() {
         this._canvas = document.createElement('canvas');
+        this._canvas.className = 'particles-layer';
+        this._canvas.setAttribute('aria-hidden', 'true');
         const context = this._canvas.getContext('2d', { alpha: true });
         if (!context) {
             throw new Error('Failed to get 2D context');
@@ -59,7 +62,7 @@ export class Particles {
         this._canvas.style.width = '100%';
         this._canvas.style.height = '100%';
         this._canvas.style.pointerEvents = 'none';
-        this._canvas.style.zIndex = '-1'; /* Behind body content */
+        this._canvas.style.zIndex = '0'; /* Visible to backdrop-filter, still behind app UI */
 
         // Initialize World to Physical Device Pixels
         const g = globalThis as unknown as IParticlesGlobal;
@@ -73,6 +76,12 @@ export class Particles {
         this._height = maxDim;
 
         this._resize();
+
+        const isTauriRuntime = (globalThis as IParticlesGlobal).__TAURI_INTERNALS__ !== undefined;
+        if (!isTauriRuntime) {
+            this._canvas.style.display = 'none';
+            return;
+        }
 
         this._init();
         this._bindEvents();

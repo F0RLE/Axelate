@@ -1,18 +1,25 @@
 import { BaseComponent } from '../ui/BaseComponent';
 import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
+import { type WindowService } from '../services/WindowService';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { mountLogos } from '@/assets/logos';
 import { APP_PAGES } from '@/shared/config/AppPages';
 
 export class SidebarUI extends BaseComponent {
+    private static readonly _AUTO_COMPACT_ZOOM_THRESHOLD = 3;
+    private static readonly _AUTO_COMPACT_WARNING_LEAD_STEPS = 0;
+    private static readonly _AUTO_COMPACT_ZOOM_STEP = 0.1;
+    private static readonly _AUTO_COMPACT_THRESHOLD_FACTOR = 0.5;
     private _sidebar: HTMLElement | null = null;
     private _isCollapsed = false;
+    private _isAutoCompact = false;
     private _snappingTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor(
         private readonly _state: UISettingsService,
         private readonly _soundService?: SoundService,
+        private readonly _windowService?: WindowService,
     ) {
         super();
     }
@@ -46,6 +53,18 @@ export class SidebarUI extends BaseComponent {
 
         // Ensure logos are mounted after template injection
         mountLogos();
+
+        const signal = this._abortController?.signal;
+        if (signal) {
+            globalThis.addEventListener(
+                'resize',
+                () => {
+                    this._updateAutoCompactState();
+                    this._applySidebarWidth();
+                },
+                { signal },
+            );
+        }
     }
 
     /**
@@ -80,7 +99,7 @@ export class SidebarUI extends BaseComponent {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'nav-btn';
-            if (page.id === 'debug') btn.classList.add('debug-trigger');
+            if (page.id === 'console') btn.classList.add('console-trigger');
             btn.dataset['page'] = page.id;
 
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -112,7 +131,8 @@ export class SidebarUI extends BaseComponent {
      */
     private _restoreState(): void {
         this._isCollapsed = this._state.getSidebarCollapsed();
-        this._setSidebarWidth(this._isCollapsed ? 80 : 280);
+        this._updateAutoCompactState();
+        this._applySidebarWidth();
     }
 
     /**
@@ -140,7 +160,8 @@ export class SidebarUI extends BaseComponent {
                 this._isCollapsed = !this._isCollapsed;
 
                 document.body.classList.add('snapping');
-                this._setSidebarWidth(targetWidth);
+                this._updateAutoCompactState();
+                this._applySidebarWidth();
 
                 // Update state
                 this._state.setSidebarWidth(targetWidth);
@@ -181,8 +202,10 @@ export class SidebarUI extends BaseComponent {
      * Sets the actual width of the sidebar and updates CSS variables.
      * @sideeffect Modifies CSS custom properties and styles
      */
-    private _setSidebarWidth(width: number): void {
+    private _applySidebarWidth(): void {
         if (this._sidebar === null) return;
+
+        const width = this._isCollapsed || this._isAutoCompact ? 80 : 280;
 
         if (width < 100) {
             this._sidebar.classList.add('collapsed');
@@ -190,8 +213,32 @@ export class SidebarUI extends BaseComponent {
             this._sidebar.classList.remove('collapsed');
         }
 
+        this._sidebar.classList.toggle('auto-compact', this._isAutoCompact);
         document.documentElement.style.setProperty('--sidebar-width', `${String(width)}px`);
         this._sidebar.style.width = `${String(width)}px`;
+    }
+
+    private _updateAutoCompactState(): void {
+        const zoom = this._state.getZoomLevel();
+        const config = this._windowService?.getConfig();
+
+        if (config !== null && config !== undefined) {
+            const leadZoom =
+                zoom +
+                SidebarUI._AUTO_COMPACT_WARNING_LEAD_STEPS * SidebarUI._AUTO_COMPACT_ZOOM_STEP;
+            const effectiveWidth = globalThis.innerWidth / leadZoom;
+            const effectiveHeight = globalThis.innerHeight / leadZoom;
+            const compactWarningWidth =
+                config.thresholds.warningWidth * SidebarUI._AUTO_COMPACT_THRESHOLD_FACTOR;
+            const compactWarningHeight =
+                config.thresholds.warningHeight * SidebarUI._AUTO_COMPACT_THRESHOLD_FACTOR;
+
+            this._isAutoCompact =
+                effectiveWidth < compactWarningWidth || effectiveHeight < compactWarningHeight;
+            return;
+        }
+
+        this._isAutoCompact = zoom >= SidebarUI._AUTO_COMPACT_ZOOM_THRESHOLD;
     }
 
     private _resizeObserver: ResizeObserver | null = null;
@@ -229,6 +276,9 @@ export class SidebarUI extends BaseComponent {
         });
 
         this._resizeObserver.observe(this._sidebar);
+        this._updateAutoCompactState();
+        this._applySidebarWidth();
+        this._checkMonitorVisibility();
     }
 
     private _checkMonitorVisibility(): void {
@@ -260,17 +310,30 @@ export class SidebarUI extends BaseComponent {
 
         const requiredSpace =
             logoH + menuH + bottomH + this._minMonitorHeight + paddingAndMargins + autoMarginBuffer;
+        const overflowAllowancePx = Math.max(32, Math.round(bottomH * 0.6));
+        const spaceDeficit = requiredSpace - sidebarHeight;
+        const overflowAmount = Math.max(0, this._sidebar.scrollHeight - sidebarHeight);
+        this._updateAutoCompactState();
+        this._applySidebarWidth();
 
         // If currently showing but sidebar has scrollbar (clipping!), hide it immediately
-        const isOverflowing = this._sidebar.scrollHeight > sidebarHeight + 2;
         const isVisible = !monitor.classList.contains('adaptive-hidden');
 
-        if (isVisible && (sidebarHeight < requiredSpace || isOverflowing)) {
+        if (
+            isVisible &&
+            (spaceDeficit > overflowAllowancePx || overflowAmount > overflowAllowancePx)
+        ) {
             monitor.classList.add('adaptive-hidden');
+            this._sidebar.classList.add('monitor-hidden');
             tracer.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
-        } else if (!isVisible && sidebarHeight >= requiredSpace + 10) {
+        } else if (
+            !isVisible &&
+            spaceDeficit <= overflowAllowancePx / 2 &&
+            overflowAmount <= overflowAllowancePx / 2
+        ) {
             // Only bring back if there's substantial extra space to avoid flickering
             monitor.classList.remove('adaptive-hidden');
+            this._sidebar.classList.remove('monitor-hidden');
             tracer.debug('[SidebarUI] Showing monitor (space restored)');
         }
     }

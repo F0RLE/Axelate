@@ -4,6 +4,7 @@ import type {
     MessageSource,
     MessageHandler,
     IChunkHandler,
+    IImageGenerationPreview,
 } from './aiTypes';
 
 export interface IAIBridge {
@@ -19,6 +20,8 @@ export interface IAIBridge {
     stopProvider(): void;
     clearHistory(): Promise<void>;
     getHistory(): Promise<IChatMessage[]>;
+    cancelImageGeneration(): Promise<void>;
+    getImageGenerationPreview(): Promise<IImageGenerationPreview | null>;
     rewindLastTurn(): Promise<string | null>;
     getState(): { activeProviderId: string | null; isRunning: boolean };
     onMessage(listenerId: string, handler: MessageHandler): void;

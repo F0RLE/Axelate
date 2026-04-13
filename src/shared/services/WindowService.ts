@@ -58,11 +58,16 @@ export class WindowService {
     private _windowListenersInitialized = false;
     private _webWheelHandler: ((e: WheelEvent) => void) | null = null;
     private _isDestroyed = false;
+    private _beforeClose: (() => Promise<void>) | null = null;
     private readonly _boundWindowResize = () => {
         this._scheduleSaveWindowState();
     };
 
     constructor(private readonly _bridge: IBridge) {}
+
+    public setBeforeCloseHook(hook: (() => Promise<void>) | null): void {
+        this._beforeClose = hook;
+    }
 
     /**
      * Initializes the window service by retrieving the current zoom level from the host.
@@ -165,6 +170,7 @@ export class WindowService {
      */
     public async close(): Promise<void> {
         if (this._bridge.isTauri()) {
+            await this._beforeClose?.();
             await this._bridge.invoke('close_window');
         } else {
             globalThis.close();
@@ -200,15 +206,7 @@ export class WindowService {
         for (let i = 0; i < maxRetries; i++) {
             try {
                 await this._bridge.invoke('show_window');
-
-                // Try to set focus, but don't fail if command missing
-                try {
-                    await this._bridge.invoke('set_focus');
-                } catch {
-                    // set_focus command not found - skipping focus step
-                }
-
-                return; // Success
+                return;
             } catch (e) {
                 tracer.warn(
                     `[WindowService] show_window attempt ${(i + 1).toString()} failed: ${String(e)}`,

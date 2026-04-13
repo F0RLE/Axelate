@@ -23,6 +23,7 @@ export interface ICustomModel {
 
 export class SettingsService {
     private settings: ISettings = {} as ISettings;
+    private _gpuInfoPromise: Promise<IGpuInfo> | null = null;
 
     constructor(private readonly _tauri: TauriProvider) {}
 
@@ -71,12 +72,17 @@ export class SettingsService {
     }
 
     public async loadGpuInfo(): Promise<IGpuInfo> {
-        try {
-            return await this._tauri.invoke<IGpuInfo>('get_gpu_info');
-        } catch (e) {
-            tracer.error('[SettingsService] Failed to load GPU info:', e);
-            return { detected: false };
+        if (this._gpuInfoPromise !== null) {
+            return await this._gpuInfoPromise;
         }
+
+        this._gpuInfoPromise = this._tauri.invoke<IGpuInfo>('get_gpu_info').catch((e) => {
+            tracer.error('[SettingsService] Failed to load GPU info:', e);
+            this._gpuInfoPromise = null;
+            return { detected: false };
+        });
+
+        return await this._gpuInfoPromise;
     }
 
     public getSettings(): ISettings {

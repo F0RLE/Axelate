@@ -32,6 +32,7 @@
         "noUncheckedIndexedAccess": true,
         "noPropertyAccessFromIndexSignature": true,
         "exactOptionalPropertyTypes": true,
+        "ignoreDeprecations": "6.0",
 
         "forceConsistentCasingInFileNames": true,
         "noFallthroughCasesInSwitch": true,

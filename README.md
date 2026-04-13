@@ -23,8 +23,6 @@
     <a href="docs/en/architecture.md"><img src="https://img.shields.io/badge/Documentation-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
   </p>
   <p>
-    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.5-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
-    &nbsp;
     <img src="https://img.shields.io/badge/Status-Public_Beta-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
   </p>
 
@@ -32,7 +30,7 @@
 </div>
 
 > [!IMPORTANT]
-> **Axelate is currently in Public Beta (v0.1.5 / 0.1.x).**
+> Axelate is currently in public beta.
 >
 > This is pre-release software. Features may change, and current workflows are still being hardened.
 
@@ -94,8 +92,10 @@ Axelate uses Rust for domain logic and a thin TypeScript shell for the desktop U
 Axelate/
 ├── src/         frontend app and npm dependencies
 ├── src-tauri/   Rust backend and Tauri configuration
+├── scripts/     shared cross-platform workflow runner
+├── launchers/   optional double-click entrypoints by platform
 ├── docs/        project documentation
-└── .github/     scripts, workflows, hooks
+└── .github/     workflows, templates, legacy PowerShell helpers
 ```
 
 `src/` is the only npm project with real dependencies. The root `package.json` only proxies commands.
@@ -105,8 +105,42 @@ Axelate/
 ```bash
 npm run install-deps
 npm run dev
-npm run verify-all
+npm run dev:webview
+npm run dev:inspect
+npm run dev:release-like
+npm run verify
+npm run build
+npm run test
 ```
+
+`npm run dev`, `npm run dev:webview`, `npm run dev:app`, and `npm run tauri:dev` start the frontend inside the Tauri desktop WebView with Rust IPC enabled.
+`npm run dev:inspect` also opens desktop DevTools and enables WebView remote debugging on port `9223` for automation tools.
+`npm run dev:release-like` rebuilds the frontend and starts Tauri against the built static assets without Vite HMR.
+Use `launchers/*/dev-app.*` for desktop runtime checks and `launchers/*/dev-inspect.*` when you want deep inspection.
+Use `launchers/*/dev-release-like.*` when you want a closer-to-release desktop smoke test.
+
+On Windows, install WebView2 Runtime, Windows SDK, and Microsoft C++ Build Tools first.
+Portable Node/Rust toolchains are supported through `AXELATE_DEPS_DIR`, `./.deps`, or `%USERPROFILE%/Axelate-deps`.
+Double-click launchers are grouped under `launchers/windows`, `launchers/macos`, and `launchers/linux`.
+Release packaging uses the same Windows prerequisites and will only pass after `npm run verify` is green.
+
+### Current product scope
+
+Today Axelate is:
+
+- a launcher for local AI engines
+- an API-backed AI chat shell
+- a unified desktop UI for downloads, settings, monitoring, and console tooling
+
+The `Marketplace` page already exists in the UI shell, but marketplace purchase, entitlement, and managed remote execution are still roadmap work.
+
+### More docs
+
+- [Getting Started](docs/en/getting-started.md)
+- [Architecture](docs/en/architecture.md)
+- [Roadmap](docs/en/ROADMAP.md)
+- [Automation](docs/en/AUTOMATION.md)
+- [Security Hardening](docs/en/SECURITY_HARDENING.md)
 
 ---
 

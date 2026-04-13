@@ -6,8 +6,15 @@
 import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types/coreTypes';
 import type { DownloadProgress } from '../types/downloaderTypes';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import DOMPurify from 'dompurify';
 
 export class DownloadUI {
+    private static readonly _purifyConfig = {
+        ALLOWED_TAGS: ['div', 'span', 'button', 'svg', 'use'],
+        ALLOWED_ATTR: ['aria-label', 'class', 'href', 'style', 'title'],
+        ALLOW_DATA_ATTR: false,
+    };
+
     private static readonly SELECTORS = {
         PROGRESS_BAR: 'downloads-progress-bar',
         PROGRESS_TEXT: 'downloads-progress-text',
@@ -146,9 +153,12 @@ export class DownloadUI {
     ): void {
         if (els.mainCard) els.mainCard.classList.toggle('hidden', !hasActive);
         if (els.infoCard) els.infoCard.classList.add('hidden');
-        if (els.downloadsBody) els.downloadsBody.classList.toggle('empty-state', !hasActive);
+        if (els.downloadsBody) {
+            els.downloadsBody.classList.toggle('empty-state', !hasActive);
+            els.downloadsBody.classList.toggle('hidden', !hasActive);
+        }
         if (els.downloadsHeader) {
-            els.downloadsHeader.classList.toggle('compact', hasActive);
+            els.downloadsHeader.classList.toggle('hidden', hasActive);
             els.downloadsHeader.classList.toggle('full', !hasActive);
         }
         if (els.pageDownloads) els.pageDownloads.classList.toggle('active-download', hasActive);
@@ -347,6 +357,7 @@ export class DownloadUI {
 
         // Ensure the dynamic list container exists
         this._ensureDynamicList();
+        this.renderDownloadsProgress({ hasActive: false });
 
         this._boundHandleUpdate = (e: Event) => {
             const payload = (e as CustomEvent).detail as ModuleDownloadState & {
@@ -445,7 +456,9 @@ export class DownloadUI {
 
         if (this._activeDownloads.size === 0) {
             this._clearDynamicList(list);
-            this._hideLegacyDownloadCards(emptyText, mainCard, infoCard);
+            if (emptyText !== null) emptyText.classList.add('hidden');
+            if (mainCard !== null) mainCard.style.display = 'none';
+            if (infoCard !== null) infoCard.classList.add('hidden');
             return;
         }
 
@@ -604,7 +617,8 @@ export class DownloadUI {
             state.status === 'connecting' ||
             state.status === 'extracting';
 
-        card.innerHTML = `
+        card.innerHTML = DOMPurify.sanitize(
+            `
             <div class="downloads-card-header">
                 <div class="downloads-meta-section">
                     <div class="downloads-icon-wrapper">
@@ -652,7 +666,9 @@ export class DownloadUI {
                     <div class="downloads-stat-value">${this._formatSpeed(speed)}</div>
                 </div>
             </div>
-        `;
+        `,
+            DownloadUI._purifyConfig,
+        );
 
         // Wire cancel button
         if (isCancellable) {

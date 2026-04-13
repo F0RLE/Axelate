@@ -142,6 +142,10 @@ export class CatalogService {
                 repoUrl: item.repoUrl ?? '',
                 expectedHash: item.expectedHash ?? '',
                 dlType: item.dlType ?? undefined,
+                comingSoon: (item as ModuleItem & { comingSoon?: boolean }).comingSoon === true,
+                managedExternally:
+                    (item as ModuleItem & { managedExternally?: boolean }).managedExternally ===
+                    true,
                 version: item.version ?? '1.0.0',
                 installed: (item as ModuleItem & { installed?: boolean }).installed ?? false,
             } as IApp;
@@ -164,6 +168,15 @@ export class CatalogService {
             const isApi =
                 app.type === 'api' || config.apiProviders.some((p: ApiProvider) => p.id === app.id);
             const installedModule = installedMap.get(app.id.toLowerCase());
+
+            if (app.comingSoon === true) {
+                app.installed = false;
+                return;
+            }
+
+            if (app.managedExternally === true) {
+                app.installed = true;
+            }
 
             if (isApi) {
                 app.installed = true;

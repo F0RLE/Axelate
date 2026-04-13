@@ -54,7 +54,7 @@ This document is intentionally short. Code and config files are authoritative wh
 Run from the repository root:
 
 ```bash
-npm run verify-all
+npm run verify
 ```
 
 This is the required gate for the current repository.

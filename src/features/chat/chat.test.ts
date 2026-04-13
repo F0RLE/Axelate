@@ -51,6 +51,7 @@ vi.mock('./services/ChatFileHandler', () => ({
 }));
 
 import { ChatController } from './chat';
+import type { IChatResponse } from './types/chatTypes';
 import { getTokenCount } from './utils/chatUtils';
 import { chatFileHandler } from './services/ChatFileHandler';
 
@@ -58,10 +59,8 @@ type ChatControllerTestAccess = {
     _chatHistory: Array<{ role: string; content: unknown; thought_signature?: string }>;
     _voice: { stop: ReturnType<typeof vi.fn> };
     _lockUI: (input: HTMLTextAreaElement | null) => unknown;
-    _handleChatResponse: (
-        response: { ok: boolean; message?: string; thought_signature?: string },
-        streamingHandle: null,
-    ) => Promise<void>;
+    _autoResizeInput: () => void;
+    _handleChatResponse: (response: IChatResponse, streamingHandle: null) => Promise<void>;
     _checkAIActive: (messageId: string | null) => Promise<boolean>;
     _tryAutoStartAI: () => Promise<boolean>;
     _loadHistory: () => Promise<void>;
@@ -175,6 +174,44 @@ describe('ChatController', () => {
         ]);
     });
 
+    it('should render generated images as media-first assistant replies', async () => {
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+
+        await controller._handleChatResponse(
+            {
+                ok: true,
+                reply: {
+                    text: 'caption',
+                    images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+                },
+            },
+            null,
+        );
+
+        expect(appendMessage).toHaveBeenCalledWith('assistant', 'caption', {
+            images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+        });
+        expect(controller._chatHistory).toEqual([
+            {
+                role: 'assistant',
+                content: [
+                    {
+                        type: 'image_url',
+                        image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+                    },
+                    {
+                        type: 'text',
+                        text: 'caption',
+                    },
+                ],
+            },
+        ]);
+    });
+
     it('should restore multimodal history without flattening stored content', async () => {
         aiBridge.getHistory.mockResolvedValueOnce([
             {
@@ -232,6 +269,27 @@ describe('ChatController', () => {
         );
     });
 
+    it('should localize image VRAM allocation errors', () => {
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+
+        const message = controller._getFriendlyErrorMessage(
+            '[ERROR] ggml_backend_cuda_buffer_type_alloc_buffer: allocating 4900.07 MiB on device 0: cudaMalloc failed: out of memory',
+            'sdcpp',
+        );
+
+        expect(message).toBe(
+            'Not enough GPU memory to generate the image. Lower image size, steps, or batch size, or use a smaller model.',
+        );
+        expect(i18n.t).toHaveBeenCalledWith(
+            'ui.chat.error.image_vram',
+            'Not enough GPU memory to generate the image. Lower image size, steps, or batch size, or use a smaller model.',
+        );
+    });
+
     it('should initialize only once', () => {
         const controller = new ChatController(
             aiBridge as never,
@@ -276,5 +334,26 @@ describe('ChatController', () => {
 
         expect(input?.value).toBe('keep me');
         expect(input?.disabled).toBe(true);
+    });
+
+    it('should enable textarea scrolling when input exceeds max height', () => {
+        document.body.innerHTML = '<textarea id="chat-input"></textarea>';
+
+        const controller = new ChatController(
+            aiBridge as never,
+            i18n as never,
+            soundService as never,
+        ) as unknown as ChatControllerTestAccess;
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement;
+
+        Object.defineProperty(input, 'scrollHeight', {
+            configurable: true,
+            value: 320,
+        });
+
+        controller._autoResizeInput();
+
+        expect(input.style.height).toBe('200px');
+        expect(input.style.overflowY).toBe('auto');
     });
 });

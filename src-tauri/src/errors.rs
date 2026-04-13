@@ -11,7 +11,6 @@ use thiserror::Error;
 
 /// Application-level errors
 #[derive(Error, Debug, Clone, specta::Type)]
-#[serde(tag = "type", content = "payload")]
 pub enum AppError {
     /// Validation error (invalid input, malformed data)
     #[error("Validation error: {0}")]

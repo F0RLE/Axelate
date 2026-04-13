@@ -19,7 +19,7 @@ html {
 
 body {
     font-family: var(--app-font-family);
-    background: transparent; /* Allow particles (z-index -1) to show through */
+    background: transparent; /* Allow particles layer to show through */
     color: var(--text-primary);
     margin: 0;
     padding: 0;
@@ -33,6 +33,13 @@ body {
     /* Changed for splash screen handling */
     transition: opacity 0.5s ease-in;
     position: relative;
+}
+
+.particles-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
 }
 
 body::before {

@@ -54,6 +54,31 @@ describe('CatalogService', () => {
             expect(catalog.ai[0]?.type).toBe('api'); // is mapped to api if no type provided in AI
         });
 
+        it('should preserve comingSoon placeholders as non-installed AI apps', async () => {
+            const mockConfig = createMockAppConfig({
+                catalog: {
+                    ai: [
+                        {
+                            id: 'future-image',
+                            name: 'Future Image',
+                            type: 'local',
+                            comingSoon: true,
+                        },
+                    ],
+                    services: [],
+                },
+            });
+
+            setupBridgeMocks(mockBridge, mockConfig);
+
+            await service.loadCatalog();
+
+            const app = service.getAppById('future-image');
+            expect(app?.comingSoon).toBe(true);
+            expect(app?.installed).toBe(false);
+            expect(app?.type).toBe('local');
+        });
+
         it('should fallback to FALLBACK_CONFIG if config is empty or invalid', async () => {
             const invalidConfig = createMockAppConfig();
 

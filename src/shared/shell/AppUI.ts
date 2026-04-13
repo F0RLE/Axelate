@@ -541,6 +541,10 @@ export class AppUI {
     // _createAppCard removed (delegated to ModuleCardRenderer)
 
     private async _handleAppCardClick(e: MouseEvent, app: IApp, category: string): Promise<void> {
+        if (this._isComingSoonApp(app)) {
+            this._showComingSoonToast();
+            return;
+        }
         if (await this._tryDeleteAction(e, app, category)) return;
         if (await this._tryDownloadAction(e, app, category)) return;
         this._performSelectionAction(category, app);
@@ -558,6 +562,11 @@ export class AppUI {
 
     private async _tryDownloadAction(e: MouseEvent, app: IApp, category: string): Promise<boolean> {
         const isApi = this._platformService.isApiModule(app);
+
+        if (this._isComingSoonApp(app)) {
+            this._showComingSoonToast();
+            return true;
+        }
 
         // Any click on an uninstalled local app should trigger download, not selection
         if (!isApi && app.installed !== true) {
@@ -621,6 +630,11 @@ export class AppUI {
     }
 
     private _performSelectionAction(category: string, app: IApp): void {
+        if (this._isComingSoonApp(app)) {
+            this._showComingSoonToast();
+            return;
+        }
+
         const win = getGlobalWin();
         const alreadySelected = this._selectedApps.get(category)?.id === app.id;
 
@@ -894,6 +908,23 @@ export class AppUI {
     // _markCardAsInstalled delegated
     private _markCardAsInstalled(card: HTMLElement, app: IApp): void {
         this._cardRenderer.markCardAsInstalled(card, app, (c, a) => this._configureActionBtn(c, a));
+    }
+
+    private _isComingSoonApp(app: IApp): boolean {
+        return app.comingSoon === true;
+    }
+
+    private _showComingSoonToast(): void {
+        const win = getGlobalWin();
+        this.showToast(
+            typeof win.t === 'function'
+                ? win.t(
+                      'ui.launcher.module.coming_soon_detail',
+                      'This integration is planned and will arrive in a future update.',
+                  )
+                : 'This integration is planned and will arrive in a future update.',
+            'info',
+        );
     }
 
     private _configureActionBtn(card: HTMLElement, app: IApp): void {

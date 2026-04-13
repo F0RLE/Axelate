@@ -83,7 +83,7 @@ export const svgIcons = `
                 viewBox="0 0 24 24"
                 fill="currentColor"
             >
-                <path d="M6 7h2v2H6zm14 0h2v10h-2zM8 5h12v2H8zM4 9h2v2H4zm-2 2h2v2H2zm2 2h2v2H4zm2 2h2v2H6zm2 2h12v2H8zm6-6h2v2h-2zm2 2h2v2h-2zm0-4h2v2h-2zm-4 4h2v2h-2zm0-4h2v2h-2z"></path>
+                <path d="M9 3h6v2h5v2h-1v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7H4V5h5V3Zm8 4H7v13h10V7Zm-6 3v7H9v-7h2Zm4 0v7h-2v-7h2Z"></path>
             </symbol>
             <symbol
                 id="icon-eye"

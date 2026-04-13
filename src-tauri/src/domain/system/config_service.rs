@@ -77,6 +77,8 @@ impl ConfigService {
                 raw_config_schema: None,
                 repo_url: None,
                 expected_hash: None,
+                coming_soon: false,
+                managed_externally: false,
                 installed: true,
                 version: "1.0.0".to_string(),
                 config_schema: Some(config_schema),

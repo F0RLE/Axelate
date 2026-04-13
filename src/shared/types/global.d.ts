@@ -40,6 +40,12 @@ interface AIBridgeInterface {
     removeListener: (_listenerId: string) => void;
     onChunk: (_listenerId: string, _handler: (_chunk: string) => void) => void;
     removeChunkListener: (_listenerId: string) => void;
+    cancelImageGeneration: () => Promise<void>;
+    getImageGenerationPreview: () => Promise<{
+        data_url: string;
+        updated_at_ms: number;
+    } | null>;
+    rewindLastTurn: () => Promise<string | null>;
     getHistory: () => Promise<ChatHistoryItem[]>;
     getState: () => { activeProviderId: string | null; isRunning: boolean };
     destroy: () => void;

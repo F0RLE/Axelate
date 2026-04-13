@@ -17,6 +17,13 @@ use crate::infrastructure::config::engine_settings::{
 };
 use tauri::State;
 
+/// Aggregated payload for the local engine settings modal.
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+pub struct EngineSettingsPayload {
+    /// Fully merged engine config for the selected engine.
+    pub config: EngineConfig,
+}
+
 #[tauri::command]
 #[specta::specta]
 /// Starts a local engine. Hot-swaps if another engine is active.
@@ -70,8 +77,11 @@ pub async fn get_engine_definitions(
     let mut defs = engine_manager.list_definitions().await;
     // Populate `installed` at request time — no extra round-trip needed from frontend
     for def in &mut defs {
-        def.installed =
-            crate::domain::engine::detector::is_engine_installed(&def.id, def.binary.as_deref());
+        def.installed = if def.managed_externally {
+            true
+        } else {
+            crate::domain::engine::detector::is_engine_installed(&def.id, def.binary.as_deref())
+        };
     }
     Ok(defs)
 }
@@ -94,6 +104,28 @@ pub async fn get_engine_config(
     }
 
     Ok(build_default_engine_config(&def))
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Returns the local engine modal payload in a single backend round-trip.
+pub async fn get_engine_settings_payload(
+    engine_id: String,
+    engine_manager: State<'_, Arc<EngineManager>>,
+) -> Result<EngineSettingsPayload, AppError> {
+    let def = engine_manager
+        .get_definition(&engine_id)
+        .await
+        .ok_or_else(|| AppError::Config(format!("Unknown engine: {engine_id}")))?;
+
+    let saved = load_engine_config_map().await?;
+    let config = if let Some(config) = saved.get(&engine_id) {
+        merge_user_engine_config(&def, config)
+    } else {
+        build_default_engine_config(&def)
+    };
+
+    Ok(EngineSettingsPayload { config })
 }
 
 #[tauri::command]

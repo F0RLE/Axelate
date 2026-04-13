@@ -36,6 +36,19 @@ jobs:
           cd src
           npm ci
 
+      - name: Frontend Security Audit
+        run: |
+          cd src
+          npm audit --audit-level=high
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked --quiet
+
+      - name: Backend Security Audit
+        run: |
+          cd src-tauri
+          cargo audit
+
       - name: Build and publish with official Tauri action
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
         env:
@@ -46,3 +59,35 @@ jobs:
           releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Axelate {0}', github.ref_name) || '' }}
           releaseDraft: false
           prerelease: false
+
+      - name: Generate release checksums
+        shell: powershell
+        run: |
+          . .\.github\scripts\common.ps1
+          $bundleDir = Join-Path $TAURI_DIR "target\release\bundle"
+          $checksumPath = Write-ReleaseChecksums -BundleDir $bundleDir
+          if (-not $checksumPath) {
+            throw "No release artifacts found for checksum generation."
+          }
+
+          Write-Host "Checksums saved: $checksumPath"
+
+      - name: Verify release hardening
+        shell: powershell
+        run: |
+          . .\.github\scripts\common.ps1
+          Invoke-ReleaseSecurityVerification
+
+      - name: Upload release checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: src-tauri/target/release/bundle/SHA256SUMS.txt
+
+      - name: Attach checksums to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: powershell
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" "src-tauri/target/release/bundle/SHA256SUMS.txt" --clobber

@@ -6,23 +6,27 @@
     gap: 1rem;
 }
 
+.ai-settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
 /* === SECTIONS & PANELS === */
 
 .ai-content-panel {
-    background:
-        linear-gradient(180deg, rgba(18, 18, 28, 0.18) 0%, rgba(18, 18, 28, 0.1) 100%),
-        rgba(var(--background-raw), 0.08);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.038);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.03);
     border-radius: 20px;
-    padding: 0.75rem;
+    padding: 0.9rem;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     width: 100%;
     box-sizing: border-box;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.025);
+    box-shadow: none;
 }
 
 /* Sections behave as transparent containers for specific layout needs */
@@ -33,7 +37,7 @@
     background: transparent;
     border: none;
     padding: 0;
-    margin-top: 1rem;
+    margin-top: 0;
     grid-column: 1 / -1; /* Wide design for all */
 }
 
@@ -48,12 +52,22 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0;
     align-items: center;
 }
 
+.api-key-link {
+    text-decoration: none;
+    cursor: pointer;
+    color: inherit;
+}
+
+.thinking-level-section.is-hidden {
+    display: none;
+}
+
 .ai-key-section .settings-card-header-center {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.35rem;
 }
 
 .ai-key-section .settings-card-header-center,
@@ -65,11 +79,11 @@
     justify-content: center;
     align-items: center;
     text-align: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.65rem;
 }
 
 .ai-key-section .encryption-note {
-    margin-top: 1rem;
+    margin-top: 0.7rem;
     font-size: 0.82rem;
     opacity: 0.6;
     font-style: italic;
@@ -126,14 +140,14 @@
 .ai-stats-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 1.5rem;
+    gap: 1rem;
     text-align: center;
     width: 100%;
-    background: rgba(255, 255, 255, 0.02);
-    padding: 1.5rem;
-    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.018);
+    padding: 1.1rem;
+    border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.038);
-    margin: 0.5rem 0 1rem 0;
+    margin: 0.1rem 0 0.2rem 0;
 }
 
 .stats-note {
@@ -189,16 +203,16 @@
         auto-fit,
         minmax(280px, 1fr)
     ); /* Increased min-width and ensured stretch */
-    gap: 1.25rem;
+    gap: 1rem;
     width: 100%;
 }
 
 .ai-model-card {
-    background: var(--glass-surface);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: none;
-    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.022);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.038);
+    border-radius: 16px;
     padding: 1rem;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     cursor: pointer;
@@ -210,12 +224,16 @@
 }
 
 .ai-model-card:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.032);
+    border-color: rgba(255, 255, 255, 0.055);
 }
 
 .ai-model-card.selected {
-    background: var(--primary);
-    box-shadow: none !important;
+    background: linear-gradient(135deg, rgba(145, 53, 255, 0.92), rgba(191, 92, 255, 0.88));
+    border-color: rgba(235, 204, 255, 0.16);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 12px 32px rgba(129, 43, 226, 0.18) !important;
     color: white;
 }
 
@@ -262,10 +280,10 @@
 
 .price-tag {
     white-space: nowrap;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.05);
     padding: 0.35rem 0.6rem;
-    border-radius: 8px;
+    border-radius: 10px;
     font-family: var(--app-font-family);
     font-size: 0.72rem;
     font-weight: 500;
@@ -317,7 +335,7 @@
 .thinking-grid {
     display: flex;
     flex-direction: row; /* Override panel column direction */
-    gap: 1rem;
+    gap: 0.85rem;
     justify-content: stretch;
     width: 100%;
 }
@@ -327,11 +345,11 @@
     cursor: pointer;
     padding: 0.75rem;
     font-family: var(--app-font-family);
-    border-radius: 12px;
-    background: var(--glass-surface);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: none;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.022);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.038);
     transition: all 0.3s ease;
     text-align: center;
     display: flex;
@@ -340,23 +358,18 @@
     justify-content: center;
 }
 
-.thinking-option-card:focus,
-.thinking-option-card:focus-visible,
-.thinking-option-card:active {
-    outline: none !important;
-    box-shadow: none !important;
-}
-
 .thinking-option-card:hover {
-    background: rgba(255, 255, 255, 0.1);
-    outline: none !important;
-    box-shadow: none !important;
+    background: rgba(255, 255, 255, 0.032);
+    border-color: rgba(255, 255, 255, 0.055);
 }
 
 .thinking-option-card.selected {
-    background: var(--primary);
+    background: linear-gradient(135deg, rgba(145, 53, 255, 0.92), rgba(191, 92, 255, 0.88));
+    border-color: rgba(235, 204, 255, 0.16);
     color: white;
-    box-shadow: none !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 12px 32px rgba(129, 43, 226, 0.18) !important;
 }
 
 .thinking-option-card.selected .thinking-option-title {
@@ -388,9 +401,10 @@
     align-items: center;
     width: 100%;
     height: 48px;
-    background: var(--glass-surface);
-    backdrop-filter: blur(4px);
-    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.022);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 14px; /* Slightly larger outer radius to nest 12px buttons */
     padding: 0 4px 0 16px;
     transition: all 0.3s var(--ease-smooth);
@@ -401,7 +415,8 @@
 }
 
 .ai-key-input-row:focus-within {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.065);
 }
 
 .ai-key-input-row input,
@@ -446,9 +461,10 @@
     display: flex !important;
     align-items: center;
     justify-content: center;
-    background: var(--glass-surface-hover) !important;
-    backdrop-filter: blur(4px);
-    border: none !important;
+    background: rgba(255, 255, 255, 0.03) !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid rgba(255, 255, 255, 0.045) !important;
     color: white !important;
     border-radius: 12px;
     cursor: pointer;
@@ -457,13 +473,14 @@
 }
 
 .ai-icon-btn:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
     transform: scale(1.05);
 }
 
 /* Action Check Button - No Border */
 .ai-check-btn {
     height: 38px;
+    min-width: 96px;
     padding: 0 1.5rem;
     background: var(--primary) !important;
     border: none !important;
@@ -481,11 +498,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    white-space: nowrap;
 }
 
 .ai-check-btn:hover {
     filter: brightness(1.2);
-    transform: scale(1.02);
+    transform: translateY(-1px);
 }
 
 .ai-check-btn.checking {
@@ -497,8 +515,6 @@
 .ai-check-btn.success {
     background: var(--success) !important;
     border-color: var(--success) !important;
-    width: 60px !important;
-    padding: 0 !important;
     border-radius: 12px !important;
     box-shadow: 0 0 20px rgba(33, 136, 56, 0.4) !important;
     animation: buttonSuccessPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
@@ -507,8 +523,6 @@
 .ai-check-btn.error {
     background: var(--danger) !important;
     border-color: var(--danger) !important;
-    width: 60px !important;
-    padding: 0 !important;
     border-radius: 12px !important;
     box-shadow: 0 0 20px rgba(194, 33, 49, 0.4) !important;
     animation: buttonErrorShake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
@@ -901,7 +915,9 @@
 #module-settings-modal .ai-icon-btn:focus,
 #module-settings-modal .ai-icon-btn:focus-visible {
     outline: none !important;
-    box-shadow: none !important;
+    box-shadow:
+        0 0 0 2px rgba(12, 12, 18, 0.92),
+        0 0 0 4px rgba(var(--primary-raw), 0.75) !important;
 }
 
 .local-engine-label-row {

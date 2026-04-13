@@ -25,8 +25,8 @@ import { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsS
 import { Particles } from '@/shared/shell/Particles';
 import { MonitoringService } from '@/features/monitoring/services/MonitoringService';
 import { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
-import { DebugService } from '@/features/debug/services/DebugService';
-import { DebugUI } from '@/features/debug/ui/DebugUI';
+import { ConsoleLogService } from '@/features/console/services/ConsoleLogService';
+import { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import { SettingsService } from '@/features/settings/services/SettingsService';
 import { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
@@ -55,8 +55,8 @@ export class Core {
     public readonly particles: Particles;
     public readonly monitoringService: MonitoringService;
     public readonly monitoringUI: MonitoringUI;
-    public readonly debugService: DebugService;
-    public readonly debugUI: DebugUI;
+    public readonly consoleLogService: ConsoleLogService;
+    public readonly consoleUI: ConsoleUI;
     public readonly settingsService: SettingsService;
     public readonly chatController: ChatController;
     public readonly modulePlatformService: ModulePlatformService;
@@ -121,7 +121,7 @@ export class Core {
         this.navigation.setUISettingsService(this.uiSettings);
 
         this.monitoringService = new MonitoringService(this.tauriProvider);
-        this.debugService = new DebugService(this.tauriProvider);
+        this.consoleLogService = new ConsoleLogService(this.tauriProvider);
         this.settingsService = new SettingsService(this.tauriProvider);
 
         // 3. Init UI Handlers
@@ -142,7 +142,7 @@ export class Core {
         this.i18nUI = new I18nUI(this.i18n);
         this.windowUI = new WindowUI(this.windowService, this.uiSettings, this.soundService);
         this.navigationUI = new NavigationUI(this.navigation, this.soundService);
-        this.sidebarUI = new SidebarUI(this.uiSettings, this.soundService);
+        this.sidebarUI = new SidebarUI(this.uiSettings, this.soundService, this.windowService);
         this.downloadUI = new DownloadUI(this.i18n);
         this.downloadUI.setOnCancel((moduleId: string) => {
             void this.modulePlatformService.cancelDownload(moduleId);
@@ -165,7 +165,7 @@ export class Core {
         );
         this.particles = new Particles();
         this.monitoringUI = new MonitoringUI(this.monitoringService);
-        this.debugUI = new DebugUI(this.debugService);
+        this.consoleUI = new ConsoleUI(this.consoleLogService);
 
         // 4. Init Event Handler and Bridge
         this._bridge = new GlobalBridge(this);
@@ -190,6 +190,7 @@ export class Core {
             saveImmediate: () => this.windowService.saveImmediate(),
         });
         this.stateManager.init();
+        this.windowService.setBeforeCloseHook(() => this.stateManager.saveAllAsync());
 
         // Register all services in DI container (replaces globalThis pollution)
         container.registerServices({
@@ -208,7 +209,7 @@ export class Core {
             navigation: this.navigation,
             soundService: this.soundService,
             monitoringService: this.monitoringService,
-            debugService: this.debugService,
+            consoleLogService: this.consoleLogService,
             settingsService: this.settingsService,
             chatController: this.chatController,
         });
@@ -223,7 +224,7 @@ export class Core {
             settingsUI: this.settingsUI,
             moduleSettingsUI: this.moduleSettingsUI,
             monitoringUI: this.monitoringUI,
-            debugUI: this.debugUI,
+            consoleUI: this.consoleUI,
             particles: this.particles,
         });
 
@@ -343,7 +344,7 @@ export class Core {
             this._restoreSelectedModules();
             this.i18nUI.applyTranslations();
 
-            this.debugUI.init();
+            this.consoleUI.init();
         } catch (e) {
             this.tracer.error(`[Core] Critical bootstrap failure: ${String(e)}`);
             throw e;
@@ -400,7 +401,7 @@ export class Core {
         this.windowService.destroy();
         this.moduleService.destroy();
         this.i18nUI.destroy();
-        this.debugUI.destroy();
+        this.consoleUI.destroy();
         this.monitoringUI.destroy();
         this.monitoringService.destroy();
         this.sidebarUI.destroy();

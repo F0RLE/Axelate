@@ -170,7 +170,7 @@ class AISettingsRenderer extends BaseComponent {
                         <div class="ai-content-panel">
                             <div class="settings-card-header-center">
                                 <h3 id="${appId}-api-title">🔑 
-                                    <a href="#" id="${appId}-api-link" class="api-key-link" style="text-decoration: none; cursor: pointer; color: inherit;" title="Manage your OpenRouter API Keys">
+                                    <a href="#" id="${appId}-api-link" class="api-key-link" title="Manage your OpenRouter API Keys">
                                         <span data-i18n="ui.settings.api_key_label">${t('ui.settings.api_key_label', 'OpenRouter API Key')}</span>
                                     </a>
                                 </h3>
@@ -239,7 +239,7 @@ class AISettingsRenderer extends BaseComponent {
 
         return `
             <!-- 3. THINKING LEVEL SECTION (WINDOW) -->
-            <section id="${appId}-thinking-section" class="thinking-level-section" aria-labelledby="${appId}-thinking-title" style="display: ${hasReasoning ? 'block' : 'none'};">
+            <section id="${appId}-thinking-section" class="thinking-level-section ${hasReasoning ? '' : 'is-hidden'}" aria-labelledby="${appId}-thinking-title">
                 <div class="ai-content-panel">
                     <div class="settings-card-header-center">
                         <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
@@ -810,7 +810,7 @@ class AISettingsRenderer extends BaseComponent {
         const hasReasoning = modelData?.capabilities?.reasoning === true;
         const thinkingSection = this._queryActiveElement<HTMLElement>(`#${appId}-thinking-section`);
         if (thinkingSection !== null) {
-            thinkingSection.style.display = hasReasoning ? 'block' : 'none';
+            thinkingSection.classList.toggle('is-hidden', !hasReasoning);
         }
 
         const statsArea = this._queryActiveElement<HTMLElement>(`#${appId}-model-stats`);

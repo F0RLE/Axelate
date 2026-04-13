@@ -1,6 +1,8 @@
 //! GitHub release asset selection for platform-specific module bundles.
 
-use crate::domain::system::hardware_probe::{AcceleratorClass, probe_gpu_info};
+use crate::domain::system::hardware_probe::{
+    AcceleratorClass, CpuInstructionTier, GpuInfo, probe_gpu_info,
+};
 use crate::errors::AppError;
 use reqwest::Client;
 use serde::Deserialize;
@@ -55,17 +57,11 @@ struct Platform {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CpuTier {
-    Avx512,
-    Avx2,
-    Avx,
-    Baseline,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct HardwareProfile {
     accelerator: AcceleratorClass,
-    cpu_tier: CpuTier,
+    cpu_tier: CpuInstructionTier,
+    cuda_driver_major: Option<u32>,
+    cuda_driver_minor: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -229,7 +225,10 @@ fn select_release_assets(
         return None;
     }
 
-    if platform.os == PlatformOs::Windows && hardware.accelerator == AcceleratorClass::NvidiaCuda {
+    if module_id != "comfyui"
+        && platform.os == PlatformOs::Windows
+        && hardware.accelerator == AcceleratorClass::NvidiaCuda
+    {
         let has_cuda_main = main_candidates.iter().copied().any(|idx| {
             assets
                 .get(idx)
@@ -275,7 +274,8 @@ fn runtime_assets(module_id: &str, platform: Platform, assets: &[Asset]) -> Vec<
         .iter()
         .enumerate()
         .filter(|(_, asset)| {
-            is_runtime_asset(module_id, &asset.name) && platform_matches(platform, &asset.name)
+            is_runtime_asset(module_id, &asset.name)
+                && platform_matches(module_id, platform, &asset.name)
         })
         .map(|(idx, _)| idx)
         .collect();
@@ -300,7 +300,8 @@ fn main_assets(
         .iter()
         .enumerate()
         .filter(|(_, asset)| {
-            is_main_asset(module_id, &asset.name) && platform_matches(platform, &asset.name)
+            is_main_asset(module_id, &asset.name)
+                && platform_matches(module_id, platform, &asset.name)
         })
         .map(|(idx, _)| idx)
         .collect();
@@ -354,6 +355,7 @@ fn is_main_asset(module_id: &str, name: &str) -> bool {
     match module_id {
         "sdcpp" => lower.starts_with("sd-") && lower.contains("-bin-"),
         "llamacpp" => lower.starts_with("llama-") && lower.contains("-bin-"),
+        "comfyui" => lower.starts_with("comfyui_windows_portable_"),
         _ => !lower.starts_with("cudart-"),
     }
 }
@@ -362,13 +364,17 @@ fn is_archive_asset(lower_name: &str) -> bool {
     lower_name.ends_with(".tar.gz")
         || std::path::Path::new(lower_name)
             .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip") || ext.eq_ignore_ascii_case("tgz"))
+            .is_some_and(|ext| {
+                ext.eq_ignore_ascii_case("zip")
+                    || ext.eq_ignore_ascii_case("tgz")
+                    || ext.eq_ignore_ascii_case("7z")
+            })
 }
 
-fn platform_matches(platform: Platform, name: &str) -> bool {
+fn platform_matches(module_id: &str, platform: Platform, name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
 
-    os_matches(platform.os, &lower) && arch_matches(platform.arch, &lower)
+    os_matches(platform.os, &lower) && arch_matches(module_id, platform.arch, &lower)
 }
 
 fn os_matches(os: PlatformOs, lower_name: &str) -> bool {
@@ -380,12 +386,17 @@ fn os_matches(os: PlatformOs, lower_name: &str) -> bool {
     }
 }
 
-fn arch_matches(arch: PlatformArch, lower_name: &str) -> bool {
+fn arch_matches(module_id: &str, arch: PlatformArch, lower_name: &str) -> bool {
     match arch {
         PlatformArch::X64 => {
             lower_name.contains("x64")
                 || lower_name.contains("x86_64")
                 || lower_name.contains("amd64")
+                || (module_id == "comfyui"
+                    && !lower_name.contains("arm64")
+                    && !lower_name.contains("aarch64")
+                    && !lower_name.contains("-x86")
+                    && !lower_name.contains("_x86"))
         }
         PlatformArch::Arm64 => lower_name.contains("arm64") || lower_name.contains("aarch64"),
         PlatformArch::X86 => lower_name.contains("-x86") || lower_name.contains("_x86"),
@@ -395,6 +406,10 @@ fn arch_matches(arch: PlatformArch, lower_name: &str) -> bool {
 
 fn main_score(module_id: &str, name: &str, hardware: HardwareProfile) -> i32 {
     let lower = name.to_ascii_lowercase();
+    if module_id == "comfyui" {
+        return comfyui_main_score(&lower, hardware);
+    }
+
     let mut score = base_main_score(&lower);
 
     match hardware.accelerator {
@@ -470,6 +485,44 @@ fn main_score(module_id: &str, name: &str, hardware: HardwareProfile) -> i32 {
     score
 }
 
+fn comfyui_main_score(lower: &str, hardware: HardwareProfile) -> i32 {
+    let mut score = 0;
+
+    if lower.contains("portable") {
+        score += 50;
+    }
+
+    match hardware.accelerator {
+        AcceleratorClass::NvidiaCuda => {
+            if lower.contains("nvidia_cu126") {
+                if hardware.supports_cuda_at_least(12, 6) {
+                    score += 1_500;
+                } else {
+                    score -= 1_500;
+                }
+            } else if lower.contains("nvidia") {
+                score += 1_300;
+            } else {
+                score -= 1_000;
+            }
+        }
+        AcceleratorClass::AmdGpu => {
+            if lower.contains("amd") {
+                score += 1_300;
+            } else {
+                score -= 1_000;
+            }
+        }
+        _ => {
+            if lower.contains("nvidia") || lower.contains("amd") {
+                score -= 800;
+            }
+        }
+    }
+
+    score
+}
+
 fn base_main_score(lower: &str) -> i32 {
     let mut score = 0;
     if let Some(cuda_track) = detect_cuda_track(lower) {
@@ -486,13 +539,13 @@ fn base_main_score(lower: &str) -> i32 {
     if lower.contains("rocm") {
         score += 220;
     }
-    if lower.contains("avx2") {
+    if has_avx2_marker(lower) {
         score += 160;
     }
-    if lower.contains("avx512") {
+    if has_avx512_marker(lower) {
         score += 140;
     }
-    if lower.contains("avx") {
+    if has_avx_marker(lower) {
         score += 120;
     }
     if lower.contains("noavx") {
@@ -502,22 +555,34 @@ fn base_main_score(lower: &str) -> i32 {
     score
 }
 
-fn cpu_feature_score(lower: &str, cpu_tier: CpuTier) -> i32 {
+fn cpu_feature_score(lower: &str, cpu_tier: CpuInstructionTier) -> i32 {
     match cpu_tier {
-        CpuTier::Avx512 if lower.contains("avx512") => 700,
-        CpuTier::Avx512 if lower.contains("avx2") => 600,
-        CpuTier::Avx512 if lower.contains("avx") => 500,
-        CpuTier::Avx2 if lower.contains("avx2") => 700,
-        CpuTier::Avx2 if lower.contains("avx") => 600,
-        CpuTier::Avx if lower.contains("avx") => 700,
-        CpuTier::Avx512 | CpuTier::Avx2 | CpuTier::Avx
+        CpuInstructionTier::Avx512 if has_avx512_marker(lower) => 700,
+        CpuInstructionTier::Avx512 if has_avx2_marker(lower) => 600,
+        CpuInstructionTier::Avx512 if has_avx_marker(lower) => 500,
+        CpuInstructionTier::Avx2 if has_avx2_marker(lower) => 700,
+        CpuInstructionTier::Avx2 if has_avx_marker(lower) => 600,
+        CpuInstructionTier::Avx if has_avx_marker(lower) => 700,
+        CpuInstructionTier::Avx512 | CpuInstructionTier::Avx2 | CpuInstructionTier::Avx
             if lower.contains("noavx") || lower.contains("cpu") =>
         {
             300
         }
-        CpuTier::Baseline if lower.contains("noavx") || lower.contains("cpu") => 700,
+        CpuInstructionTier::Baseline if lower.contains("noavx") || lower.contains("cpu") => 700,
         _ => 0,
     }
+}
+
+fn has_avx512_marker(lower: &str) -> bool {
+    lower.contains("avx512")
+}
+
+fn has_avx2_marker(lower: &str) -> bool {
+    lower.contains("avx2")
+}
+
+fn has_avx_marker(lower: &str) -> bool {
+    lower.contains("avx") && !lower.contains("noavx")
 }
 
 fn runtime_score(name: &str) -> i32 {
@@ -569,33 +634,30 @@ impl Platform {
 impl HardwareProfile {
     async fn detect() -> Self {
         let probe = probe_gpu_info().await;
+        Self::from_probe(&probe)
+    }
+
+    fn from_probe(probe: &GpuInfo) -> Self {
         Self {
             accelerator: probe.accelerator_class(),
-            cpu_tier: CpuTier::current(),
+            cpu_tier: CpuInstructionTier::current(),
+            cuda_driver_major: probe.cuda_driver_major,
+            cuda_driver_minor: probe.cuda_driver_minor,
         }
     }
-}
 
-impl CpuTier {
-    fn current() -> Self {
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        {
-            if std::arch::is_x86_feature_detected!("avx512f") {
-                return Self::Avx512;
+    const fn supports_cuda_at_least(&self, major: u32, minor: u32) -> bool {
+        match (self.cuda_driver_major, self.cuda_driver_minor) {
+            (Some(driver_major), Some(driver_minor)) => {
+                driver_major > major || (driver_major == major && driver_minor >= minor)
             }
-            if std::arch::is_x86_feature_detected!("avx2") {
-                return Self::Avx2;
-            }
-            if std::arch::is_x86_feature_detected!("avx") {
-                return Self::Avx;
-            }
+            _ => false,
         }
-
-        Self::Baseline
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -607,7 +669,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
 
         let incomplete_latest = vec![
@@ -645,7 +709,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
@@ -676,7 +742,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
@@ -710,7 +778,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![asset("cudart-sd-bin-win-cu12-x64.zip")];
 
@@ -725,7 +795,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset_without_digest("cudart-llama-bin-win-cuda-12.4-x64.zip"),
@@ -743,7 +815,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset("llama-b8726-bin-win-cuda-13.1-x64.zip"),
@@ -761,7 +835,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::GenericGpu,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset("cudart-sd-bin-win-cu12-x64.zip"),
@@ -788,7 +864,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::CpuOnly,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset("cudart-sd-bin-win-cu12-x64.zip"),
@@ -809,6 +887,40 @@ mod tests {
     }
 
     #[test]
+    fn prefers_noavx_bundle_for_baseline_cpu() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::CpuOnly,
+            cpu_tier: CpuInstructionTier::Baseline,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let assets = vec![
+            asset("sd-master-560-e8323ca-bin-win-avx-x64.zip"),
+            asset("sd-master-560-e8323ca-bin-win-noavx-x64.zip"),
+        ];
+
+        let selected = select_release_assets("sdcpp", platform, hardware, &assets)
+            .expect("expected compatible sdcpp bundle");
+
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("sd-master-560-e8323ca-bin-win-noavx-x64.zip")
+        );
+    }
+
+    #[test]
+    fn noavx_marker_does_not_score_as_avx() {
+        let lower = "sd-master-560-e8323ca-bin-win-noavx-x64.zip";
+
+        assert_eq!(base_main_score(lower), 80);
+        assert_eq!(cpu_feature_score(lower, CpuInstructionTier::Avx), 300);
+    }
+
+    #[test]
     fn prefers_llamacpp_hip_bundle_for_amd_gpu() {
         let platform = Platform {
             os: PlatformOs::Windows,
@@ -816,7 +928,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::AmdGpu,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset("llama-b8724-bin-win-vulkan-x64.zip"),
@@ -841,7 +955,9 @@ mod tests {
         };
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::IntelGpu,
-            cpu_tier: CpuTier::Avx2,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
         };
         let assets = vec![
             asset("llama-b8724-bin-win-vulkan-x64.zip"),
@@ -855,6 +971,89 @@ mod tests {
         assert_eq!(
             selected.first().map(|asset| asset.name.as_str()),
             Some("llama-b8724-bin-win-sycl-x64.zip")
+        );
+    }
+
+    #[test]
+    fn selects_comfyui_nvidia_portable_release_without_runtime_pairing() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let assets = vec![
+            asset("ComfyUI_windows_portable_amd.7z"),
+            asset("ComfyUI_windows_portable_nvidia.7z"),
+            asset("ComfyUI_windows_portable_nvidia_cu126.7z"),
+        ];
+
+        let selected = select_release_assets("comfyui", platform, hardware, &assets)
+            .expect("expected compatible ComfyUI bundle");
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("ComfyUI_windows_portable_nvidia.7z")
+        );
+    }
+
+    #[test]
+    fn selects_comfyui_cu126_bundle_when_cuda_driver_supports_it() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: Some(12),
+            cuda_driver_minor: Some(6),
+        };
+        let assets = vec![
+            asset("ComfyUI_windows_portable_amd.7z"),
+            asset("ComfyUI_windows_portable_nvidia.7z"),
+            asset("ComfyUI_windows_portable_nvidia_cu126.7z"),
+        ];
+
+        let selected = select_release_assets("comfyui", platform, hardware, &assets)
+            .expect("expected compatible ComfyUI bundle");
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("ComfyUI_windows_portable_nvidia_cu126.7z")
+        );
+    }
+
+    #[test]
+    fn selects_comfyui_amd_portable_release() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::AmdGpu,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let assets = vec![
+            asset("ComfyUI_windows_portable_amd.7z"),
+            asset("ComfyUI_windows_portable_nvidia.7z"),
+        ];
+
+        let selected = select_release_assets("comfyui", platform, hardware, &assets)
+            .expect("expected compatible ComfyUI bundle");
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("ComfyUI_windows_portable_amd.7z")
         );
     }
 

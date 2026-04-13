@@ -3,7 +3,6 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
 };
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -91,7 +90,7 @@ impl SecureStorage {
         let cipher = Aes256Gcm::new(&key_bytes.into());
 
         let mut nonce_bytes = [0u8; 12];
-        rand::rng().fill_bytes(&mut nonce_bytes);
+        rand::fill(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let ciphertext =

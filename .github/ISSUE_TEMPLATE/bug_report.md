@@ -1,44 +1,56 @@
 ---
-name: Сообщение об ошибке
-about: Создайте отчет, чтобы помочь нам улучшить проект
+name: Bug report
+about: Report a reproducible problem to help improve Axelate
 title: '[BUG] '
 labels: bug
 assignees: ''
 ---
 
-## Описание ошибки
+<div align="center">
+  <br />
+  <img src="../src-tauri/icons/icon.png" alt="Axelate Logo" width="96" height="96" />
+  <br />
+  <h1 style="border-bottom: none; margin-bottom: 0;">Bug Report</h1>
+  <p style="font-size: 1.05em; color: #888; font-style: italic;">Help us reproduce and fix the issue quickly.</p>
+  <br />
+</div>
 
-Краткое и понятное описание ошибки.
+## Problem Summary
 
-## Шаги для воспроизведения
+Describe the issue in one or two clear sentences.
 
-Шаги для воспроизведения поведения:
+## Steps to Reproduce
 
-1. Перейти к '...'
-2. Нажать на '....'
-3. Прокрутить вниз до '....'
-4. Увидеть ошибку
+1. Go to `...`
+2. Click `...`
+3. Run `...`
+4. Observe the problem
 
-## Ожидаемое поведение
+## Expected Behavior
 
-Четкое и краткое описание того, что вы ожидали увидеть.
+Describe what you expected to happen.
 
-## Скриншоты
+## Actual Behavior
 
-Если применимо, добавьте скриншоты, чтобы помочь объяснить вашу проблему.
+Describe what actually happened instead.
 
-## Окружение
+## Environment
 
-- ОС: [например, Windows 11]
-- Python версия: [например, 3.11.9]
-- Версия проекта: [например, 1.0.0]
+- OS:
+- App version:
+- Installation type:
+- GPU / CPU details (if relevant):
 
-## Логи
+## Logs
 
 ```text
-Вставьте сюда логи из консоли или файлов логов
+Paste console output, crash logs, or other diagnostics here.
 ```
 
-## Дополнительная информация
+## Screenshots
 
-Любая другая информация о проблеме.
+Add screenshots or screen recordings if they help explain the issue.
+
+## Additional Context
+
+Add any other details that may help with investigation.

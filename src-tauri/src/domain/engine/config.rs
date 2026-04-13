@@ -65,6 +65,7 @@ mod tests {
             default_context_size: 4096,
             config_schema: None,
             installed: false,
+            managed_externally: false,
         }
     }
 

@@ -72,5 +72,25 @@
     "repoUrl": "https://github.com/F0RLE/Axelate-tg-bot-module",
     "expectedHash": "",
     "version": "1.0.0"
+  },
+  {
+    "id": "comfyui",
+    "nameKey": "ui.launcher.engine.comfyui.name",
+    "descKey": "ui.launcher.engine.comfyui.desc",
+    "name": "ComfyUI",
+    "desc": "Node-based image workflow engine for maximum quality and control.",
+    "icon": "🧩",
+    "type": "local",
+    "dlType": "release",
+    "capabilities": ["image"],
+    "repoUrl": "https://github.com/Comfy-Org/ComfyUI",
+    "configSchema": {
+      "port": {
+        "type": "number",
+        "label": "Port",
+        "default": 8188
+      }
+    },
+    "version": "1.0.0"
   }
 ]

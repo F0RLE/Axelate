@@ -5,6 +5,7 @@ use crate::domain::ai::{
 };
 use crate::domain::ai::{ChannelSink, StreamEvent, StreamSink};
 use crate::domain::engine::manager::EngineManager;
+use crate::domain::engine::types::Capability;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
 use crate::infrastructure::config::ui_state::UiStateService;
@@ -40,6 +41,15 @@ pub struct SavedChatImage {
     file_path: String,
     /// Absolute path to the folder containing the saved image.
     folder_path: String,
+}
+
+/// Live preview payload for in-progress image generation.
+#[derive(Debug, serde::Serialize, specta::Type)]
+pub struct ImageGenerationPreview {
+    /// Data URL of the latest preview image.
+    data_url: String,
+    /// File modification timestamp in Unix milliseconds.
+    updated_at_ms: f64,
 }
 
 fn chat_image_root_dir() -> Result<PathBuf, AppError> {
@@ -195,6 +205,7 @@ pub async fn generate_image(
     sessions: State<'_, Arc<ChatSessionManager>>,
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
+    image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
     settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
 ) -> Result<ai::ImageGenerationResponse, AppError> {
     ai_service::process_image_request(
@@ -202,6 +213,7 @@ pub async fn generate_image(
         &sessions,
         &config_service,
         &engine_manager,
+        &image_generation_state,
         settings_service.inner(),
     )
     .await
@@ -218,12 +230,14 @@ pub async fn generate_image_background(
     sessions: State<'_, Arc<ChatSessionManager>>,
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
+    image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
     settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
     ui_state_service: State<'_, UiStateService>,
 ) -> Result<(), AppError> {
     let sessions = Arc::clone(&*sessions);
     let config_service = Arc::clone(&*config_service);
     let engine_manager = Arc::clone(&*engine_manager);
+    let image_generation_state = Arc::clone(&*image_generation_state);
     let settings_service = settings_service.inner().clone();
     let ui_state_service = ui_state_service.inner().clone();
     let app_handle = app;
@@ -235,6 +249,7 @@ pub async fn generate_image_background(
             &sessions,
             &config_service,
             &engine_manager,
+            &image_generation_state,
             &settings_service,
         )
         .await;
@@ -258,6 +273,88 @@ pub async fn generate_image_background(
     });
 
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Cancels the current image generation request for the selected provider.
+pub async fn cancel_image_generation(
+    provider: String,
+    engine_manager: State<'_, Arc<EngineManager>>,
+    image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
+) -> Result<(), AppError> {
+    if provider == "comfyui" {
+        if let Some(job) = image_generation_state.cancel(&provider).await {
+            let client = reqwest::Client::new();
+            let response = client
+                .post(format!("{}/interrupt", job.base_url.trim_end_matches('/')))
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let body = response.text().await.unwrap_or_default();
+                return Err(AppError::External {
+                    request_id: None,
+                    message: format!("Failed to interrupt ComfyUI job: {body}"),
+                });
+            }
+        }
+
+        return Ok(());
+    }
+
+    engine_manager.stop_slot(Capability::Image).await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Returns the latest image-generation preview when the local image engine writes one.
+pub async fn get_image_generation_preview(
+    engine_manager: State<'_, Arc<EngineManager>>,
+) -> Result<Option<ImageGenerationPreview>, AppError> {
+    let Some(path) = engine_manager.active_image_preview_path().await else {
+        return Ok(None);
+    };
+
+    tokio::task::spawn_blocking(move || {
+        let metadata = match std::fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                tracing::debug!("Failed to stat preview file {}: {error}", path.display());
+                return Ok(None);
+            }
+        };
+
+        if !metadata.is_file() || metadata.len() == 0 {
+            return Ok(None);
+        }
+
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                tracing::debug!("Failed to read preview file {}: {error}", path.display());
+                return Ok(None);
+            }
+        };
+
+        let updated_at_ms = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0.0, |duration| duration.as_secs_f64() * 1000.0);
+
+        Ok(Some(ImageGenerationPreview {
+            data_url: format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
+            updated_at_ms,
+        }))
+    })
+    .await
+    .map_err(|error| AppError::Internal {
+        request_id: None,
+        message: format!("Preview read task failed: {error}"),
+    })?
 }
 
 #[tauri::command]
@@ -409,45 +506,6 @@ pub fn open_chat_image_location(file_path: String, folder_path: String) -> Resul
 
     command.spawn().map_err(|e| AppError::Io(e.to_string()))?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::resolve_existing_path_within_root;
-    use crate::errors::AppError;
-
-    #[test]
-    fn resolve_existing_path_within_root_allows_file_inside_root() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let root = temp_dir.path().join("axelate");
-        std::fs::create_dir_all(&root).expect("create root");
-        let file = root.join("image.png");
-        std::fs::write(&file, b"png").expect("write file");
-
-        let resolved = resolve_existing_path_within_root(&file, &root, "missing file")
-            .expect("path should resolve");
-
-        assert_eq!(
-            resolved,
-            file.canonicalize().expect("canonical file should exist")
-        );
-    }
-
-    #[test]
-    fn resolve_existing_path_within_root_rejects_path_outside_root() {
-        let temp_dir = tempfile::tempdir().expect("temp dir");
-        let root = temp_dir.path().join("axelate");
-        std::fs::create_dir_all(&root).expect("create root");
-        let outside = temp_dir.path().join("outside.png");
-        std::fs::write(&outside, b"png").expect("write outside file");
-
-        let error = resolve_existing_path_within_root(&outside, &root, "missing file")
-            .expect_err("outside path must be rejected");
-
-        assert!(
-            matches!(error, AppError::Validation(message) if message.contains("outside chat image directory"))
-        );
-    }
 }
 
 #[cfg(target_os = "windows")]
@@ -635,4 +693,44 @@ fn is_local_provider(provider: &str) -> bool {
             | "claude"
             | "deepseek"
     )
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::resolve_existing_path_within_root;
+    use crate::errors::AppError;
+
+    #[test]
+    fn resolve_existing_path_within_root_allows_file_inside_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("axelate");
+        std::fs::create_dir_all(&root).expect("create root");
+        let file = root.join("image.png");
+        std::fs::write(&file, b"png").expect("write file");
+
+        let resolved = resolve_existing_path_within_root(&file, &root, "missing file")
+            .expect("path should resolve");
+
+        assert_eq!(
+            resolved,
+            file.canonicalize().expect("canonical file should exist")
+        );
+    }
+
+    #[test]
+    fn resolve_existing_path_within_root_rejects_path_outside_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let root = temp_dir.path().join("axelate");
+        std::fs::create_dir_all(&root).expect("create root");
+        let outside = temp_dir.path().join("outside.png");
+        std::fs::write(&outside, b"png").expect("write outside file");
+
+        let error = resolve_existing_path_within_root(&outside, &root, "missing file")
+            .expect_err("outside path must be rejected");
+
+        assert!(
+            matches!(error, AppError::Validation(message) if message.contains("outside chat image directory"))
+        );
+    }
 }

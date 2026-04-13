@@ -173,9 +173,9 @@ describe('AISettingsRenderer', () => {
                 .querySelector('.ai-model-card[data-model-key="fast"]')
                 ?.classList.contains('selected'),
         ).toBe(true);
-        expect((document.getElementById('gpt-thinking-section') as HTMLElement).style.display).toBe(
-            'none',
-        );
+        expect(
+            document.getElementById('gpt-thinking-section')?.classList.contains('is-hidden'),
+        ).toBe(true);
         expect(document.getElementById('gpt-model-stats')?.textContent).toContain(
             'Stats unavailable',
         );

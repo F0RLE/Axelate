@@ -77,6 +77,9 @@ pub struct EngineDefinition {
     /// Whether the engine binary is currently installed (populated at runtime, not from JSON)
     #[serde(default)]
     pub installed: bool,
+    /// True when the launcher connects to a user-managed external engine instead of installing it
+    #[serde(default)]
+    pub managed_externally: bool,
 }
 
 fn default_version() -> String {

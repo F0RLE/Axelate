@@ -140,7 +140,7 @@ describe('DownloadUI', () => {
             expect(speed?.textContent).toBe('1.00 MB/s');
         });
 
-        it('should hide both main card and empty state when no active download', () => {
+        it('should hide main card and keep empty state hidden when no active download', () => {
             ui.renderDownloadsProgress({ hasActive: false });
 
             const mainCard = document.getElementById('downloads-main-card');

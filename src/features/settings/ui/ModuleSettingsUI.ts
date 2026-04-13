@@ -303,6 +303,11 @@ export class ModuleSettingsUI {
             return;
         }
 
+        if (app.id === 'comfyui') {
+            this._renderComfyUiSettings(container, app);
+            return;
+        }
+
         // Local engine — render real config from backend
         if (app.type === 'local') {
             await this._renderLocalEngineConfig(container, app);
@@ -407,6 +412,104 @@ export class ModuleSettingsUI {
         container.appendChild(wrapper);
     }
 
+    private _renderComfyUiSettings(container: HTMLElement, app: IApp): void {
+        const t = this._context.t;
+        container.innerHTML = '';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'ai-module-config';
+
+        const panel = document.createElement('section');
+        panel.className = 'ai-content-panel';
+
+        const title = document.createElement('h3');
+        title.textContent = t('ui.settings.comfyui.title', 'Configure in ComfyUI');
+
+        const description = document.createElement('p');
+        description.className = 'stats-note';
+        description.textContent = t(
+            'ui.settings.comfyui.desc',
+            'Models, custom nodes, workflows and manager settings are configured in the ComfyUI browser UI.',
+        );
+
+        const note = document.createElement('p');
+        note.className = 'stats-note';
+        note.textContent = t(
+            'ui.settings.comfyui.note',
+            'Axelate starts the local ComfyUI module and sends generation requests through its HTTP API.',
+        );
+
+        const actions = document.createElement('div');
+        actions.style.display = 'flex';
+        actions.style.justifyContent = 'center';
+        actions.style.marginTop = '0.5rem';
+
+        const openButton = document.createElement('button');
+        openButton.className = 'modal-btn modal-btn-primary';
+        openButton.textContent = t('ui.settings.comfyui.open', 'Open ComfyUI');
+        openButton.addEventListener('click', () => {
+            void this._openComfyUiBrowser(app);
+        });
+
+        actions.appendChild(openButton);
+        panel.appendChild(title);
+        panel.appendChild(description);
+        panel.appendChild(note);
+        panel.appendChild(actions);
+        wrapper.appendChild(panel);
+        container.appendChild(wrapper);
+    }
+
+    private async _openComfyUiBrowser(app: IApp): Promise<void> {
+        const baseUrl = this._getComfyUiBaseUrl();
+
+        try {
+            if (this._tauri.isTauri()) {
+                const result = await this._tauri.invoke<{ action?: string }>('launch_module', {
+                    moduleId: app.id,
+                });
+
+                if (result.action === 'start_local') {
+                    await this._tauri.invoke('control_module', {
+                        request: {
+                            module_id: app.id,
+                            action: 'start',
+                        },
+                    });
+                }
+            }
+
+            await new Promise((resolve) => {
+                globalThis.setTimeout(resolve, 1200);
+            });
+            await this._tauri.openUrl(baseUrl);
+        } catch (error: unknown) {
+            tracer.error('[ModuleSettingsUI] Failed to open ComfyUI browser settings', error);
+            this._context.showToast(
+                this._context.t(
+                    'ui.settings.comfyui.open_failed',
+                    'Failed to open ComfyUI in your browser.',
+                ),
+                'error',
+            );
+        }
+    }
+
+    private _getComfyUiBaseUrl(): string {
+        const settings = this._service.getSettings() as Record<string, string | undefined>;
+        const raw = settings['comfyui_base_url']?.trim() ?? '';
+
+        if (raw === '') {
+            return 'http://127.0.0.1:8188';
+        }
+
+        if (raw.startsWith('http://') || raw.startsWith('https://')) {
+            return raw.replace(/\/+$/, '');
+        }
+
+        return `http://${raw.replace(/\/+$/, '')}`;
+    }
+
     /**
      * Renders engine config form for local engines (llamacpp, sdcpp, etc.).
      * Loads the persisted EngineConfig from Tauri, renders fields, saves on change.
@@ -415,11 +518,11 @@ export class ModuleSettingsUI {
         const t = this._context.t;
         container.innerHTML = '';
 
-        const config = await this._engineConfigService.getConfig(app.id);
-        const gpuInfo = await this._service.loadGpuInfo();
+        const payload = await this._engineConfigService.getSettingsPayload(app.id);
+        const config = payload?.config ?? null;
         const isImage = app.capability === 'image';
         const modelExt = isImage ? '.safetensors' : '.gguf';
-        const rawHtml = this._getEngineConfigHtml(app, config, gpuInfo);
+        const rawHtml = this._getEngineConfigHtml(app, config);
 
         const purifyConfig = {
             ALLOW_DATA_ATTR: true,
@@ -746,26 +849,13 @@ export class ModuleSettingsUI {
         return normalized.split('/').pop() ?? modelPath;
     }
 
-    private _getEngineConfigHtml(
-        app: IApp,
-        config: EngineConfig | null,
-        gpuInfo?: { backend?: string; detected?: boolean },
-    ): string {
+    private _getEngineConfigHtml(app: IApp, config: EngineConfig | null): string {
         const t = this._context.t;
         const isImage = app.capability === 'image';
-        const runtimeBackend = this._getRuntimeBackendLabel(
-            gpuInfo?.backend,
-            gpuInfo?.detected === true,
-        );
         const warnHtml =
             config === null
                 ? `<p class="local-engine-warning">${this._escapeHtml(t('ui.settings.engine.config_unavailable', 'Engine config unavailable (Tauri not connected)'))}</p>`
                 : '';
-        const runtimeHintHtml = `
-            <p class="local-engine-warning">
-                ${this._escapeHtml(t('ui.settings.engine.runtime_bundle', 'Auto download package'))}: ${this._escapeHtml(runtimeBackend)}
-            </p>
-        `;
         const generationSection = isImage
             ? `
                 <section class="thinking-level-section local-engine-section" aria-labelledby="${app.id}-generation-title">
@@ -827,7 +917,6 @@ export class ModuleSettingsUI {
                                     t('ui.settings.engine.core_config', 'Core Config'),
                                 )}</h3>
                             </div>
-                            ${runtimeHintHtml}
                             <div id="local-engine-core-primary-${app.id}" class="local-engine-field-stack local-engine-field-stack--tight"></div>
                             ${warnHtml}
                         </div>
@@ -836,35 +925,6 @@ export class ModuleSettingsUI {
                 </div>
             </div>
         `;
-    }
-
-    private _getRuntimeBackendLabel(backend?: string, detected = false): string {
-        const t = this._context.t;
-
-        switch (backend) {
-            case 'cuda':
-                return t('ui.settings.engine.runtime_bundle.cuda', 'CUDA (NVIDIA)');
-            case 'hip':
-                return t('ui.settings.engine.runtime_bundle.hip', 'HIP (AMD)');
-            case 'sycl':
-                return t('ui.settings.engine.runtime_bundle.sycl', 'SYCL (Intel)');
-            case 'metal':
-                return t('ui.settings.engine.runtime_bundle.metal', 'Metal (Apple)');
-            case 'vulkan':
-                return t(
-                    'ui.settings.engine.runtime_bundle.vulkan',
-                    'Vulkan (AMD / Intel / generic GPU)',
-                );
-            case 'cpu':
-                return detected
-                    ? t('ui.settings.engine.runtime_bundle.cpu_detected', 'CPU fallback')
-                    : t(
-                          'ui.settings.engine.runtime_bundle.cpu',
-                          'CPU (best supported instruction set)',
-                      );
-            default:
-                return t('ui.settings.engine.runtime_bundle.auto', 'Auto detect');
-        }
     }
 
     private _createEngineFieldControl(options: {

@@ -34,7 +34,7 @@ Found a bug? We want to know!
 
 ## 📚 Documentation links
 - [**Developer Architecture**](docs/en/architecture.md)
-- [**Setup Guide**](docs/en/development.md)
+- [**Setup Guide**](docs/en/getting-started.md)
 
 ---
 

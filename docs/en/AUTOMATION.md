@@ -1,6 +1,6 @@
 # Automation
 
-Axelate uses root proxy scripts plus PowerShell automation under `.github/scripts`.
+Axelate uses a shared cross-platform workflow runner plus optional platform launchers.
 
 ## Main commands
 
@@ -9,61 +9,51 @@ Run all commands from the repository root.
 | Command | What it does |
 | --- | --- |
 | `npm run install-deps` | install frontend dependencies into `src/node_modules` |
-| `npm run dev` | run the PowerShell dev flow |
+| `npm run dev` | start the desktop app in development mode |
 | `npm run tauri:dev` | start Tauri dev directly |
-| `npm run verify-all` | full verification gate |
+| `npm run verify` | full verification gate |
 | `npm run build` | frontend production build |
 | `npm run tauri:build` | desktop production build |
+| `npm run release` | verify first, then build the desktop release bundle |
 | `npm run clean` | clean build outputs and caches |
 
-## PowerShell scripts
+## Primary workflow
 
-Scripts live in `.github/scripts/`.
+The main entrypoint is:
 
-### `common.ps1`
+```text
+scripts/workflow.mjs
+```
 
-Shared helpers:
+It is responsible for:
 
-- path setup
-- command execution
-- Windows SDK discovery
-- frontend dependency check
-- Specta binding sync
+- resolving portable Node/Rust toolchains
+- adding Windows SDK / MSVC tools when needed
+- running root commands in a cross-platform way
+- keeping `npm run ...` as the canonical interface
 
-### `dev.ps1`
+## Optional launchers
 
-The development entrypoint used by `npm run dev`.
+Double-click launchers live in:
 
-Current behavior:
+- `launchers/windows`
+- `launchers/macos`
+- `launchers/linux`
 
-1. check required tools
-2. find Windows SDK when needed
-3. install frontend dependencies if missing
-4. sync Rust to TypeScript bindings
-5. format frontend files
-6. start Tauri dev
+These are convenience wrappers only.
 
-### `verify-all.ps1`
+## Legacy PowerShell scripts
 
-The release gate.
+PowerShell scripts still live in `.github/scripts/`.
 
-Current order:
+They are now helper or compatibility entrypoints, not the primary development interface.
 
-1. `cargo fmt --check`
-2. `cargo clippy -- -D warnings`
-3. `cargo check --bins --verbose`
-4. `cargo test --lib --verbose`
-5. `npm ci` in `src`
-6. Specta binding sync
-7. frontend typecheck, lint, format check, tests
-8. frontend build
-9. size-budget check
-
-### Other scripts
-
-- `clear.ps1` - cleanup
-- `release.ps1` - release helper
-- `update.ps1` - update helper
+- `common.ps1` - helper functions and Windows bootstrap logic
+- `dev.ps1` - legacy development flow
+- `verify-all.ps1` - legacy verification flow
+- `clear.ps1` - cleanup helper
+- `release.ps1` - legacy release helper with checksum and release hardening checks
+- `update.ps1` - legacy dependency update helper
 
 ## Git hooks
 
@@ -87,4 +77,4 @@ src/scripts/setup-git-hooks.mjs
 GitHub workflows live in `.github/workflows`.
 
 - `ci.yml` runs the verification pipeline
-- `release.yml` uses the official Tauri GitHub Action for releases
+- `release.yml` uses the official Tauri GitHub Action, release audits, checksum generation, and release hardening checks

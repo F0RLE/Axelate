@@ -564,6 +564,36 @@ describe('AppUI lifecycle', () => {
         expect(mockedGlobals.showToast).not.toHaveBeenCalled();
     });
 
+    it('should show a placeholder toast instead of selecting or downloading coming-soon modules', async () => {
+        appUI = createAppUI();
+        const toastSpy = vi.spyOn(appUI, 'showToast');
+
+        const privateAppUI = appUI as unknown as {
+            _handleAppCardClick: (e: MouseEvent, app: IApp, category: string) => Promise<void>;
+        };
+
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'currentTarget', { value: card });
+
+        const app = {
+            id: 'future-image',
+            name: 'Future Image',
+            installed: false,
+            comingSoon: true,
+        } as IApp;
+
+        await privateAppUI._handleAppCardClick(event, app, 'ai_image');
+
+        const mockedGlobals = globalThis as unknown as {
+            launchApp: ReturnType<typeof vi.fn>;
+        };
+        expect(toastSpy).toHaveBeenCalled();
+        expect(platformServiceMock.download).not.toHaveBeenCalled();
+        expect(mockedGlobals.launchApp).not.toHaveBeenCalled();
+    });
+
     it('should stop stale launched module after quick reselection', async () => {
         appUI = createAppUI();
 

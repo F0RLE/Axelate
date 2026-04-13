@@ -3,6 +3,37 @@ import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
+function parseGeneratedImages(
+    images: string[] | undefined,
+): Array<{ mime: string; data_base64: string }> | undefined {
+    if (!Array.isArray(images) || images.length === 0) {
+        return undefined;
+    }
+
+    const parsed = images
+        .map((image) => {
+            const match = /^data:([^;]+);base64,(.+)$/u.exec(image);
+            if (match === null) {
+                return null;
+            }
+
+            return {
+                mime: match[1] ?? 'image/png',
+                data_base64: match[2] ?? '',
+            };
+        })
+        .filter(
+            (
+                image,
+            ): image is {
+                mime: string;
+                data_base64: string;
+            } => image !== null && image.data_base64 !== '',
+        );
+
+    return parsed.length > 0 ? parsed : undefined;
+}
+
 export class ChatService {
     constructor(
         private readonly _aiBridge: IAIBridge,
@@ -48,6 +79,14 @@ export class ChatService {
                 ok: true,
                 message: response.text ?? '',
             };
+            const generatedImages = parseGeneratedImages(response.images);
+            if (generatedImages !== undefined) {
+                result.reply = {
+                    text: response.text ?? '',
+                    type: 'markdown',
+                    images: generatedImages,
+                };
+            }
             if (response.thought_signature !== undefined) {
                 result.thought_signature = response.thought_signature;
             }

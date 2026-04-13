@@ -18,7 +18,6 @@ type ModuleSettingsUIPrivate = {
     _getEngineConfigHtml: (
         app: Record<string, unknown>,
         config: Record<string, unknown> | null,
-        gpuInfo?: { backend?: string; detected?: boolean },
     ) => string;
     _bindEvents: () => void;
     _appendExtraArgs: (appId: string, groups: string[]) => number;
@@ -174,17 +173,11 @@ describe('ModuleSettingsUI lifecycle', () => {
             't:ui.settings.engine.model_not_selected:Model not selected',
         );
 
-        const imageHtml = ui._getEngineConfigHtml({ id: 'sdcpp', capability: 'image' }, null, {
-            detected: true,
-            backend: 'vulkan',
-        });
+        const imageHtml = ui._getEngineConfigHtml({ id: 'sdcpp', capability: 'image' }, null);
         const textHtml = ui._getEngineConfigHtml({ id: 'llamacpp', capability: 'text' }, {});
 
         expect(imageHtml).toContain('t:ui.settings.engine.generation_presets:Generation Presets');
-        expect(imageHtml).toContain('t:ui.settings.engine.runtime_bundle:Auto download package');
-        expect(imageHtml).toContain(
-            't:ui.settings.engine.runtime_bundle.vulkan:Vulkan (AMD / Intel / generic GPU)',
-        );
+        expect(imageHtml).not.toContain('Auto download package');
         expect(imageHtml).toContain(
             't:ui.settings.engine.config_unavailable:Engine config unavailable (Tauri not connected)',
         );
@@ -196,14 +189,16 @@ describe('ModuleSettingsUI lifecycle', () => {
         const container = document.createElement('div');
         (
             ui as unknown as {
-                _engineConfigService: { getConfig: ReturnType<typeof vi.fn> };
+                _engineConfigService: { getSettingsPayload: ReturnType<typeof vi.fn> };
             }
-        )._engineConfigService.getConfig = vi.fn().mockResolvedValue({
-            engine_id: 'llamacpp',
-            gpu_layers: 24,
-            context_size: 8192,
-            model_path: 'C:/models/llama.gguf',
-            extra_args: ['--flash-attn'],
+        )._engineConfigService.getSettingsPayload = vi.fn().mockResolvedValue({
+            config: {
+                engine_id: 'llamacpp',
+                gpu_layers: 24,
+                context_size: 8192,
+                model_path: 'C:/models/llama.gguf',
+                extra_args: ['--flash-attn'],
+            },
         });
 
         await ui._renderLocalEngineConfig(container, { id: 'llamacpp', capability: 'text' });
@@ -215,36 +210,24 @@ describe('ModuleSettingsUI lifecycle', () => {
         expect(labels).toContain('t:ui.settings.engine.context_size:Context Window');
     });
 
-    it('should render runtime package hint for sdcpp local settings', async () => {
+    it('should not render runtime package hint for sdcpp local settings', async () => {
         const ui = createSettingsUI();
         const container = document.createElement('div');
         (
             ui as unknown as {
-                _engineConfigService: { getConfig: ReturnType<typeof vi.fn> };
+                _engineConfigService: { getSettingsPayload: ReturnType<typeof vi.fn> };
             }
-        )._engineConfigService.getConfig = vi.fn().mockResolvedValue({
-            engine_id: 'sdcpp',
-            model_path: 'C:/models/sd.safetensors',
-            extra_args: [],
-        });
-        (
-            ui as unknown as {
-                _service: { loadGpuInfo: ReturnType<typeof vi.fn> };
-            }
-        )._service.loadGpuInfo = vi.fn().mockResolvedValue({
-            detected: false,
-            backend: 'cpu',
-            memory: 0,
+        )._engineConfigService.getSettingsPayload = vi.fn().mockResolvedValue({
+            config: {
+                engine_id: 'sdcpp',
+                model_path: 'C:/models/sd.safetensors',
+                extra_args: [],
+            },
         });
 
         await ui._renderLocalEngineConfig(container, { id: 'sdcpp', capability: 'image' });
 
-        expect(container.textContent).toContain(
-            't:ui.settings.engine.runtime_bundle:Auto download package',
-        );
-        expect(container.textContent).toContain(
-            't:ui.settings.engine.runtime_bundle.cpu:CPU (best supported instruction set)',
-        );
+        expect(container.textContent).not.toContain('Auto download package');
     });
 
     it('should close stale custom select overlays when another select opens', () => {

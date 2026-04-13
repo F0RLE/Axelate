@@ -164,6 +164,7 @@ fn localized_prompt_zh(requirement: StartupRequirement) -> StartupPrompt {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};

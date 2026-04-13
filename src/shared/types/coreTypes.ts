@@ -48,6 +48,8 @@ export interface IApp {
     repoUrl?: string;
     expectedHash?: string;
     dlType?: string;
+    comingSoon?: boolean;
+    managedExternally?: boolean;
     configSchema?: Record<string, IConfigField>;
     apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI
 }

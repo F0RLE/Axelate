@@ -5,7 +5,7 @@
 
 import type { AppUI } from '@/shared/shell/AppUI';
 import type { ChatController } from '@/features/chat/chat';
-import type { DebugUI } from '@/features/debug/ui/DebugUI';
+import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
@@ -17,7 +17,7 @@ import { tracer } from '@/infrastructure/logging/LoggerService';
 export interface ICoreEvents {
     readonly appUI: AppUI;
     readonly chatController: ChatController;
-    readonly debugUI: DebugUI;
+    readonly consoleUI: ConsoleUI;
     readonly downloadUI: DownloadUI;
     readonly i18nUI: I18nUI;
     readonly navigationUI: NavigationUI;

@@ -15,7 +15,14 @@ import { type SoundService } from '@/shared/services/SoundService';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationUI {
+    private _lastHandledSideMouseEvent: {
+        button: number;
+        timestamp: number;
+        type: 'mousedown' | 'mouseup';
+    } | null = null;
+    private _mouseDownHandler: ((e: MouseEvent) => void) | null = null;
     private _mouseUpHandler: ((e: MouseEvent) => void) | null = null;
+    private _auxClickHandler: ((e: MouseEvent) => void) | null = null;
     private _keyDownHandler: ((e: KeyboardEvent) => void) | null = null;
     private _initialized = false;
     private static readonly _BACK_BUTTON = 3;
@@ -35,9 +42,15 @@ export class NavigationUI {
         this._initialized = true;
         tracer.debug('[NavigationUI] Navigation initialized.');
 
-        // Bind global mouse navigation (Button 3 = Back, Button 4 = Forward)
+        // Bind global mouse navigation (Button 3 = Back, Button 4 = Forward).
+        this._mouseDownHandler = (e: MouseEvent) => {
+            this._handleMouseNavigation(e);
+        };
         this._mouseUpHandler = (e: MouseEvent) => {
             this._handleMouseNavigation(e);
+        };
+        this._auxClickHandler = (e: MouseEvent) => {
+            this._suppressNativeSideMouseNavigation(e);
         };
 
         // Bind global keyboard shortcuts (Escape = Back)
@@ -50,12 +63,29 @@ export class NavigationUI {
             }
         };
 
-        globalThis.addEventListener('mouseup', this._mouseUpHandler);
+        globalThis.addEventListener('mousedown', this._mouseDownHandler, true);
+        globalThis.addEventListener('mouseup', this._mouseUpHandler, true);
+        globalThis.addEventListener('auxclick', this._auxClickHandler, true);
         globalThis.addEventListener('keydown', this._keyDownHandler);
+    }
+
+    private _suppressNativeSideMouseNavigation(e: MouseEvent): void {
+        if (!this._shouldHandleMouseNavigation(e)) return;
+
+        e.preventDefault();
+        e.stopPropagation();
     }
 
     private _handleMouseNavigation(e: MouseEvent): void {
         if (!this._shouldHandleMouseNavigation(e)) return;
+
+        if (this._isDuplicateSideMouseEvent(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        const isTextEntryTarget = this._isTextEntryTarget(e.target);
 
         if (e.button === NavigationUI._BACK_BUTTON) {
             if (this._service.popBackAction()) {
@@ -64,7 +94,7 @@ export class NavigationUI {
                 return;
             }
 
-            if (this._hasOpenDialog()) {
+            if (isTextEntryTarget || this._hasOpenDialog()) {
                 e.preventDefault();
                 e.stopPropagation();
                 return;
@@ -76,13 +106,7 @@ export class NavigationUI {
             return;
         }
 
-        if (this._service.popForwardAction()) {
-            e.preventDefault();
-            e.stopPropagation();
-            return;
-        }
-
-        if (this._hasOpenDialog()) {
+        if (isTextEntryTarget || this._hasOpenDialog()) {
             e.preventDefault();
             e.stopPropagation();
             return;
@@ -90,13 +114,40 @@ export class NavigationUI {
 
         e.preventDefault();
         e.stopPropagation();
-        this._navigateHistory(this._service.goForward());
+        const pageId = this._service.goForward();
+        if (pageId !== undefined && pageId !== '') {
+            this._navigateHistory(pageId);
+            return;
+        }
+
+        this._service.popForwardAction();
+    }
+
+    private _isDuplicateSideMouseEvent(e: MouseEvent): boolean {
+        const timestamp = performance.now();
+        const previous = this._lastHandledSideMouseEvent;
+
+        if (
+            previous !== null &&
+            previous.button === e.button &&
+            previous.type !== e.type &&
+            timestamp - previous.timestamp < 400
+        ) {
+            this._lastHandledSideMouseEvent = null;
+            return true;
+        }
+
+        this._lastHandledSideMouseEvent = {
+            button: e.button,
+            timestamp,
+            type: e.type === 'mouseup' ? 'mouseup' : 'mousedown',
+        };
+        return false;
     }
 
     private _shouldHandleMouseNavigation(e: MouseEvent): boolean {
         if (e.defaultPrevented) return false;
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
-        if (this._isTextEntryTarget(e.target)) return false;
         return e.button === NavigationUI._BACK_BUTTON || e.button === NavigationUI._FORWARD_BUTTON;
     }
 
@@ -122,9 +173,18 @@ export class NavigationUI {
      * Cleanup listeners.
      */
     public destroy(): void {
+        this._lastHandledSideMouseEvent = null;
+        if (this._mouseDownHandler) {
+            globalThis.removeEventListener('mousedown', this._mouseDownHandler, true);
+            this._mouseDownHandler = null;
+        }
         if (this._mouseUpHandler) {
-            globalThis.removeEventListener('mouseup', this._mouseUpHandler);
+            globalThis.removeEventListener('mouseup', this._mouseUpHandler, true);
             this._mouseUpHandler = null;
+        }
+        if (this._auxClickHandler) {
+            globalThis.removeEventListener('auxclick', this._auxClickHandler, true);
+            this._auxClickHandler = null;
         }
         if (this._keyDownHandler) {
             globalThis.removeEventListener('keydown', this._keyDownHandler);

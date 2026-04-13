@@ -79,11 +79,14 @@ describe('ModuleCardRenderer', () => {
         ModuleCardRenderer.setDownloadProgress(card, 47.4, 'downloading');
         expect((card.querySelector('.download-pct') as HTMLElement).textContent).toBe('47%');
 
-        ModuleCardRenderer.setDownloadProgress(card, -1, 'extracting');
+        ModuleCardRenderer.setDownloadProgress(card, 73, 'extracting');
         expect((card.querySelector('.download-label') as HTMLElement).textContent).toContain(
             'Extracting',
         );
-        expect(card.querySelector('.download-btn')?.classList.contains('indeterminate')).toBe(true);
+        expect((card.querySelector('.download-pct') as HTMLElement).textContent).toBe('73%');
+        expect(card.querySelector('.download-btn')?.classList.contains('indeterminate')).toBe(
+            false,
+        );
 
         ModuleCardRenderer.clearDownloadProgress(card);
         expect(card.querySelector('.download-btn')?.classList.contains('downloading')).toBe(false);
@@ -118,6 +121,44 @@ describe('ModuleCardRenderer', () => {
 
         (selectCard.querySelector('.modal-btn-primary') as HTMLButtonElement).click();
         expect(onClick).toHaveBeenCalled();
+    });
+
+    it('renders a disabled coming-soon button for placeholder modules', () => {
+        const onClick = vi.fn();
+        const onDownload = vi.fn();
+
+        const card = renderer.createCard(
+            {
+                id: 'future-image',
+                name: 'Future Image',
+                desc: 'Desc',
+                installed: false,
+                comingSoon: true,
+            } as never,
+            'ai',
+            false,
+            onClick,
+            onDownload,
+        );
+
+        const button = card.querySelector('.modal-btn-secondary') as HTMLButtonElement | null;
+        expect(button).not.toBeNull();
+        expect(button?.textContent).toContain('Coming soon');
+        expect(button?.disabled).toBe(true);
+        expect(card.querySelector('.download-btn')).toBeNull();
+    });
+
+    it('renders delete badge emoji for installed local modules', () => {
+        const onClick = vi.fn();
+        const card = renderer.createCard(
+            { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,
+            'services',
+            false,
+            onClick,
+        );
+
+        const deleteIcon = card.querySelector('.app-delete-badge .badge-icon');
+        expect(deleteIcon?.textContent).toContain('🗑');
     });
 
     it('opens module settings on right click for installed cards and ignores uninstalled ones', async () => {

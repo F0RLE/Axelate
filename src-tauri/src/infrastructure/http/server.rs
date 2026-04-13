@@ -326,6 +326,7 @@ async fn get_config_handler(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::{LogsQuery, clear_logs_handler, get_logs_handler, sanitize_public_module};
     use crate::models::modules::{ConfigField, Module};

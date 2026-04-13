@@ -27,9 +27,23 @@ type StreamingMessageHandle = {
     finalize: (text: string, stats?: Record<string, unknown>) => void;
 };
 
+type ImageGenerationHandle = {
+    setStatus: (chunk: string) => void;
+    setPreview: (dataUrl: string) => void;
+    finalize: (result: {
+        text: string;
+        images: Array<{ mime: string; data_base64: string }>;
+    }) => void;
+    fail: (message: string) => void;
+    cancel: (message?: string) => void;
+    discard: () => void;
+};
+
 export class ChatController {
     private static readonly _historyRetryDelayMs = 300;
     private static readonly _chatRevealFollowUpDelayMs = 120;
+    private static readonly _maxInputHeightPx = 200;
+    private static readonly _baseInputHeightPx = 42;
 
     private readonly _service: ChatService;
     private readonly _ui: ChatUI;
@@ -44,6 +58,9 @@ export class ChatController {
     private _inactiveAiErrorTimeout: ReturnType<typeof setTimeout> | null = null;
     private _revealLatestMessageTimeout: ReturnType<typeof setTimeout> | null = null;
     private _revealLatestMessageFrame: number | null = null;
+    private _imagePreviewPollTimer: ReturnType<typeof setInterval> | null = null;
+    private _imagePreviewPollInFlight = false;
+    private _lastImagePreviewUpdatedAtMs = 0;
     private _eventsBound = false;
     private _isInitialized = false;
     private _isDestroyed = false;
@@ -145,6 +162,7 @@ export class ChatController {
             globalThis.clearTimeout(this._historyRetryTimeout);
             this._historyRetryTimeout = null;
         }
+        this._stopImagePreviewPolling();
         this._clearInactiveAiErrorTimeout();
         this._clearRevealLatestMessageTimeout();
         if (this._revealLatestMessageFrame !== null) {
@@ -180,6 +198,7 @@ export class ChatController {
 
     public clearChat(): void {
         this._clearInactiveAiErrorTimeout();
+        this._stopImagePreviewPolling();
         this._chatHistory = [];
         chatFileHandler.clear();
         this._ui.clear();
@@ -206,6 +225,8 @@ export class ChatController {
         const uiElements = this._lockUI(input);
         const typingId = `typing-${String(Date.now())}`;
         const listenerId = `chat-stream-${String(Date.now())}`;
+        const activeProviderId = this._aiBridge.getState().activeProviderId;
+        const isImageProvider = this._isImageProvider(activeProviderId);
 
         this._isSending = true;
 
@@ -225,9 +246,8 @@ export class ChatController {
                 content: createMultimodalContent(combinedText, attachments),
             });
 
-            this._ui.showTyping(typingId);
-
             let streamingHandle: StreamingMessageHandle | null = null;
+            let imageHandle: ImageGenerationHandle | null = null;
 
             const ensureStreamingHandle = (): StreamingMessageHandle => {
                 if (streamingHandle === null) {
@@ -237,11 +257,35 @@ export class ChatController {
                 return streamingHandle;
             };
 
-            this._aiBridge.onChunk(listenerId, (chunk) => {
-                ensureStreamingHandle().update(chunk);
-            });
+            const queueRegenerate = async (): Promise<void> => {
+                this._restoreInputText(text);
+                await this.sendChat();
+            };
+
+            const cancelGeneration = async (): Promise<void> => {
+                this._stopImagePreviewPolling();
+                await this._aiBridge.cancelImageGeneration();
+                imageHandle?.cancel();
+            };
+
+            if (isImageProvider) {
+                imageHandle = this._ui.createImageGenerationMessage({
+                    onCancel: cancelGeneration,
+                    onRegenerate: queueRegenerate,
+                });
+                this._startImagePreviewPolling(imageHandle);
+            } else {
+                this._ui.showTyping(typingId);
+                this._aiBridge.onChunk(listenerId, (chunk) => {
+                    ensureStreamingHandle().update(chunk);
+                });
+            }
 
             this._aiBridge.onReplaceChunk(listenerId, (chunk) => {
+                if (imageHandle !== null) {
+                    imageHandle.setStatus(chunk.trim());
+                    return;
+                }
                 ensureStreamingHandle().replace(chunk);
             });
 
@@ -252,8 +296,7 @@ export class ChatController {
             );
 
             this._cleanupStreamingState(listenerId, typingId);
-
-            await this._handleChatResponse(response, streamingHandle);
+            await this._handleChatResponse(response, streamingHandle, imageHandle);
         } catch (e: unknown) {
             this._cleanupStreamingState(listenerId, typingId);
             this._handleError(e);
@@ -447,7 +490,58 @@ export class ChatController {
     private _cleanupStreamingState(listenerId: string, typingId: string): void {
         this._aiBridge.removeChunkListener(listenerId);
         this._aiBridge.removeReplaceChunkListener(listenerId);
+        this._stopImagePreviewPolling();
         this._ui.removeTyping(typingId);
+    }
+
+    private _isImageProvider(providerId: string | null): boolean {
+        return (
+            providerId === 'sdcpp' || providerId === 'stable-diffusion' || providerId === 'comfyui'
+        );
+    }
+
+    private _startImagePreviewPolling(handle: ImageGenerationHandle): void {
+        this._stopImagePreviewPolling();
+        this._lastImagePreviewUpdatedAtMs = 0;
+        void this._pollImagePreview(handle);
+        this._imagePreviewPollTimer = globalThis.setInterval(() => {
+            void this._pollImagePreview(handle);
+        }, 850);
+    }
+
+    private _stopImagePreviewPolling(): void {
+        if (this._imagePreviewPollTimer !== null) {
+            globalThis.clearInterval(this._imagePreviewPollTimer);
+            this._imagePreviewPollTimer = null;
+        }
+        this._imagePreviewPollInFlight = false;
+        this._lastImagePreviewUpdatedAtMs = 0;
+    }
+
+    private async _pollImagePreview(handle: ImageGenerationHandle): Promise<void> {
+        if (this._imagePreviewPollInFlight || this._isDestroyed || !this._isSending) {
+            return;
+        }
+
+        this._imagePreviewPollInFlight = true;
+
+        try {
+            const preview = await this._aiBridge.getImageGenerationPreview();
+            if (
+                preview === null ||
+                preview.data_url.trim() === '' ||
+                preview.updated_at_ms <= this._lastImagePreviewUpdatedAtMs
+            ) {
+                return;
+            }
+
+            this._lastImagePreviewUpdatedAtMs = preview.updated_at_ms;
+            handle.setPreview(preview.data_url);
+        } catch (error: unknown) {
+            tracer.debug('[Chat] Preview polling skipped:', error);
+        } finally {
+            this._imagePreviewPollInFlight = false;
+        }
     }
 
     private _consumePendingChatReveal(): boolean {
@@ -561,10 +655,32 @@ export class ChatController {
             finalize: (text: string, stats?: Record<string, unknown>) => void;
             discard: () => void;
         } | null,
+        imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
         if (response.ok) {
             const rawReply = response.message ?? response.reply?.text ?? '';
             const replyText = this._safeExtractText(rawReply);
+            const generatedImages = response.reply?.images ?? [];
+
+            if (generatedImages.length > 0) {
+                const caption = replyText || this._i18n.t('ui.chat.image_ready', 'Generated image');
+
+                if (imageHandle !== null && imageHandle !== undefined) {
+                    imageHandle.finalize({ text: caption, images: generatedImages });
+                } else {
+                    this._ui.appendMessage('assistant', caption, { images: generatedImages });
+                }
+
+                const assistantMessage: IChatMessage = {
+                    role: 'assistant',
+                    content: this._buildGeneratedImageContent(generatedImages, replyText),
+                };
+                if (response.thought_signature !== undefined) {
+                    assistantMessage.thought_signature = response.thought_signature;
+                }
+                this._chatHistory.push(assistantMessage);
+                return;
+            }
 
             if (replyText !== '') {
                 const tokens = await this._estimateReplyTokens(replyText);
@@ -585,10 +701,16 @@ export class ChatController {
                 this._chatHistory.push(assistantMessage);
             } else if (streamingHandle) {
                 streamingHandle.discard();
+            } else if (imageHandle !== null && imageHandle !== undefined) {
+                imageHandle.discard();
             }
         } else {
             const friendlyMsg = this._getFriendlyErrorMessage(response.error ?? '', response.model);
-            this._handleError(friendlyMsg, response.model);
+            if (imageHandle !== null && imageHandle !== undefined) {
+                imageHandle.fail(friendlyMsg);
+            } else {
+                this._handleError(friendlyMsg, response.model);
+            }
         }
     }
 
@@ -622,7 +744,37 @@ export class ChatController {
     }
 
     private _extractRenderableText(content: ChatContent): string {
-        return this._safeExtractText(content);
+        const extracted = this._safeExtractText(content);
+        if (extracted !== '') {
+            return extracted;
+        }
+
+        if (this._buildHistoryRenderOptions(content).images !== undefined) {
+            return this._i18n.t('ui.chat.image_ready', 'Generated image');
+        }
+
+        return '';
+    }
+
+    private _buildGeneratedImageContent(
+        images: Array<{ mime: string; data_base64: string }>,
+        text: string,
+    ): ChatContent {
+        const parts: ChatContentPart[] = images.map((image) => ({
+            type: 'image_url',
+            image_url: {
+                url: `data:${image.mime};base64,${image.data_base64}`,
+            },
+        }));
+
+        if (text.trim() !== '') {
+            parts.push({
+                type: 'text',
+                text,
+            });
+        }
+
+        return parts;
     }
 
     private _buildHistoryRenderOptions(content: ChatContent): {
@@ -732,6 +884,20 @@ export class ChatController {
             );
         }
 
+        if (
+            msg.includes('cudamalloc failed') ||
+            msg.includes('ggml_backend_cuda_buffer_type_alloc_buffer') ||
+            msg.includes('alloc_tensor_range: failed to allocate cuda0 buffer') ||
+            msg.includes('unet alloc runtime params backend buffer failed') ||
+            (msg.includes('out of memory') &&
+                (msg.includes('stable-diffusion.cpp') || msg.includes('ggml')))
+        ) {
+            return this._i18n.t(
+                'ui.chat.error.image_vram',
+                'Not enough GPU memory to generate the image. Lower image size, steps, or batch size, or use a smaller model.',
+            );
+        }
+
         if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('api key')) {
             return this._i18n
                 .t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`)
@@ -807,9 +973,12 @@ export class ChatController {
         const el = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         if (el) {
             el.style.height = 'auto';
-            const newHeight = Math.min(el.scrollHeight, 200);
+            const targetHeight = Math.max(el.scrollHeight, ChatController._baseInputHeightPx);
+            const isOverflowing = targetHeight > ChatController._maxInputHeightPx;
+            const newHeight = Math.min(targetHeight, ChatController._maxInputHeightPx);
             const nextHeight = `${String(newHeight)}px`;
             el.style.height = nextHeight;
+            el.style.overflowY = isOverflowing ? 'auto' : 'hidden';
         }
     }
 }

@@ -9,9 +9,28 @@ const repoRoot = resolve(srcDir, '..');
 const gitExecutable = resolveGitExecutable();
 
 function resolveGitExecutable() {
+    const configuredGit = process.env.GIT ?? process.env.AXELATE_GIT;
+    if (configuredGit && existsSync(configuredGit)) {
+        return configuredGit;
+    }
+
+    try {
+        execFileSync('git', ['--version'], {
+            cwd: repoRoot,
+            stdio: 'ignore',
+        });
+        return 'git';
+    } catch {
+        // Fall back to well-known install locations below.
+    }
+
     const candidates =
         process.platform === 'win32'
             ? [
+                  String.raw`C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe`,
+                  String.raw`C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe`,
+                  String.raw`C:\Program Files\Microsoft Visual Studio\2022\Professional\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe`,
+                  String.raw`C:\Program Files\Microsoft Visual Studio\2022\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TeamFoundation\Team Explorer\Git\cmd\git.exe`,
                   String.raw`C:\Program Files\Git\cmd\git.exe`,
                   String.raw`C:\Program Files\Git\bin\git.exe`,
                   String.raw`C:\Program Files (x86)\Git\cmd\git.exe`,

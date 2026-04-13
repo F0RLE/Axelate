@@ -5,7 +5,10 @@
 //!
 //! DTOs → [`types`] · Session management → [`session`] · Streaming → [`streaming`]
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::domain::engine::config::{build_default_engine_config, merge_user_engine_config};
 use crate::infrastructure::config::engine_settings::load_engine_config_map;
@@ -299,15 +302,15 @@ pub async fn validate_api_key(
 
 /// Counts tokens in text using tiktoken
 pub fn count_tokens(text: &str, model: Option<&str>) -> Result<usize, String> {
-    use tiktoken_rs::{cl100k_base, get_bpe_from_model};
+    use tiktoken_rs::{bpe_for_model, cl100k_base};
 
-    let bpe = if let Some(m) = model {
-        get_bpe_from_model(m)
-            .or_else(|_| cl100k_base())
-            .map_err(|e| format!("Failed to load tokenizer: {e}"))?
-    } else {
-        cl100k_base().map_err(|e| format!("Failed to load cl100k_base tokenizer: {e}"))?
-    };
+    if let Some(model_name) = model
+        && let Ok(bpe) = bpe_for_model(model_name)
+    {
+        return Ok(bpe.encode_with_special_tokens(text).len());
+    }
+
+    let bpe = cl100k_base().map_err(|e| format!("Failed to load cl100k_base tokenizer: {e}"))?;
 
     Ok(bpe.encode_with_special_tokens(text).len())
 }
@@ -318,131 +321,146 @@ pub async fn process_image_request(
     sessions: &crate::domain::ai::session::ChatSessionManager,
     _config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    image_generation_state: &crate::domain::ai::ImageGenerationState,
     settings_service: &crate::infrastructure::config::settings::SettingsService,
 ) -> Result<super::types::ImageGenerationResponse, crate::errors::AppError> {
     let request = apply_image_request_defaults(request, settings_service).await?;
-    let base_url;
-
-    // Route only local engines for now
-    if let Some(def) = engine_manager.get_definition(&request.provider).await {
-        tracing::info!(
-            provider = %request.provider,
-            "Detected local engine for image generation"
-        );
-
-        // Slot empty, occupied by a different engine, or different model — start or reuse
-        let mut config = build_engine_config(&def).await?;
-
-        // If the request provides a specific (valid) model path, override the config.
-        // Frontend sends "default" when no specific model is selected in the chat UI,
-        // so we must ignore "default" here and rely on the saved Config (from settings).
-        if !request.model.is_empty() && request.model != "default" {
-            config.model_path = Some(request.model.clone());
-        }
-
-        // Final sanity check: if model_path is still None or "default", the engine will fail.
-        if config.model_path.as_deref() == Some("default") {
-            config.model_path = None;
-        }
-
-        let status = engine_manager.start(config).await?;
-        base_url = status.endpoint;
+    let images = if request.provider == "comfyui" {
+        process_comfyui_request(&request, image_generation_state, settings_service).await?
     } else {
-        return Err(crate::errors::AppError::External {
-            request_id: None,
-            message: "Cloud image generation is not yet supported. Please use a local engine."
-                .into(),
+        let base_url;
+        let preview_path: Option<std::path::PathBuf>;
+
+        // Route only local engines for now
+        if let Some(def) = engine_manager.get_definition(&request.provider).await {
+            tracing::info!(
+                provider = %request.provider,
+                "Detected local engine for image generation"
+            );
+
+            // Slot empty, occupied by a different engine, or different model — start or reuse
+            let mut config = build_engine_config(&def).await?;
+
+            // If the request provides a specific (valid) model path, override the config.
+            // Frontend sends "default" when no specific model is selected in the chat UI,
+            // so we must ignore "default" here and rely on the saved Config (from settings).
+            if !request.model.is_empty() && request.model != "default" {
+                config.model_path = Some(request.model.clone());
+            }
+
+            // Final sanity check: if model_path is still None or "default", the engine will fail.
+            if config.model_path.as_deref() == Some("default") {
+                config.model_path = None;
+            }
+
+            preview_path =
+                crate::domain::engine::manager::resolve_sdcpp_preview_path(&config.extra_args);
+
+            let status = engine_manager.start(config).await?;
+            base_url = status.endpoint;
+        } else {
+            return Err(crate::errors::AppError::External {
+                request_id: None,
+                message: "Cloud image generation is not yet supported. Please use a local engine."
+                    .into(),
+            });
+        }
+
+        let is_sdapi = request.provider == "sdcpp" || request.provider == "stable-diffusion";
+        let url = if is_sdapi {
+            format!("{base_url}/sdapi/v1/txt2img")
+        } else {
+            format!("{base_url}/v1/images/generations")
+        };
+
+        let normalized_sampler = if is_sdapi {
+            normalize_sdcpp_sampler(request.sampler.as_deref())
+        } else {
+            request
+                .sampler
+                .clone()
+                .unwrap_or_else(|| "euler_a".to_string())
+        };
+        let normalized_scheduler = if is_sdapi {
+            normalize_sdcpp_scheduler(request.scheduler.as_deref())
+        } else {
+            request.scheduler.clone().unwrap_or_default()
+        };
+
+        // Convert our request to exactly what the endpoint expects
+        let payload = serde_json::json!({
+            "prompt": request.prompt,
+            "steps": request.steps.unwrap_or(20),
+            "cfg_scale": request.cfg_scale.unwrap_or(7.0),
+            "width": request.width.unwrap_or(512),
+            "height": request.height.unwrap_or(512),
+            "sampler_name": normalized_sampler,
+            "scheduler": normalized_scheduler,
+            "seed": request.seed.unwrap_or(-1),
+            "batch_size": request.batch_size.unwrap_or(1),
+            "clip_skip": request.clip_skip.unwrap_or(-1),
+            "negative_prompt": request.negative_prompt.unwrap_or_default()
         });
-    }
 
-    let is_sdapi = request.provider == "sdcpp" || request.provider == "stable-diffusion";
-    let url = if is_sdapi {
-        format!("{base_url}/sdapi/v1/txt2img")
-    } else {
-        format!("{base_url}/v1/images/generations")
-    };
-
-    let normalized_sampler = if is_sdapi {
-        normalize_sdcpp_sampler(request.sampler.as_deref())
-    } else {
-        request
-            .sampler
-            .clone()
-            .unwrap_or_else(|| "euler_a".to_string())
-    };
-    let normalized_scheduler = if is_sdapi {
-        normalize_sdcpp_scheduler(request.scheduler.as_deref())
-    } else {
-        request.scheduler.clone().unwrap_or_default()
-    };
-
-    // Convert our request to exactly what the endpoint expects
-    let payload = serde_json::json!({
-        "prompt": request.prompt,
-        "steps": request.steps.unwrap_or(20),
-        "cfg_scale": request.cfg_scale.unwrap_or(7.0),
-        "width": request.width.unwrap_or(512),
-        "height": request.height.unwrap_or(512),
-        "sampler_name": normalized_sampler,
-        "scheduler": normalized_scheduler,
-        "seed": request.seed.unwrap_or(-1),
-        "batch_size": request.batch_size.unwrap_or(1),
-        "clip_skip": request.clip_skip.unwrap_or(-1),
-        "negative_prompt": request.negative_prompt.unwrap_or_default()
-    });
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(999_999))
-        .build()
-        .map_err(|e| crate::errors::AppError::External {
-            request_id: None,
-            message: e.to_string(),
-        })?;
-
-    tracing::info!("Sending image generation request to {}", url);
-    let res = client.post(&url).json(&payload).send().await.map_err(|e| {
-        crate::errors::AppError::External {
-            request_id: None,
-            message: e.to_string(),
-        }
-    })?;
-
-    if !res.status().is_success() {
-        let err_text = res.text().await.unwrap_or_default();
-        return Err(crate::errors::AppError::External {
-            request_id: None,
-            message: format!("Image generation failed: {err_text}"),
-        });
-    }
-
-    // The standardized response format usually looks like:
-    // { "created": ..., "data": [ { "b64_json": "...", "url": "..." } ] }
-    let body: serde_json::Value =
-        res.json()
-            .await
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(999_999))
+            .build()
             .map_err(|e| crate::errors::AppError::External {
                 request_id: None,
-                message: format!("Failed to parse image response: {e}"),
+                message: e.to_string(),
             })?;
 
-    let mut images = Vec::new();
-    if is_sdapi {
-        if let Some(imgs) = body.get("images").and_then(|i| i.as_array()) {
-            for item in imgs {
-                if let Some(b64) = item.as_str() {
+        if let Some(preview_path) = preview_path.as_deref() {
+            clear_preview_file(preview_path).await;
+        }
+
+        tracing::info!("Sending image generation request to {}", url);
+        let res = client.post(&url).json(&payload).send().await.map_err(|e| {
+            crate::errors::AppError::External {
+                request_id: None,
+                message: e.to_string(),
+            }
+        })?;
+
+        if !res.status().is_success() {
+            let err_text = res.text().await.unwrap_or_default();
+            return Err(crate::errors::AppError::External {
+                request_id: None,
+                message: format!("Image generation failed: {err_text}"),
+            });
+        }
+
+        // The standardized response format usually looks like:
+        // { "created": ..., "data": [ { "b64_json": "...", "url": "..." } ] }
+        let body: serde_json::Value =
+            res.json()
+                .await
+                .map_err(|e| crate::errors::AppError::External {
+                    request_id: None,
+                    message: format!("Failed to parse image response: {e}"),
+                })?;
+
+        let mut images = Vec::new();
+        if is_sdapi {
+            if let Some(imgs) = body.get("images").and_then(|i| i.as_array()) {
+                for item in imgs {
+                    if let Some(b64) = item.as_str() {
+                        images.push(format!("data:image/png;base64,{b64}"));
+                    }
+                }
+            }
+        } else if let Some(data) = body.get("data").and_then(|d| d.as_array()) {
+            for item in data {
+                if let Some(b64) = item.get("b64_json").and_then(|s| s.as_str()) {
                     images.push(format!("data:image/png;base64,{b64}"));
+                } else if let Some(url) = item.get("url").and_then(|s| s.as_str()) {
+                    images.push(url.to_string());
                 }
             }
         }
-    } else if let Some(data) = body.get("data").and_then(|d| d.as_array()) {
-        for item in data {
-            if let Some(b64) = item.get("b64_json").and_then(|s| s.as_str()) {
-                images.push(format!("data:image/png;base64,{b64}"));
-            } else if let Some(url) = item.get("url").and_then(|s| s.as_str()) {
-                images.push(url.to_string());
-            }
-        }
-    }
+
+        images
+    };
 
     if let Some(sid) = request.session_id.as_deref()
         && !images.is_empty()
@@ -460,18 +478,18 @@ pub async fn process_image_request(
         };
         let _ = sessions.merge_request_messages(sid, &[user_message]);
 
-        let markdown_images = images
-            .iter()
-            .map(|image| format!("![Generated Image]({image})"))
-            .collect::<Vec<_>>()
-            .join("\n\n");
-
         let reply = super::types::ChatReply {
-            text: markdown_images,
+            text: String::new(),
             role: "assistant".to_string(),
         };
 
-        sessions.append_response(sid, uuid::Uuid::new_v4().to_string(), &reply, None);
+        sessions.append_response_with_content(
+            sid,
+            uuid::Uuid::new_v4().to_string(),
+            build_generated_image_content(&images),
+            &reply.role,
+            None,
+        );
         let _ = sessions.force_save().await;
     }
 
@@ -480,6 +498,551 @@ pub async fn process_image_request(
         ok: true,
         error: None,
     })
+}
+
+async fn process_comfyui_request(
+    request: &super::types::ImageGenerationRequest,
+    image_generation_state: &crate::domain::ai::ImageGenerationState,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
+) -> Result<Vec<String>, crate::errors::AppError> {
+    let settings = settings_service.get_settings().await?;
+    let settings_key = request
+        .settings_key
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| request.provider.clone());
+
+    let base_url = normalize_comfyui_base_url(
+        resolve_string_setting(&settings, &settings_key, &request.provider, "base_url")
+            .as_deref()
+            .unwrap_or("http://127.0.0.1:8188"),
+    );
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|error| crate::errors::AppError::External {
+            request_id: None,
+            message: error.to_string(),
+        })?;
+    let checkpoint =
+        resolve_comfyui_checkpoint(request, &settings, &settings_key, &base_url, &client).await?;
+
+    let sampler = normalize_comfyui_sampler(request.sampler.as_deref());
+    let scheduler = normalize_comfyui_scheduler(request.scheduler.as_deref());
+    let seed = normalize_comfyui_seed(request.seed);
+    let steps = request.steps.unwrap_or(24);
+    let cfg_scale = request.cfg_scale.unwrap_or(7.0);
+    let width = request.width.unwrap_or(832);
+    let height = request.height.unwrap_or(1216);
+    let batch_size = request.batch_size.unwrap_or(1);
+    let negative_prompt = request.negative_prompt.clone().unwrap_or_default();
+    let prompt_id = uuid::Uuid::new_v4().to_string();
+    let client_id = uuid::Uuid::new_v4().to_string();
+
+    let workflow = build_comfyui_workflow(
+        &request.prompt,
+        &negative_prompt,
+        &checkpoint,
+        seed,
+        steps,
+        cfg_scale,
+        width,
+        height,
+        batch_size,
+        &sampler,
+        &scheduler,
+    );
+
+    image_generation_state
+        .begin(&request.provider, &base_url, Some(prompt_id.clone()))
+        .await;
+
+    let mut active_prompt_id = prompt_id.clone();
+    let result = async {
+        let response = client
+            .post(format!("{base_url}/prompt"))
+            .json(&serde_json::json!({
+                "prompt": workflow,
+                "client_id": client_id,
+                "prompt_id": prompt_id,
+            }))
+            .send()
+            .await
+            .map_err(|error| crate::errors::AppError::External {
+                request_id: None,
+                message: format!("Failed to queue ComfyUI prompt: {error}"),
+            })?;
+
+        if !response.status().is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(crate::errors::AppError::External {
+                request_id: None,
+                message: format!("ComfyUI queue request failed: {body}"),
+            });
+        }
+
+        let queue_body: serde_json::Value =
+            response
+                .json()
+                .await
+                .map_err(|error| crate::errors::AppError::External {
+                    request_id: None,
+                    message: format!("Failed to parse ComfyUI queue response: {error}"),
+                })?;
+
+        if let Some(server_prompt_id) = queue_body.get("prompt_id").and_then(|value| value.as_str())
+            && !server_prompt_id.trim().is_empty()
+        {
+            active_prompt_id = server_prompt_id.to_string();
+            image_generation_state
+                .update_prompt_id(&request.provider, active_prompt_id.clone())
+                .await;
+        }
+
+        if let Some(message) = extract_comfyui_queue_error(&queue_body) {
+            return Err(crate::errors::AppError::External {
+                request_id: None,
+                message,
+            });
+        }
+
+        wait_for_comfyui_images(
+            &client,
+            &base_url,
+            &request.provider,
+            &active_prompt_id,
+            image_generation_state,
+        )
+        .await
+    }
+    .await;
+
+    image_generation_state
+        .clear(&request.provider, Some(active_prompt_id.as_str()))
+        .await;
+
+    result
+}
+
+async fn resolve_comfyui_checkpoint(
+    request: &super::types::ImageGenerationRequest,
+    settings: &crate::models::AppSettings,
+    settings_key: &str,
+    base_url: &str,
+    client: &reqwest::Client,
+) -> Result<String, crate::errors::AppError> {
+    if !request.model.trim().is_empty() && request.model != "default" {
+        return Ok(normalize_comfyui_checkpoint(&request.model));
+    }
+
+    if let Some(saved_checkpoint) =
+        resolve_string_setting(settings, settings_key, &request.provider, "checkpoint")
+    {
+        return Ok(normalize_comfyui_checkpoint(&saved_checkpoint));
+    }
+
+    let available_checkpoints = fetch_comfyui_checkpoints(client, base_url).await?;
+    if let Some(checkpoint) = available_checkpoints.first() {
+        return Ok(normalize_comfyui_checkpoint(checkpoint));
+    }
+
+    Err(crate::errors::AppError::Config(
+        "ComfyUI does not expose any checkpoints yet. Install a model in ComfyUI and try again."
+            .to_string(),
+    ))
+}
+
+fn normalize_comfyui_base_url(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return "http://127.0.0.1:8188".to_string();
+    }
+
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return trimmed.to_string();
+    }
+
+    format!("http://{trimmed}")
+}
+
+fn normalize_comfyui_checkpoint(raw: &str) -> String {
+    raw.trim()
+        .replace('\\', "/")
+        .split('/')
+        .next_back()
+        .unwrap_or(raw)
+        .trim()
+        .to_string()
+}
+
+fn normalize_comfyui_sampler(value: Option<&str>) -> String {
+    match value.unwrap_or("euler").trim().to_lowercase().as_str() {
+        "euler a" | "euler_a" | "euler ancestral" | "euler_ancestral" => {
+            "euler_ancestral".to_string()
+        }
+        "euler" => "euler".to_string(),
+        "heun" => "heun".to_string(),
+        "heunpp2" => "heunpp2".to_string(),
+        "dpm2" | "dpm 2" | "dpm_2" => "dpm_2".to_string(),
+        "dpm2 a" | "dpm2_a" | "dpm 2 ancestral" | "dpm_2_ancestral" => {
+            "dpm_2_ancestral".to_string()
+        }
+        "lms" => "lms".to_string(),
+        "dpm fast" | "dpm_fast" => "dpm_fast".to_string(),
+        "dpm adaptive" | "dpm_adaptive" => "dpm_adaptive".to_string(),
+        "dpm++ 2s a" | "dpm++2s_a" | "dpmpp_2s_a" | "dpmpp_2s_ancestral" => {
+            "dpmpp_2s_ancestral".to_string()
+        }
+        "dpm++ sde" | "dpmpp_sde" => "dpmpp_sde".to_string(),
+        "dpm++ sde gpu" | "dpmpp_sde_gpu" => "dpmpp_sde_gpu".to_string(),
+        "dpm++ 2m" | "dpm++2m" | "dpmpp_2m" => "dpmpp_2m".to_string(),
+        "dpm++ 2m sde" | "dpm++2m sde" | "dpmpp_2m_sde" => "dpmpp_2m_sde".to_string(),
+        "dpm++ 3m sde" | "dpm++3m sde" | "dpmpp_3m_sde" => "dpmpp_3m_sde".to_string(),
+        "dpm++ 3m sde gpu" | "dpm++3m sde gpu" | "dpmpp_3m_sde_gpu" => {
+            "dpmpp_3m_sde_gpu".to_string()
+        }
+        "ddpm" => "ddpm".to_string(),
+        "lcm" => "lcm".to_string(),
+        "ipndm" => "ipndm".to_string(),
+        "ipndm_v" => "ipndm_v".to_string(),
+        "deis" => "deis".to_string(),
+        "ddim" => "ddim".to_string(),
+        "uni pc" | "uni_pc" => "uni_pc".to_string(),
+        "uni pc bh2" | "uni_pc_bh2" => "uni_pc_bh2".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn normalize_comfyui_scheduler(value: Option<&str>) -> String {
+    match value.unwrap_or("karras").trim().to_lowercase().as_str() {
+        "default" | "auto" | "karras" => "karras".to_string(),
+        "normal" => "normal".to_string(),
+        "simple" => "simple".to_string(),
+        "sgm uniform" | "sgm_uniform" => "sgm_uniform".to_string(),
+        "exponential" => "exponential".to_string(),
+        "ddim uniform" | "ddim_uniform" => "ddim_uniform".to_string(),
+        "beta" => "beta".to_string(),
+        "linear quadratic" | "linear_quadratic" => "linear_quadratic".to_string(),
+        "kl optimal" | "kl_optimal" => "kl_optimal".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn normalize_comfyui_seed(value: Option<i32>) -> u64 {
+    match value {
+        Some(seed) if seed >= 0 => u64::from(seed.unsigned_abs()),
+        _ => rand::random::<u64>(),
+    }
+}
+
+async fn fetch_comfyui_checkpoints(
+    client: &reqwest::Client,
+    base_url: &str,
+) -> Result<Vec<String>, crate::errors::AppError> {
+    let response = client
+        .get(format!("{base_url}/models/checkpoints"))
+        .send()
+        .await
+        .map_err(|error| crate::errors::AppError::External {
+            request_id: None,
+            message: format!("Failed to query ComfyUI checkpoints: {error}"),
+        })?;
+
+    if !response.status().is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(crate::errors::AppError::External {
+            request_id: None,
+            message: format!("ComfyUI checkpoints request failed: {body}"),
+        });
+    }
+
+    let payload: serde_json::Value =
+        response
+            .json()
+            .await
+            .map_err(|error| crate::errors::AppError::External {
+                request_id: None,
+                message: format!("Failed to parse ComfyUI checkpoint list: {error}"),
+            })?;
+
+    Ok(parse_comfyui_checkpoint_list(&payload))
+}
+
+fn parse_comfyui_checkpoint_list(payload: &serde_json::Value) -> Vec<String> {
+    fn extract_checkpoint_name(value: &serde_json::Value) -> Option<String> {
+        if let Some(name) = value.as_str() {
+            let trimmed = name.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+
+        let object = value.as_object()?;
+        for key in ["name", "filename", "path"] {
+            if let Some(candidate) = object.get(key).and_then(|entry| entry.as_str()) {
+                let trimmed = candidate.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
+    let values = if let Some(items) = payload.as_array() {
+        items.iter().collect::<Vec<_>>()
+    } else if let Some(items) = payload.get("models").and_then(|value| value.as_array()) {
+        items.iter().collect::<Vec<_>>()
+    } else if let Some(items) = payload.get("files").and_then(|value| value.as_array()) {
+        items.iter().collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+
+    let mut seen = std::collections::HashSet::new();
+    values
+        .into_iter()
+        .filter_map(extract_checkpoint_name)
+        .filter(|value| seen.insert(value.clone()))
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_comfyui_workflow(
+    prompt: &str,
+    negative_prompt: &str,
+    checkpoint: &str,
+    seed: u64,
+    steps: u32,
+    cfg_scale: f32,
+    width: u32,
+    height: u32,
+    batch_size: u32,
+    sampler: &str,
+    scheduler: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "3": {
+            "class_type": "KSampler",
+            "inputs": {
+                "cfg": cfg_scale,
+                "denoise": 1.0,
+                "latent_image": ["5", 0],
+                "model": ["4", 0],
+                "negative": ["7", 0],
+                "positive": ["6", 0],
+                "sampler_name": sampler,
+                "scheduler": scheduler,
+                "seed": seed,
+                "steps": steps
+            }
+        },
+        "4": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": checkpoint
+            }
+        },
+        "5": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {
+                "batch_size": batch_size,
+                "height": height,
+                "width": width
+            }
+        },
+        "6": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["4", 1],
+                "text": prompt
+            }
+        },
+        "7": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["4", 1],
+                "text": negative_prompt
+            }
+        },
+        "8": {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["3", 0],
+                "vae": ["4", 2]
+            }
+        },
+        "9": {
+            "class_type": "SaveImage",
+            "inputs": {
+                "filename_prefix": "Axelate",
+                "images": ["8", 0]
+            }
+        }
+    })
+}
+
+async fn wait_for_comfyui_images(
+    client: &reqwest::Client,
+    base_url: &str,
+    provider: &str,
+    prompt_id: &str,
+    image_generation_state: &crate::domain::ai::ImageGenerationState,
+) -> Result<Vec<String>, crate::errors::AppError> {
+    let deadline = Instant::now() + Duration::from_secs(600);
+
+    loop {
+        if image_generation_state
+            .is_cancelled(provider, Some(prompt_id))
+            .await
+        {
+            return Err(crate::errors::AppError::External {
+                request_id: None,
+                message: "Image generation cancelled".to_string(),
+            });
+        }
+
+        let response = client
+            .get(format!("{base_url}/history/{prompt_id}"))
+            .send()
+            .await
+            .map_err(|error| crate::errors::AppError::External {
+                request_id: None,
+                message: format!("Failed to poll ComfyUI history: {error}"),
+            })?;
+
+        if response.status().is_success() {
+            let history_body: serde_json::Value =
+                response
+                    .json()
+                    .await
+                    .map_err(|error| crate::errors::AppError::External {
+                        request_id: None,
+                        message: format!("Failed to parse ComfyUI history: {error}"),
+                    })?;
+
+            if let Some(entry) = history_body.get(prompt_id) {
+                let images = fetch_comfyui_history_images(client, base_url, entry).await?;
+                if !images.is_empty() {
+                    return Ok(images);
+                }
+            }
+        }
+
+        if Instant::now() >= deadline {
+            return Err(crate::errors::AppError::External {
+                request_id: None,
+                message: "ComfyUI image generation timed out".to_string(),
+            });
+        }
+
+        tokio::time::sleep(Duration::from_millis(700)).await;
+    }
+}
+
+async fn fetch_comfyui_history_images(
+    client: &reqwest::Client,
+    base_url: &str,
+    history_entry: &serde_json::Value,
+) -> Result<Vec<String>, crate::errors::AppError> {
+    let mut images = Vec::new();
+    let Some(outputs) = history_entry
+        .get("outputs")
+        .and_then(|value| value.as_object())
+    else {
+        return Ok(images);
+    };
+
+    for node_output in outputs.values() {
+        let Some(node_images) = node_output.get("images").and_then(|value| value.as_array()) else {
+            continue;
+        };
+
+        for image_meta in node_images {
+            let Some(filename) = image_meta.get("filename").and_then(|value| value.as_str()) else {
+                continue;
+            };
+
+            let subfolder = image_meta
+                .get("subfolder")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            let image_type = image_meta
+                .get("type")
+                .and_then(|value| value.as_str())
+                .unwrap_or("output");
+            let mut image_url =
+                reqwest::Url::parse(&format!("{base_url}/view")).map_err(|error| {
+                    crate::errors::AppError::External {
+                        request_id: None,
+                        message: format!("Failed to build ComfyUI image URL: {error}"),
+                    }
+                })?;
+            {
+                let mut query = image_url.query_pairs_mut();
+                query.append_pair("filename", filename);
+                if !subfolder.is_empty() {
+                    query.append_pair("subfolder", subfolder);
+                }
+                query.append_pair("type", image_type);
+            }
+
+            let response = client.get(image_url).send().await.map_err(|error| {
+                crate::errors::AppError::External {
+                    request_id: None,
+                    message: format!("Failed to fetch ComfyUI image: {error}"),
+                }
+            })?;
+
+            if !response.status().is_success() {
+                let body = response.text().await.unwrap_or_default();
+                return Err(crate::errors::AppError::External {
+                    request_id: None,
+                    message: format!("ComfyUI image download failed: {body}"),
+                });
+            }
+
+            let mime_type = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("image/png")
+                .to_string();
+            let bytes =
+                response
+                    .bytes()
+                    .await
+                    .map_err(|error| crate::errors::AppError::External {
+                        request_id: None,
+                        message: format!("Failed to read ComfyUI image bytes: {error}"),
+                    })?;
+
+            images.push(format!(
+                "data:{mime_type};base64,{}",
+                STANDARD.encode(bytes)
+            ));
+        }
+    }
+
+    Ok(images)
+}
+
+fn extract_comfyui_queue_error(body: &serde_json::Value) -> Option<String> {
+    if let Some(error_message) = body.get("error").and_then(|value| value.as_str()) {
+        return Some(format!("ComfyUI queue error: {error_message}"));
+    }
+
+    let node_errors = body.get("node_errors")?;
+    if !node_errors.is_object()
+        || node_errors
+            .as_object()
+            .is_some_and(serde_json::Map::is_empty)
+    {
+        return None;
+    }
+
+    Some(format!("ComfyUI node validation failed: {node_errors}"))
 }
 
 async fn apply_image_request_defaults(
@@ -540,6 +1103,33 @@ async fn apply_image_request_defaults(
         .or_else(|| resolve_i32_setting(&settings, &settings_key, &request.provider, "clip_skip"));
 
     Ok(request)
+}
+
+async fn clear_preview_file(path: &Path) {
+    if let Err(error) = tokio::fs::remove_file(path).await
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::debug!(
+            "Failed to clear stale preview file {}: {error}",
+            path.display()
+        );
+    }
+}
+
+fn build_generated_image_content(images: &[String]) -> serde_json::Value {
+    serde_json::Value::Array(
+        images
+            .iter()
+            .map(|image| {
+                serde_json::json!({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image
+                    }
+                })
+            })
+            .collect(),
+    )
 }
 
 fn resolve_string_setting(
@@ -816,6 +1406,55 @@ mod tests {
         assert_eq!(
             resolve_string_setting(&settings, "custom_sd", "sdcpp", "negative_prompt"),
             Some("blurry".to_string())
+        );
+    }
+
+    #[test]
+    fn test_normalize_comfyui_sampler_maps_a1111_aliases() {
+        assert_eq!(
+            normalize_comfyui_sampler(Some("DPM++ 2M SDE")),
+            "dpmpp_2m_sde"
+        );
+        assert_eq!(
+            normalize_comfyui_sampler(Some("Euler a")),
+            "euler_ancestral"
+        );
+        assert_eq!(normalize_comfyui_sampler(None), "euler");
+    }
+
+    #[test]
+    fn test_normalize_comfyui_scheduler_maps_known_aliases() {
+        assert_eq!(normalize_comfyui_scheduler(Some("default")), "karras");
+        assert_eq!(
+            normalize_comfyui_scheduler(Some("linear quadratic")),
+            "linear_quadratic"
+        );
+        assert_eq!(
+            normalize_comfyui_scheduler(Some("sgm uniform")),
+            "sgm_uniform"
+        );
+    }
+
+    #[test]
+    fn test_parse_comfyui_checkpoint_list_supports_multiple_payload_shapes() {
+        let payload = serde_json::json!({
+            "models": [
+                "model-a.safetensors",
+                { "name": "model-b.safetensors" },
+                { "filename": "model-c.safetensors" },
+                { "path": "nested/model-d.safetensors" },
+                "model-a.safetensors"
+            ]
+        });
+
+        assert_eq!(
+            parse_comfyui_checkpoint_list(&payload),
+            vec![
+                "model-a.safetensors".to_string(),
+                "model-b.safetensors".to_string(),
+                "model-c.safetensors".to_string(),
+                "nested/model-d.safetensors".to_string(),
+            ]
         );
     }
 }

@@ -62,6 +62,13 @@ export class ModulePlatformService {
             aiBridge.stopProvider();
             return true;
         } else {
+            if (app.managedExternally === true) {
+                tracer.info(
+                    `[ModulePlatformService] Skip local stop for externally managed module: ${app.id}`,
+                );
+                return true;
+            }
+
             // Stop Local Process
             // Currently ModuleService.control handles this, or backend kills process?
             // Existing AppUI logic just showed a toast for local modules saying "Stopped"

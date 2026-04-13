@@ -26,12 +26,21 @@ src-tauri/check_output.txt
 .env
 .env.*
 !**/.env.example
+.envrc
+.direnv/
 *.log
+.eslintcache
+.cache/
+.history/
 
 # System
 Thumbs.db
 Desktop.ini
+.DS_Store
+ehthumbs.db
 
 # Application
 AxelateData/
 data/
+.playwright-cli
+output

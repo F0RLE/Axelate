@@ -30,6 +30,20 @@ type SavedChatImage = {
     folderPath: string;
 };
 
+type ChatImagePayload = {
+    mime: string;
+    data_base64: string;
+};
+
+type ImageGenerationMessageHandle = {
+    setStatus: (text: string) => void;
+    setPreview: (dataUrl: string) => void;
+    finalize: (result: { text: string; images: ChatImagePayload[] }) => void;
+    fail: (message: string) => void;
+    cancel: (message?: string) => void;
+    discard: () => void;
+};
+
 export class ChatUI {
     private static readonly _imageResetDelayMs = 250;
     private _lastTokenCount = 0;
@@ -83,6 +97,9 @@ export class ChatUI {
     }
     private get _chatInput(): HTMLTextAreaElement | null {
         return document.getElementById('chat-input') as HTMLTextAreaElement | null;
+    }
+    private get _chatInputPlaceholder(): HTMLElement | null {
+        return document.getElementById('chat-input-placeholder');
     }
     private get _clearBtn(): HTMLElement | null {
         return document.getElementById('clear-chat-btn');
@@ -543,6 +560,185 @@ export class ChatUI {
         };
     }
 
+    public createImageGenerationMessage(opts: {
+        onCancel: () => void | Promise<void>;
+        onRegenerate: () => void | Promise<void>;
+    }): ImageGenerationMessageHandle {
+        this._prepareContainer();
+
+        const row = document.createElement('div');
+        row.className = 'chat-row bot';
+
+        const bubble = this._createMessageBubble({ mediaFirst: true });
+        bubble.classList.add('chat-image-generation');
+
+        const media = document.createElement('div');
+        media.className = 'chat-generated-media hidden';
+
+        const image = document.createElement('img');
+        image.className = 'chat-img chat-generated-image';
+        image.alt = 'Generated preview';
+        media.appendChild(image);
+
+        const status = document.createElement('div');
+        status.className = 'chat-generated-status';
+        status.textContent = getGlobalWin().t('ui.chat.image_generating', 'Generating image...');
+
+        const progress = document.createElement('div');
+        progress.className = 'chat-generated-progress';
+
+        const progressFill = document.createElement('div');
+        progressFill.className = 'chat-generated-progress-fill';
+        progress.appendChild(progressFill);
+
+        const caption = document.createElement('div');
+        caption.className = 'chat-generated-caption hidden';
+
+        const controls = document.createElement('div');
+        controls.className = 'chat-generated-controls';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'chat-generated-control is-cancel';
+        cancelBtn.textContent = getGlobalWin().t('ui.chat.image_cancel', 'Cancel');
+
+        const regenerateBtn = document.createElement('button');
+        regenerateBtn.type = 'button';
+        regenerateBtn.className = 'chat-generated-control is-regenerate hidden';
+        regenerateBtn.textContent = getGlobalWin().t('ui.chat.image_regenerate', 'Regenerate');
+
+        const invokeControl = (
+            button: HTMLButtonElement,
+            action: () => void | Promise<void>,
+        ): void => {
+            button.disabled = true;
+            Promise.resolve(action())
+                .catch((error: unknown) => {
+                    tracer.error('[ChatUI] Image generation control failed', error);
+                })
+                .finally(() => {
+                    if (!this._isDestroyed && button.isConnected) {
+                        button.disabled = false;
+                    }
+                });
+        };
+
+        cancelBtn.addEventListener('click', () => {
+            invokeControl(cancelBtn, opts.onCancel);
+        });
+        regenerateBtn.addEventListener('click', () => {
+            invokeControl(regenerateBtn, opts.onRegenerate);
+        });
+
+        controls.append(cancelBtn, regenerateBtn);
+        bubble.append(media, status, progress, caption, controls);
+        row.appendChild(bubble);
+        this._messagesContainer?.appendChild(row);
+        this._scrollToBottom();
+
+        let actions: {
+            actionBar: HTMLElement;
+            copyBtn: HTMLElement;
+            editBtn: HTMLElement | null;
+        } | null = null;
+        let finalImage: ChatImagePayload | null = null;
+
+        const setProgressFromStatus = (text: string): void => {
+            const match = /(\d+)\s*\/\s*(\d+)/u.exec(text);
+            if (match === null) {
+                progressFill.style.width = '';
+                progress.classList.remove('is-complete');
+                return;
+            }
+
+            const current = Number.parseInt(match[1] ?? '0', 10);
+            const total = Number.parseInt(match[2] ?? '0', 10);
+            if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) {
+                progressFill.style.width = '';
+                progress.classList.remove('is-complete');
+                return;
+            }
+
+            const percent = Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+            progressFill.style.width = `${String(percent)}%`;
+            progress.classList.toggle('is-complete', percent >= 100);
+        };
+
+        const showPreview = (dataUrl: string): void => {
+            if (dataUrl.trim() === '') return;
+            if (image.src === dataUrl) return;
+            image.src = dataUrl;
+            media.classList.remove('hidden');
+            bubble.classList.add('chat-bubble--media');
+            this._scrollToBottom(true);
+        };
+
+        const showRegenerateOnly = (): void => {
+            cancelBtn.classList.add('hidden');
+            regenerateBtn.classList.remove('hidden');
+        };
+
+        const ensureImageActions = (content: string): void => {
+            if (finalImage === null) {
+                return;
+            }
+            actions ??= this._appendMessageActions(content, 'assistant', finalImage);
+            if (actions !== null && !bubble.contains(actions.actionBar)) {
+                bubble.appendChild(actions.actionBar);
+                this._scheduleBubbleImageActions(bubble, actions.actionBar);
+            }
+        };
+
+        return {
+            setStatus: (text: string) => {
+                status.textContent = text;
+                setProgressFromStatus(text);
+            },
+            setPreview: (dataUrl: string) => {
+                showPreview(dataUrl);
+            },
+            finalize: (result: { text: string; images: ChatImagePayload[] }) => {
+                finalImage = result.images[0] ?? null;
+                if (finalImage !== null) {
+                    showPreview(`data:${finalImage.mime};base64,${finalImage.data_base64}`);
+                }
+
+                status.textContent = getGlobalWin().t('ui.chat.image_ready', 'Generated image');
+                progressFill.style.width = '100%';
+                progress.classList.add('is-complete');
+
+                caption.textContent = result.text;
+                caption.classList.toggle('hidden', result.text.trim() === '');
+
+                showRegenerateOnly();
+                ensureImageActions(result.text);
+                this._scrollToBottom();
+            },
+            fail: (message: string) => {
+                bubble.classList.add('chat-error');
+                status.textContent = message;
+                progress.classList.remove('is-complete');
+                progressFill.style.width = '';
+                caption.classList.add('hidden');
+                showRegenerateOnly();
+                this._scrollToBottom();
+            },
+            cancel: (
+                message = getGlobalWin().t('ui.chat.image_cancelled', 'Image generation cancelled'),
+            ) => {
+                status.textContent = message;
+                progress.classList.remove('is-complete');
+                progressFill.style.width = '';
+                caption.classList.add('hidden');
+                showRegenerateOnly();
+                this._scrollToBottom();
+            },
+            discard: () => {
+                row.remove();
+            },
+        };
+    }
+
     private _prepareContainer(): void {
         if (!this._messagesContainer || !this._chatContainer) return;
         if (!this._messagesContainer.classList.contains('has-messages')) {
@@ -579,7 +775,9 @@ export class ChatUI {
      */
     private _createMessageBubble(opts: Record<string, unknown>): HTMLElement {
         const bubble = document.createElement('div');
-        bubble.className = `chat-bubble${opts['error'] === true ? ' chat-error' : ''}${opts['thought'] === true ? ' chat-thought' : ''}`;
+        const hasImages = Array.isArray(opts['images']) && (opts['images'] as unknown[]).length > 0;
+        const mediaFirst = opts['mediaFirst'] === true || hasImages;
+        bubble.className = `chat-bubble${opts['error'] === true ? ' chat-error' : ''}${opts['thought'] === true ? ' chat-thought' : ''}${mediaFirst ? ' chat-bubble--media' : ''}`;
         return bubble;
     }
 
@@ -826,15 +1024,42 @@ export class ChatUI {
         const fileTokens = f.tokens ?? 0;
 
         if (isImage && f.data_base64.length > 0) {
-            const mime = f.type || (ext === 'svg' ? 'image/svg+xml' : `image/${ext}`);
-            card.innerHTML = `
-                <img src="data:${mime};base64,${f.data_base64}" alt="${DOMPurify.sanitize(name)}" style="width:100%; height:100%; object-fit: cover; border-radius: 10px;">
-                ${fileTokens > 0 ? `<div class="media-badge">${String(fileTokens)}</div>` : ''}
-            `;
+            const safeBase64 = this._safeBase64Data(f.data_base64);
+            if (safeBase64.length > 0) {
+                const image = document.createElement('img');
+                image.src = `data:${this._safeImageMime(f.type, ext)};base64,${safeBase64}`;
+                image.alt = name;
+                image.style.width = '100%';
+                image.style.height = '100%';
+                image.style.objectFit = 'cover';
+                image.style.borderRadius = '10px';
+                card.appendChild(image);
+
+                if (fileTokens > 0) {
+                    const badge = document.createElement('div');
+                    badge.className = 'media-badge';
+                    badge.textContent = String(fileTokens);
+                    card.appendChild(badge);
+                }
+            } else {
+                card.innerHTML = this._createFilePillHtml(f.name, fileTokens, name);
+            }
         } else {
             card.innerHTML = this._createFilePillHtml(f.name, fileTokens, name);
         }
         container.appendChild(card);
+    }
+
+    private _safeImageMime(type: string, ext: string): string {
+        const candidate = type.length > 0 ? type : ext === 'svg' ? 'image/svg+xml' : `image/${ext}`;
+        return /^image\/(?:png|jpe?g|gif|webp|bmp|avif|svg\+xml)$/iu.test(candidate)
+            ? candidate
+            : 'image/png';
+    }
+
+    private _safeBase64Data(data: string): string {
+        const normalized = data.replace(/\s+/gu, '');
+        return /^[A-Za-z0-9+/]+={0,2}$/u.test(normalized) ? normalized : '';
     }
 
     private _shortenFileName(name: string): string {
@@ -854,6 +1079,12 @@ export class ChatUI {
         images?: { mime: string; data_base64: string }[],
     ): void {
         if (!images || images.length === 0) return;
+
+        bubble.classList.add('chat-bubble--media');
+        const insertionTarget =
+            bubble.querySelector(
+                '.markdown-body, .chat-generated-status, .chat-generated-caption',
+            ) ?? null;
 
         images.forEach((img) => {
             try {
@@ -877,7 +1108,11 @@ export class ChatUI {
                 );
 
                 wrapper.appendChild(el);
-                bubble.appendChild(wrapper);
+                if (insertionTarget instanceof HTMLElement) {
+                    bubble.insertBefore(wrapper, insertionTarget);
+                } else {
+                    bubble.appendChild(wrapper);
+                }
             } catch {
                 /* ignore image errors */
             }
@@ -952,6 +1187,14 @@ export class ChatUI {
         this._openImageViewer(image.currentSrc || image.src);
     }
 
+    private _resolveImageViewerHost(): HTMLElement {
+        return (
+            document.getElementById('page-chat') ??
+            document.getElementById('main-area') ??
+            document.body
+        );
+    }
+
     private _ensureImageViewer(): void {
         if (
             this._imageViewerOverlay instanceof HTMLElement &&
@@ -963,7 +1206,7 @@ export class ChatUI {
         const overlay = document.createElement('div');
         overlay.className = 'chat-image-viewer hidden';
         overlay.innerHTML = DOMPurify.sanitize(`
-            <button type="button" class="chat-image-viewer-close" aria-label="Close image preview">
+            <button type="button" class="chat-image-viewer-close window-control-btn close-btn" aria-label="Close image preview">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                     <path d="M5 4h2v2H5zm12 0h2v2h-2zM7 6h2v2H7zm8 0h2v2h-2zM9 8h2v2H9zm4 0h2v2h-2zM11 10h2v4h-2zM9 14h2v2H9zm4 0h2v2h-2zM7 16h2v2H7zm8 0h2v2h-2zM5 18h2v2H5zm12 0h2v2h-2z"></path>
                 </svg>
@@ -984,7 +1227,7 @@ export class ChatUI {
             }
         });
 
-        document.body.appendChild(overlay);
+        this._resolveImageViewerHost().appendChild(overlay);
         this._imageViewerOverlay = overlay;
         this._imageViewerImage = overlay.querySelector('.chat-image-viewer-img');
     }
@@ -1299,8 +1542,11 @@ export class ChatUI {
 
         const t = getGlobalWin().t;
         const tokensLabel = t('ui.launcher.web.tokens', 'tokens');
+        const safeTokensLabel = DOMPurify.sanitize(tokensLabel);
         const tokensHtml =
-            tokens > 0 ? `<div class="media-tokens">${String(tokens)} ${tokensLabel}</div>` : '';
+            tokens > 0
+                ? `<div class="media-tokens">${String(tokens)} ${safeTokensLabel}</div>`
+                : '';
 
         return `
             <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
@@ -1537,7 +1783,11 @@ export class ChatUI {
         if (this._chatInput) {
             const placeholderKey = this._chatInput.dataset['i18nPlaceholder'];
             if (placeholderKey !== undefined) {
-                this._chatInput.placeholder = t(placeholderKey, 'Ask something...');
+                const placeholderText = t(placeholderKey, 'Ask something...');
+                this._chatInput.placeholder = placeholderText;
+                if (this._chatInputPlaceholder) {
+                    this._chatInputPlaceholder.textContent = placeholderText;
+                }
             }
         }
 
@@ -1579,6 +1829,18 @@ export class ChatUI {
         document.querySelectorAll<HTMLElement>('.chat-open-image-folder-btn').forEach((btn) => {
             btn.title = t('ui.chat.open_image_folder', 'Open image folder');
         });
+
+        document
+            .querySelectorAll<HTMLElement>('.chat-generated-control.is-cancel')
+            .forEach((btn) => {
+                btn.textContent = t('ui.chat.image_cancel', 'Cancel');
+            });
+
+        document
+            .querySelectorAll<HTMLElement>('.chat-generated-control.is-regenerate')
+            .forEach((btn) => {
+                btn.textContent = t('ui.chat.image_regenerate', 'Regenerate');
+            });
 
         const viewerClose = document.querySelector<HTMLElement>('.chat-image-viewer-close');
         if (viewerClose) {

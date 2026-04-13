@@ -49,7 +49,7 @@ describe('GeneralSettingsRenderer', () => {
                 <button class="nav-btn" data-page="chat"></button>
                 <button class="nav-btn" data-page="modules"></button>
                 <button class="nav-btn" data-page="marketplace"></button>
-                <button class="nav-btn" data-page="debug"></button>
+                <button class="nav-btn" data-page="console"></button>
                 <button class="nav-btn" data-page="downloads"></button>
             </div>
             <div id="system-monitor">

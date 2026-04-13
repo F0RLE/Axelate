@@ -42,11 +42,11 @@ describe('NavigationService', () => {
         it('should clear forward history when navigating', () => {
             navService.navigate('home');
             navService.navigate('settings');
-            navService.navigate('debug');
+            navService.navigate('console');
             navService.goBack();
             navService.goBack();
 
-            // Now at 'home', forward history has 'settings', 'debug'
+            // Now at 'home', forward history has 'settings', 'console'
             navService.navigate('monitoring');
 
             // Forward history should be cleared
@@ -67,7 +67,7 @@ describe('NavigationService', () => {
         it('should navigate to previous page', () => {
             navService.navigate('home');
             navService.navigate('settings');
-            navService.navigate('debug');
+            navService.navigate('console');
 
             navService.goBack();
 

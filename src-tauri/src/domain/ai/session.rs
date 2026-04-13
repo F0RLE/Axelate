@@ -204,11 +204,29 @@ impl ChatSessionManager {
         reply: &ChatReply,
         signature: Option<String>,
     ) {
+        self.append_response_with_content(
+            session_id,
+            message_id,
+            serde_json::Value::String(reply.text.clone()),
+            &reply.role,
+            signature,
+        );
+    }
+
+    /// Appends an assistant reply with custom multimodal content to an existing session.
+    pub fn append_response_with_content(
+        &self,
+        session_id: &str,
+        message_id: String,
+        content: serde_json::Value,
+        role: &str,
+        signature: Option<String>,
+    ) {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.history.push(ChatMessage {
                 id: message_id,
-                role: reply.role.clone(),
-                content: serde_json::Value::String(reply.text.clone()),
+                role: role.to_string(),
+                content,
                 thought_signature: signature,
             });
             session.last_updated = Self::current_timestamp();

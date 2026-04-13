@@ -117,6 +117,11 @@ export interface IImageGenerationResponse {
     error: string | null;
 }
 
+export interface IImageGenerationPreview {
+    data_url: string;
+    updated_at_ms: number;
+}
+
 // ============================================================================
 // State Interrogations
 // ============================================================================

@@ -132,6 +132,27 @@ describe('SettingsService', () => {
             expect(result).toEqual(gpuInfo);
         });
 
+        it('should cache GPU info requests', async () => {
+            const gpuInfo = {
+                detected: true,
+                name: 'NVIDIA RTX 4090',
+                cuda: true,
+                backend: 'cuda',
+                memory: 24576,
+            };
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(gpuInfo);
+
+            const [first, second] = await Promise.all([
+                service.loadGpuInfo(),
+                service.loadGpuInfo(),
+            ]);
+
+            expect(first).toEqual(gpuInfo);
+            expect(second).toEqual(gpuInfo);
+            expect(tauri.invoke).toHaveBeenCalledTimes(1);
+            expect(tauri.invoke).toHaveBeenCalledWith('get_gpu_info');
+        });
+
         it('should return default on error', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
             const result = await service.loadGpuInfo();

@@ -20,6 +20,10 @@ export interface EngineConfig {
     extra_args: string[];
 }
 
+export interface EngineSettingsPayload {
+    config: EngineConfig;
+}
+
 export class EngineConfigService {
     constructor(private readonly _tauri: TauriProvider) {}
 
@@ -35,6 +39,21 @@ export class EngineConfigService {
             });
         } catch (e) {
             tracer.error('[EngineConfigService] Failed to get engine config:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Fetches the local engine modal data in a single backend round-trip.
+     */
+    public async getSettingsPayload(engineId: string): Promise<EngineSettingsPayload | null> {
+        if (!this._tauri.isTauri()) return null;
+        try {
+            return await this._tauri.invoke<EngineSettingsPayload>('get_engine_settings_payload', {
+                engineId,
+            });
+        } catch (e) {
+            tracer.error('[EngineConfigService] Failed to get engine settings payload:', e);
             return null;
         }
     }

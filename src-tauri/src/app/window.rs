@@ -35,6 +35,32 @@ pub fn setup_webview2_cache() {
     }
 }
 
+fn should_open_devtools() -> bool {
+    matches!(
+        std::env::var("AXELATE_OPEN_DEVTOOLS"),
+        Ok(value) if matches!(value.as_str(), "1" | "true" | "TRUE" | "True")
+    )
+}
+
+/// Enables optional WebView debugging hooks for development sessions.
+#[allow(unsafe_code)]
+pub fn setup_webview2_debugging() {
+    #[cfg(debug_assertions)]
+    {
+        #[cfg(target_os = "windows")]
+        if let Ok(port) = std::env::var("AXELATE_WEBVIEW_DEBUG_PORT") {
+            let trimmed = port.trim();
+            if !trimmed.is_empty() {
+                let args = format!("--remote-debugging-port={trimmed}");
+                // Safety: set during startup before the WebView is created.
+                unsafe {
+                    std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args);
+                }
+            }
+        }
+    }
+}
+
 /// Registers the Ctrl+Space global shortcut for window toggling.
 #[cfg(desktop)]
 pub fn setup_global_shortcut(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -112,6 +138,11 @@ pub fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow
     // Attempt to build
     match builder.build() {
         Ok(window) => {
+            #[cfg(debug_assertions)]
+            if should_open_devtools() {
+                window.open_devtools();
+            }
+
             // 4. Apply zoom using canonical priority chain:
             //    per-resolution saved > global zoom_level > 1.0
             let ui_state = infra_ui_state::get_ui_state_sync();

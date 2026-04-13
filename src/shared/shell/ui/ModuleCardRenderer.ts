@@ -23,6 +23,7 @@ export class ModuleCardRenderer {
             'div',
             'span',
             'svg',
+            'use',
             'line',
             'path',
         ],
@@ -43,6 +44,7 @@ export class ModuleCardRenderer {
             'x2',
             'y2',
             'd',
+            'aria-hidden',
         ],
         ALLOW_DATA_ATTR: true,
     };
@@ -55,17 +57,19 @@ export class ModuleCardRenderer {
         onDownload?: (app: IApp) => void,
     ): HTMLElement {
         const card = document.createElement('div');
-        card.className = 'app-card';
+        card.className = 'app-card module-picker-card';
         if (isSelected) {
             card.classList.add('selected');
         }
         card.dataset['appId'] = app.id;
 
         const isApi = this._isApiModule(app);
-        const isInstalled = isApi ? true : app.installed === true;
+        const isComingSoon = app.comingSoon === true;
+        const isInstalled = isApi ? true : !isComingSoon && app.installed === true;
 
         card.classList.toggle('is-api', isApi);
         card.classList.toggle('is-installed', isInstalled);
+        card.classList.toggle('is-coming-soon', isComingSoon);
 
         const template = document.getElementById('tpl-module-card') as HTMLTemplateElement | null;
         if (!template) {
@@ -82,6 +86,7 @@ export class ModuleCardRenderer {
             app,
             isApi,
             isInstalled,
+            isComingSoon,
             isSelected,
             onClick,
             onDownload,
@@ -90,7 +95,7 @@ export class ModuleCardRenderer {
         card.appendChild(clone);
 
         this._attachEventHandlers(card, app, isApi, onClick);
-        this._startAsyncInstallCheck(card, app, isApi, isInstalled, onClick);
+        this._startAsyncInstallCheck(card, app, isApi, isInstalled, isComingSoon, onClick);
 
         return card;
     }
@@ -136,6 +141,7 @@ export class ModuleCardRenderer {
         app: IApp,
         isApi: boolean,
         isInstalled: boolean,
+        isComingSoon: boolean,
         isSelected: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
         onDownload?: (app: IApp) => void,
@@ -152,7 +158,9 @@ export class ModuleCardRenderer {
         const actionsContainer = document.createElement('div');
         actionsContainer.className = 'app-card-hover-actions';
 
-        if (!isInstalled && !isApi) {
+        if (isComingSoon) {
+            actionsContainer.appendChild(this._buildComingSoonButton());
+        } else if (!isInstalled && !isApi) {
             actionsContainer.appendChild(this._buildDownloadButton(app, onDownload));
         } else {
             actionsContainer.appendChild(this._buildActionButton(app, isSelected, onClick));
@@ -171,7 +179,7 @@ export class ModuleCardRenderer {
         downloadBtn.style.overflow = 'hidden';
         downloadBtn.style.position = 'relative';
 
-        // .btn-content wrapper — required by dashboard.css ::before/z-index layering
+        // .btn-content wrapper — required by home-and-modules-legacy.css ::before/z-index layering
         const content = document.createElement('span');
         content.className = 'btn-content';
         content.style.cssText =
@@ -198,6 +206,22 @@ export class ModuleCardRenderer {
         return downloadBtn;
     }
 
+    private _buildComingSoonButton(): HTMLButtonElement {
+        const button = document.createElement('button');
+        const g = getGlobalWin();
+        const label =
+            typeof g.t === 'function'
+                ? g.t('ui.launcher.web.coming_soon', 'Coming soon')
+                : 'Coming soon';
+
+        button.className = 'modal-btn modal-btn-secondary';
+        button.textContent = label;
+        button.disabled = true;
+        button.title = label;
+        button.setAttribute('aria-disabled', 'true');
+        return button;
+    }
+
     /**
      * Updates visual download progress on a `.download-btn` inside a card.
      *
@@ -222,29 +246,20 @@ export class ModuleCardRenderer {
         }
 
         const pct = btn.querySelector<HTMLElement>('.download-pct');
-        if (pct) ModuleCardRenderer._updatePctDisplay(pct, percent, status);
+        if (pct) ModuleCardRenderer._updatePctDisplay(pct, percent);
 
         const label = btn.querySelector<HTMLElement>('.download-label');
         if (label) ModuleCardRenderer._updateLabelDisplay(label, status);
     }
 
     private static _isStatusIndeterminate(percent: number, status?: string): boolean {
-        return (
-            percent < 0 ||
-            status === 'extracting' ||
-            status === 'connecting' ||
-            status === 'pending'
-        );
+        return percent < 0 || status === 'connecting' || status === 'pending';
     }
 
-    private static _updatePctDisplay(pct: HTMLElement, percent: number, status?: string): void {
-        if (status === 'extracting') {
-            pct.style.display = 'none';
-        } else {
-            pct.style.display = '';
-            const displayPercent = percent < 0 ? 0 : Math.round(percent);
-            pct.textContent = `${displayPercent}%`;
-        }
+    private static _updatePctDisplay(pct: HTMLElement, percent: number): void {
+        pct.style.display = '';
+        const displayPercent = percent < 0 ? 0 : Math.round(percent);
+        pct.textContent = `${displayPercent}%`;
     }
 
     private static _updateLabelDisplay(label: HTMLElement, status?: string): void {
@@ -374,9 +389,10 @@ export class ModuleCardRenderer {
         app: IApp,
         isApi: boolean,
         isInstalled: boolean,
+        isComingSoon: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
     ): void {
-        if (!isInstalled && !isApi) {
+        if (!isInstalled && !isApi && !isComingSoon) {
             const win = getGlobalWin();
             if (typeof win.checkModuleInstalled === 'function') {
                 void (async (): Promise<void> => {
@@ -440,7 +456,10 @@ export class ModuleCardRenderer {
         if (card.querySelector('.app-delete-badge') === null) {
             const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
             if (badgeHtml !== '') {
-                card.insertAdjacentHTML('afterbegin', badgeHtml);
+                card.insertAdjacentHTML(
+                    'afterbegin',
+                    DOMPurify.sanitize(badgeHtml, this._purifyConfig),
+                );
             }
         }
     }
@@ -545,7 +564,10 @@ export class ModuleCardRenderer {
             const isApi = this._isApiModule(app);
             const badgeHtml = this._getAppDeleteBadgeHtml(isApi, true);
             if (badgeHtml !== '') {
-                card.insertAdjacentHTML('afterbegin', badgeHtml);
+                card.insertAdjacentHTML(
+                    'afterbegin',
+                    DOMPurify.sanitize(badgeHtml, this._purifyConfig),
+                );
             }
         }
 
@@ -620,7 +642,9 @@ export class ModuleCardRenderer {
 
         return `
             <div class="app-delete-badge">
-                <div class="badge-icon"><span style="font-size: 1.1rem; line-height: 1;">🗑️</span></div>
+                <div class="badge-icon">
+                    <span style="font-size: 1.1rem; line-height: 1;">🗑️</span>
+                </div>
                 <div class="badge-text">${deleteText}</div>
             </div>
         `;

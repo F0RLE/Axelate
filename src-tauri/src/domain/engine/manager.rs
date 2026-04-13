@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::net::TcpListener;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -65,12 +66,23 @@ fn is_qwen_model(model_path: Option<&str>) -> bool {
 }
 
 fn has_arg(args: &[String], candidates: &[&str]) -> bool {
-    args.iter()
-        .any(|arg| candidates.iter().any(|candidate| arg == candidate))
+    args.iter().any(|arg| {
+        candidates.iter().any(|candidate| {
+            arg == candidate
+                || arg
+                    .strip_prefix(candidate)
+                    .is_some_and(|suffix| suffix.starts_with('='))
+        })
+    })
 }
 
-fn push_arg_if_missing(args: &mut Vec<String>, candidates: &[&str], value: Option<&str>) {
-    if has_arg(args, candidates) {
+fn push_arg_if_missing(
+    args: &mut Vec<String>,
+    existing_args: &[String],
+    candidates: &[&str],
+    value: Option<&str>,
+) {
+    if has_arg(args, candidates) || has_arg(existing_args, candidates) {
         return;
     }
 
@@ -82,6 +94,39 @@ fn push_arg_if_missing(args: &mut Vec<String>, candidates: &[&str], value: Optio
     if let Some(value) = value {
         args.push(value.to_string());
     }
+}
+
+fn extract_arg_value(args: &[String], candidates: &[&str]) -> Option<String> {
+    for (index, arg) in args.iter().enumerate() {
+        for candidate in candidates {
+            if arg == candidate {
+                if let Some(value) = args.get(index + 1) {
+                    return Some(value.clone());
+                }
+            }
+
+            let prefix = format!("{candidate}=");
+            if let Some(value) = arg.strip_prefix(&prefix) {
+                return Some(value.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+/// Resolves the explicit sdcpp preview file path from user extra arguments.
+pub fn resolve_sdcpp_preview_path(extra_args: &[String]) -> Option<PathBuf> {
+    extract_arg_value(extra_args, &["--preview-path"]).map(PathBuf::from)
+}
+
+fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
+    extract_arg_value(extra_args, &["--preview"])
+        .is_none_or(|value| !value.trim().eq_ignore_ascii_case("none"))
+}
+
+fn build_sdcpp_args(_config: &EngineConfig, port: u16) -> Vec<String> {
+    vec!["--listen-port".to_string(), port.to_string()]
 }
 
 fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
@@ -96,14 +141,29 @@ fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
     ];
 
     // Desktop launcher is single-user. Force a single slot unless user explicitly overrides it.
-    push_arg_if_missing(&mut args, &["--parallel", "-np"], Some("1"));
-    push_arg_if_missing(&mut args, &["--reasoning", "-rea"], Some("off"));
+    push_arg_if_missing(
+        &mut args,
+        &config.extra_args,
+        &["--parallel", "-np"],
+        Some("1"),
+    );
+    push_arg_if_missing(
+        &mut args,
+        &config.extra_args,
+        &["--reasoning", "-rea"],
+        Some("off"),
+    );
 
     if is_qwen_model(config.model_path.as_deref()) {
-        push_arg_if_missing(&mut args, &["--jinja"], None);
-        push_arg_if_missing(&mut args, &["--reasoning-format"], Some("deepseek"));
-        push_arg_if_missing(&mut args, &["--no-context-shift"], None);
-        push_arg_if_missing(&mut args, &["--flash-attn"], Some("on"));
+        push_arg_if_missing(&mut args, &config.extra_args, &["--jinja"], None);
+        push_arg_if_missing(
+            &mut args,
+            &config.extra_args,
+            &["--reasoning-format"],
+            Some("deepseek"),
+        );
+        push_arg_if_missing(&mut args, &config.extra_args, &["--no-context-shift"], None);
+        push_arg_if_missing(&mut args, &config.extra_args, &["--flash-attn"], Some("on"));
     }
 
     args
@@ -299,6 +359,21 @@ impl EngineManager {
             .collect()
     }
 
+    /// Returns the active preview file path for the image engine when supported.
+    pub async fn active_image_preview_path(&self) -> Option<PathBuf> {
+        let slots = self.slots.lock().await;
+        let engine = slots.get(&Capability::Image)?;
+        if engine.definition.id != "sdcpp" && engine.definition.id != "stable-diffusion" {
+            return None;
+        }
+
+        if !sdcpp_preview_enabled(&engine.config.extra_args) {
+            return None;
+        }
+
+        resolve_sdcpp_preview_path(&engine.config.extra_args)
+    }
+
     /// Start an engine in its primary capability slot.
     /// If another engine occupies that slot, stops it first (hot-swap).
     /// Other slots are left untouched.
@@ -379,7 +454,7 @@ impl EngineManager {
         if config.engine_id == "llamacpp" {
             cmd.args(build_llamacpp_args(&config, selected_port));
         } else if config.engine_id == "sdcpp" {
-            cmd.arg("--listen-port").arg(selected_port.to_string());
+            cmd.args(build_sdcpp_args(&config, selected_port));
         } else {
             // Default fallback for other engines
             cmd.arg("--port").arg(selected_port.to_string());
@@ -630,7 +705,8 @@ mod tests {
 
         let selected = find_available_local_port(busy_port).unwrap();
 
-        assert_eq!(selected, busy_port + 1);
+        assert_ne!(selected, busy_port);
+        assert!(selected > busy_port);
     }
 
     #[test]

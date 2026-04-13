@@ -281,7 +281,7 @@ impl<'a> LifecycleExecutor<'a> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used)]
+    #![allow(clippy::expect_used, clippy::panic)]
 
     use super::LifecycleExecutor;
     use crate::domain::modules::controller::Controller;

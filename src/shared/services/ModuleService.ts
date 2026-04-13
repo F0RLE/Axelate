@@ -16,6 +16,7 @@ import { invokeSafe } from '../api/invoke';
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
     private readonly _deletedModules = new Set<string>();
+    private readonly _lastLoggedDownloadPhase = new Map<string, string>();
     private _downloadProgressUnlisten: (() => void) | null = null;
     private _initialized = false;
 
@@ -38,7 +39,7 @@ export class ModuleService {
             total: number;
             speed: number;
         }>('download_progress', (payload) => {
-            tracer.debug(`[ModuleService] Progress Event: ${JSON.stringify(payload)}`);
+            this._logDownloadPhase(payload);
 
             this._downloadState[payload.module_id] = {
                 status: payload.status as
@@ -75,6 +76,7 @@ export class ModuleService {
     public destroy(): void {
         this._downloadProgressUnlisten?.();
         this._downloadProgressUnlisten = null;
+        this._lastLoggedDownloadPhase.clear();
         this._initialized = false;
     }
 
@@ -219,6 +221,36 @@ export class ModuleService {
      */
     public getDownloadState(moduleId: string): IModuleDownloadState | undefined {
         return this._downloadState[moduleId];
+    }
+
+    private _logDownloadPhase(payload: {
+        module_id: string;
+        status: string;
+        progress: number;
+        message: string;
+        downloaded: number;
+        total: number;
+        speed: number;
+    }): void {
+        const phaseKey = `${payload.status}:${payload.message}`;
+        const previous = this._lastLoggedDownloadPhase.get(payload.module_id);
+        if (previous === phaseKey) return;
+
+        this._lastLoggedDownloadPhase.set(payload.module_id, phaseKey);
+
+        const progressPercent =
+            payload.progress >= 0 ? ` ${(payload.progress * 100).toFixed(1)}%` : '';
+        tracer.info(
+            `[ModuleService] ${payload.module_id} -> ${payload.status}${progressPercent} ${payload.message}`.trim(),
+        );
+
+        if (
+            payload.status === 'complete' ||
+            payload.status === 'error' ||
+            payload.status === 'cancelled'
+        ) {
+            this._lastLoggedDownloadPhase.delete(payload.module_id);
+        }
     }
 
     // Sync state to legacy window object for UI compatibility

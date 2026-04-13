@@ -190,6 +190,22 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('close_window');
         });
 
+        it('should run before-close hook before closing native window', async () => {
+            const calls: string[] = [];
+            service.setBeforeCloseHook(() => {
+                calls.push('save');
+                return Promise.resolve();
+            });
+            mockBridge.invoke.mockImplementation((cmd: string) => {
+                if (cmd === 'close_window') calls.push('close');
+                return Promise.resolve(undefined);
+            });
+
+            await service.close();
+
+            expect(calls).toEqual(['save', 'close']);
+        });
+
         it('should call globalThis.close in web mode', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             const closeSpy = vi.fn();
@@ -225,21 +241,22 @@ describe('WindowService', () => {
 
     // ---------------------------------------------------------- show
     describe('show', () => {
-        it('should call show_window and set_focus', async () => {
+        it('should call show_window', async () => {
             await service.show();
 
             expect(mockBridge.invoke).toHaveBeenCalledWith('show_window');
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_focus');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_focus');
         });
 
-        it('should skip set_focus if it throws', async () => {
+        it('should not call the removed set_focus command', async () => {
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'set_focus') return Promise.reject(new Error('Command not found'));
                 return Promise.resolve(undefined);
             });
 
-            await service.show(); // should not throw
+            await service.show();
             expect(mockBridge.invoke).toHaveBeenCalledWith('show_window');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_focus');
         });
 
         it('should retry up to 3 times if show_window fails', async () => {

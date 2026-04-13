@@ -18,7 +18,7 @@ import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import type { MonitoringService } from '@/features/monitoring/services/MonitoringService';
-import type { DebugService } from '@/features/debug/services/DebugService';
+import type { ConsoleLogService } from '@/features/console/services/ConsoleLogService';
 import type { SettingsService } from '@/features/settings/services/SettingsService';
 import type { ChatController } from '@/features/chat/chat';
 import type { ModulePlatformService } from '@/shared/services/ModulePlatformService';
@@ -31,7 +31,7 @@ import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
 import type { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
-import type { DebugUI } from '@/features/debug/ui/DebugUI';
+import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { Particles } from '@/shared/shell/Particles';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { TemplateLoader } from '@/shared/services/TemplateLoader';
@@ -56,7 +56,7 @@ export interface CoreServices {
     navigation: NavigationService;
     soundService: SoundService;
     monitoringService: MonitoringService;
-    debugService: DebugService;
+    consoleLogService: ConsoleLogService;
     settingsService: SettingsService;
     chatController: ChatController;
 }
@@ -71,7 +71,7 @@ export interface CoreUI {
     settingsUI: SettingsUI;
     moduleSettingsUI: ModuleSettingsUI;
     monitoringUI: MonitoringUI;
-    debugUI: DebugUI;
+    consoleUI: ConsoleUI;
     particles: Particles;
 }
 
