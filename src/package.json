@@ -47,7 +47,7 @@
     "dependencies": {
         "@tauri-apps/api": "^2.1.0",
         "@tauri-apps/plugin-dialog": "^2.6.0",
-        "@tauri-apps/plugin-fs": "^2.4.5",
+        "@tauri-apps/plugin-fs": "^2.5.0",
         "dompurify": "^3.3.3",
         "marked": "^17.0.5",
         "marked-alert": "^2.0.1",
