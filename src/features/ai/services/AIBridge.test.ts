@@ -43,6 +43,7 @@ const mockCore = {
         getSelectedAIModel: vi.fn(),
         getLastActiveProvider: vi.fn(),
         getThinkingLevel: vi.fn().mockReturnValue('high'),
+        getInternetAccessEnabled: vi.fn().mockReturnValue(true),
         getLocalMaxOutputTokens: vi.fn().mockReturnValue(384),
     },
     chatController: {
@@ -105,6 +106,8 @@ describe('AIBridge', () => {
         mockCore.aiSettings.getSelectedAIModel.mockReturnValue(undefined);
         mockCore.aiSettings.getThinkingLevel.mockReset();
         mockCore.aiSettings.getThinkingLevel.mockReturnValue('high');
+        mockCore.aiSettings.getInternetAccessEnabled.mockReset();
+        mockCore.aiSettings.getInternetAccessEnabled.mockReturnValue(true);
         mockCore.aiSettings.getLocalMaxOutputTokens.mockReset();
         mockCore.aiSettings.getLocalMaxOutputTokens.mockReturnValue(384);
         (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
@@ -350,8 +353,9 @@ describe('AIBridge', () => {
             expect(mockInvoke).toHaveBeenCalledWith(
                 'send_chat_message',
                 expect.objectContaining({
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                    request: expect.any(Object),
+                    request: expect.objectContaining({
+                        web_search: { enabled: true },
+                    }),
                 }),
             );
         });

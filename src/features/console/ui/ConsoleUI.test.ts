@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleUI } from './ConsoleUI';
-import type { ConsoleLogService } from '../services/ConsoleLogService';
+import type { ConsoleLogService, ILogEntry } from '../services/ConsoleLogService';
 import { eventBus } from '@/shared/services/EventBus';
 
 describe('ConsoleUI lifecycle', () => {
@@ -18,12 +18,26 @@ describe('ConsoleUI lifecycle', () => {
             <div class="debug-dropzone">Drop here</div>
             <button class="debug-tab"></button>
             <div id="debug-first-tab" class="debug-tab-content"></div>
-            <button class="console-tab"></button>
-            <button id="clear-logs-btn"></button>
-            <button id="copy-logs-btn"></button>
+            <div class="console-toolbar">
+                <div class="console-toolbar-left">
+                    <button class="console-tab" data-view="general"></button>
+                </div>
+                <div class="console-toolbar-right">
+                    <div class="console-level-filters">
+                        <button class="console-filter-chip active" data-level="ERROR" type="button"></button>
+                        <button class="console-filter-chip active" data-level="WARN" type="button"></button>
+                        <button class="console-filter-chip active" data-level="INFO" type="button"></button>
+                        <button class="console-filter-chip active" data-level="DEBUG" type="button"></button>
+                    </div>
+                    <button id="copy-logs-btn"></button>
+                    <button id="clear-logs-btn"></button>
+                </div>
+            </div>
             <div id="page-console" class="active"></div>
             <div id="console-container" class="console-logs-area">
-                <div id="logs-general" class="logs-pane active"></div>
+                <div id="logs">
+                    <div id="logs-general" class="logs-pane active"></div>
+                </div>
             </div>
         `;
         (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
@@ -40,14 +54,41 @@ describe('ConsoleUI lifecycle', () => {
         document.body.innerHTML = '';
     });
 
-    function createConsoleUI(): ConsoleUI {
-        const service = {
+    async function flushPromises(): Promise<void> {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+    }
+
+    function createServiceMock(
+        overrides: Partial<{
+            init: ReturnType<typeof vi.fn>;
+            destroy: ReturnType<typeof vi.fn>;
+            clearLogs: ReturnType<typeof vi.fn>;
+            getLogs: ReturnType<typeof vi.fn>;
+            getLogsForView: ReturnType<typeof vi.fn>;
+            getAvailableViews: ReturnType<typeof vi.fn>;
+            fetchLogs: ReturnType<typeof vi.fn>;
+            getModulePath: ReturnType<typeof vi.fn>;
+            openModuleFolder: ReturnType<typeof vi.fn>;
+        }> = {},
+    ): ConsoleLogService {
+        return {
+            init: vi.fn().mockResolvedValue(undefined),
+            destroy: vi.fn(),
             clearLogs: vi.fn().mockResolvedValue(true),
             getLogs: vi.fn().mockReturnValue([]),
+            getLogsForView: vi.fn().mockReturnValue([]),
+            getAvailableViews: vi.fn().mockResolvedValue([{ id: 'general', label: 'General' }]),
             fetchLogs: vi.fn().mockResolvedValue([]),
+            getModulePath: vi.fn().mockResolvedValue(null),
+            openModuleFolder: vi.fn().mockResolvedValue(false),
+            ...overrides,
         } as unknown as ConsoleLogService;
+    }
 
-        return new ConsoleUI(service);
+    function createConsoleUI(): ConsoleUI {
+        return new ConsoleUI(createServiceMock());
     }
 
     it('should restore previous global debug shims on destroy', () => {
@@ -135,14 +176,17 @@ describe('ConsoleUI lifecycle', () => {
 
     it('should clear, copy and render logs through browser clipboard fallback', async () => {
         vi.useFakeTimers();
-        const service = {
-            clearLogs: vi.fn().mockResolvedValue(true),
+        const service = createServiceMock({
             getLogs: vi.fn().mockReturnValue([
                 { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
                 { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
             ]),
+            getLogsForView: vi.fn().mockReturnValue([
+                { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
+                { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
+            ]),
             fetchLogs: vi.fn().mockResolvedValue([{ level: 'INFO', message: 'new' }]),
-        } as unknown as ConsoleLogService;
+        });
 
         ui = new ConsoleUI(service);
         const clipboardWrite = vi.fn().mockResolvedValue(undefined);
@@ -160,7 +204,7 @@ describe('ConsoleUI lifecycle', () => {
         await ui.copyLogs();
         expect(clipboardWrite).toHaveBeenCalledWith('hello\nboom');
 
-        (service.getLogs as ReturnType<typeof vi.fn>).mockReturnValue([]);
+        (service.getLogsForView as ReturnType<typeof vi.fn>).mockReturnValue([]);
         await ui.copyLogs();
         expect(
             (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
@@ -168,15 +212,19 @@ describe('ConsoleUI lifecycle', () => {
     });
 
     it('should scroll logs to the bottom on the first render', () => {
-        const service = {
-            clearLogs: vi.fn().mockResolvedValue(true),
+        const service = createServiceMock({
             getLogs: vi
                 .fn()
                 .mockReturnValue([
                     { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
                 ]),
+            getLogsForView: vi
+                .fn()
+                .mockReturnValue([
+                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                ]),
             fetchLogs: vi.fn().mockResolvedValue([{ level: 'INFO', message: 'alpha' }]),
-        } as unknown as ConsoleLogService;
+        });
 
         const container = document.getElementById('console-container') as HTMLDivElement;
         Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 720 });
@@ -195,16 +243,19 @@ describe('ConsoleUI lifecycle', () => {
     });
 
     it('should render logs at the bottom when console page becomes active', async () => {
-        vi.useFakeTimers();
-        const service = {
-            clearLogs: vi.fn().mockResolvedValue(true),
+        const service = createServiceMock({
             getLogs: vi
                 .fn()
                 .mockReturnValue([
                     { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
                 ]),
+            getLogsForView: vi
+                .fn()
+                .mockReturnValue([
+                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                ]),
             fetchLogs: vi.fn().mockResolvedValue([]),
-        } as unknown as ConsoleLogService;
+        });
 
         const container = document.getElementById('console-container') as HTMLDivElement;
         Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 720 });
@@ -213,29 +264,242 @@ describe('ConsoleUI lifecycle', () => {
 
         ui = new ConsoleUI(service);
         ui.init();
-
-        eventBus.emit('page:change', { pageId: 'console' });
-        await Promise.resolve();
-        await Promise.resolve();
-        vi.advanceTimersByTime(200);
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
 
         expect(container.scrollTop).toBe(720);
     });
 
     it('should fetch logs immediately when console page becomes active', async () => {
-        const service = {
-            clearLogs: vi.fn().mockResolvedValue(true),
-            getLogs: vi.fn().mockReturnValue([]),
-            fetchLogs: vi.fn().mockResolvedValue([]),
-        } as unknown as ConsoleLogService;
+        const service = createServiceMock();
 
         ui = new ConsoleUI(service);
         ui.init();
 
         eventBus.emit('page:change', { pageId: 'console' });
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushPromises();
 
         expect(service.fetchLogs).toHaveBeenCalledTimes(1);
+    });
+
+    it('should render module-specific tabs and filter logs by active view', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn((view: string) =>
+                view === 'llamacpp'
+                    ? [{ level: 'INFO', message: 'engine line', source: 'llamacpp', timestamp: 1 }]
+                    : [{ level: 'INFO', message: 'general line', source: 'system', timestamp: 1 }],
+            ),
+            getAvailableViews: vi.fn().mockResolvedValue([
+                { id: 'general', label: 'General' },
+                { id: 'llamacpp', label: 'LLaMA.cpp' },
+            ]),
+            fetchLogs: vi.fn().mockResolvedValue([]),
+        });
+
+        ui = new ConsoleUI(service);
+        ui.init();
+        await flushPromises();
+
+        const moduleTab = document.querySelector('[data-view="llamacpp"]') as HTMLElement;
+        moduleTab.click();
+
+        expect(service.getLogsForView).toHaveBeenLastCalledWith('llamacpp');
+        expect(document.getElementById('logs-general')?.hidden).toBe(true);
+        expect(document.getElementById('logs-llamacpp')?.hidden).toBe(false);
+        expect(document.getElementById('logs-llamacpp')?.textContent).toContain('engine line');
+    });
+
+    it('should copy only logs from the active view', async () => {
+        const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(globalThis.navigator, 'clipboard', {
+            configurable: true,
+            value: { writeText: clipboardWrite },
+        });
+        delete (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+
+        const service = createServiceMock({
+            getLogsForView: vi.fn((view: string) =>
+                view === 'llamacpp'
+                    ? [
+                          {
+                              level: 'INFO',
+                              message: 'engine line',
+                              source: 'llamacpp',
+                              timestamp: 1,
+                          },
+                      ]
+                    : [
+                          {
+                              level: 'INFO',
+                              message: 'general line',
+                              source: 'system',
+                              timestamp: 1,
+                          },
+                      ],
+            ),
+            getAvailableViews: vi.fn().mockResolvedValue([
+                { id: 'general', label: 'General' },
+                { id: 'llamacpp', label: 'LLaMA.cpp' },
+            ]),
+        });
+
+        ui = new ConsoleUI(service);
+        ui.init();
+        await flushPromises();
+
+        const moduleTab = document.querySelector('[data-view="llamacpp"]') as HTMLElement;
+        moduleTab.click();
+        await ui.copyLogs();
+
+        const copiedText = clipboardWrite.mock.calls[0]?.[0] as string;
+        expect(copiedText).toContain('engine line');
+        expect(copiedText).not.toContain('general line');
+    });
+
+    it('should group repeated manifest errors without expandable details', async () => {
+        const logs: ILogEntry[] = [
+            {
+                level: 'INFO',
+                message: '[AIBridge] Starting provider: llamacpp',
+                source: 'frontend',
+                timestamp: 1,
+            },
+            {
+                level: 'ERROR',
+                message:
+                    '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml or module.json',
+                source: 'frontend',
+                timestamp: 2,
+            },
+            {
+                level: 'ERROR',
+                message:
+                    '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml or module.json',
+                source: 'frontend',
+                timestamp: 3,
+            },
+        ];
+        const service = createServiceMock({
+            getLogsForView: vi.fn().mockReturnValue(logs),
+        });
+
+        ui = new ConsoleUI(service);
+        ui.init();
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
+        await flushPromises();
+
+        const badge = document.querySelector('.log-count-badge') as HTMLSpanElement | null;
+        expect(badge?.textContent).toBe('x2');
+
+        const errorEntry = document.querySelectorAll('.log-entry')[1] as HTMLDivElement;
+        errorEntry.click();
+        await flushPromises();
+
+        expect(errorEntry.getAttribute('role')).toBeNull();
+        expect(document.querySelector('.log-entry-details')).toBeNull();
+    });
+
+    it('should not wipe rendered logs when views are unchanged and no new logs arrived', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi
+                .fn()
+                .mockReturnValue([
+                    { level: 'INFO', message: 'stable line', source: 'system', timestamp: 1 },
+                ]),
+            fetchLogs: vi.fn().mockResolvedValue([]),
+        });
+
+        ui = new ConsoleUI(service);
+        ui.init();
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
+
+        expect(document.getElementById('logs-general')?.textContent).toContain('stable line');
+
+        await (
+            ui as unknown as {
+                refreshLogViews: () => Promise<boolean>;
+            }
+        ).refreshLogViews();
+
+        expect(document.getElementById('logs-general')?.textContent).toContain('stable line');
+    });
+
+    it('should filter logs by selected levels from top menu', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn().mockReturnValue([
+                {
+                    level: 'INFO',
+                    message: '[NavigationService] Navigating to: settings',
+                    source: 'frontend',
+                    timestamp: 1,
+                },
+                {
+                    level: 'ERROR',
+                    message:
+                        '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml or module.json',
+                    source: 'frontend',
+                    timestamp: 2,
+                },
+            ]),
+        });
+
+        ui = new ConsoleUI(service);
+        ui.init();
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
+        await flushPromises();
+
+        expect(document.getElementById('logs-general')?.textContent).toContain(
+            'Manifest not found',
+        );
+        expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
+
+        const infoButton = document.querySelector(
+            '.console-filter-chip[data-level="INFO"]',
+        ) as HTMLButtonElement;
+        infoButton.click();
+
+        expect(document.getElementById('logs-general')?.textContent).toContain(
+            'Manifest not found',
+        );
+        expect(document.getElementById('logs-general')?.textContent).not.toContain('Page settings');
+    });
+
+    it('should hide launcher source labels like frontend from rendered logs', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn().mockReturnValue([
+                {
+                    level: 'INFO',
+                    message: '[NavigationService] Navigating to: settings',
+                    source: 'frontend',
+                    timestamp: 1,
+                },
+            ]),
+        });
+
+        ui = new ConsoleUI(service);
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
+        await flushPromises();
+
+        expect(document.querySelector('.log-src')).toBeNull();
+        expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
     });
 });

@@ -3,8 +3,6 @@
 //! Converts `ModuleItem` entries (from `local_modules.json`) with `type == "local"`
 //! into `EngineDefinition` instances that `EngineManager` can use.
 
-use tracing::info;
-
 use crate::models::config::ModuleItem;
 
 use super::types::{Capability, EngineDefinition};
@@ -19,13 +17,13 @@ pub fn load_engine_definitions(modules: &[ModuleItem]) -> Vec<EngineDefinition> 
         .map(convert_module_to_definition)
         .collect();
 
-    info!(
+    tracing::info!(
         count = defs.len(),
         "Loaded engine definitions from local_modules"
     );
 
     for def in &defs {
-        info!(
+        tracing::debug!(
             id = %def.id,
             name = %def.name,
             capabilities = ?def.capabilities,

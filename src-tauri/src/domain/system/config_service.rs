@@ -21,8 +21,16 @@ impl ConfigService {
         ConfigField {
             field_type: "text".to_string(),
             label: label.to_string(),
+            description: None,
+            placeholder: None,
             default: default.map(|s| serde_json::Value::String(s.to_string())),
             required,
+            min: None,
+            max: None,
+            step: None,
+            rows: None,
+            section: None,
+            order: None,
             options: None,
         }
     }

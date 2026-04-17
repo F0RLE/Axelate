@@ -18,6 +18,89 @@ use super::streaming::{AiProvider, OpenRouterProvider, StreamEvent, StreamSink};
 pub use super::types::{
     ChatMessage, ChatReply, ChatRequest, ChatResponse, ChatSession, TokenUsage,
 };
+use super::web_grounding;
+
+#[derive(Clone, Copy)]
+enum LocalEngineAccess {
+    AutoStart,
+    RequireRunning,
+}
+
+fn conflicting_local_capability(
+    capability: crate::domain::engine::types::Capability,
+) -> Option<crate::domain::engine::types::Capability> {
+    match capability {
+        crate::domain::engine::types::Capability::Text => {
+            Some(crate::domain::engine::types::Capability::Image)
+        }
+        crate::domain::engine::types::Capability::Image => {
+            Some(crate::domain::engine::types::Capability::Text)
+        }
+        crate::domain::engine::types::Capability::Vision => None,
+    }
+}
+
+async fn stop_conflicting_local_engine(
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    capability: crate::domain::engine::types::Capability,
+) -> Result<(), crate::errors::AppError> {
+    let Some(conflicting_capability) = conflicting_local_capability(capability) else {
+        return Ok(());
+    };
+
+    engine_manager.stop_slot(conflicting_capability).await
+}
+
+fn latest_user_query(messages: &[ChatMessage]) -> Option<String> {
+    messages.iter().rev().find_map(|message| {
+        if message.role != "user" {
+            return None;
+        }
+
+        match &message.content {
+            serde_json::Value::String(text) => {
+                let trimmed = text.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }
+            serde_json::Value::Array(parts) => {
+                let text = parts
+                    .iter()
+                    .filter_map(|part| {
+                        let part_type = part.get("type")?.as_str()?;
+                        if part_type != "text" {
+                            return None;
+                        }
+                        part.get("text")?.as_str().map(str::trim)
+                    })
+                    .filter(|text| !text.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                if text.is_empty() { None } else { Some(text) }
+            }
+            _ => None,
+        }
+    })
+}
+
+fn inject_grounding_message(messages: &mut Vec<ChatMessage>, grounding_message: String) {
+    let grounding = ChatMessage {
+        id: uuid::Uuid::new_v4().to_string(),
+        role: "system".to_string(),
+        content: serde_json::Value::String(grounding_message),
+        thought_signature: None,
+    };
+
+    let insert_at = messages
+        .iter()
+        .position(|message| message.role != "system")
+        .unwrap_or(messages.len());
+    messages.insert(insert_at, grounding);
+}
 
 // ==================================================================================
 // Service Orchestrator
@@ -30,6 +113,81 @@ pub async fn process_chat_request(
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
     sink: Arc<dyn StreamSink>,
+) -> Result<ChatResponse, crate::errors::AppError> {
+    process_chat_request_with_local_engine_access(
+        request,
+        sessions,
+        config_service,
+        engine_manager,
+        sink,
+        LocalEngineAccess::AutoStart,
+    )
+    .await
+}
+
+/// Dispatches a chat request without starting or hot-swapping local engines.
+/// Fails if the requested local engine is not already running in the launcher.
+pub async fn process_chat_request_without_engine_autostart(
+    request: ChatRequest,
+    sessions: &ChatSessionManager,
+    config_service: &crate::domain::system::config_service::ConfigService,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    sink: Arc<dyn StreamSink>,
+) -> Result<ChatResponse, crate::errors::AppError> {
+    process_chat_request_with_local_engine_access(
+        request,
+        sessions,
+        config_service,
+        engine_manager,
+        sink,
+        LocalEngineAccess::RequireRunning,
+    )
+    .await
+}
+
+/// Dispatches a chat request without streaming and without starting or hot-swapping local engines.
+/// Used by launcher modules that expect one JSON response and must not mutate launcher engine state.
+pub async fn process_chat_request_non_stream_without_engine_autostart(
+    request: ChatRequest,
+    sessions: &ChatSessionManager,
+    config_service: &crate::domain::system::config_service::ConfigService,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+) -> Result<ChatResponse, crate::errors::AppError> {
+    process_chat_request_non_stream_with_local_engine_access(
+        request,
+        sessions,
+        config_service,
+        engine_manager,
+        LocalEngineAccess::RequireRunning,
+    )
+    .await
+}
+
+/// Dispatches a chat request without streaming while still allowing launcher-managed local
+/// engine autostart and cross-slot exclusivity.
+pub async fn process_chat_request_non_stream(
+    request: ChatRequest,
+    sessions: &ChatSessionManager,
+    config_service: &crate::domain::system::config_service::ConfigService,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+) -> Result<ChatResponse, crate::errors::AppError> {
+    process_chat_request_non_stream_with_local_engine_access(
+        request,
+        sessions,
+        config_service,
+        engine_manager,
+        LocalEngineAccess::AutoStart,
+    )
+    .await
+}
+
+async fn process_chat_request_with_local_engine_access(
+    request: ChatRequest,
+    sessions: &ChatSessionManager,
+    config_service: &crate::domain::system::config_service::ConfigService,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    sink: Arc<dyn StreamSink>,
+    local_engine_access: LocalEngineAccess,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     // 1. Session Management
     let mut messages_context = request.messages.clone();
@@ -50,37 +208,73 @@ pub async fn process_chat_request(
             "Detected local engine — routing through EngineManager"
         );
 
-        // Slot empty, occupied by a different engine, or different model — start or reuse
-        let mut config = build_engine_config(&def).await?;
+        match local_engine_access {
+            LocalEngineAccess::AutoStart => {
+                // Slot empty, occupied by a different engine, or different model — start or reuse
+                let mut config = build_engine_config(&def).await?;
 
-        // Override model_path from request if frontend provided one
-        if !request.model.is_empty() && request.model != "default" {
-            config.model_path = Some(request.model.clone());
+                // Override model_path from request if frontend provided one
+                if !request.model.is_empty() && request.model != "default" {
+                    config.model_path = Some(request.model.clone());
+                }
+
+                if config.model_path.as_deref() == Some("default") {
+                    config.model_path = None;
+                }
+
+                let local_context_size =
+                    usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
+                let local_model_for_context = config
+                    .model_path
+                    .clone()
+                    .unwrap_or_else(|| request.model.clone());
+                effective_model = resolve_local_text_model_id(
+                    &request.model,
+                    config.model_path.as_deref(),
+                    &request.provider,
+                );
+                stop_conflicting_local_engine(
+                    engine_manager,
+                    crate::domain::engine::types::Capability::Text,
+                )
+                .await?;
+                let status = engine_manager.start(config).await?;
+                base_url = format!("{}/v1", status.endpoint);
+                is_local_engine = true;
+
+                if let Some(sid) = &request.session_id {
+                    messages_context = sessions.build_local_context(
+                        sid,
+                        local_context_size,
+                        &local_model_for_context,
+                    );
+                }
+
+                tracing::info!(
+                    engine = %status.id,
+                    endpoint = %base_url,
+                    "Local engine ready"
+                );
+            }
+            LocalEngineAccess::RequireRunning => {
+                let status = active_local_engine_status(
+                    engine_manager,
+                    &request.provider,
+                    crate::domain::engine::types::Capability::Text,
+                )
+                .await?;
+                base_url = format!("{}/v1", status.endpoint);
+                is_local_engine = true;
+                effective_model =
+                    resolve_local_text_model_id(&request.model, None, &request.provider);
+
+                tracing::info!(
+                    engine = %status.id,
+                    endpoint = %base_url,
+                    "Using already running local engine"
+                );
+            }
         }
-
-        if config.model_path.as_deref() == Some("default") {
-            config.model_path = None;
-        }
-
-        let local_context_size = usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
-        let local_model_for_context = config
-            .model_path
-            .clone()
-            .unwrap_or_else(|| request.model.clone());
-        let status = engine_manager.start(config).await?;
-        base_url = format!("{}/v1", status.endpoint);
-        is_local_engine = true;
-
-        if let Some(sid) = &request.session_id {
-            messages_context =
-                sessions.build_local_context(sid, local_context_size, &local_model_for_context);
-        }
-
-        tracing::info!(
-            engine = %status.id,
-            endpoint = %base_url,
-            "Local engine ready"
-        );
     }
 
     // 2b. Cloud provider resolution (skip if local engine)
@@ -129,6 +323,16 @@ pub async fn process_chat_request(
                 effective_model = custom.base_model_id.clone();
             }
         }
+    }
+
+    if is_local_engine
+        && let Some(options) = request.web_search.as_ref()
+        && options.enabled
+        && let Some(query) = latest_user_query(&request.messages)
+        && let Some(grounding_message) =
+            web_grounding::build_grounding_message(&query, options).await?
+    {
+        inject_grounding_message(&mut messages_context, grounding_message);
     }
 
     // Dynamic Clamping
@@ -196,6 +400,191 @@ pub async fn process_chat_request(
     {
         sessions.append_response(sid, message_id, reply, res.thought_signature.clone());
         // Immediate flush after stream completion
+        let _ = sessions.force_save().await;
+    }
+
+    response
+}
+
+async fn process_chat_request_non_stream_with_local_engine_access(
+    request: ChatRequest,
+    sessions: &ChatSessionManager,
+    config_service: &crate::domain::system::config_service::ConfigService,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    local_engine_access: LocalEngineAccess,
+) -> Result<ChatResponse, crate::errors::AppError> {
+    let mut messages_context = request.messages.clone();
+    if let Some(sid) = &request.session_id {
+        messages_context = sessions.merge_request_messages(sid, &request.messages);
+    }
+
+    let mut base_url = "https://openrouter.ai/api/v1".to_string();
+    let mut effective_model = request.model.clone();
+    let mut model_max_tokens: Option<u32> = None;
+    let mut is_local_engine = false;
+
+    if let Some(def) = engine_manager.get_definition(&request.provider).await {
+        tracing::info!(
+            provider = %request.provider,
+            "Detected local engine — routing through EngineManager"
+        );
+
+        match local_engine_access {
+            LocalEngineAccess::AutoStart => {
+                let mut config = build_engine_config(&def).await?;
+
+                if !request.model.is_empty() && request.model != "default" {
+                    config.model_path = Some(request.model.clone());
+                }
+
+                if config.model_path.as_deref() == Some("default") {
+                    config.model_path = None;
+                }
+
+                let local_context_size =
+                    usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
+                let local_model_for_context = config
+                    .model_path
+                    .clone()
+                    .unwrap_or_else(|| request.model.clone());
+                effective_model = resolve_local_text_model_id(
+                    &request.model,
+                    config.model_path.as_deref(),
+                    &request.provider,
+                );
+                stop_conflicting_local_engine(
+                    engine_manager,
+                    crate::domain::engine::types::Capability::Text,
+                )
+                .await?;
+                let status = engine_manager.start(config).await?;
+                base_url = format!("{}/v1", status.endpoint);
+                is_local_engine = true;
+
+                if let Some(sid) = &request.session_id {
+                    messages_context = sessions.build_local_context(
+                        sid,
+                        local_context_size,
+                        &local_model_for_context,
+                    );
+                }
+            }
+            LocalEngineAccess::RequireRunning => {
+                let status = active_local_engine_status(
+                    engine_manager,
+                    &request.provider,
+                    crate::domain::engine::types::Capability::Text,
+                )
+                .await?;
+                base_url = format!("{}/v1", status.endpoint);
+                is_local_engine = true;
+                effective_model =
+                    resolve_local_text_model_id(&request.model, None, &request.provider);
+            }
+        }
+    }
+
+    if !is_local_engine {
+        if let Ok(config) = config_service.load_full_config() {
+            if let Some(p) = config
+                .api_providers
+                .iter()
+                .find(|p| p.id == request.provider)
+            {
+                if let Some(url) = &p.base_url {
+                    base_url = url.clone();
+                }
+
+                if let Some(target) = p.model_aliases.as_ref().and_then(|m| m.get(&request.model)) {
+                    tracing::info!("Resolved model alias: {} -> {}", request.model, target);
+                    effective_model = target.clone();
+                }
+
+                if let Some(models) = &p.models {
+                    if let Some(def) = models.iter().find(|m| m.id == effective_model) {
+                        model_max_tokens = def.max_output_tokens;
+                        if let Some(tm) = def.api_models.as_ref().and_then(|m| m.text.as_ref()) {
+                            tracing::info!("Resolved API model ID: {effective_model} -> {tm}");
+                            effective_model = tm.clone();
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Ok(cc) = config_service.load_custom_models() {
+            if let Some(custom) = cc
+                .models
+                .iter()
+                .find(|m| m.id == effective_model && m.provider_id == request.provider)
+            {
+                tracing::info!(
+                    "Resolved Custom Model: {} -> {}",
+                    effective_model,
+                    custom.base_model_id
+                );
+                effective_model = custom.base_model_id.clone();
+            }
+        }
+    }
+
+    if is_local_engine
+        && let Some(options) = request.web_search.as_ref()
+        && options.enabled
+        && let Some(query) = latest_user_query(&request.messages)
+        && let Some(grounding_message) =
+            web_grounding::build_grounding_message(&query, options).await?
+    {
+        inject_grounding_message(&mut messages_context, grounding_message);
+    }
+
+    let clamped_max_tokens = match (request.max_tokens, model_max_tokens) {
+        (Some(req_limit), Some(mod_limit)) => Some(req_limit.min(mod_limit)),
+        (None, Some(mod_limit)) => Some(mod_limit),
+        (req_limit, None) => req_limit,
+    };
+
+    let effective_request = ChatRequest {
+        messages: messages_context,
+        model: effective_model,
+        max_tokens: clamped_max_tokens,
+        ..request.clone()
+    };
+
+    let request_id = request
+        .request_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let message_id = uuid::Uuid::new_v4().to_string();
+    tracing::info!(
+        "[AI] Starting request {} (msg {}) for model {}",
+        request_id,
+        message_id,
+        effective_request.model
+    );
+
+    let provider = OpenRouterProvider::new(&base_url);
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(90),
+        provider.generate_completion(request_id.clone(), message_id.clone(), effective_request),
+    )
+    .await;
+
+    let response = if let Ok(result) = response {
+        result
+    } else {
+        Err(crate::errors::AppError::Internal {
+            request_id: Some(request_id),
+            message: "AI Request timed out after 90 seconds.".to_string(),
+        })
+    };
+
+    if let Ok(res) = &response
+        && res.ok
+        && let Some(reply) = &res.reply
+        && let Some(sid) = &request.session_id
+    {
+        sessions.append_response(sid, message_id, reply, res.thought_signature.clone());
         let _ = sessions.force_save().await;
     }
 
@@ -324,8 +713,52 @@ pub async fn process_image_request(
     image_generation_state: &crate::domain::ai::ImageGenerationState,
     settings_service: &crate::infrastructure::config::settings::SettingsService,
 ) -> Result<super::types::ImageGenerationResponse, crate::errors::AppError> {
+    process_image_request_with_local_engine_access(
+        request,
+        sessions,
+        engine_manager,
+        image_generation_state,
+        settings_service,
+        LocalEngineAccess::AutoStart,
+    )
+    .await
+}
+
+/// Dispatches an image request without starting or hot-swapping local engines.
+/// Fails if the requested local engine is not already running in the launcher.
+pub async fn process_image_request_without_engine_autostart(
+    request: super::types::ImageGenerationRequest,
+    sessions: &crate::domain::ai::session::ChatSessionManager,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    image_generation_state: &crate::domain::ai::ImageGenerationState,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
+) -> Result<super::types::ImageGenerationResponse, crate::errors::AppError> {
+    process_image_request_with_local_engine_access(
+        request,
+        sessions,
+        engine_manager,
+        image_generation_state,
+        settings_service,
+        LocalEngineAccess::RequireRunning,
+    )
+    .await
+}
+
+async fn process_image_request_with_local_engine_access(
+    request: super::types::ImageGenerationRequest,
+    sessions: &crate::domain::ai::session::ChatSessionManager,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    image_generation_state: &crate::domain::ai::ImageGenerationState,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
+    local_engine_access: LocalEngineAccess,
+) -> Result<super::types::ImageGenerationResponse, crate::errors::AppError> {
     let request = apply_image_request_defaults(request, settings_service).await?;
     let images = if request.provider == "comfyui" {
+        stop_conflicting_local_engine(
+            engine_manager,
+            crate::domain::engine::types::Capability::Image,
+        )
+        .await?;
         process_comfyui_request(&request, image_generation_state, settings_service).await?
     } else {
         let base_url;
@@ -338,26 +771,46 @@ pub async fn process_image_request(
                 "Detected local engine for image generation"
             );
 
-            // Slot empty, occupied by a different engine, or different model — start or reuse
-            let mut config = build_engine_config(&def).await?;
+            match local_engine_access {
+                LocalEngineAccess::AutoStart => {
+                    // Slot empty, occupied by a different engine, or different model — start or reuse
+                    let mut config = build_engine_config(&def).await?;
 
-            // If the request provides a specific (valid) model path, override the config.
-            // Frontend sends "default" when no specific model is selected in the chat UI,
-            // so we must ignore "default" here and rely on the saved Config (from settings).
-            if !request.model.is_empty() && request.model != "default" {
-                config.model_path = Some(request.model.clone());
+                    // If the request provides a specific (valid) model path, override the config.
+                    // Frontend sends "default" when no specific model is selected in the chat UI,
+                    // so we must ignore "default" here and rely on the saved Config (from settings).
+                    if !request.model.is_empty() && request.model != "default" {
+                        config.model_path = Some(request.model.clone());
+                    }
+
+                    // Final sanity check: if model_path is still None or "default", the engine will fail.
+                    if config.model_path.as_deref() == Some("default") {
+                        config.model_path = None;
+                    }
+
+                    preview_path = crate::domain::engine::manager::resolve_sdcpp_preview_path(
+                        &config.extra_args,
+                    );
+
+                    stop_conflicting_local_engine(
+                        engine_manager,
+                        crate::domain::engine::types::Capability::Image,
+                    )
+                    .await?;
+                    let status = engine_manager.start(config).await?;
+                    base_url = status.endpoint;
+                }
+                LocalEngineAccess::RequireRunning => {
+                    let status = active_local_engine_status(
+                        engine_manager,
+                        &request.provider,
+                        crate::domain::engine::types::Capability::Image,
+                    )
+                    .await?;
+                    preview_path = engine_manager.active_image_preview_path().await;
+                    base_url = status.endpoint;
+                }
             }
-
-            // Final sanity check: if model_path is still None or "default", the engine will fail.
-            if config.model_path.as_deref() == Some("default") {
-                config.model_path = None;
-            }
-
-            preview_path =
-                crate::domain::engine::manager::resolve_sdcpp_preview_path(&config.extra_args);
-
-            let status = engine_manager.start(config).await?;
-            base_url = status.endpoint;
         } else {
             return Err(crate::errors::AppError::External {
                 request_id: None,
@@ -498,6 +951,29 @@ pub async fn process_image_request(
         ok: true,
         error: None,
     })
+}
+
+async fn active_local_engine_status(
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    provider: &str,
+    capability: crate::domain::engine::types::Capability,
+) -> Result<crate::domain::engine::types::EngineStatus, crate::errors::AppError> {
+    match engine_manager.state().await {
+        crate::domain::engine::types::EngineState::Ready { slots } => slots
+            .into_iter()
+            .find(|slot| {
+                slot.capability == capability && slot.engine.id == provider && slot.engine.healthy
+            })
+            .map(|slot| slot.engine)
+            .ok_or_else(|| {
+                crate::errors::AppError::PermissionDenied(format!(
+                    "Local AI engine '{provider}' is not running in launcher. Start it first."
+                ))
+            }),
+        _ => Err(crate::errors::AppError::PermissionDenied(format!(
+            "Local AI engine '{provider}' is not running in launcher. Start it first."
+        ))),
+    }
 }
 
 async fn process_comfyui_request(
@@ -1221,6 +1697,26 @@ async fn build_engine_config(
     ))
 }
 
+fn resolve_local_text_model_id(
+    request_model: &str,
+    model_path: Option<&str>,
+    provider: &str,
+) -> String {
+    let requested = request_model.trim();
+    if !requested.is_empty() && requested != "default" {
+        return requested.to_string();
+    }
+
+    if let Some(path) = model_path {
+        let path = std::path::Path::new(path);
+        if let Some(file_name) = path.file_name().and_then(|value| value.to_str()) {
+            return file_name.to_string();
+        }
+    }
+
+    provider.to_string()
+}
+
 fn normalize_sdcpp_sampler(value: Option<&str>) -> String {
     match value.unwrap_or("euler a").trim().to_lowercase().as_str() {
         "euler a" | "euler_a" => "euler_a".to_string(),
@@ -1284,6 +1780,56 @@ mod tests {
     }
 
     #[test]
+    fn test_latest_user_query_supports_string_and_multimodal_content() {
+        let messages = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                role: "assistant".to_string(),
+                content: serde_json::Value::String("old".to_string()),
+                thought_signature: None,
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                role: "user".to_string(),
+                content: serde_json::json!([
+                    { "type": "text", "text": "найди свежие новости по Rust" },
+                    { "type": "image_url", "image_url": { "url": "data:image/png;base64,abc" } }
+                ]),
+                thought_signature: None,
+            },
+        ];
+
+        assert_eq!(
+            latest_user_query(&messages).as_deref(),
+            Some("найди свежие новости по Rust")
+        );
+    }
+
+    #[test]
+    fn test_inject_grounding_message_preserves_system_prefix() {
+        let mut messages = vec![
+            ChatMessage {
+                id: "1".to_string(),
+                role: "system".to_string(),
+                content: serde_json::Value::String("base rules".to_string()),
+                thought_signature: None,
+            },
+            ChatMessage {
+                id: "2".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("query".to_string()),
+                thought_signature: None,
+            },
+        ];
+
+        inject_grounding_message(&mut messages, "grounding".to_string());
+
+        assert_eq!(messages[0].role, "system");
+        assert_eq!(messages[1].role, "system");
+        assert_eq!(messages[2].role, "user");
+    }
+
+    #[test]
     fn test_count_tokens_with_model_fallback() {
         // Unknown model should fall back to cl100k_base without error
         let count = count_tokens(
@@ -1292,6 +1838,22 @@ mod tests {
         )
         .expect("Should fall back to cl100k_base");
         assert!(count > 0);
+    }
+
+    #[test]
+    fn conflicting_local_capability_is_text_image_exclusive() {
+        assert_eq!(
+            conflicting_local_capability(crate::domain::engine::types::Capability::Text),
+            Some(crate::domain::engine::types::Capability::Image)
+        );
+        assert_eq!(
+            conflicting_local_capability(crate::domain::engine::types::Capability::Image),
+            Some(crate::domain::engine::types::Capability::Text)
+        );
+        assert_eq!(
+            conflicting_local_capability(crate::domain::engine::types::Capability::Vision),
+            None
+        );
     }
 
     #[test]

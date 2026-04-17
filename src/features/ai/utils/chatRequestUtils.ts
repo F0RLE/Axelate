@@ -37,9 +37,11 @@ export function constructChatRequest(
         sessionId: string;
         thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
         maxTokens?: number | undefined;
+        webSearchEnabled?: boolean;
     },
 ): IChatRequest {
-    const { providerId, model, apiKey, sessionId, thinkingLevel, maxTokens } = config;
+    const { providerId, model, apiKey, sessionId, thinkingLevel, maxTokens, webSearchEnabled } =
+        config;
     const request: IChatRequest = {
         provider: providerId,
         model,
@@ -66,6 +68,12 @@ export function constructChatRequest(
 
     if (maxTokens !== undefined) {
         request.max_tokens = maxTokens;
+    }
+
+    if (webSearchEnabled === true) {
+        request.web_search = {
+            enabled: true,
+        };
     }
 
     return request;

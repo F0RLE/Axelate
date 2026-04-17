@@ -7,6 +7,16 @@
     pointer-events: none !important;
 }
 
+/* Shared app-shell modal frame tokens */
+.modal-backdrop {
+    --modal-shell-padding-inline: 24px;
+    --modal-shell-padding-block-start: 24px;
+    --modal-shell-padding-block-end: 24px;
+    --modal-shell-radius: 24px;
+}
+
+/* Keep app selection on the shared modal geometry used by module settings. */
+
 /* Confirmation Modal */
 
 .modal-overlay {
@@ -74,6 +84,68 @@
     max-height: calc(90vh - 200px);
 }
 
+.module-settings-legacy-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.module-settings-webui-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+}
+
+.module-settings-webui-frame-shell {
+    position: relative;
+    min-height: min(74vh, 920px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 48%),
+        rgba(5, 7, 12, 0.78);
+}
+
+.module-settings-webui-frame {
+    display: block;
+    width: 100%;
+    min-height: min(74vh, 920px);
+    border: 0;
+    background: transparent;
+}
+
+.module-settings-webui-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    text-align: center;
+    background: rgba(9, 11, 18, 0.86);
+    z-index: 1;
+}
+
+.module-settings-webui-status.hidden {
+    display: none;
+}
+
+.module-settings-webui-status[data-state='error'] {
+    color: var(--danger);
+}
+
 .module-settings-content form {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
@@ -136,8 +208,8 @@
 
 .module-settings-content .form-input:focus {
     outline: none;
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(138, 43, 226, 0.1);
+    border-color: var(--border-color);
+    box-shadow: none;
 }
 
 .module-settings-content .form-textarea {

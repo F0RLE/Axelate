@@ -160,17 +160,17 @@ export class EngineStatusService {
                     ? 'Booting...'
                     : tFn('ui.launcher.modules.modal.btn_booting', 'Booting...');
         } else if (state === 'ready') {
-            btn.classList.add('active-module-btn', 'stop-btn');
+            btn.classList.remove('active-module-btn', 'stop-btn');
             btn.textContent =
                 tFn === undefined
-                    ? 'Running'
-                    : tFn('ui.launcher.modules.modal.btn_running', 'Running');
+                    ? 'Убрать'
+                    : tFn('ui.launcher.modules.modal.btn_remove', 'Убрать');
         } else {
             btn.classList.remove('active-module-btn', 'stop-btn');
             btn.textContent =
                 tFn === undefined
-                    ? 'Remove'
-                    : tFn('ui.launcher.modules.modal.btn_remove', 'Remove');
+                    ? 'Убрать'
+                    : tFn('ui.launcher.modules.modal.btn_remove', 'Убрать');
         }
     }
 

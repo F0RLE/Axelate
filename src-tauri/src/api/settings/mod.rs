@@ -10,6 +10,8 @@ pub mod window_settings;
 use crate::errors::AppError;
 use crate::infrastructure::config::settings::{self};
 use crate::models::AppSettings;
+use serde_json::Value;
+use std::collections::HashMap;
 
 #[tauri::command]
 #[specta::specta]
@@ -40,6 +42,29 @@ pub async fn save_setting(
     value: String,
 ) -> Result<(), AppError> {
     settings_service.save_setting(&key, &value).await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Retrieves persisted settings for a specific module.
+pub async fn get_module_settings(
+    settings_service: tauri::State<'_, settings::SettingsService>,
+    module_id: String,
+) -> Result<HashMap<String, Value>, AppError> {
+    settings_service.get_module_settings(&module_id).await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Saves persisted settings for a specific module.
+pub async fn save_module_settings(
+    settings_service: tauri::State<'_, settings::SettingsService>,
+    module_id: String,
+    settings: HashMap<String, Value>,
+) -> Result<(), AppError> {
+    settings_service
+        .save_module_settings(&module_id, &settings)
+        .await
 }
 
 #[tauri::command]

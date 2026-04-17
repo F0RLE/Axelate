@@ -22,7 +22,7 @@ fn is_frontend_managed_secret(service: &str) -> bool {
 }
 
 fn is_frontend_readable_secret(service: &str) -> bool {
-    normalize_service_name(service) == "ai_session_id"
+    is_frontend_managed_secret(service)
 }
 
 fn ensure_frontend_managed_secret(service: &str) -> Result<String, AppError> {
@@ -46,7 +46,7 @@ pub async fn save_secure_key(service: String, key: String) -> Result<(), AppErro
 
 #[tauri::command]
 #[specta::specta]
-/// Retrieves an API key from system credential storage
+/// Retrieves a frontend-managed secret from system credential storage
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned types for serialization
 pub async fn get_secure_key(service: String) -> Result<Option<String>, AppError> {
     let service = normalize_service_name(&service);
@@ -94,25 +94,13 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn get_secure_key_rejects_api_key_reads() {
-        let err = get_secure_key("openrouter_api_key".to_string())
-            .await
-            .unwrap_err();
-
-        assert!(matches!(
-            err,
-            AppError::Validation(message) if message.contains("not allowed")
-        ));
-    }
-
     #[test]
     fn frontend_secret_policy_allows_only_expected_service_names() {
         assert!(is_frontend_managed_secret("openrouter_api_key"));
         assert!(is_frontend_managed_secret("ai_session_id"));
         assert!(!is_frontend_managed_secret("license_data"));
         assert!(is_frontend_readable_secret("ai_session_id"));
-        assert!(!is_frontend_readable_secret("openrouter_api_key"));
+        assert!(is_frontend_readable_secret("openrouter_api_key"));
     }
 
     #[tokio::test]

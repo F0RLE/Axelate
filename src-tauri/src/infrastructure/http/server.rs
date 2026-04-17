@@ -1,8 +1,17 @@
+#[path = "ai_http.rs"]
+mod ai_http;
+#[path = "module_ai.rs"]
+mod module_ai;
+#[path = "ui_ai.rs"]
+mod ui_ai;
+
 use crate::domain::{
     modules::controller as module_controller,
     monitoring::system_monitor::SystemMonitorService,
     system::hardware_probe::{merge_probe_with_runtime_stats, probe_gpu_info},
 };
+use crate::errors::AppError;
+use crate::infrastructure::config::ui_state::UiStateService;
 use crate::infrastructure::logging;
 use crate::models::{
     SystemStats,
@@ -10,21 +19,38 @@ use crate::models::{
 };
 use axum::{
     Json, Router,
-    extract::State,
-    http::{HeaderName, HeaderValue, Method},
+    body::Body,
+    extract::{Path as AxumPath, State},
+    http::{HeaderName, HeaderValue, Method, StatusCode, header},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
+use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 use tower_http::cors::CorsLayer;
 
+static LOCAL_SERVER_ADDR: std::sync::OnceLock<SocketAddr> = std::sync::OnceLock::new();
+
 #[derive(Clone)]
-struct AppState {
-    config: std::sync::Arc<crate::domain::system::config_service::ConfigService>,
+pub(super) struct AppState {
+    config: Arc<crate::domain::system::config_service::ConfigService>,
     settings: crate::infrastructure::config::settings::SettingsService,
-    monitor: std::sync::Arc<SystemMonitorService>,
+    monitor: Arc<SystemMonitorService>,
+    sessions: Arc<crate::domain::ai::session::ChatSessionManager>,
+    engine_manager: Arc<crate::domain::engine::manager::EngineManager>,
+    image_generation_state: Arc<crate::domain::ai::ImageGenerationState>,
+    ui_state: UiStateService,
+}
+
+/// Returns the current local HTTP server base URL when available.
+pub fn get_local_server_base_url() -> Option<String> {
+    LOCAL_SERVER_ADDR
+        .get()
+        .map(|address| format!("http://{}", address))
 }
 
 /// Starts the HTTP API server on port 3000 for local access
@@ -38,9 +64,22 @@ pub fn start_server(
     );
 
     let state = AppState {
-        monitor: std::sync::Arc::clone(app.state::<std::sync::Arc<SystemMonitorService>>().inner()),
+        monitor: Arc::clone(app.state::<Arc<SystemMonitorService>>().inner()),
         config: config_service,
         settings: settings_service,
+        sessions: Arc::clone(
+            app.state::<Arc<crate::domain::ai::session::ChatSessionManager>>()
+                .inner(),
+        ),
+        engine_manager: Arc::clone(
+            app.state::<Arc<crate::domain::engine::manager::EngineManager>>()
+                .inner(),
+        ),
+        image_generation_state: Arc::clone(
+            app.state::<Arc<crate::domain::ai::ImageGenerationState>>()
+                .inner(),
+        ),
+        ui_state: app.state::<UiStateService>().inner().clone(),
     };
 
     tauri::async_runtime::spawn(async move {
@@ -70,12 +109,24 @@ pub fn start_server(
             .route("/api/logs", get(get_logs_handler))
             .route("/api/logs/clear", post(clear_logs_handler))
             .route("/api/modules", get(get_modules_handler))
+            .route(
+                "/api/modules/{module_id}/settings-ui",
+                get(module_settings_ui_index_handler),
+            )
+            .route(
+                "/api/modules/{module_id}/settings-ui/{*asset_path}",
+                get(module_settings_ui_asset_handler),
+            )
             .route("/api/translations", get(translations_handler))
             .route("/api/gpu/info", get(gpu_info_handler))
             .route("/api/settings", get(get_settings_handler))
             .route("/api/settings/save", post(save_setting_handler))
             .route("/api/config", get(get_config_handler))
             .route("/api/system/language", get(system_language_handler))
+            .route("/api/ai/chat", post(ui_ai::chat_handler))
+            .route("/api/ai/image", post(ui_ai::image_handler))
+            .route("/api/modules/ai/text", post(module_ai::text_handler))
+            .route("/api/modules/ai/image", post(module_ai::image_handler))
             .layer(cors)
             .with_state(state);
 
@@ -84,6 +135,7 @@ pub fn start_server(
                 let addr = listener
                     .local_addr()
                     .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 0)));
+                let _ = LOCAL_SERVER_ADDR.set(addr);
                 tracing::debug!("[Server] HTTP Server listening on http://{addr}");
                 if let Err(e) = axum::serve(listener, app).await {
                     tracing::error!("[Server] Fatal error serving HTTP: {e}");
@@ -267,6 +319,7 @@ fn sanitize_public_module(module: Module) -> Value {
         "isDeletable": module.is_deletable,
         "config": sanitized_config,
         "configSchema": sanitized_schema,
+        "settingsUi": module.settings_ui,
     })
 }
 
@@ -302,6 +355,181 @@ async fn get_modules_handler() -> Json<Value> {
     Json(Value::Array(public_modules))
 }
 
+async fn module_settings_ui_index_handler(
+    AxumPath(module_id): AxumPath<String>,
+) -> Result<Response, AppError> {
+    crate::domain::modules::downloader::validate_module_id(&module_id)?;
+    Ok(
+        Redirect::temporary(&format!("/api/modules/{module_id}/settings-ui/index.html"))
+            .into_response(),
+    )
+}
+
+async fn module_settings_ui_asset_handler(
+    AxumPath((module_id, asset_path)): AxumPath<(String, String)>,
+) -> Result<Response, AppError> {
+    serve_module_settings_ui_asset(&module_id, Some(asset_path)).await
+}
+
+async fn serve_module_settings_ui_asset(
+    module_id: &str,
+    asset_path: Option<String>,
+) -> Result<Response, AppError> {
+    crate::domain::modules::downloader::validate_module_id(module_id)?;
+
+    let module_root = crate::domain::modules::downloader::get_module_path(module_id);
+    let manifest = crate::domain::modules::lifecycle::ManifestLoader::load(&module_root)?;
+    let settings_ui = manifest.settings_ui.ok_or_else(|| {
+        AppError::NotFound(format!(
+            "Module {module_id} does not expose a custom settings UI"
+        ))
+    })?;
+
+    let (settings_root, entry_file) = resolve_settings_ui_root(&module_root, &settings_ui).await?;
+    let target = match asset_path {
+        Some(path) if !path.trim().is_empty() => {
+            resolve_requested_settings_asset(&settings_root, &path).await?
+        }
+        _ => entry_file,
+    };
+
+    let body = tokio::fs::read(&target)
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
+
+    let mime = guess_content_type(&target);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime)
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(body))
+        .map_err(|error| AppError::Internal {
+            request_id: None,
+            message: error.to_string(),
+        })
+}
+
+async fn resolve_settings_ui_root(
+    module_root: &Path,
+    settings_ui: &str,
+) -> Result<(PathBuf, PathBuf), AppError> {
+    let canonical_module_root = tokio::fs::canonicalize(module_root)
+        .await
+        .map_err(|error| AppError::NotFound(error.to_string()))?;
+    let requested_path = validate_relative_module_asset(settings_ui)?;
+    let configured_path = tokio::fs::canonicalize(module_root.join(&requested_path))
+        .await
+        .map_err(|error| AppError::NotFound(error.to_string()))?;
+
+    if !configured_path.starts_with(&canonical_module_root) {
+        return Err(AppError::PermissionDenied(
+            "settings_ui must stay inside the module directory".to_string(),
+        ));
+    }
+
+    let metadata = tokio::fs::metadata(&configured_path)
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
+
+    let (root, entry) = if metadata.is_dir() {
+        let entry = configured_path.join("index.html");
+        (configured_path, entry)
+    } else {
+        let root = configured_path.parent().ok_or_else(|| {
+            AppError::Validation("settings_ui file must have a parent directory".to_string())
+        })?;
+        (root.to_path_buf(), configured_path)
+    };
+
+    let entry = tokio::fs::canonicalize(&entry)
+        .await
+        .map_err(|error| AppError::NotFound(error.to_string()))?;
+
+    if !entry.starts_with(&root) {
+        return Err(AppError::PermissionDenied(
+            "settings_ui entry must stay inside its root directory".to_string(),
+        ));
+    }
+
+    let canonical_root = tokio::fs::canonicalize(&root)
+        .await
+        .map_err(|error| AppError::NotFound(error.to_string()))?;
+
+    Ok((canonical_root, entry))
+}
+
+async fn resolve_requested_settings_asset(
+    settings_root: &Path,
+    asset_path: &str,
+) -> Result<PathBuf, AppError> {
+    let relative_path = validate_relative_module_asset(asset_path)?;
+    let resolved = tokio::fs::canonicalize(settings_root.join(relative_path))
+        .await
+        .map_err(|error| AppError::NotFound(error.to_string()))?;
+
+    if !resolved.starts_with(settings_root) {
+        return Err(AppError::PermissionDenied(
+            "Requested settings asset is outside the module settings root".to_string(),
+        ));
+    }
+
+    Ok(resolved)
+}
+
+fn validate_relative_module_asset(raw_path: &str) -> Result<PathBuf, AppError> {
+    let trimmed = raw_path.trim().replace('\\', "/");
+    if trimmed.is_empty() {
+        return Err(AppError::Validation(
+            "settings_ui path cannot be empty".to_string(),
+        ));
+    }
+
+    let path = PathBuf::from(trimmed);
+    if path.is_absolute() {
+        return Err(AppError::Validation(
+            "settings_ui path must be relative".to_string(),
+        ));
+    }
+
+    if path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return Err(AppError::Validation(
+            "settings_ui path contains forbidden segments".to_string(),
+        ));
+    }
+
+    Ok(path)
+}
+
+fn guess_content_type(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("html") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") | Some("mjs") => "application/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("ico") => "image/x-icon",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("ttf") => "font/ttf",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
 async fn system_language_handler() -> Json<Value> {
     let lang = infra_settings::get_language_sync();
     Json(json!({ "language": lang }))
@@ -328,11 +556,15 @@ async fn get_config_handler(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
-    use super::{LogsQuery, clear_logs_handler, get_logs_handler, sanitize_public_module};
+    use super::{
+        LogsQuery, clear_logs_handler, get_logs_handler, resolve_settings_ui_root,
+        sanitize_public_module,
+    };
     use crate::models::modules::{ConfigField, Module};
     use axum::extract::Query;
     use serde_json::json;
     use std::collections::HashMap;
+    use std::fs;
 
     #[test]
     fn sanitize_public_module_redacts_password_values_and_defaults() {
@@ -346,8 +578,16 @@ mod tests {
             ConfigField {
                 field_type: "password".to_string(),
                 label: "API key".to_string(),
+                description: None,
+                placeholder: None,
                 default: Some(json!("seed-value")),
                 required: true,
+                min: None,
+                max: None,
+                step: None,
+                rows: None,
+                section: None,
+                order: None,
                 options: None,
             },
         );
@@ -356,8 +596,16 @@ mod tests {
             ConfigField {
                 field_type: "text".to_string(),
                 label: "Endpoint".to_string(),
+                description: None,
+                placeholder: None,
                 default: Some(json!("http://localhost")),
                 required: true,
+                min: None,
+                max: None,
+                step: None,
+                rows: None,
+                section: None,
+                order: None,
                 options: None,
             },
         );
@@ -378,6 +626,7 @@ mod tests {
             is_deletable: true,
             config,
             config_schema: Some(schema),
+            settings_ui: None,
         };
 
         let value = sanitize_public_module(module);
@@ -405,5 +654,27 @@ mod tests {
         let cleared = clear_logs_handler().await;
         assert_eq!(cleared.0["success"], json!(true));
         assert!(crate::infrastructure::logging::logger::get_logs_since(0.0).is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolve_settings_ui_root_allows_valid_file_inside_module() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let settings_dir = temp_dir.path().join("settings-ui");
+        fs::create_dir_all(&settings_dir).expect("create settings dir");
+        let entry_path = settings_dir.join("index.html");
+        fs::write(&entry_path, "<html></html>").expect("write entry file");
+
+        let (root, entry) = resolve_settings_ui_root(temp_dir.path(), "settings-ui/index.html")
+            .await
+            .expect("resolve settings ui");
+
+        assert_eq!(
+            root,
+            fs::canonicalize(&settings_dir).expect("canonical settings root")
+        );
+        assert_eq!(
+            entry,
+            fs::canonicalize(&entry_path).expect("canonical entry path")
+        );
     }
 }

@@ -12,6 +12,8 @@ use tokio::process::Child;
 pub mod lifecycle;
 /// OS-specific process monitoring
 pub mod process;
+/// Shared script module runtime management
+pub mod script_runtime;
 
 pub use self::lifecycle::LifecycleExecutor;
 
@@ -122,11 +124,37 @@ pub async fn get_all_modules() -> Vec<Module> {
                 let id = entry.file_name().to_string_lossy().to_string();
                 let path = entry.path();
 
-                let (name, version, config_schema) =
-                    match module_lifecycle::ManifestLoader::load(&path) {
-                        Ok(m) => (m.name, m.version, m.config_schema),
-                        Err(_) => (id.clone(), "0.0.0".to_string(), None),
-                    };
+                let (
+                    name,
+                    description,
+                    version,
+                    author,
+                    category,
+                    icon,
+                    config_schema,
+                    settings_ui,
+                ) = match module_lifecycle::ManifestLoader::load(&path) {
+                    Ok(m) => (
+                        m.name,
+                        m.description,
+                        m.version,
+                        m.author.unwrap_or_default(),
+                        m.category.unwrap_or_else(|| "service".to_string()),
+                        m.icon.unwrap_or_default(),
+                        m.config_schema,
+                        m.settings_ui,
+                    ),
+                    Err(_) => (
+                        id.clone(),
+                        String::new(),
+                        "0.0.0".to_string(),
+                        String::new(),
+                        "service".to_string(),
+                        String::new(),
+                        None,
+                        None,
+                    ),
+                };
 
                 let status = if controller.is_running(&id, &path).await {
                     "running".to_string()
@@ -137,11 +165,11 @@ pub async fn get_all_modules() -> Vec<Module> {
                 modules.push(Module {
                     id: id.clone(),
                     name,
-                    description: String::new(),
+                    description,
                     version,
-                    author: String::new(),
-                    category: "service".to_string(),
-                    icon: String::new(),
+                    author,
+                    category,
+                    icon,
                     path: path.to_string_lossy().to_string(),
                     installed: true,
                     local: true,
@@ -150,6 +178,7 @@ pub async fn get_all_modules() -> Vec<Module> {
                     is_deletable: true,
                     config: std::collections::HashMap::new(),
                     config_schema,
+                    settings_ui,
                 });
             }
         }

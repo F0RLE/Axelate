@@ -105,11 +105,11 @@
     "baseUrl": "https://openrouter.ai/api/v1",
     "models": [
       {
-        "name": "Claude Opus 4.6",
+        "name": "Claude Opus 4.7",
         "desc": "Anthropic's strongest model for coding and long-running professional tasks, built for agentic workflows across large codebases and multi-step execution.",
         "descKey": "ui.claude.model.opus46.desc",
         "tier": "strong",
-        "releaseDate": "2026-02-04",
+        "releaseDate": "2026-04-16",
         "contextWindow": 1000000,
         "maxOutputTokens": 128000,
         "pricing": {
@@ -128,9 +128,9 @@
           "functionCalling": true
         },
         "apiModels": {
-          "text": "anthropic/claude-opus-4.6"
+          "text": "anthropic/claude-opus-4.7"
         },
-        "id": "claude-opus-4.6"
+        "id": "claude-opus-4.7"
       },
       {
         "name": "Claude Sonnet 4.6",

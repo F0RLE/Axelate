@@ -99,6 +99,11 @@ describe('GeneralSettingsRenderer', () => {
                 .querySelector('#sidebar .nav-btn[data-page="chat"]')
                 ?.classList.contains('hidden'),
         ).toBe(true);
+        expect(
+            document
+                .querySelector('#sidebar .nav-btn[data-page="chat"]')
+                ?.getAttribute('tabindex'),
+        ).toBe('-1');
 
         const gpuMonitor = document.querySelector(
             '#monitor-toggles .monitor-toggle-btn[data-monitor-id="gpu"]',
@@ -125,11 +130,15 @@ describe('GeneralSettingsRenderer', () => {
         expect(homeNav.classList.contains('nav-item-hiding')).toBe(true);
         homeNav.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(homeNav.classList.contains('hidden')).toBe(true);
+        expect(homeNav.getAttribute('tabindex')).toBe('-1');
+        expect(homeNav.getAttribute('aria-hidden')).toBe('true');
 
         uiSettings.getHiddenNavItems.mockReturnValue(['chat', 'home']);
         renderer.toggleNavItem('home', true);
         expect(uiSettings.setHiddenNavItems).toHaveBeenLastCalledWith(['chat']);
         expect(homeNav.classList.contains('hidden')).toBe(false);
+        expect(homeNav.hasAttribute('tabindex')).toBe(false);
+        expect(homeNav.hasAttribute('aria-hidden')).toBe(false);
 
         renderer.toggleMonitorItem('cpu', false);
         expect(uiSettings.setHiddenMonitors).toHaveBeenCalledWith(['gpu', 'cpu']);
@@ -144,6 +153,26 @@ describe('GeneralSettingsRenderer', () => {
         renderer.toggleMonitorItem('cpu', true);
         expect(uiSettings.setHiddenMonitors).toHaveBeenLastCalledWith(['gpu']);
         expect(cpuStat.classList.contains('hidden')).toBe(false);
+    });
+
+    it('does not mutate hidden state arrays returned by settings service', () => {
+        const hiddenNavItems = ['chat'];
+        const hiddenMonitors = ['gpu'];
+
+        uiSettings.getHiddenNavItems.mockReturnValue(hiddenNavItems);
+        uiSettings.getHiddenMonitors.mockReturnValue(hiddenMonitors);
+
+        renderer.init({
+            t: (_key: string, fallback: string) => fallback,
+        } as never);
+
+        renderer.toggleNavItem('home', false);
+        renderer.toggleMonitorItem('cpu', false);
+
+        expect(hiddenNavItems).toEqual(['chat']);
+        expect(hiddenMonitors).toEqual(['gpu']);
+        expect(uiSettings.setHiddenNavItems).toHaveBeenLastCalledWith(['chat', 'home']);
+        expect(uiSettings.setHiddenMonitors).toHaveBeenLastCalledWith(['gpu', 'cpu']);
     });
 
     it('updates monitor panel and divider visibility based on hidden monitors', () => {

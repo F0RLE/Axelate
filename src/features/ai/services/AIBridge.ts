@@ -321,11 +321,16 @@ export class AIBridge implements IAIBridge {
     private _resolveRequestOptions(providerId: string): {
         thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
         maxTokens?: number;
+        webSearchEnabled?: boolean;
     } {
         const isLocalProvider = this._manager.apiKey === null;
         const thinkingLevel =
             this._core && !isLocalProvider
                 ? this._core.aiSettings.getThinkingLevel(providerId)
+                : undefined;
+        const webSearchEnabled =
+            this._core && !isLocalProvider
+                ? this._core.aiSettings.getInternetAccessEnabled(providerId)
                 : undefined;
         const effectiveThinkingLevel = thinkingLevel === 'off' ? undefined : thinkingLevel;
         const maxTokens = isLocalProvider ? undefined : this._manager.maxOutputTokens;
@@ -333,6 +338,7 @@ export class AIBridge implements IAIBridge {
         const requestOptions: {
             thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
             maxTokens?: number;
+            webSearchEnabled?: boolean;
         } = {};
 
         if (effectiveThinkingLevel !== undefined) {
@@ -341,6 +347,10 @@ export class AIBridge implements IAIBridge {
 
         if (maxTokens !== undefined) {
             requestOptions.maxTokens = maxTokens;
+        }
+
+        if (webSearchEnabled === true) {
+            requestOptions.webSearchEnabled = true;
         }
 
         return requestOptions;

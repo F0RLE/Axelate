@@ -55,6 +55,8 @@ pub struct Module {
     pub config: std::collections::HashMap<String, serde_json::Value>, // current config values
     /// Configuration schema definition
     pub config_schema: Option<std::collections::HashMap<String, ConfigField>>, // schema definition
+    /// Relative path to the module-owned settings UI entry file.
+    pub settings_ui: Option<String>,
 }
 
 /// Configuration field schema for module settings
@@ -65,10 +67,35 @@ pub struct ConfigField {
     pub field_type: String,
     /// Display label in UI
     pub label: String,
+    /// Optional field description/help text shown under the control.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Optional placeholder text for text inputs and textareas.
+    #[serde(default)]
+    pub placeholder: Option<String>,
     /// Default value
     pub default: Option<serde_json::Value>,
     /// Whether field is required
     pub required: bool,
-    /// Available options for "select" type
+    /// Optional minimum numeric value for number and range controls.
+    #[serde(default)]
+    pub min: Option<f64>,
+    /// Optional maximum numeric value for number and range controls.
+    #[serde(default)]
+    pub max: Option<f64>,
+    /// Optional numeric step for number and range controls.
+    #[serde(default)]
+    pub step: Option<f64>,
+    /// Preferred row count for multiline textareas.
+    #[serde(default)]
+    pub rows: Option<u32>,
+    /// Optional section/group label for form grouping.
+    #[serde(default)]
+    pub section: Option<String>,
+    /// Optional ordering hint inside a form or section.
+    #[serde(default)]
+    pub order: Option<i32>,
+    /// Available options for "select" fields.
+    #[serde(default)]
     pub options: Option<Vec<String>>,
 }

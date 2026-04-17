@@ -35,6 +35,15 @@
     /* cursor: text; removed to allow default cursor behavior */
 }
 
+.chat-bubble::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+}
+
 .chat-bubble--media {
     max-width: min(100%, 32rem);
     display: flex;
@@ -77,10 +86,43 @@
 }
 
 .chat-row.user .chat-bubble {
-    background: rgba(53, 35, 74, 0.96);
-    border-color: rgba(var(--primary-raw), 0.12);
-    border-top-right-radius: 14px;
-    box-shadow: 0 0 0 1px rgba(var(--primary-raw), 0.08);
+    background:
+        linear-gradient(
+            135deg,
+            rgba(var(--primary-raw), 0.14) 0%,
+            rgba(var(--primary-raw), 0.07) 48%,
+            rgba(255, 255, 255, 0.03) 100%
+        ),
+        var(--module-button-bg-soft);
+    border-color: var(--module-button-border);
+    border-radius: var(--module-button-radius);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    color: var(--module-button-text);
+}
+
+.chat-row.user .chat-bubble::before {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.07) 0%,
+            rgba(255, 255, 255, 0.02) 42%,
+            rgba(255, 255, 255, 0) 100%
+        );
+    opacity: 1;
+}
+
+.chat-row.user:hover .chat-bubble,
+.chat-row.user:focus-within .chat-bubble {
+    border-color: rgba(var(--primary-raw), 0.24);
+    background:
+        linear-gradient(
+            135deg,
+            rgba(var(--primary-raw), 0.17) 0%,
+            rgba(var(--primary-raw), 0.09) 48%,
+            rgba(255, 255, 255, 0.035) 100%
+        ),
+        var(--module-button-bg-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .chat-row.bot .chat-bubble {
@@ -1074,6 +1116,7 @@
     display: flex;
     align-items: center;
     align-self: stretch;
+    padding-inline: 0.1rem;
 }
 
 .chat-input-bar {
@@ -1167,13 +1210,41 @@
 }
 
 .chat-action-btn.primary {
-    color: rgba(var(--primary-raw), 0.88);
+    color: var(--text-secondary);
     background: transparent !important;
+    border: none !important;
+    border-radius: 0;
 }
 
 .chat-action-btn.primary:hover {
-    background: rgba(var(--primary-raw), 0.07) !important;
-    color: rgba(var(--primary-raw), 0.92);
+    background: transparent !important;
+    color: var(--text-primary);
+    transform: scale(1.05);
+}
+
+.chat-action-btn.primary:active {
+    background: transparent !important;
+    transform: scale(0.9);
+    opacity: 0.7;
+}
+
+#chat-voice-btn {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0;
+    color: var(--text-secondary);
+}
+
+#chat-voice-btn:hover {
+    background: transparent !important;
+    color: var(--text-primary);
+    transform: scale(1.05);
+}
+
+#chat-voice-btn:active {
+    background: transparent !important;
+    transform: scale(0.9);
+    opacity: 0.7;
 }
 
 .chat-action-btn svg,
@@ -1216,7 +1287,7 @@
     background: transparent;
     border: none;
     color: var(--text-primary);
-    padding: 0.72rem 0.9rem 0.62rem;
+    padding: 0.72rem 0.24rem 0.62rem;
     font-size: 0.92rem;
     outline: none;
     resize: none;
@@ -1233,10 +1304,7 @@
 }
 
 #chat-container:not(.has-messages) .chat-textarea {
-    padding-left: 0;
-    padding-right: 0.08rem;
-    padding-top: 0.72rem;
-    padding-bottom: 0.62rem;
+    padding-right: 0.24rem;
 }
 
 #chat-container:not(.has-messages) .chat-textarea:placeholder-shown {
@@ -1246,8 +1314,8 @@
 
 .chat-input-placeholder {
     position: absolute;
-    left: 0;
-    right: 0;
+    left: 0.24rem;
+    right: 0.24rem;
     top: 50%;
     transform: translateY(-50%);
     color: var(--text-muted);
@@ -1600,6 +1668,18 @@
 
 .markdown-body .footnotes ol {
     padding-left: 1.5rem;
+}
+
+.markdown-body .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
 }
 
 /* Strikethrough */

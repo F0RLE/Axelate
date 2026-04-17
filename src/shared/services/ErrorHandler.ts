@@ -3,7 +3,6 @@
  * @description Global error boundary and management service for catching and logging application errors
  */
 
-import DOMPurify from 'dompurify';
 import { eventBus } from './EventBus';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { getGlobalWin } from '@/shared/utils/globalAccessor';
@@ -22,9 +21,6 @@ export interface IErrorInfo {
 }
 
 type ErrorCallback = (_error: IErrorInfo) => void;
-
-// Local type definition for global extending
-// IErrorHandlerGlobal removed
 
 export class ErrorHandler {
     private _initialized = false;
@@ -49,7 +45,6 @@ export class ErrorHandler {
         }
         win.errorHandler = this;
 
-        // Catch uncaught errors
         globalThis.onerror = (message, source, lineno, colno, error) => {
             const extra: { url?: string; line?: number; column?: number } = {};
             if (source !== undefined && source !== '') extra.url = source;
@@ -61,10 +56,9 @@ export class ErrorHandler {
                 'window.onerror',
                 extra,
             );
-            return false; // Don't prevent default handling
+            return false;
         };
 
-        // Catch unhandled promise rejections
         globalThis.onunhandledrejection = (event) => {
             const error =
                 event.reason instanceof Error ? event.reason : new Error(String(event.reason));
@@ -83,77 +77,26 @@ export class ErrorHandler {
         context?: string,
         extra?: { url?: string; line?: number; column?: number },
     ): void {
-        const errorInfo: IErrorInfo = {
-            message: error.message,
-            timestamp: Date.now(),
-        };
+        const errorInfo = this._createErrorInfo(error, context, extra);
+        this._pushError(errorInfo);
 
-        if (error.stack !== undefined && error.stack !== '') errorInfo.stack = error.stack;
-        if (context !== undefined && context !== '') errorInfo.context = context;
-        if (extra?.url !== undefined && extra.url !== '') errorInfo.url = extra.url;
-        if (extra?.line !== undefined) errorInfo.line = extra.line;
-        if (extra?.column !== undefined) errorInfo.column = extra.column;
-
-        // Add to log (with size limit)
-        this._errorLog.push(errorInfo);
-        if (this._errorLog.length > this._maxLogSize) {
-            this._errorLog.shift();
-        }
-
-        // Logger with styling (mimic console)
         tracer.error(`[ErrorHandler] ${context ?? 'Error'} - ${error.message}`, error);
 
-        // Emit event for other components
         const eventPayload: { error: Error; context?: string } = { error };
-        if (context !== undefined && context !== '') eventPayload.context = context;
+        if (context !== undefined && context !== '') {
+            eventPayload.context = context;
+        }
         eventBus.emit('error:global', eventPayload);
 
-        // Notify callbacks
         this._callbacks.forEach((cb) => {
             try {
                 cb(errorInfo);
-            } catch (e) {
-                tracer.error('[ErrorHandler] Callback error:', e);
+            } catch (callbackError) {
+                tracer.error('[ErrorHandler] Callback error:', callbackError);
             }
         });
 
-        // Show toast notification (if available)
         this._showErrorToast(error.message);
-    }
-
-    /**
-     * Shows a user-friendly error toast via the UI.
-     */
-    private _showErrorToast(message: string): void {
-        // Try to use existing toast system
-        const toastContainer = document.getElementById('toast-container');
-        if (!toastContainer) return;
-
-        const toast = document.createElement('div');
-        toast.className = 'toast toast-error';
-        toast.innerHTML = DOMPurify.sanitize(`
-            <div class="toast-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="15" y1="9" x2="9" y2="15"></line>
-                    <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-            </div>
-            <div class="toast-content">
-                <div class="toast-title">Error</div>
-                <div class="toast-message">${message}</div>
-            </div>
-        `);
-
-        toastContainer.appendChild(toast);
-
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            toast.classList.add('toast-fade-out');
-            setTimeout(() => {
-                toast.remove();
-            }, 300);
-        }, 5000);
     }
 
     /**
@@ -208,6 +151,99 @@ export class ErrorHandler {
                 );
             }
         };
+    }
+
+    private _createErrorInfo(
+        error: Error,
+        context?: string,
+        extra?: { url?: string; line?: number; column?: number },
+    ): IErrorInfo {
+        const errorInfo: IErrorInfo = {
+            message: error.message,
+            timestamp: Date.now(),
+        };
+
+        if (error.stack !== undefined && error.stack !== '') errorInfo.stack = error.stack;
+        if (context !== undefined && context !== '') errorInfo.context = context;
+        if (extra?.url !== undefined && extra.url !== '') errorInfo.url = extra.url;
+        if (extra?.line !== undefined) errorInfo.line = extra.line;
+        if (extra?.column !== undefined) errorInfo.column = extra.column;
+
+        return errorInfo;
+    }
+
+    private _pushError(errorInfo: IErrorInfo): void {
+        this._errorLog.push(errorInfo);
+        if (this._errorLog.length > this._maxLogSize) {
+            this._errorLog.shift();
+        }
+    }
+
+    /**
+     * Shows a user-friendly error toast via the UI.
+     */
+    private _showErrorToast(message: string): void {
+        const toastContainer = document.getElementById('toast-container');
+        if (!(toastContainer instanceof HTMLElement)) {
+            return;
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-error';
+        toast.appendChild(this._createToastIcon());
+        toast.appendChild(this._createToastContent(message));
+        toastContainer.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('toast-fade-out');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }, 5000);
+    }
+
+    private _createToastIcon(): HTMLDivElement {
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'toast-icon';
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+
+        svg.appendChild(this._createSvgNode('circle', { cx: '12', cy: '12', r: '10' }));
+        svg.appendChild(this._createSvgNode('line', { x1: '15', y1: '9', x2: '9', y2: '15' }));
+        svg.appendChild(this._createSvgNode('line', { x1: '9', y1: '9', x2: '15', y2: '15' }));
+
+        iconContainer.appendChild(svg);
+        return iconContainer;
+    }
+
+    private _createToastContent(message: string): HTMLDivElement {
+        const content = document.createElement('div');
+        content.className = 'toast-content';
+        content.appendChild(this._createTextNode('toast-title', 'Error'));
+        content.appendChild(this._createTextNode('toast-message', message));
+        return content;
+    }
+
+    private _createTextNode(className: string, text: string): HTMLDivElement {
+        const element = document.createElement('div');
+        element.className = className;
+        element.textContent = text;
+        return element;
+    }
+
+    private _createSvgNode(
+        tagName: 'circle' | 'line',
+        attributes: Record<string, string>,
+    ): SVGElement {
+        const node = document.createElementNS('http://www.w3.org/2000/svg', tagName);
+        Object.entries(attributes).forEach(([key, value]) => {
+            node.setAttribute(key, value);
+        });
+        return node;
     }
 }
 

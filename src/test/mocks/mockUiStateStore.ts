@@ -16,6 +16,7 @@ export function createMockStore(initial?: Partial<IUIState>): UiStateStore {
         resolution_zoom: {},
         sound_enabled: true,
         ai_thinking_level: {},
+        ai_web_search_enabled: {},
         local_max_output_tokens: {},
         last_active_provider: null,
         ai_session_id: null,

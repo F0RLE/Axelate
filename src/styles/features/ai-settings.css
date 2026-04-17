@@ -32,6 +32,7 @@
 /* Sections behave as transparent containers for specific layout needs */
 .ai-key-section,
 .ai-models-section,
+.ai-web-section,
 .thinking-level-section,
 .ai-stats-section {
     background: transparent;
@@ -72,6 +73,7 @@
 
 .ai-key-section .settings-card-header-center,
 .ai-models-section .settings-card-header-center,
+.ai-web-section .settings-card-header-center,
 .thinking-level-section .settings-card-header-center,
 .ai-stats-section .settings-card-header-center {
     width: 100%;
@@ -80,6 +82,15 @@
     align-items: center;
     text-align: center;
     margin-bottom: 0.65rem;
+}
+
+.ai-web-section .settings-card-header-center {
+    margin-bottom: 0.8rem;
+}
+
+.ai-web-section .ai-content-panel {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
 }
 
 .ai-key-section .encryption-note {
@@ -915,9 +926,7 @@
 #module-settings-modal .ai-icon-btn:focus,
 #module-settings-modal .ai-icon-btn:focus-visible {
     outline: none !important;
-    box-shadow:
-        0 0 0 2px rgba(12, 12, 18, 0.92),
-        0 0 0 4px rgba(var(--primary-raw), 0.75) !important;
+    box-shadow: none !important;
 }
 
 .local-engine-label-row {

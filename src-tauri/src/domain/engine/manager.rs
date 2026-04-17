@@ -8,8 +8,9 @@
 //! Within a slot, only one engine is loaded at a time (hot-swap).
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::net::TcpListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -25,6 +26,9 @@ use super::events::EngineEventEmitter;
 use super::types::{
     Capability, EngineConfig, EngineDefinition, EngineState, EngineStatus, SlotStatus,
 };
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Internal handle for a running engine process
 struct RunningEngine {
@@ -63,6 +67,13 @@ fn is_progress_log_line(line: &str) -> bool {
 
 fn is_qwen_model(model_path: Option<&str>) -> bool {
     model_path.is_some_and(|path| path.to_ascii_lowercase().contains("qwen"))
+}
+
+fn is_qwen_image_model(model_path: Option<&str>) -> bool {
+    model_path.is_some_and(|path| {
+        let normalized = path.replace('\\', "/").to_ascii_lowercase();
+        normalized.contains("qwen-image") || normalized.contains("qwen_image")
+    })
 }
 
 fn has_arg(args: &[String], candidates: &[&str]) -> bool {
@@ -125,8 +136,103 @@ fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
         .is_none_or(|value| !value.trim().eq_ignore_ascii_case("none"))
 }
 
-fn build_sdcpp_args(_config: &EngineConfig, port: u16) -> Vec<String> {
-    vec!["--listen-port".to_string(), port.to_string()]
+fn find_companion_model_file(
+    model_path: &Path,
+    stems: &[&str],
+    extensions: &[&str],
+) -> Option<String> {
+    let model_dir = model_path.parent()?;
+    let mut entries = std::fs::read_dir(model_dir)
+        .ok()?
+        .flatten()
+        .collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
+        let extension = path.extension()?.to_string_lossy().to_ascii_lowercase();
+
+        if extensions.iter().all(|candidate| extension != *candidate) {
+            continue;
+        }
+
+        if stems.iter().any(|stem| file_name.contains(stem)) {
+            return Some(path.to_string_lossy().to_string());
+        }
+    }
+
+    None
+}
+
+fn resolve_qwen_image_support_file(
+    model_path: &Path,
+    extra_args: &[String],
+    arg_names: &[&str],
+    stems: &[&str],
+    extensions: &[&str],
+) -> Option<String> {
+    extract_arg_value(extra_args, arg_names)
+        .or_else(|| find_companion_model_file(model_path, stems, extensions))
+}
+
+fn qwen_image_requirements_error(model_path: &str) -> AppError {
+    AppError::Validation(format!(
+        "Qwen Image model '{model_path}' needs companion files for stable-diffusion.cpp. Add '--vae <qwen_image_vae.safetensors>' and '--llm <Qwen2.5-VL-7B-Instruct*.gguf>' in Extra Arguments, or place those files next to the model."
+    ))
+}
+
+fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Result<Vec<String>, AppError> {
+    let mut args = vec!["--listen-port".to_string(), port.to_string()];
+
+    if let Some(model_path) = config.model_path.as_deref() {
+        if is_qwen_image_model(Some(model_path)) {
+            let model_path_buf = Path::new(model_path);
+            let vae_path = resolve_qwen_image_support_file(
+                model_path_buf,
+                &config.extra_args,
+                &["--vae"],
+                &["qwen_image_vae", "qwen-image-vae"],
+                &["safetensors"],
+            );
+            let llm_path = resolve_qwen_image_support_file(
+                model_path_buf,
+                &config.extra_args,
+                &["--llm"],
+                &["qwen2.5-vl", "qwen2_5_vl", "qwen25-vl", "qwen25_vl"],
+                &["gguf"],
+            );
+
+            if vae_path.is_none() || llm_path.is_none() {
+                return Err(qwen_image_requirements_error(model_path));
+            }
+
+            args.push("--diffusion-model".to_string());
+            args.push(model_path.to_string());
+            push_arg_if_missing(
+                &mut args,
+                &config.extra_args,
+                &["--vae"],
+                vae_path.as_deref(),
+            );
+            push_arg_if_missing(
+                &mut args,
+                &config.extra_args,
+                &["--llm"],
+                llm_path.as_deref(),
+            );
+        } else {
+            args.push("--model".to_string());
+            args.push(model_path.to_string());
+        }
+    }
+
+    args.extend(config.extra_args.clone());
+    Ok(args)
 }
 
 fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
@@ -210,6 +316,11 @@ fn classify_engine_start_failure(log: &str) -> Option<String> {
     None
 }
 
+fn write_engine_log_line(file: &mut File, line: &str) {
+    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S");
+    let _ = writeln!(file, "{timestamp} [INFO] {}", line.trim());
+}
+
 async fn diagnose_engine_start_failure(stderr_path: &std::path::Path) -> Option<String> {
     let raw = tokio::fs::read_to_string(stderr_path).await.ok()?;
     classify_engine_start_failure(&raw)
@@ -224,7 +335,6 @@ fn spawn_log_reader<R>(
     R: AsyncRead + Unpin + Send + 'static,
 {
     tokio::spawn(async move {
-        use std::io::Write;
         use tokio::io::AsyncReadExt;
 
         let mut buf = [0u8; 1024];
@@ -242,9 +352,7 @@ fn spawn_log_reader<R>(
                 if c == '\n' || c == '\r' {
                     if !current_line.is_empty() {
                         if let Some(ref mut f) = file {
-                            let mut line_nl = current_line.clone();
-                            line_nl.push('\n');
-                            let _ = f.write_all(line_nl.as_bytes());
+                            write_engine_log_line(f, &current_line);
                         }
                         let trimmed = current_line.trim();
                         if is_progress_log_line(trimmed) {
@@ -451,29 +559,44 @@ impl EngineManager {
         let mut cmd = Command::new(&binary_path);
         cmd.kill_on_drop(true);
 
+        #[cfg(windows)]
+        {
+            // Local engines are background services. Do not flash a console window for them.
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
         if config.engine_id == "llamacpp" {
             cmd.args(build_llamacpp_args(&config, selected_port));
         } else if config.engine_id == "sdcpp" {
-            cmd.args(build_sdcpp_args(&config, selected_port));
+            let sdcpp_args = build_sdcpp_args(&config, selected_port).map_err(|error| {
+                self.emitter
+                    .emit_error(&config.engine_id, &error.to_string());
+                error
+            })?;
+            cmd.args(sdcpp_args);
         } else {
             // Default fallback for other engines
             cmd.arg("--port").arg(selected_port.to_string());
         }
 
-        if let Some(ref model) = config.model_path {
-            cmd.arg("--model").arg(model);
-        }
+        if config.engine_id != "sdcpp" {
+            if let Some(ref model) = config.model_path {
+                cmd.arg("--model").arg(model);
+            }
 
-        for arg in &config.extra_args {
-            cmd.arg(arg);
+            for arg in &config.extra_args {
+                cmd.arg(arg);
+            }
         }
 
         // Pipe engine stdout/stderr to files in logs directory
-        let log_dir = crate::utils::paths::LOG_DIR.join("Engines");
+        let log_dir = crate::utils::paths::LOG_DIR
+            .join("Engines")
+            .join(&config.engine_id);
         let _ = std::fs::create_dir_all(&log_dir);
 
-        let stdout_path = log_dir.join(format!("{}.stdout.log", config.engine_id));
-        let stderr_path = log_dir.join(format!("{}.stderr.log", config.engine_id));
+        let stdout_path = log_dir.join("stdout.log");
+        let stderr_path = log_dir.join("stderr.log");
 
         let stdout_file = File::create(&stdout_path).ok();
         let stderr_file = File::create(&stderr_path).ok();
@@ -648,10 +771,22 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn sample_config(model_path: Option<&str>) -> EngineConfig {
         EngineConfig {
             engine_id: "llamacpp".to_string(),
+            gpu_layers: -1,
+            context_size: 4096,
+            model_path: model_path.map(str::to_string),
+            extra_args: vec![],
+        }
+    }
+
+    fn sample_sdcpp_config(model_path: Option<&str>) -> EngineConfig {
+        EngineConfig {
+            engine_id: "sdcpp".to_string(),
             gpu_layers: -1,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
@@ -733,5 +868,77 @@ mod tests {
                 "Not enough system memory to start the local model. Close other apps or use a smaller model."
             )
         );
+    }
+
+    #[test]
+    fn builds_plain_sdcpp_model_args() {
+        let args = build_sdcpp_args(
+            &sample_sdcpp_config(Some("C:/models/sd15.safetensors")),
+            8082,
+        )
+        .unwrap();
+
+        assert!(args.windows(2).any(|w| w == ["--listen-port", "8082"]));
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--model", "C:/models/sd15.safetensors"])
+        );
+    }
+
+    #[test]
+    fn rejects_qwen_image_without_companion_files() {
+        let error = build_sdcpp_args(
+            &sample_sdcpp_config(Some("C:/models/qwen-image-Q2_K.gguf")),
+            8082,
+        )
+        .unwrap_err();
+
+        match error {
+            AppError::Validation(message) => {
+                assert!(message.contains("Qwen Image model"));
+                assert!(message.contains("--vae"));
+                assert!(message.contains("--llm"));
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auto_detects_qwen_image_companion_files_in_model_directory() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("axelate-sdcpp-qwen-{unique}"));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let diffusion = temp_dir.join("qwen-image-Q2_K.gguf");
+        let vae = temp_dir.join("qwen_image_vae.safetensors");
+        let llm = temp_dir.join("Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf");
+
+        fs::write(&diffusion, []).unwrap();
+        fs::write(&vae, []).unwrap();
+        fs::write(&llm, []).unwrap();
+
+        let args = build_sdcpp_args(
+            &sample_sdcpp_config(Some(diffusion.to_string_lossy().as_ref())),
+            8082,
+        )
+        .unwrap();
+
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--diffusion-model", diffusion.to_string_lossy().as_ref()])
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--vae", vae.to_string_lossy().as_ref()])
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--llm", llm.to_string_lossy().as_ref()])
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

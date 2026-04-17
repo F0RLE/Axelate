@@ -1,3 +1,11 @@
+use super::downloader_comfyui::{build_temp_archive_path, prepare_comfyui_module_files};
+use super::downloader_support::{
+    PartialDownloadMetadata, TarEntryAction, archive_file_count_limit,
+    archive_total_uncompressed_size_limit, classify_tar_entry_type, extract_last_modified,
+    extract_strong_etag, format_archive_extraction_error, if_range_validator,
+    load_partial_metadata, normalize_archive_relative_path, parse_content_range_total,
+    remove_partial_metadata, shared_archive_root, store_partial_metadata, strip_archive_root,
+};
 use crate::errors::AppError;
 use crate::utils::paths::{LEGACY_MODULES_DIR, MODULES_DIR, TEMP_DIR};
 use chrono;
@@ -10,13 +18,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 use zip::ZipArchive;
 use zip::result::ZipError;
 
-const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE: u64 = 3 * 1024 * 1024 * 1024; // 3GB per archive
-const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE: u64 = 12 * 1024 * 1024 * 1024; // 12GB for portable runtimes like ComfyUI
-const MAX_ARCHIVE_FILE_COUNT: usize = 10000;
-const MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE: usize = 100_000;
 const MAX_ARCHIVE_SINGLE_FILE_SIZE: u64 = 1024 * 1024 * 1024; // 1GB per file, needed for CUDA DLLs
 
 /// Download progress event payload
@@ -104,60 +109,6 @@ fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
     candidates
         .into_iter()
         .find(|path| path.exists() && path.is_dir())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TarEntryAction {
-    CopyFile,
-    CreateDirectory,
-    SkipMetadata,
-}
-
-fn normalize_archive_relative_path(path: &Path) -> Result<PathBuf, String> {
-    let mut normalized = PathBuf::new();
-
-    for component in path.components() {
-        match component {
-            std::path::Component::Normal(part) => normalized.push(part),
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir
-            | std::path::Component::RootDir
-            | std::path::Component::Prefix(_) => {
-                return Err(format!(
-                    "Security Violation: Invalid path {}",
-                    path.display()
-                ));
-            }
-        }
-    }
-
-    Ok(normalized)
-}
-
-fn classify_tar_entry_type(
-    entry_type: tar::EntryType,
-    path: &Path,
-) -> Result<TarEntryAction, String> {
-    if entry_type.is_dir() {
-        return Ok(TarEntryAction::CreateDirectory);
-    }
-
-    if entry_type.is_file() || entry_type.is_contiguous() {
-        return Ok(TarEntryAction::CopyFile);
-    }
-
-    if entry_type.is_gnu_longname()
-        || entry_type.is_gnu_longlink()
-        || entry_type.is_pax_global_extensions()
-        || entry_type.is_pax_local_extensions()
-    {
-        return Ok(TarEntryAction::SkipMetadata);
-    }
-
-    Err(format!(
-        "Security Violation: Unsupported tar entry type for {}",
-        path.display()
-    ))
 }
 
 use std::sync::{Arc, Mutex};
@@ -309,20 +260,82 @@ impl UrlResolver {
     }
 }
 
+struct GitRepositoryDownloader;
+
+impl GitRepositoryDownloader {
+    async fn clone_into(
+        app: &AppHandle,
+        module_id: &str,
+        repo_url: &str,
+        extraction_path: &Path,
+    ) -> Result<(), AppError> {
+        emit_progress(ProgressEvent {
+            app,
+            module_id,
+            status: "downloading",
+            message: "Cloning repository...",
+            progress: 0.15,
+            downloaded: 0,
+            total: 0,
+            speed: 0,
+        });
+
+        let output = Command::new("git")
+            .arg("clone")
+            .arg("--depth")
+            .arg("1")
+            .arg(repo_url)
+            .arg(extraction_path)
+            .output()
+            .await
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Failed to launch git clone for '{module_id}': {e}"),
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let details = if !stderr.is_empty() {
+                stderr
+            } else if !stdout.is_empty() {
+                stdout
+            } else {
+                "Unknown git clone failure".to_string()
+            };
+
+            return Err(AppError::External {
+                request_id: None,
+                message: format!("Failed to clone repository for '{module_id}': {details}"),
+            });
+        }
+
+        emit_progress(ProgressEvent {
+            app,
+            module_id,
+            status: "extracting",
+            message: "Preparing module files...",
+            progress: 0.9,
+            downloaded: 0,
+            total: 0,
+            speed: 0,
+        });
+
+        let git_dir = extraction_path.join(".git");
+        if git_dir.exists() {
+            let _ = tokio::fs::remove_dir_all(git_dir).await;
+        }
+
+        Ok(())
+    }
+}
+
 struct NetworkClient;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct ProgressSnapshot {
     downloaded: u64,
     total: u64,
-}
-
-#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
-struct PartialDownloadMetadata {
-    url: String,
-    etag: Option<String>,
-    last_modified: Option<String>,
-    total_bytes: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -627,73 +640,6 @@ fn build_progress_snapshot(
     }
 }
 
-fn parse_content_range_total(headers: &reqwest::header::HeaderMap) -> Option<u64> {
-    let header_value = headers.get(reqwest::header::CONTENT_RANGE)?;
-    let content_range = header_value.to_str().ok()?.trim();
-    let total = content_range.rsplit('/').next()?.trim();
-    if total == "*" {
-        return None;
-    }
-
-    total.parse::<u64>().ok()
-}
-
-fn partial_metadata_path(dest_path: &Path) -> PathBuf {
-    PathBuf::from(format!("{}.resume.json", dest_path.to_string_lossy()))
-}
-
-async fn load_partial_metadata(dest_path: &Path) -> Option<PartialDownloadMetadata> {
-    let metadata_path = partial_metadata_path(dest_path);
-    let raw = tokio::fs::read_to_string(metadata_path).await.ok()?;
-    serde_json::from_str(&raw).ok()
-}
-
-async fn store_partial_metadata(
-    dest_path: &Path,
-    metadata: &PartialDownloadMetadata,
-) -> Result<(), AppError> {
-    let serialized = serde_json::to_vec_pretty(metadata).map_err(|e| {
-        AppError::Serialization(format!(
-            "Failed to serialize partial download metadata: {e}"
-        ))
-    })?;
-    tokio::fs::write(partial_metadata_path(dest_path), serialized)
-        .await
-        .map_err(|e| AppError::Io(e.to_string()))
-}
-
-async fn remove_partial_metadata(dest_path: &Path) {
-    let metadata_path = partial_metadata_path(dest_path);
-    if tokio::fs::try_exists(&metadata_path).await.unwrap_or(false) {
-        let _ = tokio::fs::remove_file(metadata_path).await;
-    }
-}
-
-fn extract_strong_etag(headers: &reqwest::header::HeaderMap) -> Option<String> {
-    let raw = headers.get(reqwest::header::ETAG)?.to_str().ok()?.trim();
-    if raw.starts_with("W/") || raw.is_empty() {
-        return None;
-    }
-
-    Some(raw.to_string())
-}
-
-fn extract_last_modified(headers: &reqwest::header::HeaderMap) -> Option<String> {
-    headers
-        .get(reqwest::header::LAST_MODIFIED)
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
-}
-
-fn if_range_validator(metadata: &PartialDownloadMetadata) -> Option<&str> {
-    metadata
-        .etag
-        .as_deref()
-        .or(metadata.last_modified.as_deref())
-}
-
 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 fn compute_progress(snapshot: ProgressSnapshot) -> f32 {
     if snapshot.total > 0 {
@@ -701,78 +647,6 @@ fn compute_progress(snapshot: ProgressSnapshot) -> f32 {
     } else {
         -1.0
     }
-}
-
-fn format_archive_extraction_error(message: &str) -> String {
-    if message.contains("Kind(OutOfMemory)") || message.contains("MaxMemLimited") {
-        return "Not enough RAM to extract this archive with the current decoder".to_string();
-    }
-
-    message.to_string()
-}
-
-fn shared_archive_root<I>(entry_names: I) -> Option<String>
-where
-    I: IntoIterator,
-    I::Item: AsRef<str>,
-{
-    let mut first_root: Option<String> = None;
-    let mut saw_nested_entry = false;
-
-    for name in entry_names {
-        let parts: Vec<&str> = name
-            .as_ref()
-            .split('/')
-            .filter(|segment| !segment.is_empty())
-            .collect();
-        if parts.len() < 2 {
-            continue;
-        }
-
-        saw_nested_entry = true;
-        let root = parts.first()?.to_string();
-
-        match &first_root {
-            None => first_root = Some(root),
-            Some(existing_root) if *existing_root == root => {}
-            Some(_) => return None,
-        }
-    }
-
-    if saw_nested_entry { first_root } else { None }
-}
-
-fn strip_archive_root(path: &Path, root_to_skip: Option<&str>) -> PathBuf {
-    let Some(root) = root_to_skip else {
-        return path.to_path_buf();
-    };
-
-    let mut components = path.components();
-    let Some(std::path::Component::Normal(first)) = components.next() else {
-        return path.to_path_buf();
-    };
-
-    if first.to_string_lossy() != root {
-        return path.to_path_buf();
-    }
-
-    components.as_path().to_path_buf()
-}
-
-fn archive_file_count_limit(module_id: &str) -> usize {
-    if module_id == "comfyui" {
-        return MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE;
-    }
-
-    MAX_ARCHIVE_FILE_COUNT
-}
-
-fn archive_total_uncompressed_size_limit(module_id: &str) -> u64 {
-    if module_id == "comfyui" {
-        return MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE;
-    }
-
-    MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE
 }
 
 fn combine_progress_phases(base: f32, span: f32, progress: f32) -> f32 {
@@ -1386,7 +1260,6 @@ impl ArchiveExtractor {
         if module_id == "comfyui" {
             prepare_comfyui_module_files(extraction_path, release_tag)?;
         }
-
         let manifest = serde_json::json!({
             "module_id": module_id,
             "installed_at": chrono::Local::now().to_rfc3339(),
@@ -1426,200 +1299,6 @@ impl ArchiveExtractor {
     }
 }
 
-fn prepare_comfyui_module_files(
-    extraction_path: &Path,
-    release_tag: Option<&str>,
-) -> Result<(), AppError> {
-    let scripts_dir = extraction_path.join("scripts");
-    fs::create_dir_all(&scripts_dir)
-        .map_err(|e| AppError::Io(format!("Failed to create ComfyUI scripts directory: {e}")))?;
-
-    let manifest = serde_json::json!({
-        "api_version": "1",
-        "id": "comfyui",
-        "name": "ComfyUI",
-        "version": release_tag.unwrap_or("unknown"),
-        "description": "Node-based image workflow engine for maximum quality and control.",
-        "dependencies": [],
-        "lifecycle": {
-            "start": {
-                "program": "powershell",
-                "args": [
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    "scripts/start.ps1"
-                ]
-            },
-            "stop": {
-                "program": "powershell",
-                "args": [
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    "scripts/stop.ps1"
-                ]
-            }
-        }
-    });
-    let manifest_path = extraction_path.join("module.json");
-    let manifest_file = fs::File::create(&manifest_path).map_err(|e| {
-        AppError::Io(format!(
-            "Failed to create ComfyUI module manifest at {}: {e}",
-            manifest_path.display()
-        ))
-    })?;
-    serde_json::to_writer_pretty(manifest_file, &manifest).map_err(|e| {
-        AppError::Serialization(format!("Failed to serialize ComfyUI module manifest: {e}"))
-    })?;
-
-    let start_script_path = scripts_dir.join("start.ps1");
-    fs::write(&start_script_path, comfyui_start_script()).map_err(|e| {
-        AppError::Io(format!(
-            "Failed to write ComfyUI start script at {}: {e}",
-            start_script_path.display()
-        ))
-    })?;
-
-    let stop_script_path = scripts_dir.join("stop.ps1");
-    fs::write(&stop_script_path, comfyui_stop_script()).map_err(|e| {
-        AppError::Io(format!(
-            "Failed to write ComfyUI stop script at {}: {e}",
-            stop_script_path.display()
-        ))
-    })?;
-
-    Ok(())
-}
-
-fn comfyui_start_script() -> String {
-    r"$ErrorActionPreference = 'Stop'
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$moduleRoot = Split-Path -Parent $scriptRoot
-$childPidPath = Join-Path $moduleRoot 'comfyui.pid'
-$stdoutLog = Join-Path $moduleRoot 'comfyui.stdout.log'
-$stderrLog = Join-Path $moduleRoot 'comfyui.stderr.log'
-
-function Resolve-ComfyPortable {
-    param([string]$rootPath)
-
-    $pythonExe = Get-ChildItem -Path $rootPath -Recurse -File -Filter 'python.exe' |
-        Where-Object { $_.FullName -match '[\\/]python_embeded[\\/]python\.exe$' } |
-        Select-Object -First 1
-    if ($null -eq $pythonExe) {
-        throw 'ComfyUI portable python runtime not found.'
-    }
-
-    $portableRoot = Split-Path (Split-Path $pythonExe.FullName -Parent) -Parent
-    $mainPy = Get-ChildItem -Path $portableRoot -Recurse -File -Filter 'main.py' |
-        Where-Object { $_.FullName -match '[\\/]ComfyUI[\\/]main\.py$' } |
-        Select-Object -First 1
-    if ($null -eq $mainPy) {
-        throw 'ComfyUI main.py not found.'
-    }
-
-    return [PSCustomObject]@{
-        PortableRoot = $portableRoot
-        PythonExe = $pythonExe.FullName
-        MainPy = $mainPy.FullName
-    }
-}
-
-if (Test-Path -LiteralPath $childPidPath) {
-    $existingPidText = Get-Content -LiteralPath $childPidPath -Raw -ErrorAction SilentlyContinue
-    if ($null -ne $existingPidText -and $existingPidText.Trim() -ne '') {
-        try {
-            $existingPid = [int]$existingPidText.Trim()
-            $existingProcess = Get-Process -Id $existingPid -ErrorAction Stop
-            Write-Host ('ComfyUI already running on http://127.0.0.1:8188 (PID {0})' -f $existingProcess.Id)
-            Wait-Process -Id $existingPid
-            exit 0
-        } catch {
-            Remove-Item -LiteralPath $childPidPath -Force -ErrorAction SilentlyContinue
-        }
-    }
-}
-
-$portable = Resolve-ComfyPortable -rootPath $moduleRoot
-$arguments = @(
-    '-s',
-    $portable.MainPy,
-    '--listen',
-    '127.0.0.1',
-    '--port',
-    '8188',
-    '--disable-auto-launch'
-)
-
-Write-Host 'Starting ComfyUI on http://127.0.0.1:8188'
-$process = Start-Process `
-    -FilePath $portable.PythonExe `
-    -ArgumentList $arguments `
-    -WorkingDirectory $portable.PortableRoot `
-    -RedirectStandardOutput $stdoutLog `
-    -RedirectStandardError $stderrLog `
-    -PassThru `
-    -WindowStyle Hidden
-
-Set-Content -LiteralPath $childPidPath -Value $process.Id -Encoding ascii -NoNewline
-
-try {
-    $process.WaitForExit()
-    exit $process.ExitCode
-} finally {
-    Remove-Item -LiteralPath $childPidPath -Force -ErrorAction SilentlyContinue
-}
-"
-    .to_string()
-}
-
-fn comfyui_stop_script() -> String {
-    r"$ErrorActionPreference = 'Stop'
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$moduleRoot = Split-Path -Parent $scriptRoot
-$childPidPath = Join-Path $moduleRoot 'comfyui.pid'
-
-if (!(Test-Path -LiteralPath $childPidPath)) {
-    exit 0
-}
-
-$pidText = Get-Content -LiteralPath $childPidPath -Raw -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $childPidPath -Force -ErrorAction SilentlyContinue
-
-if ($null -eq $pidText -or $pidText.Trim() -eq '') {
-    exit 0
-}
-
-$childPid = [int]$pidText.Trim()
-
-try {
-    $process = Get-Process -Id $childPid -ErrorAction Stop
-    Stop-Process -Id $childPid -Force -ErrorAction Stop
-    $process.WaitForExit(5000) | Out-Null
-} catch [System.ArgumentException] {
-    exit 0
-}
-"
-    .to_string()
-}
-
-fn build_temp_archive_path(module_id: &str, asset_index: usize, asset_name: &str) -> PathBuf {
-    let safe_name: String = asset_name
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-
-    TEMP_DIR.join(format!("{module_id}_{asset_index}_{safe_name}"))
-}
-
 /// Downloads and extracts a module from a remote repository
 pub async fn download_module(
     app: AppHandle,
@@ -1656,7 +1335,11 @@ pub async fn download_module(
         let mut latest_progress_snapshot = ProgressSnapshot::default();
 
         let (release_tag, assets_to_download): (Option<String>, Vec<ReleaseDownloadAsset>) =
-            if dl_type.as_deref() == Some("release") {
+            if dl_type.as_deref() == Some("git") {
+                GitRepositoryDownloader::clone_into(&app, &module_id, &repo_url, &extraction_path)
+                    .await?;
+                (None, Vec::new())
+            } else if dl_type.as_deref() == Some("release") {
                 let bundle = crate::domain::modules::github_releases::fetch_release_bundle(
                     &client, &repo_url, &module_id,
                 )
@@ -1691,53 +1374,55 @@ pub async fn download_module(
                 )
             };
 
-        let aggregate_total_bytes = assets_to_download.iter().try_fold(0_u64, |acc, asset| {
-            asset.3.and_then(|size| acc.checked_add(size))
-        });
+        if !assets_to_download.is_empty() {
+            let aggregate_total_bytes = assets_to_download.iter().try_fold(0_u64, |acc, asset| {
+                asset.3.and_then(|size| acc.checked_add(size))
+            });
 
-        for (asset_index, (asset_name, asset_url, asset_hash, _asset_size)) in
-            assets_to_download.iter().enumerate()
-        {
-            let archive_path = build_temp_archive_path(&module_id, asset_index, asset_name);
-            temp_archives.push(archive_path.clone());
+            for (asset_index, (asset_name, asset_url, asset_hash, _asset_size)) in
+                assets_to_download.iter().enumerate()
+            {
+                let archive_path = build_temp_archive_path(&module_id, asset_index, asset_name);
+                temp_archives.push(archive_path.clone());
 
-            let download_result = NetworkClient::download_file(
-                DownloadTask {
-                    app: &app,
-                    downloader,
-                    client: &client,
-                    url: asset_url,
-                    dest_path: &archive_path,
-                    module_id: &module_id,
-                    cancel_token: &cancel_token,
-                },
-                aggregate_total_bytes.map(|total_bytes| AggregateDownloadContext {
-                    completed_bytes_before: completed_downloaded_bytes,
-                    total_bytes,
-                }),
-            )
-            .await?;
+                let download_result = NetworkClient::download_file(
+                    DownloadTask {
+                        app: &app,
+                        downloader,
+                        client: &client,
+                        url: asset_url,
+                        dest_path: &archive_path,
+                        module_id: &module_id,
+                        cancel_token: &cancel_token,
+                    },
+                    aggregate_total_bytes.map(|total_bytes| AggregateDownloadContext {
+                        completed_bytes_before: completed_downloaded_bytes,
+                        total_bytes,
+                    }),
+                )
+                .await?;
 
-            completed_downloaded_bytes =
-                completed_downloaded_bytes.saturating_add(download_result.asset_downloaded);
-            latest_progress_snapshot = download_result.snapshot;
+                completed_downloaded_bytes =
+                    completed_downloaded_bytes.saturating_add(download_result.asset_downloaded);
+                latest_progress_snapshot = download_result.snapshot;
 
-            FileVerifier::verify(
-                &app,
-                &archive_path,
-                asset_hash.clone(),
-                &module_id,
-                Some(latest_progress_snapshot),
-            )
-            .await?;
-            ArchiveExtractor::extract_into(
-                &app,
-                &archive_path,
-                &module_id,
-                &extraction_path,
-                Some(latest_progress_snapshot),
-            )
-            .await?;
+                FileVerifier::verify(
+                    &app,
+                    &archive_path,
+                    asset_hash.clone(),
+                    &module_id,
+                    Some(latest_progress_snapshot),
+                )
+                .await?;
+                ArchiveExtractor::extract_into(
+                    &app,
+                    &archive_path,
+                    &module_id,
+                    &extraction_path,
+                    Some(latest_progress_snapshot),
+                )
+                .await?;
+            }
         }
 
         final_progress_snapshot = latest_progress_snapshot;

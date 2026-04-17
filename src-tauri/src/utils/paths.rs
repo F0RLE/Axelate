@@ -97,6 +97,9 @@ pub static TEMP_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Temp
 /// Downloaded modules directory (`AxelateData/System/Modules`)
 pub static MODULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Modules"));
 
+/// Shared runtime directory for managed language/tool runtimes (`AxelateData/System/Runtime`)
+pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Runtime"));
+
 /// Legacy downloaded modules directory used by older Windows builds
 /// that stored system data in Local AppData.
 pub static LEGACY_MODULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -174,6 +177,10 @@ pub static FILE_ENV: LazyLock<PathBuf> = LazyLock::new(|| CONFIG_DIR.join(".env"
 pub static FILE_GEN_CONFIG: LazyLock<PathBuf> =
     LazyLock::new(|| CONFIG_DIR.join("generation_config.json"));
 
+/// Path to module settings store (`AxelateData/User/Configs/module_settings.json`)
+pub static FILE_MODULE_SETTINGS: LazyLock<PathBuf> =
+    LazyLock::new(|| CONFIG_DIR.join("module_settings.json"));
+
 /// Path to engine user config (`AxelateData/User/Configs/engine_config.json`)
 pub static FILE_ENGINE_CONFIG: LazyLock<PathBuf> =
     LazyLock::new(|| CONFIG_DIR.join("engine_config.json"));
@@ -207,6 +214,7 @@ pub fn init_filesystem() -> Result<(), AppError> {
         &*LOG_DIR,
         &*TEMP_DIR,
         &*MODULES_DIR,
+        &*RUNTIME_DIR,
         &*MODELS_DIR,
         &*CACHE_DIR,
         &*CHAT_DIR,

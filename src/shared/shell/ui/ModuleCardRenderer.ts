@@ -294,27 +294,15 @@ export class ModuleCardRenderer {
     ): HTMLButtonElement {
         const actionBtn = document.createElement('button');
         const winConfig = getGlobalWin() as unknown as {
-            aiBridge?: { getState: () => { activeProviderId?: string } };
             t?: (k: string, d: string) => string;
         };
 
-        const aiState = winConfig.aiBridge?.getState();
-        const isRunning = aiState?.activeProviderId === app.id;
-
         if (isSelected) {
             actionBtn.className = 'modal-btn modal-btn-secondary';
-            if (isRunning) {
-                actionBtn.classList.add('active-module-btn', 'stop-btn');
-                const i18nKey = 'ui.launcher.modules.modal.btn_running';
-                actionBtn.dataset['i18n'] = i18nKey;
-                actionBtn.textContent =
-                    typeof winConfig.t === 'function' ? winConfig.t(i18nKey, 'Running') : 'Running';
-            } else {
-                const i18nKey = 'ui.launcher.modules.modal.btn_remove';
-                actionBtn.dataset['i18n'] = i18nKey;
-                actionBtn.textContent =
-                    typeof winConfig.t === 'function' ? winConfig.t(i18nKey, 'Remove') : 'Remove';
-            }
+            const i18nKey = 'ui.launcher.modules.modal.btn_remove';
+            actionBtn.dataset['i18n'] = i18nKey;
+            actionBtn.textContent =
+                typeof winConfig.t === 'function' ? winConfig.t(i18nKey, 'Убрать') : 'Убрать';
         } else {
             actionBtn.className = 'modal-btn modal-btn-primary';
             const i18nKey = 'ui.launcher.modules.modal.btn_select';

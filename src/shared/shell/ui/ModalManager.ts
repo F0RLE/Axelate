@@ -9,7 +9,11 @@ import { ModuleCardRenderer } from './ModuleCardRenderer';
  * @description Handles the App Selection modal and other potential overlays.
  */
 export class ModalManager {
+    private static readonly _FILTER_TRANSITION_MS = 90;
+    private static readonly _FILTER_RESET_MS = 150;
     private readonly _cardRenderer: ModuleCardRenderer;
+    private static readonly _FOCUSABLE_SELECTOR =
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
     private _currentCategory: string | null = null;
     private _currentApps: IApp[] = [];
     private _currentFilter: 'text' | 'image' = 'text';
@@ -24,6 +28,52 @@ export class ModalManager {
         if (e.target === this._overlayClickModal) {
             this.closeAppSelection();
         }
+    };
+    private readonly _boundModalKeydown = (e: KeyboardEvent) => {
+        if (e.key !== 'Tab' || this._overlayClickModal === null) {
+            return;
+        }
+
+        const focusable = this._getFocusableElements(this._overlayClickModal);
+        if (focusable.length === 0) {
+            e.preventDefault();
+            this._overlayClickModal.focus();
+            return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (first === undefined || last === undefined) {
+            e.preventDefault();
+            this._overlayClickModal.focus();
+            return;
+        }
+        const active = document.activeElement;
+
+        if (e.shiftKey) {
+            if (active === first || active === this._overlayClickModal) {
+                e.preventDefault();
+                last.focus();
+            }
+            return;
+        }
+
+        if (active === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    };
+    private readonly _boundFocusIn = (e: FocusEvent) => {
+        if (this._overlayClickModal === null) {
+            return;
+        }
+
+        const target = e.target;
+        if (!(target instanceof Node) || this._overlayClickModal.contains(target)) {
+            return;
+        }
+
+        this._focusFirstModalElement(this._overlayClickModal);
     };
 
     // Callback for app interactions (Download, Delete, Select)
@@ -141,9 +191,19 @@ export class ModalManager {
         // Prevent Chromium from painting an intermediate frame with stale/default dialog visuals.
         modal.style.visibility = 'hidden';
         modal.classList.remove('hidden');
-        modal.showModal();
+        if (typeof modal.showModal === 'function') {
+            modal.showModal();
+        } else {
+            modal.show();
+        }
+        this._focusFirstModalElement(modal);
         requestAnimationFrame(() => {
             modal.style.removeProperty('visibility');
+            setTimeout(() => {
+                if (this._overlayClickModal === modal && this.isAppSelectionOpen()) {
+                    this._focusFirstModalElement(modal);
+                }
+            }, 0);
         });
 
         // Add smooth hiding for main content
@@ -167,6 +227,8 @@ export class ModalManager {
 
         this._overlayClickModal = modal;
         modal.addEventListener('click', this._boundOverlayClick);
+        modal.addEventListener('keydown', this._boundModalKeydown);
+        document.addEventListener('focusin', this._boundFocusIn);
     }
 
     public closeAppSelection(): void {
@@ -174,6 +236,7 @@ export class ModalManager {
         this._navigation.removeBackAction('app-selection-modal');
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
         if (modal) {
+            modal.style.removeProperty('--app-modal-dynamic-height');
             this._detachOverlayCloseHandler();
             if (modal.open) {
                 modal.close();
@@ -314,10 +377,9 @@ export class ModalManager {
                 this._cancelPendingFilterTransition();
                 const transitionVersion = ++this._filterTransitionVersion;
                 listEl.style.willChange = 'opacity, transform';
-                listEl.style.transition =
-                    'opacity 0.14s cubic-bezier(0.22, 1, 0.36, 1), transform 0.14s cubic-bezier(0.22, 1, 0.36, 1)';
-                listEl.style.opacity = '0.72';
-                listEl.style.transform = 'translateY(6px) scale(0.992)';
+                listEl.style.transition = `opacity ${ModalManager._FILTER_TRANSITION_MS}ms cubic-bezier(0.22, 1, 0.36, 1), transform ${ModalManager._FILTER_TRANSITION_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+                listEl.style.opacity = '0.86';
+                listEl.style.transform = 'translateY(3px) scale(0.997)';
 
                 this._filterPopulateTimer = setTimeout(() => {
                     this._filterPopulateTimer = null;
@@ -335,9 +397,16 @@ export class ModalManager {
                         category,
                         this._currentSelectedAppId,
                     );
-                    listEl.getBoundingClientRect();
-                    listEl.style.opacity = '1';
-                    listEl.style.transform = 'translateY(0) scale(1)';
+                    requestAnimationFrame(() => {
+                        if (
+                            transitionVersion !== this._filterTransitionVersion ||
+                            document.getElementById('app-modal-list') !== listEl
+                        ) {
+                            return;
+                        }
+                        listEl.style.opacity = '1';
+                        listEl.style.transform = 'translateY(0) scale(1)';
+                    });
                     this._filterStyleResetTimer = setTimeout(() => {
                         this._filterStyleResetTimer = null;
                         if (
@@ -347,8 +416,8 @@ export class ModalManager {
                             return;
                         }
                         listEl.style.willChange = 'auto';
-                    }, 180);
-                }, 110);
+                    }, ModalManager._FILTER_RESET_MS);
+                }, ModalManager._FILTER_TRANSITION_MS);
             }
         };
 
@@ -362,8 +431,31 @@ export class ModalManager {
     private _detachOverlayCloseHandler(): void {
         if (this._overlayClickModal !== null) {
             this._overlayClickModal.removeEventListener('click', this._boundOverlayClick);
+            this._overlayClickModal.removeEventListener('keydown', this._boundModalKeydown);
             this._overlayClickModal = null;
         }
+        document.removeEventListener('focusin', this._boundFocusIn);
+    }
+
+    private _focusFirstModalElement(modal: HTMLDialogElement): void {
+        const focusable = this._getFocusableElements(modal);
+        const first = focusable[0];
+        if (first !== undefined) {
+            first.focus();
+            return;
+        }
+
+        modal.focus();
+    }
+
+    private _getFocusableElements(root: HTMLElement): HTMLElement[] {
+        return [...root.querySelectorAll<HTMLElement>(ModalManager._FOCUSABLE_SELECTOR)].filter(
+            (element) =>
+                !element.hasAttribute('disabled') &&
+                element.tabIndex !== -1 &&
+                element.closest('.hidden') === null &&
+                element.getAttribute('aria-hidden') !== 'true',
+        );
     }
 
     private _cancelPendingFilterTransition(): void {
@@ -407,26 +499,35 @@ export class ModalManager {
         category: string,
         selectedAppId: string | null,
     ): void {
+        const visibleApps = this._getVisibleApps(apps, category);
+        this._populateVisibleAppList(listEl, visibleApps, category, selectedAppId);
+    }
+
+    private _populateVisibleAppList(
+        listEl: HTMLElement,
+        visibleApps: IApp[],
+        category: string,
+        selectedAppId: string | null,
+    ): void {
         listEl.innerHTML = '';
 
-        let filteredApps = apps;
-        const isAi = category === 'ai' || category.startsWith('ai_');
-        if (isAi) {
-            filteredApps = apps.filter((app) => {
-                const cap = app.capability ?? 'text';
-                return cap === this._currentFilter;
-            });
-        }
-
-        const sorted = this._getSortedApps(filteredApps);
-
-        if (sorted.length === 0) {
+        if (visibleApps.length === 0) {
             this._renderEmptyState(listEl);
             return;
         }
 
+        const isAi = category === 'ai' || category.startsWith('ai_');
         const interactionCategory = isAi ? `ai_${this._currentFilter}` : category;
-        this._renderAppCards(listEl, sorted, interactionCategory, selectedAppId);
+        this._renderAppCards(listEl, visibleApps, interactionCategory, selectedAppId);
+    }
+
+    private _getVisibleApps(apps: IApp[], category: string): IApp[] {
+        const isAi = category === 'ai' || category.startsWith('ai_');
+        const filteredApps = isAi
+            ? apps.filter((app) => (app.capability ?? 'text') === this._currentFilter)
+            : apps;
+
+        return this._getSortedApps(filteredApps);
     }
 
     private _renderEmptyState(listEl: HTMLElement): void {
@@ -546,8 +647,7 @@ export class ModalManager {
         const btn = card.querySelector<HTMLButtonElement>('.app-card-hover-actions button');
         if (btn === null) return;
 
-        const appId = card.dataset['appId'] ?? '';
-        const state = this._getButtonState(card, appId, isSelected);
+        const state = this._getButtonState(card, isSelected);
 
         const win = getGlobalWin() as unknown as { t?: (k: string, d: string) => string };
         btn.className = state.className;
@@ -558,7 +658,6 @@ export class ModalManager {
 
     private _getButtonState(
         card: HTMLElement,
-        appId: string,
         isSelected: boolean,
     ): {
         className: string;
@@ -573,17 +672,9 @@ export class ModalManager {
             };
         }
 
-        const win = getGlobalWin() as unknown as {
-            aiBridge?: { getState: () => { activeProviderId?: string } };
-        };
-        const aiState = win.aiBridge?.getState();
-        const isCurrentlyActiveAi = aiState?.activeProviderId === appId;
-
         const isStarting =
             card.classList.contains('engine-starting') ||
             card.classList.contains('engine-swapping');
-        const isReady = card.classList.contains('engine-ready');
-        const isEffectivelyRunning = isCurrentlyActiveAi || isReady;
 
         if (isStarting) {
             return {
@@ -593,18 +684,10 @@ export class ModalManager {
             };
         }
 
-        if (isEffectivelyRunning) {
-            return {
-                className: 'modal-btn modal-btn-secondary active-module-btn stop-btn',
-                key: 'ui.launcher.modules.modal.btn_running',
-                defaultLabel: 'Running',
-            };
-        }
-
         return {
             className: 'modal-btn modal-btn-secondary',
             key: 'ui.launcher.modules.modal.btn_remove',
-            defaultLabel: 'Remove',
+            defaultLabel: 'Убрать',
         };
     }
 

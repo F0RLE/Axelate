@@ -77,7 +77,7 @@ describe('EngineStatusService', () => {
         expect(service.getEndpointForEngine('llamacpp')).toBe('http://127.0.0.1:8080');
         expect(service.hasActiveEngines).toBe(true);
         expect(llama.classList.contains('engine-ready')).toBe(true);
-        expect(llama.querySelector('button')?.textContent).toBe('Running');
+        expect(llama.querySelector('button')?.textContent).toBe('Убрать');
 
         listeners['ai:engine:swapping']?.({ from: 'llamacpp', to: 'sdcpp' });
         const sdcpp = document.querySelector<HTMLElement>('[data-app-id="sdcpp"]');
@@ -108,10 +108,10 @@ describe('EngineStatusService', () => {
         );
 
         listeners['ai:engine:ready']?.({ engine_id: 'sdcpp', endpoint: '/engine' });
-        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Running');
+        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Убрать');
 
         listeners['ai:engine:error']?.({ engine_id: 'sdcpp', message: 'oops' });
-        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Remove');
+        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Убрать');
     });
 
     it('cleans active slots and unlisteners on destroy', async () => {

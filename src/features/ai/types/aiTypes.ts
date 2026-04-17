@@ -44,6 +44,16 @@ export interface IChatMessage {
     thought_signature?: string | undefined;
 }
 
+export interface IWebSearchOptions {
+    enabled: boolean;
+    engine?: 'auto' | 'native' | 'exa' | 'firecrawl' | 'parallel';
+    max_results?: number;
+    max_total_results?: number;
+    search_context_size?: 'low' | 'medium' | 'high';
+    allowed_domains?: string[];
+    excluded_domains?: string[];
+}
+
 // ============================================================================
 // IPC Transfer Envelopes
 // ============================================================================
@@ -61,6 +71,7 @@ export interface IChatRequest {
     max_tokens?: number | undefined;
     attachments?: { name: string; type: string; data_base64: string }[];
     session_id?: string;
+    web_search?: IWebSearchOptions;
 }
 
 /**

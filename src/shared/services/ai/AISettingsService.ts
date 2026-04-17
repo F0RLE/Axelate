@@ -1,6 +1,16 @@
 import type { UiStateStore, ThinkingLevel } from '../state/UiStateStore';
 
 const LOCAL_LOW_THINKING_DEFAULTS = new Set(['llamacpp']);
+const CLOUD_AI_PROVIDERS = new Set([
+    'gpt',
+    'gemini',
+    'openai',
+    'openrouter',
+    'anthropic',
+    'mistral',
+    'claude',
+    'deepseek',
+]);
 const DEFAULT_LOCAL_MAX_OUTPUT_TOKENS = 384;
 
 export class AISettingsService {
@@ -25,6 +35,19 @@ export class AISettingsService {
 
     public setThinkingLevel(appId: string, level: ThinkingLevel): void {
         this._store.updateNestedState('ai_thinking_level', appId, level);
+    }
+
+    public getInternetAccessEnabled(appId: string): boolean {
+        const savedValue = this._store.getState().ai_web_search_enabled[appId];
+        if (typeof savedValue === 'boolean') {
+            return savedValue;
+        }
+
+        return CLOUD_AI_PROVIDERS.has(appId);
+    }
+
+    public setInternetAccessEnabled(appId: string, enabled: boolean): void {
+        this._store.updateNestedState('ai_web_search_enabled', appId, enabled);
     }
 
     public getLocalMaxOutputTokens(appId: string): number {

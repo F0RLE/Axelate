@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConsoleLogService, type ILogEntry } from './ConsoleLogService';
 import type { IBridge } from '@/shared/types/IBridge';
 import { createMockBridge } from '@/test/mocks/mockBridge';
+import * as invokeModule from '@/shared/api/invoke';
+import { commands } from '@/shared/types/bindings';
 function setupTauri(bridge: IBridge, isTauri = true, invokeReturn?: unknown) {
     vi.mocked(bridge.isTauri).mockReturnValue(isTauri);
     if (invokeReturn !== undefined) {
@@ -28,6 +30,7 @@ describe('ConsoleLogService', () => {
     ];
 
     beforeEach(() => {
+        vi.restoreAllMocks();
         bridge = createMockBridge();
         service = new ConsoleLogService(bridge);
         // Mock global fetch for fallback
@@ -198,5 +201,278 @@ describe('ConsoleLogService', () => {
         vi.mocked(bridge.invoke).mockResolvedValueOnce(secondBatch);
         const logs = await service.fetchLogs();
         expect(logs).toHaveLength(1);
+    });
+
+    it('should subscribe to engine events and append module logs in Tauri mode', async () => {
+        const unlisten = vi.fn();
+        const listeners = new Map<string, (payload: unknown) => void>();
+
+        setupTauri(bridge, true);
+        vi.mocked(bridge.listen).mockImplementation(
+            <T>(event: string, callback: (payload: T) => void) => {
+                listeners.set(event, callback as (payload: unknown) => void);
+                return Promise.resolve(unlisten);
+            },
+        );
+
+        await service.init();
+
+        listeners.get('ai:engine:starting')?.({ engine_id: 'llamacpp' });
+        listeners.get('ai:engine:log')?.({
+            engine_id: 'llamacpp',
+            line: 'ready line',
+        });
+        listeners.get('ai:engine:error')?.({
+            engine_id: 'llamacpp',
+            message: 'boom',
+        });
+
+        expect(service.getLogsForView('llamacpp')).toEqual([
+            expect.objectContaining({
+                source: 'llamacpp',
+                level: 'info',
+                message: 'Engine is starting...',
+            }),
+            expect.objectContaining({
+                source: 'llamacpp',
+                level: 'info',
+                message: 'ready line',
+            }),
+            expect.objectContaining({
+                source: 'llamacpp',
+                level: 'error',
+                message: 'boom',
+            }),
+        ]);
+
+        service.destroy();
+        expect(unlisten).toHaveBeenCalledTimes(4);
+    });
+
+    it('should ignore noisy engine events', async () => {
+        const listeners = new Map<string, (payload: unknown) => void>();
+
+        setupTauri(bridge, true);
+        vi.mocked(bridge.listen).mockImplementation(
+            <T>(event: string, callback: (payload: T) => void) => {
+                listeners.set(event, callback as (payload: unknown) => void);
+                return Promise.resolve(vi.fn());
+            },
+        );
+
+        await service.init();
+        listeners.get('ai:engine:log')?.({
+            engine_id: 'llamacpp',
+            line: '[AIBridge] Stream chunk received',
+        });
+
+        expect(service.getLogsForView('llamacpp')).toEqual([]);
+    });
+
+    it('should expose General plus ready engine tabs', async () => {
+        setupTauri(bridge, true);
+        const invokeSafeSpy = vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                ready: {
+                    slots: [
+                        {
+                            capability: 'text',
+                            engine: { id: 'llamacpp', name: 'LLaMA.cpp' },
+                        },
+                    ],
+                },
+            },
+        });
+
+        const views = await service.getAvailableViews();
+
+        expect(invokeSafeSpy).toHaveBeenCalledWith(commands.getEngineState());
+        expect(views).toEqual([
+            { id: 'general', label: 'General' },
+            { id: 'llamacpp', label: 'LLaMA.cpp' },
+        ]);
+    });
+
+    it('should not duplicate module views when engine tab already exists', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                ready: {
+                    slots: [
+                        {
+                            capability: 'text',
+                            engine: { id: 'axelate-telegram-bot', name: 'Telegram Bot' },
+                        },
+                    ],
+                },
+            },
+        });
+        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
+            if (command === 'get_logs') {
+                return [
+                    {
+                        timestamp: 1,
+                        source: 'module:axelate-telegram-bot',
+                        level: 'INFO',
+                        message: 'Started',
+                    },
+                ];
+            }
+            return undefined;
+        });
+
+        await service.fetchLogs();
+        const views = await service.getAvailableViews();
+
+        expect(views).toEqual([
+            { id: 'general', label: 'General' },
+            { id: 'axelate-telegram-bot', label: 'Telegram Bot' },
+        ]);
+    });
+
+    it('should keep General limited to launcher logs and route module logs to module tabs', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                ready: {
+                    slots: [
+                        {
+                            capability: 'text',
+                            engine: { id: 'llamacpp', name: 'LLaMA.cpp' },
+                        },
+                    ],
+                },
+            },
+        });
+        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
+            if (command === 'get_logs') {
+                return [
+                    {
+                        timestamp: 1,
+                        source: 'frontend',
+                        level: 'INFO',
+                        message: '[NavigationService] Navigating to: console',
+                    },
+                    {
+                        timestamp: 2,
+                        source: 'frontend',
+                        level: 'INFO',
+                        message: '[AIBridge] Starting provider: llamacpp',
+                    },
+                    {
+                        timestamp: 3,
+                        source: 'llamacpp',
+                        level: 'INFO',
+                        message: 'ready line',
+                    },
+                ];
+            }
+            return undefined;
+        });
+
+        await service.fetchLogs();
+        await service.getAvailableViews();
+
+        expect(service.getLogsForView('general')).toEqual([
+            expect.objectContaining({
+                source: 'frontend',
+                message: '[NavigationService] Navigating to: console',
+            }),
+        ]);
+        expect(service.getLogsForView('llamacpp')).toEqual([
+            expect.objectContaining({
+                source: 'frontend',
+                message: '[AIBridge] Starting provider: llamacpp',
+            }),
+            expect.objectContaining({
+                source: 'llamacpp',
+                message: 'ready line',
+            }),
+        ]);
+    });
+
+    it('should build runtime status items for engines and modules', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                ready: {
+                    slots: [
+                        {
+                            capability: 'text',
+                            engine: { id: 'llamacpp', name: 'LLaMA.cpp' },
+                        },
+                    ],
+                },
+            },
+        });
+        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
+            if (command === 'get_logs') {
+                return [
+                    {
+                        timestamp: 1,
+                        source: 'module:llamacpp',
+                        level: 'ERROR',
+                        message: 'Manifest not found',
+                    },
+                ];
+            }
+            if (command === 'get_module_status') {
+                return 'running';
+            }
+            return undefined;
+        });
+
+        await service.fetchLogs();
+        const items = await service.getStatusItems();
+
+        expect(items).toEqual([
+            {
+                id: 'engine:llamacpp',
+                label: 'LLaMA.cpp',
+                kind: 'engine',
+                status: 'running',
+                detail: 'text',
+            },
+            {
+                id: 'module:llamacpp',
+                label: 'Llamacpp',
+                kind: 'module',
+                status: 'running',
+                detail: 'Running',
+            },
+        ]);
+    });
+
+    it('should cache module paths and open module folder', async () => {
+        setupTauri(bridge, true);
+        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
+            if (command === 'get_module_path') {
+                return 'C:/modules/llamacpp';
+            }
+            if (command === 'plugin:shell|open') {
+                return undefined;
+            }
+            return undefined;
+        });
+
+        const firstPath = await service.getModulePath('llamacpp');
+        const secondPath = await service.getModulePath('llamacpp');
+        const opened = await service.openModuleFolder('llamacpp');
+
+        expect(firstPath).toBe('C:/modules/llamacpp');
+        expect(secondPath).toBe('C:/modules/llamacpp');
+        expect(opened).toBe(true);
+        expect(bridge.invoke).toHaveBeenCalledWith('plugin:shell|open', {
+            path: 'C:/modules/llamacpp',
+        });
+        expect(
+            vi
+                .mocked(bridge.invoke)
+                .mock.calls.filter(([command]) => command === 'get_module_path'),
+        ).toHaveLength(1);
     });
 });

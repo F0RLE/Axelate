@@ -207,13 +207,14 @@ body[data-platform='linux'] .module-card {
 }
 
 .btn-module.primary {
-    background: rgba(86, 46, 145, 0.92);
-    border-color: rgba(140, 92, 214, 0.42);
-    color: #f6f0ff;
+    background: var(--module-button-bg);
+    border-color: var(--module-button-border-hover);
+    color: var(--module-button-text);
+    border-radius: var(--module-button-radius);
 }
 
 .btn-module.primary:hover {
-    background: rgba(98, 54, 164, 0.96);
+    background: var(--module-button-bg-hover);
     transform: translateY(-2px);
     box-shadow: none;
 }
@@ -717,10 +718,10 @@ body.ui-hidden .modal-backdrop {
     margin-bottom: 0.5rem;
     width: max-content;
     padding: 0.6rem 2rem;
-    border-radius: 12px;
-    background: rgba(62, 44, 92, 0.72);
-    color: #f4ecff;
-    border: 1px solid rgba(148, 110, 214, 0.2);
+    border-radius: var(--module-button-radius);
+    background: var(--module-button-bg-soft);
+    color: var(--module-button-text);
+    border: 1px solid var(--module-button-border);
     font-weight: 600;
     font-size: 0.95rem;
     transition:
@@ -788,9 +789,9 @@ body.ui-hidden .modal-backdrop {
 }
 
 .model-card-premium .model-card-action.active-module-btn {
-    background: rgba(78, 49, 118, 0.9);
+    background: var(--module-button-bg);
     color: #ffffff;
-    border: 1px solid rgba(160, 121, 228, 0.24);
+    border: 1px solid var(--module-button-border-hover);
     min-width: 140px;
 }
 
@@ -829,14 +830,14 @@ body.ui-hidden .modal-backdrop {
 }
 
 .model-card-premium .model-card-action.download-module-btn:hover {
-    background: rgba(98, 54, 164, 0.98) !important;
+    background: var(--module-button-bg-hover) !important;
     transform: translateY(-2px) scale(1.01) !important;
     box-shadow: none;
 }
 
 .model-card-premium .model-card-action.active-module-btn:hover {
-    background: rgba(98, 54, 164, 0.96) !important;
-    border-color: rgba(168, 130, 236, 0.26) !important;
+    background: var(--module-button-bg-hover) !important;
+    border-color: var(--module-button-border-hover) !important;
     color: #ffffff !important;
     transform: translateY(-2px);
     box-shadow: none;
@@ -1008,12 +1009,25 @@ body.snapping .modal-backdrop {
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.modal-backdrop {
+    --app-modal-width: 95%;
+    --app-modal-max-width: 1320px;
+    --app-modal-height: min(860px, calc((100vh - 80px) / var(--app-zoom, 1)));
+    --app-modal-max-height: var(--app-modal-height);
+    --app-modal-popover-gap: 380px;
+}
+
 .modal-backdrop.popover-open .app-modal {
     transform: none;
     margin-right: 344px; /* Space for the 320px popover + gap */
-    max-width: min(1300px, calc(100% - 380px)); /* Use 100% of backdrop to preserve left margin */
+    width: min(var(--app-modal-max-width), calc(100% - var(--app-modal-popover-gap)));
+    max-width: min(
+        var(--app-modal-max-width),
+        calc(100% - var(--app-modal-popover-gap))
+    ); /* Use 100% of backdrop to preserve left margin */
     transition:
         margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1026,11 +1040,12 @@ body.snapping .modal-backdrop {
     box-shadow:
         inset -1px 0 0 rgba(255, 255, 255, 0.018),
         0 18px 48px rgba(0, 0, 0, 0.2);
-    border-radius: 24px;
-    width: 95%;
-    max-width: 1320px;
-    max-height: calc((100vh - 80px) / var(--app-zoom, 1));
-    height: auto;
+    border-radius: var(--modal-shell-radius);
+    width: var(--app-modal-width);
+    max-width: var(--app-modal-max-width);
+    height: var(--app-modal-dynamic-height, var(--app-modal-height));
+    max-height: var(--app-modal-dynamic-height, var(--app-modal-max-height));
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1038,6 +1053,7 @@ body.snapping .modal-backdrop {
     transform: scale(1) translateY(0) translateZ(0);
     transition:
         margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     will-change: auto;
@@ -1167,8 +1183,8 @@ body.snapping .modal-backdrop {
     border-radius: 14px;
     padding: 0.3rem;
     box-shadow:
-        inset -1px 0 0 rgba(255, 255, 255, 0.018),
-        0 0 0 1px rgba(255, 255, 255, 0.03);
+        inset 0 1px 0 rgba(255, 255, 255, 0.03),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .app-modal-tab-row.hidden {
@@ -1192,6 +1208,7 @@ body.snapping .modal-backdrop {
         box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
     letter-spacing: 0.04em;
+    min-height: 40px;
 }
 
 .app-modal-tab:hover:not(:disabled):not(.active) {
@@ -1201,10 +1218,10 @@ body.snapping .modal-backdrop {
 }
 
 .app-modal-tab.active {
-    background: rgba(86, 46, 145, 0.9);
+    background: linear-gradient(90deg, var(--primary), var(--primary-light));
     color: #f6f0ff;
-    border-color: transparent;
-    box-shadow: inset 0 0 0 1px rgba(168, 130, 236, 0.16);
+    border-color: rgba(var(--primary-raw), 0.38);
+    box-shadow: none;
 }
 
 .app-modal-tab:disabled {
@@ -1252,6 +1269,7 @@ body.snapping .modal-backdrop {
     display: flex;
     flex-direction: row;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
     background: transparent;
 }
@@ -1407,10 +1425,13 @@ body.snapping .modal-backdrop {
     padding: 1.35rem 1.35rem 1.45rem;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+    align-content: start;
     gap: 1.1rem;
     overflow-y: auto;
     flex: 1;
     min-height: 0;
+    box-sizing: border-box;
+    scroll-padding-bottom: 1.45rem;
 }
 
 /* Restore left padding when sidebar is hidden/removed */
@@ -1450,9 +1471,7 @@ body.snapping .modal-backdrop {
     will-change: transform, box-shadow;
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
-    box-shadow:
-        inset -1px 0 0 rgba(255, 255, 255, 0.018),
-        0 0 0 1px rgba(255, 255, 255, 0.03);
+    box-shadow: none !important;
 }
 
 .app-card:hover .app-icon-wrapper,
@@ -1497,19 +1516,14 @@ body.snapping .modal-backdrop {
 .app-card:hover,
 .module-picker-card:hover {
     transform: translateY(-2px) translateZ(0);
-    box-shadow:
-        inset -1px 0 0 rgba(255, 255, 255, 0.022),
-        0 0 0 1px rgba(255, 255, 255, 0.035) !important;
+    box-shadow: none !important;
     z-index: 20;
-    background: rgba(var(--background-raw), 0.075) !important;
 }
 
 .app-card:not(.selected),
 .module-picker-card:not(.selected) {
-    background: rgba(var(--background-raw), 0.065) !important;
-    box-shadow:
-        inset -1px 0 0 rgba(255, 255, 255, 0.018),
-        0 0 0 1px rgba(255, 255, 255, 0.03) !important;
+    background: rgba(255, 255, 255, 0.028) !important;
+    box-shadow: none !important;
 }
 
 /* High specificity for cards in grid */
@@ -1522,9 +1536,6 @@ body.snapping .modal-backdrop {
 #app-grid .module-picker-card:focus-within,
 .app-grid .module-picker-card:focus-within {
     transform: translateY(-2px) translateZ(0) !important;
-    box-shadow:
-        inset -1px 0 0 rgba(255, 255, 255, 0.022),
-        0 0 0 1px rgba(255, 255, 255, 0.035) !important;
     z-index: 20;
 }
 
@@ -1550,7 +1561,6 @@ body.snapping .modal-backdrop {
 #app-modal-list .module-picker-card:hover,
 #app-modal-list .module-picker-card:focus-within {
     transform: translateY(-2px) translateZ(0) !important;
-    box-shadow: none !important;
     z-index: 20;
 }
 
@@ -1718,20 +1728,23 @@ body.snapping .modal-backdrop {
     width: 100%;
     max-width: 220px; /* Prevent it from being too wide on large grids */
     margin: 0 !important;
-    padding: 0.8rem 1rem !important;
+    min-height: 44px;
+    padding: 0.6rem 1.6rem !important;
     font-family: var(--app-font-family) !important;
     font-size: 1rem !important;
-    font-weight: 700 !important;
-    border-radius: 12px !important;
+    font-weight: 600 !important;
+    line-height: 1;
+    border-radius: var(--module-button-radius) !important;
     box-shadow: none !important;
-
-    background: rgba(86, 46, 145, 0.96) !important;
-    color: #f6f0ff !important;
+    background: var(--module-button-bg-soft) !important;
+    color: var(--module-button-text) !important;
     transition:
-        transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1),
-        background 0.3s ease,
-        box-shadow 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        transform 0.2s ease,
+        background 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease !important;
+    border: 1px solid var(--module-button-border) !important;
 
     /* Undo the base .download-btn margins for the hover area */
     margin-top: 0 !important;
@@ -1741,26 +1754,61 @@ body.snapping .modal-backdrop {
     overflow: hidden;
 }
 
+.app-card-hover-actions .modal-btn.modal-btn-primary {
+    background: linear-gradient(90deg, var(--primary), var(--primary-light)) !important;
+    color: var(--module-button-text) !important;
+    border: 1px solid rgba(var(--primary-raw), 0.38) !important;
+    border-radius: var(--module-button-radius) !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+
 .app-card-hover-actions button:hover,
 .app-card-hover-actions .download-btn:hover {
-    transform: scale(1.03) translateY(-1px) !important;
-    background: rgba(98, 54, 164, 0.98) !important;
+    transform: translateY(-2px) !important;
+    background: var(--module-button-bg-hover) !important;
+    border-color: var(--module-button-border-hover) !important;
+    color: #ffffff !important;
     box-shadow: none !important;
+}
+
+.app-card-hover-actions .modal-btn.modal-btn-primary:hover {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--primary) 90%, white 10%),
+        color-mix(in srgb, var(--primary-light) 90%, white 10%)
+    ) !important;
+    color: #ffffff !important;
+    border-color: rgba(var(--primary-raw), 0.52) !important;
+    box-shadow: none !important;
+    filter: none !important;
 }
 
 /* Specifically style the "Remove" (Secondary) Button to be red */
 .app-card-hover-actions .modal-btn-secondary {
-    background: #dc3545 !important;
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--danger) 92%, #111015 8%),
+        color-mix(in srgb, var(--danger-dark) 92%, #111015 8%)
+    ) !important;
     color: #ffffff !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    box-shadow: none !important; /* No glow at all for red button */
+    border: 1px solid rgba(var(--danger-raw), 0.4) !important;
+    border-radius: var(--module-button-radius) !important;
+    box-shadow: none !important;
+    filter: none !important;
 }
 
 .app-card-hover-actions .modal-btn-secondary:hover {
-    background: #c82333 !important;
-    transform: scale(1.03) translateY(-1px) !important;
-    box-shadow: none !important; /* Strictly no glow */
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--danger) 84%, white 16%),
+        color-mix(in srgb, var(--danger-dark) 84%, white 16%)
+    ) !important;
+    transform: translateY(-2px) !important;
+    border-color: rgba(var(--danger-raw), 0.58) !important;
+    box-shadow: none !important;
     color: #ffffff !important;
+    filter: none !important;
 }
 
 /* Selected Card properly marching dashed border (Conic walking technique) */
@@ -1786,16 +1834,17 @@ body.snapping .modal-backdrop {
 }
 
 .app-card.selected {
-    border-color: rgba(255, 255, 255, 0.06) !important;
-    background: rgba(255, 255, 255, 0.007) !important;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(var(--primary-raw), 0.18) !important;
+    background: rgba(255, 255, 255, 0.028) !important;
+    box-shadow: none !important;
     --selected-border-color: rgba(var(--primary-raw), 0);
     transform: translateY(-1px) translateZ(0);
 }
 
 .app-card.selected:hover {
-    background: rgba(255, 255, 255, 0.007) !important;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(var(--primary-raw), 0.22) !important;
+    background: rgba(255, 255, 255, 0.028) !important;
+    box-shadow: none !important;
     --selected-border-color: rgba(var(--primary-raw), 0);
 }
 
@@ -1827,9 +1876,9 @@ body.snapping .modal-backdrop {
 #app-grid .app-card.selected,
 .app-grid .app-card.selected,
 #app-modal-list .app-card.selected {
-    border-color: rgba(255, 255, 255, 0.06) !important;
-    background: rgba(255, 255, 255, 0.007) !important;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(var(--primary-raw), 0.18) !important;
+    background: rgba(255, 255, 255, 0.028) !important;
+    box-shadow: none !important;
 }
 
 #app-grid .app-card.selected:hover,
@@ -1838,8 +1887,9 @@ body.snapping .modal-backdrop {
 .app-grid .app-card.selected:focus-within,
 #app-modal-list .app-card.selected:hover,
 #app-modal-list .app-card.selected:focus-within {
-    background: rgba(255, 255, 255, 0.007) !important;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(var(--primary-raw), 0.22) !important;
+    background: rgba(255, 255, 255, 0.028) !important;
+    box-shadow: none !important;
 }
 
 /* ============================================================
@@ -2298,16 +2348,16 @@ body.snapping .modal-backdrop {
 }
 
 .model-card-premium.empty .model-card-action {
-    background: rgba(255, 255, 255, 0.007);
-    border: none;
-    color: rgba(255, 255, 255, 0.82);
+    background: var(--module-button-bg-soft);
+    border: 1px solid var(--module-button-border);
+    color: var(--module-button-text);
 
     /* Hidden by default, behaves like standard cards */
     opacity: 0;
     transform: translateY(10px);
     pointer-events: none;
 
-    border-radius: 12px;
+    border-radius: var(--module-button-radius);
     padding: 0.8rem 1.5rem;
     font-weight: 600;
     font-size: 0.9rem;
@@ -2318,7 +2368,8 @@ body.snapping .modal-backdrop {
 }
 
 .model-card-premium.empty:hover .model-card-action {
-    background: rgba(116, 54, 184, 0.92);
+    background: var(--module-button-bg-hover);
+    border-color: var(--module-button-border-hover);
     color: white;
     opacity: 1;
     transform: translateY(0);
@@ -2339,9 +2390,9 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     width: 100%;
     padding: 10px 16px;
     margin-top: 12px;
-    background: rgba(86, 46, 145, 0.96);
+    background: var(--module-button-bg);
     border: none;
-    border-radius: 12px;
+    border-radius: var(--module-button-radius);
     color: white;
     font-weight: 600;
     font-size: 0.9rem;
@@ -2355,7 +2406,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .app-download-btn:hover:not(:disabled) {
     transform: translateY(-2px);
-    background: rgba(98, 54, 164, 0.98);
+    background: var(--module-button-bg-hover);
     box-shadow: none;
 }
 
@@ -2801,10 +2852,77 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 /* Note: Now uses modal-backdrop and app-modal classes from modals.css */
 
 .module-settings-content {
-    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 1.25rem 1.5rem 1.5rem;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
     overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    scroll-padding-bottom: 1.5rem;
+}
+
+.module-settings-content.module-settings-content-custom-ui {
+    padding: 0;
+    overflow: hidden;
+}
+
+#module-settings-modal .app-modal-main,
+#module-settings-modal .module-settings-webui-shell {
+    min-height: 0;
+}
+
+#module-settings-modal .module-config-modal-active {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: max-content;
+    padding-bottom: 1.5rem;
+    box-sizing: border-box;
+}
+
+#module-settings-modal .module-config-modal-active.module-settings-custom-ui-active {
     flex: 1;
     min-height: 0;
+    padding-bottom: 0;
+}
+
+#module-settings-modal .module-settings-webui-shell {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+}
+
+#module-settings-modal .module-settings-webui-frame-shell {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    border-radius: 0;
+    border: none;
+    background: transparent;
+}
+
+#module-settings-modal .module-settings-webui-frame {
+    min-height: 100%;
+    height: 100%;
+    border-radius: 0;
+}
+
+@media (max-width: 900px) {
+    .module-settings-content {
+        padding: 1rem;
+    }
+}
+
+@media (max-height: 820px) {
+    #module-settings-modal .module-settings-webui-frame-shell {
+        min-height: clamp(320px, 56vh, 640px);
+    }
 }
 
 .module-settings-empty {

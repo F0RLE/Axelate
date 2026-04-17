@@ -52,6 +52,28 @@ export class SettingsService {
         await this._tauri.invoke('save_setting', { key, value: String(value) });
     }
 
+    public async getModuleSettings(moduleId: string): Promise<Record<string, unknown>> {
+        try {
+            return await this._tauri.invoke<Record<string, unknown>>('get_module_settings', {
+                moduleId,
+            });
+        } catch (e) {
+            tracer.error('[SettingsService] Failed to get module settings:', e);
+            return {};
+        }
+    }
+
+    public async saveModuleSettings(
+        moduleId: string,
+        settings: Record<string, unknown>,
+    ): Promise<void> {
+        await this._tauri.invoke('save_module_settings', { moduleId, settings });
+    }
+
+    public async getLocalServerBaseUrl(): Promise<string> {
+        return await this._tauri.invoke<string>('get_local_server_base_url');
+    }
+
     public async updateSettings(updates: Partial<ISettings>): Promise<void> {
         for (const [key, value] of Object.entries(updates)) {
             await this.saveSetting(key, value as SettingsValue);
@@ -140,6 +162,19 @@ export class SettingsService {
         } catch (e) {
             tracer.error('[SettingsService] Failed to get secure key metadata:', e);
             return { exists: false, length: 0 };
+        }
+    }
+
+    /**
+     * Returns the decrypted secure key for explicit user reveal flows.
+     */
+    public async getSecureKey(provider: string): Promise<string | null> {
+        const storageKey = `${provider}_api_key`;
+        try {
+            return await this._tauri.getSecureKey(storageKey);
+        } catch (e) {
+            tracer.error('[SettingsService] Failed to get secure key:', e);
+            return null;
         }
     }
 

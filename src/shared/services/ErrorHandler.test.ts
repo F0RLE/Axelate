@@ -261,6 +261,15 @@ describe('ErrorHandler', () => {
             document.body.innerHTML = '';
         });
 
+        it('should render toast message as text, not HTML', () => {
+            document.body.innerHTML = '<div id="toast-container"></div>';
+            errorHandler.captureError(new Error('<img src=x onerror=alert(1)>'));
+
+            const toastMessage = document.querySelector('.toast-message');
+            expect(toastMessage?.textContent).toBe('<img src=x onerror=alert(1)>');
+            expect(document.querySelector('.toast-message img')).toBeNull();
+        });
+
         it('should skip toast when no container', () => {
             document.body.innerHTML = '';
             expect(() => errorHandler.captureError(new Error('No toast'))).not.toThrow();

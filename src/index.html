@@ -4,7 +4,7 @@
         <meta charset="UTF-8" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: blob: https:; connect-src 'self' ipc: http://ipc.localhost https:; base-uri 'self';"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: blob: https:; connect-src 'self' ipc: http://ipc.localhost https:; frame-src 'self' http://127.0.0.1:* http://localhost:*; base-uri 'self';"
         />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Axelate (Beta)</title>
@@ -167,6 +167,7 @@
                             <button
                                 id="close-app-selection-btn"
                                 class="app-close-btn"
+                                autofocus
                                 data-i18n-aria-label="ui.launcher.button.close"
                                 data-i18n-title="ui.launcher.button.close"
                                 aria-label="Close"
@@ -191,35 +192,39 @@
                 class="modal-backdrop hidden"
             >
                 <div class="app-modal">
-                    <div class="app-modal-header">
-                        <h2
-                            id="module-settings-title"
-                            class="app-modal-title"
-                            data-i18n="ui.launcher.module.settings_title"
-                        >
-                            Module Settings
-                        </h2>
-                        <button
-                            id="close-module-settings-btn"
-                            class="app-close-btn"
-                            data-i18n-aria-label="ui.launcher.button.close"
-                            data-i18n-title="ui.launcher.button.close"
-                            aria-label="Close"
-                            title="Close"
-                        >
-                            <svg class="icon">
-                                <use href="#icon-close"></use>
-                            </svg>
-                        </button>
-                    </div>
-                    <div
-                        id="module-settings-content"
-                        class="module-settings-content"
-                    >
-                        <!-- Dynamic settings will be injected here -->
-                        <div id="module-config-modal-active" class="module-config-modal-active">
-                            <div class="module-settings-empty">
-                                <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
+                    <div class="app-modal-main">
+                        <div class="app-modal-header">
+                            <h2
+                                id="module-settings-title"
+                                class="app-modal-title"
+                                data-i18n="ui.launcher.module.settings_title"
+                            >
+                                Module Settings
+                            </h2>
+                            <button
+                                id="close-module-settings-btn"
+                                class="app-close-btn"
+                                data-i18n-aria-label="ui.launcher.button.close"
+                                data-i18n-title="ui.launcher.button.close"
+                                aria-label="Close"
+                                title="Close"
+                            >
+                                <svg class="icon">
+                                    <use href="#icon-close"></use>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="app-modal-body">
+                            <div
+                                id="module-settings-content"
+                                class="module-settings-content"
+                            >
+                                <!-- Dynamic settings will be injected here -->
+                                <div id="module-config-modal-active" class="module-config-modal-active">
+                                    <div class="module-settings-empty">
+                                        <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

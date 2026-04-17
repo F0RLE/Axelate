@@ -8,9 +8,40 @@ import { tracer } from '@/infrastructure/logging/LoggerService';
 import type { IAppSettingsUIContext } from './SettingsContext';
 import { APP_PAGES } from '@/shared/config/AppPages';
 
+interface IToggleItem {
+    id: string;
+    label: string;
+    icon: string;
+}
+
+interface IToggleGroupConfig {
+    containerId: string;
+    templateId: string;
+    dataKey: 'pageId' | 'monitorId';
+    hiddenItems: string[];
+    items: IToggleItem[];
+    getLabelKey: (item: IToggleItem) => string;
+    onToggle: (id: string, enabled: boolean) => void;
+}
+
 export class GeneralSettingsRenderer {
     private readonly _cleanupFns: Array<() => void> = [];
     private readonly _observers: ResizeObserver[] = [];
+    private readonly _resizeFrames = new Map<string, number>();
+
+    private static readonly _monitorItems: IToggleItem[] = [
+        { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
+        { id: 'gpu', label: 'GPU', icon: '#icon-gpu' },
+        { id: 'ram', label: 'RAM', icon: '#icon-ram' },
+        { id: 'vram', label: 'VRAM', icon: '#icon-vram' },
+        { id: 'disk', label: 'Disk', icon: '#icon-disk' },
+        { id: 'network', label: 'Network', icon: '#icon-network' },
+    ];
+
+    private static readonly _monitorGroups = {
+        upper: ['cpu', 'gpu', 'ram', 'vram'],
+        lower: ['disk', 'network'],
+    };
 
     constructor(private readonly _uiSettings: UISettingsService) {}
 
@@ -30,6 +61,10 @@ export class GeneralSettingsRenderer {
         this._observers.splice(0).forEach((observer) => {
             observer.disconnect();
         });
+        this._resizeFrames.forEach((frameId) => {
+            globalThis.cancelAnimationFrame(frameId);
+        });
+        this._resizeFrames.clear();
 
         const taskbar = document.getElementById('taskbar-toggles');
         const monitors = document.getElementById('monitor-toggles');
@@ -44,7 +79,7 @@ export class GeneralSettingsRenderer {
     /**
      * Initializes taskbar visibility toggles.
      */
-    private _initTaskbarToggles(context: IAppSettingsUIContext) {
+    private _initTaskbarToggles(context: IAppSettingsUIContext): void {
         const container = document.getElementById('taskbar-toggles');
         if (!container) {
             tracer.warn('[GeneralSettingsRenderer] #taskbar-toggles not found');
@@ -54,71 +89,31 @@ export class GeneralSettingsRenderer {
             tracer.debug('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
             return;
         }
+
         container.dataset['initialized'] = 'true';
         tracer.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
 
-        const { t } = context;
-
-        const navItems = APP_PAGES.filter((p) => p.inSettings === true);
-
         const hiddenItems = this._uiSettings.getHiddenNavItems();
+        const navItems = APP_PAGES.filter((page) => page.inSettings === true).map((page) => ({
+            id: page.id,
+            label: page.defaultLabel,
+            icon: page.icon,
+        }));
 
-        const template = document.getElementById(
-            'tpl-taskbar-toggle',
-        ) as HTMLTemplateElement | null;
-        if (!template) {
-            tracer.error('[GeneralSettingsRenderer] template #tpl-taskbar-toggle not found');
-            return;
-        }
-
-        const fragment = document.createDocumentFragment();
-
-        navItems.forEach((item) => {
-            const labelKey = `ui.launcher.settings.toggle_${item.id}`;
-            const clone = template.content.cloneNode(true) as DocumentFragment;
-
-            const btn = clone.querySelector('.monitor-toggle-btn');
-            if (btn instanceof HTMLElement) {
-                if (hiddenItems.includes(item.id)) {
-                    btn.classList.remove('active');
-                }
-                btn.dataset['pageId'] = item.id;
-            }
-
-            const useEl = clone.querySelector('use');
-            if (useEl) {
-                useEl.setAttribute('href', item.icon);
-            }
-
-            const labelEl = clone.querySelector('.toggle-label');
-            if (labelEl instanceof HTMLElement) {
-                labelEl.dataset['i18n'] = labelKey;
-                labelEl.textContent = t(labelKey, item.defaultLabel);
-            }
-
-            fragment.appendChild(clone);
-        });
-
-        container.innerHTML = '';
-        container.appendChild(fragment);
-
-        const handleTaskbarClick = (e: Event) => {
-            const target = e.target;
-            if (!(target instanceof Element)) return;
-            const item = target.closest('.monitor-toggle-btn');
-            if (item instanceof HTMLElement) {
-                const pageId = item.dataset['pageId'];
-                if (pageId !== undefined && pageId !== '') {
-                    item.classList.toggle('active');
-                    this.toggleNavItem(pageId, item.classList.contains('active'));
-                }
-            }
-        };
-
-        container.addEventListener('click', handleTaskbarClick);
-        this._cleanupFns.push(() => {
-            container.removeEventListener('click', handleTaskbarClick);
-        });
+        this._initToggleGroup(
+            {
+                containerId: 'taskbar-toggles',
+                templateId: 'tpl-taskbar-toggle',
+                dataKey: 'pageId',
+                hiddenItems,
+                items: navItems,
+                getLabelKey: (item) => `ui.launcher.settings.toggle_${item.id}`,
+                onToggle: (pageId, enabled) => {
+                    this.toggleNavItem(pageId, enabled);
+                },
+            },
+            context.t,
+        );
 
         this._applyHiddenState(hiddenItems);
         this._observeToggleGrid('taskbar-toggles');
@@ -127,39 +122,42 @@ export class GeneralSettingsRenderer {
     /**
      * Applies hidden state to navigation items on startup.
      */
-    private _applyHiddenState(hidden: string[]) {
+    private _applyHiddenState(hidden: string[]): void {
         hidden.forEach((id) => {
-            const btn = document.querySelector(`#sidebar .nav-btn[data-page="${id}"]`);
-            if (btn) btn.classList.add('hidden');
+            const button = document.querySelector(`#sidebar .nav-btn[data-page="${id}"]`);
+            if (button instanceof HTMLElement) {
+                button.classList.add('hidden');
+                this._syncHiddenAccessibility(button, false);
+            }
         });
     }
 
     /**
      * Toggles a sidebar navigation item visibility.
      */
-    public toggleNavItem(pageId: string, enabled: boolean) {
-        const hiddenItems = this._uiSettings.getHiddenNavItems();
-        const navBtn = document.querySelector(`#sidebar .nav-btn[data-page="${pageId}"]`);
+    public toggleNavItem(pageId: string, enabled: boolean): void {
+        const hiddenItems = this._toggleHiddenItem(
+            this._uiSettings.getHiddenNavItems(),
+            pageId,
+            enabled,
+        );
+        const navButton = document.querySelector(`#sidebar .nav-btn[data-page="${pageId}"]`);
 
         if (enabled) {
-            const idx = hiddenItems.indexOf(pageId);
-            if (idx > -1) hiddenItems.splice(idx, 1);
-            if (navBtn instanceof HTMLElement) {
-                this._showElement(navBtn, 'nav-item-hiding');
+            if (navButton instanceof HTMLElement) {
+                this._showElement(navButton, 'nav-item-hiding');
             }
-        } else {
-            if (!hiddenItems.includes(pageId)) hiddenItems.push(pageId);
-            if (navBtn instanceof HTMLElement) {
-                this._hideElement(navBtn, 'nav-item-hiding');
-            }
+        } else if (navButton instanceof HTMLElement) {
+            this._hideElement(navButton, 'nav-item-hiding');
         }
+
         this._uiSettings.setHiddenNavItems(hiddenItems);
     }
 
     /**
      * Initializes system monitor toggles.
      */
-    private _initMonitorToggles(context: IAppSettingsUIContext) {
+    private _initMonitorToggles(context: IAppSettingsUIContext): void {
         const container = document.getElementById('monitor-toggles');
         if (!container) {
             tracer.warn('[GeneralSettingsRenderer] #monitor-toggles not found');
@@ -169,134 +167,80 @@ export class GeneralSettingsRenderer {
             tracer.debug('[GeneralSettingsRenderer] #monitor-toggles already initialized');
             return;
         }
+
         container.dataset['initialized'] = 'true';
         tracer.info('[GeneralSettingsRenderer] Initializing monitor toggles');
-        const monitorItems = [
-            { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
-            { id: 'gpu', label: 'GPU', icon: '#icon-gpu' },
-            { id: 'ram', label: 'RAM', icon: '#icon-ram' },
-            { id: 'vram', label: 'VRAM', icon: '#icon-vram' },
-            { id: 'disk', label: 'Disk', icon: '#icon-disk' },
-            { id: 'network', label: 'Network', icon: '#icon-network' },
-        ];
 
         const hiddenMonitors = this._uiSettings.getHiddenMonitors();
 
-        const { t } = context;
-
-        const template = document.getElementById(
-            'tpl-monitor-toggle',
-        ) as HTMLTemplateElement | null;
-        if (!template) {
-            tracer.error('[GeneralSettingsRenderer] template #tpl-monitor-toggle not found');
-            return;
-        }
-
-        const fragment = document.createDocumentFragment();
-
-        monitorItems.forEach((item) => {
-            const labelKey = `ui.launcher.settings.monitor_${item.id}`;
-            const clone = template.content.cloneNode(true) as DocumentFragment;
-
-            const btn = clone.querySelector('.monitor-toggle-btn');
-            if (btn instanceof HTMLElement) {
-                if (hiddenMonitors.includes(item.id)) {
-                    btn.classList.remove('active');
-                }
-                btn.dataset['monitorId'] = item.id;
-            }
-
-            const useEl = clone.querySelector('use');
-            if (useEl) {
-                useEl.setAttribute('href', item.icon);
-            }
-
-            const labelEl = clone.querySelector('.toggle-label');
-            if (labelEl instanceof HTMLElement) {
-                labelEl.dataset['i18n'] = labelKey;
-                labelEl.textContent = t(labelKey, item.label);
-            }
-
-            fragment.appendChild(clone);
-        });
-
-        container.innerHTML = '';
-        container.appendChild(fragment);
-
-        const handleMonitorClick = (e: Event) => {
-            const target = e.target;
-            if (!(target instanceof Element)) return;
-            const btn = target.closest('.monitor-toggle-btn');
-            if (btn instanceof HTMLElement) {
-                const mid = btn.dataset['monitorId'];
-                if (mid !== undefined && mid !== '') {
-                    btn.classList.toggle('active');
-                    this.toggleMonitorItem(mid, btn.classList.contains('active'));
-                }
-            }
-        };
-
-        container.addEventListener('click', handleMonitorClick);
-        this._cleanupFns.push(() => {
-            container.removeEventListener('click', handleMonitorClick);
-        });
+        this._initToggleGroup(
+            {
+                containerId: 'monitor-toggles',
+                templateId: 'tpl-monitor-toggle',
+                dataKey: 'monitorId',
+                hiddenItems: hiddenMonitors,
+                items: GeneralSettingsRenderer._monitorItems,
+                getLabelKey: (item) => `ui.launcher.settings.monitor_${item.id}`,
+                onToggle: (monitorId, enabled) => {
+                    this.toggleMonitorItem(monitorId, enabled);
+                },
+            },
+            context.t,
+        );
 
         hiddenMonitors.forEach((id) => {
-            const el = document.querySelector(
+            const element = document.querySelector(
                 `#system-monitor .sysmon-stat[data-monitor-id="${id}"]`,
             );
-            if (el) el.classList.add('hidden');
+            if (element instanceof HTMLElement) {
+                element.classList.add('hidden');
+            }
         });
 
         this._updateMonitorPanelVisibility(false);
         this._updateMonitorDivider(false);
-
         this._observeToggleGrid('monitor-toggles');
     }
 
     /**
      * Toggles a system monitor visibility.
      */
-    public toggleMonitorItem(id: string, enabled: boolean) {
-        const hidden = this._uiSettings.getHiddenMonitors();
-        const el = document.querySelector(`#system-monitor .sysmon-stat[data-monitor-id="${id}"]`);
+    public toggleMonitorItem(id: string, enabled: boolean): void {
+        const hidden = this._toggleHiddenItem(this._uiSettings.getHiddenMonitors(), id, enabled);
+        const element = document.querySelector(`#system-monitor .sysmon-stat[data-monitor-id="${id}"]`);
 
         if (enabled) {
-            const idx = hidden.indexOf(id);
-            if (idx > -1) hidden.splice(idx, 1);
             this._updateMonitorPanelVisibility(true);
             this._updateMonitorDivider(true);
-            if (el instanceof HTMLElement) {
-                this._showElement(el, 'hiding');
+            if (element instanceof HTMLElement) {
+                this._showElement(element, 'hiding');
             }
-        } else {
-            if (!hidden.includes(id)) hidden.push(id);
-            if (el instanceof HTMLElement) {
-                this._hideElement(el, 'hiding', () => {
+        } else if (element instanceof HTMLElement) {
+            this._hideElement(element, 'hiding', () => {
+                requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            this._updateMonitorPanelVisibility(true);
-                            this._updateMonitorDivider(true);
-                        });
+                        this._updateMonitorPanelVisibility(true);
+                        this._updateMonitorDivider(true);
                     });
                 });
-            } else {
-                this._updateMonitorPanelVisibility(true);
-                this._updateMonitorDivider(true);
-            }
+            });
+        } else {
+            this._updateMonitorPanelVisibility(true);
+            this._updateMonitorDivider(true);
         }
+
         this._uiSettings.setHiddenMonitors(hidden);
     }
 
     /**
      * Updates the main monitor panel visibility (hides if all items are hidden).
      */
-    private _updateMonitorPanelVisibility(_animate: boolean = true) {
+    private _updateMonitorPanelVisibility(_animate: boolean = true): void {
         const monitorPanel = document.getElementById('system-monitor');
         if (!monitorPanel) return;
 
         const hiddenMonitors = this._uiSettings.getHiddenMonitors();
-        const allHidden = hiddenMonitors.length === 6; // cpu, gpu, ram, vram, disk, network
+        const allHidden = hiddenMonitors.length === GeneralSettingsRenderer._monitorItems.length;
 
         if (allHidden) {
             monitorPanel.classList.add('adaptive-hidden');
@@ -308,16 +252,17 @@ export class GeneralSettingsRenderer {
     /**
      * Updates the divider visibility in the monitor panel.
      */
-    private _updateMonitorDivider(animate: boolean = true) {
+    private _updateMonitorDivider(animate: boolean = true): void {
         const divider = document.querySelector('.sysmon-divider');
         if (!(divider instanceof HTMLElement)) return;
 
         const hiddenMonitors = this._uiSettings.getHiddenMonitors();
-        const aboveItems = ['cpu', 'gpu', 'ram', 'vram'];
-        const belowItems = ['disk', 'network'];
-
-        const allAboveHidden = aboveItems.every((id) => hiddenMonitors.includes(id));
-        const allBelowHidden = belowItems.every((id) => hiddenMonitors.includes(id));
+        const allAboveHidden = GeneralSettingsRenderer._monitorGroups.upper.every((id) =>
+            hiddenMonitors.includes(id),
+        );
+        const allBelowHidden = GeneralSettingsRenderer._monitorGroups.lower.every((id) =>
+            hiddenMonitors.includes(id),
+        );
         const shouldHide = allAboveHidden || allBelowHidden;
 
         if (shouldHide) {
@@ -336,8 +281,8 @@ export class GeneralSettingsRenderer {
     private _showElement(element: HTMLElement, transitionClass: string): void {
         element.classList.add(transitionClass);
         element.classList.remove('hidden');
+        this._syncHiddenAccessibility(element, true);
 
-        // Force style flush so the transition starts from the collapsed state.
         element.getBoundingClientRect();
 
         requestAnimationFrame(() => {
@@ -359,6 +304,7 @@ export class GeneralSettingsRenderer {
         const finalize = () => {
             element.classList.add('hidden');
             element.classList.remove(transitionClass);
+            this._syncHiddenAccessibility(element, false);
             onHidden?.();
         };
 
@@ -384,22 +330,145 @@ export class GeneralSettingsRenderer {
         element.classList.add(transitionClass);
     }
 
+    private _syncHiddenAccessibility(element: HTMLElement, visible: boolean): void {
+        if (!element.classList.contains('nav-btn')) {
+            return;
+        }
+
+        if (visible) {
+            element.removeAttribute('aria-hidden');
+            element.removeAttribute('tabindex');
+            return;
+        }
+
+        element.setAttribute('aria-hidden', 'true');
+        element.setAttribute('tabindex', '-1');
+    }
+
     /**
      * Observes a container with a ResizeObserver to apply compact classes.
      */
-    private _observeToggleGrid(id: string) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const ro = new ResizeObserver((entries) => {
+    private _observeToggleGrid(id: string): void {
+        const element = document.getElementById(id);
+        if (!element) return;
+
+        const observer = new ResizeObserver((entries) => {
             for (const entry of entries) {
-                const w = entry.contentRect.width;
-                if (w < 450) el.classList.add('compact');
-                else el.classList.remove('compact');
-                if (w < 300) el.classList.add('super-compact');
-                else el.classList.remove('super-compact');
+                const width = entry.contentRect.width;
+                const pendingFrame = this._resizeFrames.get(id);
+                if (pendingFrame !== undefined) {
+                    globalThis.cancelAnimationFrame(pendingFrame);
+                }
+
+                const nextCompact = width < 450;
+                const nextSuperCompact = width < 300;
+                const frameId = globalThis.requestAnimationFrame(() => {
+                    this._resizeFrames.delete(id);
+                    element.classList.toggle('compact', nextCompact);
+                    element.classList.toggle('super-compact', nextSuperCompact);
+                });
+                this._resizeFrames.set(id, frameId);
             }
         });
-        ro.observe(el);
-        this._observers.push(ro);
+
+        observer.observe(element);
+        this._observers.push(observer);
+    }
+
+    private _initToggleGroup(
+        config: IToggleGroupConfig,
+        translate: IAppSettingsUIContext['t'],
+    ): void {
+        const container = document.getElementById(config.containerId);
+        if (!(container instanceof HTMLElement)) {
+            return;
+        }
+
+        const template = document.getElementById(config.templateId) as HTMLTemplateElement | null;
+        if (template === null) {
+            tracer.error(`[GeneralSettingsRenderer] template #${config.templateId} not found`);
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        config.items.forEach((item) => {
+            fragment.appendChild(
+                this._createToggleItem(
+                    template,
+                    item,
+                    config.hiddenItems,
+                    config.dataKey,
+                    translate,
+                    config.getLabelKey,
+                ),
+            );
+        });
+
+        container.innerHTML = '';
+        container.appendChild(fragment);
+
+        const handleClick = (event: Event) => {
+            const target = event.target;
+            if (!(target instanceof Element)) return;
+
+            const button = target.closest('.monitor-toggle-btn');
+            if (!(button instanceof HTMLElement)) return;
+
+            const itemId = button.dataset[config.dataKey];
+            if (itemId === undefined || itemId === '') return;
+
+            button.classList.toggle('active');
+            config.onToggle(itemId, button.classList.contains('active'));
+        };
+
+        container.addEventListener('click', handleClick);
+        this._cleanupFns.push(() => {
+            container.removeEventListener('click', handleClick);
+        });
+    }
+
+    private _createToggleItem(
+        template: HTMLTemplateElement,
+        item: IToggleItem,
+        hiddenItems: string[],
+        dataKey: IToggleGroupConfig['dataKey'],
+        translate: IAppSettingsUIContext['t'],
+        getLabelKey: IToggleGroupConfig['getLabelKey'],
+    ): DocumentFragment {
+        const labelKey = getLabelKey(item);
+        const clone = template.content.cloneNode(true) as DocumentFragment;
+
+        const button = clone.querySelector('.monitor-toggle-btn');
+        if (button instanceof HTMLElement) {
+            if (hiddenItems.includes(item.id)) {
+                button.classList.remove('active');
+            }
+            button.dataset[dataKey] = item.id;
+        }
+
+        const useElement = clone.querySelector('use');
+        if (useElement !== null) {
+            useElement.setAttribute('href', item.icon);
+        }
+
+        const labelElement = clone.querySelector('.toggle-label');
+        if (labelElement instanceof HTMLElement) {
+            labelElement.dataset['i18n'] = labelKey;
+            labelElement.textContent = translate(labelKey, item.label);
+        }
+
+        return clone;
+    }
+
+    private _toggleHiddenItem(items: string[], id: string, enabled: boolean): string[] {
+        if (enabled) {
+            return items.filter((item) => item !== id);
+        }
+
+        if (items.includes(id)) {
+            return [...items];
+        }
+
+        return [...items, id];
     }
 }

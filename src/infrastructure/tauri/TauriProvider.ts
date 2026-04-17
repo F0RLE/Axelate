@@ -230,6 +230,8 @@ export class TauriProvider implements IBridge {
                 use_gpu: true,
                 debug_mode: false,
             } as Bindings.AppSettings,
+            get_module_settings: {},
+            get_local_server_base_url: 'http://127.0.0.1:3000',
             get_translations: {},
             get_system_language: 'en',
             get_config: {

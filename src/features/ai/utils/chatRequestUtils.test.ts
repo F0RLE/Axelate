@@ -60,6 +60,7 @@ describe('chatRequestUtils', () => {
                 thinking_level: 'high',
                 max_tokens: undefined,
                 attachments: [],
+                web_search: undefined,
             });
         });
 
@@ -132,6 +133,22 @@ describe('chatRequestUtils', () => {
             const request = constructChatRequest([], mockMessage, [], config);
 
             expect(request.model).toBe('gemini-2.5-pro');
+        });
+
+        it('should include web search flag when enabled', () => {
+            const config = {
+                providerId: 'gpt',
+                model: 'gpt-5.4',
+                apiKey: 'sk-123',
+                sessionId: 'session-1',
+                webSearchEnabled: true,
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.web_search).toEqual({
+                enabled: true,
+            });
         });
     });
 });

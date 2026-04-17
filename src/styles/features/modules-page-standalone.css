@@ -127,23 +127,28 @@
     align-items: center;
     justify-content: center;
     min-height: 2.5rem;
-    padding: 0.65rem 1rem;
-    border-radius: 12px;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-    color: #fff;
-    font-size: 0.85rem;
+    min-width: 144px;
+    padding: 0.6rem 1.6rem;
+    border: 1px solid var(--module-button-border);
+    border-radius: var(--module-button-radius);
+    background: var(--module-button-bg-soft);
+    color: var(--module-button-text);
+    font-size: 1rem;
+    font-weight: 600;
     line-height: 1;
-    box-shadow: 0 10px 24px rgba(var(--primary-raw), 0.24);
+    box-shadow: none;
     transition:
         transform var(--transition-fast) var(--ease-smooth),
-        filter var(--transition-fast) var(--ease-smooth),
-        box-shadow var(--transition-fast) var(--ease-smooth);
+        background var(--transition-fast) var(--ease-smooth),
+        color var(--transition-fast) var(--ease-smooth),
+        border-color var(--transition-fast) var(--ease-smooth);
 }
 
 .model-card-action:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.08);
-    box-shadow: 0 14px 28px rgba(var(--primary-raw), 0.3);
+    transform: translateY(-2px);
+    background: var(--module-button-bg-hover);
+    border-color: var(--module-button-border-hover);
+    color: #ffffff;
 }
 
 .model-card-premium.selected .model-card-action {

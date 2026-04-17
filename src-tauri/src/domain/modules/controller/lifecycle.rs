@@ -1,12 +1,14 @@
-use crate::domain::modules::controller::Controller;
+use crate::domain::modules::controller::script_runtime;
+use crate::domain::modules::controller::{Controller, process};
 use crate::domain::modules::lifecycle::{CommandDefinition, ModuleManifest};
 use crate::errors::AppError;
 use crate::models::ControlResponse;
+use crate::utils::paths::LOG_DIR;
 use std::fs::OpenOptions;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 use tokio::time::timeout;
 
 fn build_command(cmd: CommandDefinition) -> Command {
@@ -53,6 +55,17 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Safely starts a module with the given manifest
     pub async fn start(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
+        if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
+            if let Some(existing_pid) = self.reconcile_existing_script_processes(&entry_path).await
+            {
+                return Ok(ControlResponse {
+                    success: true,
+                    message: format!("Module already running with PID {existing_pid}"),
+                    status: Some("running".to_string()),
+                });
+            }
+        }
+
         // 1. Guard against double-start
         // Check registry first (atomic-ish)
         if self.controller.registry.contains_key(&self.module_id) {
@@ -75,54 +88,63 @@ impl<'a> LifecycleExecutor<'a> {
             });
         }
 
-        // 2. Select start command
-        let start_cmd = manifest
-            .lifecycle
-            .as_ref()
-            .and_then(|l| l.start.clone())
-            .ok_or_else(|| AppError::Config("No start script defined".to_string()))?;
-
-        // 3. Prepare Logging (runtime.log) with basic capping
-        let log_path = self.module_path.join("runtime.log");
-
-        // Simple log capping: if file > 10MB, truncate it
-        if let Ok(metadata) = std::fs::metadata(&log_path)
-            && metadata.len() > 10 * 1024 * 1024
-        {
-            tracing::info!(
-                "Truncating large runtime.log ({} bytes) for {module_id}",
-                metadata.len(),
-                module_id = self.module_id
-            );
-            let _ = std::fs::remove_file(&log_path);
-        }
-
-        let log_file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .map_err(|e| AppError::Internal {
-                request_id: None,
-                message: format!("Failed to open runtime.log: {e}"),
-            })?;
-
         // 4. Spawn process
-        let mut builder = build_command(start_cmd);
+        let child = if script_runtime::supports_manifest(manifest) {
+            script_runtime::spawn_process(self.module_path, manifest).await?
+        } else {
+            // 3. Prepare Logging (runtime.log) with basic capping
+            let log_path = self.module_log_path();
+            if let Some(log_dir) = log_path.parent() {
+                std::fs::create_dir_all(log_dir).map_err(|e| AppError::Io(e.to_string()))?;
+            }
 
-        builder
-            .current_dir(self.module_path)
-            .stdout(Stdio::from(
-                log_file
-                    .try_clone()
-                    .map_err(|e| AppError::Io(e.to_string()))?,
-            ))
-            .stderr(Stdio::from(log_file));
+            // Simple log capping: if file > 10MB, truncate it
+            if let Ok(metadata) = std::fs::metadata(&log_path)
+                && metadata.len() > 10 * 1024 * 1024
+            {
+                tracing::info!(
+                    "Truncating large runtime.log ({} bytes) for {module_id}",
+                    metadata.len(),
+                    module_id = self.module_id
+                );
+                let _ = std::fs::remove_file(&log_path);
+            }
 
-        let child = builder.spawn().map_err(|e| AppError::Internal {
-            request_id: None,
-            message: format!("Failed to spawn process: {e}"),
-        })?;
+            let log_file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .map_err(|e| AppError::Internal {
+                    request_id: None,
+                    message: format!("Failed to open runtime.log: {e}"),
+                })?;
 
+            let start_cmd = manifest
+                .lifecycle
+                .as_ref()
+                .and_then(|l| l.start.clone())
+                .ok_or_else(|| AppError::Config("No start script defined".to_string()))?;
+
+            let mut builder = build_command(start_cmd);
+            builder
+                .current_dir(self.module_path)
+                .stdout(Stdio::from(
+                    log_file
+                        .try_clone()
+                        .map_err(|e| AppError::Io(e.to_string()))?,
+                ))
+                .stderr(Stdio::from(log_file));
+
+            builder.spawn().map_err(|e| AppError::Internal {
+                request_id: None,
+                message: format!("Failed to spawn process: {e}"),
+            })?
+        };
+
+        Ok(self.register_spawned_child(child))
+    }
+
+    fn register_spawned_child(&self, child: Child) -> ControlResponse {
         let pid = child.id().unwrap_or(0);
         let module_id = self.module_id.clone();
         let controller_registry = self.controller.registry; // Pass registry reference to the task
@@ -171,16 +193,35 @@ impl<'a> LifecycleExecutor<'a> {
             let _ = std::fs::rename(temp_pid_file, pid_file);
         }
 
-        Ok(ControlResponse {
+        ControlResponse {
             success: true,
             message: format!("Started process with PID {pid}"),
             status: Some("running".to_string()),
-        })
+        }
+    }
+
+    fn module_log_path(&self) -> PathBuf {
+        LOG_DIR
+            .join("Engines")
+            .join(&self.module_id)
+            .join("runtime.log")
+    }
+
+    fn persist_pid(&self, pid: usize) {
+        let pid_file = self.module_path.join("module.pid");
+        let temp_pid_file = self.module_path.join("module.pid.tmp");
+        if let Err(error) = std::fs::write(&temp_pid_file, pid.to_string()) {
+            tracing::error!("Failed to write temp PID file: {error}");
+            return;
+        }
+
+        let _ = std::fs::rename(temp_pid_file, pid_file);
     }
 
     /// Gracefully stops a module with escalation
     pub async fn stop(&self, manifest: &ModuleManifest) -> ControlResponse {
         tracing::info!("Stopping module: {}", self.module_id);
+        let script_entry_path = self.resolve_script_entry_path(manifest);
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
@@ -208,6 +249,10 @@ impl<'a> LifecycleExecutor<'a> {
                 tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
                 let _ = child.kill().await;
             }
+        }
+
+        if let Some(entry_path) = script_entry_path.as_ref() {
+            self.kill_matching_script_processes(entry_path);
         }
 
         // 3. Escalation check (fallback for orphans or if still running)
@@ -247,6 +292,53 @@ impl<'a> LifecycleExecutor<'a> {
             success: true,
             message: format!("Module {} stopped", self.module_id),
             status: Some("stopped".to_string()),
+        }
+    }
+
+    fn resolve_script_entry_path(&self, manifest: &ModuleManifest) -> Option<std::path::PathBuf> {
+        let entry = manifest.entry.as_ref()?.trim();
+        if entry.is_empty() || !script_runtime::supports_manifest(manifest) {
+            return None;
+        }
+
+        Some(self.module_path.join(entry))
+    }
+
+    async fn reconcile_existing_script_processes(&self, entry_path: &Path) -> Option<usize> {
+        let matching_pids = process::find_script_module_processes(self.module_path, entry_path);
+        if matching_pids.is_empty() {
+            return None;
+        }
+
+        if let Some(&existing_pid) = matching_pids.first()
+            && matching_pids.len() == 1
+        {
+            self.persist_pid(existing_pid);
+            return Some(existing_pid);
+        }
+
+        tracing::warn!(
+            "Detected duplicate script module processes for {}: {:?}. Cleaning them before start",
+            self.module_id,
+            matching_pids
+        );
+
+        if let Some(mut child) = self.controller.unregister(&self.module_id) {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
+
+        for pid in matching_pids {
+            let _ = process::kill_orphan(pid);
+        }
+
+        let _ = std::fs::remove_file(self.module_path.join("module.pid"));
+        None
+    }
+
+    fn kill_matching_script_processes(&self, entry_path: &Path) {
+        for pid in process::find_script_module_processes(self.module_path, entry_path) {
+            let _ = process::kill_orphan(pid);
         }
     }
 
@@ -311,6 +403,12 @@ mod tests {
             name: "Registry Test".to_string(),
             version: "1.0.0".to_string(),
             description: String::new(),
+            author: None,
+            category: None,
+            icon: None,
+            readme: None,
+            settings_schema: None,
+            settings_ui: None,
             entry: None,
             dependencies: Vec::new(),
             lifecycle: Some(LifecycleScripts {

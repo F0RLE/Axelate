@@ -234,6 +234,16 @@ describe('AppUI lifecycle', () => {
         appUI = null;
     });
 
+    it('should reuse a single action feedback node across repeated calls', () => {
+        appUI = createAppUI();
+
+        appUI.showActionFeedback('success');
+        appUI.showActionFeedback('error');
+
+        expect(document.querySelectorAll('#action-feedback')).toHaveLength(1);
+        expect(document.getElementById('action-feedback')?.classList.contains('error')).toBe(true);
+    });
+
     it('should delegate modal opening', () => {
         appUI = createAppUI();
         const modalOpenSpy = vi.spyOn(

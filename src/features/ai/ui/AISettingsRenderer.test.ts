@@ -15,6 +15,7 @@ import { aiSettingsRenderer } from './AISettingsRenderer';
 describe('AISettingsRenderer', () => {
     const settingsService = {
         getSecureKeyMeta: vi.fn(),
+        getSecureKey: vi.fn(),
         saveSecureKey: vi.fn(),
         hasSecureKey: vi.fn(),
         validateApiKey: vi.fn(),
@@ -26,6 +27,8 @@ describe('AISettingsRenderer', () => {
         setSelectedAIModel: vi.fn(),
         getThinkingLevel: vi.fn(),
         setThinkingLevel: vi.fn(),
+        getInternetAccessEnabled: vi.fn(),
+        setInternetAccessEnabled: vi.fn(),
     };
 
     const tauri = {
@@ -57,12 +60,14 @@ describe('AISettingsRenderer', () => {
     beforeEach(async () => {
         document.body.innerHTML = `<div id="root"></div>`;
         settingsService.getSecureKeyMeta.mockResolvedValue({ exists: true, length: 16 });
+        settingsService.getSecureKey.mockResolvedValue('stored-secret');
         settingsService.saveSecureKey.mockResolvedValue(undefined);
         settingsService.hasSecureKey.mockResolvedValue(true);
         settingsService.validateApiKey.mockResolvedValue(true);
         settingsService.validateStoredApiKey.mockResolvedValue(true);
         aiSettings.getSelectedAIModel.mockReturnValue('reasoner');
         aiSettings.getThinkingLevel.mockReturnValue('medium');
+        aiSettings.getInternetAccessEnabled.mockReturnValue(true);
         tauri.invoke.mockResolvedValue(true);
         tauri.openUrl.mockResolvedValue(undefined);
 
@@ -118,6 +123,9 @@ describe('AISettingsRenderer', () => {
         const thinkingCard = container.querySelector(
             '.thinking-option-card[data-value="high"]',
         ) as HTMLElement;
+        const internetCard = container.querySelector(
+            '.internet-access-card[data-value="off"]',
+        ) as HTMLElement;
 
         expect(input.value).toBe('••••••••••••••••');
         expect(input.dataset['storedMasked']).toBe('true');
@@ -139,13 +147,16 @@ describe('AISettingsRenderer', () => {
             new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
         );
         expect(aiSettings.setThinkingLevel).toHaveBeenCalledWith('gpt', 'high');
+
+        internetCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(aiSettings.setInternetAccessEnabled).toHaveBeenCalledWith('gpt', false);
         expect(
             (globalThis as unknown as { applyTranslations: ReturnType<typeof vi.fn> })
                 .applyTranslations,
         ).toHaveBeenCalled();
     });
 
-    it('keeps stored key hidden and updates selected model stats', async () => {
+    it('reveals stored key on demand and updates selected model stats', async () => {
         const container = document.getElementById('root') as HTMLElement;
         await aiSettingsRenderer.render(container, {
             id: 'gpt',
@@ -156,16 +167,11 @@ describe('AISettingsRenderer', () => {
         const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
         expect(input.type).toBe('text');
         expect(input.dataset['storedMasked']).toBe('true');
-        aiSettingsRenderer.toggleKeyVisibility('gpt');
-        expect(input.value).toBe('••••••••••••••••');
+        await aiSettingsRenderer.toggleKeyVisibility('gpt');
+        expect(settingsService.getSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(input.value).toBe('stored-secret');
         expect(input.dataset['storedMasked']).toBe('true');
-        expect(input.dataset['storedRevealed']).toBeUndefined();
-        expect(
-            (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
-        ).toHaveBeenCalledWith(
-            'ui.settings.stored_key_hidden:Stored key stays hidden. Type a new key to replace it.',
-            'info',
-        );
+        expect(input.dataset['storedRevealed']).toBe('true');
 
         aiSettingsRenderer.selectModel('gpt', 'fast');
         expect(
@@ -178,6 +184,26 @@ describe('AISettingsRenderer', () => {
         ).toBe(true);
         expect(document.getElementById('gpt-model-stats')?.textContent).toContain(
             'Stats unavailable',
+        );
+    });
+
+    it('shows an error toast when stored key reveal fails', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+        settingsService.getSecureKey.mockResolvedValueOnce(null);
+
+        await aiSettingsRenderer.render(container, {
+            id: 'gpt',
+            name: 'GPT',
+            apiProviderData: { models },
+        } as never);
+
+        await aiSettingsRenderer.toggleKeyVisibility('gpt');
+
+        expect(
+            (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
+        ).toHaveBeenCalledWith(
+            'ui.settings.key_reveal_error:Failed to reveal stored key',
+            'error',
         );
     });
 

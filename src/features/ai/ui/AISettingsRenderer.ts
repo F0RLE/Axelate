@@ -146,9 +146,9 @@ class AISettingsRenderer extends BaseComponent {
         const defaultModelId = firstModel ? firstModel.id : '';
         const savedModel = this._aiSettings?.getSelectedAIModel(appId) ?? defaultModelId;
         const t = this._getTranslator();
-
         const isCleanApp =
             ['axelate', 'axelate-platform'].includes(appId) || appId.includes('telegram');
+        const supportsInternetAccess = !isCleanApp;
 
         this._activeContainer = container;
         const rawHtml = isCleanApp
@@ -197,6 +197,7 @@ class AISettingsRenderer extends BaseComponent {
                     </section>
 
                     ${this._renderThinkingSection(appId, savedModel, models, t)}
+                    ${supportsInternetAccess ? this._renderInternetAccessSection(appId, t) : ''}
 
                     <!-- 4. STATS SECTION (CLEAN) -->
                     <section id="${appId}-model-stats" class="ai-stats-section" aria-live="polite">
@@ -245,19 +246,12 @@ class AISettingsRenderer extends BaseComponent {
                         <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
                     </div>
                     <div id="${appId}-thinking-grid" class="thinking-grid four-col" role="radiogroup" aria-label="Thinking Level">
-                        <div class="thinking-option-card ${isOff ? 'selected' : ''}"
+                        <div class="thinking-option-card ${isHigh ? 'selected' : ''}"
                             role="radio"
-                            aria-checked="${String(isOff)}"
+                            aria-checked="${String(isHigh)}"
                             tabindex="0"
-                            data-value="off">
-                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.off">${t('ui.settings.thinking.off', 'Off')}</div>
-                        </div>
-                        <div class="thinking-option-card ${isLow ? 'selected' : ''}"
-                            role="radio"
-                            aria-checked="${String(isLow)}"
-                            tabindex="0"
-                            data-value="low">
-                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.low">${t('ui.settings.thinking.low', 'Low')}</div>
+                            data-value="high">
+                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
                         </div>
                         <div class="thinking-option-card ${isMedium ? 'selected' : ''}"
                             role="radio"
@@ -266,12 +260,49 @@ class AISettingsRenderer extends BaseComponent {
                             data-value="medium">
                             <div class="thinking-option-title" data-i18n="ui.settings.thinking.medium">${t('ui.settings.thinking.medium', 'Medium')}</div>
                         </div>
-                        <div class="thinking-option-card ${isHigh ? 'selected' : ''}"
+                        <div class="thinking-option-card ${isLow ? 'selected' : ''}"
                             role="radio"
-                            aria-checked="${String(isHigh)}"
+                            aria-checked="${String(isLow)}"
                             tabindex="0"
-                            data-value="high">
-                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
+                            data-value="low">
+                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.low">${t('ui.settings.thinking.low', 'Low')}</div>
+                        </div>
+                        <div class="thinking-option-card ${isOff ? 'selected' : ''}"
+                            role="radio"
+                            aria-checked="${String(isOff)}"
+                            tabindex="0"
+                            data-value="off">
+                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.off">${t('ui.settings.thinking.off', 'Off')}</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        `;
+    }
+
+    private _renderInternetAccessSection(appId: string, t: TranslateFunc): string {
+        const isEnabled = this._aiSettings?.getInternetAccessEnabled(appId) ?? true;
+
+        return `
+            <section id="${appId}-internet-section" class="ai-web-section" aria-labelledby="${appId}-internet-title">
+                <div class="ai-content-panel">
+                    <div class="settings-card-header-center">
+                        <h3 id="${appId}-internet-title">🌐 <span data-i18n="ui.settings.internet_access">${t('ui.settings.internet_access', 'Internet Access')}</span></h3>
+                    </div>
+                    <div id="${appId}-internet-grid" class="thinking-grid" role="radiogroup" aria-label="${t('ui.settings.internet_access', 'Internet Access')}">
+                        <div class="thinking-option-card internet-access-card ${isEnabled ? 'selected' : ''}"
+                            role="radio"
+                            aria-checked="${String(isEnabled)}"
+                            tabindex="0"
+                            data-value="on">
+                            <div class="thinking-option-title" data-i18n="ui.common.on">${t('ui.common.on', 'On')}</div>
+                        </div>
+                        <div class="thinking-option-card internet-access-card ${!isEnabled ? 'selected' : ''}"
+                            role="radio"
+                            aria-checked="${String(!isEnabled)}"
+                            tabindex="0"
+                            data-value="off">
+                            <div class="thinking-option-title" data-i18n="ui.common.off">${t('ui.common.off', 'Off')}</div>
                         </div>
                     </div>
                 </div>
@@ -333,7 +364,7 @@ class AISettingsRenderer extends BaseComponent {
 
         return `
             <div class="price-row context-row">
-                <span class="price-tag context-tag">Ctx: ${DOMPurify.sanitize(this._formatCompactContext(contextWindow), PURIFY_CONFIG)}</span>
+                <span class="price-tag context-tag">${this._getTranslator()('ui.settings.context_short', 'Ctx')}: ${DOMPurify.sanitize(this._formatCompactContext(contextWindow), PURIFY_CONFIG)}</span>
             </div>
         `;
     }
@@ -387,7 +418,7 @@ class AISettingsRenderer extends BaseComponent {
         if (isFree) {
             html += `
                 <div class="price-row">
-                    <span class="price-tag free">Free</span>
+                    <span class="price-tag free">${this._getTranslator()('ui.settings.free', 'Free')}</span>
                 </div>
             `;
         } else {
@@ -404,8 +435,8 @@ class AISettingsRenderer extends BaseComponent {
             if (inPrice !== null && outPrice !== null) {
                 html += `
                 <div class="price-row">
-                    <span class="price-tag">In: ${inPrice}</span>
-                    <span class="price-tag">Out: ${outPrice}</span>
+                    <span class="price-tag">${this._getTranslator()('ui.settings.price_input', 'In')}: ${inPrice}</span>
+                    <span class="price-tag">${this._getTranslator()('ui.settings.price_output', 'Out')}: ${outPrice}</span>
                 </div>
             `;
             }
@@ -542,7 +573,7 @@ class AISettingsRenderer extends BaseComponent {
         });
 
         addListener(container.querySelector(`#${appId}-key-toggle-btn`), 'click', () => {
-            this.toggleKeyVisibility(appId);
+            void this.toggleKeyVisibility(appId);
         });
 
         // Add handler for the OpenRouter link
@@ -598,8 +629,6 @@ class AISettingsRenderer extends BaseComponent {
                 target.classList.add('selected');
                 target.setAttribute('aria-checked', 'true');
 
-                target.setAttribute('aria-checked', 'true');
-
                 const savedModel = this._aiSettings?.getSelectedAIModel(appId) ?? '';
                 if (savedModel !== '') {
                     this.selectModel(appId, savedModel);
@@ -627,6 +656,44 @@ class AISettingsRenderer extends BaseComponent {
             });
         }
 
+        const internetGrid = container.querySelector(`#${appId}-internet-grid`);
+        if (internetGrid !== null) {
+            const buttons = Array.from(
+                internetGrid.querySelectorAll<HTMLElement>('.internet-access-card'),
+            );
+
+            const updateInternetAccess = (target: HTMLElement) => {
+                const enabled = (target.dataset['value'] ?? 'on') === 'on';
+                this._aiSettings?.setInternetAccessEnabled(appId, enabled);
+
+                buttons.forEach((button) => {
+                    const buttonEnabled = (button.dataset['value'] ?? 'off') === 'on';
+                    button.classList.toggle('selected', buttonEnabled === enabled);
+                    button.setAttribute('aria-checked', String(buttonEnabled === enabled));
+                });
+            };
+
+            buttons.forEach((btn) => {
+                btn.addEventListener(
+                    'click',
+                    (event) => {
+                        updateInternetAccess(event.currentTarget as HTMLElement);
+                    },
+                    { signal: renderSignal },
+                );
+                btn.addEventListener(
+                    'keydown',
+                    (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            updateInternetAccess(event.currentTarget as HTMLElement);
+                        }
+                    },
+                    { signal: renderSignal },
+                );
+            });
+        }
+
         const globalContext = getGlobalWin();
         if (typeof globalContext.applyTranslations === 'function') {
             globalContext.applyTranslations();
@@ -639,21 +706,35 @@ class AISettingsRenderer extends BaseComponent {
      * @param appId - Unique provider identifier
      * @sideeffect Modifies input type and innerHTML
      */
-    public toggleKeyVisibility(appId: string): void {
+    public async toggleKeyVisibility(appId: string): Promise<void> {
         const input = this._queryActiveElement<HTMLInputElement | HTMLTextAreaElement>(
             `#${appId}-api-key-input`,
         );
         const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-toggle-btn`);
 
         if (input !== null && btn !== null) {
-            if (input.dataset['storedMasked'] === 'true') {
-                this._showToast(
-                    this._getTranslator()(
-                        'ui.settings.stored_key_hidden',
-                        'Stored key stays hidden. Type a new key to replace it.',
-                    ),
-                    'info',
+            if (
+                input.dataset['storedMasked'] === 'true' &&
+                input.dataset['storedRevealed'] !== 'true'
+            ) {
+                const revealedKey = await this._settingsService?.getSecureKey(
+                    this._getKeyProviderId(appId),
                 );
+                if (revealedKey === undefined || revealedKey === null || revealedKey === '') {
+                    this._showToast(
+                        this._getTranslator()(
+                            'ui.settings.key_reveal_error',
+                            'Failed to reveal stored key',
+                        ),
+                        'error',
+                    );
+                    return;
+                }
+
+                input.value = revealedKey;
+                input.dataset['storedRevealed'] = 'true';
+                input.classList.remove('is-masked');
+                btn.innerHTML = ICONS.VISIBLE;
                 return;
             }
 
@@ -739,6 +820,7 @@ class AISettingsRenderer extends BaseComponent {
         length?: number,
     ): void {
         input.dataset['storedMasked'] = 'true';
+        delete input.dataset['storedRevealed'];
         delete input.dataset['keyDirty'];
         input.classList.remove('is-masked');
         input.value = this._buildStoredKeyMask(length);
@@ -750,6 +832,7 @@ class AISettingsRenderer extends BaseComponent {
 
     private _clearStoredKeyMask(input: HTMLInputElement | HTMLTextAreaElement): void {
         delete input.dataset['storedMasked'];
+        delete input.dataset['storedRevealed'];
         input.value = '';
         input.classList.add('is-masked');
         input.placeholder = this._getTranslator()(

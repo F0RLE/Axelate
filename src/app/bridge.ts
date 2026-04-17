@@ -287,6 +287,7 @@ export class GlobalBridge {
                 'gpt';
 
             const model = (body['model'] as string | undefined) ?? this._resolveModel(provider);
+            const webSearchEnabled = this._core.aiSettings.getInternetAccessEnabled(provider);
 
             const res = await this._core.tauriProvider.invoke('send_chat_message', {
                 request: {
@@ -294,6 +295,7 @@ export class GlobalBridge {
                     model: model,
                     messages: (body['history'] as unknown[] | undefined) ?? [],
                     api_key: null,
+                    web_search: webSearchEnabled ? { enabled: true } : undefined,
                 },
             });
             return new Response(JSON.stringify(res));

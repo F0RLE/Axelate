@@ -201,6 +201,10 @@ export class CatalogService {
                     IConfigField
                 >;
             }
+
+            if (installedModule?.settingsUi !== undefined) {
+                app.settingsUi = installedModule.settingsUi;
+            }
         };
 
         this._appData.ai.forEach(mergeAppSchema);

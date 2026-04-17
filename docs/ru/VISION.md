@@ -112,6 +112,7 @@ Backend сам:
 
 - [Getting Started](../en/getting-started.md)
 - [Architecture](../en/architecture.md)
+- [Module Platform Spec](./MODULE_PLATFORM_SPEC.md)
 - [Roadmap](../en/ROADMAP.md)
 - [Automation](../en/AUTOMATION.md)
 - [Security Hardening](../en/SECURITY_HARDENING.md)

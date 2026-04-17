@@ -8,6 +8,7 @@ function createMockTauri(): TauriProvider {
         isTauri: vi.fn(() => true),
         listen: vi.fn().mockResolvedValue(() => {}),
         saveSecureKey: vi.fn().mockResolvedValue(undefined),
+        getSecureKey: vi.fn().mockResolvedValue(null),
         hasSecureKey: vi.fn().mockResolvedValue(false),
         getSecureKeyMeta: vi.fn().mockResolvedValue({ exists: false, length: 0 }),
     } as unknown as TauriProvider;
@@ -244,6 +245,27 @@ describe('SettingsService', () => {
             const result = await service.getSecureKeyMeta('gemini');
 
             expect(result).toEqual({ exists: false, length: 0 });
+        });
+    });
+
+    describe('getSecureKey', () => {
+        it('should return the decrypted key from backend', async () => {
+            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockResolvedValue('secret');
+
+            const result = await service.getSecureKey('gemini');
+
+            expect(result).toBe('secret');
+            expect(tauri.getSecureKey).toHaveBeenCalledWith('gemini_api_key');
+        });
+
+        it('should return null on error', async () => {
+            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(
+                new Error('fail'),
+            );
+
+            const result = await service.getSecureKey('gemini');
+
+            expect(result).toBeNull();
         });
     });
 

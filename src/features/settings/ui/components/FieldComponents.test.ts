@@ -3,6 +3,7 @@ import { createField } from './FieldFactory';
 import { NumberField } from './NumberField';
 import { SelectField } from './SelectField';
 import { TextField } from './TextField';
+import { TextAreaField } from './TextAreaField';
 import { ToggleField } from './ToggleField';
 
 describe('setting field components', () => {
@@ -83,5 +84,18 @@ describe('setting field components', () => {
 
         expect(field.getValue()).toBe('beta');
         expect(nextValue).toBe('beta');
+    });
+
+    it('creates a textarea field with placeholder and rows', () => {
+        const field = createField(
+            { fieldType: 'textarea', placeholder: 'Type here', rows: 6 } as never,
+            'hello',
+        ) as TextAreaField;
+
+        expect(field).toBeInstanceOf(TextAreaField);
+        const textarea = field.render() as HTMLTextAreaElement;
+        expect(textarea.placeholder).toBe('Type here');
+        expect(textarea.rows).toBe(6);
+        expect(field.getValue()).toBe('hello');
     });
 });

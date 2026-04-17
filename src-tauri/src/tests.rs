@@ -84,7 +84,9 @@ mod app_tests {
     /// Test directory paths are correctly derived
     #[test]
     fn test_directory_paths() {
-        use crate::utils::paths::{CONFIG_DIR, LOG_DIR, MODELS_DIR, SYSTEM_ROOT, USER_ROOT};
+        use crate::utils::paths::{
+            CONFIG_DIR, LOG_DIR, MODELS_DIR, RUNTIME_DIR, SYSTEM_ROOT, USER_ROOT,
+        };
 
         // Verify all derived paths are rooted under the expected test directories.
         assert!(USER_ROOT.starts_with(crate::utils::paths::APPDATA_ROOT.as_path()));
@@ -101,6 +103,8 @@ mod app_tests {
         assert!(LOG_DIR.ends_with("Logs"));
         assert!(MODELS_DIR.starts_with(SYSTEM_ROOT.as_path()));
         assert!(MODELS_DIR.ends_with("Models"));
+        assert!(RUNTIME_DIR.starts_with(SYSTEM_ROOT.as_path()));
+        assert!(RUNTIME_DIR.ends_with("Runtime"));
     }
 
     /// Test file paths are correctly derived

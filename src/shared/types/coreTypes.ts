@@ -51,6 +51,7 @@ export interface IApp {
     comingSoon?: boolean;
     managedExternally?: boolean;
     configSchema?: Record<string, IConfigField>;
+    settingsUi?: string | null;
     apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI
 }
 

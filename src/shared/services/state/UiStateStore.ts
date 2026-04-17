@@ -26,6 +26,7 @@ export interface IUIState {
     resolution_zoom: Record<string, number>;
     sound_enabled: boolean;
     ai_thinking_level: Record<string, ThinkingLevel>;
+    ai_web_search_enabled: Record<string, boolean>;
     local_max_output_tokens: Record<string, number>;
     last_active_provider: string | null;
     ai_session_id: string | null;
@@ -47,6 +48,7 @@ const DEFAULT_UI_STATE: IUIState = {
     resolution_zoom: {},
     sound_enabled: true,
     ai_thinking_level: {},
+    ai_web_search_enabled: {},
     local_max_output_tokens: {},
     last_active_provider: null,
     ai_session_id: null,

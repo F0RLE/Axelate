@@ -19,6 +19,10 @@ export const commands = {
 	saveSettings: (settings: AppSettings) => typedError<null, AppError>(__TAURI_INVOKE("save_settings", { settings })),
 	// Saves a single setting by key-value pair
 	saveSetting: (key: string, value: string) => typedError<null, AppError>(__TAURI_INVOKE("save_setting", { key, value })),
+	// Retrieves persisted settings for a specific module.
+	getModuleSettings: (moduleId: string) => typedError<{ [key in string]: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } }, AppError>(__TAURI_INVOKE("get_module_settings", { moduleId })),
+	// Saves persisted settings for a specific module.
+	saveModuleSettings: (moduleId: string, settings: { [key in string]: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } }) => typedError<null, AppError>(__TAURI_INVOKE("save_module_settings", { moduleId, settings })),
 	// Detects and returns the current system language code
 	getSystemLanguage: () => typedError<string, AppError>(__TAURI_INVOKE("get_system_language")),
 	// Retrieves log entries since a given timestamp
@@ -49,6 +53,8 @@ export const commands = {
 	getGpuInfo: () => typedError<GpuInfo, AppError>(__TAURI_INVOKE("get_gpu_info")),
 	// Pauses or resumes system monitoring
 	setMonitoringPaused: (paused: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_monitoring_paused", { paused })),
+	// Returns the current local HTTP server base URL.
+	getLocalServerBaseUrl: () => typedError<string, AppError>(__TAURI_INVOKE("get_local_server_base_url")),
 	// Retrieves list of all available modules (AI and services)
 	getModules: () => typedError<Module[], AppError>(__TAURI_INVOKE("get_modules")),
 	// Controls a module (start, stop, restart)
@@ -113,7 +119,7 @@ export const commands = {
 	getAppBootstrapData: () => typedError<BootstrapData, AppError>(__TAURI_INVOKE("get_app_bootstrap_data")),
 	// Saves anAPI key securely to system credential storage
 	saveSecureKey: (service: string, key: string) => typedError<null, AppError>(__TAURI_INVOKE("save_secure_key", { service, key })),
-	// Retrieves an API key from system credential storage
+	// Retrieves a frontend-managed secret from system credential storage
 	getSecureKey: (service: string) => typedError<string | null, AppError>(__TAURI_INVOKE("get_secure_key", { service })),
 	// Checks whether a non-empty API key exists in secure storage
 	hasSecureKey: (service: string) => typedError<boolean, AppError>(__TAURI_INVOKE("has_secure_key", { service })),
@@ -390,6 +396,8 @@ export type ChatRequest = {
 	request_id: string | null,
 	// Session identifier for history tracking
 	session_id: string | null,
+	// Optional web search controls for cloud/API providers
+	web_search?: WebSearchOptions | null,
 };
 
 // AI chat response
@@ -439,12 +447,28 @@ export type ConfigField = {
 	fieldType: string,
 	// Display label in UI
 	label: string,
+	// Optional field description/help text shown under the control.
+	description?: string | null,
+	// Optional placeholder text for text inputs and textareas.
+	placeholder?: string | null,
 	// Default value
 	default: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } | null,
 	// Whether field is required
 	required: boolean,
-	// Available options for "select" type
-	options: string[] | null,
+	// Optional minimum numeric value for number and range controls.
+	min?: number | null,
+	// Optional maximum numeric value for number and range controls.
+	max?: number | null,
+	// Optional numeric step for number and range controls.
+	step?: number | null,
+	// Preferred row count for multiline textareas.
+	rows?: number | null,
+	// Optional section/group label for form grouping.
+	section?: string | null,
+	// Optional ordering hint inside a form or section.
+	order?: number | null,
+	// Available options for "select" fields.
+	options?: string[] | null,
 };
 
 // Module control request from frontend
@@ -798,6 +822,8 @@ export type Module = {
 	config: { [key in string]: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } },
 	// Configuration schema definition
 	configSchema: { [key in string]: ConfigField } | null,
+	// Relative path to the module-owned settings UI entry file.
+	settingsUi: string | null,
 };
 
 // Catalog item for downloadable modules
@@ -1067,6 +1093,8 @@ export type UIState = {
 	sound_enabled: boolean,
 	// Selected reasoning level by AI provider
 	ai_thinking_level?: { [key in string]: string },
+	// Enables provider-side internet search by AI provider
+	ai_web_search_enabled?: { [key in string]: boolean },
 	// Last provider activated in the UI
 	last_active_provider?: string | null,
 	// Current persistent AI session identifier
@@ -1085,6 +1113,24 @@ export type VramStats = {
 	usedGb: number,
 	// Total VRAM capacity (GB)
 	totalGb: number,
+};
+
+// Optional web search configuration for provider-backed chat requests.
+export type WebSearchOptions = {
+	// Enables provider-side web search.
+	enabled?: boolean,
+	// Search engine preference (`auto`, `native`, `exa`, ...).
+	engine?: string | null,
+	// Maximum results per search call.
+	max_results?: number | null,
+	// Maximum results across all search calls in one request.
+	max_total_results?: number | null,
+	// Search context size (`low`, `medium`, `high`).
+	search_context_size?: string | null,
+	// Optional allow-list of domains.
+	allowed_domains?: string[],
+	// Optional deny-list of domains.
+	excluded_domains?: string[],
 };
 
 // Overall window configuration combining breakpoints and thresholds.

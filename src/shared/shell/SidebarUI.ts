@@ -4,17 +4,35 @@ import { type SoundService } from '../services/SoundService';
 import { type WindowService } from '../services/WindowService';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { mountLogos } from '@/assets/logos';
-import { APP_PAGES } from '@/shared/config/AppPages';
+import { APP_PAGES, type IAppPage } from '@/shared/config/AppPages';
+
+interface ISidebarMenus {
+    mainMenu: HTMLElement;
+    bottomMenu: HTMLElement;
+}
+
+interface IMonitoringElements {
+    monitor: HTMLElement;
+    logo: HTMLElement;
+    menu: HTMLElement;
+    bottom: HTMLElement;
+}
 
 export class SidebarUI extends BaseComponent {
+    private static readonly _COLLAPSED_WIDTH = 80;
+    private static readonly _EXPANDED_WIDTH = 280;
     private static readonly _AUTO_COMPACT_ZOOM_THRESHOLD = 3;
     private static readonly _AUTO_COMPACT_WARNING_LEAD_STEPS = 0;
     private static readonly _AUTO_COMPACT_ZOOM_STEP = 0.1;
     private static readonly _AUTO_COMPACT_THRESHOLD_FACTOR = 0.5;
+
     private _sidebar: HTMLElement | null = null;
     private _isCollapsed = false;
     private _isAutoCompact = false;
     private _snappingTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _resizeObserver: ResizeObserver | null = null;
+    private _monitorCheckFrame: number | null = null;
+    private _minMonitorHeight = 0;
 
     constructor(
         private readonly _state: UISettingsService,
@@ -28,19 +46,7 @@ export class SidebarUI extends BaseComponent {
      * Initializes the sidebar element, restores its last state, and sets up toggle logic.
      */
     protected async onInit(): Promise<void> {
-        // Ensure sidebar element is present (might be injected late)
-        let attempts = 0;
-        while (this._sidebar === null && attempts < 10) {
-            this._sidebar = this.getElement('sidebar');
-            if (this._sidebar === null || this._sidebar.children.length === 0) {
-                this._sidebar = null; // Reset if empty container
-                await new Promise((r) => setTimeout(r, 100));
-                attempts++;
-            } else {
-                break;
-            }
-        }
-
+        this._sidebar = await this._findSidebar();
         if (this._sidebar === null) {
             tracer.error('[SidebarUI] Sidebar element not found or empty after 1s');
             return;
@@ -50,12 +56,10 @@ export class SidebarUI extends BaseComponent {
         this._renderNavigation();
         this._initToggle();
         this._initAdaptiveMonitoring();
-
-        // Ensure logos are mounted after template injection
         mountLogos();
 
         const signal = this._abortController?.signal;
-        if (signal) {
+        if (signal !== undefined) {
             globalThis.addEventListener(
                 'resize',
                 () => {
@@ -73,10 +77,15 @@ export class SidebarUI extends BaseComponent {
     protected onDestroy(): void {
         if (this._snappingTimeout !== null) {
             clearTimeout(this._snappingTimeout);
+            this._snappingTimeout = null;
         }
         if (this._resizeObserver !== null) {
             this._resizeObserver.disconnect();
             this._resizeObserver = null;
+        }
+        if (this._monitorCheckFrame !== null) {
+            globalThis.cancelAnimationFrame(this._monitorCheckFrame);
+            this._monitorCheckFrame = null;
         }
     }
 
@@ -84,46 +93,20 @@ export class SidebarUI extends BaseComponent {
      * Dynamically renders navigation buttons from APP_PAGES.
      */
     private _renderNavigation(): void {
-        if (!this._sidebar) return;
-        const mainMenu = this._sidebar.querySelector('.main-menu');
-        const bottomMenu = this._sidebar.querySelector('.bottom-menu');
-        if (!mainMenu || !bottomMenu) return;
+        const menus = this._getSidebarMenus();
+        if (menus === null) {
+            return;
+        }
 
-        mainMenu.innerHTML = '';
-        bottomMenu.innerHTML = '';
+        const mainButtons = APP_PAGES.filter((page) => page.isBottom !== true).map((page) =>
+            this._createNavButton(page),
+        );
+        const bottomButtons = APP_PAGES.filter((page) => page.isBottom === true).map((page) =>
+            this._createNavButton(page),
+        );
 
-        const dfMain = document.createDocumentFragment();
-        const dfBottom = document.createDocumentFragment();
-
-        APP_PAGES.forEach((page) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'nav-btn';
-            if (page.id === 'console') btn.classList.add('console-trigger');
-            btn.dataset['page'] = page.id;
-
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('class', 'icon');
-            const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-            use.setAttribute('href', page.icon);
-            svg.appendChild(use);
-
-            const span = document.createElement('span');
-            span.dataset['i18n'] = page.i18nKey;
-            span.textContent = page.defaultLabel;
-
-            btn.appendChild(svg);
-            btn.appendChild(span);
-
-            if (page.isBottom === true) {
-                dfBottom.appendChild(btn);
-            } else {
-                dfMain.appendChild(btn);
-            }
-        });
-
-        mainMenu.appendChild(dfMain);
-        bottomMenu.appendChild(dfBottom);
+        menus.mainMenu.replaceChildren(...mainButtons);
+        menus.bottomMenu.replaceChildren(...bottomButtons);
     }
 
     /**
@@ -143,59 +126,42 @@ export class SidebarUI extends BaseComponent {
         if (this._sidebar === null) return;
 
         const logoArea = this._sidebar.querySelector('.logo-area');
-        if (logoArea instanceof HTMLElement) {
-            // Section 23.2: Accessibility
-            logoArea.style.cursor = 'pointer';
-            logoArea.setAttribute('role', 'button');
-            logoArea.setAttribute('tabindex', '0');
-            logoArea.setAttribute('aria-label', 'Toggle Sidebar');
-            logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
-
-            // Logic moved to CSS/HTML inline styles for FOUC prevention
-
-            const toggle = (): void => {
-                if (this._sidebar === null) return;
-
-                const targetWidth = this._isCollapsed ? 280 : 80;
-                this._isCollapsed = !this._isCollapsed;
-
-                document.body.classList.add('snapping');
-                this._updateAutoCompactState();
-                this._applySidebarWidth();
-
-                // Update state
-                this._state.setSidebarWidth(targetWidth);
-                this._state.setSidebarCollapsed(this._isCollapsed);
-
-                logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
-
-                // Play sound effect
-                if (this._soundService !== undefined) {
-                    this._soundService.playExpand(!this._isCollapsed);
-                }
-
-                if (this._snappingTimeout !== null) clearTimeout(this._snappingTimeout);
-                this._snappingTimeout = setTimeout(() => {
-                    document.body.classList.remove('snapping');
-                    this._snappingTimeout = null;
-                }, 300);
-            };
-
-            const signal = this._abortController?.signal;
-            if (!signal) return;
-
-            logoArea.addEventListener('click', toggle, { signal });
-            logoArea.addEventListener(
-                'keydown',
-                ((e: KeyboardEvent) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        toggle();
-                    }
-                }) as EventListener,
-                { signal },
-            );
+        if (!(logoArea instanceof HTMLElement)) {
+            return;
         }
+
+        logoArea.style.cursor = 'pointer';
+        logoArea.setAttribute('role', 'button');
+        logoArea.setAttribute('tabindex', '0');
+        logoArea.setAttribute('aria-label', 'Toggle Sidebar');
+        logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
+
+        const toggle = (): void => {
+            if (this._sidebar === null) return;
+
+            this._isCollapsed = !this._isCollapsed;
+            this._startSnappingAnimation();
+            this._updateAutoCompactState();
+            this._applySidebarWidth();
+            this._persistSidebarState();
+            logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
+            this._soundService?.playExpand(!this._isCollapsed);
+        };
+
+        const signal = this._abortController?.signal;
+        if (signal === undefined) return;
+
+        logoArea.addEventListener('click', toggle, { signal });
+        logoArea.addEventListener(
+            'keydown',
+            ((event: KeyboardEvent) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggle();
+                }
+            }) as EventListener,
+            { signal },
+        );
     }
 
     /**
@@ -205,14 +171,12 @@ export class SidebarUI extends BaseComponent {
     private _applySidebarWidth(): void {
         if (this._sidebar === null) return;
 
-        const width = this._isCollapsed || this._isAutoCompact ? 80 : 280;
+        const width =
+            this._isCollapsed || this._isAutoCompact
+                ? SidebarUI._COLLAPSED_WIDTH
+                : SidebarUI._EXPANDED_WIDTH;
 
-        if (width < 100) {
-            this._sidebar.classList.add('collapsed');
-        } else {
-            this._sidebar.classList.remove('collapsed');
-        }
-
+        this._sidebar.classList.toggle('collapsed', width < 100);
         this._sidebar.classList.toggle('auto-compact', this._isAutoCompact);
         document.documentElement.style.setProperty('--sidebar-width', `${String(width)}px`);
         this._sidebar.style.width = `${String(width)}px`;
@@ -241,9 +205,6 @@ export class SidebarUI extends BaseComponent {
         this._isAutoCompact = zoom >= SidebarUI._AUTO_COMPACT_ZOOM_THRESHOLD;
     }
 
-    private _resizeObserver: ResizeObserver | null = null;
-    private _minMonitorHeight = 0;
-
     /**
      * Initializes adaptive monitoring visibility.
      * Hides system monitor if there isn't enough vertical space.
@@ -251,26 +212,17 @@ export class SidebarUI extends BaseComponent {
     private _initAdaptiveMonitoring(): void {
         if (this._sidebar === null) return;
 
-        const monitor = this._sidebar.querySelector('#system-monitor');
-        const logo = this._sidebar.querySelector('.logo-area');
-        const menu = this._sidebar.querySelector('.main-menu');
-        const bottom = this._sidebar.querySelector('.bottom-menu');
-
-        if (
-            !(monitor instanceof HTMLElement) ||
-            !(logo instanceof HTMLElement) ||
-            !(menu instanceof HTMLElement) ||
-            !(bottom instanceof HTMLElement)
-        )
+        const elements = this._getMonitoringElements();
+        if (elements === null) {
             return;
+        }
 
-        // Capture initial height of monitor to know when to bring it back
-        this._minMonitorHeight = monitor.offsetHeight || 300; // Fallback to approx pixels
+        this._minMonitorHeight = elements.monitor.offsetHeight || 300;
 
         this._resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 if (entry.target === this._sidebar) {
-                    this._checkMonitorVisibility();
+                    this._scheduleMonitorVisibilityCheck();
                 }
             }
         });
@@ -281,8 +233,142 @@ export class SidebarUI extends BaseComponent {
         this._checkMonitorVisibility();
     }
 
+    private _scheduleMonitorVisibilityCheck(): void {
+        if (this._monitorCheckFrame !== null) {
+            globalThis.cancelAnimationFrame(this._monitorCheckFrame);
+        }
+
+        this._monitorCheckFrame = globalThis.requestAnimationFrame(() => {
+            this._monitorCheckFrame = null;
+            this._checkMonitorVisibility();
+        });
+    }
+
     private _checkMonitorVisibility(): void {
         if (this._sidebar === null) return;
+
+        const elements = this._getMonitoringElements();
+        if (elements === null) {
+            return;
+        }
+
+        const sidebarHeight = this._sidebar.clientHeight;
+        const requiredSpace = this._calculateRequiredMonitorSpace(elements);
+        const overflowAllowancePx = Math.max(32, Math.round(elements.bottom.offsetHeight * 0.6));
+        const spaceDeficit = requiredSpace - sidebarHeight;
+        const overflowAmount = Math.max(0, this._sidebar.scrollHeight - sidebarHeight);
+        const isVisible = !elements.monitor.classList.contains('adaptive-hidden');
+
+        if (
+            isVisible &&
+            (spaceDeficit > overflowAllowancePx || overflowAmount > overflowAllowancePx)
+        ) {
+            elements.monitor.classList.add('adaptive-hidden');
+            this._sidebar.classList.add('monitor-hidden');
+            tracer.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
+            return;
+        }
+
+        if (
+            !isVisible &&
+            spaceDeficit <= overflowAllowancePx / 2 &&
+            overflowAmount <= overflowAllowancePx / 2
+        ) {
+            elements.monitor.classList.remove('adaptive-hidden');
+            this._sidebar.classList.remove('monitor-hidden');
+            tracer.debug('[SidebarUI] Showing monitor (space restored)');
+        }
+    }
+
+    private async _findSidebar(): Promise<HTMLElement | null> {
+        let attempts = 0;
+        while (attempts < 10) {
+            const sidebar = this.getElement<HTMLElement>('sidebar');
+            if (sidebar !== null && sidebar.children.length > 0) {
+                return sidebar;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            attempts++;
+        }
+
+        return null;
+    }
+
+    private _getSidebarMenus(): ISidebarMenus | null {
+        if (this._sidebar === null) {
+            return null;
+        }
+
+        const mainMenu = this._sidebar.querySelector('.main-menu');
+        const bottomMenu = this._sidebar.querySelector('.bottom-menu');
+        if (!(mainMenu instanceof HTMLElement) || !(bottomMenu instanceof HTMLElement)) {
+            return null;
+        }
+
+        return { mainMenu, bottomMenu };
+    }
+
+    private _createNavButton(page: IAppPage): HTMLButtonElement {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'nav-btn';
+        this._applyHiddenNavState(button, page.id);
+        if (page.id === 'console') {
+            button.classList.add('console-trigger');
+        }
+        button.dataset['page'] = page.id;
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'icon');
+
+        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', page.icon);
+        svg.appendChild(use);
+
+        const label = document.createElement('span');
+        label.dataset['i18n'] = page.i18nKey;
+        label.textContent = page.defaultLabel;
+
+        button.appendChild(svg);
+        button.appendChild(label);
+        return button;
+    }
+
+    private _applyHiddenNavState(button: HTMLButtonElement, pageId: string): void {
+        if (!this._state.getHiddenNavItems().includes(pageId)) {
+            return;
+        }
+
+        button.classList.add('hidden');
+        button.setAttribute('aria-hidden', 'true');
+        button.setAttribute('tabindex', '-1');
+    }
+
+    private _startSnappingAnimation(): void {
+        document.body.classList.add('snapping');
+        if (this._snappingTimeout !== null) {
+            clearTimeout(this._snappingTimeout);
+        }
+
+        this._snappingTimeout = setTimeout(() => {
+            document.body.classList.remove('snapping');
+            this._snappingTimeout = null;
+        }, 300);
+    }
+
+    private _persistSidebarState(): void {
+        const targetWidth = this._isCollapsed
+            ? SidebarUI._COLLAPSED_WIDTH
+            : SidebarUI._EXPANDED_WIDTH;
+        this._state.setSidebarWidth(targetWidth);
+        this._state.setSidebarCollapsed(this._isCollapsed);
+    }
+
+    private _getMonitoringElements(): IMonitoringElements | null {
+        if (this._sidebar === null) {
+            return null;
+        }
 
         const monitor = this._sidebar.querySelector('#system-monitor');
         const logo = this._sidebar.querySelector('.logo-area');
@@ -294,47 +380,24 @@ export class SidebarUI extends BaseComponent {
             !(logo instanceof HTMLElement) ||
             !(menu instanceof HTMLElement) ||
             !(bottom instanceof HTMLElement)
-        )
-            return;
-
-        const sidebarHeight = this._sidebar.clientHeight;
-
-        // Accurate space calculation matching sidebar.css:
-        // top_padding(1.5rem) + logo + [auto] + menu + 1.5rem + monitor + 1.5rem + [auto] + bottom + bottom_padding(1.5rem)
-        // 1.5rem = 24px (at 16px base)
-        const logoH = logo.offsetHeight;
-        const menuH = menu.offsetHeight;
-        const bottomH = bottom.offsetHeight;
-        const paddingAndMargins = 24 * 4; // top_pad + mid_margin1 + mid_margin2 + bottom_pad
-        const autoMarginBuffer = 20; // Some extra space for the "centering" effect to be visible
-
-        const requiredSpace =
-            logoH + menuH + bottomH + this._minMonitorHeight + paddingAndMargins + autoMarginBuffer;
-        const overflowAllowancePx = Math.max(32, Math.round(bottomH * 0.6));
-        const spaceDeficit = requiredSpace - sidebarHeight;
-        const overflowAmount = Math.max(0, this._sidebar.scrollHeight - sidebarHeight);
-        this._updateAutoCompactState();
-        this._applySidebarWidth();
-
-        // If currently showing but sidebar has scrollbar (clipping!), hide it immediately
-        const isVisible = !monitor.classList.contains('adaptive-hidden');
-
-        if (
-            isVisible &&
-            (spaceDeficit > overflowAllowancePx || overflowAmount > overflowAllowancePx)
         ) {
-            monitor.classList.add('adaptive-hidden');
-            this._sidebar.classList.add('monitor-hidden');
-            tracer.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
-        } else if (
-            !isVisible &&
-            spaceDeficit <= overflowAllowancePx / 2 &&
-            overflowAmount <= overflowAllowancePx / 2
-        ) {
-            // Only bring back if there's substantial extra space to avoid flickering
-            monitor.classList.remove('adaptive-hidden');
-            this._sidebar.classList.remove('monitor-hidden');
-            tracer.debug('[SidebarUI] Showing monitor (space restored)');
+            return null;
         }
+
+        return { monitor, logo, menu, bottom };
+    }
+
+    private _calculateRequiredMonitorSpace(elements: IMonitoringElements): number {
+        const paddingAndMargins = 24 * 4;
+        const autoMarginBuffer = 20;
+
+        return (
+            elements.logo.offsetHeight +
+            elements.menu.offsetHeight +
+            elements.bottom.offsetHeight +
+            this._minMonitorHeight +
+            paddingAndMargins +
+            autoMarginBuffer
+        );
     }
 }

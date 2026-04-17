@@ -69,6 +69,7 @@
     "desc": "LLM rewriting, image gen, channel posting.",
     "icon": "🤖",
     "type": "script",
+    "dlType": "git",
     "repoUrl": "https://github.com/F0RLE/Axelate-tg-bot-module",
     "expectedHash": "",
     "version": "1.0.0"

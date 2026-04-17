@@ -32,6 +32,19 @@ describe('AISettingsService', () => {
         expect(service.getThinkingLevel('gemini')).toBe('low');
     });
 
+    it('should enable internet access by default for cloud providers', () => {
+        expect(service.getInternetAccessEnabled('gpt')).toBe(true);
+    });
+
+    it('should disable internet access by default for local providers', () => {
+        expect(service.getInternetAccessEnabled('llamacpp')).toBe(false);
+    });
+
+    it('should set internet access explicitly', () => {
+        service.setInternetAccessEnabled('gpt', false);
+        expect(service.getInternetAccessEnabled('gpt')).toBe(false);
+    });
+
     it('should get default local max output tokens', () => {
         expect(service.getLocalMaxOutputTokens('llamacpp')).toBe(384);
     });

@@ -43,6 +43,21 @@
     --warning: #ffc107;
     --warning-dark: #e0a800;
 
+    /* Unified module/console action theme
+       Change only this line to recolor all module and console buttons. */
+    --module-button-accent: #8a2be2;
+    --module-button-bg: color-mix(in srgb, var(--module-button-accent) 78%, #111015 22%);
+    --module-button-bg-soft: color-mix(in srgb, var(--module-button-accent) 58%, #111015 42%);
+    --module-button-bg-hover: color-mix(in srgb, var(--module-button-accent) 88%, #111015 12%);
+    --module-button-text: #f4ecff;
+    --module-button-border: color-mix(in srgb, var(--module-button-accent) 28%, transparent);
+    --module-button-border-hover: color-mix(
+        in srgb,
+        var(--module-button-accent) 42%,
+        rgba(255, 255, 255, 0.12)
+    );
+    --module-button-radius: 12px;
+
     /* Semantic Slugs */
     --text-primary: #e0e0e0;
     --text-secondary: #a0a0a0;

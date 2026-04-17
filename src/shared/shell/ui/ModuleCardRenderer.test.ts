@@ -37,7 +37,7 @@ describe('ModuleCardRenderer', () => {
                 aiBridge?: { getState: () => { activeProviderId?: string } };
             }
         ).aiBridge = {
-            getState: () => ({ activeProviderId: 'running-app' }),
+            getState: () => ({ activeProviderId: 'Убрать-app' }),
         };
         (
             globalThis as unknown as { openModuleSettings?: ReturnType<typeof vi.fn> }
@@ -92,16 +92,16 @@ describe('ModuleCardRenderer', () => {
         expect(card.querySelector('.download-btn')?.classList.contains('downloading')).toBe(false);
     });
 
-    it('creates action buttons for selected and running modules', () => {
+    it('creates action buttons for selected and Убрать modules', () => {
         const onClick = vi.fn();
 
         const selectedCard = renderer.createCard(
-            { id: 'running-app', name: 'Runner', desc: 'Desc', installed: true } as never,
+            { id: 'Убрать-app', name: 'Runner', desc: 'Desc', installed: true } as never,
             'services',
             true,
             onClick,
         );
-        expect(selectedCard.textContent).toContain('Running');
+        expect(selectedCard.textContent).toContain('Убрать');
 
         const removableCard = renderer.createCard(
             { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,
@@ -109,7 +109,7 @@ describe('ModuleCardRenderer', () => {
             true,
             onClick,
         );
-        expect(removableCard.textContent).toContain('Remove');
+        expect(removableCard.textContent).toContain('Убрать');
 
         const selectCard = renderer.createCard(
             { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,

@@ -8,8 +8,18 @@ import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
 import { tracer } from '@/infrastructure/logging/LoggerService';
+import { WindowViewportController } from './WindowViewportController';
+import { type IWindowViewportState } from './WindowViewportController';
 
-// IWindowUIGlobal removed
+type TimeoutField =
+    | '_monitoringTimeout'
+    | '_splashTimeout'
+    | '_gracePeriodTimeout'
+    | '_zoomCheckTimeout';
+
+const DEVTOOLS_SHORTCUT_KEYS = ['I', 'J', 'C'] as const;
+const RELOAD_SHORTCUT_KEYS = ['r', 'R', 'к', 'К'] as const;
+const BLOCKED_CTRL_KEYS = ['u', 'p', 's', 'f', 'g'] as const;
 
 export class WindowUI {
     private _initialized = false;
@@ -28,12 +38,20 @@ export class WindowUI {
     private _gracePeriodTimeout: ReturnType<typeof setTimeout> | null = null;
     private _zoomCheckTimeout: ReturnType<typeof setTimeout> | null = null;
     private _isInGracePeriod = true;
+    private readonly _viewportController: WindowViewportController;
+    private readonly _viewportState: IWindowViewportState;
+    private readonly _boundHandleResize = () => {
+        this._handleResize();
+    };
 
     constructor(
         private readonly _service: WindowService,
         private readonly _state: UISettingsService,
         private readonly _sound: SoundService,
-    ) {}
+    ) {
+        this._viewportController = new WindowViewportController(_service);
+        this._viewportState = this._createViewportState();
+    }
 
     /**
      * Initializes window event listeners and screen protection.
@@ -47,16 +65,12 @@ export class WindowUI {
         this._bindGlobalEvents();
         this._suppressNativeTooltips();
 
-        // Fire and forget
         this._applySmallScreenProtection().catch((err: unknown) => {
             tracer.warn('[WindowUI] Failed to apply small screen protection:', err);
         });
 
-        // Initial check
         this._checkWidth();
         this._initSoundState();
-
-        // End grace period after 2 seconds
         this._gracePeriodTimeout = setTimeout(() => {
             this._isInGracePeriod = false;
         }, 2000);
@@ -81,18 +95,17 @@ export class WindowUI {
         this._cleanupAbort?.abort();
         this._cleanupAbort = null;
 
-        if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
-        if (this._monitoringTimeout) clearTimeout(this._monitoringTimeout);
-        if (this._splashTimeout) clearTimeout(this._splashTimeout);
-        if (this._gracePeriodTimeout) clearTimeout(this._gracePeriodTimeout);
-        if (this._zoomCheckTimeout) clearTimeout(this._zoomCheckTimeout);
+        if (this._resizeTimeout !== undefined) {
+            clearTimeout(this._resizeTimeout);
+        }
+
+        this._clearTimeoutField('_monitoringTimeout');
+        this._clearTimeoutField('_splashTimeout');
+        this._clearTimeoutField('_gracePeriodTimeout');
+        this._clearTimeoutField('_zoomCheckTimeout');
 
         this._resizeTimeout = undefined;
         this._resizeCheckVersion += 1;
-        this._monitoringTimeout = null;
-        this._splashTimeout = null;
-        this._gracePeriodTimeout = null;
-        this._zoomCheckTimeout = null;
         this._initialized = false;
         this._isSmallScreen = false;
         this._wasMaximizedOnSmallScreen = false;
@@ -111,9 +124,6 @@ export class WindowUI {
         const signal = this._cleanupAbort?.signal;
         if (signal === undefined) return;
 
-        // 1. Context Menu Block — preventDefault alone blocks the native menu;
-        //    stopPropagation is intentionally omitted so card-level handlers
-        //    (ModuleCardRenderer, AppUI) can still intercept and open settings.
         document.addEventListener(
             'contextmenu',
             (e) => {
@@ -126,7 +136,6 @@ export class WindowUI {
             { capture: true, signal },
         );
 
-        // 2. Monitoring Pause on Blur/Hide
         const updateMonitoring = (): void => {
             const shouldPause = !this._isInGracePeriod && (document.hidden || !document.hasFocus());
             void this._service.setMonitoringPaused(shouldPause);
@@ -134,10 +143,8 @@ export class WindowUI {
         document.addEventListener('visibilitychange', updateMonitoring, { signal });
         globalThis.addEventListener('blur', updateMonitoring, { signal });
         globalThis.addEventListener('focus', updateMonitoring, { signal });
-
         this._monitoringTimeout = setTimeout(updateMonitoring, 1000);
 
-        // 3. Keydown Handlers
         document.addEventListener(
             'keydown',
             (e) => {
@@ -149,7 +156,6 @@ export class WindowUI {
             },
         );
 
-        // 4. Zoom (Ctrl+Wheel)
         document.addEventListener(
             'wheel',
             (e: Event) => {
@@ -170,18 +176,12 @@ export class WindowUI {
             { passive: false, signal },
         );
 
-        // 5. Selection Prevention
         this._bindSelectionPrevention(signal);
-
-        // 6. Resize Handler
-        globalThis.addEventListener('resize', this._handleResize.bind(this), { signal });
+        globalThis.addEventListener('resize', this._boundHandleResize, { signal });
     }
 
     private _scheduleZoomWidthCheck(): void {
-        if (this._zoomCheckTimeout) {
-            clearTimeout(this._zoomCheckTimeout);
-        }
-
+        this._clearTimeoutField('_zoomCheckTimeout');
         this._zoomCheckTimeout = setTimeout(() => {
             this._zoomCheckTimeout = null;
             if (!this._initialized) return;
@@ -193,10 +193,10 @@ export class WindowUI {
      * Handles window resize events with debouncing.
      */
     private _handleResize(): void {
-        this._checkWidth(); // Immediate check
-        this._service.checkResolutionChange(); // Detect resolution/monitor changes
+        this._checkWidth();
+        this._service.checkResolutionChange();
 
-        if (this._resizeTimeout) {
+        if (this._resizeTimeout !== undefined) {
             clearTimeout(this._resizeTimeout);
         }
         const resizeCheckVersion = ++this._resizeCheckVersion;
@@ -210,17 +210,17 @@ export class WindowUI {
      */
     private async _performResizeCheck(resizeCheckVersion: number): Promise<void> {
         try {
-            const [isMaximized, policy] = await Promise.all([
-                this._service.isMaximized(),
-                this._service.checkPolicy(),
-            ]);
-
-            if (!this._initialized || resizeCheckVersion !== this._resizeCheckVersion) {
-                return;
-            }
-
-            this.updateMaximizeIcon(isMaximized);
-            this._handlePolicyAdjustments(policy, isMaximized);
+            await this._viewportController.syncAfterResize(
+                this._viewportState,
+                () => this._initialized && resizeCheckVersion === this._resizeCheckVersion,
+                (isMaximized) => {
+                    this.updateMaximizeIcon(isMaximized);
+                },
+                async (isMaximized, isSmallScreen) => {
+                    this._isSmallScreen = isSmallScreen;
+                    await this._handleSmallScreenUnmaximize(isMaximized);
+                },
+            );
         } catch (e) {
             tracer.warn('[WindowUI] Resize check failed:', e);
         }
@@ -231,10 +231,9 @@ export class WindowUI {
      * @sideeffect Intercepts keyboard events and blocks window shortcuts
      */
     private _handleKeydown(e: KeyboardEvent): void {
-        // Block DevTools
         if (
             e.key === 'F12' ||
-            (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key.toUpperCase()))
+            (e.ctrlKey && e.shiftKey && DEVTOOLS_SHORTCUT_KEYS.includes(e.key.toUpperCase() as never))
         ) {
             e.preventDefault();
             e.stopPropagation();
@@ -247,7 +246,6 @@ export class WindowUI {
             return;
         }
 
-        // F11 Toggle Maximize
         if (e.key === 'F11') {
             e.preventDefault();
             this._service.toggleMaximize().catch(() => {
@@ -256,15 +254,13 @@ export class WindowUI {
             return;
         }
 
-        // Ctrl+R Refresh
-        if ((e.ctrlKey && ['r', 'R', 'к', 'К'].includes(e.key)) || e.key === 'F5') {
+        if (this._isReloadShortcut(e)) {
             e.preventDefault();
             globalThis.location.reload();
             return;
         }
 
-        // Block browser shortcuts
-        if (e.ctrlKey && ['u', 'p', 's', 'f', 'g'].includes(e.key.toLowerCase())) {
+        if (e.ctrlKey && BLOCKED_CTRL_KEYS.includes(e.key.toLowerCase() as never)) {
             e.preventDefault();
             e.stopPropagation();
         }
@@ -288,8 +284,12 @@ export class WindowUI {
 
     private _isWindowShortcut(e: KeyboardEvent): boolean {
         if (e.key === 'F11' || e.key === 'F5') return true;
-        if (e.ctrlKey && ['r', 'R', 'к', 'К'].includes(e.key)) return true;
-        return e.ctrlKey && ['u', 'p', 's', 'f', 'g'].includes(e.key.toLowerCase());
+        if (this._isReloadShortcut(e)) return true;
+        return e.ctrlKey && BLOCKED_CTRL_KEYS.includes(e.key.toLowerCase() as never);
+    }
+
+    private _isReloadShortcut(e: KeyboardEvent): boolean {
+        return e.key === 'F5' || (e.ctrlKey && RELOAD_SHORTCUT_KEYS.includes(e.key as never));
     }
 
     /**
@@ -320,7 +320,7 @@ export class WindowUI {
                     return;
                 }
                 if (ev.detail > 1) {
-                    ev.preventDefault(); // Prevent double-click select
+                    ev.preventDefault();
                 }
             },
             { signal },
@@ -335,14 +335,7 @@ export class WindowUI {
         if (signal === undefined) return;
 
         const handler = (): void => {
-            document.querySelectorAll('[title]').forEach((el) => {
-                const element = el as HTMLElement;
-                const title = element.title;
-                if (title) {
-                    element.dataset['title'] = title;
-                    element.removeAttribute('title');
-                }
-            });
+            this._moveTitlesToDataset(document.querySelectorAll('[title]'));
         };
 
         if (document.readyState === 'loading') {
@@ -356,11 +349,7 @@ export class WindowUI {
             (e: Event) => {
                 let target = e.target as HTMLElement | null;
                 while (target && target !== document.body) {
-                    if (target.title) {
-                        const title = target.title;
-                        target.dataset['title'] = title;
-                        target.removeAttribute('title');
-                    }
+                    this._moveTitleToDataset(target);
                     target = target.parentElement;
                 }
             },
@@ -372,34 +361,7 @@ export class WindowUI {
      * Detects and applies adjustments for small screens (zoom, maximization).
      */
     private async _applySmallScreenProtection(): Promise<void> {
-        const policy = await this._service.checkPolicy();
-        this._isSmallScreen = policy.isSmallScreen;
-
-        if (!this._isSmallScreen) {
-            return;
-        }
-
-        const isMaximized = await this._service.isMaximized();
-        if (isMaximized) {
-            this._wasMaximizedOnSmallScreen = false;
-            return;
-        }
-
-        this._service.toggleMaximize().catch(() => {
-            /* ignore */
-        });
-        this._wasMaximizedOnSmallScreen = true;
-    }
-
-    /**
-     * Applies policies from the backend (warnings, auto-maximize).
-     */
-    private _handlePolicyAdjustments(
-        policy: { isSmallScreen: boolean },
-        isMaximized: boolean,
-    ): void {
-        this._isSmallScreen = policy.isSmallScreen;
-        void this._handleSmallScreenUnmaximize(isMaximized);
+        await this._viewportController.applyInitialProtection(this._viewportState);
     }
 
     /**
@@ -407,16 +369,10 @@ export class WindowUI {
      * @sideeffect Changes window size
      */
     private async _handleSmallScreenUnmaximize(isMaximized: boolean): Promise<void> {
-        if (!this._isSmallScreen) return;
-
-        if (this._wasMaximizedOnSmallScreen && !isMaximized) {
-            const win = getGlobalWin();
-            const width = Math.floor((win.screen.availWidth || win.screen.width) * 0.85);
-            const height = Math.floor((win.screen.availHeight || win.screen.height) * 0.85);
-
-            await this._service.setSize(width, height);
-            this._wasMaximizedOnSmallScreen = false;
-        }
+        await this._viewportController.handleSmallScreenUnmaximize(
+            this._viewportState,
+            isMaximized,
+        );
     }
 
     /**
@@ -424,49 +380,7 @@ export class WindowUI {
      * @sideeffect Modifies the DOM safely
      */
     public updateMaximizeIcon(isMaximized: boolean): void {
-        this._updateMaximizeButtonLabels(isMaximized);
-        this._updateMaximizeButtonIcon(isMaximized);
-
-        // Toggle body class for styling adjustments (e.g. squaring off corners)
-        if (isMaximized) {
-            document.body.classList.add('maximized');
-        } else {
-            document.body.classList.remove('maximized');
-        }
-    }
-
-    private _updateMaximizeButtonLabels(isMaximized: boolean): void {
-        const btn = document.getElementById('maximize-btn');
-        if (!btn) return;
-
-        const g = getGlobalWin();
-        const labelKey = isMaximized ? 'ui.launcher.button.restore' : 'ui.launcher.button.maximize';
-        const fallback = isMaximized ? 'Restore' : 'Maximize';
-        const label = typeof g.t === 'function' ? g.t(labelKey, fallback) : fallback;
-
-        btn.setAttribute('aria-label', label);
-        btn.setAttribute('title', label);
-        btn.dataset['i18nAriaLabel'] = labelKey;
-        btn.dataset['i18nTitle'] = labelKey;
-    }
-
-    private _updateMaximizeButtonIcon(isMaximized: boolean): void {
-        if (!this._maximizeIcon) return;
-
-        const use = this._maximizeIcon.querySelector('use');
-        if (use) {
-            use.setAttribute('href', isMaximized ? '#icon-restore' : '#icon-maximize');
-            return;
-        }
-
-        // Re-create safe structure if 'use' is missing
-        this._maximizeIcon.textContent = '';
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('class', 'icon');
-        const useEl = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-        useEl.setAttribute('href', isMaximized ? '#icon-restore' : '#icon-maximize');
-        svg.appendChild(useEl);
-        this._maximizeIcon.appendChild(svg);
+        this._viewportController.updateMaximizeIcon(this._maximizeIcon, isMaximized);
     }
 
     /**
@@ -477,7 +391,6 @@ export class WindowUI {
         const newState = !this._sound.isEnabled();
         this._sound.setEnabled(newState);
         this._state.setSoundEnabled(newState);
-
         this.updateSoundUI(newState);
     }
 
@@ -497,15 +410,11 @@ export class WindowUI {
         if (!this._soundToggle) return;
 
         const use = this._soundToggle.querySelector('use');
-        if (use) {
+        if (use !== null) {
             use.setAttribute('href', enabled ? '#icon-volume' : '#icon-volume-x');
         }
 
-        if (enabled) {
-            this._soundToggle.classList.remove('muted');
-        } else {
-            this._soundToggle.classList.add('muted');
-        }
+        this._soundToggle.classList.toggle('muted', !enabled);
     }
 
     /**
@@ -513,18 +422,15 @@ export class WindowUI {
      * @sideeffect Shows/hides warning overlays in the DOM
      */
     private _checkWidth(): void {
-        // Get current zoom factor (default 1)
         const computedStyle = getComputedStyle(document.documentElement) as CSSStyleDeclaration & {
             zoom?: string;
         };
         const zoom = Number.parseFloat(computedStyle.zoom || '1') || 1;
 
-        // Calculate effective space available to the layout
         const win = getGlobalWin();
         const width = win.innerWidth / zoom;
         const height = win.innerHeight / zoom;
 
-        // Use backend thresholds if available, otherwise safe defaults (0 to disable)
         const config = this._service.getConfig();
         const minWidth = config?.thresholds.warningWidth ?? 0;
         const minHeight = config?.thresholds.warningHeight ?? 0;
@@ -532,16 +438,14 @@ export class WindowUI {
         const showWarning = width < minWidth || height < minHeight;
         const isDuringSplash = this._splash !== null && !this._splash.classList.contains('hidden');
 
-        if (this._globalWarning) {
-            if (showWarning && !isDuringSplash) {
-                if (!this._globalWarning.open) {
-                    this._globalWarning.showModal();
-                    document.body.classList.add('ui-hidden');
-                }
-            } else if (this._globalWarning.open) {
-                this._globalWarning.close();
-                document.body.classList.remove('ui-hidden');
-            }
+        if (this._globalWarning === null) {
+            return;
+        }
+
+        if (showWarning && !isDuringSplash) {
+            this._showGlobalWarning();
+        } else {
+            this._hideGlobalWarning();
         }
     }
 
@@ -550,29 +454,100 @@ export class WindowUI {
      * @sideeffect Modifies body overflow and visibility of major layout blocks
      */
     public hideSplashScreen(): void {
-        if (this._splash) {
-            // Trigger CSS Transition
+        if (this._splash !== null) {
             this._splash.classList.add('fade-out');
+            this._clearTimeoutField('_splashTimeout');
 
-            if (this._splashTimeout) clearTimeout(this._splashTimeout);
-
-            // Wait for CSS transition (350ms) + buffer
             this._splashTimeout = setTimeout(() => {
-                if (this._splash) {
-                    this._splash.classList.remove('fade-out'); // Clean up class
-                    this._splash.classList.add('hidden'); // display: none
+                if (this._splash !== null) {
+                    this._splash.classList.remove('fade-out');
+                    this._splash.classList.add('hidden');
                 }
                 document.body.classList.remove('no-overflow');
                 this._splashTimeout = null;
-                this._checkWidth(); // Re-evaluate now that splash is gone
+                this._checkWidth();
             }, 400);
         }
 
-        ['sidebar', 'app-header', 'main-area'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.classList.add('visible');
+        this._showLayoutSections(['sidebar', 'app-header', 'main-area']);
+    }
+
+    private _moveTitlesToDataset(elements: NodeListOf<Element>): void {
+        elements.forEach((element) => {
+            this._moveTitleToDataset(element);
+        });
+    }
+
+    private _moveTitleToDataset(element: Element): void {
+        if (!(element instanceof HTMLElement)) {
+            return;
+        }
+
+        const title = element.title;
+        if (title === '') {
+            return;
+        }
+
+        element.dataset['title'] = title;
+        element.removeAttribute('title');
+    }
+
+    private _showGlobalWarning(): void {
+        if (this._globalWarning === null || this._globalWarning.open) {
+            return;
+        }
+
+        this._globalWarning.showModal();
+        document.body.classList.add('ui-hidden');
+    }
+
+    private _hideGlobalWarning(): void {
+        if (this._globalWarning?.open !== true) {
+            return;
+        }
+
+        this._globalWarning.close();
+        document.body.classList.remove('ui-hidden');
+    }
+
+    private _showLayoutSections(ids: string[]): void {
+        ids.forEach((id) => {
+            const element = document.getElementById(id);
+            if (element instanceof HTMLElement) {
+                element.classList.add('visible');
             }
         });
+    }
+
+    private _createViewportState(): IWindowViewportState {
+        const self = this;
+        return {
+            get isSmallScreen() {
+                return self._isSmallScreen;
+            },
+            set isSmallScreen(value: boolean) {
+                self._isSmallScreen = value;
+            },
+            get wasMaximizedOnSmallScreen() {
+                return self._wasMaximizedOnSmallScreen;
+            },
+            set wasMaximizedOnSmallScreen(value: boolean) {
+                self._wasMaximizedOnSmallScreen = value;
+            },
+            get maximizeIcon() {
+                return self._maximizeIcon;
+            },
+            set maximizeIcon(value: HTMLElement | null) {
+                self._maximizeIcon = value;
+            },
+        };
+    }
+
+    private _clearTimeoutField(field: TimeoutField): void {
+        const timeout = this[field];
+        if (timeout !== null) {
+            clearTimeout(timeout);
+            this[field] = null;
+        }
     }
 }

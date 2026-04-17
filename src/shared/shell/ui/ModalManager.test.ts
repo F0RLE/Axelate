@@ -11,18 +11,28 @@ describe('ModalManager lifecycle', () => {
 
     beforeEach(() => {
         document.body.innerHTML = `
-            <dialog id="app-selection-modal" class="hidden"></dialog>
+            <dialog id="app-selection-modal" class="hidden">
+                <div class="app-modal">
+                    <div class="app-modal-main">
+                        <div class="app-modal-header">
+                            <div id="app-modal-title"></div>
+                            <div id="app-modal-tab-row" class="hidden">
+                                <button id="filter-text-btn" type="button">Text</button>
+                                <button id="filter-image-btn" type="button">Image</button>
+                            </div>
+                            <button id="close-app-selection-btn" type="button">Close</button>
+                        </div>
+                        <div class="app-modal-body">
+                            <div id="app-modal-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </dialog>
             <div class="models-container"></div>
-            <div id="app-modal-title"></div>
             <div id="app-modal-sidebar">
                 <button class="category-filter-btn"><span>Text models</span></button>
                 <button class="category-filter-btn"><span>Image models wide title</span></button>
             </div>
-            <div id="app-modal-tab-row" class="hidden">
-                <button id="filter-text-btn" type="button">Text</button>
-                <button id="filter-image-btn" type="button">Image</button>
-            </div>
-            <div id="app-modal-list"></div>
             <template id="tpl-empty-state-module"><span></span></template>
             <template id="tpl-module-card">
                 <div class="app-icon-wrapper"></div>
@@ -179,7 +189,7 @@ describe('ModalManager lifecycle', () => {
                 'appId'
             ],
         ).toBe('svc-b');
-        expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Remove');
+        expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Убрать');
     });
 
     it('should rerender current selection without reopening modal shell', () => {
@@ -205,6 +215,50 @@ describe('ModalManager lifecycle', () => {
         ).toBe('svc-b');
     });
 
+    it('should keep the shared modal height for up to four visible cards', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+
+        Object.defineProperty(globalThis, 'innerWidth', {
+            configurable: true,
+            value: 1600,
+        });
+        Object.defineProperty(globalThis, 'innerHeight', {
+            configurable: true,
+            value: 1200,
+        });
+
+        modalManager.openAppSelection(
+            'services',
+            [
+                { id: 'svc-a', name: 'Service A', installed: true } as IApp,
+                { id: 'svc-b', name: 'Service B', installed: true } as IApp,
+            ],
+            'svc-a',
+        );
+
+        expect(modal.style.getPropertyValue('--app-modal-dynamic-height')).toBe('');
+    });
+
+    it('should restore default modal height when more than four cards are visible', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+
+        modalManager.openAppSelection(
+            'services',
+            [
+                { id: 'svc-a', name: 'Service A', installed: true } as IApp,
+                { id: 'svc-b', name: 'Service B', installed: true } as IApp,
+                { id: 'svc-c', name: 'Service C', installed: true } as IApp,
+                { id: 'svc-d', name: 'Service D', installed: true } as IApp,
+                { id: 'svc-e', name: 'Service E', installed: true } as IApp,
+            ],
+            'svc-a',
+        );
+
+        expect(modal.style.getPropertyValue('--app-modal-dynamic-height')).toBe('');
+    });
+
     it('should not re-show modal or duplicate back action when reopening an already open modal', () => {
         modalManager = createManager();
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
@@ -215,6 +269,51 @@ describe('ModalManager lifecycle', () => {
 
         expect(modal.showModal).toHaveBeenCalledTimes(1);
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps keyboard focus inside the app selection modal', () => {
+        modalManager = createManager();
+        const outsideButton = document.createElement('button');
+        outsideButton.textContent = 'Outside';
+        document.body.appendChild(outsideButton);
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: true } as IApp],
+            'svc-a',
+        );
+
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+        const closeButton = document.getElementById('close-app-selection-btn') as HTMLButtonElement;
+        const modalAction = document.querySelector(
+            '#app-modal-list .app-card-hover-actions button',
+        ) as HTMLButtonElement;
+        const privateManager = modalManager as unknown as {
+            _boundModalKeydown: (event: KeyboardEvent) => void;
+            _boundFocusIn: (event: FocusEvent) => void;
+        };
+
+        expect(document.activeElement).toBe(closeButton);
+
+        modalAction.focus();
+        modal.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: 'Tab',
+                bubbles: true,
+            }),
+        );
+        expect(document.activeElement).toBe(closeButton);
+
+        outsideButton.focus();
+        const focusInEvent = new FocusEvent('focusin', {
+            bubbles: true,
+        });
+        Object.defineProperty(focusInEvent, 'target', {
+            configurable: true,
+            value: outsideButton,
+        });
+        privateManager._boundFocusIn(focusInEvent);
+        expect(document.activeElement).toBe(closeButton);
     });
 
     it('should preserve current selection when replaying modal back action', () => {
@@ -236,7 +335,7 @@ describe('ModalManager lifecycle', () => {
         reopen?.();
 
         expect(document.querySelector('[data-app-id="svc-b"] .modal-btn')?.textContent).toBe(
-            'Remove',
+            'Убрать',
         );
         expect(
             document
@@ -329,7 +428,7 @@ describe('ModalManager lifecycle', () => {
             false,
         );
         expect(document.querySelector('[data-app-id="gemini"] .modal-btn')?.textContent).toBe(
-            'Remove',
+            'Убрать',
         );
         expect(
             document

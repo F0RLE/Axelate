@@ -429,8 +429,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         ).toHaveBeenCalledWith(config);
 
         ui._debouncedSave('download_max_speed', 123);
-        vi.advanceTimersByTime(1000);
-        await Promise.resolve();
+        await vi.runAllTimersAsync();
         expect(
             (
                 ui as unknown as {
@@ -475,8 +474,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         expect(document.getElementById('save-indicator')?.classList.contains('show')).toBe(false);
 
         ui._debouncedSave('theme', 'dark');
-        vi.advanceTimersByTime(1000);
-        await Promise.resolve();
+        await vi.runAllTimersAsync();
         expect(document.querySelector('#save-indicator span')?.textContent).toBe(
             't:ui.settings.save_failed:Save failed',
         );
