@@ -1,7 +1,4 @@
-type ConsolePollingRuntime = Pick<
-    typeof globalThis,
-    'setInterval' | 'clearInterval'
->;
+type ConsolePollingRuntime = Pick<typeof globalThis, 'setInterval' | 'clearInterval'>;
 
 type ConsolePollingControllerDeps = {
     runtime?: ConsolePollingRuntime;

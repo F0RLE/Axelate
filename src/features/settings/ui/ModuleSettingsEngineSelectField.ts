@@ -40,7 +40,10 @@ export function createEngineCustomSelectField(
     const updateMenuPosition = () => {
         const rect = trigger.getBoundingClientRect();
         const viewportHeight = runtime.getViewportSize().height;
-        const estimatedHeight = Math.min(Math.max((options.options?.length ?? 0) * 46 + 12, 120), 320);
+        const estimatedHeight = Math.min(
+            Math.max((options.options?.length ?? 0) * 46 + 12, 120),
+            320,
+        );
         const spaceBelow = viewportHeight - rect.bottom - 12;
         const spaceAbove = rect.top - 12;
         const openUpward = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
@@ -64,7 +67,8 @@ export function createEngineCustomSelectField(
     };
 
     const syncDisplay = () => {
-        valueEl.textContent = hiddenInput.value === '' ? (options.options?.[0] ?? '') : hiddenInput.value;
+        valueEl.textContent =
+            hiddenInput.value === '' ? (options.options?.[0] ?? '') : hiddenInput.value;
         menu.querySelectorAll('.local-engine-select-option').forEach((node) => {
             if (node instanceof HTMLButtonElement) {
                 node.classList.toggle('selected', node.textContent === valueEl.textContent);

@@ -94,9 +94,9 @@ describe('AppUI lifecycle', () => {
                     },
                     updateState: (updates: { last_active_provider: string | null }) => {
                         (
-                            uiStateMocks.updateState as (
-                                value: { last_active_provider: string | null },
-                            ) => void
+                            uiStateMocks.updateState as (value: {
+                                last_active_provider: string | null;
+                            }) => void
                         )(updates);
                     },
                 },
@@ -264,7 +264,9 @@ describe('AppUI lifecycle', () => {
 
         appUI.showActionFeedback('success');
 
-        expect(document.querySelector('#action-feedback .action-feedback-icon')?.textContent).toBe('✓');
+        expect(document.querySelector('#action-feedback .action-feedback-icon')?.textContent).toBe(
+            '✓',
+        );
     });
 
     it('should delegate modal opening', () => {

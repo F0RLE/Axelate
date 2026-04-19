@@ -127,10 +127,7 @@ describe('WindowService', () => {
         });
 
         it('should fallback to 1 when no UISettingsService is set (L69)', async () => {
-            const bareService = new WindowService(
-                mockBridge as unknown as IBridge,
-                mockTracer,
-            );
+            const bareService = new WindowService(mockBridge as unknown as IBridge, mockTracer);
             // No setUISettingsService called — _uiSettingsService is undefined
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'get_window_config') return Promise.resolve(mockWindowConfig);
@@ -157,9 +154,13 @@ describe('WindowService', () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.init();
 
-            expect(mockRuntime.addEventListener).toHaveBeenCalledWith('wheel', expect.any(Function), {
-                passive: false,
-            });
+            expect(mockRuntime.addEventListener).toHaveBeenCalledWith(
+                'wheel',
+                expect.any(Function),
+                {
+                    passive: false,
+                },
+            );
         });
 
         it('should call _initWindowListeners in Tauri mode', async () => {
@@ -379,10 +380,7 @@ describe('WindowService', () => {
         });
 
         it('should work without UISettingsService', async () => {
-            const bareService = new WindowService(
-                mockBridge as unknown as IBridge,
-                mockTracer,
-            );
+            const bareService = new WindowService(mockBridge as unknown as IBridge, mockTracer);
             const result = await bareService.setZoom(1.2);
             expect(result).toBe(1.2);
         });

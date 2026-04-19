@@ -19,9 +19,7 @@ export function applyImageFilterAvailability(
     imageButton.disabled = !hasImageApps;
     imageButton.style.opacity = hasImageApps ? '' : '0.4';
     imageButton.style.cursor = hasImageApps ? '' : 'not-allowed';
-    imageButton.title = hasImageApps
-        ? ''
-        : translate('ui.launcher.web.coming_soon', 'Coming soon');
+    imageButton.title = hasImageApps ? '' : translate('ui.launcher.web.coming_soon', 'Coming soon');
 
     textButton?.classList.toggle('active', nextFilter === 'text');
     imageButton.classList.toggle('active', nextFilter === 'image');
@@ -33,7 +31,9 @@ export function renderModalEmptyState(
     listElement: HTMLElement,
     translate: (key: string, defaultText: string) => string,
 ): void {
-    const template = document.getElementById('tpl-empty-state-module') as HTMLTemplateElement | null;
+    const template = document.getElementById(
+        'tpl-empty-state-module',
+    ) as HTMLTemplateElement | null;
     if (template === null) {
         return;
     }

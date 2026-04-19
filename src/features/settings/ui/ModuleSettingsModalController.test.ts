@@ -25,7 +25,6 @@ describe('ModuleSettingsModalController', () => {
         modal.close = vi.fn(function (this: HTMLDialogElement) {
             this.open = false;
         });
-
     });
 
     it('opens modal, hides background and wires close actions', () => {

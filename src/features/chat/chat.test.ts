@@ -57,9 +57,7 @@ vi.mock('./services/ChatFileHandler', () => ({
         public hasFiles = vi.fn().mockReturnValue(false);
         public getFiles = vi.fn().mockReturnValue([]);
         public getTotalTokenEstimate = vi.fn().mockResolvedValue(0);
-        public processForSend = vi
-            .fn()
-            .mockResolvedValue({ attachments: [], combinedText: '' });
+        public processForSend = vi.fn().mockResolvedValue({ attachments: [], combinedText: '' });
 
         public constructor() {
             mockChatFileHandlerInstances.push({
@@ -116,7 +114,9 @@ describe('ChatController', () => {
         openExternalUrl: vi.fn().mockResolvedValue(undefined),
         copyText: vi.fn().mockResolvedValue(undefined),
         getPendingChatRevealStore: vi.fn().mockReturnValue(null),
-        estimateTokens: vi.fn((text: string) => Promise.resolve(Math.max(1, Math.ceil(text.length / 4)))),
+        estimateTokens: vi.fn((text: string) =>
+            Promise.resolve(Math.max(1, Math.ceil(text.length / 4))),
+        ),
         hostBridge: {
             invoke: vi.fn(),
             listen: vi.fn(),

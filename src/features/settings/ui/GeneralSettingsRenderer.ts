@@ -391,7 +391,10 @@ export class GeneralSettingsRenderer {
         this._observers.push(observer);
     }
 
-    private _initToggleGroup(config: IToggleGroupConfig, translate: IAppSettingsUIContext['t']): void {
+    private _initToggleGroup(
+        config: IToggleGroupConfig,
+        translate: IAppSettingsUIContext['t'],
+    ): void {
         const cleanup = initGeneralSettingsToggleGroup(config, translate, this._tracer);
         if (cleanup !== null) {
             this._cleanupFns.push(cleanup);

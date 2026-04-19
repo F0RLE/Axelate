@@ -53,7 +53,9 @@ export function bindAISettingsInteractions(deps: AISettingsInteractionBinderDeps
     });
 
     const handleModelSelection = (event: Event) => {
-        const card = (event.target as Element).closest<HTMLElement>('.ai-model-card[data-model-key]');
+        const card = (event.target as Element).closest<HTMLElement>(
+            '.ai-model-card[data-model-key]',
+        );
         if (!card) return;
 
         const keyEvent = event as KeyboardEvent;
@@ -71,7 +73,9 @@ export function bindAISettingsInteractions(deps: AISettingsInteractionBinderDeps
 
     const thinkingGrid = container.querySelector(`#${appId}-thinking-grid`);
     if (thinkingGrid !== null) {
-        const buttons = Array.from(thinkingGrid.querySelectorAll<HTMLElement>('.thinking-option-card'));
+        const buttons = Array.from(
+            thinkingGrid.querySelectorAll<HTMLElement>('.thinking-option-card'),
+        );
 
         const updateThinking = (target: HTMLElement) => {
             const val = (target.dataset['value'] ?? 'high') as ThinkingLevel;
@@ -113,7 +117,9 @@ export function bindAISettingsInteractions(deps: AISettingsInteractionBinderDeps
 
     const internetGrid = container.querySelector(`#${appId}-internet-grid`);
     if (internetGrid !== null) {
-        const buttons = Array.from(internetGrid.querySelectorAll<HTMLElement>('.internet-access-card'));
+        const buttons = Array.from(
+            internetGrid.querySelectorAll<HTMLElement>('.internet-access-card'),
+        );
 
         const updateInternetAccess = (target: HTMLElement) => {
             const enabled = (target.dataset['value'] ?? 'on') === 'on';

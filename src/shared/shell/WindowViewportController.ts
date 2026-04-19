@@ -9,10 +9,8 @@ export interface IWindowViewportState {
 export class WindowViewportController {
     constructor(
         private readonly _service: WindowService,
-        private readonly _translate: (key: string, fallback: string) => string = (
-            _key,
+        private readonly _translate: (key: string, fallback: string) => string = (_key, fallback) =>
             fallback,
-        ) => fallback,
         private readonly _getScreen: () => Screen = () => globalThis.screen,
     ) {}
 

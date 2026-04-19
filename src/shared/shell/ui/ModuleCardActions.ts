@@ -44,9 +44,7 @@ export function buildModuleCardDownloadButton(
     return downloadBtn;
 }
 
-export function buildModuleCardComingSoonButton(
-    translate: ModuleCardTranslate,
-): HTMLButtonElement {
+export function buildModuleCardComingSoonButton(translate: ModuleCardTranslate): HTMLButtonElement {
     const button = document.createElement('button');
     const label = translate('ui.launcher.web.coming_soon', 'Coming soon');
 

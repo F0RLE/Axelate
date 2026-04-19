@@ -24,8 +24,7 @@ export class SidebarAutoCompactPolicy {
     ): boolean {
         if (windowConfig !== null && windowConfig !== undefined) {
             const leadZoom =
-                zoom +
-                this._config.autoCompactWarningLeadSteps * this._config.autoCompactZoomStep;
+                zoom + this._config.autoCompactWarningLeadSteps * this._config.autoCompactZoomStep;
             const effectiveWidth = viewport.width / leadZoom;
             const effectiveHeight = viewport.height / leadZoom;
             const compactWarningWidth =
@@ -40,9 +39,7 @@ export class SidebarAutoCompactPolicy {
     }
 
     public getSidebarWidth(collapsed: boolean, autoCompact: boolean): number {
-        return collapsed || autoCompact
-            ? this._config.collapsedWidth
-            : this._config.expandedWidth;
+        return collapsed || autoCompact ? this._config.collapsedWidth : this._config.expandedWidth;
     }
 
     public getPersistedWidth(collapsed: boolean): number {

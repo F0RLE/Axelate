@@ -15,10 +15,7 @@ import type { NavigationService } from '@/infrastructure/navigation/NavigationSe
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type SettingsUIDeps = {
-    showToast: (
-        message: string,
-        type?: 'success' | 'error' | 'warning' | 'info',
-    ) => void;
+    showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
     tracer: LoggerService;
 };
 
@@ -49,7 +46,11 @@ export class SettingsUI {
 
         this._context = {
             t: (key, defaultValue, params) =>
-                this._i18n.t(key, defaultValue, (params as Record<string, unknown> | undefined) ?? {}),
+                this._i18n.t(
+                    key,
+                    defaultValue,
+                    (params as Record<string, unknown> | undefined) ?? {},
+                ),
             showToast: (message: string, type?: 'success' | 'error' | 'info') => {
                 this._deps.showToast(message, type);
             },

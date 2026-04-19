@@ -3,7 +3,11 @@ import { open } from '@tauri-apps/plugin-dialog';
 import type { EngineConfig } from '@/features/ai/services/EngineConfigService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
-import { formatEngineFieldSaveValue, parseEngineFieldValue, setupInitialEngineFieldValue } from './ModuleSettingsEngineFieldState';
+import {
+    formatEngineFieldSaveValue,
+    parseEngineFieldValue,
+    setupInitialEngineFieldValue,
+} from './ModuleSettingsEngineFieldState';
 
 type EngineFieldType = 'number' | 'text' | 'select' | 'password' | 'textarea';
 type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;

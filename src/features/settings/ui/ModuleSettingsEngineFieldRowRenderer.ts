@@ -133,11 +133,7 @@ export class ModuleSettingsEngineFieldRowRenderer {
         });
         inputWrapper.appendChild(infoButton);
 
-        if (
-            options.isEngineConfig &&
-            options.key === 'extra_args' &&
-            extraArgsControl !== null
-        ) {
+        if (options.isEngineConfig && options.key === 'extra_args' && extraArgsControl !== null) {
             extraArgsControl.root.style.cursor = 'pointer';
             extraArgsControl.root.addEventListener('click', (event) => {
                 const target = event.target as Node;

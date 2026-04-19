@@ -36,7 +36,9 @@ export class WindowServicePolicy {
         try {
             return await this._deps.bridge.invoke<IWindowPolicy>('get_window_policy');
         } catch (error) {
-            this._deps.tracer.error(`[WindowService] Failed to fetch window policy: ${String(error)}`);
+            this._deps.tracer.error(
+                `[WindowService] Failed to fetch window policy: ${String(error)}`,
+            );
             return { isSmallScreen: false, showWarning: false };
         }
     }
@@ -47,7 +49,10 @@ export class WindowServicePolicy {
 
     private syncResolutionChange(): void {
         const currentResolutionKey = this.getCurrentResolutionKey();
-        if (currentResolutionKey === this._lastResolutionKey || currentResolutionKey === 'unknown') {
+        if (
+            currentResolutionKey === this._lastResolutionKey ||
+            currentResolutionKey === 'unknown'
+        ) {
             return;
         }
 
@@ -65,7 +70,9 @@ export class WindowServicePolicy {
     }
 
     private async handleResolutionChange(): Promise<void> {
-        const zoom = await this._deps.zoomService.handleResolutionChange(this._deps.getCurrentZoom());
+        const zoom = await this._deps.zoomService.handleResolutionChange(
+            this._deps.getCurrentZoom(),
+        );
         if (zoom !== null) {
             await this._deps.setZoom(zoom);
         }

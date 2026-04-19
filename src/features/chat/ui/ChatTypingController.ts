@@ -49,8 +49,10 @@ export class ChatTypingController {
             return null;
         }
 
-        return this._translate('ui.gemini.status.retry', 'Rate limited. Retrying in {seconds}s...')
-            .replace('{seconds}', payload.wait_seconds.toString());
+        return this._translate(
+            'ui.gemini.status.retry',
+            'Rate limited. Retrying in {seconds}s...',
+        ).replace('{seconds}', payload.wait_seconds.toString());
     }
 
     public renderTypingStatus(message: string): void {

@@ -258,10 +258,7 @@ export class ChatImageController {
             saveBtn.classList.add('chat-open-image-folder-btn');
             saveBtn.dataset['filePath'] = filePath;
             saveBtn.dataset['folderPath'] = folderPath;
-            saveBtn.title = this._deps.translate(
-                'ui.chat.open_image_folder',
-                'Open image folder',
-            );
+            saveBtn.title = this._deps.translate('ui.chat.open_image_folder', 'Open image folder');
             saveBtn.innerHTML = ChatImageController._folderIcon;
         }, ChatImageController._imageResetDelayMs);
     }

@@ -202,7 +202,10 @@ export class CoreLifecycleController {
     }
 
     public initGlobalShortcuts(globalShortcutKeydown?: (e: KeyboardEvent) => void): void {
-        globalThis.addEventListener('keydown', globalShortcutKeydown ?? this._deps.globalShortcutKeydown);
+        globalThis.addEventListener(
+            'keydown',
+            globalShortcutKeydown ?? this._deps.globalShortcutKeydown,
+        );
     }
 
     public scheduleDeferredChatInit(): void {

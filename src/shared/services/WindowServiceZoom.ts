@@ -70,7 +70,9 @@ export class WindowServiceZoom {
                 return zoom;
             }
         } catch (error) {
-            this._deps.tracer.error(`[WindowService] Failed to fetch backend zoom: ${String(error)}`);
+            this._deps.tracer.error(
+                `[WindowService] Failed to fetch backend zoom: ${String(error)}`,
+            );
         }
 
         return fallback;

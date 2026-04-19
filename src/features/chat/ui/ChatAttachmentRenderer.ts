@@ -176,10 +176,7 @@ export class ChatAttachmentRenderer {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'media-remove';
-        btn.title = this._deps.translate(
-            'ui.launcher.web.remove_attachment',
-            'Remove attachment',
-        );
+        btn.title = this._deps.translate('ui.launcher.web.remove_attachment', 'Remove attachment');
         btn.textContent = 'x';
         btn.onclick = (event) => {
             event.stopPropagation();

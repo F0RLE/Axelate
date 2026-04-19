@@ -36,10 +36,7 @@ import { ModuleSettingsControllerFactory } from './ModuleSettingsControllerFacto
 type ModuleSettingsUIDeps = {
     eventBus: EventBus;
     tracer: Pick<LoggerService, 'error' | 'warn' | 'info' | 'debug'>;
-    showToast: (
-        message: string,
-        type?: 'success' | 'error' | 'warning' | 'info',
-    ) => void;
+    showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
     reopenModuleSettings: (app: IApp) => void;
     closeAppSelection: () => void;
 };
@@ -140,7 +137,9 @@ export class ModuleSettingsUI {
         this._bindEvents();
         this._initCardResizer();
 
-        this._bridgeController.install(async (app: IApp) => await this._openModuleSettingsHelper(app));
+        this._bridgeController.install(
+            async (app: IApp) => await this._openModuleSettingsHelper(app),
+        );
         this._bindGlobalEvents();
     }
 
@@ -164,7 +163,10 @@ export class ModuleSettingsUI {
 
         if (currentApp === undefined || !this._isModuleModalOpen(elements)) return;
 
-        this._deps.tracer.debug('[ModuleSettingsUI] Refreshing active module settings:', currentApp.id);
+        this._deps.tracer.debug(
+            '[ModuleSettingsUI] Refreshing active module settings:',
+            currentApp.id,
+        );
         this._applyModuleTitle(elements.title, currentApp);
         this._renderSpecializedModuleConfig(elements.container, currentApp).catch((e: unknown) => {
             this._deps.tracer.error(String(e));
@@ -192,7 +194,11 @@ export class ModuleSettingsUI {
     private _createContext(): IModuleSettingsUIContext {
         return {
             t: (key, defaultValue, params) =>
-                this._i18n.t(key, defaultValue, (params as Record<string, unknown> | undefined) ?? {}),
+                this._i18n.t(
+                    key,
+                    defaultValue,
+                    (params as Record<string, unknown> | undefined) ?? {},
+                ),
             showToast: (message: string, type?: 'success' | 'error' | 'info') => {
                 this._deps.showToast(message, type);
             },
@@ -391,7 +397,9 @@ export class ModuleSettingsUI {
         return { modal, container, title };
     }
 
-    private _isModuleModalOpen(elements: ModuleSettingsModalElements | null): elements is ModuleSettingsModalElements {
+    private _isModuleModalOpen(
+        elements: ModuleSettingsModalElements | null,
+    ): elements is ModuleSettingsModalElements {
         return elements?.modal.open === true;
     }
 

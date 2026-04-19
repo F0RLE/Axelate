@@ -127,11 +127,7 @@ type ChatSendFactoryDeps = {
     ) => void;
     clearInput: () => void;
     updateTokenCount: (count: number) => void;
-    appendUserMessage: (
-        text: string,
-        attachments: IChatAttachment[],
-        tokens: number,
-    ) => void;
+    appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     handleResponse: (
         response: IChatResponse,

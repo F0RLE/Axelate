@@ -145,7 +145,9 @@ function createCatalogReader(catalog: CatalogService): (category: string) => IAp
     };
 }
 
-function createToastBridge(appUI: AppUI): (message: string, type?: string, duration?: number) => void {
+function createToastBridge(
+    appUI: AppUI,
+): (message: string, type?: string, duration?: number) => void {
     return (message, type, duration) => {
         appUI.showToast(message, type, duration);
     };
@@ -161,9 +163,7 @@ function createModuleSettingsGateway(
     };
 }
 
-function createClipboardWriter(
-    tauriProvider: TauriProvider,
-): (text: string) => Promise<void> {
+function createClipboardWriter(tauriProvider: TauriProvider): (text: string) => Promise<void> {
     const isTauriRuntime = (): boolean => tauriProvider.isTauri();
 
     return async (text: string) => {
@@ -235,7 +235,10 @@ export function createAppUI(deps: CreateAppUIDeps): AppUI {
     );
 }
 
-export function createDownloadUI(i18n: I18nService, modulePlatformService: ModulePlatformService): DownloadUI {
+export function createDownloadUI(
+    i18n: I18nService,
+    modulePlatformService: ModulePlatformService,
+): DownloadUI {
     const downloadUI = new DownloadUI(i18n);
     downloadUI.setOnCancel((moduleId: string) => {
         void modulePlatformService.cancelDownload(moduleId);
@@ -298,7 +301,8 @@ export function createChatController(deps: CreateChatControllerDeps): ChatContro
     const openExternalUrl = createExternalUrlOpener(deps.tauriProvider, deps.tracer);
 
     return new ChatController(deps.aiBridge, deps.i18n, deps.soundService, {
-        showToast: (message, type = 'success', duration = 2000) => showToast(message, type, duration),
+        showToast: (message, type = 'success', duration = 2000) =>
+            showToast(message, type, duration),
         isTauriRuntime,
         openExternalUrl,
         copyText,
@@ -314,7 +318,9 @@ export function createChatController(deps: CreateChatControllerDeps): ChatContro
                         model,
                     });
                 } catch (error) {
-                    deps.tracer.warn(`[TokenCount] Backend failed, using heuristic: ${String(error)}`);
+                    deps.tracer.warn(
+                        `[TokenCount] Backend failed, using heuristic: ${String(error)}`,
+                    );
                 }
             }
 

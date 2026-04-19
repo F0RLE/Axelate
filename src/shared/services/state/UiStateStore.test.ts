@@ -150,7 +150,10 @@ describe('UiStateStore', () => {
             store.updateState({ sidebar_width: 450 });
             await store.saveAsync();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<string, unknown>;
+            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
+                string,
+                unknown
+            >;
             expect(stored['sidebar_width']).toBe(450);
         });
 
@@ -175,7 +178,10 @@ describe('UiStateStore', () => {
             store.updateState({ zoom_level: 1.5 });
             store.saveImmediate();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<string, unknown>;
+            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
+                string,
+                unknown
+            >;
             expect(stored['zoom_level']).toBe(1.5);
         });
 
@@ -275,7 +281,10 @@ describe('UiStateStore', () => {
             // beforeunload is now handled by StateManager; test saveImmediate directly
             store.saveImmediate();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<string, unknown>;
+            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
+                string,
+                unknown
+            >;
             expect(stored['sidebar_width']).toBe(500);
         });
 
@@ -289,7 +298,10 @@ describe('UiStateStore', () => {
             // saveImmediate should still work (no event listeners to remove)
             store.saveImmediate();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<string, unknown>;
+            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
+                string,
+                unknown
+            >;
             expect(stored['sidebar_width']).toBe(640);
         });
     });

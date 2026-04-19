@@ -242,8 +242,7 @@
 .ai-model-card.selected {
     background: var(--premium-purple-bg);
     border-color: var(--premium-purple-border);
-    box-shadow:
-        var(--premium-purple-shadow) !important;
+    box-shadow: var(--premium-purple-shadow) !important;
     color: white;
 }
 
@@ -377,8 +376,7 @@
     background: var(--premium-purple-bg);
     border-color: var(--premium-purple-border);
     color: white;
-    box-shadow:
-        var(--premium-purple-shadow) !important;
+    box-shadow: var(--premium-purple-shadow) !important;
 }
 
 .thinking-option-card.selected .thinking-option-title {

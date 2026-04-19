@@ -25,9 +25,10 @@ describe('ModalSelectionPolicy', () => {
         ] as never[];
 
         expect(policy.hasImageApps(apps)).toBe(true);
-        expect(
-            policy.getVisibleApps(apps, 'ai_text', 'text').map((app) => app.id),
-        ).toEqual(['gemini-fast', 'custom']);
+        expect(policy.getVisibleApps(apps, 'ai_text', 'text').map((app) => app.id)).toEqual([
+            'gemini-fast',
+            'custom',
+        ]);
 
         const card = document.createElement('div');
         expect(policy.getButtonState(card, false)).toEqual({

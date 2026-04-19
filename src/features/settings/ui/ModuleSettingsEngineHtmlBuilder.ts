@@ -30,7 +30,10 @@ export class ModuleSettingsEngineHtmlBuilder {
                         <div class="ai-content-panel">
                             <div class="local-engine-section-header">
                                 <h3 id="${app.id}-core-title">🧩 ${this.escapeHtml(
-                                    this._translate('ui.settings.engine.core_config', 'Core Config'),
+                                    this._translate(
+                                        'ui.settings.engine.core_config',
+                                        'Core Config',
+                                    ),
                                 )}</h3>
                             </div>
                             <div id="local-engine-core-primary-${app.id}" class="local-engine-field-stack local-engine-field-stack--tight"></div>
@@ -49,7 +52,10 @@ export class ModuleSettingsEngineHtmlBuilder {
                 <div class="ai-content-panel">
                     <div class="local-engine-section-header">
                         <h3 id="${appId}-generation-title">🎛️ ${this.escapeHtml(
-                            this._translate('ui.settings.engine.generation_presets', 'Generation Presets'),
+                            this._translate(
+                                'ui.settings.engine.generation_presets',
+                                'Generation Presets',
+                            ),
                         )}</h3>
                     </div>
                     <div class="local-engine-generation-grid local-engine-generation-grid--image">

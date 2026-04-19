@@ -170,7 +170,9 @@ export class NavigationService {
         if (this._forwardActionStack.length > 0) {
             const actionInfo = this._forwardActionStack.pop();
             if (actionInfo) {
-                this._tracer.debug(`[NavigationService] Executing forward action: ${actionInfo.id}`);
+                this._tracer.debug(
+                    `[NavigationService] Executing forward action: ${actionInfo.id}`,
+                );
                 actionInfo.forwardAction();
                 return true;
             }

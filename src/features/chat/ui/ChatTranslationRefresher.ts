@@ -41,7 +41,8 @@ export function refreshChatTranslations(
         }
     }
 
-    if (elements.attachBtn) elements.attachBtn.title = translate('ui.launcher.web.attach', 'Attach');
+    if (elements.attachBtn)
+        elements.attachBtn.title = translate('ui.launcher.web.attach', 'Attach');
     if (elements.voiceBtn) elements.voiceBtn.title = translate('ui.launcher.web.voice', 'Voice');
     if (elements.sendBtn) elements.sendBtn.title = translate('ui.launcher.web.send', 'Send');
 
@@ -55,11 +56,9 @@ export function refreshChatTranslations(
         btn.title = translate('ui.chat.open_image_folder', 'Open image folder');
     });
 
-    document
-        .querySelectorAll<HTMLElement>('.chat-generated-control.is-cancel')
-        .forEach((btn) => {
-            btn.textContent = translate('ui.chat.image_cancel', 'Cancel');
-        });
+    document.querySelectorAll<HTMLElement>('.chat-generated-control.is-cancel').forEach((btn) => {
+        btn.textContent = translate('ui.chat.image_cancel', 'Cancel');
+    });
 
     document
         .querySelectorAll<HTMLElement>('.chat-generated-control.is-regenerate')

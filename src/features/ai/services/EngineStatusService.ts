@@ -70,13 +70,17 @@ export class EngineStatusService {
                 this._setCardState(payload.engine_id, 'starting');
             }),
             this._listen<EngineReadyPayload>('ai:engine:ready', (payload) => {
-                this._tracer.info(`[EngineStatus] Ready: ${payload.engine_id} @ ${payload.endpoint}`);
+                this._tracer.info(
+                    `[EngineStatus] Ready: ${payload.engine_id} @ ${payload.endpoint}`,
+                );
                 this._activeSlots.set(payload.engine_id, payload.endpoint);
                 this._setCardState(payload.engine_id, 'ready');
                 this._updateBadge();
             }),
             this._listen<EngineErrorPayload>('ai:engine:error', (payload) => {
-                this._tracer.error(`[EngineStatus] Error on ${payload.engine_id}: ${payload.message}`);
+                this._tracer.error(
+                    `[EngineStatus] Error on ${payload.engine_id}: ${payload.message}`,
+                );
                 this._activeSlots.delete(payload.engine_id);
                 this._setCardState(payload.engine_id, 'error');
                 this._updateBadge();

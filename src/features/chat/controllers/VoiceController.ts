@@ -29,12 +29,9 @@ export class VoiceController {
             return;
         }
 
-        this._voiceInputService.start(
-            (text) => onResult(text),
-            {
-                onStateChange: ({ state }) => this._onStateChange(state),
-            },
-        );
+        this._voiceInputService.start((text) => onResult(text), {
+            onStateChange: ({ state }) => this._onStateChange(state),
+        });
     }
 
     public stop(): void {

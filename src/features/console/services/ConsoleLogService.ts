@@ -143,7 +143,9 @@ export class ConsoleLogService {
                 return result.data.views;
             }
         } catch (error) {
-            this._tracer.warn(`[ConsoleLogService] Failed to resolve console views: ${String(error)}`);
+            this._tracer.warn(
+                `[ConsoleLogService] Failed to resolve console views: ${String(error)}`,
+            );
         }
 
         const views: IConsoleLogView[] = [{ id: 'general', label: 'General' }];
@@ -208,7 +210,9 @@ export class ConsoleLogService {
                 return this._mapOverviewStatusItems(result.data);
             }
         } catch (error) {
-            this._tracer.warn(`[ConsoleLogService] Failed to resolve engine status: ${String(error)}`);
+            this._tracer.warn(
+                `[ConsoleLogService] Failed to resolve engine status: ${String(error)}`,
+            );
         }
 
         return [];

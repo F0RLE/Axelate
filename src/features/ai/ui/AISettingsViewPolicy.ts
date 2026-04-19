@@ -1,11 +1,6 @@
 export class AISettingsViewPolicy {
     private static readonly _cleanAppIds = new Set(['axelate', 'axelate-platform']);
-    private static readonly _thinkingProviders = new Set([
-        'gemini',
-        'claude',
-        'gpt',
-        'deepseek',
-    ]);
+    private static readonly _thinkingProviders = new Set(['gemini', 'claude', 'gpt', 'deepseek']);
 
     public isCleanApp(appId: string): boolean {
         return AISettingsViewPolicy._cleanAppIds.has(appId) || appId.includes('telegram');

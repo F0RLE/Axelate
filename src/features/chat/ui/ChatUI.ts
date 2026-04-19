@@ -192,7 +192,7 @@ export class ChatUI {
         content: unknown,
         opts: Record<string, unknown> = {},
     ): void {
-            this._prepareContainer();
+        this._prepareContainer();
 
         const row = document.createElement('div');
         row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
@@ -251,7 +251,8 @@ export class ChatUI {
             createMessageBubble: (bubbleOpts) => this._createMessageBubble(bubbleOpts),
             appendMessageActions: (content, actionRole, image) =>
                 this._appendMessageActions(content, actionRole, image),
-            appendAttachments: (bubble, attachments) => this._appendAttachments(bubble, attachments),
+            appendAttachments: (bubble, attachments) =>
+                this._appendAttachments(bubble, attachments),
             appendImages: (bubble, images) => this._appendImages(bubble, images),
             getPrimaryImage: (images) => this._getPrimaryImage(images),
             ensureImageActionButtons: (actionBar, image) => {
@@ -287,7 +288,10 @@ export class ChatUI {
     }
 
     private _prepareContainer(): void {
-        this._viewportController.prepareContainer(this._dom.messagesContainer, this._dom.chatContainer);
+        this._viewportController.prepareContainer(
+            this._dom.messagesContainer,
+            this._dom.chatContainer,
+        );
     }
 
     private _scrollToBottom(sticky = false): void {

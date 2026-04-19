@@ -98,7 +98,9 @@ export class ModalFocusTrapHelper {
     }
 
     public getFocusableElements(root: HTMLElement): HTMLElement[] {
-        return [...root.querySelectorAll<HTMLElement>(ModalFocusTrapHelper.FOCUSABLE_SELECTOR)].filter(
+        return [
+            ...root.querySelectorAll<HTMLElement>(ModalFocusTrapHelper.FOCUSABLE_SELECTOR),
+        ].filter(
             (element) =>
                 !element.hasAttribute('disabled') &&
                 element.tabIndex !== -1 &&

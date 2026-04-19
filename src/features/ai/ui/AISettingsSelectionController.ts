@@ -86,11 +86,7 @@ export class AISettingsSelectionController {
         );
     }
 
-    private _buildStatsMarkup(
-        appId: string,
-        modelKey: string,
-        translate: TranslateFunc,
-    ): string {
+    private _buildStatsMarkup(appId: string, modelKey: string, translate: TranslateFunc): string {
         return `
             <div class="ai-content-panel">
                 <div class="settings-card-header-center">

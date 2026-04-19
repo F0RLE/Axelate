@@ -245,9 +245,7 @@ export class AppUI {
      * @param {string} [type='success'] - The feedback type.
      */
     public showActionFeedback(type = 'success'): void {
-        this._actionFeedbackController.show(
-            type as 'success' | 'error' | 'warning' | 'info',
-        );
+        this._actionFeedbackController.show(type as 'success' | 'error' | 'warning' | 'info');
     }
 
     // --- Skeletons ---
@@ -349,7 +347,9 @@ export class AppUI {
         }
 
         void this._platformService.stop(app).catch((err: unknown) => {
-            this._deps.tracer.warn(`[AppUI] Failed to stop removed module ${app.id}: ${String(err)}`);
+            this._deps.tracer.warn(
+                `[AppUI] Failed to stop removed module ${app.id}: ${String(err)}`,
+            );
         });
     }
 
@@ -455,5 +455,4 @@ export class AppUI {
             'info',
         );
     }
-
 }

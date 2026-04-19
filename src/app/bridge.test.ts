@@ -43,7 +43,9 @@ describe('GlobalBridge', () => {
 
     it('starts AI provider before launching AI app', async () => {
         const bridge = new GlobalBridge(core);
-        core.tauriProvider.invoke = vi.fn().mockResolvedValue({ action: 'navigate', provider: 'gpt' });
+        core.tauriProvider.invoke = vi
+            .fn()
+            .mockResolvedValue({ action: 'navigate', provider: 'gpt' });
 
         await bridge.launchApp('gpt');
 

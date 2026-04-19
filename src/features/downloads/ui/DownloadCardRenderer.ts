@@ -62,7 +62,8 @@ export class DownloadCardRenderer {
         const speed = state.speed ?? 0;
         const statValues = card.querySelectorAll('.downloads-stat-value');
         if (statValues[0]) statValues[0].textContent = this._deps.formatBytes(downloaded);
-        if (statValues[1]) statValues[1].textContent = total > 0 ? this._deps.formatBytes(total) : '--';
+        if (statValues[1])
+            statValues[1].textContent = total > 0 ? this._deps.formatBytes(total) : '--';
         if (statValues[2]) statValues[2].textContent = this._deps.formatSpeed(speed);
 
         const itemLabel = card.querySelector('.downloads-item-label');
@@ -74,12 +75,18 @@ export class DownloadCardRenderer {
     public patchCardTranslations(card: HTMLElement): void {
         const progressLabel = card.querySelector('.downloads-progress-label');
         if (progressLabel !== null) {
-            progressLabel.textContent = this._deps.translate('ui.launcher.web.progress', 'Progress');
+            progressLabel.textContent = this._deps.translate(
+                'ui.launcher.web.progress',
+                'Progress',
+            );
         }
 
         const downloadedLabel = card.querySelector('.downloads-downloaded-label');
         if (downloadedLabel !== null) {
-            downloadedLabel.textContent = this._deps.translate('ui.launcher.web.downloaded', 'Downloaded');
+            downloadedLabel.textContent = this._deps.translate(
+                'ui.launcher.web.downloaded',
+                'Downloaded',
+            );
         }
 
         const totalLabel = card.querySelector('.downloads-total-label');

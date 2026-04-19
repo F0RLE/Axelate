@@ -72,8 +72,9 @@ export class AIBridgeRuntime {
         }
 
         const isImageProvider = args.providerPolicy.isImageProvider(args.providerId);
-        const isManagedLocalImageEngine =
-            args.providerPolicy.isManagedLocalImageEngine(args.providerId);
+        const isManagedLocalImageEngine = args.providerPolicy.isManagedLocalImageEngine(
+            args.providerId,
+        );
 
         try {
             if (isImageProvider) {
@@ -116,9 +117,12 @@ export class AIBridgeRuntime {
             return [];
         }
 
-        return await (context.tauriProvider as unknown as TauriProvider).invoke('get_chat_history', {
-            sessionId,
-        });
+        return await (context.tauriProvider as unknown as TauriProvider).invoke(
+            'get_chat_history',
+            {
+                sessionId,
+            },
+        );
     }
 
     public async clearHistory(context: AIBridgeContext | null, sessionId: string): Promise<void> {

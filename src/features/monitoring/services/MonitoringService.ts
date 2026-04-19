@@ -63,7 +63,9 @@ export class MonitoringService {
             // Optimization: Pause backend monitoring when window is hidden
             this._bindVisibilityHandler();
         } else {
-            this._tracer.info('[MonitoringService] Non-Tauri environment, starting fallback polling');
+            this._tracer.info(
+                '[MonitoringService] Non-Tauri environment, starting fallback polling',
+            );
             this.startFallback();
         }
     }

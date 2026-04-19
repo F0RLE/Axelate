@@ -104,9 +104,7 @@ export class StateManager {
         const targets = [...this._targets.values()];
         if (targets.length === 0) return;
 
-        this._tracer.info(
-            `[StateManager] Saving ${String(targets.length)} targets (immediate)...`,
-        );
+        this._tracer.info(`[StateManager] Saving ${String(targets.length)} targets (immediate)...`);
 
         // Fire all saves — no await, best effort before page unloads
         for (const target of targets) {

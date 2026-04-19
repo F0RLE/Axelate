@@ -61,8 +61,8 @@ describe('ChatFileHandler', () => {
             error: vi.fn(),
         };
         handler = new ChatFileHandler(tracer);
-        handler.setTokenEstimator(async (text: string, model?: string) =>
-            await getTokenCount(text, model),
+        handler.setTokenEstimator(
+            async (text: string, model?: string) => await getTokenCount(text, model),
         );
         mockBridge = {
             isTauri: vi.fn(),

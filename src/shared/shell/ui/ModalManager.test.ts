@@ -393,9 +393,9 @@ describe('ModalManager lifecycle', () => {
         const policy = new ModalSelectionPolicy();
         const sorted = policy.getVisibleApps(
             [
-            { id: 'custom', name: 'A Localized Name', installed: true } as IApp,
-            { id: 'gemini', name: 'ZZZ localized', installed: true } as IApp,
-            { id: 'gpt', name: 'YYY localized', installed: true } as IApp,
+                { id: 'custom', name: 'A Localized Name', installed: true } as IApp,
+                { id: 'gemini', name: 'ZZZ localized', installed: true } as IApp,
+                { id: 'gpt', name: 'YYY localized', installed: true } as IApp,
             ],
             'services',
             'text',

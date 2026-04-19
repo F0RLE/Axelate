@@ -30,10 +30,7 @@ type ImageGenerationHandle = {
 
 type ChatSendControllerOptions = {
     aiBridge: AIBridge;
-    fileHandler: Pick<
-        ChatFileHandler,
-        'hasFiles' | 'getTotalTokenEstimate' | 'processForSend'
-    >;
+    fileHandler: Pick<ChatFileHandler, 'hasFiles' | 'getTotalTokenEstimate' | 'processForSend'>;
     service: ChatService;
     getHistory: () => IChatMessage[];
     pushUserMessage: (content: IChatMessage['content']) => void;

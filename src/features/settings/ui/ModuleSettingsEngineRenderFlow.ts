@@ -32,7 +32,10 @@ type ModuleSettingsEngineRenderOptions = {
     html: string;
     sanitizeHtml: (html: string) => string;
     translate: TranslateFn;
-    getImageGroups: (translate: TranslateFn, appId: string) => {
+    getImageGroups: (
+        translate: TranslateFn,
+        appId: string,
+    ) => {
         promptFields: EngineFieldDefinition[];
         sizeFields: EngineFieldDefinition[];
         samplingFields: EngineFieldDefinition[];
@@ -148,9 +151,13 @@ export class ModuleSettingsEngineRenderFlow {
         translate: TranslateFn;
         getImageGroups: ModuleSettingsEngineRenderOptions['getImageGroups'];
     }): void {
-        const promptsGroup = options.container.querySelector(`#local-engine-prompts-${options.appId}`);
+        const promptsGroup = options.container.querySelector(
+            `#local-engine-prompts-${options.appId}`,
+        );
         const sizeGroup = options.container.querySelector(`#local-engine-size-${options.appId}`);
-        const samplingGroup = options.container.querySelector(`#local-engine-sampling-${options.appId}`);
+        const samplingGroup = options.container.querySelector(
+            `#local-engine-sampling-${options.appId}`,
+        );
         const batchGroup = options.container.querySelector(`#local-engine-batch-${options.appId}`);
         if (
             !(promptsGroup instanceof HTMLElement) ||
@@ -169,13 +176,23 @@ export class ModuleSettingsEngineRenderFlow {
             options.config,
         );
         this._deps.syncPromptTextareaHeights(promptsGroup);
-        this._deps.renderFieldDefinitions(sizeGroup, imageGroups.sizeFields, options.appId, options.config);
+        this._deps.renderFieldDefinitions(
+            sizeGroup,
+            imageGroups.sizeFields,
+            options.appId,
+            options.config,
+        );
         this._deps.renderFieldDefinitions(
             samplingGroup,
             imageGroups.samplingFields,
             options.appId,
             options.config,
         );
-        this._deps.renderFieldDefinitions(batchGroup, imageGroups.batchFields, options.appId, options.config);
+        this._deps.renderFieldDefinitions(
+            batchGroup,
+            imageGroups.batchFields,
+            options.appId,
+            options.config,
+        );
     }
 }

@@ -36,10 +36,7 @@ import type { EventBus } from '@/shared/services/EventBus';
 import { ErrorHandler } from '@/shared/services/ErrorHandler';
 import type { StateManager } from '@/shared/services/StateManager';
 import { bindCoreEntry } from './CoreEntry';
-import {
-    createCoreUiBundle,
-    createStateManager,
-} from './CoreUiFactory';
+import { createCoreUiBundle, createStateManager } from './CoreUiFactory';
 import { configureCoreServices, createCoreServiceBundle } from './CoreServiceFactory';
 import {
     bindAIBridgeContext,

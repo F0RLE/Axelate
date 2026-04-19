@@ -253,5 +253,4 @@ export class ModuleService {
             this._lastLoggedDownloadPhase.delete(payload.module_id);
         }
     }
-
 }

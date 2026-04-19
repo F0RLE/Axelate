@@ -133,10 +133,7 @@ export function renderModelCard(
     `;
 }
 
-export function renderModelStats(
-    modelData: IAIModelData | null,
-    translate: TranslateFunc,
-): string {
+export function renderModelStats(modelData: IAIModelData | null, translate: TranslateFunc): string {
     const stats = modelData?.stats;
 
     if (stats) {

@@ -24,10 +24,7 @@ const ICONS = {
 } as const;
 
 type TranslateFunc = (key: string, fallback: string) => string;
-type ShowToast = (
-    message: string,
-    type: 'success' | 'error' | 'warning' | 'info',
-) => void;
+type ShowToast = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 type AISettingsRendererLogger = Pick<LoggerService, 'info' | 'debug' | 'error'>;
 
 // IAISettingsGlobal removed as it's no longer used for strictness reasons
@@ -296,10 +293,7 @@ class AISettingsRenderer extends BaseComponent {
         return this._translate;
     }
 
-    private _showToast(
-        message: string,
-        type: 'success' | 'error' | 'warning' | 'info',
-    ): void {
+    private _showToast(message: string, type: 'success' | 'error' | 'warning' | 'info'): void {
         this._showToastCallback(message, type);
     }
 

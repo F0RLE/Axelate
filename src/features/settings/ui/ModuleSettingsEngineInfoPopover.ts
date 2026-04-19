@@ -59,10 +59,7 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         );
         deps.showToast(
             added > 0
-                ? deps.translate(
-                      'ui.settings.engine.extra_args.add_all_success',
-                      'Arguments added',
-                  )
+                ? deps.translate('ui.settings.engine.extra_args.add_all_success', 'Arguments added')
                 : deps.translate(
                       'ui.settings.engine.extra_args.add_all_exists',
                       'Arguments already added',
@@ -104,10 +101,7 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
             const added = deps.appendExtraArgs(appId, [item.flag]);
             deps.showToast(
                 (added > 0
-                    ? deps.translate(
-                          'ui.settings.engine.extra_args.flag_added',
-                          '{flag} added',
-                      )
+                    ? deps.translate('ui.settings.engine.extra_args.flag_added', '{flag} added')
                     : deps.translate(
                           'ui.settings.engine.extra_args.flag_exists',
                           '{flag} already added',

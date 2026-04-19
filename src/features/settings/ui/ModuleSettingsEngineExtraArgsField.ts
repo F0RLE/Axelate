@@ -8,9 +8,7 @@ export type EngineExtraArgsControl = {
     setGroups: (groups: string[]) => void;
 };
 
-export function createEngineExtraArgsField(
-    translate: ExtraArgsTranslate,
-): EngineExtraArgsControl {
+export function createEngineExtraArgsField(translate: ExtraArgsTranslate): EngineExtraArgsControl {
     const root = document.createElement('div');
     root.className = 'local-engine-tags-editor';
 

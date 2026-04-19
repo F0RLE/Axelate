@@ -10,10 +10,7 @@ type KeyControllerOptions = {
     getSettingsService: () => SettingsService | null;
     getTranslator: () => TranslateFunc;
     scheduleButtonReset: (button: KeyButton, callback: () => void) => void;
-    showToast: (
-        message: string,
-        type: 'success' | 'error' | 'warning' | 'info',
-    ) => void;
+    showToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
     icons: {
         visible: string;
         hidden: string;
@@ -62,7 +59,10 @@ export class AISettingsKeyController {
             return;
         }
 
-        if (input.dataset['storedMasked'] === 'true' && input.dataset['storedRevealed'] !== 'true') {
+        if (
+            input.dataset['storedMasked'] === 'true' &&
+            input.dataset['storedRevealed'] !== 'true'
+        ) {
             const settingsService = this._options.getSettingsService();
             const revealedKey = await settingsService?.getSecureKey(providerId);
             if (revealedKey === undefined || revealedKey === null || revealedKey === '') {
@@ -207,9 +207,6 @@ export class AISettingsKeyController {
     }
 
     private _showToast(message: string, type: string): void {
-        this._options.showToast(
-            message,
-            type as 'success' | 'error' | 'warning' | 'info',
-        );
+        this._options.showToast(message, type as 'success' | 'error' | 'warning' | 'info');
     }
 }

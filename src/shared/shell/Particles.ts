@@ -19,8 +19,7 @@ type ParticlesRuntime = {
 
 function createDefaultParticlesRuntime(): ParticlesRuntime {
     return {
-        isTauriRuntime: () =>
-            (globalThis as IParticlesGlobal).__TAURI_INTERNALS__ !== undefined,
+        isTauriRuntime: () => (globalThis as IParticlesGlobal).__TAURI_INTERNALS__ !== undefined,
         getViewportSize: () => ({
             width: globalThis.innerWidth,
             height: globalThis.innerHeight,

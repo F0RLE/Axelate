@@ -18,9 +18,7 @@ export class ConsoleLogNormalizer {
             summary_message: summaryMessage,
             source_label: this._formatSourceLabel(normalizedSource, source),
             source_class:
-                source.startsWith('module:') === true
-                    ? 'src-MODULE'
-                    : `src-${normalizedSource}`,
+                source.startsWith('module:') === true ? 'src-MODULE' : `src-${normalizedSource}`,
             page: this._extractPage(parsed.message),
             action: this._extractAction(parsed.message),
             expected: this._extractExpected(parsed.message),

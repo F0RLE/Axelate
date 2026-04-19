@@ -108,9 +108,8 @@ export class ChatController {
         this._tracer = deps.tracer;
         this._service = new ChatService(_aiBridge, _i18n, this._tracer);
         this._fileHandler = new ChatFileHandler(this._tracer);
-        this._voiceInputService = new VoiceInputService(
-            this._tracer,
-            () => this._i18n.getCurrentLang(),
+        this._voiceInputService = new VoiceInputService(this._tracer, () =>
+            this._i18n.getCurrentLang(),
         );
         this._fileHandler.setTokenEstimator((text, model) => deps.estimateTokens(text, model));
         this._fileHandler.setBridge(deps.hostBridge);
@@ -343,8 +342,7 @@ export class ChatController {
             restoreInputText: (text) => {
                 this._inputCoordinator.restore(text);
             },
-            isImageProvider: (providerId) =>
-                this._generationController.isImageProvider(providerId),
+            isImageProvider: (providerId) => this._generationController.isImageProvider(providerId),
             lockUi: (input) => this._lockUI(input),
             unlockUi: (els) => {
                 this._unlockUI(els);

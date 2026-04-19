@@ -22,10 +22,7 @@ export function extractErrorMessage(error: unknown): string {
     return String(error);
 }
 
-function extractFromObject(
-    value: Record<string, unknown>,
-    translate: ChatTranslate,
-): string {
+function extractFromObject(value: Record<string, unknown>, translate: ChatTranslate): string {
     if ('message' in value && typeof value['message'] === 'string') return value['message'];
     if ('error' in value && typeof value['error'] === 'string') return value['error'];
     if ('text' in value && typeof value['text'] === 'string') return value['text'];

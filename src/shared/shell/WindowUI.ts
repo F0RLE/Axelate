@@ -87,10 +87,8 @@ export class WindowUI {
                 soundToggle: this._soundToggle,
             }),
         });
-        this._viewportController = new WindowViewportController(
-            _service,
-            i18n.t.bind(i18n),
-            () => this._runtime.getScreen(),
+        this._viewportController = new WindowViewportController(_service, i18n.t.bind(i18n), () =>
+            this._runtime.getScreen(),
         );
         this._viewportState = this._createViewportState();
     }

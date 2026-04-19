@@ -79,7 +79,9 @@ export class WindowServiceActions {
             }
         }
 
-        this._deps.tracer.error('[WindowService] All show_window attempts failed. Continuing anyway.');
+        this._deps.tracer.error(
+            '[WindowService] All show_window attempts failed. Continuing anyway.',
+        );
     }
 
     public async setMonitoringPaused(paused: boolean): Promise<void> {

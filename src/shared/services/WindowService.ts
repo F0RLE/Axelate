@@ -8,13 +8,8 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { WindowServiceActions } from './WindowServiceActions';
 import { WindowNativeBridgeHelper } from './WindowNativeBridgeHelper';
 import { WindowServicePolicy } from './WindowServicePolicy';
-import {
-    WindowServicePersistence,
-} from './WindowServicePersistence';
-import {
-    WindowServiceZoom,
-    type WindowZoomSettingsStore,
-} from './WindowServiceZoom';
+import { WindowServicePersistence } from './WindowServicePersistence';
+import { WindowServiceZoom, type WindowZoomSettingsStore } from './WindowServiceZoom';
 
 type WindowServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
@@ -145,7 +140,8 @@ export class WindowService {
 
                 // Use pre-loaded initialZoom or determine it
                 const zoom =
-                    initialZoom ?? (await this._zoomService.getInitialZoomWithFallback(fallbackZoom));
+                    initialZoom ??
+                    (await this._zoomService.getInitialZoomWithFallback(fallbackZoom));
                 await this.setZoom(zoom);
             } catch (e) {
                 this._tracer.warn(

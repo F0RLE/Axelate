@@ -194,7 +194,9 @@ export function createChatImageGenerationMessage(
             showRegenerateOnly();
             deps.scrollToBottom();
         },
-        cancel: (message = deps.translate('ui.chat.image_cancelled', 'Image generation cancelled')) => {
+        cancel: (
+            message = deps.translate('ui.chat.image_cancelled', 'Image generation cancelled'),
+        ) => {
             status.textContent = message;
             progress.classList.remove('is-complete');
             progressFill.style.width = '';

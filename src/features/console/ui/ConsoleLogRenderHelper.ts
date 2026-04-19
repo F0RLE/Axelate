@@ -70,7 +70,10 @@ export class ConsoleLogRenderHelper {
         container.dataset['level'] = normalizedLevel;
         summary.className = `log-entry level-${log.parsed.level ?? 'INFO'}`;
         summary.appendChild(
-            this._createSpan('log-time', log.parsed.time ?? this._formatTimestamp(log.rawLogs[0]?.timestamp)),
+            this._createSpan(
+                'log-time',
+                log.parsed.time ?? this._formatTimestamp(log.rawLogs[0]?.timestamp),
+            ),
         );
         if (shouldHideSource) {
             summary.classList.add('log-entry-no-source');

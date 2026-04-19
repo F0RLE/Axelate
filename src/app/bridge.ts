@@ -19,8 +19,7 @@ export interface ICoreBridge {
     readonly tauriProvider: TauriProvider;
 }
 
-type GlobalBridgeRuntime = {
-};
+type GlobalBridgeRuntime = {};
 
 /**
  * GlobalBridge keeps runtime transport concerns out of Core boot logic.

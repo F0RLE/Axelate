@@ -61,10 +61,7 @@ export class VoiceInputService {
     /**
      * Start voice recording
      */
-    public start(
-        onResult: VoiceResultCallback,
-        callbacks: VoiceSessionCallbacks = {},
-    ): boolean {
+    public start(onResult: VoiceResultCallback, callbacks: VoiceSessionCallbacks = {}): boolean {
         if (this.isActive()) {
             this.stop();
             return false;

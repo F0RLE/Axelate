@@ -52,9 +52,7 @@ export class ConsoleLogPresentationHelper {
         logs.forEach((log, index) => {
             const parsed = this._parseLogMessage(log);
             const dedupeKey = [
-                this._shouldDedupeAcrossSources(log)
-                    ? 'semantic'
-                    : log.source,
+                this._shouldDedupeAcrossSources(log) ? 'semantic' : log.source,
                 log.normalized_level ?? '',
                 parsed.scope ?? '',
                 log.summary_message ?? '',
@@ -91,7 +89,9 @@ export class ConsoleLogPresentationHelper {
     }
 
     private _filterDisplayLogs(logs: ConsoleDisplayLog[]): ConsoleDisplayLog[] {
-        return logs.filter((log) => this._deps.matchesNormalizedLevel(this.getNormalizedLevel(log)));
+        return logs.filter((log) =>
+            this._deps.matchesNormalizedLevel(this.getNormalizedLevel(log)),
+        );
     }
 
     private _formatClipboardLine(log: ConsoleDisplayLog): string {
@@ -152,9 +152,7 @@ export class ConsoleLogPresentationHelper {
             sourceLabel: firstLog?.source_label ?? '',
             sourceClass:
                 firstLog?.source_class ??
-                ((firstLog?.source ?? '').startsWith('module:') === true
-                    ? 'src-MODULE'
-                    : ''),
+                ((firstLog?.source ?? '').startsWith('module:') === true ? 'src-MODULE' : ''),
             parsed,
             summaryMessage,
             count: groupedLogs.length,
@@ -269,8 +267,7 @@ export class ConsoleLogPresentationHelper {
         }
 
         const expected =
-            contextItems.find((item) => item.label === 'Expected')?.value ??
-            'axelate-module.toml';
+            contextItems.find((item) => item.label === 'Expected')?.value ?? 'axelate-module.toml';
 
         return [
             `Check that the module folder contains ${expected}.`,

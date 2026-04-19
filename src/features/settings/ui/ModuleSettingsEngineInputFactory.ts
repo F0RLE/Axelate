@@ -15,7 +15,9 @@ export type ModuleSettingsEngineControlOptions = {
 export class ModuleSettingsEngineInputFactory {
     public constructor(private readonly _deps: ModuleSettingsEngineInputFactoryDeps) {}
 
-    public createTextAreaField(options: Pick<ModuleSettingsEngineControlOptions, 'placeholder'>): HTMLTextAreaElement {
+    public createTextAreaField(
+        options: Pick<ModuleSettingsEngineControlOptions, 'placeholder'>,
+    ): HTMLTextAreaElement {
         const textArea = document.createElement('textarea');
         textArea.className = 'settings-input local-engine-input local-engine-input--textarea';
         if (options.placeholder !== undefined && options.placeholder !== '') {
@@ -70,9 +72,7 @@ export class ModuleSettingsEngineInputFactory {
         return textInput;
     }
 
-    public createBasicControl(
-        options: ModuleSettingsEngineControlOptions,
-    ): EngineInputElement {
+    public createBasicControl(options: ModuleSettingsEngineControlOptions): EngineInputElement {
         if (options.type === 'textarea') {
             return this.createTextAreaField(options);
         }

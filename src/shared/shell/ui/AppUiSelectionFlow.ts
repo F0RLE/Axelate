@@ -16,10 +16,7 @@ type AppUiSelectionFlowDeps = {
         launchApp: LaunchAppFn,
     ) => Promise<void>;
     removeSelectedModule: (category: string) => void;
-    setSelectedModule: (
-        category: string,
-        moduleData: Partial<IApp>,
-    ) => void;
+    setSelectedModule: (category: string, moduleData: Partial<IApp>) => void;
     launchApp?: LaunchAppFn;
 };
 

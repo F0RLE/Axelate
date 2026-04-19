@@ -1,13 +1,9 @@
-import {
-    type ConsoleLogService,
-} from '../services/ConsoleLogService';
+import { type ConsoleLogService } from '../services/ConsoleLogService';
 import type { EventBus } from '@/shared/services/EventBus';
 import { ConsoleClipboardHelper } from './ConsoleClipboardHelper';
 import { ConsoleFilterControlHelper } from './ConsoleFilterControlHelper';
 import { ConsoleInteractionHelper } from './ConsoleInteractionHelper';
-import {
-    ConsoleLogPresentationHelper,
-} from './ConsoleLogPresentationHelper';
+import { ConsoleLogPresentationHelper } from './ConsoleLogPresentationHelper';
 import { ConsoleLogRenderHelper } from './ConsoleLogRenderHelper';
 import { ConsoleViewHelper } from './ConsoleViewHelper';
 import { ConsolePollingController } from './ConsolePollingController';
@@ -62,7 +58,10 @@ export class ConsoleUI {
     private readonly _showToast: ConsoleShowToast;
     private readonly _eventBus: EventBus;
 
-    constructor(private readonly service: ConsoleLogService, deps: ConsoleUIDeps) {
+    constructor(
+        private readonly service: ConsoleLogService,
+        deps: ConsoleUIDeps,
+    ) {
         this._eventBus = deps.eventBus;
         this._translateFn = deps.translate;
         this._showToast = deps.showToast;

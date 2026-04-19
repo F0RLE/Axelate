@@ -12,15 +12,12 @@ describe('AppUiChrome', () => {
             _key,
             fallback,
         ) => fallback;
-        chrome = new AppUiChrome(
-            undefined,
-            {
-                info: vi.fn(),
-                warn: vi.fn(),
-                error: vi.fn(),
-                debug: vi.fn(),
-            } as unknown as LoggerService,
-        );
+        chrome = new AppUiChrome(undefined, {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService);
     });
 
     it('reuses a single action feedback node', () => {

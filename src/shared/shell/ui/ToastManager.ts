@@ -81,7 +81,13 @@ export class ToastManager {
         const existingToast = id === null ? null : this._findToastById(id);
 
         if (existingToast !== null) {
-            this._updateExistingToast(existingToast, normalizedMessage, type, normalizedTitle, duration);
+            this._updateExistingToast(
+                existingToast,
+                normalizedMessage,
+                type,
+                normalizedTitle,
+                duration,
+            );
             return;
         }
 

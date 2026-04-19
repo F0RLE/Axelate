@@ -127,9 +127,7 @@ export async function fetchBootstrapData(
     }
 }
 
-export async function hydrateCriticalServices(
-    args: HydrateCriticalServicesArgs,
-): Promise<void> {
+export async function hydrateCriticalServices(args: HydrateCriticalServicesArgs): Promise<void> {
     const preferredLanguage = args.bootstrapData.uiState.preferred_language;
     args.stateStore.setState(args.bootstrapData.uiState);
     args.tracer.debug(
@@ -138,7 +136,9 @@ export async function hydrateCriticalServices(
     await loadCriticalTemplates(args.templateLoader);
     await Promise.all([
         args.windowService.init(args.bootstrapData.windowConfig, args.bootstrapData.initialZoom),
-        args.i18n.init(preferredLanguage !== null ? preferredLanguage : args.bootstrapData.systemLanguage),
+        args.i18n.init(
+            preferredLanguage !== null ? preferredLanguage : args.bootstrapData.systemLanguage,
+        ),
         args.catalog.loadCatalog(),
     ]);
     args.windowUI.init();
@@ -148,7 +148,7 @@ export async function hydrateCriticalServices(
 
 export async function showInitialPage(args: ShowInitialPageArgs): Promise<void> {
     const state = args.stateStore.getState();
-    const pageId = state.pending_chat_reveal === true ? 'chat' : state.last_page ?? 'home';
+    const pageId = state.pending_chat_reveal === true ? 'chat' : (state.last_page ?? 'home');
 
     args.navigation.refreshFromUiState(pageId);
     await args.navigationUI.showPage(pageId, null, true, true);
@@ -165,9 +165,7 @@ export function initializeImmediateUi(args: InitializeImmediateUiArgs): void {
     void args.downloadUI.init();
 }
 
-export async function initializeDeferredUi(
-    args: InitializeDeferredUiArgs,
-): Promise<void> {
+export async function initializeDeferredUi(args: InitializeDeferredUiArgs): Promise<void> {
     await args.settingsService.loadSettings();
     void args.monitoringUI.init();
     await args.settingsUI.init();

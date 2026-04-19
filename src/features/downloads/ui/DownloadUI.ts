@@ -53,7 +53,8 @@ export class DownloadUI {
         this._presenter = new DownloadProgressPresenter(this._createPresenterDeps());
         this._cardRenderer = new DownloadCardRenderer(this._createCardRendererDeps());
         this._dynamicListController = new DownloadUiDynamicListController({
-            syncCards: (list, activeDownloads) => this._cardRenderer.syncCards(list, activeDownloads),
+            syncCards: (list, activeDownloads) =>
+                this._cardRenderer.syncCards(list, activeDownloads),
         });
         this._terminalCleanupController = new DownloadUiTerminalCleanupController(
             this._runtime,
@@ -83,7 +84,9 @@ export class DownloadUI {
         };
     }
 
-    private _createEventControllerDeps(): ConstructorParameters<typeof DownloadUiEventController>[0] {
+    private _createEventControllerDeps(): ConstructorParameters<
+        typeof DownloadUiEventController
+    >[0] {
         return {
             clearTerminalCleanup: (moduleId) => this._terminalCleanupController.clear(moduleId),
             scheduleTerminalCleanup: (moduleId, delayMs) =>
@@ -152,7 +155,12 @@ export class DownloadUI {
     private _updateDownloadsLayout(
         els: Pick<
             DownloadUiElements,
-            'mainCard' | 'infoCard' | 'downloadsBody' | 'downloadsHeader' | 'downloadsContainer' | 'pageDownloads'
+            | 'mainCard'
+            | 'infoCard'
+            | 'downloadsBody'
+            | 'downloadsHeader'
+            | 'downloadsContainer'
+            | 'pageDownloads'
         >,
         hasActive: boolean,
     ): void {

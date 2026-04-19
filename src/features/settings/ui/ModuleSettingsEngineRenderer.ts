@@ -175,7 +175,8 @@ export class ModuleSettingsEngineRenderer {
     >[0] {
         return {
             createControl: (options) => this._createEngineFieldControl(options),
-            setupInitialValue: (input, options) => this._setupEngineFieldInitialValue(input, options),
+            setupInitialValue: (input, options) =>
+                this._setupEngineFieldInitialValue(input, options),
             setupEvents: (input, options) => this._setupEngineFieldEvents(input, options),
             registerCleanup: (cleanup) => {
                 this._deps.registerCleanup(cleanup);
@@ -186,17 +187,16 @@ export class ModuleSettingsEngineRenderer {
                 this._addFileBrowseButton(container, input, isImage);
             },
             getExtraArgsInfoText: () =>
-                this._translate(
-                    'ui.settings.engine.extra_args.info',
-                    'Extra arguments info',
-                ),
+                this._translate('ui.settings.engine.extra_args.info', 'Extra arguments info'),
             toggleInfoPopover: (anchor, appId) => {
                 this._toggleEngineInfoPopover(anchor, appId);
             },
         };
     }
 
-    private _createRenderFlowDeps(): ConstructorParameters<typeof ModuleSettingsEngineRenderFlow>[0] {
+    private _createRenderFlowDeps(): ConstructorParameters<
+        typeof ModuleSettingsEngineRenderFlow
+    >[0] {
         return {
             renderFieldDefinitions: (container, definitions, appId, config) => {
                 this._renderFieldDefinitions(container, definitions, appId, config);
@@ -289,7 +289,9 @@ export class ModuleSettingsEngineRenderer {
         return this._htmlBuilder.buildEngineConfigHtml(app, config);
     }
 
-    private _createEngineFieldControl(options: EngineFieldControlOptions): EngineFieldControlResult {
+    private _createEngineFieldControl(
+        options: EngineFieldControlOptions,
+    ): EngineFieldControlResult {
         if (options.type === 'select') {
             return this._createSelectFieldControl(options);
         }
@@ -307,7 +309,9 @@ export class ModuleSettingsEngineRenderer {
         return this._createPlainFieldControl(input);
     }
 
-    private _createSelectFieldControl(options: EngineFieldControlOptions): EngineFieldControlResult {
+    private _createSelectFieldControl(
+        options: EngineFieldControlOptions,
+    ): EngineFieldControlResult {
         const customSelect = this._createCustomSelectField(options);
         return {
             input: customSelect.root,

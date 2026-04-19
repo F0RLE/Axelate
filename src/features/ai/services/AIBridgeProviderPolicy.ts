@@ -24,11 +24,7 @@ export class AIBridgeProviderPolicy {
         'claude',
         'deepseek',
     ]);
-    private static readonly _imageProviders = new Set([
-        'sdcpp',
-        'stable-diffusion',
-        'comfyui',
-    ]);
+    private static readonly _imageProviders = new Set(['sdcpp', 'stable-diffusion', 'comfyui']);
     private static readonly _managedLocalImageEngines = new Set(['sdcpp', 'stable-diffusion']);
 
     public isCloudProvider(providerId: string): boolean {

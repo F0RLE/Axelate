@@ -183,15 +183,25 @@ describe('ConsoleUI lifecycle', () => {
     it('should clear, copy and render logs through browser clipboard fallback', async () => {
         vi.useFakeTimers();
         const service = createServiceMock({
-            getLogs: vi.fn().mockReturnValue(normalizeLogs([
-                { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
-                { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
-            ])),
-            getLogsForView: vi.fn().mockReturnValue(normalizeLogs([
-                { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
-                { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
-            ])),
-            fetchLogs: vi.fn().mockResolvedValue(normalizeLogs([{ level: 'INFO', message: 'new', source: 'system', timestamp: 3 }])),
+            getLogs: vi.fn().mockReturnValue(
+                normalizeLogs([
+                    { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
+                    { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
+                ]),
+            ),
+            getLogsForView: vi.fn().mockReturnValue(
+                normalizeLogs([
+                    { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
+                    { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
+                ]),
+            ),
+            fetchLogs: vi
+                .fn()
+                .mockResolvedValue(
+                    normalizeLogs([
+                        { level: 'INFO', message: 'new', source: 'system', timestamp: 3 },
+                    ]),
+                ),
         });
 
         ui = new ConsoleUI(service, createDeps());
@@ -222,15 +232,25 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogs: vi
                 .fn()
-                .mockReturnValue(normalizeLogs([
-                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ])),
+                .mockReturnValue(
+                    normalizeLogs([
+                        { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                    ]),
+                ),
             getLogsForView: vi
                 .fn()
-                .mockReturnValue(normalizeLogs([
-                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ])),
-            fetchLogs: vi.fn().mockResolvedValue(normalizeLogs([{ level: 'INFO', message: 'alpha', source: 'system', timestamp: 2 }])),
+                .mockReturnValue(
+                    normalizeLogs([
+                        { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                    ]),
+                ),
+            fetchLogs: vi
+                .fn()
+                .mockResolvedValue(
+                    normalizeLogs([
+                        { level: 'INFO', message: 'alpha', source: 'system', timestamp: 2 },
+                    ]),
+                ),
         });
 
         const container = document.getElementById('console-container') as HTMLDivElement;
@@ -253,14 +273,18 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogs: vi
                 .fn()
-                .mockReturnValue(normalizeLogs([
-                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ])),
+                .mockReturnValue(
+                    normalizeLogs([
+                        { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                    ]),
+                ),
             getLogsForView: vi
                 .fn()
-                .mockReturnValue(normalizeLogs([
-                    { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ])),
+                .mockReturnValue(
+                    normalizeLogs([
+                        { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
+                    ]),
+                ),
             fetchLogs: vi.fn().mockResolvedValue([]),
         });
 
@@ -297,8 +321,22 @@ describe('ConsoleUI lifecycle', () => {
             getLogsForView: vi.fn((view: string) =>
                 normalizeLogs(
                     view === 'llamacpp'
-                        ? [{ level: 'INFO', message: 'engine line', source: 'llamacpp', timestamp: 1 }]
-                        : [{ level: 'INFO', message: 'general line', source: 'system', timestamp: 1 }],
+                        ? [
+                              {
+                                  level: 'INFO',
+                                  message: 'engine line',
+                                  source: 'llamacpp',
+                                  timestamp: 1,
+                              },
+                          ]
+                        : [
+                              {
+                                  level: 'INFO',
+                                  message: 'general line',
+                                  source: 'system',
+                                  timestamp: 1,
+                              },
+                          ],
                 ),
             ),
             getAvailableViews: vi.fn().mockResolvedValue([
@@ -420,9 +458,11 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogsForView: vi
                 .fn()
-                .mockReturnValue(normalizeLogs([
-                    { level: 'INFO', message: 'stable line', source: 'system', timestamp: 1 },
-                ])),
+                .mockReturnValue(
+                    normalizeLogs([
+                        { level: 'INFO', message: 'stable line', source: 'system', timestamp: 1 },
+                    ]),
+                ),
             fetchLogs: vi.fn().mockResolvedValue([]),
         });
 
@@ -447,21 +487,23 @@ describe('ConsoleUI lifecycle', () => {
 
     it('should filter logs by selected levels from top menu', async () => {
         const service = createServiceMock({
-            getLogsForView: vi.fn().mockReturnValue(normalizeLogs([
-                {
-                    level: 'INFO',
-                    message: '[NavigationService] Navigating to: settings',
-                    source: 'frontend',
-                    timestamp: 1,
-                },
-                {
-                    level: 'ERROR',
-                    message:
-                        '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml',
-                    source: 'frontend',
-                    timestamp: 2,
-                },
-            ])),
+            getLogsForView: vi.fn().mockReturnValue(
+                normalizeLogs([
+                    {
+                        level: 'INFO',
+                        message: '[NavigationService] Navigating to: settings',
+                        source: 'frontend',
+                        timestamp: 1,
+                    },
+                    {
+                        level: 'ERROR',
+                        message:
+                            '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml',
+                        source: 'frontend',
+                        timestamp: 2,
+                    },
+                ]),
+            ),
         });
 
         ui = new ConsoleUI(service, createDeps());
@@ -491,14 +533,16 @@ describe('ConsoleUI lifecycle', () => {
 
     it('should hide launcher source labels like frontend from rendered logs', async () => {
         const service = createServiceMock({
-            getLogsForView: vi.fn().mockReturnValue(normalizeLogs([
-                {
-                    level: 'INFO',
-                    message: '[NavigationService] Navigating to: settings',
-                    source: 'frontend',
-                    timestamp: 1,
-                },
-            ])),
+            getLogsForView: vi.fn().mockReturnValue(
+                normalizeLogs([
+                    {
+                        level: 'INFO',
+                        message: '[NavigationService] Navigating to: settings',
+                        source: 'frontend',
+                        timestamp: 1,
+                    },
+                ]),
+            ),
         });
 
         ui = new ConsoleUI(service, createDeps());

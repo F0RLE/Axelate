@@ -22,11 +22,7 @@ export class ModalSelectionPolicy {
         };
     }
 
-    public getVisibleApps(
-        apps: IApp[],
-        category: string,
-        currentFilter: 'text' | 'image',
-    ): IApp[] {
+    public getVisibleApps(apps: IApp[], category: string, currentFilter: 'text' | 'image'): IApp[] {
         const isAi = category === 'ai' || category.startsWith('ai_');
         const filteredApps = isAi
             ? apps.filter((app) => (app.capability ?? 'text') === currentFilter)

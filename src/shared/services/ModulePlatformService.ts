@@ -90,7 +90,9 @@ export class ModulePlatformService {
             // But AppUI's `_stopPreviousModule` seemed to only effectively stop AIProviders.
             // For now, we replicate existing behavior but clearer.
 
-            this._tracer.info(`[ModulePlatformService] Requesting stop for local module: ${app.id}`);
+            this._tracer.info(
+                `[ModulePlatformService] Requesting stop for local module: ${app.id}`,
+            );
             // If we have a control method, use it:
             return await this._moduleService.control(app.id, 'stop');
         }

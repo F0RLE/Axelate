@@ -21,8 +21,7 @@ type AppUiDashboardControllerDeps = {
 };
 
 export class AppUiDashboardController {
-    private static readonly _DASHBOARD_CARD_SELECTOR =
-        '#ai-module-card, #services-module-card';
+    private static readonly _DASHBOARD_CARD_SELECTOR = '#ai-module-card, #services-module-card';
 
     private _pendingDashboardSwitchTimer: ReturnType<typeof setTimeout> | null = null;
     private _pendingDashboardSwitchCard: HTMLElement | null = null;

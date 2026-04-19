@@ -199,9 +199,11 @@ export class AIProviderManager {
     }
 
     private _getAiCatalogApps(): IAICatalogApp[] {
-        const context = this._context as (Partial<AIProviderManagerContext> & {
-            catalog?: { getCatalog: () => unknown };
-        }) | null;
+        const context = this._context as
+            | (Partial<AIProviderManagerContext> & {
+                  catalog?: { getCatalog: () => unknown };
+              })
+            | null;
         const catalog = context?.catalog?.getCatalog() as unknown;
         if (typeof catalog !== 'object' || catalog === null) {
             return [];

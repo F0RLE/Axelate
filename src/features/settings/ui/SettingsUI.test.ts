@@ -81,7 +81,9 @@ describe('ModuleSettingsUI lifecycle', () => {
             service,
             uiSettings,
             aiSettings,
-            { t: (key: string, defaultValue = '') => `t:${key}:${defaultValue}` } as unknown as I18nService,
+            {
+                t: (key: string, defaultValue = '') => `t:${key}:${defaultValue}`,
+            } as unknown as I18nService,
             i18nUI,
             tauri,
             navigation,

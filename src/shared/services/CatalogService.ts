@@ -90,7 +90,9 @@ export class CatalogService {
                 return res.ok ? ((await res.json()) as AppConfig) : FALLBACK_CONFIG;
             }
         } catch (e) {
-            this._tracer.warn(`[CatalogService] Backend config failed, using fallback: ${String(e)}`);
+            this._tracer.warn(
+                `[CatalogService] Backend config failed, using fallback: ${String(e)}`,
+            );
             return FALLBACK_CONFIG;
         }
     }

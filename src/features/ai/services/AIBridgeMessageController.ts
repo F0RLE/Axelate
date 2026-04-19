@@ -73,7 +73,9 @@ export class AIBridgeMessageController {
         source: MessageSource,
     ): Promise<IBridgeResponse> {
         const context = this._deps.getContext();
-        const settings = context?.settingsService.getSettings() as Record<string, unknown> | undefined;
+        const settings = context?.settingsService.getSettings() as
+            | Record<string, unknown>
+            | undefined;
         const selectedImageModule = context?.stateStore.getSelectedModule('ai_image');
         const settingsKey = selectedImageModule?.id ?? providerId;
         const performanceMode = this._deps.providerPolicy.isImagePerformanceModeEnabled(

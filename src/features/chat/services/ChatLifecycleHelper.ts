@@ -4,11 +4,7 @@ import type { EventBus, IEventBusEvents } from '@/shared/services/EventBus';
 type ChatLifecycleHelperDeps = {
     fileHandler: Pick<
         ChatFileHandler,
-        | 'setUpdateCallback'
-        | 'clearUpdateCallback'
-        | 'hasFiles'
-        | 'getFiles'
-        | 'removeFile'
+        'setUpdateCallback' | 'clearUpdateCallback' | 'hasFiles' | 'getFiles' | 'removeFile'
     >;
     eventBus: EventBus;
     refreshTranslations: () => void;

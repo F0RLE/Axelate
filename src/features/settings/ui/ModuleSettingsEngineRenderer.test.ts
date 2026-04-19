@@ -158,14 +158,8 @@ describe('ModuleSettingsEngineRenderer', () => {
             't:ui.settings.engine.model_not_selected:Model not selected',
         );
 
-        const imageHtml = renderer._getEngineConfigHtml(
-            { id: 'sdcpp', capability: 'image' },
-            null,
-        );
-        const textHtml = renderer._getEngineConfigHtml(
-            { id: 'llamacpp', capability: 'text' },
-            {},
-        );
+        const imageHtml = renderer._getEngineConfigHtml({ id: 'sdcpp', capability: 'image' }, null);
+        const textHtml = renderer._getEngineConfigHtml({ id: 'llamacpp', capability: 'text' }, {});
 
         expect(imageHtml).toContain('t:ui.settings.engine.generation_presets:Generation Presets');
         expect(imageHtml).not.toContain('Auto download package');
@@ -293,27 +287,25 @@ describe('ModuleSettingsEngineRenderer', () => {
         }).not.toThrow();
         expect(runtime.requestAnimationFrame).toHaveBeenCalled();
 
-        expect(renderer._parseEngineFieldValue('99', { type: 'number', min: 1, max: 10 })).toEqual(
-            {
-                value: 10,
-                displayValue: '10',
-            },
-        );
-        expect(renderer._parseEngineFieldValue('oops', { type: 'number', defaultValue: 7 })).toEqual(
-            {
-                value: 7,
-                displayValue: '7',
-            },
-        );
+        expect(renderer._parseEngineFieldValue('99', { type: 'number', min: 1, max: 10 })).toEqual({
+            value: 10,
+            displayValue: '10',
+        });
+        expect(
+            renderer._parseEngineFieldValue('oops', { type: 'number', defaultValue: 7 }),
+        ).toEqual({
+            value: 7,
+            displayValue: '7',
+        });
         expect(
             renderer._parseEngineFieldValue('', { type: 'select', defaultValue: 'auto' }),
         ).toEqual({
             value: 'auto',
             displayValue: 'auto',
         });
-        expect(renderer._formatEngineFieldSaveValue('extra_args', '--ctx 4096 --threads 8')).toEqual(
-            ['--ctx', '4096', '--threads', '8'],
-        );
+        expect(
+            renderer._formatEngineFieldSaveValue('extra_args', '--ctx 4096 --threads 8'),
+        ).toEqual(['--ctx', '4096', '--threads', '8']);
     });
 
     it('should hydrate initial values from config aliases and defaults', () => {

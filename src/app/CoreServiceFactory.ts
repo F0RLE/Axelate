@@ -85,7 +85,9 @@ export function createCoreServiceBundle(tracer: LoggerService): CoreServiceBundl
     };
 }
 
-export function configureCoreServices(bundle: Pick<CoreServiceBundle, 'windowService' | 'navigation' | 'uiSettings'>): void {
+export function configureCoreServices(
+    bundle: Pick<CoreServiceBundle, 'windowService' | 'navigation' | 'uiSettings'>,
+): void {
     bundle.windowService.setUISettingsService(bundle.uiSettings);
     bundle.navigation.setUISettingsService(bundle.uiSettings);
 }

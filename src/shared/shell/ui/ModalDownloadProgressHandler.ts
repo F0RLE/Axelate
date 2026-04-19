@@ -29,7 +29,9 @@ export function createModalDownloadProgressHandler(): ProgressEventHandler {
         const list = document.getElementById('app-modal-list');
         if (list === null) return;
 
-        const card = list.querySelector<HTMLElement>(`.app-card[data-app-id="${payload.module_id}"]`);
+        const card = list.querySelector<HTMLElement>(
+            `.app-card[data-app-id="${payload.module_id}"]`,
+        );
         if (card === null) return;
 
         if (isTerminal) {

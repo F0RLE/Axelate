@@ -188,7 +188,9 @@ describe('ErrorHandler', () => {
         it('should skip if already initialized', () => {
             errorHandler.init();
             errorHandler.init();
-            expect(tracer.warn).toHaveBeenCalledWith(expect.stringContaining('Already initialized'));
+            expect(tracer.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Already initialized'),
+            );
         });
 
         it('should handle onerror with source and line info', () => {

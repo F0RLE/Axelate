@@ -189,7 +189,8 @@ export class AppUiControllerFactory {
                 moduleFlow.handleDownloadModule(app, category, btn),
             resetDownloadButton: (btn) => moduleFlow.resetDownloadButton(btn),
             restoreDownloadButtonLabel: (btn) => moduleFlow.restoreDownloadButtonLabel(btn),
-            performSelectionAction: (category, app) => actions.performSelectionAction(category, app),
+            performSelectionAction: (category, app) =>
+                actions.performSelectionAction(category, app),
             translate: core.translate,
         });
     }

@@ -1,10 +1,5 @@
 type WindowUiTimeoutHandle = ReturnType<typeof setTimeout>;
-type WindowUiTimeoutKey =
-    | 'monitoring'
-    | 'splash'
-    | 'gracePeriod'
-    | 'zoomCheck'
-    | 'resize';
+type WindowUiTimeoutKey = 'monitoring' | 'splash' | 'gracePeriod' | 'zoomCheck' | 'resize';
 
 export class WindowUiTimingController {
     private readonly _timeouts: Record<WindowUiTimeoutKey, WindowUiTimeoutHandle | null> = {

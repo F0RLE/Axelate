@@ -108,14 +108,7 @@ export class ModuleCardRenderer {
 
         this._injectBadges(clone, state);
         this._injectCoreContent(clone, app);
-        this._injectStatusAndActions(
-            clone,
-            app,
-            state,
-            isSelected,
-            onClick,
-            onDownload,
-        );
+        this._injectStatusAndActions(clone, app, state, isSelected, onClick, onDownload);
 
         card.appendChild(clone);
 
@@ -255,7 +248,10 @@ export class ModuleCardRenderer {
                     return;
                 }
 
-                this._tracer?.info('[ModuleCardRenderer] Isolated right-click on module card:', app.id);
+                this._tracer?.info(
+                    '[ModuleCardRenderer] Isolated right-click on module card:',
+                    app.id,
+                );
                 if (this._deps.openModuleSettings !== undefined) {
                     this._deps.openModuleSettings(app);
                 }
@@ -323,7 +319,10 @@ export class ModuleCardRenderer {
         app.installed = true;
 
         this._applyInstalledCardAppearance(card);
-        this._replaceCardActions(card, buildModuleCardActionButton(app, false, this._translate, onClick));
+        this._replaceCardActions(
+            card,
+            buildModuleCardActionButton(app, false, this._translate, onClick),
+        );
         this._ensureDeleteBadge(card, isApi);
     }
 
