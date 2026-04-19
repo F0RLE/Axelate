@@ -8,16 +8,40 @@ import type {
     ISpeechRecognitionErrorEvent,
     ISpeechRecognitionInstance,
 } from '../types/chatTypes';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type VoiceInputLogger = Pick<LoggerService, 'info' | 'error'>;
 
 export type VoiceResultCallback = (text: string) => void;
-export type VoiceStateCallback = (isRecording: boolean) => void;
+export type VoiceRecordingState = 'idle' | 'starting' | 'listening' | 'stopping';
+export type VoiceStopReason = 'user' | 'ended' | 'error' | 'startup_failed';
+export type VoiceErrorCallback = (error: { code: string; message?: string }) => void;
+export type VoiceStateCallback = (snapshot: {
+    state: VoiceRecordingState;
+    isRecording: boolean;
+    reason?: VoiceStopReason;
+}) => void;
+
+type VoiceSessionCallbacks = {
+    onStateChange?: VoiceStateCallback;
+    onError?: VoiceErrorCallback;
+};
 
 export class VoiceInputService {
     private _recognition: ISpeechRecognitionInstance | null = null;
-    private _isRecording = false;
+    private _state: VoiceRecordingState = 'idle';
     private _onResult: VoiceResultCallback | null = null;
     private _onStateChange: VoiceStateCallback | null = null;
+    private _onError: VoiceErrorCallback | null = null;
+    private readonly _getCurrentLang: () => string;
+    private _pendingStopReason: VoiceStopReason | null = null;
+
+    public constructor(
+        private readonly _tracer: VoiceInputLogger,
+        getCurrentLang: () => string = () => document.documentElement.lang || 'en',
+    ) {
+        this._getCurrentLang = getCurrentLang;
+    }
 
     /**
      * Check if voice input is supported in the current browser
@@ -31,14 +55,17 @@ export class VoiceInputService {
      * Check if currently recording
      */
     public isActive(): boolean {
-        return this._isRecording;
+        return this._state !== 'idle';
     }
 
     /**
      * Start voice recording
      */
-    public start(onResult: VoiceResultCallback, onStateChange?: VoiceStateCallback): boolean {
-        if (this._isRecording) {
+    public start(
+        onResult: VoiceResultCallback,
+        callbacks: VoiceSessionCallbacks = {},
+    ): boolean {
+        if (this.isActive()) {
             this.stop();
             return false;
         }
@@ -48,7 +75,9 @@ export class VoiceInputService {
         }
 
         this._onResult = onResult;
-        this._onStateChange = onStateChange ?? null;
+        this._onStateChange = callbacks.onStateChange ?? null;
+        this._onError = callbacks.onError ?? null;
+        this._pendingStopReason = null;
 
         try {
             const win = globalThis as unknown as Record<string, unknown>;
@@ -58,22 +87,25 @@ export class VoiceInputService {
             this._recognition = recognition;
 
             // Set language with BCP-47 mapping
-            const currentLang = (win['currentLang'] as string) || 'en';
+            const currentLang = this._getCurrentLang();
             const langMap: Record<string, string> = {
                 en: 'en-US',
                 ru: 'ru-RU',
                 zh: 'zh-CN',
             };
             recognition.lang = langMap[currentLang] ?? currentLang;
-            tracer.info(
+            this._tracer.info(
                 `[VoiceInputService] Target Recognition Lang: ${recognition.lang} (from: ${currentLang})`,
             );
             recognition.continuous = true;
             recognition.interimResults = true;
 
             recognition.onstart = () => {
-                this._isRecording = true;
-                this._onStateChange?.(true);
+                if (this._recognition !== recognition) {
+                    return;
+                }
+
+                this._setState('listening');
             };
 
             recognition.onresult = (event: ISpeechRecognitionEvent) => {
@@ -91,29 +123,36 @@ export class VoiceInputService {
             };
 
             recognition.onend = () => {
-                if (this._isRecording) {
-                    this.stop();
+                if (this._recognition !== recognition) {
+                    return;
                 }
+
+                this._finishSession(this._pendingStopReason ?? 'ended');
             };
 
             recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
-                tracer.error(`[VoiceInputService] Recognition error: ${event.error}`);
-                if (this._isRecording) {
-                    this.stop();
+                this._tracer.error(`[VoiceInputService] Recognition error: ${event.error}`);
+                const payload: { code: string; message?: string } = {
+                    code: event.error,
+                };
+                if (event.message !== undefined) {
+                    payload.message = event.message;
                 }
+                this._onError?.(payload);
+                this._requestStop('error');
             };
 
+            this._setState('starting');
             recognition.start();
-
-            // Assume recording started successfully if no immediate error was thrown
-            // WebView2 sometimes delays or drops the onstart event.
-            this._isRecording = true;
-            this._onStateChange?.(true);
 
             return true;
         } catch (e) {
-            tracer.error(`[VoiceInputService] Error starting recognition: ${String(e)}`);
-            this.stop();
+            this._tracer.error(`[VoiceInputService] Error starting recognition: ${String(e)}`);
+            this._onError?.({
+                code: 'startup_failed',
+                message: String(e),
+            });
+            this._finishSession('startup_failed');
             return false;
         }
     }
@@ -122,22 +161,57 @@ export class VoiceInputService {
      * Stop voice recording
      */
     public stop(): void {
-        this._isRecording = false;
+        this._requestStop('user');
+    }
 
-        if (this._recognition) {
-            try {
-                this._recognition.stop();
-            } catch {
-                // Ignore stop errors
-            }
-            this._recognition = null;
+    private _requestStop(reason: VoiceStopReason): void {
+        this._pendingStopReason = reason;
+
+        if (this._recognition === null) {
+            this._finishSession(reason);
+            return;
         }
 
-        this._onStateChange?.(false);
+        if (this._state !== 'stopping') {
+            this._setState('stopping');
+        }
+
+        try {
+            this._recognition.stop();
+        } catch {
+            this._finishSession(reason);
+        }
+    }
+
+    private _finishSession(reason: VoiceStopReason): void {
+        this._recognition = null;
+        this._pendingStopReason = null;
+        this._setState('idle', reason);
         this._onResult = null;
         this._onStateChange = null;
+        this._onError = null;
+    }
+
+    private _setState(state: VoiceRecordingState, reason?: VoiceStopReason): void {
+        const previousState = this._state;
+        this._state = state;
+
+        if (previousState === state && reason === undefined) {
+            return;
+        }
+
+        const snapshot: {
+            state: VoiceRecordingState;
+            isRecording: boolean;
+            reason?: VoiceStopReason;
+        } = {
+            state,
+            isRecording: state === 'starting' || state === 'listening' || state === 'stopping',
+        };
+        if (reason !== undefined) {
+            snapshot.reason = reason;
+        }
+
+        this._onStateChange?.(snapshot);
     }
 }
-
-// Export singleton
-export const voiceInputService = new VoiceInputService();

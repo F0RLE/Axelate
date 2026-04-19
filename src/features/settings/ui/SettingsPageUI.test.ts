@@ -10,20 +10,19 @@ vi.mock('./GeneralSettingsRenderer', () => ({
     },
 }));
 
-vi.mock('@/shared/utils/globalAccessor', () => ({
-    getGlobalWin: () => globalThis,
-}));
-
 import { SettingsUI } from './SettingsUI';
 import type { SettingsService } from '../services/SettingsService';
 import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 
 describe('SettingsUI page lifecycle', () => {
     let settingsUI: SettingsUI | null = null;
+    let showToastMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
         initRenderer.mockReset();
@@ -32,10 +31,9 @@ describe('SettingsUI page lifecycle', () => {
         (
             globalThis as unknown as {
                 t?: (key: string, defaultValue?: string) => string;
-                showToast?: ReturnType<typeof vi.fn>;
             }
         ).t = (_key, defaultValue) => defaultValue ?? '';
-        (globalThis as unknown as { showToast?: ReturnType<typeof vi.fn> }).showToast = vi.fn();
+        showToastMock = vi.fn();
     });
 
     afterEach(() => {
@@ -50,9 +48,24 @@ describe('SettingsUI page lifecycle', () => {
             {} as SettingsService,
             {} as UISettingsService,
             {} as AISettingsService,
+            { t: (_key: string, defaultValue = '') => defaultValue } as unknown as I18nService,
             { applyTranslations: vi.fn() } as unknown as I18nUI,
             {} as TauriProvider,
             {} as NavigationService,
+            {
+                tracer: {
+                    info: vi.fn(),
+                    error: vi.fn(),
+                } as unknown as LoggerService,
+                showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => {
+                    (
+                        showToastMock as (
+                            message: string,
+                            type?: 'success' | 'error' | 'warning' | 'info',
+                        ) => void
+                    )(message, type);
+                },
+            },
         );
 
         return settingsUI;

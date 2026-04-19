@@ -1,8 +1,14 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { ChatContent } from '@/features/ai/types/aiTypes';
-import { tracer } from '@/infrastructure/logging/LoggerService';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage } from '../types/chatTypes';
+
+type ChatHistoryLogger = Pick<LoggerService, 'info' | 'error'>;
+
+type PendingChatRevealStore = {
+    getState: () => { pending_chat_reveal?: boolean };
+    updateState: (updates: { pending_chat_reveal: boolean }) => void;
+};
 
 type ChatHistoryControllerOptions = {
     aiBridge: AIBridge;
@@ -15,13 +21,15 @@ type ChatHistoryControllerOptions = {
     ) => void;
     revealLatestMessage: () => void;
     extractRenderableText: (content: ChatContent) => string;
-    buildHistoryRenderOptions: (
-        content: ChatContent,
-    ) => { images?: Array<{ mime: string; data_base64: string }> };
+    buildHistoryRenderOptions: (content: ChatContent) => {
+        images?: Array<{ mime: string; data_base64: string }>;
+    };
     restoreInputText: (text: string) => void;
     renderHistory: (history: IChatMessage[]) => void;
     showEditError: () => void;
     isDestroyed: () => boolean;
+    getPendingChatRevealStore: () => PendingChatRevealStore | null;
+    tracer: ChatHistoryLogger;
 };
 
 export class ChatHistoryController {
@@ -88,7 +96,7 @@ export class ChatHistoryController {
             this._options.renderHistory(this._options.getHistory());
             this._options.restoreInputText(nextText);
         } catch (error: unknown) {
-            tracer.error('[Chat] Failed to rewind last turn:', error);
+            this._options.tracer.error('[Chat] Failed to rewind last turn:', error);
             this._options.showEditError();
         }
     }
@@ -117,7 +125,7 @@ export class ChatHistoryController {
             const history = await this._options.aiBridge.getHistory();
             this._historyLoaded = true;
             if (Array.isArray(history) && history.length > 0) {
-                tracer.info(
+                this._options.tracer.info(
                     `[ChatController] Restoring ${String(history.length)} messages from persistence`,
                 );
 
@@ -153,7 +161,10 @@ export class ChatHistoryController {
                 this.scheduleRevealLatestMessage();
             }
         } catch (error: unknown) {
-            tracer.error('[ChatController] Failed to restore persisted history:', error);
+            this._options.tracer.error(
+                '[ChatController] Failed to restore persisted history:',
+                error,
+            );
         }
     }
 
@@ -182,18 +193,7 @@ export class ChatHistoryController {
     }
 
     public consumePendingChatReveal(): boolean {
-        type PendingUiState = {
-            getState: () => { pending_chat_reveal?: boolean };
-            updateState: (updates: { pending_chat_reveal: boolean }) => void;
-        };
-        const win = getGlobalWin() as unknown as Window & {
-            uiState?: {
-                getState?: PendingUiState['getState'];
-                updateState?: PendingUiState['updateState'];
-            };
-        };
-
-        const uiState = win.uiState as PendingUiState | undefined;
+        const uiState = this._options.getPendingChatRevealStore();
         const pendingState = uiState?.getState();
         const shouldReveal = pendingState?.pending_chat_reveal === true;
         if (shouldReveal) {

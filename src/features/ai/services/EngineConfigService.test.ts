@@ -5,10 +5,12 @@ import {
     type EngineSettingsPayload,
 } from './EngineConfigService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('EngineConfigService', () => {
     let tauri: TauriProvider;
     let service: EngineConfigService;
+    let tracer: Pick<LoggerService, 'error'>;
 
     const config: EngineConfig = {
         engine_id: 'llamacpp',
@@ -26,7 +28,8 @@ describe('EngineConfigService', () => {
             isTauri: vi.fn().mockReturnValue(true),
             invoke: vi.fn(),
         } as unknown as TauriProvider;
-        service = new EngineConfigService(tauri);
+        tracer = { error: vi.fn() };
+        service = new EngineConfigService(tauri, tracer);
     });
 
     it('returns null on web without invoking backend', async () => {

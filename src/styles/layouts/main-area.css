@@ -28,10 +28,7 @@
     opacity: 0;
     pointer-events: none;
     transition: none;
-    filter: blur(0px);
-    transform: translateZ(0);
     background: transparent;
-    will-change: auto;
 }
 
 .page.active {

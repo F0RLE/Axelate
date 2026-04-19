@@ -21,7 +21,6 @@
 
 .toast {
     background: rgba(22, 20, 28, 0.96);
-    backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
     padding: 0.95rem 1.15rem;

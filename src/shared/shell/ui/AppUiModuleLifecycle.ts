@@ -1,15 +1,17 @@
 import type { IApp } from '../../types/coreTypes';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
-import { getGlobalWin } from '../../utils/globalAccessor';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type LaunchAppFn = (id: string) => Promise<void>;
 
 type AppUiModuleLifecycleDeps = {
     platformService: ModulePlatformService;
+    tracer: LoggerService;
     getSelectedApp: (category: string) => IApp | undefined;
     isSelectedInAnotherAiSlot: (category: string, appId: string) => boolean;
     resolveAppById: (appId: string) => IApp | undefined;
+    translate: (key: string, fallback: string) => string;
+    showToast: (message: string, type?: string) => void;
 };
 
 export class AppUiModuleLifecycle {
@@ -32,7 +34,7 @@ export class AppUiModuleLifecycle {
         try {
             await launchApp(app.id);
         } catch (err: unknown) {
-            tracer.error(`[AppUI] Failed to launch selected module ${app.id}:`, err);
+            this._deps.tracer.error(`[AppUI] Failed to launch selected module ${app.id}:`, err);
             return;
         }
 
@@ -47,7 +49,9 @@ export class AppUiModuleLifecycle {
         }
 
         await this._deps.platformService.stop(app).catch((err: unknown) => {
-            tracer.warn(`[AppUI] Failed to stop stale launched module ${app.id}: ${String(err)}`);
+            this._deps.tracer.warn(
+                `[AppUI] Failed to stop stale launched module ${app.id}: ${String(err)}`,
+            );
         });
     }
 
@@ -61,11 +65,15 @@ export class AppUiModuleLifecycle {
             return;
         }
 
-        if (category.startsWith('ai') && this._deps.isSelectedInAnotherAiSlot(category, previousModuleId)) {
+        if (
+            category.startsWith('ai') &&
+            this._deps.isSelectedInAnotherAiSlot(category, previousModuleId)
+        ) {
             return;
         }
 
-        const previousApp = this._deps.resolveAppById(previousModuleId) ??
+        const previousApp =
+            this._deps.resolveAppById(previousModuleId) ??
             ({
                 id: previousModuleId,
                 name: card.dataset['currentModuleName'] ?? previousModuleId,
@@ -77,23 +85,18 @@ export class AppUiModuleLifecycle {
                 const prevName =
                     previousApp.name ?? card.dataset['currentModuleName'] ?? previousModuleId;
                 if (!this._deps.platformService.isApiModule(previousApp)) {
-                    const win = getGlobalWin();
-                    if (typeof win.showToast === 'function') {
-                        win.showToast(
-                            typeof win.t === 'function'
-                                ? win.t('ui.launcher.module.stopped', `${prevName} stopped`)
-                                : `${prevName} stopped`,
-                            'info',
-                        );
-                    }
+                    this._deps.showToast(
+                        this._deps.translate('ui.launcher.module.stopped', `${prevName} stopped`),
+                        'info',
+                    );
                 }
             })
             .catch((err: unknown) => {
-                tracer.warn(
+                this._deps.tracer.warn(
                     `[AppUI] Failed to stop previous module ${previousApp.id}: ${String(err)}`,
                 );
             });
 
-        tracer.info('[AppUI] Stopped previous module:', previousModuleId);
+        this._deps.tracer.info('[AppUI] Stopped previous module:', previousModuleId);
     }
 }

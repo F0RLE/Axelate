@@ -1,9 +1,8 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type * as Bindings from '@/shared/types/bindings';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IBridge } from '@/shared/types/IBridge';
-import type { TGlobalWin } from '@/shared/types/global_bridge_types';
 
 // No local types needed, using global.d.ts
 export interface SecureKeyMeta {
@@ -11,8 +10,30 @@ export interface SecureKeyMeta {
     length: number;
 }
 
+type TauriRuntime = {
+    hasTauriGlobals: () => boolean;
+    openExternal: (url: string) => void;
+};
+
+function createDefaultTauriRuntime(): TauriRuntime {
+    return {
+        hasTauriGlobals: () => {
+            const runtime = globalThis as Record<string, unknown>;
+            return '__TAURI_INTERNALS__' in runtime || '__TAURI__' in runtime;
+        },
+        openExternal: (url: string) => {
+            globalThis.open(url, '_blank');
+        },
+    };
+}
+
 export class TauriProvider implements IBridge {
     private _isTauriDetected: boolean | null = null;
+
+    constructor(
+        private readonly _tracer: LoggerService,
+        private readonly _runtime: TauriRuntime = createDefaultTauriRuntime(),
+    ) {}
 
     public init(): void {
         void this._performHandshake();
@@ -23,10 +44,10 @@ export class TauriProvider implements IBridge {
             // Priority Check: Try to call a safe, neutral command
             await this._performInvoke('get_health', {});
             this._isTauriDetected = true;
-            tracer.info('[TauriProvider] IPC Handshake successful');
+            this._tracer.info('[TauriProvider] IPC Handshake successful');
         } catch {
             this._isTauriDetected = false;
-            tracer.warn('[TauriProvider] Handshake failed, operating in Mock mode');
+            this._tracer.warn('[TauriProvider] Handshake failed, operating in Mock mode');
         }
     }
 
@@ -36,8 +57,7 @@ export class TauriProvider implements IBridge {
             return this._isTauriDetected;
         }
 
-        const win = globalThis as unknown as TGlobalWin;
-        return '__TAURI_INTERNALS__' in win || '__TAURI__' in win;
+        return this._runtime.hasTauriGlobals();
     }
 
     public async invoke<T, A extends Record<string, unknown> = Record<string, unknown>>(
@@ -147,7 +167,7 @@ export class TauriProvider implements IBridge {
             });
             return unlisten;
         } else {
-            tracer.info(`[TauriProvider] Mock Listen: ${event}`);
+            this._tracer.info(`[TauriProvider] Mock Listen: ${event}`);
             return () => {
                 /* no-op */
             };
@@ -158,7 +178,7 @@ export class TauriProvider implements IBridge {
         if (this.isTauri()) {
             await this.invoke('plugin:clipboard-manager|write_text', { text });
         } else {
-            tracer.info(`[Mock Clipboard] Write: ${text}`);
+            this._tracer.info(`[Mock Clipboard] Write: ${text}`);
         }
     }
 
@@ -166,8 +186,8 @@ export class TauriProvider implements IBridge {
         if (this.isTauri()) {
             await this.invoke('plugin:shell|open', { path: url });
         } else {
-            tracer.info(`[Mock Shell] Open URL: ${url}`);
-            window.open(url, '_blank');
+            this._tracer.info(`[Mock Shell] Open URL: ${url}`);
+            this._runtime.openExternal(url);
         }
     }
 
@@ -178,7 +198,7 @@ export class TauriProvider implements IBridge {
         try {
             return await this.invoke<string | null>('get_secure_key', { service });
         } catch (e) {
-            tracer.error(`[TauriProvider] Secure get failed for ${service}: ${String(e)}`);
+            this._tracer.error(`[TauriProvider] Secure get failed for ${service}: ${String(e)}`);
             return null;
         }
     }
@@ -190,7 +210,7 @@ export class TauriProvider implements IBridge {
         try {
             await this.invoke('save_secure_key', { service, key });
         } catch (e) {
-            tracer.error(`[TauriProvider] Secure save failed for ${service}: ${String(e)}`);
+            this._tracer.error(`[TauriProvider] Secure save failed for ${service}: ${String(e)}`);
             throw e;
         }
     }
@@ -202,7 +222,7 @@ export class TauriProvider implements IBridge {
         try {
             return await this.invoke<boolean>('has_secure_key', { service });
         } catch (e) {
-            tracer.error(
+            this._tracer.error(
                 `[TauriProvider] Secure presence check failed for ${service}: ${String(e)}`,
             );
             return false;
@@ -213,7 +233,7 @@ export class TauriProvider implements IBridge {
         try {
             return await this.invoke<SecureKeyMeta>('get_secure_key_meta', { service });
         } catch (e) {
-            tracer.error(
+            this._tracer.error(
                 `[TauriProvider] Secure metadata lookup failed for ${service}: ${String(e)}`,
             );
             return { exists: false, length: 0 };
@@ -221,7 +241,7 @@ export class TauriProvider implements IBridge {
     }
 
     private _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
-        tracer.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
+        this._tracer.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
 
         const saneDefaults: Record<string, unknown> = {
             get_settings: {

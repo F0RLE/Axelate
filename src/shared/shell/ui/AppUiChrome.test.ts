@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IApp } from '../../types/coreTypes';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AppUiChrome } from './AppUiChrome';
 
 describe('AppUiChrome', () => {
@@ -11,7 +12,15 @@ describe('AppUiChrome', () => {
             _key,
             fallback,
         ) => fallback;
-        chrome = new AppUiChrome();
+        chrome = new AppUiChrome(
+            undefined,
+            {
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
+            } as unknown as LoggerService,
+        );
     });
 
     it('reuses a single action feedback node', () => {

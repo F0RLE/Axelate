@@ -1,13 +1,15 @@
 import DOMPurify from 'dompurify';
 
-import { chatFileHandler } from '../services/ChatFileHandler';
+import type { ChatFileHandler } from '../services/ChatFileHandler';
 import type { IChatAttachment } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
 
 type ChatAttachmentRendererDeps = {
+    fileHandler: Pick<ChatFileHandler, 'getFileTokenEstimate'>;
     isDestroyed: () => boolean;
     getRenderVersion: () => number;
+    translate: TTranslateFunction;
 };
 
 export class ChatAttachmentRenderer {
@@ -132,11 +134,8 @@ export class ChatAttachmentRenderer {
         const isImage = file.type.startsWith('image/');
         card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
-        const fileTokens = await chatFileHandler.getFileTokenEstimate(file);
-        if (
-            this._deps.isDestroyed() ||
-            renderVersion !== this._deps.getRenderVersion()
-        ) {
+        const fileTokens = await this._deps.fileHandler.getFileTokenEstimate(file);
+        if (this._deps.isDestroyed() || renderVersion !== this._deps.getRenderVersion()) {
             return;
         }
 
@@ -177,7 +176,10 @@ export class ChatAttachmentRenderer {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'media-remove';
-        btn.title = getGlobalWin().t('ui.launcher.web.remove_attachment', 'Remove attachment');
+        btn.title = this._deps.translate(
+            'ui.launcher.web.remove_attachment',
+            'Remove attachment',
+        );
         btn.textContent = 'x';
         btn.onclick = (event) => {
             event.stopPropagation();
@@ -231,8 +233,7 @@ export class ChatAttachmentRenderer {
             }
         })();
 
-        const t = getGlobalWin().t;
-        const tokensLabel = t('ui.launcher.web.tokens', 'tokens');
+        const tokensLabel = this._deps.translate('ui.launcher.web.tokens', 'tokens');
         const safeTokensLabel = DOMPurify.sanitize(tokensLabel);
         const tokensHtml =
             tokens > 0

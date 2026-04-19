@@ -1,8 +1,14 @@
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 
+type ModuleSettingsModalControllerDeps = {
+    closeAppSelection: () => void;
+};
+
 export class ModuleSettingsModalController {
-    constructor(private readonly _navigation: NavigationService) {}
+    constructor(
+        private readonly _navigation: NavigationService,
+        private readonly _deps: ModuleSettingsModalControllerDeps,
+    ) {}
 
     public close(): void {
         this._navigation.removeBackAction('module-settings-modal');
@@ -17,7 +23,11 @@ export class ModuleSettingsModalController {
         this._setBackgroundHidden(false);
     }
 
-    public open(appId: string, onClose: () => void, onReopen: () => void): HTMLDialogElement | null {
+    public open(
+        appId: string,
+        onClose: () => void,
+        onReopen: () => void,
+    ): HTMLDialogElement | null {
         const modal = document.getElementById('module-settings-modal') as HTMLDialogElement | null;
         if (modal === null) {
             return null;
@@ -27,10 +37,7 @@ export class ModuleSettingsModalController {
         this._navigation.pushBackAction('module-settings-modal', onClose, onReopen);
         modal.showModal();
 
-        const win = getGlobalWin();
-        if (typeof win.closeAppSelection === 'function') {
-            win.closeAppSelection();
-        }
+        this._deps.closeAppSelection();
 
         this._setBackgroundHidden(true);
 

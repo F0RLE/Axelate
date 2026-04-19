@@ -1,14 +1,23 @@
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { invokeSafe } from '@/shared/api/invoke';
-import type { EngineState, SlotStatus } from '@/shared/types/bindings';
-import { commands } from '@/shared/types/bindings';
 import type { IBridge } from '@/shared/types/IBridge';
+import { ConsoleLogNormalizer } from './ConsoleLogNormalizer';
 
 export interface ILogEntry {
     timestamp: number;
     source: string;
     level: string;
     message: string;
+    module_id?: string | null;
+    display_time?: string | null;
+    normalized_level?: string | null;
+    scope?: string | null;
+    summary_message?: string | null;
+    source_label?: string | null;
+    source_class?: string | null;
+    page?: string | null;
+    action?: string | null;
+    expected?: string | null;
 }
 
 export interface IConsoleLogView {
@@ -26,6 +35,17 @@ export interface IConsoleStatusItem {
     detail: string;
 }
 
+type ConsoleOverviewPayload = {
+    views: IConsoleLogView[];
+    status_items: Array<{
+        id: string;
+        label: string;
+        kind: string;
+        status: string;
+        detail: string;
+    }>;
+};
+
 type EngineEventPayloadMap = {
     'ai:engine:log': { engine_id: string; line: string };
     'ai:engine:starting': { engine_id: string };
@@ -34,15 +54,14 @@ type EngineEventPayloadMap = {
 };
 
 type EngineEventName = keyof EngineEventPayloadMap;
+type ConsoleLogServiceLogger = Pick<LoggerService, 'warn' | 'error'>;
 
 export class ConsoleLogService {
     private static readonly _MAX_LOG_COUNT = 1000;
     private static readonly _TRIM_THRESHOLD = 2000;
-    private static readonly _MODULE_SOURCE_PREFIX = 'module:';
     private static readonly _MODULE_LABELS: Readonly<Record<string, string>> = {
         'axelate-telegram-bot': 'Telegram Bot',
     };
-    private static readonly _LAUNCHER_SOURCES = new Set(['frontend', 'system', 'api-gateway']);
     private static readonly _NOISE_PATTERNS = [
         /\[AIBridge\] Stream chunk received/i,
         /\[AIBridge\] Thought chunk received/i,
@@ -53,9 +72,13 @@ export class ConsoleLogService {
     private readonly _engineUnlisteners: Array<() => void> = [];
     private readonly _modulePathCache = new Map<string, string | null>();
     private readonly _knownModuleIds = new Set<string>();
+    private readonly _normalizer = new ConsoleLogNormalizer();
     private _initialized = false;
 
-    constructor(private readonly bridge: IBridge) {}
+    constructor(
+        private readonly bridge: IBridge,
+        private readonly _tracer: ConsoleLogServiceLogger,
+    ) {}
 
     public async init(): Promise<void> {
         if (this._initialized || !this.bridge.isTauri()) {
@@ -80,7 +103,7 @@ export class ConsoleLogService {
                 : await this._fetchBrowserLogs();
             return this._processLogs(logs);
         } catch (error) {
-            tracer.error('[ConsoleLogService] Fetch logs failed:', error);
+            this._tracer.error('[ConsoleLogService] Fetch logs failed:', error);
             return [];
         }
     }
@@ -97,7 +120,7 @@ export class ConsoleLogService {
             }
             return true;
         } catch (error) {
-            tracer.error('[ConsoleLogService] Clear logs failed:', error);
+            this._tracer.error('[ConsoleLogService] Clear logs failed:', error);
             return false;
         }
     }
@@ -107,31 +130,31 @@ export class ConsoleLogService {
     }
 
     public async getAvailableViews(): Promise<IConsoleLogView[]> {
-        const views: IConsoleLogView[] = [{ id: 'general', label: 'General' }];
-        const moduleLabels = new Map<string, string>();
         if (!this.bridge.isTauri()) {
+            const views: IConsoleLogView[] = [{ id: 'general', label: 'General' }];
+            const moduleLabels = new Map<string, string>();
             this._hydrateModuleMetadata(moduleLabels);
             return [...views, ...this._buildModuleViews(moduleLabels)];
         }
 
         try {
-            const result = await invokeSafe(commands.getEngineState());
+            const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
-                for (const slot of this._extractReadySlots(result.data as EngineState)) {
-                    moduleLabels.set(slot.engine.id, slot.engine.name);
-                }
+                return result.data.views;
             }
         } catch (error) {
-            tracer.warn(`[ConsoleLogService] Failed to resolve console views: ${String(error)}`);
+            this._tracer.warn(`[ConsoleLogService] Failed to resolve console views: ${String(error)}`);
         }
 
+        const views: IConsoleLogView[] = [{ id: 'general', label: 'General' }];
+        const moduleLabels = new Map<string, string>();
         this._hydrateModuleMetadata(moduleLabels);
         return [...views, ...this._buildModuleViews(moduleLabels)];
     }
 
     private _hydrateModuleMetadata(moduleLabels: Map<string, string>): void {
         for (const log of this.logs) {
-            const moduleId = this._resolveModuleIdFromEntry(log);
+            const moduleId = this._getModuleId(log);
             if (moduleId === null) {
                 continue;
             }
@@ -168,12 +191,10 @@ export class ConsoleLogService {
 
     public getLogsForView(viewId: string): ILogEntry[] {
         if (viewId === 'general') {
-            return this.logs.filter((entry) => this._resolveModuleIdFromEntry(entry) === null);
+            return this.logs.filter((entry) => this._getModuleId(entry) === null);
         }
 
-        return this.logs.filter(
-            (entry) => entry.source === viewId || this._resolveModuleIdFromEntry(entry) === viewId,
-        );
+        return this.logs.filter((entry) => this._getModuleId(entry) === viewId);
     }
 
     public async getStatusItems(): Promise<IConsoleStatusItem[]> {
@@ -181,44 +202,16 @@ export class ConsoleLogService {
             return [];
         }
 
-        const items: IConsoleStatusItem[] = [];
-
         try {
-            const result = await invokeSafe(commands.getEngineState());
+            const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
-                items.push(...this._buildEngineStatusItems(result.data as EngineState));
+                return this._mapOverviewStatusItems(result.data);
             }
         } catch (error) {
-            tracer.warn(`[ConsoleLogService] Failed to resolve engine status: ${String(error)}`);
+            this._tracer.warn(`[ConsoleLogService] Failed to resolve engine status: ${String(error)}`);
         }
 
-        const moduleIds = new Set<string>();
-        for (const log of this.logs) {
-            const moduleId = this._extractModuleIdFromSource(log.source);
-            if (moduleId !== null) {
-                moduleIds.add(moduleId);
-            }
-        }
-
-        if (moduleIds.size === 0) {
-            return items;
-        }
-
-        const moduleStatusItems = await Promise.all(
-            [...moduleIds].map(async (moduleId) => {
-                const status = await this._getModuleStatus(moduleId);
-                return {
-                    id: `module:${moduleId}`,
-                    label: this._getModuleLabel(moduleId),
-                    kind: 'module' as const,
-                    status,
-                    detail: this._describeStatus(status),
-                };
-            }),
-        );
-
-        items.push(...moduleStatusItems);
-        return items;
+        return [];
     }
 
     public async getModulePath(moduleId: string): Promise<string | null> {
@@ -237,7 +230,7 @@ export class ConsoleLogService {
             this._modulePathCache.set(moduleId, path);
             return path;
         } catch (error) {
-            tracer.warn(
+            this._tracer.warn(
                 `[ConsoleLogService] Failed to resolve module path for ${moduleId}: ${String(error)}`,
             );
             this._modulePathCache.set(moduleId, null);
@@ -255,7 +248,7 @@ export class ConsoleLogService {
             await this.bridge.invoke('plugin:shell|open', { path });
             return true;
         } catch (error) {
-            tracer.error(
+            this._tracer.error(
                 `[ConsoleLogService] Failed to open module folder for ${moduleId}: ${String(error)}`,
             );
             return false;
@@ -310,7 +303,9 @@ export class ConsoleLogService {
         }
 
         this.lastTimestamp = newLogs.at(-1)?.timestamp ?? this.lastTimestamp;
-        const visibleLogs = newLogs.filter((entry) => !this._isNoise(entry));
+        const visibleLogs = newLogs
+            .filter((entry) => !this._isNoise(entry))
+            .map((entry) => this._normalizer.normalize(entry));
         if (visibleLogs.length === 0) {
             return [];
         }
@@ -329,7 +324,9 @@ export class ConsoleLogService {
     }
 
     private _isNoise(entry: ILogEntry): boolean {
-        return ConsoleLogService._NOISE_PATTERNS.some((pattern) => pattern.test(entry.message));
+        return ConsoleLogService._NOISE_PATTERNS.some((pattern) =>
+            pattern.test(String(entry.message)),
+        );
     }
 
     private _pushLog(message: string, source: string, level: string): void {
@@ -338,13 +335,14 @@ export class ConsoleLogService {
             source,
             level,
             message,
+            module_id: source,
         };
 
         if (this._isNoise(entry)) {
             return;
         }
 
-        this.logs.push(entry);
+        this.logs.push(this._normalizer.normalize(entry));
         this._trimLogs();
     }
 
@@ -354,156 +352,40 @@ export class ConsoleLogService {
         }
     }
 
-    private _buildEngineStatusItems(state: EngineState): IConsoleStatusItem[] {
-        if (state === 'idle') {
-            return [
-                {
-                    id: 'engine:idle',
-                    label: 'Engines',
-                    kind: 'engine',
-                    status: 'stopped',
-                    detail: 'No active engines',
-                },
-            ];
-        }
-
-        if ('starting' in state) {
-            return [
-                {
-                    id: `engine:${state.starting.engine_id}`,
-                    label: this._getModuleLabel(state.starting.engine_id),
-                    kind: 'engine',
-                    status: 'starting',
-                    detail: 'Starting…',
-                },
-            ];
-        }
-
-        if ('swapping' in state) {
-            return [
-                {
-                    id: `engine:${state.swapping.to}`,
-                    label: this._getModuleLabel(state.swapping.to),
-                    kind: 'engine',
-                    status: 'starting',
-                    detail: `Switching from ${state.swapping.from}`,
-                },
-            ];
-        }
-
-        if ('error' in state) {
-            return [
-                {
-                    id: `engine:${state.error.engine_id}`,
-                    label: this._getModuleLabel(state.error.engine_id),
-                    kind: 'engine',
-                    status: 'failed',
-                    detail: state.error.message,
-                },
-            ];
-        }
-
-        return state.ready.slots.map((slot) => ({
-            id: `engine:${slot.engine.id}`,
-            label: slot.engine.name,
-            kind: 'engine' as const,
-            status: 'running' as const,
-            detail: slot.capability,
+    private _mapOverviewStatusItems(payload: ConsoleOverviewPayload): IConsoleStatusItem[] {
+        return payload.status_items.map((item) => ({
+            id: item.id,
+            label: item.label,
+            kind: item.kind === 'module' ? 'module' : 'engine',
+            status: this._toRuntimeStatus(item.status),
+            detail: item.detail,
         }));
     }
 
-    private async _getModuleStatus(moduleId: string): Promise<ConsoleRuntimeStatus> {
-        try {
-            const status = await this.bridge.invoke<string>('get_module_status', { moduleId });
-            if (status === 'running') {
-                return 'running';
-            }
-            return 'stopped';
-        } catch (error) {
-            tracer.warn(
-                `[ConsoleLogService] Failed to resolve module status for ${moduleId}: ${String(error)}`,
-            );
-            return 'failed';
+    private _getModuleId(entry: ILogEntry): string | null {
+        const moduleId = entry.module_id?.trim();
+        if (moduleId !== undefined && moduleId !== '') {
+            this._knownModuleIds.add(moduleId);
+            return moduleId;
         }
+
+        const source = entry.source.trim();
+        if (source !== '' && this._knownModuleIds.has(source)) {
+            return source;
+        }
+
+        return null;
     }
 
-    private _describeStatus(status: ConsoleRuntimeStatus): string {
+    private _toRuntimeStatus(status: string): ConsoleRuntimeStatus {
         switch (status) {
             case 'running':
-                return 'Running';
             case 'starting':
-                return 'Starting…';
             case 'failed':
-                return 'Failed';
             case 'stopped':
+                return status;
             default:
-                return 'Stopped';
+                return 'failed';
         }
-    }
-
-    private _extractModuleIdFromSource(source: string): string | null {
-        if (!source.startsWith(ConsoleLogService._MODULE_SOURCE_PREFIX)) {
-            return null;
-        }
-
-        return source.slice(ConsoleLogService._MODULE_SOURCE_PREFIX.length);
-    }
-
-    private _resolveModuleIdFromEntry(entry: ILogEntry): string | null {
-        const explicitModuleId = this._extractModuleIdFromSource(entry.source);
-        if (explicitModuleId !== null) {
-            this._knownModuleIds.add(explicitModuleId);
-            return explicitModuleId;
-        }
-
-        const inferredModuleId = this._resolveModuleIdFromText(entry.message);
-        if (inferredModuleId !== null) {
-            this._knownModuleIds.add(inferredModuleId);
-            return inferredModuleId;
-        }
-
-        const normalizedSource = entry.source.trim();
-        if (normalizedSource !== '' && this._knownModuleIds.has(normalizedSource)) {
-            return normalizedSource;
-        }
-
-        if (
-            normalizedSource !== '' &&
-            !ConsoleLogService._LAUNCHER_SOURCES.has(normalizedSource.toLowerCase())
-        ) {
-            return null;
-        }
-
-        return null;
-    }
-
-    private _resolveModuleIdFromText(message: string): string | null {
-        const patterns = [
-            /Control\s+([a-z0-9._-]+)\s+->/i,
-            /Launching App:\s+([a-z0-9._-]+)/i,
-            /Starting provider:\s+([a-z0-9._-]+)/i,
-            /Switching provider to:\s+([a-z0-9._-]+)/i,
-            /Requesting stop for local module:\s+([a-z0-9._-]+)/i,
-            /Stopping module:\s+([a-z0-9._-]+)/i,
-            /Module\s+([a-z0-9._-]+)\s+successfully\s+stopped/i,
-        ];
-
-        for (const pattern of patterns) {
-            const match = message.match(pattern);
-            const moduleId = match?.[1]?.trim();
-            if (moduleId !== undefined && moduleId !== '') {
-                return moduleId;
-            }
-        }
-
-        return null;
-    }
-
-    private _extractReadySlots(state: EngineState): SlotStatus[] {
-        if (typeof state !== 'object' || state === null || !('ready' in state)) {
-            return [];
-        }
-
-        return state.ready.slots;
     }
 }

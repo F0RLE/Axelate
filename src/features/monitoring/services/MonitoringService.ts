@@ -1,6 +1,8 @@
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
+
+type MonitoringLogger = Pick<LoggerService, 'info' | 'debug' | 'error' | 'warn'>;
 
 interface IMonitoringGlobal {
     __TAURI__?: {
@@ -23,7 +25,10 @@ export class MonitoringService {
     private readonly _boundVisibilityChange = this._handleVisibilityChange.bind(this);
     private _visibilityBound = false;
 
-    constructor(private readonly _tauri: TauriProvider) {}
+    constructor(
+        private readonly _tauri: TauriProvider,
+        private readonly _tracer: MonitoringLogger,
+    ) {}
 
     /**
      * Starts listening to system stats from Tauri or starts fallback polling.
@@ -40,7 +45,7 @@ export class MonitoringService {
                         this.notifyListeners(payload);
                     },
                 );
-                tracer.info('[MonitoringService] Started listening to system_stats');
+                this._tracer.info('[MonitoringService] Started listening to system_stats');
 
                 // Fetch cached stats immediately so UI doesn't flash empty
                 // (the Rust loop sleeps 1s before the first emit)
@@ -48,17 +53,17 @@ export class MonitoringService {
                     const cached = await this._tauri.invoke<ISystemStats>('get_system_stats');
                     this.notifyListeners(cached);
                 } catch {
-                    tracer.debug('[MonitoringService] Initial stats fetch skipped');
+                    this._tracer.debug('[MonitoringService] Initial stats fetch skipped');
                 }
             } catch (e) {
-                tracer.error('[MonitoringService] Failed to listen to events:', e);
+                this._tracer.error('[MonitoringService] Failed to listen to events:', e);
                 this.startFallback();
             }
 
             // Optimization: Pause backend monitoring when window is hidden
             this._bindVisibilityHandler();
         } else {
-            tracer.info('[MonitoringService] Non-Tauri environment, starting fallback polling');
+            this._tracer.info('[MonitoringService] Non-Tauri environment, starting fallback polling');
             this.startFallback();
         }
     }
@@ -77,7 +82,7 @@ export class MonitoringService {
         if (this._tauri.isTauri()) {
             const isHidden = document.hidden;
             void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
-            tracer.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
+            this._tracer.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
         }
     }
 
@@ -123,7 +128,7 @@ export class MonitoringService {
             try {
                 cb(stats);
             } catch (err) {
-                tracer.error('[MonitoringService] Listener error:', err);
+                this._tracer.error('[MonitoringService] Listener error:', err);
             }
         });
     }
@@ -140,7 +145,7 @@ export class MonitoringService {
                         return;
                     }
                 } catch (e) {
-                    tracer.warn('[MonitoringService] Poll failed', e);
+                    this._tracer.warn('[MonitoringService] Poll failed', e);
                 }
                 // Fallback to mock removed for quality assurance
             })();

@@ -1,4 +1,4 @@
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
 
 type TranslateFn = (key: string, defaultValue?: string) => string;
@@ -54,6 +54,7 @@ type SettingsServiceLike = {
     saveModuleSettings(moduleId: string, settings: Record<string, unknown>): Promise<void>;
     getLocalServerBaseUrl(): Promise<string>;
 };
+type ModuleSettingsCustomUiLogger = Pick<LoggerService, 'error'>;
 
 type ModuleSettingsCustomUiControllerDeps = {
     service: SettingsServiceLike;
@@ -63,6 +64,7 @@ type ModuleSettingsCustomUiControllerDeps = {
     showSavedIndicator: () => void;
     hideSavedIndicator: () => void;
     showToast: ShowToastFn;
+    tracer: ModuleSettingsCustomUiLogger;
 };
 
 export class ModuleSettingsCustomUiController {
@@ -144,7 +146,7 @@ export class ModuleSettingsCustomUiController {
 
             iframe.src = frameUrl.toString();
         } catch (error) {
-            tracer.error(
+            this._deps.tracer.error(
                 '[ModuleSettingsCustomUiController] Failed to prepare custom settings UI:',
                 error,
             );
@@ -229,7 +231,7 @@ export class ModuleSettingsCustomUiController {
                 expectedOrigin,
             );
         } catch (error) {
-            tracer.error(
+            this._deps.tracer.error(
                 '[ModuleSettingsCustomUiController] Custom settings bridge failed:',
                 error,
             );
@@ -293,7 +295,7 @@ export class ModuleSettingsCustomUiController {
                 this._showNotification(request.payload);
                 return { shown: true };
             default:
-                throw new Error(`Unsupported custom settings method: ${request.method}`);
+                throw new Error('Unsupported custom settings method');
         }
     }
 

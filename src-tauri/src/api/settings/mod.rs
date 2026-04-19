@@ -57,6 +57,7 @@ pub async fn get_module_settings(
 #[tauri::command]
 #[specta::specta]
 /// Saves persisted settings for a specific module.
+#[allow(clippy::implicit_hasher)] // Tauri command payload uses the concrete serde HashMap shape.
 pub async fn save_module_settings(
     settings_service: tauri::State<'_, settings::SettingsService>,
     module_id: String,

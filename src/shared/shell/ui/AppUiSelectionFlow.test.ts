@@ -10,6 +10,9 @@ describe('AppUiSelectionFlow', () => {
     const bumpLaunchSelectionVersion = vi.fn(() => 1);
     const stopSelectedApp = vi.fn().mockResolvedValue(true);
     const launchSelectedApp = vi.fn();
+    const removeSelectedModule = vi.fn();
+    const setSelectedModule = vi.fn();
+    const launchApp = vi.fn().mockResolvedValue(undefined);
 
     let flow: AppUiSelectionFlow;
 
@@ -23,20 +26,10 @@ describe('AppUiSelectionFlow', () => {
             bumpLaunchSelectionVersion,
             stopSelectedApp,
             launchSelectedApp,
+            removeSelectedModule,
+            setSelectedModule,
+            launchApp,
         });
-        (globalThis as unknown as {
-            uiState?: {
-                removeSelectedModule: ReturnType<typeof vi.fn>;
-                setSelectedModule: ReturnType<typeof vi.fn>;
-            };
-            launchApp?: ReturnType<typeof vi.fn>;
-        }).uiState = {
-            removeSelectedModule: vi.fn(),
-            setSelectedModule: vi.fn(),
-        };
-        (globalThis as unknown as { launchApp?: ReturnType<typeof vi.fn> }).launchApp = vi
-            .fn()
-            .mockResolvedValue(undefined);
     });
 
     it('selects module, persists it and launches it', () => {
@@ -47,13 +40,7 @@ describe('AppUiSelectionFlow', () => {
 
         expect(updateModuleCard).toHaveBeenCalledWith('services', app);
         expect(updateModalSelection).toHaveBeenCalledWith('svc');
-        expect(
-            (
-                globalThis as unknown as {
-                    uiState: { setSelectedModule: ReturnType<typeof vi.fn> };
-                }
-            ).uiState.setSelectedModule,
-        ).toHaveBeenCalled();
+        expect(setSelectedModule).toHaveBeenCalled();
         expect(launchSelectedApp).toHaveBeenCalled();
     });
 
@@ -65,13 +52,7 @@ describe('AppUiSelectionFlow', () => {
 
         expect(clearModuleCard).toHaveBeenCalledWith('services');
         expect(updateModalSelection).toHaveBeenCalledWith(null);
-        expect(
-            (
-                globalThis as unknown as {
-                    uiState: { removeSelectedModule: ReturnType<typeof vi.fn> };
-                }
-            ).uiState.removeSelectedModule,
-        ).toHaveBeenCalledWith('services');
+        expect(removeSelectedModule).toHaveBeenCalledWith('services');
         expect(stopSelectedApp).toHaveBeenCalledWith(app);
     });
 });

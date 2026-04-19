@@ -1,21 +1,17 @@
-/**
- * @module ai/ui/AISettingsRenderer
- * @description Handles rendering of AI provider settings UI with secure DOM patterns.
- * Implements interactive model selection and API key management.
- */
-
-import DOMPurify from 'dompurify';
-
 import type { IApp } from '@/shared/types/coreTypes';
 import { type SettingsService } from '@/features/settings/services/SettingsService';
 import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
+import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAIModelData } from '../types/aiTypes';
-import { getModelDataFromModels } from '../utils/catalogHelpers';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { tracer } from '@/infrastructure/logging/LoggerService';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import { bindAISettingsInteractions } from './AISettingsInteractionBinder';
+import { AISettingsViewPolicy } from './AISettingsViewPolicy';
+import { AISettingsKeyController } from './AISettingsKeyController';
+import { AISettingsContentRenderer } from './AISettingsContentRenderer';
+import { AISettingsSelectionController } from './AISettingsSelectionController';
 
 const ICONS = {
     VISIBLE:
@@ -27,46 +23,12 @@ const ICONS = {
         '<svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><use href="#icon-clock"></use></svg>',
 } as const;
 
-const PURIFY_CONFIG = {
-    USE_PROFILES: { html: true, svg: true },
-    ADD_TAGS: ['svg', 'path', 'circle', 'polyline', 'line', 'g', 'use'],
-    ADD_ATTR: [
-        'viewBox',
-        'd',
-        'fill',
-        'stroke',
-        'stroke-width',
-        'cx',
-        'cy',
-        'r',
-        'stroke-linecap',
-        'stroke-linejoin',
-        'points',
-        'x1',
-        'y1',
-        'x2',
-        'y2',
-        'width',
-        'height',
-        'style',
-        'class',
-        'href',
-    ],
-};
-// Types
-// ============================================================================
-
 type TranslateFunc = (key: string, fallback: string) => string;
-
-interface IAIModelPricing {
-    input_per_1m?: number;
-    output_per_1m?: number;
-    currency?: string;
-    tier?: string;
-    note?: string;
-    in?: number;
-    out?: number;
-}
+type ShowToast = (
+    message: string,
+    type: 'success' | 'error' | 'warning' | 'info',
+) => void;
+type AISettingsRendererLogger = Pick<LoggerService, 'info' | 'debug' | 'error'>;
 
 // IAISettingsGlobal removed as it's no longer used for strictness reasons
 
@@ -79,13 +41,38 @@ class AISettingsRenderer extends BaseComponent {
     private _settingsService: SettingsService | null = null;
     private _aiSettings: AISettingsService | null = null;
     private _tauri: TauriProvider | null = null;
-    private _activeContainer: HTMLElement | null = null;
+    private _i18nUI: I18nUI | null = null;
+    private _logger: AISettingsRendererLogger | null = null;
+    private _translate: TranslateFunc = (_key, fallback) => fallback;
+    private _showToastCallback: ShowToast = () => undefined;
     private _renderAbortController: AbortController | null = null;
-    private readonly _modelsByProvider = new Map<string, IAIModelData[]>();
     private readonly _buttonResetTimers = new Map<
         HTMLButtonElement,
         ReturnType<typeof setTimeout>
     >();
+    private readonly _contentRenderer = new AISettingsContentRenderer();
+    private readonly _viewPolicy = new AISettingsViewPolicy();
+    private readonly _selectionController = new AISettingsSelectionController();
+    private readonly _keyController = new AISettingsKeyController({
+        getSettingsService: () => this._settingsService,
+        getTranslator: () => this._getTranslator(),
+        scheduleButtonReset: (button, callback) => this._scheduleButtonReset(button, callback),
+        showToast: (message, type) => {
+            this._showToast(message, type);
+        },
+        tracer: {
+            error: (message, error) => {
+                this._logger?.error(message, error);
+            },
+        },
+        icons: {
+            visible: ICONS.VISIBLE,
+            hidden: ICONS.HIDDEN,
+            check: ICONS.CHECK,
+            x: ICONS.X,
+            spinner: ICONS.SPINNER,
+        },
+    });
 
     constructor() {
         super();
@@ -102,23 +89,34 @@ class AISettingsRenderer extends BaseComponent {
         settingsService: SettingsService,
         aiSettings: AISettingsService,
         tauri: TauriProvider,
+        i18nUI: I18nUI,
+        translate: TranslateFunc,
+        tracer: AISettingsRendererLogger,
+        showToast: ShowToast,
     ): Promise<void> {
         this._settingsService = settingsService;
         this._aiSettings = aiSettings;
         this._tauri = tauri;
+        this._i18nUI = i18nUI;
+        this._translate = translate;
+        this._logger = tracer;
+        this._showToastCallback = showToast;
         return super.init();
     }
 
     protected onInit(): void | Promise<void> {
-        tracer.debug('[AISettingsRenderer] Initialized');
+        this._logger?.debug('[AISettingsRenderer] Initialized');
     }
 
     protected onDestroy(): void {
         this._settingsService = null;
         this._aiSettings = null;
         this._tauri = null;
-        this._activeContainer = null;
-        this._modelsByProvider.clear();
+        this._i18nUI = null;
+        this._logger = null;
+        this._translate = (_key, fallback) => fallback;
+        this._showToastCallback = () => undefined;
+        this._selectionController.reset();
         this._cleanupRenderScope();
     }
 
@@ -131,7 +129,7 @@ class AISettingsRenderer extends BaseComponent {
      */
     public async render(container: HTMLElement, app: IApp): Promise<void> {
         if (!this._isInit) {
-            tracer.error('[AISettingsRenderer] Not initialized. Call init() first.');
+            this._logger?.error('[AISettingsRenderer] Not initialized. Call init() first.');
             return;
         }
 
@@ -140,310 +138,39 @@ class AISettingsRenderer extends BaseComponent {
         const appId = app.id;
         const providerData = app.apiProviderData ?? {};
         const models = (providerData['models'] as IAIModelData[] | undefined) ?? [];
-        this._modelsByProvider.set(appId, models);
 
         const firstModel = models.length > 0 ? models[0] : undefined;
         const defaultModelId = firstModel ? firstModel.id : '';
-        const savedModel = this._aiSettings?.getSelectedAIModel(appId) ?? defaultModelId;
+        const savedModel = this._selectionController.getSavedModel(
+            appId,
+            this._aiSettings,
+            defaultModelId,
+        );
         const t = this._getTranslator();
-        const isCleanApp =
-            ['axelate', 'axelate-platform'].includes(appId) || appId.includes('telegram');
-        const supportsInternetAccess = !isCleanApp;
 
-        this._activeContainer = container;
-        const rawHtml = isCleanApp
-            ? `
-            <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center">
-                        <h3 id="${appId}-title">${app.name ?? 'Module'} Settings</h3>
-                         <div class="model-desc" data-i18n="ui.settings.no_settings">No additional settings required for this module.</div>
-                    </div>
-                </div>
-            </div>`
-            : `
-            <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
-                <!-- Unified API & Models Settings -->
-                <div class="ai-settings-content">
-                    <!-- 1. API KEY SECTION (CLEAN) -->
-                    <section class="ai-key-section centered" aria-labelledby="${appId}-api-title">
-                        <div class="ai-content-panel">
-                            <div class="settings-card-header-center">
-                                <h3 id="${appId}-api-title">🔑 
-                                    <a href="#" id="${appId}-api-link" class="api-key-link" title="Manage your OpenRouter API Keys">
-                                        <span data-i18n="ui.settings.api_key_label">${t('ui.settings.api_key_label', 'OpenRouter API Key')}</span>
-                                    </a>
-                                </h3>
-                            </div>
-                            <div class="ai-key-input-row">
-                                <input id="${appId}-api-key-input" class="ai-key-editor is-masked" type="text" placeholder="${t('ui.settings.enter_key_placeholder', 'Enter your API key here')}" data-i18n-placeholder="ui.settings.enter_key_placeholder" spellcheck="false" autocomplete="off" />
-                                <button id="${appId}-key-toggle-btn" class="ai-icon-btn" aria-label="Toggle password visibility" data-i18n-aria-label="ui.settings.toggle_visibility">${ICONS.HIDDEN}</button>
-                                <button id="${appId}-key-check-btn" class="ai-check-btn" data-i18n="ui.gpt.key_check_btn">${t('ui.gpt.key_check_btn', 'Check')}</button>
-                            </div>
-                            <div class="encryption-note">🔒 <span data-i18n="ui.settings.keys_encrypted">${t('ui.settings.keys_encrypted', 'Shared OpenRouter key is securely encrypted locally.')}</span></div>
-                        </div>
-                    </section>
-
-                    <!-- 2. MODELS SECTION (WINDOW) -->
-                    <section class="ai-models-section" aria-labelledby="${appId}-models-title">
-                        <div class="ai-content-panel">
-                            <div class="settings-card-header-center">
-                                <h3 id="${appId}-models-title">🤖 <span data-i18n="ui.settings.select_model">${t('ui.settings.select_model', 'Select Model')}</span></h3>
-                            </div>
-                            <div class="ai-models-grid" role="listbox" aria-label="Available Models">
-                                ${models.map((model) => this._renderModelCard(model.id, model, savedModel === model.id, t)).join('')}
-                            </div>
-                        </div>
-                    </section>
-
-                    ${this._renderThinkingSection(appId, savedModel, models, t)}
-                    ${supportsInternetAccess ? this._renderInternetAccessSection(appId, t) : ''}
-
-                    <!-- 4. STATS SECTION (CLEAN) -->
-                    <section id="${appId}-model-stats" class="ai-stats-section" aria-live="polite">
-                        <div class="ai-content-panel">
-                            <div class="settings-card-header-center">
-                                <h3>📊 <span data-i18n="ui.settings.model_stats">${t('ui.settings.model_stats', 'Model Stats')}</span></h3>
-                            </div>
-                            ${this.renderModelStats(appId, savedModel)}
-                        </div>
-                    </section>
-                </div>
-            </div>
-        `;
-
-        container.innerHTML = DOMPurify.sanitize(rawHtml, PURIFY_CONFIG);
+        this._selectionController.registerRender({ appId, container, models });
+        this._contentRenderer.render(container, {
+            app,
+            appId,
+            models,
+            savedModel,
+            translate: t,
+            viewPolicy: this._viewPolicy,
+            supportsInternetAccess: this._viewPolicy.supportsInternetAccess(appId),
+            supportsThinking: this._viewPolicy.supportsThinking(appId),
+            thinkingLevel: this._selectionController.getThinkingLevel(appId, this._aiSettings),
+            internetAccessEnabled: this._selectionController.getInternetAccessEnabled(
+                appId,
+                this._aiSettings,
+            ),
+            renderModelStats: (targetAppId, modelKey) =>
+                this.renderModelStats(targetAppId, modelKey),
+        });
+        const toggleButton = container.querySelector<HTMLButtonElement>(`#${appId}-key-toggle-btn`);
+        if (toggleButton !== null) {
+            toggleButton.innerHTML = ICONS.HIDDEN;
+        }
         await this._bindEvents(container, appId);
-    }
-
-    /**
-     * Renders the thinking level section, or empty string if not applicable.
-     */
-    private _renderThinkingSection(
-        appId: string,
-        savedModel: string,
-        models: IAIModelData[],
-        t: TranslateFunc,
-    ): string {
-        const supportsThinking =
-            appId === 'gemini' || appId === 'claude' || appId === 'gpt' || appId === 'deepseek';
-        if (!supportsThinking) return '';
-
-        const savedLevel = this._aiSettings?.getThinkingLevel(appId);
-        const isOff = savedLevel === 'off';
-        const isLow = savedLevel === 'low';
-        const isMedium = savedLevel === 'medium';
-        const isHigh = savedLevel === 'high';
-
-        const selectedModelData = models.find((m) => m.id === savedModel);
-        const hasReasoning = selectedModelData?.capabilities?.reasoning === true;
-
-        return `
-            <!-- 3. THINKING LEVEL SECTION (WINDOW) -->
-            <section id="${appId}-thinking-section" class="thinking-level-section ${hasReasoning ? '' : 'is-hidden'}" aria-labelledby="${appId}-thinking-title">
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center">
-                        <h3 id="${appId}-thinking-title" class="thinking-level-title">🧠 <span data-i18n="ui.settings.gemini.thinking">${t('ui.settings.gemini.thinking', 'Thinking Level')}</span></h3>
-                    </div>
-                    <div id="${appId}-thinking-grid" class="thinking-grid four-col" role="radiogroup" aria-label="Thinking Level">
-                        <div class="thinking-option-card ${isHigh ? 'selected' : ''}"
-                            role="radio"
-                            aria-checked="${String(isHigh)}"
-                            tabindex="0"
-                            data-value="high">
-                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.high">${t('ui.settings.thinking.high', 'High')}</div>
-                        </div>
-                        <div class="thinking-option-card ${isMedium ? 'selected' : ''}"
-                            role="radio"
-                            aria-checked="${String(isMedium)}"
-                            tabindex="0"
-                            data-value="medium">
-                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.medium">${t('ui.settings.thinking.medium', 'Medium')}</div>
-                        </div>
-                        <div class="thinking-option-card ${isLow ? 'selected' : ''}"
-                            role="radio"
-                            aria-checked="${String(isLow)}"
-                            tabindex="0"
-                            data-value="low">
-                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.low">${t('ui.settings.thinking.low', 'Low')}</div>
-                        </div>
-                        <div class="thinking-option-card ${isOff ? 'selected' : ''}"
-                            role="radio"
-                            aria-checked="${String(isOff)}"
-                            tabindex="0"
-                            data-value="off">
-                            <div class="thinking-option-title" data-i18n="ui.settings.thinking.off">${t('ui.settings.thinking.off', 'Off')}</div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        `;
-    }
-
-    private _renderInternetAccessSection(appId: string, t: TranslateFunc): string {
-        const isEnabled = this._aiSettings?.getInternetAccessEnabled(appId) ?? true;
-
-        return `
-            <section id="${appId}-internet-section" class="ai-web-section" aria-labelledby="${appId}-internet-title">
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center">
-                        <h3 id="${appId}-internet-title">🌐 <span data-i18n="ui.settings.internet_access">${t('ui.settings.internet_access', 'Internet Access')}</span></h3>
-                    </div>
-                    <div id="${appId}-internet-grid" class="thinking-grid" role="radiogroup" aria-label="${t('ui.settings.internet_access', 'Internet Access')}">
-                        <div class="thinking-option-card internet-access-card ${isEnabled ? 'selected' : ''}"
-                            role="radio"
-                            aria-checked="${String(isEnabled)}"
-                            tabindex="0"
-                            data-value="on">
-                            <div class="thinking-option-title" data-i18n="ui.common.on">${t('ui.common.on', 'On')}</div>
-                        </div>
-                        <div class="thinking-option-card internet-access-card ${!isEnabled ? 'selected' : ''}"
-                            role="radio"
-                            aria-checked="${String(!isEnabled)}"
-                            tabindex="0"
-                            data-value="off">
-                            <div class="thinking-option-title" data-i18n="ui.common.off">${t('ui.common.off', 'Off')}</div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        `;
-    }
-
-    /**
-     * Renders a discrete model selection card.
-     */
-    private _renderModelCard(
-        key: string,
-        model: IAIModelData,
-        isSelected: boolean,
-        t: TranslateFunc,
-    ): string {
-        const pricingHtml = this._renderPricing(model.pricing);
-        const contextHtml = this._renderContextWindow(model.contextWindow);
-
-        return `
-            <div class="ai-model-card ${isSelected ? 'selected' : ''}" 
-                role="option" 
-                aria-selected="${String(isSelected)}" 
-                tabindex="0"
-                data-model-key="${key}">
-                <div class="model-name">${DOMPurify.sanitize(model.name, PURIFY_CONFIG)}</div>
-                <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(t(model.descKey ?? '', model.desc), PURIFY_CONFIG)}</div>
-                <div class="model-pricing">${pricingHtml}${contextHtml}</div>
-            </div>
-        `;
-    }
-
-    /**
-     * Renders pricing information safely.
-     * Delegates to specific handlers based on data structure.
-     */
-    private _renderPricing(pricing: unknown): string {
-        if (pricing === null || pricing === undefined) return '';
-
-        if (Array.isArray(pricing)) {
-            return this._renderLegacyPricing(pricing as IAIModelPricing[]);
-        }
-
-        if (typeof pricing === 'object') {
-            return this._renderNewPricing(pricing as IAIModelPricing);
-        }
-
-        return '';
-    }
-
-    private _renderContextWindow(contextWindow: number | null | undefined): string {
-        if (
-            contextWindow === null ||
-            contextWindow === undefined ||
-            !Number.isFinite(contextWindow)
-        ) {
-            return '';
-        }
-
-        return `
-            <div class="price-row context-row">
-                <span class="price-tag context-tag">${this._getTranslator()('ui.settings.context_short', 'Ctx')}: ${DOMPurify.sanitize(this._formatCompactContext(contextWindow), PURIFY_CONFIG)}</span>
-            </div>
-        `;
-    }
-
-    private _formatCompactContext(contextWindow: number): string {
-        if (contextWindow >= 1_000_000) {
-            const millions = contextWindow / 1_000_000;
-            return `${millions
-                .toFixed(millions >= 10 ? 0 : 2)
-                .replace(/\.00$/, '')
-                .replace(/(\.\d)0$/, '$1')}M`;
-        }
-
-        if (contextWindow >= 1_000) {
-            const thousands = contextWindow / 1_000;
-            return `${thousands.toFixed(thousands >= 100 ? 0 : 1).replace(/\.0$/, '')}K`;
-        }
-
-        return String(contextWindow);
-    }
-
-    /**
-     * Renders legacy array-based pricing.
-     */
-    private _renderLegacyPricing(pricing: IAIModelPricing[]): string {
-        return pricing
-            .map(
-                (price) => `
-            <div class="price-row">
-                <span>${price.tier ?? ''}</span>
-                <span>${price.note ?? `${String(price.in ?? 0)} / ${String(price.out ?? 0)}`}</span>
-            </div>
-        `,
-            )
-            .join('');
-    }
-
-    /**
-     * Renders new object-based pricing structure (IAIModelPricing).
-     */
-    private _renderNewPricing(pricing: IAIModelPricing): string {
-        let html = '';
-        const currency = pricing.currency ?? '$';
-        const displayCurrency = currency === 'USD' ? '$' : currency;
-        const separator = displayCurrency.length > 1 ? ' ' : '';
-
-        const inputCost = pricing.input_per_1m ?? 0;
-        const outputCost = pricing.output_per_1m ?? 0;
-        const isFree = inputCost === 0 && outputCost === 0;
-
-        if (isFree) {
-            html += `
-                <div class="price-row">
-                    <span class="price-tag free">${this._getTranslator()('ui.settings.free', 'Free')}</span>
-                </div>
-            `;
-        } else {
-            const inPrice =
-                pricing.input_per_1m === undefined
-                    ? null
-                    : `${displayCurrency}${separator}${String(pricing.input_per_1m)}`;
-
-            const outPrice =
-                pricing.output_per_1m === undefined
-                    ? null
-                    : `${displayCurrency}${separator}${String(pricing.output_per_1m)}`;
-
-            if (inPrice !== null && outPrice !== null) {
-                html += `
-                <div class="price-row">
-                    <span class="price-tag">${this._getTranslator()('ui.settings.price_input', 'In')}: ${inPrice}</span>
-                    <span class="price-tag">${this._getTranslator()('ui.settings.price_output', 'Out')}: ${outPrice}</span>
-                </div>
-            `;
-            }
-        }
-
-        // Removed notes/description as per user request
-        return html;
     }
 
     /**
@@ -453,65 +180,7 @@ class AISettingsRenderer extends BaseComponent {
      * @param modelKey - Unique model identifier
      */
     public renderModelStats(appId: string, modelKey: string): string {
-        const t = this._getTranslator();
-        const modelData = this._getModelData(appId, modelKey);
-        const stats = modelData?.stats;
-
-        if (stats) {
-            return `
-                <div class="ai-stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-header">
-                            <span class="stat-icon-wrapper">⚡</span>
-                            <div class="stat-label" data-i18n="ui.gpt.stats.speed">${t('ui.gpt.stats.speed', 'Speed')}</div>
-                        </div>
-                        <div class="stat-stars">${this._renderStars(stats.speed)}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-header">
-                            <span class="stat-icon-wrapper">🧠</span>
-                            <div class="stat-label" data-i18n="ui.gpt.stats.logic">${t('ui.gpt.stats.logic', 'Logic')}</div>
-                        </div>
-                        <div class="stat-stars">${this._renderStars(stats.logic)}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-header">
-                            <span class="stat-icon-wrapper">🎨</span>
-                            <div class="stat-label" data-i18n="ui.gpt.stats.creative">${t('ui.gpt.stats.creative', 'Creative')}</div>
-                        </div>
-                        <div class="stat-stars">${this._renderStars(stats.creative)}</div>
-                    </div>
-                </div>
-            `;
-        }
-
-        return `<div class="model-desc">${t('ui.settings.stats_unavailable', 'Stats unavailable')}</div>`;
-    }
-
-    /**
-     * Renders an aggregate star rating visual.
-     */
-    private _renderStars(count: number): string {
-        let starsHtml = '';
-        const maxStars = 5;
-
-        for (let i = 0; i < maxStars; i++) {
-            const thresholdFull = (i + 1) * 2;
-            const thresholdHalf = i * 2 + 1;
-
-            let className = 'star-icon';
-
-            if (count >= thresholdFull) {
-                className += ' full';
-            } else if (count >= thresholdHalf) {
-                className += ' half';
-            } else {
-                className += ' empty';
-            }
-
-            starsHtml += `<span class="${className}">★</span>`;
-        }
-        return starsHtml;
+        return this._selectionController.renderModelStats(appId, modelKey, this._getTranslator());
     }
 
     /**
@@ -534,170 +203,36 @@ class AISettingsRenderer extends BaseComponent {
             | null;
 
         if (input !== null) {
-            const meta = await this._settingsService.getSecureKeyMeta(keyProviderId);
-            if (meta.exists) {
-                this._applyStoredKeyMask(input, meta.length);
-            }
+            await this._keyController.hydrateStoredMask(input, keyProviderId);
         }
-
-        const addListener = (element: Element | null, type: string, fn: EventListener): void => {
-            if (element !== null) {
-                element.addEventListener(type, fn, { signal: renderSignal });
-            }
-        };
-
-        addListener(input, 'input', (event) => {
-            const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-            const normalizedValue = target.value.replaceAll(/[\r\n]+/g, '');
-            if (normalizedValue !== target.value) {
-                target.value = normalizedValue;
-            }
-            delete target.dataset['storedMasked'];
-            target.dataset['keyDirty'] = 'true';
-        });
-
-        addListener(input, 'beforeinput', (event) => {
-            const target = event.target as HTMLInputElement | HTMLTextAreaElement;
-            const inputEvent = event as InputEvent;
-            const inputType = inputEvent.inputType;
-
-            if (target.dataset['storedMasked'] === 'true' && !inputType.startsWith('delete')) {
-                this._clearStoredKeyMask(target);
-            }
-        });
-
-        addListener(input, 'keydown', (event) => {
-            if ((event as KeyboardEvent).key === 'Enter') {
-                event.preventDefault();
-            }
-        });
-
-        addListener(container.querySelector(`#${appId}-key-toggle-btn`), 'click', () => {
-            void this.toggleKeyVisibility(appId);
-        });
-
-        // Add handler for the OpenRouter link
-        addListener(container.querySelector(`#${appId}-api-link`), 'click', (e) => {
-            e.preventDefault();
-            if (this._tauri) {
-                void this._tauri.openUrl(this._getKeyProviderUrl(keyProviderId));
-            }
-        });
-
-        addListener(container.querySelector(`#${appId}-key-check-btn`), 'click', () => {
-            void this.checkKey(appId);
-        });
-
-        const handleModelSelection = (event: Event) => {
-            const card = (event.target as Element).closest<HTMLElement>(
-                '.ai-model-card[data-model-key]',
-            );
-            if (!card) return;
-
-            const keyEvent = event as KeyboardEvent;
-            if (event.type === 'keydown' && keyEvent.key !== 'Enter' && keyEvent.key !== ' ')
-                return;
-
-            const modelKey = card.dataset['modelKey'];
-            if (modelKey !== undefined && modelKey !== '') {
-                event.preventDefault();
-                this.selectModel(appId, modelKey);
-            }
-        };
-
-        container.addEventListener('click', handleModelSelection, {
+        bindAISettingsInteractions({
+            appId,
+            container,
             signal: renderSignal,
-        });
-        container.addEventListener('keydown', handleModelSelection, {
-            signal: renderSignal,
-        });
-
-        const thinkingGrid = container.querySelector(`#${appId}-thinking-grid`);
-        if (thinkingGrid !== null) {
-            const buttons = Array.from(
-                thinkingGrid.querySelectorAll<HTMLElement>('.thinking-option-card'),
-            );
-
-            const updateThinking = (target: HTMLElement) => {
-                const val = (target.dataset['value'] ?? 'high') as ThinkingLevel;
-                this._aiSettings?.setThinkingLevel(appId, val);
-
-                buttons.forEach((b) => {
-                    b.classList.remove('selected');
-                    b.setAttribute('aria-checked', 'false');
-                });
-                target.classList.add('selected');
-                target.setAttribute('aria-checked', 'true');
-
-                const savedModel = this._aiSettings?.getSelectedAIModel(appId) ?? '';
-                if (savedModel !== '') {
-                    this.selectModel(appId, savedModel);
+            normalizeKeyInput: (event) => {
+                this._keyController.normalizeInput(event);
+            },
+            maybeClearStoredMask: (event) => {
+                this._keyController.maybeClearStoredMask(event);
+            },
+            openKeyProviderUrl: () => {
+                if (this._tauri) {
+                    void this._tauri.openUrl(this._getKeyProviderUrl(keyProviderId));
                 }
-            };
-
-            buttons.forEach((btn) => {
-                btn.addEventListener(
-                    'click',
-                    (event) => {
-                        updateThinking(event.currentTarget as HTMLElement);
-                    },
-                    { signal: renderSignal },
-                );
-                btn.addEventListener(
-                    'keydown',
-                    (event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            updateThinking(event.currentTarget as HTMLElement);
-                        }
-                    },
-                    { signal: renderSignal },
-                );
-            });
-        }
-
-        const internetGrid = container.querySelector(`#${appId}-internet-grid`);
-        if (internetGrid !== null) {
-            const buttons = Array.from(
-                internetGrid.querySelectorAll<HTMLElement>('.internet-access-card'),
-            );
-
-            const updateInternetAccess = (target: HTMLElement) => {
-                const enabled = (target.dataset['value'] ?? 'on') === 'on';
+            },
+            toggleKeyVisibility: async () => this.toggleKeyVisibility(appId),
+            checkKey: async () => this.checkKey(appId),
+            selectModel: (modelKey) => this.selectModel(appId, modelKey),
+            setThinkingLevel: (level: ThinkingLevel) => {
+                this._aiSettings?.setThinkingLevel(appId, level);
+            },
+            getSelectedModel: () => this._aiSettings?.getSelectedAIModel(appId) ?? '',
+            setInternetAccessEnabled: (enabled) => {
                 this._aiSettings?.setInternetAccessEnabled(appId, enabled);
+            },
+        });
 
-                buttons.forEach((button) => {
-                    const buttonEnabled = (button.dataset['value'] ?? 'off') === 'on';
-                    button.classList.toggle('selected', buttonEnabled === enabled);
-                    button.setAttribute('aria-checked', String(buttonEnabled === enabled));
-                });
-            };
-
-            buttons.forEach((btn) => {
-                btn.addEventListener(
-                    'click',
-                    (event) => {
-                        updateInternetAccess(event.currentTarget as HTMLElement);
-                    },
-                    { signal: renderSignal },
-                );
-                btn.addEventListener(
-                    'keydown',
-                    (event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            updateInternetAccess(event.currentTarget as HTMLElement);
-                        }
-                    },
-                    { signal: renderSignal },
-                );
-            });
-        }
-
-        const globalContext = getGlobalWin();
-        if (typeof globalContext.applyTranslations === 'function') {
-            globalContext.applyTranslations();
-        }
+        this._i18nUI?.applyTranslations(container);
     }
 
     /**
@@ -711,37 +246,7 @@ class AISettingsRenderer extends BaseComponent {
             `#${appId}-api-key-input`,
         );
         const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-toggle-btn`);
-
-        if (input !== null && btn !== null) {
-            if (
-                input.dataset['storedMasked'] === 'true' &&
-                input.dataset['storedRevealed'] !== 'true'
-            ) {
-                const revealedKey = await this._settingsService?.getSecureKey(
-                    this._getKeyProviderId(appId),
-                );
-                if (revealedKey === undefined || revealedKey === null || revealedKey === '') {
-                    this._showToast(
-                        this._getTranslator()(
-                            'ui.settings.key_reveal_error',
-                            'Failed to reveal stored key',
-                        ),
-                        'error',
-                    );
-                    return;
-                }
-
-                input.value = revealedKey;
-                input.dataset['storedRevealed'] = 'true';
-                input.classList.remove('is-masked');
-                btn.innerHTML = ICONS.VISIBLE;
-                return;
-            }
-
-            const isMasked = input.classList.contains('is-masked');
-            input.classList.toggle('is-masked', !isMasked);
-            btn.innerHTML = isMasked ? ICONS.VISIBLE : ICONS.HIDDEN;
-        }
+        await this._keyController.toggleVisibility(input, btn, this._getKeyProviderId(appId));
     }
 
     /**
@@ -755,122 +260,7 @@ class AISettingsRenderer extends BaseComponent {
             `#${appId}-api-key-input`,
         );
         const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-check-btn`);
-        if (input === null || btn === null) return;
-
-        const keyProviderId = this._getKeyProviderId(appId);
-
-        // Rate limiting check
-        if (btn.disabled || btn.classList.contains('checking')) return;
-
-        const t = this._getTranslator();
-        const originalHtml = btn.innerHTML;
-        const originalWidth = btn.offsetWidth;
-        btn.style.width = `${String(originalWidth)}px`;
-        btn.innerHTML = ICONS.SPINNER;
-        btn.classList.add('checking');
-        btn.disabled = true;
-
-        try {
-            const isStoredMask = input.dataset['storedMasked'] === 'true';
-            const isDirtyReplacement = input.dataset['keyDirty'] === 'true';
-            const key = input.value.trim();
-            const shouldValidateTypedKey =
-                (isDirtyReplacement && key !== '') || (!isStoredMask && key !== '');
-            const shouldValidateStoredKey = !isDirtyReplacement && isStoredMask && key !== '';
-
-            let isValid = false;
-            if (shouldValidateTypedKey) {
-                isValid = await this._validateKey(keyProviderId, key);
-            } else if (shouldValidateStoredKey) {
-                isValid = Boolean(await this._settingsService?.validateStoredApiKey(keyProviderId));
-            }
-
-            if (isValid) {
-                if (shouldValidateTypedKey && key !== '') {
-                    await this._settingsService?.saveSecureKey(keyProviderId, key);
-                    this._applyStoredKeyMask(input, key.length);
-                }
-                this._updateKeyButtonState(btn, 'success', ICONS.CHECK);
-                this._showToast(t('ui.settings.key_valid', 'Key is valid'), 'success');
-            } else {
-                this._updateKeyButtonState(btn, 'error', ICONS.X);
-                this._showToast(
-                    t('ui.settings.key_invalid_check', 'Key is invalid or missing'),
-                    'error',
-                );
-            }
-        } catch (error: unknown) {
-            tracer.error('[AISettingsRenderer] Key check failed:', error);
-            this._updateKeyButtonState(btn, 'error', ICONS.X);
-            this._showToast(t('ui.settings.key_check_error', 'Key check error'), 'error');
-        } finally {
-            this._scheduleButtonReset(btn, () => {
-                if (!document.body.contains(btn)) return;
-
-                btn.disabled = false;
-                btn.style.width = '';
-                btn.classList.remove('success', 'error', 'checking');
-                btn.innerHTML = originalHtml;
-            });
-        }
-    }
-
-    private _applyStoredKeyMask(
-        input: HTMLInputElement | HTMLTextAreaElement,
-        length?: number,
-    ): void {
-        input.dataset['storedMasked'] = 'true';
-        delete input.dataset['storedRevealed'];
-        delete input.dataset['keyDirty'];
-        input.classList.remove('is-masked');
-        input.value = this._buildStoredKeyMask(length);
-        input.placeholder = this._getTranslator()(
-            'ui.settings.stored_key_placeholder',
-            'Stored locally. Type to replace.',
-        );
-    }
-
-    private _clearStoredKeyMask(input: HTMLInputElement | HTMLTextAreaElement): void {
-        delete input.dataset['storedMasked'];
-        delete input.dataset['storedRevealed'];
-        input.value = '';
-        input.classList.add('is-masked');
-        input.placeholder = this._getTranslator()(
-            'ui.settings.enter_key_placeholder',
-            'Enter your API key here',
-        );
-    }
-
-    private _buildStoredKeyMask(length?: number): string {
-        const count = typeof length === 'number' && length > 0 ? length : 16;
-        return '•'.repeat(count);
-    }
-
-    /**
-     * Performs a network probe to validate credentials via Rust backend.
-     */
-    private async _validateKey(providerId: string, key: string): Promise<boolean> {
-        if (!this._settingsService) return false;
-
-        try {
-            return await this._settingsService.validateApiKey(providerId, key);
-        } catch (error) {
-            tracer.error('[AISettingsRenderer] Key validation failed:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Synchronizes button visual state with validation results.
-     */
-    private _updateKeyButtonState(
-        btn: HTMLElement,
-        state: 'success' | 'error',
-        icon: string,
-    ): void {
-        btn.classList.remove('success', 'error', 'checking');
-        btn.classList.add(state);
-        btn.innerHTML = icon;
+        await this._keyController.checkKey(input, btn, this._getKeyProviderId(appId));
     }
 
     /**
@@ -881,39 +271,14 @@ class AISettingsRenderer extends BaseComponent {
      * @sideeffect Updates local storage and refreshes stats DOM segments
      */
     public selectModel(appId: string, modelKey: string): void {
-        this._aiSettings?.setSelectedAIModel(appId, modelKey);
-
-        const grid = this._queryActiveElement<HTMLElement>('.ai-models-grid');
-        grid?.querySelectorAll('.ai-model-card').forEach((card) => {
-            const cardKey = (card as HTMLElement).dataset['modelKey'];
-            card.classList.toggle('selected', cardKey === modelKey);
+        this._selectionController.syncSelection({
+            appId,
+            modelKey,
+            aiSettings: this._aiSettings,
+            translate: this._getTranslator(),
+            i18nUI: this._i18nUI,
+            contentRenderer: this._contentRenderer,
         });
-
-        const modelData = this._getModelData(appId, modelKey);
-        const hasReasoning = modelData?.capabilities?.reasoning === true;
-        const thinkingSection = this._queryActiveElement<HTMLElement>(`#${appId}-thinking-section`);
-        if (thinkingSection !== null) {
-            thinkingSection.classList.toggle('is-hidden', !hasReasoning);
-        }
-
-        const statsArea = this._queryActiveElement<HTMLElement>(`#${appId}-model-stats`);
-        if (statsArea !== null) {
-            const t = this._getTranslator();
-            const statsHtml = `
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center">
-                        <h3>📊 <span data-i18n="ui.settings.model_stats">${t('ui.settings.model_stats', 'Model Stats')}</span></h3>
-                    </div>
-                    ${this.renderModelStats(appId, modelKey)}
-                </div>
-            `;
-            statsArea.innerHTML = DOMPurify.sanitize(statsHtml, PURIFY_CONFIG);
-
-            const globalContext = getGlobalWin();
-            if (typeof globalContext.applyTranslations === 'function') {
-                globalContext.applyTranslations();
-            }
-        }
     }
 
     /**
@@ -928,19 +293,14 @@ class AISettingsRenderer extends BaseComponent {
      * Resolves the translation service from the global context.
      */
     private _getTranslator(): TranslateFunc {
-        const globalContext = getGlobalWin();
-        const t = globalContext.t;
-        return (t as TranslateFunc | undefined) ?? ((_key: string, fallback: string) => fallback);
+        return this._translate;
     }
 
-    /**
-     * Emits a toast notification to the global UI.
-     */
-    private _showToast(message: string, type: string): void {
-        const globalContext = getGlobalWin();
-        if (typeof globalContext.showToast === 'function') {
-            (globalContext.showToast as (m: string, t: string) => void)(message, type);
-        }
+    private _showToast(
+        message: string,
+        type: 'success' | 'error' | 'warning' | 'info',
+    ): void {
+        this._showToastCallback(message, type);
     }
 
     private _getKeyProviderId(_appId: string): string {
@@ -956,7 +316,7 @@ class AISettingsRenderer extends BaseComponent {
     }
 
     private _queryActiveElement<T extends Element>(selector: string): T | null {
-        return this._activeContainer?.querySelector<T>(selector) ?? null;
+        return this._selectionController.queryActiveElement<T>(selector);
     }
 
     private _scheduleButtonReset(btn: HTMLButtonElement, callback: () => void): void {
@@ -971,10 +331,6 @@ class AISettingsRenderer extends BaseComponent {
         }, 3000);
 
         this._buttonResetTimers.set(btn, timer);
-    }
-
-    private _getModelData(appId: string, modelKey: string): IAIModelData | null {
-        return getModelDataFromModels(this._modelsByProvider.get(appId) ?? [], modelKey);
     }
 
     private _cleanupRenderScope(): void {

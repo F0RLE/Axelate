@@ -206,6 +206,8 @@
     "ui.launcher.web.logs_general": "常规",
     "ui.launcher.web.main_menu": "主菜单",
     "ui.launcher.web.marketplace": "商店",
+    "ui.connectivity.offline_title": "网络连接不可用",
+    "ui.connectivity.offline_text": "本地模块仍可继续工作。云 AI、下载和外部页面暂时不可用。",
     "ui.launcher.web.models_title": "模型功能",
     "ui.launcher.web.module_status.available": "模块可下载",
     "ui.launcher.web.module_status.installed": "模块已安装",

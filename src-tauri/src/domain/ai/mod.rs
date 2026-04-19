@@ -1,11 +1,14 @@
+mod ai_dispatch;
 /// AI service implementation
 pub mod ai_service;
 /// Custom model management service
 pub mod custom_model_service;
 /// Shared state for active image-generation requests
 pub mod image_generation_state;
+mod image_service;
 /// Chat session persistence and management
 pub mod session;
+mod session_context;
 /// AI streaming abstractions and provider implementations
 pub mod streaming;
 /// AI Data Transfer Objects (DTOs)

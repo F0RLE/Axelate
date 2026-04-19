@@ -1,10 +1,12 @@
-import type { Core } from '@/app/init';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
 import type { IAICatalogApp } from '../types/aiTypes';
+import type { AIProviderManagerContext } from './AIBridgeContext';
+
+type AIProviderManagerLogger = Pick<LoggerService, 'info' | 'error'>;
 
 export class AIProviderManager {
-    private _core: Core | null = null;
+    private _context: AIProviderManagerContext | null = null;
     private _activeProviderId: string | null = null;
     private _hasApiKey = false;
     private _model = '';
@@ -12,8 +14,14 @@ export class AIProviderManager {
     // Session Management
     private _sessionId: string = 'default';
 
-    public setCore(core: Core): void {
-        this._core = core;
+    public constructor(private readonly _tracer: AIProviderManagerLogger) {}
+
+    public setContext(context: AIProviderManagerContext): void {
+        this._context = context;
+    }
+
+    public setCore(context: AIProviderManagerContext): void {
+        this.setContext(context);
     }
 
     public async init(): Promise<void> {
@@ -27,15 +35,15 @@ export class AIProviderManager {
         this._sessionId = sid;
 
         // Sync UI state
-        if (this._core) {
-            this._core.aiSettings.setAiSessionId(sid);
+        if (this._context) {
+            this._context.aiSettings.setAiSessionId(sid);
         }
     }
 
     public async startProvider(providerId: string): Promise<boolean> {
         if (this._activeProviderId === providerId) return true;
 
-        tracer.info(`[AIProviderManager] Switching provider to: ${providerId}`);
+        this._tracer.info(`[AIProviderManager] Switching provider to: ${providerId}`);
 
         if (this._activeProviderId !== null) {
             this.stopProvider();
@@ -56,14 +64,14 @@ export class AIProviderManager {
             this._model = model;
 
             // Persist state
-            if (this._core) {
-                this._core.aiSettings.setSelectedAIModel(providerId, model);
-                this._core.aiSettings.setLastActiveProvider(providerId);
+            if (this._context) {
+                this._context.aiSettings.setSelectedAIModel(providerId, model);
+                this._context.aiSettings.setLastActiveProvider(providerId);
             }
 
             return true;
         } catch (error) {
-            tracer.error('[AIProviderManager] Failed to start provider:', error);
+            this._tracer.error('[AIProviderManager] Failed to start provider:', error);
             return false;
         }
     }
@@ -73,7 +81,7 @@ export class AIProviderManager {
             this._activeProviderId = null;
             this._hasApiKey = false;
             this._model = '';
-            tracer.info('[AIProviderManager] Provider stopped');
+            this._tracer.info('[AIProviderManager] Provider stopped');
         }
     }
 
@@ -159,8 +167,8 @@ export class AIProviderManager {
     }
 
     private _getPersistedModel(providerId: string): string | null {
-        if (!this._core) return null;
-        const persistedModel = this._core.aiSettings.getSelectedAIModel(providerId);
+        if (!this._context) return null;
+        const persistedModel = this._context.aiSettings.getSelectedAIModel(providerId);
         if (typeof persistedModel !== 'string' || persistedModel.trim() === '') {
             return null;
         }
@@ -191,41 +199,28 @@ export class AIProviderManager {
     }
 
     private _getAiCatalogApps(): IAICatalogApp[] {
-        const catalogService = (
-            this._core as (Partial<Pick<Core, 'catalog'>> & { catalog?: unknown }) | null
-        )?.catalog;
-        if (!this._isCatalogService(catalogService)) return [];
-
-        const catalog = catalogService.getCatalog() as unknown;
+        const context = this._context as (Partial<AIProviderManagerContext> & {
+            catalog?: { getCatalog: () => unknown };
+        }) | null;
+        const catalog = context?.catalog?.getCatalog() as unknown;
         if (typeof catalog !== 'object' || catalog === null) {
             return [];
         }
 
-        const aiCatalog = (catalog as { ai?: IAICatalogApp[] }).ai;
-        return Array.isArray(aiCatalog) ? aiCatalog : [];
-    }
-
-    private _isCatalogService(
-        value: unknown,
-    ): value is { getCatalog: () => { ai?: IAICatalogApp[] } } {
-        return (
-            typeof value === 'object' &&
-            value !== null &&
-            'getCatalog' in value &&
-            typeof (value as { getCatalog?: unknown }).getCatalog === 'function'
-        );
+        const aiCatalog = (catalog as { ai?: unknown[] }).ai;
+        return Array.isArray(aiCatalog) ? (aiCatalog as IAICatalogApp[]) : [];
     }
 
     private async _getSecureVal(key: string): Promise<string | null> {
-        if (this._core) {
-            return await this._core.tauriProvider.getSecureKey(key);
+        if (this._context?.tauriProvider.getSecureKey) {
+            return await this._context.tauriProvider.getSecureKey(key);
         }
         return null;
     }
 
     private async _hasSecureVal(key: string): Promise<boolean> {
-        if (this._core && typeof this._core.tauriProvider.hasSecureKey === 'function') {
-            return Boolean(await this._core.tauriProvider.hasSecureKey(key));
+        if (this._context && typeof this._context.tauriProvider.hasSecureKey === 'function') {
+            return Boolean(await this._context.tauriProvider.hasSecureKey(key));
         }
 
         const value = await this._getSecureVal(key);
@@ -233,8 +228,8 @@ export class AIProviderManager {
     }
 
     private async _saveSecureVal(key: string, value: string): Promise<void> {
-        if (this._core) {
-            await this._core.tauriProvider.saveSecureKey(key, value);
+        if (this._context?.tauriProvider.saveSecureKey) {
+            await this._context.tauriProvider.saveSecureKey(key, value);
         }
     }
 }

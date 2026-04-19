@@ -1,7 +1,6 @@
 import type { IApp } from '../../types/coreTypes';
-import { getGlobalWin } from '../../utils/globalAccessor';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type ModalBridge = {
     isAppSelectionOpen(): boolean;
@@ -11,6 +10,7 @@ type ModalBridge = {
 
 type AppUiModuleFlowDeps = {
     platformService: ModulePlatformService;
+    tracer: LoggerService;
     modalManager: ModalBridge;
     getCatalogApps: (category: string) => IApp[];
     getSelectedAppId: (category: string) => string | null;
@@ -18,13 +18,14 @@ type AppUiModuleFlowDeps = {
     openAppSelection: (category: string, apps?: IApp[]) => void;
     markCardAsInstalled: (card: HTMLElement, app: IApp) => void;
     showToast: (message: string, type?: string) => void;
+    translate: (key: string, fallback: string) => string;
 };
 
 export class AppUiModuleFlow {
     constructor(private readonly _deps: AppUiModuleFlowDeps) {}
 
     public async handleDeleteModule(app: IApp, category: string): Promise<void> {
-        tracer.info('[AppUI] Remove module clicked:', app.id);
+        this._deps.tracer.info('[AppUI] Remove module clicked:', app.id);
         try {
             await this._deps.platformService.delete(app);
             app.installed = false;
@@ -34,11 +35,17 @@ export class AppUiModuleFlow {
             }
 
             if (this._deps.modalManager.isAppSelectionOpen()) {
-                this._deps.openAppSelection(category, this._deps.getCatalogApps(this._toRawCategory(category)));
+                this._deps.openAppSelection(
+                    category,
+                    this._deps.getCatalogApps(this._toRawCategory(category)),
+                );
             }
         } catch (err: unknown) {
-            tracer.error('[AppUI] Delete error:', err);
-            this._deps.showToast(this._getLocalizedError(err, 'ui.launcher.web.delete_model_error', 'Delete error'), 'error');
+            this._deps.tracer.error('[AppUI] Delete error:', err);
+            this._deps.showToast(
+                this._getLocalizedError(err, 'ui.launcher.web.delete_model_error', 'Delete error'),
+                'error',
+            );
         }
     }
 
@@ -47,7 +54,7 @@ export class AppUiModuleFlow {
         category: string,
         btn: HTMLElement | null,
     ): Promise<void> {
-        tracer.info('[AppUI] Download module clicked:', app.id);
+        this._deps.tracer.info('[AppUI] Download module clicked:', app.id);
         this.prepareDownloadButton(btn);
 
         try {
@@ -95,7 +102,7 @@ export class AppUiModuleFlow {
         const label = btn.querySelector<HTMLElement>('.download-label');
         if (label) {
             label.style.display = '';
-            label.textContent = this._translate('ui.launcher.module.download', 'Download');
+            label.textContent = this._deps.translate('ui.launcher.module.download', 'Download');
         }
     }
 
@@ -119,7 +126,7 @@ export class AppUiModuleFlow {
     }
 
     public onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
-        tracer.error('[AppUI] Download error:', err);
+        this._deps.tracer.error('[AppUI] Download error:', err);
         this.resetDownloadButton(btn);
         this._deps.showToast(
             this._getLocalizedError(err, 'ui.launcher.web.download_error', 'Download failed'),
@@ -127,16 +134,11 @@ export class AppUiModuleFlow {
         );
     }
 
-    private _translate(key: string, fallback: string): string {
-        const win = getGlobalWin();
-        return typeof win.t === 'function' ? win.t(key, fallback) : fallback;
-    }
-
     private _getLocalizedError(err: unknown, fallbackKey: string, fallbackText: string): string {
         const error = err as Error;
         const msg = error.message.startsWith('ui.') ? error.message : fallbackKey;
         const fallback = msg === fallbackKey ? fallbackText : msg;
-        return this._translate(msg, fallback);
+        return this._deps.translate(msg, fallback);
     }
 
     private _toRawCategory(category: string): string {

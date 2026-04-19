@@ -1,7 +1,8 @@
 import DOMPurify from 'dompurify';
 import type { IApp } from '../../types/coreTypes';
-import { getGlobalWin } from '../../utils/globalAccessor';
-import { tracer } from '../../../infrastructure/logging/LoggerService';
+import type { LoggerService } from '../../../infrastructure/logging/LoggerService';
+
+type TranslateFn = (key: string, fallback: string) => string;
 
 export class AppUiChrome {
     private readonly _purifyConfig = {
@@ -57,9 +58,13 @@ export class AppUiChrome {
         ALLOW_DATA_ATTR: true,
     };
 
+    public constructor(
+        private readonly _translate: TranslateFn = (_key, fallback) => fallback,
+        private readonly _tracer?: LoggerService,
+    ) {}
+
     public translate(key: string, fallback: string): string {
-        const win = getGlobalWin();
-        return typeof win.t === 'function' ? win.t(key, fallback) : fallback;
+        return this._translate(key, fallback);
     }
 
     public ensureActionFeedback(): HTMLElement {
@@ -71,15 +76,15 @@ export class AppUiChrome {
         feedback = document.createElement('div');
         feedback.className = 'action-feedback';
         feedback.id = 'action-feedback';
-        feedback.innerHTML = this._sanitize(this.translate('ui.feedback', ''));
+        feedback.innerHTML = this._sanitize(`
+            <div class="action-feedback-icon" aria-hidden="true"></div>
+            <div class="action-feedback-label">${this.translate('ui.feedback', '')}</div>
+        `);
         document.body.appendChild(feedback);
         return feedback;
     }
 
-    public createSettingsBadge(
-        app: IApp,
-        onOpenSettings: (app: IApp) => void,
-    ): HTMLDivElement {
+    public createSettingsBadge(app: IApp, onOpenSettings: (app: IApp) => void): HTMLDivElement {
         const badge = this.createActionBadge(
             'module-action-badge left settings',
             `
@@ -91,7 +96,7 @@ export class AppUiChrome {
         badge.addEventListener('click', (event) => {
             event.stopPropagation();
             event.stopImmediatePropagation();
-            tracer.info('[AppUiChrome] Settings button clicked for:', app.id);
+            this._tracer?.info('[AppUiChrome] Settings button clicked for:', app.id);
             onOpenSettings(app);
         });
         badge.addEventListener('mousedown', (event) => {
@@ -101,10 +106,7 @@ export class AppUiChrome {
         return badge;
     }
 
-    public createCloseBadge(
-        category: string,
-        onClose: (category: string) => void,
-    ): HTMLDivElement {
+    public createCloseBadge(category: string, onClose: (category: string) => void): HTMLDivElement {
         const badge = this.createActionBadge(
             'module-action-badge right close',
             `
@@ -126,10 +128,7 @@ export class AppUiChrome {
         return badge;
     }
 
-    public createStackBadge(
-        label: string,
-        onOpenSelection: () => void,
-    ): HTMLDivElement {
+    public createStackBadge(label: string, onOpenSelection: () => void): HTMLDivElement {
         const badge = this.createActionBadge(
             'module-action-badge bottom-right stack',
             `

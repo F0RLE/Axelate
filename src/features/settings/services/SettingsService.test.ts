@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SettingsService } from './SettingsService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 function createMockTauri(): TauriProvider {
     return {
@@ -17,10 +18,12 @@ function createMockTauri(): TauriProvider {
 describe('SettingsService', () => {
     let tauri: TauriProvider;
     let service: SettingsService;
+    let tracer: Pick<LoggerService, 'error'>;
 
     beforeEach(() => {
         tauri = createMockTauri();
-        service = new SettingsService(tauri);
+        tracer = { error: vi.fn() };
+        service = new SettingsService(tauri, tracer);
     });
 
     describe('loadSettings', () => {
@@ -259,9 +262,7 @@ describe('SettingsService', () => {
         });
 
         it('should return null on error', async () => {
-            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(
-                new Error('fail'),
-            );
+            (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
             const result = await service.getSecureKey('gemini');
 

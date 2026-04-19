@@ -1,8 +1,10 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+
+type ChatMessageRendererLogger = Pick<LoggerService, 'error' | 'debug'>;
 
 type ChatImagePayload = {
     mime: string;
@@ -11,6 +13,8 @@ type ChatImagePayload = {
 
 type ChatMessageRendererDeps = {
     onImageLoad: () => void;
+    translate: TTranslateFunction;
+    tracer: ChatMessageRendererLogger;
 };
 
 export class ChatMessageRenderer {
@@ -18,9 +22,7 @@ export class ChatMessageRenderer {
 
     public createMessageBubble(opts: Record<string, unknown>): HTMLElement {
         const bubble = document.createElement('div');
-        const hasImages = Array.isArray(opts['images']) && (opts['images'] as unknown[]).length > 0;
-        const mediaFirst = opts['mediaFirst'] === true || hasImages;
-        bubble.className = `chat-bubble${opts['error'] === true ? ' chat-error' : ''}${opts['thought'] === true ? ' chat-thought' : ''}${mediaFirst ? ' chat-bubble--media' : ''}`;
+        bubble.className = this._buildBubbleClassName(opts);
         return bubble;
     }
 
@@ -67,13 +69,13 @@ export class ChatMessageRenderer {
             const parseResult = marked.parse(finalContent);
             if (parseResult instanceof Promise) {
                 void parseResult.then((rawHtml) => {
-                    textNode.innerHTML = DOMPurify.sanitize(rawHtml);
+                    this._applySanitizedHtml(textNode, rawHtml);
                 });
             } else {
-                textNode.innerHTML = DOMPurify.sanitize(parseResult);
+                this._applySanitizedHtml(textNode, parseResult);
             }
         } catch (error) {
-            tracer.error('[ChatUI] Markdown render error:', error);
+            this._deps.tracer.error('[ChatUI] Markdown render error:', error);
             textNode.textContent = finalContent;
         }
 
@@ -85,21 +87,21 @@ export class ChatMessageRenderer {
 
         bubble.classList.add('chat-bubble--media');
         const insertionTarget =
-            bubble.querySelector('.markdown-body, .chat-generated-status, .chat-generated-caption') ??
-            null;
+            bubble.querySelector(
+                '.markdown-body, .chat-generated-status, .chat-generated-caption',
+            ) ?? null;
 
         images.forEach((img) => {
             try {
-                const mime = img.mime || 'image/png';
-                const b64 = img.data_base64 || '';
-                if (b64 === '') return;
+                const imageDataUrl = this._buildImageDataUrl(img);
+                if (imageDataUrl === null) return;
 
                 const wrapper = document.createElement('div');
                 wrapper.className = 'chat-img-wrapper';
 
                 const image = document.createElement('img');
                 image.className = 'chat-img';
-                image.src = `data:${mime};base64,${b64}`;
+                image.src = imageDataUrl;
                 image.alt = 'Generated image';
                 image.addEventListener(
                     'load',
@@ -126,8 +128,6 @@ export class ChatMessageRenderer {
         content: string,
         opts: Record<string, unknown>,
     ): string {
-        const g = getGlobalWin();
-
         if (typeof opts['i18nKey'] === 'string' && opts['i18nKey'] !== '') {
             const i18nKey = opts['i18nKey'];
             element.dataset['i18n'] = i18nKey;
@@ -136,18 +136,46 @@ export class ChatMessageRenderer {
                 element.dataset['i18nParams'] = JSON.stringify(opts['i18nParams']);
             }
 
-            tracer.debug('[ChatUI] i18nParams ignored by translator');
-            return typeof g.t === 'function' ? g.t(i18nKey, content) : content;
+            this._deps.tracer.debug('[ChatUI] i18nParams ignored by translator');
+            return this._deps.translate(i18nKey, content);
         }
 
         if (typeof opts['i18nPrefixKey'] === 'string' && opts['i18nPrefixKey']) {
             const prefixKey = opts['i18nPrefixKey'];
             element.dataset['i18nPrefix'] = prefixKey;
 
-            const prefix = typeof g.t === 'function' ? g.t(prefixKey, 'Error: ') : 'Error: ';
+            const prefix = this._deps.translate(prefixKey, 'Error: ');
             return prefix + content;
         }
 
         return content;
+    }
+
+    private _applySanitizedHtml(element: HTMLElement, html: string): void {
+        element.innerHTML = DOMPurify.sanitize(html);
+    }
+
+    private _buildBubbleClassName(opts: Record<string, unknown>): string {
+        const hasImages = Array.isArray(opts['images']) && (opts['images'] as unknown[]).length > 0;
+        const mediaFirst = opts['mediaFirst'] === true || hasImages;
+
+        return [
+            'chat-bubble',
+            opts['error'] === true ? 'chat-error' : '',
+            opts['thought'] === true ? 'chat-thought' : '',
+            mediaFirst ? 'chat-bubble--media' : '',
+        ]
+            .filter((className) => className !== '')
+            .join(' ');
+    }
+
+    private _buildImageDataUrl(image: ChatImagePayload): string | null {
+        const mime = image.mime || 'image/png';
+        const base64 = image.data_base64 || '';
+        if (base64 === '') {
+            return null;
+        }
+
+        return `data:${mime};base64,${base64}`;
     }
 }

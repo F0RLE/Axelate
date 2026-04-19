@@ -124,4 +124,11 @@ describe('ToastManager', () => {
 
         expect(document.getElementById('toast-container')).toBeNull();
     });
+
+    it('should ignore empty toast payloads', () => {
+        manager.show('   ', 'info', 1000, '   ');
+
+        expect(document.getElementById('toast-container')).toBeNull();
+        expect(document.querySelector('.toast')).toBeNull();
+    });
 });

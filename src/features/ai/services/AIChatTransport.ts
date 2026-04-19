@@ -5,8 +5,10 @@ import type {
     IImageGenerationRequest,
     IImageGenerationResponse,
 } from '../types/aiTypes';
-import type { Core } from '@/app/init';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { AITransportContext } from './AIBridgeContext';
+
+type AIChatTransportLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
 /**
  * Safely extracts a human-readable error string from any error shape.
@@ -37,7 +39,7 @@ export interface IChatTransport {
     generateImageBackground(request: IImageGenerationRequest): Promise<IBridgeResponse>;
     onStream(listener: (chunk: string) => void): () => void;
     onThought(listener: (chunk: string) => void): () => void;
-    setCore(core: Core): void;
+    setContext(context: AITransportContext): void;
     destroy(): void;
 }
 
@@ -46,21 +48,27 @@ export interface IChatTransport {
  * Isolates transport mechanism (Tauri invoke/event) from business logic.
  */
 export class AIChatTransport implements IChatTransport {
-    private _core: Core | null = null;
+    private _context: AITransportContext | null = null;
     private readonly _unlisteners = new Set<() => void>();
     private _activeStreamRequestId: string | null = null;
     private _requestCounter = 0;
 
-    public setCore(core: Core): void {
-        this._core = core;
+    public constructor(private readonly _tracer: AIChatTransportLogger) {}
+
+    public setContext(context: AITransportContext): void {
+        this._context = context;
+    }
+
+    public setCore(context: AITransportContext): void {
+        this.setContext(context);
     }
 
     public async init(): Promise<void> {
-        if (this._core?.tauriProvider.isTauri() === true) {
+        if (this._context?.tauriProvider.isTauri() === true) {
             // Setup global listener for streaming chunks if needed here,
             // or let the bridge handle the subscription via onStream.
             // For now, we follow the pattern that Transport manages the low-level listener.
-            tracer.info('[AIChatTransport] Transport initialized');
+            this._tracer.info('[AIChatTransport] Transport initialized');
         }
         await Promise.resolve();
     }
@@ -69,7 +77,7 @@ export class AIChatTransport implements IChatTransport {
      * Sends a chat request via Tauri IPC.
      */
     public async send(request: IChatRequest): Promise<IBridgeResponse> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
@@ -82,7 +90,7 @@ export class AIChatTransport implements IChatTransport {
 
         try {
             return await this._runWithTimeout(
-                this._core.tauriProvider
+                this._context.tauriProvider
                     .invoke<IChatResponse>('send_chat_message', { request: requestWithId })
                     .then((response) => this._normalizeResponse(response)),
                 90000,
@@ -90,7 +98,7 @@ export class AIChatTransport implements IChatTransport {
             );
         } catch (error: unknown) {
             const errorMsg = extractError(error);
-            tracer.error('[AIChatTransport] IPC error:', error);
+            this._tracer.error('[AIChatTransport] IPC error:', error);
             return { ok: false, error: errorMsg };
         } finally {
             this._clearActiveRequest(requestId);
@@ -101,13 +109,13 @@ export class AIChatTransport implements IChatTransport {
      * Sends an image generation request via Tauri IPC.
      */
     public async generateImage(request: IImageGenerationRequest): Promise<IBridgeResponse> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
         try {
             return await this._runWithTimeout(
-                this._core.tauriProvider
+                this._context.tauriProvider
                     .invoke<IImageGenerationResponse>('generate_image', { request })
                     .then((response) => {
                         if (response.ok && response.images.length > 0) {
@@ -120,7 +128,7 @@ export class AIChatTransport implements IChatTransport {
             );
         } catch (error: unknown) {
             const errorMsg = extractError(error);
-            tracer.error('[AIChatTransport] IPC image error:', error);
+            this._tracer.error('[AIChatTransport] IPC image error:', error);
             return { ok: false, error: errorMsg };
         }
     }
@@ -131,16 +139,16 @@ export class AIChatTransport implements IChatTransport {
     public async generateImageBackground(
         request: IImageGenerationRequest,
     ): Promise<IBridgeResponse> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
         try {
-            await this._core.tauriProvider.invoke('generate_image_background', { request });
+            await this._context.tauriProvider.invoke('generate_image_background', { request });
             return { ok: true };
         } catch (error: unknown) {
             const errorMsg = extractError(error);
-            tracer.error('[AIChatTransport] IPC background image error:', error);
+            this._tracer.error('[AIChatTransport] IPC background image error:', error);
             return { ok: false, error: errorMsg };
         }
     }
@@ -158,7 +166,7 @@ export class AIChatTransport implements IChatTransport {
     }
 
     private _createListener(eventName: string, listener: (chunk: string) => void): () => void {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return () => {};
         }
 
@@ -178,11 +186,11 @@ export class AIChatTransport implements IChatTransport {
 
         this._unlisteners.add(cleanup);
 
-        void this._core.tauriProvider
+        void this._context.tauriProvider
             .listen<unknown>(eventName, (event: unknown) => {
                 const payload = this._parseStreamPayload(event);
                 if (payload === null) {
-                    tracer.warn(`[AIChatTransport] Ignoring malformed ${eventName} payload`);
+                    this._tracer.warn(`[AIChatTransport] Ignoring malformed ${eventName} payload`);
                     return;
                 }
 
@@ -202,7 +210,7 @@ export class AIChatTransport implements IChatTransport {
                 }
             })
             .catch((error: unknown) => {
-                tracer.error(`[AIChatTransport] Failed to listen for ${eventName}:`, error);
+                this._tracer.error(`[AIChatTransport] Failed to listen for ${eventName}:`, error);
                 this._unlisteners.delete(cleanup);
             });
 

@@ -6,7 +6,6 @@
     flex-direction: column;
     justify-content: flex-start !important; /* Managed by auto-margins for better control */
     background: rgba(var(--background-raw), 0.065) !important;
-    backdrop-filter: blur(2px);
     font-family: var(--app-font-family) !important; /* Global brand font restorated */
     /* Improved border rendering to avoid subpixel gaps */
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
@@ -19,11 +18,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-app-region: no-drag;
-    transition:
-        width 0.3s var(--ease-smooth),
-        filter 0.3s ease;
-    filter: blur(0px);
-    transform: translateZ(0);
+    transition: width 0.3s var(--ease-smooth);
     z-index: 1000;
     box-sizing: border-box;
 }
@@ -138,21 +133,6 @@
         opacity 0.3s var(--ease-smooth),
         transform 0.3s var(--ease-smooth);
     transform: scale(1);
-    animation: logoIconVitality 7s ease-in-out infinite;
-    will-change: transform, filter;
-}
-
-@keyframes logoIconVitality {
-    0%,
-    100% {
-        transform: translateY(0) scale(1);
-        filter: drop-shadow(0 0 6px rgba(var(--primary-raw), 0.18));
-    }
-
-    50% {
-        transform: translateY(-4px) scale(1.02);
-        filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.24));
-    }
 }
 
 @keyframes logoTextFloat {
@@ -172,9 +152,6 @@
 .sidebar-logo-icon svg {
     width: 100%;
     height: 100%;
-    filter: drop-shadow(0 0 10px rgba(var(--primary-raw), 0.2));
-    /* Add animation here for when it becomes visible */
-    animation: logoPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
     cursor: pointer;
     pointer-events: none;
 }
@@ -216,7 +193,6 @@
 .app-title {
     font-weight: 400; /* Standard weight for Monocraft compatibility */
     font-size: 2.35rem;
-    will-change: transform, background-position;
     background: linear-gradient(
         90deg,
         var(--primary),
@@ -235,11 +211,8 @@
     white-space: nowrap;
     line-height: normal;
     font-family: var(--app-font-family) !important; /* Force brand font */
-    /* Glow restored as multi-layered drop-shadow in iconGlowFloat */
     display: inline-block; /* Required for transform animations */
-    animation:
-        logoTextFloat 7s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite,
-        textGradientShift 12s linear infinite;
+    animation: textGradientShift 12s linear infinite;
 }
 
 @keyframes textGradientShift {
@@ -540,13 +513,11 @@
 .nav-btn:hover {
     background: rgba(255, 255, 255, 0.018);
     color: #ffffff;
-    transform: translateX(1px);
     border: none !important;
 }
 
 .nav-btn:active {
-    transform: translateX(2px) scale(0.995);
-    /* Subtle click feedback only */
+    transform: scale(0.995);
     transition: all 0.1s ease;
 }
 
@@ -555,7 +526,6 @@
     color: white;
     font-weight: 600;
     border: none;
-    transform: translateX(1px);
     box-shadow: none;
 }
 
@@ -597,7 +567,6 @@
 
 .nav-btn.active .icon {
     transform: scale(1.05);
-    filter: drop-shadow(0 0 4px rgba(138, 43, 226, 0.16));
 }
 
 .nav-btn svg,

@@ -1,7 +1,9 @@
 import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
+
+type ChatServiceLogger = Pick<LoggerService, 'error'>;
 
 function parseGeneratedImages(
     images: string[] | undefined,
@@ -38,6 +40,7 @@ export class ChatService {
     constructor(
         private readonly _aiBridge: IAIBridge,
         private readonly _i18n: I18nService,
+        private readonly _tracer: ChatServiceLogger,
     ) {}
 
     /**
@@ -96,7 +99,7 @@ export class ChatService {
             return result;
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : 'Unknown error';
-            tracer.error('[ChatService] Error:', e);
+            this._tracer.error('[ChatService] Error:', e);
             return { ok: false, error: errorMsg };
         }
     }

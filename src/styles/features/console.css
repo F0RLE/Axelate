@@ -116,9 +116,10 @@
 
 .console-filter-chip:hover,
 .console-filter-chip.active {
-    background: var(--module-button-bg-hover);
-    border-color: var(--module-button-border-hover);
-    color: #ffffff;
+    background: var(--premium-purple-bg);
+    border-color: var(--premium-purple-border);
+    box-shadow: var(--premium-purple-shadow);
+    color: var(--premium-purple-text);
 }
 
 .console-tab {
@@ -148,15 +149,17 @@
 }
 
 .console-tab:hover {
-    background: var(--module-button-bg-hover);
-    border-color: var(--module-button-border-hover);
-    color: #ffffff;
+    background: var(--premium-purple-bg);
+    border-color: var(--premium-purple-border);
+    box-shadow: var(--premium-purple-shadow);
+    color: var(--premium-purple-text);
 }
 
 .console-tab.active {
-    background: var(--module-button-bg-hover);
-    border-color: var(--module-button-border-hover);
-    color: #ffffff;
+    background: var(--premium-purple-bg);
+    border-color: var(--premium-purple-border);
+    box-shadow: var(--premium-purple-shadow);
+    color: var(--premium-purple-text);
 }
 
 .console-btn {
@@ -168,9 +171,9 @@
     padding: 0;
     border: 1px solid var(--module-button-border);
     border-radius: 14px;
-    background: var(--module-button-bg-soft);
-    color: var(--module-button-text);
-    box-shadow: none;
+    background: var(--premium-purple-bg);
+    color: var(--premium-purple-text);
+    box-shadow: var(--premium-purple-shadow);
     cursor: pointer;
     transition:
         background 0.2s ease,
@@ -179,9 +182,9 @@
 }
 
 .console-btn:hover {
-    background: var(--module-button-bg-hover);
-    border-color: var(--module-button-border-hover);
-    color: #ffffff;
+    background: var(--premium-purple-bg-hover);
+    border-color: var(--premium-purple-border-strong);
+    color: var(--premium-purple-text);
 }
 
 .console-btn .icon {

@@ -3,16 +3,24 @@
  * @description UI controller for the Settings page itself (launcher/taskbar + monitoring visibility).
  */
 
-import { tracer } from '@/infrastructure/logging/LoggerService';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
 import type { IAppSettingsUIContext } from './SettingsContext';
 import type { SettingsService } from '../services/SettingsService';
 import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type SettingsUIDeps = {
+    showToast: (
+        message: string,
+        type?: 'success' | 'error' | 'warning' | 'info',
+    ) => void;
+    tracer: LoggerService;
+};
 
 export class SettingsUI {
     private readonly _generalRenderer: GeneralSettingsRenderer;
@@ -25,11 +33,13 @@ export class SettingsUI {
         _service: SettingsService,
         uiSettings: UISettingsService,
         _aiSettings: AISettingsService,
+        private readonly _i18n: I18nService,
         private readonly _i18nUI: I18nUI,
         _tauri: TauriProvider,
         _navigation: NavigationService,
+        private readonly _deps: SettingsUIDeps,
     ) {
-        this._generalRenderer = new GeneralSettingsRenderer(uiSettings);
+        this._generalRenderer = new GeneralSettingsRenderer(uiSettings, this._deps.tracer);
     }
 
     public async init(): Promise<void> {
@@ -37,14 +47,12 @@ export class SettingsUI {
         this._isInitialized = true;
         this._initAbortController = new AbortController();
 
-        const win = getGlobalWin();
         this._context = {
-            t: win.t ?? ((_: string, d?: string) => d ?? ''),
-            showToast:
-                win.showToast ??
-                ((message: string) => {
-                    tracer.info(message);
-                }),
+            t: (key, defaultValue, params) =>
+                this._i18n.t(key, defaultValue, (params as Record<string, unknown> | undefined) ?? {}),
+            showToast: (message: string, type?: 'success' | 'error' | 'info') => {
+                this._deps.showToast(message, type);
+            },
             toggleNavItem: (id: string, enabled: boolean) => {
                 this._generalRenderer.toggleNavItem(id, enabled);
             },
@@ -54,23 +62,20 @@ export class SettingsUI {
             i18nUI: this._i18nUI,
         };
 
-        const container = await this._waitForContainer(
-            'settings-grid',
-            5000,
-            this._initAbortController.signal,
-        );
+        const signal = this._initAbortController.signal;
+        const container = await this._waitForContainer('settings-grid', 5000, signal);
 
         if (container === null) {
-            if (this._isDestroyed || this._initAbortController.signal.aborted) {
+            if (signal.aborted) {
                 return;
             }
-            tracer.error(
+            this._deps.tracer.error(
                 '[SettingsUI] Settings container "settings-grid" not found after 5s. Rendering failed.',
             );
             return;
         }
 
-        tracer.info('[SettingsUI] Settings container found. Initializing renderers.');
+        this._deps.tracer.info('[SettingsUI] Settings container found. Initializing renderers.');
         this._generalRenderer.init(this._context);
     }
 
@@ -85,7 +90,7 @@ export class SettingsUI {
         this._initAbortController?.abort();
         this._initAbortController = null;
         this._generalRenderer.destroy();
-        tracer.info('[SettingsUI] Destroyed.');
+        this._deps.tracer.info('[SettingsUI] Destroyed.');
     }
 
     private async _waitForContainer(

@@ -1,5 +1,3 @@
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-
 /**
  * @class SkeletonManager
  * @description Manages skeleton loading states for module grids.
@@ -13,13 +11,6 @@ export class SkeletonManager {
     public show(containerId: string, count = 3): void {
         const container = document.getElementById(containerId);
         if (container === null) return;
-
-        const win = getGlobalWin();
-        // Legacy support if global function exists (though we prefer direct DOM manipulation here for purity)
-        if (typeof win.showSkeletonLoaders === 'function') {
-            (win.showSkeletonLoaders as (id: string, count: number) => void)(containerId, count);
-            return;
-        }
 
         for (let i = 1; i <= count; i++) {
             const skeleton = document.getElementById(`${containerId}-skeleton-${String(i)}`);

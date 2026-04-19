@@ -1,4 +1,6 @@
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type BaseComponentLogger = Pick<LoggerService, 'error'>;
 
 /**
  * @abstract BaseComponent
@@ -8,6 +10,11 @@ export abstract class BaseComponent {
     protected _isInit = false;
     protected readonly _elementCache = new Map<string, HTMLElement | null>();
     protected _abortController: AbortController | null = null;
+    private readonly _baseTracer: BaseComponentLogger | undefined;
+
+    public constructor(tracer?: BaseComponentLogger) {
+        this._baseTracer = tracer;
+    }
 
     /**
      * Initializes the component and its dependencies.
@@ -20,7 +27,7 @@ export abstract class BaseComponent {
         try {
             await this.onInit();
         } catch (err) {
-            tracer.error(`[${this.constructor.name}] Init failed:`, err);
+            this._baseTracer?.error(`[${this.constructor.name}] Init failed:`, err);
             this._abortController.abort();
             this._abortController = null;
             this._elementCache.clear();
@@ -42,7 +49,7 @@ export abstract class BaseComponent {
         try {
             this.onDestroy();
         } catch (err) {
-            tracer.error(`[${this.constructor.name}] Destroy failed:`, err);
+            this._baseTracer?.error(`[${this.constructor.name}] Destroy failed:`, err);
         }
 
         this._elementCache.clear();

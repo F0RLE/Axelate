@@ -4,7 +4,7 @@
  */
 
 // Main services
-export { AIBridge, aiBridge } from './services/AIBridge';
+export { AIBridge } from './services/AIBridge';
 
 // Core types
 export type {

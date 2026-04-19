@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const appendMessage = vi.fn();
 const clearUi = vi.fn();
 const updateTokenCount = vi.fn();
+const mockChatFileHandlerInstances: Array<{
+    clear: ReturnType<typeof vi.fn>;
+    setUpdateCallback: ReturnType<typeof vi.fn>;
+    clearUpdateCallback: ReturnType<typeof vi.fn>;
+    setBridge: ReturnType<typeof vi.fn>;
+    setTokenEstimator: ReturnType<typeof vi.fn>;
+}> = [];
 
 vi.mock('./ui/ChatUI', () => ({
     ChatUI: class {
@@ -41,19 +48,35 @@ vi.mock('./utils/chatUtils', () => ({
 }));
 
 vi.mock('./services/ChatFileHandler', () => ({
-    chatFileHandler: {
-        clear: vi.fn(),
-        setUpdateCallback: vi.fn(),
-        clearUpdateCallback: vi.fn(),
-        hasFiles: vi.fn().mockReturnValue(false),
-        getFiles: vi.fn().mockReturnValue([]),
+    ChatFileHandler: class {
+        public clear = vi.fn();
+        public setUpdateCallback = vi.fn();
+        public clearUpdateCallback = vi.fn();
+        public setBridge = vi.fn();
+        public setTokenEstimator = vi.fn();
+        public hasFiles = vi.fn().mockReturnValue(false);
+        public getFiles = vi.fn().mockReturnValue([]);
+        public getTotalTokenEstimate = vi.fn().mockResolvedValue(0);
+        public processForSend = vi
+            .fn()
+            .mockResolvedValue({ attachments: [], combinedText: '' });
+
+        public constructor() {
+            mockChatFileHandlerInstances.push({
+                clear: this.clear,
+                setUpdateCallback: this.setUpdateCallback,
+                clearUpdateCallback: this.clearUpdateCallback,
+                setBridge: this.setBridge,
+                setTokenEstimator: this.setTokenEstimator,
+            });
+        }
     },
 }));
 
 import { ChatController } from './chat';
 import type { IChatResponse } from './types/chatTypes';
 import { getTokenCount } from './utils/chatUtils';
-import { chatFileHandler } from './services/ChatFileHandler';
+import { EventBus } from '@/shared/services/EventBus';
 
 type ChatControllerTestAccess = {
     init: () => Promise<void>;
@@ -87,16 +110,40 @@ describe('ChatController', () => {
         playToggle: vi.fn(),
     };
 
+    const chatDeps = {
+        showToast: vi.fn(),
+        isTauriRuntime: vi.fn().mockReturnValue(false),
+        openExternalUrl: vi.fn().mockResolvedValue(undefined),
+        copyText: vi.fn().mockResolvedValue(undefined),
+        getPendingChatRevealStore: vi.fn().mockReturnValue(null),
+        estimateTokens: vi.fn((text: string) => Promise.resolve(Math.max(1, Math.ceil(text.length / 4)))),
+        hostBridge: {
+            invoke: vi.fn(),
+            listen: vi.fn(),
+            isTauri: vi.fn().mockReturnValue(false),
+        },
+        eventBus: new EventBus(),
+        getSelectedModule: vi.fn().mockReturnValue(undefined),
+        tracer: {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        },
+    };
+
     function createController(): ChatControllerTestAccess {
         return new ChatController(
             aiBridge as never,
             i18n as never,
             soundService as never,
+            chatDeps as never,
         ) as unknown as ChatControllerTestAccess;
     }
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockChatFileHandlerInstances.length = 0;
         document.body.innerHTML = '';
     });
 
@@ -143,10 +190,10 @@ describe('ChatController', () => {
     it('should clear file update callback on destroy', () => {
         const controller = createController();
 
-        controller.init();
+        void controller.init();
         controller.destroy();
 
-        expect(chatFileHandler.clearUpdateCallback).toHaveBeenCalledTimes(1);
+        expect(mockChatFileHandlerInstances[0]?.clearUpdateCallback).toHaveBeenCalledTimes(1);
     });
 
     it('should preserve thought signature in local assistant history', async () => {
@@ -334,10 +381,10 @@ describe('ChatController', () => {
     it('should initialize only once', () => {
         const controller = createController();
 
-        controller.init();
-        controller.init();
+        void controller.init();
+        void controller.init();
 
-        expect(chatFileHandler.setUpdateCallback).toHaveBeenCalledTimes(1);
+        expect(mockChatFileHandlerInstances[0]?.setUpdateCallback).toHaveBeenCalledTimes(1);
     });
 
     it('should stop active voice recording on destroy', () => {

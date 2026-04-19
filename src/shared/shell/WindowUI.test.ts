@@ -3,10 +3,18 @@ import { WindowUI } from './WindowUI';
 import type { WindowService } from '../services/WindowService';
 import type { UISettingsService } from '../services/ui/UISettingsService';
 import type { SoundService } from '../services/SoundService';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('WindowUI lifecycle', () => {
     let ui: WindowUI | null = null;
     let reloadSpy: ReturnType<typeof vi.fn>;
+    let runtime: {
+        addWindowListener: ReturnType<typeof vi.fn>;
+        getScreen: ReturnType<typeof vi.fn>;
+        getInnerSize: ReturnType<typeof vi.fn>;
+        reload: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
         document.body.innerHTML = `
@@ -22,6 +30,18 @@ describe('WindowUI lifecycle', () => {
             configurable: true,
             value: { reload: reloadSpy },
         });
+        const nativeAdd = globalThis.addEventListener.bind(globalThis);
+        runtime = {
+            addWindowListener: vi.fn((...args: Parameters<typeof globalThis.addEventListener>) => {
+                nativeAdd(...args);
+            }),
+            getScreen: vi.fn(() => globalThis.screen),
+            getInnerSize: vi.fn(() => ({
+                width: globalThis.innerWidth,
+                height: globalThis.innerHeight,
+            })),
+            reload: reloadSpy,
+        };
     });
 
     afterEach(() => {
@@ -52,7 +72,24 @@ describe('WindowUI lifecycle', () => {
             isEnabled: vi.fn().mockReturnValue(true),
         } as unknown as SoundService;
 
-        return new WindowUI(service, state, sound);
+        const i18n = {
+            t: vi.fn((_: string, fallback: string = ''): string => fallback),
+        } as unknown as I18nService;
+        const tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
+
+        return new WindowUI(
+            service,
+            state,
+            sound,
+            tracer,
+            i18n,
+            runtime as unknown as ConstructorParameters<typeof WindowUI>[5],
+        );
     }
 
     it('should remove and restore contextmenu prevention across destroy and re-init', () => {

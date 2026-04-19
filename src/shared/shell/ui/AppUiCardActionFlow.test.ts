@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IApp } from '../../types/coreTypes';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AppUiCardActionFlow } from './AppUiCardActionFlow';
 
 describe('AppUiCardActionFlow', () => {
@@ -11,6 +12,12 @@ describe('AppUiCardActionFlow', () => {
 
     const deps = {
         platformService: platformService as never,
+        tracer: {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService,
         isComingSoonApp: vi.fn(() => false),
         showComingSoonToast: vi.fn(),
         showToast: vi.fn(),
@@ -19,6 +26,7 @@ describe('AppUiCardActionFlow', () => {
         resetDownloadButton: vi.fn(),
         restoreDownloadButtonLabel: vi.fn(),
         performSelectionAction: vi.fn(),
+        translate: vi.fn((_key: string, fallback: string) => fallback),
     };
 
     let flow: AppUiCardActionFlow;
@@ -29,10 +37,6 @@ describe('AppUiCardActionFlow', () => {
         platformService.isApiModule.mockReturnValue(false);
         deps.isComingSoonApp.mockReturnValue(false);
         flow = new AppUiCardActionFlow(deps);
-        (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
-            _key,
-            fallback,
-        ) => fallback;
     });
 
     afterEach(() => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IApp } from '../../types/coreTypes';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AppUiModuleLifecycle } from './AppUiModuleLifecycle';
 
 describe('AppUiModuleLifecycle', () => {
@@ -11,6 +12,8 @@ describe('AppUiModuleLifecycle', () => {
     const getSelectedApp = vi.fn();
     const isSelectedInAnotherAiSlot = vi.fn();
     const resolveAppById = vi.fn();
+    const translate = vi.fn((_key: string, fallback: string) => fallback);
+    const showToast = vi.fn();
 
     let lifecycle: AppUiModuleLifecycle;
 
@@ -18,15 +21,18 @@ describe('AppUiModuleLifecycle', () => {
         vi.clearAllMocks();
         lifecycle = new AppUiModuleLifecycle({
             platformService: platformService as never,
+            tracer: {
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
+            } as unknown as LoggerService,
             getSelectedApp,
             isSelectedInAnotherAiSlot,
             resolveAppById,
+            translate,
+            showToast,
         });
-        (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
-            _key,
-            fallback,
-        ) => fallback;
-        (globalThis as unknown as { showToast?: ReturnType<typeof vi.fn> }).showToast = vi.fn();
     });
 
     it('stops stale launched module after quick reselection', async () => {
@@ -63,8 +69,6 @@ describe('AppUiModuleLifecycle', () => {
         await Promise.resolve();
 
         expect(platformService.stop).toHaveBeenCalledWith(previousApp);
-        expect(
-            (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
-        ).toHaveBeenCalledWith('Old Service stopped', 'info');
+        expect(showToast).toHaveBeenCalledWith('Old Service stopped', 'info');
     });
 });

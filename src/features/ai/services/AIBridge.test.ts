@@ -49,6 +49,21 @@ const mockCore = {
     chatController: {
         randomizeGreeting: vi.fn(),
     },
+    i18n: {
+        t: vi.fn((_: string, fallback: string = ''): string => fallback),
+    },
+    appUI: {
+        showToast: vi.fn(),
+    },
+    windowService: {
+        close: vi.fn().mockResolvedValue(undefined),
+    },
+    settingsService: {
+        getSettings: vi.fn().mockReturnValue({}),
+    },
+    stateStore: {
+        getSelectedModule: vi.fn().mockReturnValue(undefined),
+    },
     state: {
         get: vi.fn((key: string) => {
             if (key === 'ai_thinking_level') return {};
@@ -58,8 +73,6 @@ const mockCore = {
     },
 };
 
-// Mock showToast
-vi.stubGlobal('showToast', vi.fn());
 vi.stubGlobal('tracer', {
     info: vi.fn(),
     warn: vi.fn(),
@@ -68,6 +81,13 @@ vi.stubGlobal('tracer', {
 });
 
 import { AIBridge } from '@/features/ai/services/AIBridge';
+
+const mockTracer = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+};
 
 function mockStoredApiKey(value: string = 'sk-test-key'): void {
     mockInvoke.mockImplementation(async (cmd: string) => {
@@ -110,9 +130,16 @@ describe('AIBridge', () => {
         mockCore.aiSettings.getInternetAccessEnabled.mockReturnValue(true);
         mockCore.aiSettings.getLocalMaxOutputTokens.mockReset();
         mockCore.aiSettings.getLocalMaxOutputTokens.mockReturnValue(384);
+        mockCore.i18n.t.mockClear();
+        mockCore.appUI.showToast.mockClear();
+        mockCore.windowService.close.mockClear();
+        mockCore.settingsService.getSettings.mockClear();
+        mockCore.settingsService.getSettings.mockReturnValue({});
+        mockCore.stateStore.getSelectedModule.mockClear();
+        mockCore.stateStore.getSelectedModule.mockReturnValue(undefined);
         (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
         localStorage.clear();
-        aiBridge = new AIBridge();
+        aiBridge = new AIBridge(mockTracer);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
         aiBridge.setCore(mockCore as any);
 
@@ -127,11 +154,6 @@ describe('AIBridge', () => {
 
     // ---------------------------------------------------------- constructor
     describe('constructor', () => {
-        it('should register itself on globalThis', () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            expect(win['aiBridge']).toBeDefined();
-        });
-
         it('should start with no active provider', () => {
             expect(aiBridge.isActive()).toBe(false);
         });
@@ -144,7 +166,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- init
     describe('init', () => {
         it('should abort initialization when core dependency is missing', async () => {
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
 
             await bridge2.init();
 
@@ -158,7 +180,7 @@ describe('AIBridge', () => {
         });
 
         it('should clean up transport state when initialization fails', async () => {
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,7 +196,7 @@ describe('AIBridge', () => {
         });
 
         it('should broadcast chunks and thoughts via transport callbacks', async () => {
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
@@ -269,7 +291,7 @@ describe('AIBridge', () => {
 
             await aiBridge.startProvider('gemini');
 
-            expect(globalThis.showToast).toHaveBeenCalled();
+            expect(mockCore.appUI.showToast).toHaveBeenCalled();
         });
     });
 
@@ -350,14 +372,14 @@ describe('AIBridge', () => {
             await aiBridge.startProvider('gemini');
             await aiBridge.sendMessage('Hello');
 
-            expect(mockInvoke).toHaveBeenCalledWith(
-                'send_chat_message',
-                expect.objectContaining({
-                    request: expect.objectContaining({
-                        web_search: { enabled: true },
-                    }),
-                }),
+            const sendChatCall = mockInvoke.mock.calls.find(
+                ([command]) => command === 'send_chat_message',
             );
+            const payload = sendChatCall?.[1] as
+                | { request?: { web_search?: { enabled?: boolean } } }
+                | undefined;
+
+            expect(payload?.request?.web_search).toEqual({ enabled: true });
         });
 
         it('should return error for missing API key after refresh', async () => {
@@ -698,38 +720,34 @@ describe('AIBridge', () => {
 
     // ---------------------------------------------------------- _showToast
     describe('_showToast / _showErrorToast / _showInfoToast', () => {
-        it('should call globalThis.showToast if available', () => {
+        it('should call appUI.showToast', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (aiBridge as any)._showToast('Test message', 'info');
-            expect(globalThis.showToast).toHaveBeenCalledWith('Test message', 'info');
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith('Test message', 'info');
         });
 
-        it('should handle missing showToast gracefully', () => {
-            const original = globalThis.showToast;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (globalThis as any).showToast = undefined;
-
+        it('should handle missing core gracefully', () => {
+            const bridge2 = new AIBridge(mockTracer);
             const callToast = (): void => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (
-                    aiBridge as unknown as { _showToast: (msg: string, type: string) => void }
+                    bridge2 as unknown as { _showToast: (msg: string, type: string) => void }
                 )._showToast('msg', 'error');
             };
             expect(callToast).not.toThrow();
-
-            globalThis.showToast = original;
         });
 
         it('should call _showErrorToast with translated message', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (aiBridge as any)._showErrorToast('key', 'fallback');
-            expect(globalThis.showToast).toHaveBeenCalledWith(expect.any(String), 'error');
+            expect(mockCore.i18n.t).toHaveBeenCalledWith('key', 'fallback');
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith(expect.any(String), 'error');
         });
 
         it('should call _showInfoToast with translated message', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (aiBridge as any)._showInfoToast('key', 'fallback');
-            expect(globalThis.showToast).toHaveBeenCalledWith(expect.any(String), 'info');
+            expect(mockCore.i18n.t).toHaveBeenCalledWith('key', 'fallback');
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith(expect.any(String), 'info');
         });
     });
 
@@ -738,7 +756,7 @@ describe('AIBridge', () => {
         it('should log web mode active when not in Tauri', async () => {
             mockCore.tauriProvider.isTauri.mockReturnValue(false);
 
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
@@ -750,7 +768,7 @@ describe('AIBridge', () => {
 
         it('should handle IPC initialization failure gracefully (line 86)', async () => {
             // Make onStream throw to trigger the catch block
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -782,7 +800,7 @@ describe('AIBridge', () => {
 
             await aiBridge.startProvider('gemini');
 
-            expect(globalThis.showToast).toHaveBeenCalledWith(
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith(
                 'Provider activation failed',
                 'error',
             );
@@ -878,7 +896,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- additional branch coverage
     describe('Additional branch coverage', () => {
         it('should handle setCore when _transport is not AIChatTransport (Line 39)', () => {
-            const tempBridge = new AIBridge();
+            const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (tempBridge as any)._transport = { setCore: vi.fn() };
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
@@ -891,7 +909,7 @@ describe('AIBridge', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (import.meta.env as any).DEV = false;
 
-            const tempBridge = new AIBridge();
+            const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             tempBridge.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session');
@@ -907,7 +925,7 @@ describe('AIBridge', () => {
         });
 
         it('should handle sendMessage when _core is null (Line 175)', async () => {
-            const tempBridge = new AIBridge();
+            const tempBridge = new AIBridge(mockTracer);
             // Do NOT call setCore here to leave _core as null
 
             // Bypass API key checks logic just to test the core check
@@ -939,7 +957,13 @@ describe('AIBridge', () => {
             const result = await aiBridge.sendMessage('Hello');
 
             expect(result.ok).toBe(false);
-            expect(globalThis.tracer.error).not.toHaveBeenCalledWith(expect.anything(), '');
+            expect(
+                (
+                    globalThis as unknown as {
+                        tracer: { error: ReturnType<typeof vi.fn> };
+                    }
+                ).tracer.error,
+            ).not.toHaveBeenCalledWith(expect.anything(), '');
         });
 
         it('should handle repeating listener registrations (Lines 237-248)', () => {

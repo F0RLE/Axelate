@@ -3,7 +3,9 @@
  * @description Provides audio feedback for UI interactions
  */
 
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type SoundServiceLogger = Pick<LoggerService, 'warn' | 'error' | 'debug'>;
 
 interface ISoundGlobal {
     AudioContext?: typeof AudioContext;
@@ -19,7 +21,7 @@ export class SoundService {
     private _currentActionCorner: Element | null = null;
     private _isDestroyed = false;
 
-    constructor() {
+    constructor(private readonly _tracer: SoundServiceLogger) {
         this._initContext();
         this._bindListeners();
     }
@@ -35,7 +37,7 @@ export class SoundService {
                 this._ctx = new AudioContextClass();
             }
         } catch {
-            tracer.warn('[SoundService] AudioContext not available');
+            this._tracer.warn('[SoundService] AudioContext not available');
         }
     }
 
@@ -53,7 +55,7 @@ export class SoundService {
 
         if (this._ctx && this._ctx.state !== 'closed') {
             this._ctx.close().catch((e: unknown) => {
-                tracer.error(`[SoundService] Error closing context: ${String(e)}`);
+                this._tracer.error(`[SoundService] Error closing context: ${String(e)}`);
             });
         }
 
@@ -62,7 +64,7 @@ export class SoundService {
         this._currentBadge = null;
         this._currentActionCorner = null;
 
-        tracer.debug('[SoundService] Destroyed.');
+        this._tracer.debug('[SoundService] Destroyed.');
     }
 
     /**

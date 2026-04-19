@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AIProviderManager } from '@/features/ai/services/AIProviderManager';
 import type { Core } from '@/app/init';
 import { getMostPowerfulModel, getModelData } from '@/features/ai/utils/catalogHelpers';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // Mock catalogHelpers used internally
 vi.mock('@/features/ai/utils/catalogHelpers', () => ({
@@ -39,12 +40,17 @@ function createMockCore(
 
 describe('AIProviderManager', () => {
     let manager: AIProviderManager;
+    let tracer: Pick<LoggerService, 'info' | 'error'>;
 
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(getMostPowerfulModel).mockReturnValue('');
         vi.mocked(getModelData).mockReturnValue(null);
-        manager = new AIProviderManager();
+        tracer = {
+            info: vi.fn(),
+            error: vi.fn(),
+        };
+        manager = new AIProviderManager(tracer);
     });
 
     // ---------------------------------------------------------- init

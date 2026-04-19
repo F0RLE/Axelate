@@ -105,6 +105,28 @@ pub struct OpenRouterProvider {
     client: Client,
 }
 
+struct RequestExecution {
+    endpoint: String,
+    api_key: String,
+    payload: serde_json::Map<String, serde_json::Value>,
+}
+
+struct StreamingAccumulator {
+    full_content: String,
+    buffer: String,
+    final_usage: Option<TokenUsage>,
+}
+
+impl StreamingAccumulator {
+    const fn new() -> Self {
+        Self {
+            full_content: String::new(),
+            buffer: String::new(),
+            final_usage: None,
+        }
+    }
+}
+
 impl OpenRouterProvider {
     /// Creates a new OpenRouterProvider with the specified base URL
     pub fn new(base_url: &str) -> Self {
@@ -121,25 +143,25 @@ impl OpenRouterProvider {
         message_id: String,
         req: ChatRequest,
     ) -> Result<ChatResponse, crate::errors::AppError> {
-        let api_key = resolve_api_key(&req, &self.base_url)?;
-        let payload = build_request_payload(&req, false, is_local_base_url(&self.base_url));
-        let endpoint = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let execution = self.prepare_request_execution(&req, false)?;
         let res = self
-            .send_request(&endpoint, &request_id, &api_key, &payload)
+            .send_request(
+                &execution.endpoint,
+                &request_id,
+                &execution.api_key,
+                &execution.payload,
+            )
             .await?;
 
         if !res.status().is_success() {
             let status = res.status();
             let error_text = res.text().await.unwrap_or_default();
-            return Ok(ChatResponse {
-                id: message_id,
-                ok: false,
-                reply: None,
-                error: Some(format!("API Error {status}: {error_text}")),
-                model: Some(req.model),
-                thought_signature: None,
-                usage: None,
-            });
+            return Ok(build_api_error_response(
+                message_id,
+                req.model,
+                status,
+                &error_text,
+            ));
         }
 
         let body = res.json::<serde_json::Value>().await.map_err(|error| {
@@ -149,7 +171,20 @@ impl OpenRouterProvider {
             }
         })?;
 
-        Ok(parse_non_stream_response(body, message_id, req.model))
+        Ok(parse_non_stream_response(&body, message_id, req.model))
+    }
+
+    fn prepare_request_execution(
+        &self,
+        req: &ChatRequest,
+        stream: bool,
+    ) -> Result<RequestExecution, crate::errors::AppError> {
+        let is_local = is_local_base_url(&self.base_url);
+        Ok(RequestExecution {
+            endpoint: format!("{}/chat/completions", self.base_url.trim_end_matches('/')),
+            api_key: resolve_api_key(req, &self.base_url)?,
+            payload: build_request_payload(req, stream, is_local),
+        })
     }
 
     async fn send_request(
@@ -313,7 +348,7 @@ fn extract_message_text(content: &serde_json::Value) -> String {
 }
 
 fn parse_non_stream_response(
-    body: serde_json::Value,
+    body: &serde_json::Value,
     message_id: String,
     model: String,
 ) -> ChatResponse {
@@ -354,6 +389,23 @@ fn parse_non_stream_response(
         model: Some(model),
         thought_signature: None,
         usage,
+    }
+}
+
+fn build_api_error_response(
+    message_id: String,
+    model: String,
+    status: StatusCode,
+    error_text: &str,
+) -> ChatResponse {
+    ChatResponse {
+        id: message_id,
+        ok: false,
+        reply: None,
+        error: Some(format!("API Error {status}: {error_text}")),
+        model: Some(model),
+        thought_signature: None,
+        usage: None,
     }
 }
 
@@ -431,133 +483,151 @@ impl AiProvider for OpenRouterProvider {
         req: ChatRequest,
         sink: Arc<dyn StreamSink>,
     ) -> Result<ChatResponse, crate::errors::AppError> {
-        let api_key = resolve_api_key(&req, &self.base_url)?;
-        let payload = build_request_payload(&req, true, is_local_base_url(&self.base_url));
-        let endpoint = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
+        let execution = self.prepare_request_execution(&req, true)?;
         let res = self
-            .send_request(&endpoint, &request_id, &api_key, &payload)
+            .send_request(
+                &execution.endpoint,
+                &request_id,
+                &execution.api_key,
+                &execution.payload,
+            )
             .await?;
 
         // Final key drop to be safe
-        std::mem::drop(api_key);
+        std::mem::drop(execution.api_key);
 
         if !res.status().is_success() {
             let status = res.status();
             let error_text = res.text().await.unwrap_or_default();
-            return Ok(ChatResponse {
-                id: message_id,
-                ok: false,
-                reply: None,
-                error: Some(format!("API Error {status}: {error_text}")),
-                model: Some(req.model),
-                thought_signature: None,
-                usage: None,
-            });
+            return Ok(build_api_error_response(
+                message_id,
+                req.model,
+                status,
+                &error_text,
+            ));
         }
 
         let mut stream = res.bytes_stream();
-        let mut full_content = String::new();
-        let mut buffer = String::new();
-        let mut final_usage: Option<TokenUsage> = None;
+        let mut state = StreamingAccumulator::new();
 
         'outer: while let Some(item) = stream.next().await {
             let chunk = item.map_err(|e| crate::errors::AppError::External {
                 request_id: Some(request_id.clone()),
                 message: e.to_string(),
             })?;
-            let chunk_str = String::from_utf8_lossy(&chunk);
-
-            // Memory Safety: Prevent buffer overflow from malformed streams (~1MB limit)
-            if buffer.len() + chunk_str.len() > 1_024_024 {
-                tracing::error!(
-                    "[AI] Stream buffer overflow protection triggered. Clearing buffer."
-                );
-                buffer.clear();
-            }
-
-            buffer.push_str(&chunk_str);
-
-            while let Some(pos) = buffer.find('\n') {
-                let line = buffer[..pos].trim().to_string();
-                buffer.drain(..=pos);
-
-                if line.starts_with("data: ") {
-                    let data = line.trim_start_matches("data: ");
-                    if data == "[DONE]" {
-                        break 'outer;
-                    }
-
-                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                        // Extract usage if present in chunk
-                        if let Some(usage_val) = json.get("usage")
-                            && let Ok(usage) =
-                                serde_json::from_value::<TokenUsage>(usage_val.clone())
-                        {
-                            final_usage = Some(usage);
-                        }
-
-                        if let Some(choices) = json.get("choices").and_then(|c| c.as_array())
-                            && let Some(choice) = choices.first()
-                        {
-                            let delta = choice.get("delta");
-
-                            // Reasoning extraction
-                            if let Some(reasoning) = delta
-                                .and_then(|d| d.get("reasoning_content"))
-                                .and_then(|v| v.as_str())
-                                .or_else(|| {
-                                    delta
-                                        .and_then(|d| d.get("reasoning"))
-                                        .and_then(|v| v.as_str())
-                                })
-                            {
-                                sink.emit(StreamEvent::ThoughtChunk {
-                                    message_id: message_id.clone(),
-                                    content: reasoning.to_string(),
-                                });
-                            }
-
-                            // Content extraction
-                            if let Some(content) = delta
-                                .and_then(|d| d.get("content"))
-                                .and_then(|v| v.as_str())
-                            {
-                                full_content.push_str(content);
-                                sink.emit(StreamEvent::ChatChunk {
-                                    message_id: message_id.clone(),
-                                    content: content.to_string(),
-                                });
-                            }
-                        }
-                    }
-                }
+            if process_stream_chunk(&chunk, &message_id, sink.as_ref(), &mut state) {
+                break 'outer;
             }
         }
 
         // Final event
         sink.emit(StreamEvent::Done {
             message_id: message_id.clone(),
-            usage: final_usage.clone(),
+            usage: state.final_usage.clone(),
         });
 
         Ok(ChatResponse {
             id: message_id,
             ok: true,
             reply: Some(ChatReply {
-                text: full_content,
+                text: state.full_content,
                 role: "assistant".to_string(),
             }),
             error: None,
             model: Some(req.model),
             thought_signature: None,
-            usage: final_usage,
+            usage: state.final_usage,
         })
+    }
+}
+
+fn process_stream_chunk(
+    chunk: &[u8],
+    message_id: &str,
+    sink: &dyn StreamSink,
+    state: &mut StreamingAccumulator,
+) -> bool {
+    let chunk_str = String::from_utf8_lossy(chunk);
+
+    if state.buffer.len() + chunk_str.len() > 1_024_024 {
+        tracing::error!("[AI] Stream buffer overflow protection triggered. Clearing buffer.");
+        state.buffer.clear();
+    }
+
+    state.buffer.push_str(&chunk_str);
+
+    while let Some(pos) = state.buffer.find('\n') {
+        let line = state.buffer[..pos].trim().to_string();
+        state.buffer.drain(..=pos);
+
+        if let Some(data) = line.strip_prefix("data: ") {
+            if data == "[DONE]" {
+                return true;
+            }
+
+            handle_stream_json_line(data, message_id, sink, state);
+        }
+    }
+
+    false
+}
+
+fn handle_stream_json_line(
+    data: &str,
+    message_id: &str,
+    sink: &dyn StreamSink,
+    state: &mut StreamingAccumulator,
+) {
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(data) else {
+        return;
+    };
+
+    if let Some(usage_val) = json.get("usage")
+        && let Ok(usage) = serde_json::from_value::<TokenUsage>(usage_val.clone())
+    {
+        state.final_usage = Some(usage);
+    }
+
+    let Some(choice) = json
+        .get("choices")
+        .and_then(|choices| choices.as_array())
+        .and_then(|choices| choices.first())
+    else {
+        return;
+    };
+
+    let delta = choice.get("delta");
+
+    if let Some(reasoning) = delta
+        .and_then(|d| d.get("reasoning_content"))
+        .and_then(|v| v.as_str())
+        .or_else(|| {
+            delta
+                .and_then(|d| d.get("reasoning"))
+                .and_then(|v| v.as_str())
+        })
+    {
+        sink.emit(StreamEvent::ThoughtChunk {
+            message_id: message_id.to_string(),
+            content: reasoning.to_string(),
+        });
+    }
+
+    if let Some(content) = delta
+        .and_then(|d| d.get("content"))
+        .and_then(|v| v.as_str())
+    {
+        state.full_content.push_str(content);
+        sink.emit(StreamEvent::ChatChunk {
+            message_id: message_id.to_string(),
+            content: content.to_string(),
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used)]
+    #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
     use super::{build_web_search_tool, is_local_base_url};
     use crate::domain::ai::WebSearchOptions;

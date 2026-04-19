@@ -1,8 +1,10 @@
 import DOMPurify from 'dompurify';
 import { invoke } from '@tauri-apps/api/core';
 
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+
+type ChatImageLogger = Pick<LoggerService, 'error'>;
 
 type SavedChatImage = {
     filePath: string;
@@ -18,6 +20,13 @@ type ChatImageControllerDeps = {
     isDestroyed: () => boolean;
     setManagedTimeout: (callback: () => void, delayMs: number) => void;
     extractErrorMessage: (error: unknown) => string;
+    showToast: (
+        message: string,
+        type?: 'success' | 'error' | 'warning' | 'info',
+        duration?: number,
+    ) => void;
+    translate: TTranslateFunction;
+    tracer: ChatImageLogger;
 };
 
 export class ChatImageController {
@@ -78,19 +87,14 @@ export class ChatImageController {
         return true;
     }
 
-    public ensureImageActionButtons(
-        actionBar: HTMLElement,
-        image: ChatImagePayload,
-    ): void {
+    public ensureImageActionButtons(actionBar: HTMLElement, image: ChatImagePayload): void {
         if (actionBar.querySelector('.chat-save-image-btn, .chat-open-image-folder-btn')) return;
         actionBar.querySelector('.chat-copy-own-btn')?.remove();
 
-        const t = getGlobalWin().t;
         const saveBtn = document.createElement('button');
         saveBtn.type = 'button';
         saveBtn.className = 'chat-save-image-btn';
-        saveBtn.title =
-            typeof t === 'function' ? t('ui.chat.save_image', 'Save Image') : 'Save Image';
+        saveBtn.title = this._deps.translate('ui.chat.save_image', 'Save Image');
         saveBtn.innerHTML = ChatImageController._downloadIcon;
         saveBtn.addEventListener('contextmenu', (event) => {
             event.preventDefault();
@@ -164,16 +168,11 @@ export class ChatImageController {
                 );
             }
         } catch (error) {
-            tracer.error('[ChatUI] Save image failed', error);
-            const g = getGlobalWin();
-            if (typeof g.showToast === 'function') {
-                g.showToast(
-                    typeof g.t === 'function'
-                        ? g.t('ui.chat.image_save_failed', 'Failed to save image')
-                        : 'Failed to save image',
-                    'error',
-                );
-            }
+            this._deps.tracer.error('[ChatUI] Save image failed', error);
+            this._deps.showToast(
+                this._deps.translate('ui.chat.image_save_failed', 'Failed to save image'),
+                'error',
+            );
         }
     }
 
@@ -250,8 +249,6 @@ export class ChatImageController {
         filePath: string,
         folderPath: string,
     ): void {
-        const t = getGlobalWin().t;
-
         this._deps.setManagedTimeout(() => {
             if (this._deps.isDestroyed() || !document.body.contains(saveBtn)) {
                 return;
@@ -261,16 +258,15 @@ export class ChatImageController {
             saveBtn.classList.add('chat-open-image-folder-btn');
             saveBtn.dataset['filePath'] = filePath;
             saveBtn.dataset['folderPath'] = folderPath;
-            saveBtn.title =
-                typeof t === 'function'
-                    ? t('ui.chat.open_image_folder', 'Open image folder')
-                    : 'Open image folder';
+            saveBtn.title = this._deps.translate(
+                'ui.chat.open_image_folder',
+                'Open image folder',
+            );
             saveBtn.innerHTML = ChatImageController._folderIcon;
         }, ChatImageController._imageResetDelayMs);
     }
 
     private _restoreFolderButtonToSave(saveBtn: HTMLButtonElement): void {
-        const t = getGlobalWin().t;
         saveBtn.disabled = false;
         saveBtn.classList.remove(
             'chat-open-image-folder-btn',
@@ -281,8 +277,7 @@ export class ChatImageController {
         saveBtn.classList.add('chat-save-image-btn');
         delete saveBtn.dataset['filePath'];
         delete saveBtn.dataset['folderPath'];
-        saveBtn.title =
-            typeof t === 'function' ? t('ui.chat.save_image', 'Save Image') : 'Save Image';
+        saveBtn.title = this._deps.translate('ui.chat.save_image', 'Save Image');
         saveBtn.innerHTML = ChatImageController._downloadIcon;
     }
 
@@ -291,7 +286,6 @@ export class ChatImageController {
         filePath: string,
         folderPath: string,
     ): void {
-        const t = getGlobalWin().t;
         saveBtn.disabled = false;
         saveBtn.classList.remove(
             'chat-save-image-btn',
@@ -302,10 +296,7 @@ export class ChatImageController {
         saveBtn.classList.add('chat-open-image-folder-btn');
         saveBtn.dataset['filePath'] = filePath;
         saveBtn.dataset['folderPath'] = folderPath;
-        saveBtn.title =
-            typeof t === 'function'
-                ? t('ui.chat.open_image_folder', 'Open image folder')
-                : 'Open image folder';
+        saveBtn.title = this._deps.translate('ui.chat.open_image_folder', 'Open image folder');
         saveBtn.innerHTML = ChatImageController._folderIcon;
     }
 
@@ -342,19 +333,13 @@ export class ChatImageController {
             await Promise.all([deleteRequest, animationDelay]);
             this._restoreFolderButtonToSave(saveBtn);
         } catch (error) {
-            tracer.error('[ChatUI] Delete saved image failed', error);
+            this._deps.tracer.error('[ChatUI] Delete saved image failed', error);
             await animationDelay;
             this._setFolderButtonState(saveBtn, filePath, folderPath);
-
-            const g = getGlobalWin();
-            if (typeof g.showToast === 'function') {
-                g.showToast(
-                    typeof g.t === 'function'
-                        ? g.t('ui.chat.image_delete_failed', 'Failed to delete image')
-                        : 'Failed to delete image',
-                    'error',
-                );
-            }
+            this._deps.showToast(
+                this._deps.translate('ui.chat.image_delete_failed', 'Failed to delete image'),
+                'error',
+            );
         }
     }
 
@@ -363,7 +348,6 @@ export class ChatImageController {
         filePath: string,
         folderPath: string,
     ): Promise<void> {
-        const g = getGlobalWin();
         const handleMissing = async (): Promise<void> => {
             this._restoreFolderButtonToSave(saveBtn);
             try {
@@ -371,14 +355,13 @@ export class ChatImageController {
             } catch {
                 /* ignore fallback folder-open errors */
             }
-            if (typeof g.showToast === 'function') {
-                g.showToast(
-                    typeof g.t === 'function'
-                        ? g.t('ui.chat.image_missing_resave', 'Image was removed, save it again')
-                        : 'Image was removed, save it again',
-                    'warning',
-                );
-            }
+            this._deps.showToast(
+                this._deps.translate(
+                    'ui.chat.image_missing_resave',
+                    'Image was removed, save it again',
+                ),
+                'warning',
+            );
         };
 
         try {
@@ -396,15 +379,14 @@ export class ChatImageController {
                 return;
             }
 
-            tracer.error('[ChatUI] Open image location failed', error);
-            if (typeof g.showToast === 'function') {
-                g.showToast(
-                    typeof g.t === 'function'
-                        ? g.t('ui.chat.image_open_folder_failed', 'Failed to open image folder')
-                        : 'Failed to open image folder',
-                    'error',
-                );
-            }
+            this._deps.tracer.error('[ChatUI] Open image location failed', error);
+            this._deps.showToast(
+                this._deps.translate(
+                    'ui.chat.image_open_folder_failed',
+                    'Failed to open image folder',
+                ),
+                'error',
+            );
         }
     }
 }

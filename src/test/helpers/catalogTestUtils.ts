@@ -3,6 +3,7 @@ import { CatalogService } from '@/shared/services/CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
 import type { AppConfig } from '@/shared/types/bindings';
 import type { IBridge } from '@/shared/types/IBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { createMockBridge } from '@/test/mocks/mockBridge';
 
 export function createMockAppConfig(overrides?: unknown): AppConfig {
@@ -58,7 +59,12 @@ export function createCatalogHarness(): {
     globalThis.dispatchEvent = vi.fn();
 
     const mockBridge = createMockBridge() as unknown as MockCatalogBridge;
-    const service = new CatalogService(mockBridge as unknown as IBridge);
+    const tracer: Pick<LoggerService, 'info' | 'warn' | 'error'> = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+    };
+    const service = new CatalogService(mockBridge as unknown as IBridge, tracer);
 
     return { mockBridge, service };
 }

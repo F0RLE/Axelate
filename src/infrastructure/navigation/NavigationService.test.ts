@@ -1,21 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NavigationService } from '@/infrastructure/navigation/NavigationService';
-
-// Mock LoggerService
-vi.mock('@/infrastructure/logging/LoggerService', () => ({
-    tracer: {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-    },
-}));
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('NavigationService', () => {
     let navService: NavigationService;
+    let tracer: LoggerService;
 
     beforeEach(() => {
-        navService = new NavigationService();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
+        navService = new NavigationService(tracer);
     });
 
     afterEach(() => {
@@ -129,7 +127,7 @@ describe('NavigationService', () => {
 
     describe('getCurrentPage', () => {
         it('should return undefined when no navigation has occurred', () => {
-            const freshService = new NavigationService();
+            const freshService = new NavigationService(tracer);
 
             expect(freshService.getCurrentPage()).toBeUndefined();
         });
@@ -143,79 +141,33 @@ describe('NavigationService', () => {
 
     describe('refreshFromUiState', () => {
         it('should restore last page from uiState', () => {
-            const mockUiState = {
-                last_page: 'settings',
-                getLastPage: vi.fn().mockReturnValue('settings'),
-            };
-
-            const win = globalThis as unknown as Record<string, unknown>;
-            win['uiState'] = mockUiState;
-
-            navService.refreshFromUiState();
+            navService.refreshFromUiState('settings');
 
             expect(navService.getCurrentPage()).toBe('settings');
-
-            delete win['uiState'];
         });
 
         it('should handle missing uiState gracefully', () => {
-            // Ensure no uiState exists
-            const win = globalThis as unknown as Record<string, unknown>;
-            if (win['uiState'] !== undefined) {
-                delete win['uiState'];
-            }
-
-            // Should not throw, page should be undefined
             navService.refreshFromUiState();
 
-            // Should not throw, page should be undefined
             expect(navService.getCurrentPage()).toBeUndefined();
         });
 
         it('should handle empty last page', () => {
-            const mockUiState = {
-                last_page: '', // Fix: use last_page property instead of getLastPage method
-            };
+            navService.refreshFromUiState('');
 
-            const win = globalThis as unknown as Record<string, unknown>;
-            win['uiState'] = mockUiState;
-
-            navService.refreshFromUiState();
-
-            // Empty string is falsy, should not add to history
             expect(navService.getCurrentPage()).toBeUndefined();
-
-            delete win['uiState'];
         });
 
         it('should handle uiState with non-string last_page gracefully (Line 40)', () => {
-            const mockUiState = {
-                last_page: null,
-            };
+            navService.refreshFromUiState(null);
 
-            const win = globalThis as unknown as Record<string, unknown>;
-            win['uiState'] = mockUiState;
-
-            navService.refreshFromUiState();
-
-            // Should not throw, page should be undefined
             expect(navService.getCurrentPage()).toBeUndefined();
-
-            delete win['uiState'];
         });
 
         it('should handle uiState existing but without last_page property (Line 40)', () => {
-            const mockUiState = {};
-
-            const win = globalThis as unknown as Record<string, unknown>;
-            win['uiState'] = mockUiState;
-
             navService.refreshFromUiState();
 
-            // Should not throw, page should be undefined
             expect(navService.getCurrentPage()).toBeUndefined();
-
-            delete win['uiState'];
         });
     });
 

@@ -9,17 +9,40 @@
  * ```
  */
 
-import { eventBus } from '@/shared/services/EventBus';
+import type { EventBus } from '@/shared/services/EventBus';
 import { type NavigationService } from './NavigationService';
 import { type SoundService } from '@/shared/services/SoundService';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type NavigationRuntime = {
+    addWindowListener: typeof globalThis.addEventListener;
+    removeWindowListener: typeof globalThis.removeEventListener;
+};
+
+type SideMouseEventType = 'mousedown' | 'mouseup';
+
+type SideMouseEventRecord = {
+    button: number;
+    target: EventTarget | null;
+    timestamp: number;
+    type: SideMouseEventType;
+};
+
+type NavigationListenerBinding = {
+    type: keyof WindowEventMap;
+    handler: EventListenerOrEventListenerObject;
+    options?: boolean | AddEventListenerOptions;
+};
+
+function createDefaultNavigationRuntime(): NavigationRuntime {
+    return {
+        addWindowListener: globalThis.addEventListener.bind(globalThis),
+        removeWindowListener: globalThis.removeEventListener.bind(globalThis),
+    };
+}
 
 export class NavigationUI {
-    private _lastHandledSideMouseEvent: {
-        button: number;
-        timestamp: number;
-        type: 'mousedown' | 'mouseup';
-    } | null = null;
+    private _lastHandledSideMouseEvent: SideMouseEventRecord | null = null;
     private _mouseDownHandler: ((e: MouseEvent) => void) | null = null;
     private _mouseUpHandler: ((e: MouseEvent) => void) | null = null;
     private _auxClickHandler: ((e: MouseEvent) => void) | null = null;
@@ -27,10 +50,14 @@ export class NavigationUI {
     private _initialized = false;
     private static readonly _BACK_BUTTON = 3;
     private static readonly _FORWARD_BUTTON = 4;
+    private static readonly _CAPTURE_OPTIONS = true;
 
     constructor(
         private readonly _service: NavigationService,
+        private readonly _eventBus: EventBus,
+        private readonly _tracer: LoggerService,
         private readonly _sounds?: SoundService,
+        private readonly _runtime: NavigationRuntime = createDefaultNavigationRuntime(),
     ) {}
 
     /**
@@ -40,80 +67,39 @@ export class NavigationUI {
     public init(): void {
         if (this._initialized) return;
         this._initialized = true;
-        tracer.debug('[NavigationUI] Navigation initialized.');
+        this._tracer.debug('[NavigationUI] Navigation initialized.');
 
-        // Bind global mouse navigation (Button 3 = Back, Button 4 = Forward).
-        this._mouseDownHandler = (e: MouseEvent) => {
-            this._handleMouseNavigation(e);
-        };
-        this._mouseUpHandler = (e: MouseEvent) => {
-            this._handleMouseNavigation(e);
-        };
-        this._auxClickHandler = (e: MouseEvent) => {
-            this._suppressNativeSideMouseNavigation(e);
-        };
-
-        // Bind global keyboard shortcuts (Escape = Back)
-        this._keyDownHandler = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return;
-            if (e.defaultPrevented || this._isTextEntryTarget(e.target)) return;
-
-            if (this._service.popBackAction()) {
-                e.preventDefault();
-            }
-        };
-
-        globalThis.addEventListener('mousedown', this._mouseDownHandler, true);
-        globalThis.addEventListener('mouseup', this._mouseUpHandler, true);
-        globalThis.addEventListener('auxclick', this._auxClickHandler, true);
-        globalThis.addEventListener('keydown', this._keyDownHandler);
+        this._bindWindowHandlers();
+        this._applyWindowBindings('addWindowListener');
     }
 
     private _suppressNativeSideMouseNavigation(e: MouseEvent): void {
         if (!this._shouldHandleMouseNavigation(e)) return;
 
-        e.preventDefault();
-        e.stopPropagation();
+        this._consumeMouseEvent(e);
     }
 
     private _handleMouseNavigation(e: MouseEvent): void {
         if (!this._shouldHandleMouseNavigation(e)) return;
 
         if (this._isDuplicateSideMouseEvent(e)) {
-            e.preventDefault();
-            e.stopPropagation();
+            this._consumeMouseEvent(e);
             return;
         }
 
         const isTextEntryTarget = this._isTextEntryTarget(e.target);
 
         if (e.button === NavigationUI._BACK_BUTTON) {
-            if (this._service.popBackAction()) {
-                e.preventDefault();
-                e.stopPropagation();
-                return;
-            }
-
-            if (isTextEntryTarget || this._hasOpenDialog()) {
-                e.preventDefault();
-                e.stopPropagation();
-                return;
-            }
-
-            e.preventDefault();
-            e.stopPropagation();
-            this._navigateHistory(this._service.goBack());
+            this._handleBackMouseNavigation(e, isTextEntryTarget);
             return;
         }
 
-        if (isTextEntryTarget || this._hasOpenDialog()) {
-            e.preventDefault();
-            e.stopPropagation();
+        if (this._shouldBlockPageHistoryNavigation(isTextEntryTarget)) {
+            this._consumeMouseEvent(e);
             return;
         }
 
-        e.preventDefault();
-        e.stopPropagation();
+        this._consumeMouseEvent(e);
         const pageId = this._service.goForward();
         if (pageId !== undefined && pageId !== '') {
             this._navigateHistory(pageId);
@@ -123,6 +109,21 @@ export class NavigationUI {
         this._service.popForwardAction();
     }
 
+    private _handleBackMouseNavigation(e: MouseEvent, isTextEntryTarget: boolean): void {
+        if (this._service.popBackAction()) {
+            this._consumeMouseEvent(e);
+            return;
+        }
+
+        if (this._shouldBlockPageHistoryNavigation(isTextEntryTarget)) {
+            this._consumeMouseEvent(e);
+            return;
+        }
+
+        this._consumeMouseEvent(e);
+        this._navigateHistory(this._service.goBack());
+    }
+
     private _isDuplicateSideMouseEvent(e: MouseEvent): boolean {
         const timestamp = performance.now();
         const previous = this._lastHandledSideMouseEvent;
@@ -130,6 +131,7 @@ export class NavigationUI {
         if (
             previous !== null &&
             previous.button === e.button &&
+            previous.target === e.target &&
             previous.type !== e.type &&
             timestamp - previous.timestamp < 400
         ) {
@@ -139,6 +141,7 @@ export class NavigationUI {
 
         this._lastHandledSideMouseEvent = {
             button: e.button,
+            target: e.target,
             timestamp,
             type: e.type === 'mouseup' ? 'mouseup' : 'mousedown',
         };
@@ -149,6 +152,10 @@ export class NavigationUI {
         if (e.defaultPrevented) return false;
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
         return e.button === NavigationUI._BACK_BUTTON || e.button === NavigationUI._FORWARD_BUTTON;
+    }
+
+    private _shouldBlockPageHistoryNavigation(isTextEntryTarget: boolean): boolean {
+        return isTextEntryTarget || this._hasOpenDialog();
     }
 
     private _isTextEntryTarget(target: EventTarget | null): boolean {
@@ -169,27 +176,18 @@ export class NavigationUI {
         }
     }
 
+    private _consumeMouseEvent(e: MouseEvent): void {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
     /**
      * Cleanup listeners.
      */
     public destroy(): void {
         this._lastHandledSideMouseEvent = null;
-        if (this._mouseDownHandler) {
-            globalThis.removeEventListener('mousedown', this._mouseDownHandler, true);
-            this._mouseDownHandler = null;
-        }
-        if (this._mouseUpHandler) {
-            globalThis.removeEventListener('mouseup', this._mouseUpHandler, true);
-            this._mouseUpHandler = null;
-        }
-        if (this._auxClickHandler) {
-            globalThis.removeEventListener('auxclick', this._auxClickHandler, true);
-            this._auxClickHandler = null;
-        }
-        if (this._keyDownHandler) {
-            globalThis.removeEventListener('keydown', this._keyDownHandler);
-            this._keyDownHandler = null;
-        }
+        this._applyWindowBindings('removeWindowListener');
+        this._clearWindowHandlers();
         this._initialized = false;
     }
 
@@ -207,54 +205,143 @@ export class NavigationUI {
         silent = false,
         isHistoryNav = false,
     ): Promise<void> {
-        tracer.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn, isHistoryNav });
+        this._tracer.debug(`[NavigationUI] nav -> ${pageId}`, { hasBtn: !!btn, isHistoryNav });
         const previousPageId = this._service.getCurrentPage();
 
-        // 1. Play Sound
         if (!silent && this._sounds) {
             this._sounds.playToggle(true);
         }
 
-        // 2. Hide all pages & Reset Sidebar
-        // Performance note: querySelectorAll is fast enough for this infrequent operation
+        const navBtns = this._resetPageAndNavigationState();
+        const target = this._findPageElement(pageId);
+
+        if (target === null) {
+            this._tracer.warn(`[NavigationUI] Page not found: ${pageId}`);
+            return Promise.resolve();
+        }
+
+        this._activatePage(target, pageId, previousPageId, isHistoryNav);
+        this._activateNavigationButton(navBtns, pageId, btn);
+        return Promise.resolve();
+    }
+
+    private _bindWindowHandlers(): void {
+        this._mouseDownHandler = (e: MouseEvent) => {
+            this._handleMouseNavigation(e);
+        };
+        this._mouseUpHandler = (e: MouseEvent) => {
+            this._handleMouseNavigation(e);
+        };
+        this._auxClickHandler = (e: MouseEvent) => {
+            this._suppressNativeSideMouseNavigation(e);
+        };
+        this._keyDownHandler = (e: KeyboardEvent) => {
+            this._handleKeyDown(e);
+        };
+    }
+
+    private _handleKeyDown(e: KeyboardEvent): void {
+        if (e.key !== 'Escape') return;
+        if (e.defaultPrevented || this._isTextEntryTarget(e.target)) return;
+
+        if (this._service.popBackAction()) {
+            e.preventDefault();
+        }
+    }
+
+    private _applyWindowBindings(
+        method: keyof Pick<NavigationRuntime, 'addWindowListener' | 'removeWindowListener'>,
+    ): void {
+        this._getWindowListenerBindings().forEach((binding) => {
+            this._runtime[method](binding.type, binding.handler, binding.options);
+        });
+    }
+
+    private _getWindowListenerBindings(): NavigationListenerBinding[] {
+        return [
+            {
+                type: 'mousedown',
+                handler: this._mouseDownHandler as EventListener,
+                options: NavigationUI._CAPTURE_OPTIONS,
+            },
+            {
+                type: 'mouseup',
+                handler: this._mouseUpHandler as EventListener,
+                options: NavigationUI._CAPTURE_OPTIONS,
+            },
+            {
+                type: 'auxclick',
+                handler: this._auxClickHandler as EventListener,
+                options: NavigationUI._CAPTURE_OPTIONS,
+            },
+            {
+                type: 'keydown',
+                handler: this._keyDownHandler as EventListener,
+            },
+        ];
+    }
+
+    private _clearWindowHandlers(): void {
+        this._mouseDownHandler = null;
+        this._mouseUpHandler = null;
+        this._auxClickHandler = null;
+        this._keyDownHandler = null;
+    }
+
+    private _resetPageAndNavigationState(): NodeListOf<Element> {
         const pages = document.querySelectorAll('.page');
         const navBtns = document.querySelectorAll('.nav-btn');
 
-        pages.forEach((el: Element) => {
+        pages.forEach((el) => {
             el.classList.remove('active');
         });
-        navBtns.forEach((b: Element) => {
-            b.classList.remove('active');
-            b.removeAttribute('aria-current');
+        navBtns.forEach((btn) => {
+            btn.classList.remove('active');
+            btn.removeAttribute('aria-current');
         });
 
-        // 3. Show target page
+        return navBtns;
+    }
+
+    private _findPageElement(pageId: string): HTMLElement | null {
         const target = document.getElementById(pageId) ?? document.getElementById(`page-${pageId}`);
+        return target instanceof HTMLElement ? target : null;
+    }
 
-        if (target) {
-            target.classList.add('active');
-            this._service.setCurrentPage(pageId, isHistoryNav);
+    private _activatePage(
+        target: HTMLElement,
+        pageId: string,
+        previousPageId: string | undefined,
+        isHistoryNav: boolean,
+    ): void {
+        target.classList.add('active');
+        this._service.setCurrentPage(pageId, isHistoryNav);
 
-            const navPayload: { pageId: string; previousPageId?: string } = { pageId };
-            if (previousPageId !== undefined) navPayload.previousPageId = previousPageId;
-            eventBus.emit('page:change', navPayload);
-        } else {
-            tracer.warn(`[NavigationUI] Page not found: ${pageId}`);
+        const navPayload: { pageId: string; previousPageId?: string } = { pageId };
+        if (previousPageId !== undefined) {
+            navPayload.previousPageId = previousPageId;
+        }
+        this._eventBus.emit('page:change', navPayload);
+    }
+
+    private _activateNavigationButton(
+        navBtns: NodeListOf<Element>,
+        pageId: string,
+        triggerButton: HTMLElement | null,
+    ): void {
+        if (triggerButton instanceof HTMLElement) {
+            triggerButton.classList.add('active');
+            triggerButton.setAttribute('aria-current', 'page');
+            return;
         }
 
-        // 4. Update Sidebar Buttons
-        if (btn) {
+        navBtns.forEach((btn) => {
+            if (!(btn instanceof HTMLElement) || btn.dataset['page'] !== pageId) {
+                return;
+            }
+
             btn.classList.add('active');
             btn.setAttribute('aria-current', 'page');
-        } else {
-            navBtns.forEach((b) => {
-                const el = b as HTMLElement;
-                if (el.dataset['page'] === pageId) {
-                    el.classList.add('active');
-                    el.setAttribute('aria-current', 'page');
-                }
-            });
-        }
-        return Promise.resolve();
+        });
     }
 }

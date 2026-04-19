@@ -30,6 +30,7 @@ describe('LoggerService', () => {
         tracer.clear();
         (tracer as unknown as { _isInternalLog: boolean })._isInternalLog = false;
         (tracer as unknown as { _transport: null })._transport = null;
+        (tracer as unknown as { _fallbackTransport: null })._fallbackTransport = null;
         (tracer as unknown as { _buffer: unknown[] })._buffer = [];
         (tracer as unknown as { _initialized: boolean })._initialized = false; // allow re-init for tests that test init
     });
@@ -38,9 +39,8 @@ describe('LoggerService', () => {
         vi.clearAllTimers();
         vi.useRealTimers();
 
-        // Cleanup DOM and Tauri mocks
+        // Cleanup DOM and transport mocks
         document.body.innerHTML = '';
-        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = undefined;
 
         // Cleanup global handlers so we don't leak between tests
         globalWin.onerror = null;
@@ -451,12 +451,11 @@ describe('LoggerService', () => {
             expect(tracer.getLogs()).toHaveLength(0);
         });
 
-        it('should fallback to direct Tauri API if transport not set', async () => {
+        it('should use fallback transport if main transport is not set', async () => {
             const mockInvoke = vi.fn().mockResolvedValue(undefined);
-            (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = {
-                core: { invoke: mockInvoke },
-            };
-
+            tracer.setFallbackTransport(async (logs): Promise<void> => {
+                await mockInvoke('log_batch', { logs });
+            });
             tracer.error('Fallback');
             await Promise.resolve();
             await Promise.resolve();
@@ -604,34 +603,28 @@ describe('LoggerService', () => {
             (tracer as any)._isInternalLog = false;
         });
 
-        it('should fallback to direct Taur core invoke if flush is triggered with no transport (Lines 270-286)', async () => {
-            const tauriMock = {
-                core: {
-                    invoke: vi.fn().mockResolvedValue(undefined),
-                },
-            };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (globalThis as any).__TAURI__ = tauriMock;
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (tracer as any)._transport = null;
+        it('should fallback to injected early transport when flush runs with no main transport', async () => {
+            const fallbackInvoke = vi.fn().mockResolvedValue(undefined);
+            (tracer as unknown as { _transport: null })._transport = null;
+            tracer.setFallbackTransport(async (logs): Promise<void> => {
+                await fallbackInvoke(logs);
+            });
 
             // Need buffer to have length > 0
             tracer.error('test backend drop');
 
             await Promise.resolve();
 
-            expect(tauriMock.core.invoke).toHaveBeenCalledWith('log_batch', {
-                logs: [{ level: 'ERROR', message: 'test backend drop' }],
-            });
+            expect(fallbackInvoke).toHaveBeenCalledWith([
+                { level: 'ERROR', message: 'test backend drop' },
+            ]);
         });
 
-        it('should skip flush to direct Tauri invoke if __TAURI__ is missing completely (Lines 270-286)', async () => {
+        it('should skip flush fallback if no transports are configured', async () => {
             tracer.error('test no __TAURI__');
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (tracer as any)._transport = null;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (globalThis as any).__TAURI__ = undefined;
+            (tracer as unknown as { _fallbackTransport: null })._fallbackTransport = null;
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await (tracer as any)._flush();

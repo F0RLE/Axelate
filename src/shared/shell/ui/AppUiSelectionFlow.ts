@@ -1,5 +1,4 @@
 import type { IApp } from '../../types/coreTypes';
-import { getGlobalWin } from '../../utils/globalAccessor';
 
 type LaunchAppFn = (id: string) => Promise<void>;
 
@@ -16,18 +15,23 @@ type AppUiSelectionFlowDeps = {
         launchSelectionVersion: number,
         launchApp: LaunchAppFn,
     ) => Promise<void>;
+    removeSelectedModule: (category: string) => void;
+    setSelectedModule: (
+        category: string,
+        moduleData: Partial<IApp>,
+    ) => void;
+    launchApp?: LaunchAppFn;
 };
 
 export class AppUiSelectionFlow {
     constructor(private readonly _deps: AppUiSelectionFlowDeps) {}
 
     public performSelectionAction(category: string, app: IApp): void {
-        const win = getGlobalWin();
         const alreadySelected = this._deps.getSelectedApp(category)?.id === app.id;
 
         if (alreadySelected) {
             this._deps.clearModuleCard(category);
-            win.uiState.removeSelectedModule(category);
+            this._deps.removeSelectedModule(category);
             this._deps.updateModalSelection(null);
             void this._deps.stopSelectedApp(app);
             return;
@@ -38,23 +42,18 @@ export class AppUiSelectionFlow {
         this._deps.updateModalSelection(app.id);
         this._persistSelectedModule(category, app);
 
-        if (typeof win.launchApp === 'function') {
+        if (typeof this._deps.launchApp === 'function') {
             void this._deps.launchSelectedApp(
                 category,
                 app,
                 launchSelectionVersion,
-                win.launchApp as LaunchAppFn,
+                this._deps.launchApp,
             );
         }
     }
 
     private _persistSelectedModule(category: string, app: IApp): void {
-        const uiState = getGlobalWin().uiState;
-        if (typeof uiState.setSelectedModule !== 'function') {
-            return;
-        }
-
-        uiState.setSelectedModule(category, {
+        this._deps.setSelectedModule(category, {
             id: app.id,
             name: app.name ?? '',
             nameKey: app.nameKey ?? '',

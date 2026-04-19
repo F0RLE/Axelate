@@ -31,8 +31,6 @@ export default [
             parser: tsParser,
             globals: {
                 ...globals.browser,
-                t: 'readonly',
-                showToast: 'readonly',
                 updateModuleSettings: 'writable',
                 openModuleSettings: 'writable',
                 closeModuleSettings: 'writable',
@@ -40,7 +38,6 @@ export default [
                 initMonitorToggles: 'writable',
                 loadCardWidths: 'writable',
                 toggleTaskbarItem: 'writable',
-                applyTranslations: 'writable',
                 toggleNavItem: 'writable',
                 toggleMonitorItem: 'writable',
                 loadSdModels: 'writable',

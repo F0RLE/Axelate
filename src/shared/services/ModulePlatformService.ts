@@ -1,8 +1,10 @@
 import type { IApp } from '../types/coreTypes';
 import type { ModuleService } from './ModuleService';
-import { aiBridge } from '@/features/ai/services/AIBridge';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { isApiApp } from '@/shared/utils/moduleTypeUtils';
+
+type ModulePlatformLogger = Pick<LoggerService, 'info'>;
 
 /**
  * @class ModulePlatformService
@@ -10,7 +12,11 @@ import { isApiApp } from '@/shared/utils/moduleTypeUtils';
  * Abstracts differences between Local modules (ModuleService/Tauri) and API modules (AIBridge).
  */
 export class ModulePlatformService {
-    constructor(private readonly requestModuleService: () => ModuleService) {}
+    constructor(
+        private readonly requestModuleService: () => ModuleService,
+        private readonly _aiBridge: AIBridge,
+        private readonly _tracer: ModulePlatformLogger,
+    ) {}
 
     private get _moduleService(): ModuleService {
         return this.requestModuleService();
@@ -21,7 +27,7 @@ export class ModulePlatformService {
      * @param app The module to download.
      */
     public async download(app: IApp): Promise<void> {
-        tracer.info(`[ModulePlatformService] Downloading: ${app.id}`);
+        this._tracer.info(`[ModulePlatformService] Downloading: ${app.id}`);
 
         if (app.repoUrl === undefined || app.repoUrl === '') {
             throw new Error('ui.launcher.web.download_url_empty'); // Key for localization
@@ -36,7 +42,7 @@ export class ModulePlatformService {
      * @param app The module to delete.
      */
     public async delete(app: IApp): Promise<void> {
-        tracer.info(`[ModulePlatformService] Deleting: ${app.id}`);
+        this._tracer.info(`[ModulePlatformService] Deleting: ${app.id}`);
         const success = await this._moduleService.deleteModule(app.id);
         if (!success) {
             throw new Error('ui.launcher.web.delete_model_error');
@@ -52,18 +58,18 @@ export class ModulePlatformService {
 
         if (isApi) {
             // Stop API Provider
-            const activeProviderId = aiBridge.getState().activeProviderId;
+            const activeProviderId = this._aiBridge.getState().activeProviderId;
             if (activeProviderId !== app.id) {
-                tracer.info(
+                this._tracer.info(
                     `[ModulePlatformService] Skip stop for inactive API module: ${app.id} (active: ${activeProviderId ?? 'none'})`,
                 );
                 return false;
             }
-            aiBridge.stopProvider();
+            this._aiBridge.stopProvider();
             return true;
         } else {
             if (app.managedExternally === true) {
-                tracer.info(
+                this._tracer.info(
                     `[ModulePlatformService] Skip local stop for externally managed module: ${app.id}`,
                 );
                 return true;
@@ -75,7 +81,7 @@ export class ModulePlatformService {
             // but didn't actually call a stop command for local/binary modules explicitly here?
             // Wait, previous code:
             // if (isApi) { win.aiBridge.stopProvider(); }
-            // else { win.showToast(... "stopped"); tracer.info(...); }
+            // else { win.showToast(... "stopped"); logger.info(...); }
             // So for local modules, it seems it was just a UI state update or the backend handles it via other means?
             // Actually ModuleService has `control(name, 'stop')`.
 
@@ -84,7 +90,7 @@ export class ModulePlatformService {
             // But AppUI's `_stopPreviousModule` seemed to only effectively stop AIProviders.
             // For now, we replicate existing behavior but clearer.
 
-            tracer.info(`[ModulePlatformService] Requesting stop for local module: ${app.id}`);
+            this._tracer.info(`[ModulePlatformService] Requesting stop for local module: ${app.id}`);
             // If we have a control method, use it:
             return await this._moduleService.control(app.id, 'stop');
         }
@@ -95,8 +101,15 @@ export class ModulePlatformService {
      * @param moduleId The ID of the module to cancel downloading.
      */
     public async cancelDownload(moduleId: string): Promise<boolean> {
-        tracer.info(`[ModulePlatformService] Cancelling download: ${moduleId}`);
+        this._tracer.info(`[ModulePlatformService] Cancelling download: ${moduleId}`);
         return await this._moduleService.cancelDownload(moduleId);
+    }
+
+    /**
+     * Checks whether a local module is installed.
+     */
+    public async checkInstalled(moduleId: string): Promise<boolean> {
+        return await this._moduleService.checkInstalled(moduleId);
     }
 
     /**

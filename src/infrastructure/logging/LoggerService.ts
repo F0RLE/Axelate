@@ -13,7 +13,6 @@
  */
 
 import type { ILogEntry } from '@/shared/types/coreTypes';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
 
 export class LoggerService {
     private _buffer: ILogEntry[] = [];
@@ -31,6 +30,10 @@ export class LoggerService {
     /** Injected after TauriProvider is ready — avoids direct __TAURI__ access. */
     private _transport: ((logs: { level: string; message: string }[]) => Promise<void>) | null =
         null;
+    /** Optional early-boot transport used before the main transport is wired. */
+    private _fallbackTransport:
+        | ((logs: { level: string; message: string }[]) => Promise<void>)
+        | null = null;
 
     constructor() {
         // We defer capturing original methods until init() so that any environment patches
@@ -47,6 +50,12 @@ export class LoggerService {
      */
     public setTransport(fn: (logs: { level: string; message: string }[]) => Promise<void>): void {
         this._transport = fn;
+    }
+
+    public setFallbackTransport(
+        fn: ((logs: { level: string; message: string }[]) => Promise<void>) | null,
+    ): void {
+        this._fallbackTransport = fn;
     }
 
     /**
@@ -72,10 +81,8 @@ export class LoggerService {
     }
 
     private _setupInterceptors(): void {
-        const win = getGlobalWin();
-
         // Intercept window.onerror for uncaught JS errors
-        win.onerror = (
+        globalThis.onerror = (
             message: string | Event,
             source?: string,
             lineno?: number,
@@ -95,7 +102,7 @@ export class LoggerService {
         };
 
         // Intercept unhandled promise rejections
-        win.onunhandledrejection = (event: PromiseRejectionEvent) => {
+        globalThis.onunhandledrejection = (event: PromiseRejectionEvent) => {
             if (this._isInternalLog) return;
 
             const reason =
@@ -268,16 +275,10 @@ export class LoggerService {
             if (this._transport) {
                 // Use injected transport (TauriProvider path — preferred)
                 await this._transport(logs.map((l) => ({ level: l.level, message: l.message })));
-            } else {
-                // Fallback: direct __TAURI__ access during early boot before setTransport() is called
-                const g = globalThis as unknown as {
-                    __TAURI__?: { core: { invoke: (cmd: string, args: unknown) => Promise<void> } };
-                };
-                if (g.__TAURI__?.core) {
-                    await g.__TAURI__.core.invoke('log_batch', {
-                        logs: logs.map((l) => ({ level: l.level, message: l.message })),
-                    });
-                }
+            } else if (this._fallbackTransport) {
+                await this._fallbackTransport(
+                    logs.map((l) => ({ level: l.level, message: l.message })),
+                );
             }
             // Clear only the logs we successfully sent
             this._buffer = this._buffer.slice(logs.length);

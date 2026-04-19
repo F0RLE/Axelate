@@ -13,7 +13,9 @@ describe('ModuleSettingsAutosaveController', () => {
 
     it('shows indicator and hides it after successful save', async () => {
         saveSetting.mockResolvedValue(undefined);
-        const controller = new ModuleSettingsAutosaveController(translate, saveSetting);
+        const controller = new ModuleSettingsAutosaveController(translate, saveSetting, {
+            error: vi.fn(),
+        });
 
         controller.debouncedSave('svc_key', 'value');
         expect(document.getElementById('save-indicator')?.classList.contains('show')).toBe(true);
@@ -26,14 +28,16 @@ describe('ModuleSettingsAutosaveController', () => {
 
     it('shows error state on save failure and reset clears pending saves', async () => {
         saveSetting.mockRejectedValue(new Error('boom'));
-        const controller = new ModuleSettingsAutosaveController(translate, saveSetting);
+        const controller = new ModuleSettingsAutosaveController(translate, saveSetting, {
+            error: vi.fn(),
+        });
 
         controller.debouncedSave('svc_key', 'value');
         await vi.runAllTimersAsync();
 
-        expect(
-            document.querySelector<HTMLSpanElement>('#save-indicator span')?.textContent,
-        ).toBe('Save failed');
+        expect(document.querySelector<HTMLSpanElement>('#save-indicator span')?.textContent).toBe(
+            'Save failed',
+        );
 
         controller.debouncedSave('svc_key', 'value-2');
         controller.reset();

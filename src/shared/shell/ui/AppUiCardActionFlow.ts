@@ -1,10 +1,10 @@
 import type { IApp } from '../../types/coreTypes';
-import { getGlobalWin } from '../../utils/globalAccessor';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type AppUiCardActionFlowDeps = {
     platformService: ModulePlatformService;
+    tracer: LoggerService;
     isComingSoonApp: (app: IApp) => boolean;
     showComingSoonToast: () => void;
     showToast: (message: string, type?: string) => void;
@@ -13,16 +13,13 @@ type AppUiCardActionFlowDeps = {
     resetDownloadButton: (btn: HTMLElement | null) => void;
     restoreDownloadButtonLabel: (btn: HTMLElement | null) => void;
     performSelectionAction: (category: string, app: IApp) => void;
+    translate: (key: string, fallback: string) => string;
 };
 
 export class AppUiCardActionFlow {
     constructor(private readonly _deps: AppUiCardActionFlowDeps) {}
 
-    public async handleAppCardClick(
-        event: MouseEvent,
-        app: IApp,
-        category: string,
-    ): Promise<void> {
+    public async handleAppCardClick(event: MouseEvent, app: IApp, category: string): Promise<void> {
         if (this._deps.isComingSoonApp(app)) {
             this._deps.showComingSoonToast();
             return;
@@ -32,11 +29,7 @@ export class AppUiCardActionFlow {
         this._deps.performSelectionAction(category, app);
     }
 
-    public async tryDeleteAction(
-        event: MouseEvent,
-        app: IApp,
-        category: string,
-    ): Promise<boolean> {
+    public async tryDeleteAction(event: MouseEvent, app: IApp, category: string): Promise<boolean> {
         const target = event.target as HTMLElement;
         if (target.closest('.app-delete-badge') === null) {
             return false;
@@ -62,8 +55,14 @@ export class AppUiCardActionFlow {
         }
 
         if (app.repoUrl === undefined || app.repoUrl === '') {
-            tracer.warn('[AppUI] Download URL is empty for module:', app.id);
-            this._deps.showToast(this._translate('ui.launcher.web.download_url_empty', 'Download URL is not available'), 'warning');
+            this._deps.tracer.warn('[AppUI] Download URL is empty for module:', app.id);
+            this._deps.showToast(
+                this._deps.translate(
+                    'ui.launcher.web.download_url_empty',
+                    'Download URL is not available',
+                ),
+                'warning',
+            );
             return true;
         }
 
@@ -85,7 +84,7 @@ export class AppUiCardActionFlow {
     }
 
     private _cancelDownload(app: IApp, btn: HTMLElement | null): void {
-        tracer.info(`[AppUI] Cancelling download for: ${app.id}`);
+        this._deps.tracer.info(`[AppUI] Cancelling download for: ${app.id}`);
         void (async () => {
             try {
                 await this._deps.platformService.cancelDownload(app.id);
@@ -93,13 +92,8 @@ export class AppUiCardActionFlow {
                 this._deps.resetDownloadButton(btn);
                 this._deps.restoreDownloadButtonLabel(btn);
             } catch (err) {
-                tracer.error(`[AppUI] Cancel failed for ${app.id}:`, err);
+                this._deps.tracer.error(`[AppUI] Cancel failed for ${app.id}:`, err);
             }
         })();
-    }
-
-    private _translate(key: string, fallback: string): string {
-        const win = getGlobalWin();
-        return typeof win.t === 'function' ? win.t(key, fallback) : fallback;
     }
 }

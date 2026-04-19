@@ -1,7 +1,8 @@
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type TranslateFn = (key: string, defaultValue?: string) => string;
 type SaveSettingFn = (key: string, value: string) => Promise<void>;
+type ModuleSettingsAutosaveLogger = Pick<LoggerService, 'error'>;
 
 export class ModuleSettingsAutosaveController {
     private readonly _saveTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
@@ -10,6 +11,7 @@ export class ModuleSettingsAutosaveController {
     constructor(
         private readonly _translate: TranslateFn,
         private readonly _saveSetting: SaveSettingFn,
+        private readonly _tracer: ModuleSettingsAutosaveLogger,
     ) {}
 
     public reset(): void {
@@ -22,7 +24,11 @@ export class ModuleSettingsAutosaveController {
     }
 
     public showPending(): void {
-        this._showSaveIndicator('var(--text-primary)', 'ui.settings.saved_message', 'Settings Saved');
+        this._showSaveIndicator(
+            'var(--text-primary)',
+            'ui.settings.saved_message',
+            'Settings Saved',
+        );
     }
 
     public showError(): void {
@@ -57,7 +63,7 @@ export class ModuleSettingsAutosaveController {
                     return;
                 }
 
-                tracer.error(`[ModuleSettingsUI] Failed to autosave setting ${key}:`, err);
+                this._tracer.error(`[ModuleSettingsUI] Failed to autosave setting ${key}:`, err);
                 this.showError();
                 this._saveTimeouts.delete(key);
             }

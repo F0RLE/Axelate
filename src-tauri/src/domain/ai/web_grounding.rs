@@ -175,13 +175,11 @@ async fn fetch_pages(client: &Client, results: Vec<SearchResult>) -> Vec<Fetched
     let mut pages = Vec::new();
 
     for result in results.into_iter().take(MAX_FETCH_RESULTS) {
-        let response = match client.get(&result.url).send().await {
-            Ok(response) => response,
-            Err(_) => continue,
+        let Ok(response) = client.get(&result.url).send().await else {
+            continue;
         };
-        let html = match response.text().await {
-            Ok(html) => html,
-            Err(_) => continue,
+        let Ok(html) = response.text().await else {
+            continue;
         };
 
         pages.push(FetchedPage {
@@ -401,7 +399,7 @@ fn trim_to_boundary(text: &str, max_chars: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used)]
+    #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
     use super::{
         ExtractedDocument, domain_allowed, host_matches_domain, normalize_result_url,

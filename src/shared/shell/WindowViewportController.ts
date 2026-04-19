@@ -1,4 +1,3 @@
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { type WindowService } from '../services/WindowService';
 
 export interface IWindowViewportState {
@@ -8,7 +7,14 @@ export interface IWindowViewportState {
 }
 
 export class WindowViewportController {
-    constructor(private readonly _service: WindowService) {}
+    constructor(
+        private readonly _service: WindowService,
+        private readonly _translate: (key: string, fallback: string) => string = (
+            _key,
+            fallback,
+        ) => fallback,
+        private readonly _getScreen: () => Screen = () => globalThis.screen,
+    ) {}
 
     public async applyInitialProtection(state: IWindowViewportState): Promise<void> {
         const policy = await this._service.checkPolicy();
@@ -59,9 +65,9 @@ export class WindowViewportController {
         }
 
         if (state.wasMaximizedOnSmallScreen && !isMaximized) {
-            const win = getGlobalWin();
-            const width = Math.floor((win.screen.availWidth || win.screen.width) * 0.85);
-            const height = Math.floor((win.screen.availHeight || win.screen.height) * 0.85);
+            const screen = this._getScreen();
+            const width = Math.floor((screen.availWidth || screen.width) * 0.85);
+            const height = Math.floor((screen.availHeight || screen.height) * 0.85);
 
             await this._service.setSize(width, height);
             state.wasMaximizedOnSmallScreen = false;
@@ -80,10 +86,9 @@ export class WindowViewportController {
             return;
         }
 
-        const g = getGlobalWin();
         const labelKey = isMaximized ? 'ui.launcher.button.restore' : 'ui.launcher.button.maximize';
         const fallback = isMaximized ? 'Restore' : 'Maximize';
-        const label = typeof g.t === 'function' ? g.t(labelKey, fallback) : fallback;
+        const label = this._translate(labelKey, fallback);
 
         btn.setAttribute('aria-label', label);
         btn.setAttribute('title', label);

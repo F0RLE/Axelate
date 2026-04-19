@@ -3,9 +3,6 @@
  * @description Utility functions for chat-related operations
  */
 
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { tracer } from '@/infrastructure/logging/LoggerService';
-
 /**
  * Check if a file is a text-based file.
  */
@@ -153,16 +150,10 @@ export function estimateTokenCount(text: string): number {
 }
 
 /**
- * Accurately counts tokens using backend TikToken (if available) or falls back to heuristic.
+ * Estimates tokens asynchronously.
+ * Runtime-specific accurate counting lives outside this helper and should be injected.
  */
-export async function getTokenCount(text: string, model = 'gpt-4'): Promise<number> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (getGlobalWin().__TAURI__ !== undefined) {
-        try {
-            return await globalThis.__TAURI__.core.invoke('count_tokens', { text, model });
-        } catch (e) {
-            tracer.warn(`[TokenCount] Backend failed, using heuristic: ${String(e)}`);
-        }
-    }
-    return estimateTokenCount(text);
+export function getTokenCount(text: string, model = 'gpt-4'): Promise<number> {
+    void model;
+    return Promise.resolve(estimateTokenCount(text));
 }

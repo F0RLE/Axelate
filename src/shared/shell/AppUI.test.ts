@@ -1,12 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppUI } from './AppUI';
-import { eventBus } from '../services/EventBus';
+import { EventBus } from '../services/EventBus';
 import type { ModulePlatformService } from '../services/ModulePlatformService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '../types/coreTypes';
 
 describe('AppUI lifecycle', () => {
     let appUI: AppUI | null = null;
+    let testEventBus: EventBus;
+    let uiStateMocks: {
+        removeSelectedModule: ReturnType<typeof vi.fn>;
+        updateState: ReturnType<typeof vi.fn>;
+        setSelectedModule: ReturnType<typeof vi.fn>;
+    };
+    let launchAppMock: ReturnType<typeof vi.fn>;
+    let openModuleSettingsMock: ReturnType<typeof vi.fn>;
+    let stopAiProviderMock: ReturnType<typeof vi.fn>;
+    let getCatalogCategoryMock: ReturnType<typeof vi.fn>;
+    let tracerMock: LoggerService;
     let platformServiceMock: {
         isApiModule: ReturnType<typeof vi.fn>;
         delete: ReturnType<typeof vi.fn>;
@@ -16,54 +28,27 @@ describe('AppUI lifecycle', () => {
     };
 
     beforeEach(() => {
+        testEventBus = new EventBus();
         document.body.innerHTML = '';
-        (
-            globalThis as unknown as {
-                uiState: {
-                    removeSelectedModule: ReturnType<typeof vi.fn>;
-                    updateState: ReturnType<typeof vi.fn>;
-                    setSelectedModule: ReturnType<typeof vi.fn>;
-                };
-                t: (key: string, fallback: string) => string;
-                getCatalogCategory: ReturnType<typeof vi.fn>;
-                launchApp: ReturnType<typeof vi.fn>;
-                closeAppSelection: ReturnType<typeof vi.fn>;
-                showToast: ReturnType<typeof vi.fn>;
-                openModuleSettings: ReturnType<typeof vi.fn>;
-                aiBridge: { stopProvider: ReturnType<typeof vi.fn> };
-            }
-        ).uiState = {
+        uiStateMocks = {
             removeSelectedModule: vi.fn(),
             updateState: vi.fn(),
             setSelectedModule: vi.fn(),
         };
+        launchAppMock = vi.fn().mockResolvedValue(undefined);
+        openModuleSettingsMock = vi.fn();
+        stopAiProviderMock = vi.fn();
+        getCatalogCategoryMock = vi.fn().mockReturnValue([]);
+        tracerMock = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
         (globalThis as unknown as { t: (key: string, fallback: string) => string }).t = (
             _key,
             fallback,
         ) => fallback;
-        (
-            globalThis as unknown as {
-                getCatalogCategory: ReturnType<typeof vi.fn>;
-                launchApp: ReturnType<typeof vi.fn>;
-                closeAppSelection: ReturnType<typeof vi.fn>;
-                showToast: ReturnType<typeof vi.fn>;
-                openModuleSettings: ReturnType<typeof vi.fn>;
-                aiBridge: { stopProvider: ReturnType<typeof vi.fn> };
-            }
-        ).getCatalogCategory = vi.fn().mockReturnValue([]);
-        (globalThis as unknown as { launchApp: ReturnType<typeof vi.fn> }).launchApp = vi
-            .fn()
-            .mockResolvedValue(undefined);
-        (
-            globalThis as unknown as { closeAppSelection: ReturnType<typeof vi.fn> }
-        ).closeAppSelection = vi.fn();
-        (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast = vi.fn();
-        (
-            globalThis as unknown as { openModuleSettings: ReturnType<typeof vi.fn> }
-        ).openModuleSettings = vi.fn();
-        (
-            globalThis as unknown as { aiBridge: { stopProvider: ReturnType<typeof vi.fn> } }
-        ).aiBridge = { stopProvider: vi.fn() };
     });
 
     afterEach(() => {
@@ -89,11 +74,41 @@ describe('AppUI lifecycle', () => {
         return new AppUI(
             platformServiceMock as unknown as ModulePlatformService,
             navigation,
-            (category: string) => {
-                const globals = globalThis as unknown as {
-                    getCatalogCategory: ReturnType<typeof vi.fn>;
-                };
-                return (globals.getCatalogCategory as unknown as (key: string) => IApp[])(category);
+            testEventBus,
+            (category: string) =>
+                (getCatalogCategoryMock as unknown as (value: string) => IApp[])(category),
+            (_key: string, fallback: string) => fallback,
+            {
+                tracer: tracerMock,
+                uiState: {
+                    removeSelectedModule: (category: string) => {
+                        (uiStateMocks.removeSelectedModule as (value: string) => void)(category);
+                    },
+                    setSelectedModule: (category: string, moduleData: Partial<IApp>) => {
+                        (
+                            uiStateMocks.setSelectedModule as (
+                                value: string,
+                                data: Partial<IApp>,
+                            ) => void
+                        )(category, moduleData);
+                    },
+                    updateState: (updates: { last_active_provider: string | null }) => {
+                        (
+                            uiStateMocks.updateState as (
+                                value: { last_active_provider: string | null },
+                            ) => void
+                        )(updates);
+                    },
+                },
+                launchApp: async (moduleId: string) => {
+                    await (launchAppMock as (id: string) => Promise<void>)(moduleId);
+                },
+                openModuleSettings: (app: IApp) => {
+                    (openModuleSettingsMock as (targetApp: IApp) => void)(app);
+                },
+                stopAiProvider: () => {
+                    (stopAiProviderMock as () => void)();
+                },
             },
         );
     }
@@ -129,14 +144,14 @@ describe('AppUI lifecycle', () => {
     }
 
     it('should unsubscribe from page:change on destroy', () => {
-        const initialCount = eventBus.listenerCount('page:change');
+        const initialCount = testEventBus.listenerCount('page:change');
         appUI = createAppUI();
 
-        expect(eventBus.listenerCount('page:change')).toBe(initialCount + 1);
+        expect(testEventBus.listenerCount('page:change')).toBe(initialCount + 1);
 
         appUI.destroy();
 
-        expect(eventBus.listenerCount('page:change')).toBe(initialCount);
+        expect(testEventBus.listenerCount('page:change')).toBe(initialCount);
     });
 
     it('should remove language-changed listener on destroy', () => {
@@ -244,6 +259,14 @@ describe('AppUI lifecycle', () => {
         expect(document.getElementById('action-feedback')?.classList.contains('error')).toBe(true);
     });
 
+    it('should render a visible action feedback icon', () => {
+        appUI = createAppUI();
+
+        appUI.showActionFeedback('success');
+
+        expect(document.querySelector('#action-feedback .action-feedback-icon')?.textContent).toBe('✓');
+    });
+
     it('should delegate modal opening', () => {
         appUI = createAppUI();
         const modalOpenSpy = vi.spyOn(
@@ -288,12 +311,8 @@ describe('AppUI lifecycle', () => {
 
         appUI.clearModuleCard('ai_image');
         expect(card.classList.contains('empty')).toBe(true);
-        const mockedGlobals = globalThis as unknown as {
-            aiBridge: { stopProvider: ReturnType<typeof vi.fn> };
-            uiState: { updateState: ReturnType<typeof vi.fn> };
-        };
-        expect(mockedGlobals.aiBridge.stopProvider).toHaveBeenCalled();
-        expect(mockedGlobals.uiState.updateState).toHaveBeenCalledWith({
+        expect(stopAiProviderMock).toHaveBeenCalled();
+        expect(uiStateMocks.updateState).toHaveBeenCalledWith({
             last_active_provider: null,
         });
         expect(platformServiceMock.stop).toHaveBeenCalledWith(textApp);
@@ -336,11 +355,7 @@ describe('AppUI lifecycle', () => {
         const oldApp = { id: 'svc-old', name: 'Old Service', installed: true } as IApp;
         const newApp = { id: 'svc-new', name: 'New Service', installed: true } as IApp;
 
-        (
-            globalThis as unknown as {
-                getCatalogCategory: ReturnType<typeof vi.fn>;
-            }
-        ).getCatalogCategory.mockImplementation((category: string) =>
+        getCatalogCategoryMock.mockImplementation((category: string) =>
             category === 'services' ? [oldApp, newApp] : [],
         );
 
@@ -366,11 +381,7 @@ describe('AppUI lifecycle', () => {
         const oldApp = { id: 'svc-old', name: 'Old Service', installed: true } as IApp;
         const newApp = { id: 'svc-new', name: 'New Service', installed: true } as IApp;
 
-        (
-            globalThis as unknown as {
-                getCatalogCategory: ReturnType<typeof vi.fn>;
-            }
-        ).getCatalogCategory.mockImplementation((category: string) =>
+        getCatalogCategoryMock.mockImplementation((category: string) =>
             category === 'services' ? [oldApp, newApp] : [],
         );
 
@@ -471,10 +482,7 @@ describe('AppUI lifecycle', () => {
             }
         )._performSelectionAction('services', serviceApp);
 
-        const mockedGlobals = globalThis as unknown as {
-            uiState: { removeSelectedModule: ReturnType<typeof vi.fn> };
-        };
-        expect(mockedGlobals.uiState.removeSelectedModule).toHaveBeenCalledWith('services');
+        expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('services');
     });
 
     it('should track the shown AI capability on the shared dashboard card', () => {
@@ -528,12 +536,8 @@ describe('AppUI lifecycle', () => {
 
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenCalledWith('svc');
-        const mockedGlobals = globalThis as unknown as {
-            uiState: { setSelectedModule: ReturnType<typeof vi.fn> };
-            launchApp: ReturnType<typeof vi.fn>;
-        };
-        expect(mockedGlobals.uiState.setSelectedModule).toHaveBeenCalled();
-        expect(mockedGlobals.launchApp).toHaveBeenCalledWith('svc');
+        expect(uiStateMocks.setSelectedModule).toHaveBeenCalled();
+        expect(launchAppMock).toHaveBeenCalledWith('svc');
 
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenLastCalledWith(null);
@@ -570,8 +574,6 @@ describe('AppUI lifecycle', () => {
         expect(refreshSpy).toHaveBeenCalled();
 
         privateAppUI._onModalDownloadError(btn, new Error('broken'));
-        const mockedGlobals = globalThis as unknown as { showToast: ReturnType<typeof vi.fn> };
-        expect(mockedGlobals.showToast).not.toHaveBeenCalled();
     });
 
     it('should show a placeholder toast instead of selecting or downloading coming-soon modules', async () => {
@@ -596,12 +598,9 @@ describe('AppUI lifecycle', () => {
 
         await privateAppUI._handleAppCardClick(event, app, 'ai_image');
 
-        const mockedGlobals = globalThis as unknown as {
-            launchApp: ReturnType<typeof vi.fn>;
-        };
         expect(toastSpy).toHaveBeenCalled();
         expect(platformServiceMock.download).not.toHaveBeenCalled();
-        expect(mockedGlobals.launchApp).not.toHaveBeenCalled();
+        expect(launchAppMock).not.toHaveBeenCalled();
     });
 
     it('should stop stale launched module after quick reselection', async () => {
@@ -612,10 +611,10 @@ describe('AppUI lifecycle', () => {
             releaseFirstLaunch = resolve;
         });
         const launchApp = vi
-            .fn<(...args: [string]) => Promise<void>>()
+            .fn<(moduleId: string) => Promise<void>>()
             .mockImplementationOnce(async () => firstLaunchPromise)
             .mockResolvedValueOnce(undefined);
-        (globalThis as unknown as { launchApp: typeof launchApp }).launchApp = launchApp;
+        launchAppMock = launchApp;
 
         const privateAppUI = appUI as unknown as {
             _performSelectionAction: (category: string, app: IApp) => void;
@@ -669,11 +668,7 @@ describe('AppUI lifecycle', () => {
         const reopenSpy = vi.spyOn(appUI, 'openAppSelection');
 
         platformServiceMock.delete.mockResolvedValue(undefined);
-        (
-            globalThis as unknown as {
-                getCatalogCategory: ReturnType<typeof vi.fn>;
-            }
-        ).getCatalogCategory.mockReturnValue([{ id: 'svc', name: 'Service', installed: false }]);
+        getCatalogCategoryMock.mockReturnValue([{ id: 'svc', name: 'Service', installed: false }]);
 
         await privateAppUI._handleDeleteModule(
             { id: 'svc', name: 'Service', installed: true } as IApp,
@@ -696,11 +691,7 @@ describe('AppUI lifecycle', () => {
 
         platformServiceMock.delete.mockResolvedValue(undefined);
         const refreshedApps = [{ id: 'svc', name: 'Service', installed: false }] as IApp[];
-        (
-            globalThis as unknown as {
-                getCatalogCategory: ReturnType<typeof vi.fn>;
-            }
-        ).getCatalogCategory.mockReturnValue(refreshedApps);
+        getCatalogCategoryMock.mockReturnValue(refreshedApps);
 
         await privateAppUI._handleDeleteModule(
             { id: 'svc', name: 'Service', installed: true } as IApp,
@@ -736,11 +727,7 @@ describe('AppUI lifecycle', () => {
 
     it('should resolve app by id from injected catalog resolver', () => {
         appUI = createAppUI();
-        (
-            globalThis as unknown as {
-                getCatalogCategory: ReturnType<typeof vi.fn>;
-            }
-        ).getCatalogCategory.mockImplementation((category: string) =>
+        getCatalogCategoryMock.mockImplementation((category: string) =>
             category === 'services' ? [{ id: 'svc', name: 'Service', installed: true }] : [],
         );
 

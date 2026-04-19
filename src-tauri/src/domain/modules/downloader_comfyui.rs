@@ -3,7 +3,7 @@ use crate::utils::paths::TEMP_DIR;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub(crate) fn prepare_comfyui_module_files(
+pub(super) fn prepare_comfyui_module_files(
     extraction_path: &Path,
     release_tag: Option<&str>,
 ) -> Result<(), AppError> {
@@ -11,45 +11,13 @@ pub(crate) fn prepare_comfyui_module_files(
     fs::create_dir_all(&scripts_dir)
         .map_err(|e| AppError::Io(format!("Failed to create ComfyUI scripts directory: {e}")))?;
 
-    let manifest = serde_json::json!({
-        "api_version": "1",
-        "id": "comfyui",
-        "name": "ComfyUI",
-        "version": release_tag.unwrap_or("unknown"),
-        "description": "Node-based image workflow engine for maximum quality and control.",
-        "dependencies": [],
-        "lifecycle": {
-            "start": {
-                "program": "powershell",
-                "args": [
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    "scripts/start.ps1"
-                ]
-            },
-            "stop": {
-                "program": "powershell",
-                "args": [
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    "scripts/stop.ps1"
-                ]
-            }
-        }
-    });
-    let manifest_path = extraction_path.join("module.json");
-    let manifest_file = fs::File::create(&manifest_path).map_err(|e| {
+    let manifest = comfyui_manifest(release_tag);
+    let manifest_path = extraction_path.join("axelate-module.toml");
+    fs::write(&manifest_path, manifest).map_err(|e| {
         AppError::Io(format!(
-            "Failed to create ComfyUI module manifest at {}: {e}",
+            "Failed to write ComfyUI module manifest at {}: {e}",
             manifest_path.display()
         ))
-    })?;
-    serde_json::to_writer_pretty(manifest_file, &manifest).map_err(|e| {
-        AppError::Serialization(format!("Failed to serialize ComfyUI module manifest: {e}"))
     })?;
 
     let start_script_path = scripts_dir.join("start.ps1");
@@ -69,6 +37,27 @@ pub(crate) fn prepare_comfyui_module_files(
     })?;
 
     Ok(())
+}
+
+fn comfyui_manifest(release_tag: Option<&str>) -> String {
+    format!(
+        r#"api_version = "1"
+id = "comfyui"
+name = "ComfyUI"
+version = "{version}"
+description = "Node-based image workflow engine for maximum quality and control."
+dependencies = []
+
+[lifecycle.start]
+program = "powershell"
+args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/start.ps1"]
+
+[lifecycle.stop]
+program = "powershell"
+args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/stop.ps1"]
+"#,
+        version = release_tag.unwrap_or("unknown")
+    )
 }
 
 fn comfyui_start_script() -> String {
@@ -182,7 +171,7 @@ try {
     .to_string()
 }
 
-pub(crate) fn build_temp_archive_path(
+pub(super) fn build_temp_archive_path(
     module_id: &str,
     asset_index: usize,
     asset_name: &str,
@@ -199,4 +188,25 @@ pub(crate) fn build_temp_archive_path(
         .collect();
 
     TEMP_DIR.join(format!("{module_id}_{asset_index}_{safe_name}"))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::prepare_comfyui_module_files;
+
+    #[test]
+    fn writes_toml_manifest_for_comfyui_module() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+
+        prepare_comfyui_module_files(temp_dir.path(), Some("1.2.3")).expect("prepare files");
+
+        let manifest_path = temp_dir.path().join("axelate-module.toml");
+        let manifest = std::fs::read_to_string(manifest_path).expect("read manifest");
+
+        assert!(manifest.contains("id = \"comfyui\""));
+        assert!(manifest.contains("version = \"1.2.3\""));
+        assert!(manifest.contains("[lifecycle.start]"));
+    }
 }

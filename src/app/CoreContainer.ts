@@ -1,8 +1,6 @@
 /**
  * @module app/CoreContainer
- * @description Centralized DI container. Replaces globalThis pollution.
- * All services register here. Legacy globalThis accessors remain as thin proxies
- * that delegate to the container (backward compat during migration).
+ * @description Centralized DI container for app services, UI, and infrastructure.
  */
 
 import type { Core } from './init';
@@ -22,6 +20,7 @@ import type { ConsoleLogService } from '@/features/console/services/ConsoleLogSe
 import type { SettingsService } from '@/features/settings/services/SettingsService';
 import type { ChatController } from '@/features/chat/chat';
 import type { ModulePlatformService } from '@/shared/services/ModulePlatformService';
+import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { AppUI } from '@/shared/shell/AppUI';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { WindowUI } from '@/shared/shell/WindowUI';
@@ -59,6 +58,7 @@ export interface CoreServices {
     consoleLogService: ConsoleLogService;
     settingsService: SettingsService;
     chatController: ChatController;
+    aiBridge: AIBridge;
 }
 
 export interface CoreUI {
@@ -136,7 +136,7 @@ export class CoreContainer {
         this._infra = {} as CoreInfrastructure;
     }
 
-    /** Catalog category resolver — replaces globalThis.getCatalogCategory */
+    /** Shared catalog category resolver for composition root consumers. */
     getCatalogCategory(category: string): IApp[] {
         const services = this._services as Partial<Pick<CoreServices, 'catalog'>>;
         const catalogService = services.catalog;
@@ -160,8 +160,7 @@ export class CoreContainer {
 export const container = new CoreContainer();
 
 /**
- * Typed accessor — replaces getGlobalWin() pattern.
- * Returns container with full type safety.
+ * Typed accessor for the app container.
  */
 export function getContainer(): CoreContainer {
     return container;

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SoundService } from './SoundService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 /**
  * Creates a mock AudioContext and all sub-objects needed by SoundService.
@@ -41,15 +42,21 @@ function createMockCtx() {
 describe('SoundService', () => {
     let mockCtx: ReturnType<typeof createMockCtx>;
     let service: SoundService;
+    let tracer: Pick<LoggerService, 'warn' | 'error' | 'debug'>;
 
     beforeEach(() => {
         // SoundService constructor needs AudioContext on globalThis
         // We provide a stub that returns our mockCtx
         mockCtx = createMockCtx();
+        tracer = {
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        };
         (globalThis as unknown as Record<string, unknown>)['AudioContext'] = function () {
             return mockCtx;
         };
-        service = new SoundService();
+        service = new SoundService(tracer);
         // Ensure _ctx is our mock (belt-and-suspenders)
         (service as unknown as { _ctx: ReturnType<typeof createMockCtx> })._ctx = mockCtx;
     });
@@ -66,7 +73,7 @@ describe('SoundService', () => {
 
     it('should handle missing AudioContext gracefully', () => {
         delete (globalThis as unknown as Record<string, unknown>)['AudioContext'];
-        const s = new SoundService();
+        const s = new SoundService(tracer);
         expect(s.isEnabled()).toBe(true);
         expect(() => s.playHover()).not.toThrow();
         s.destroy();
@@ -204,7 +211,7 @@ describe('SoundService', () => {
             (globalThis as unknown as Record<string, unknown>)['AudioContext'] = function () {
                 throw new Error('Not supported');
             };
-            const s = new SoundService();
+            const s = new SoundService(tracer);
             // Should not throw, ctx is null
             expect(() => s.playHover()).not.toThrow();
             s.destroy();

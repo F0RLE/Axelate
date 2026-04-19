@@ -2,14 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModulePlatformService } from './ModulePlatformService';
 import type { ModuleService } from './ModuleService';
 import type { IApp } from '../types/coreTypes';
-
-// Mock the aiBridge import
-vi.mock('@/features/ai/services/AIBridge', () => ({
-    aiBridge: {
-        stopProvider: vi.fn(),
-        getState: vi.fn(() => ({ activeProviderId: 'test-module' })),
-    },
-}));
+import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 function createMockModuleService(): ModuleService {
     return {
@@ -33,10 +27,17 @@ function createApp(overrides: Partial<IApp> = {}): IApp {
 describe('ModulePlatformService', () => {
     let moduleService: ModuleService;
     let service: ModulePlatformService;
+    let aiBridge: Pick<AIBridge, 'stopProvider' | 'getState'>;
+    let tracer: Pick<LoggerService, 'info'>;
 
     beforeEach(() => {
         moduleService = createMockModuleService();
-        service = new ModulePlatformService(() => moduleService);
+        aiBridge = {
+            stopProvider: vi.fn(),
+            getState: vi.fn(() => ({ activeProviderId: 'test-module', isRunning: true })),
+        };
+        tracer = { info: vi.fn() };
+        service = new ModulePlatformService(() => moduleService, aiBridge as AIBridge, tracer);
         vi.clearAllMocks();
     });
 
@@ -84,7 +85,6 @@ describe('ModulePlatformService', () => {
 
     describe('stop', () => {
         it('should stop API provider for API modules', async () => {
-            const { aiBridge } = await import('@/features/ai/services/AIBridge');
             const app = createApp({ type: 'api' });
             const result = await service.stop(app);
             expect(result).toBe(true);
@@ -92,7 +92,6 @@ describe('ModulePlatformService', () => {
         });
 
         it('should stop API provider when provider metadata is present', async () => {
-            const { aiBridge } = await import('@/features/ai/services/AIBridge');
             const app = createApp({
                 id: 'custom-provider',
                 type: 'local',
@@ -107,10 +106,10 @@ describe('ModulePlatformService', () => {
         });
 
         it('should not stop an inactive API provider', async () => {
-            const { aiBridge } = await import('@/features/ai/services/AIBridge');
             const app = createApp({ id: 'gemini', type: 'api' });
             (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
                 activeProviderId: 'gpt',
+                isRunning: true,
             });
 
             const result = await service.stop(app);

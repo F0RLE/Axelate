@@ -1,42 +1,13 @@
-import type { IApp, IModuleDownloadState, ITauriInstance } from './coreTypes';
-import type { IUIState } from '../services/state/UiStateStore';
-import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
-import type { CatalogService } from '../services/CatalogService';
-import type { errorHandler } from '../services/ErrorHandler';
+import type { ITauriInstance } from './coreTypes';
 
 /**
- * @description Typed signatures for Axelate's global bridge functions.
- * Use these instead of 'Function' or 'any' safely.
+ * Minimal bridge-facing types kept only for modules that still inspect runtime globals.
  */
-
 export type TTranslateFunction = (key: string, defaultValue?: string) => string;
-export type TShowToastFunction = (
-    message: string,
-    type?: 'info' | 'success' | 'warning' | 'error',
-) => void;
-export type TOpenSettingsFunction = (app: IApp) => void;
-export type TStopProviderFunction = () => void;
 
-export interface IGlobalBridge {
-    t?: TTranslateFunction;
-    showToast?: TShowToastFunction;
-    openModuleSettings?: TOpenSettingsFunction;
-    aiBridge?: {
-        stopProvider: TStopProviderFunction;
-        [key: string]: unknown;
-    };
-    moduleDownloadState?: Record<string, IModuleDownloadState>;
+export interface IGlobalRuntime {
     __TAURI__?: ITauriInstance;
     __TAURI_INTERNALS__?: unknown;
-    uiState?: IUIState;
-    errorHandler?: typeof errorHandler;
-    templateLoader?: {
-        load: (id: string) => Promise<string>;
-    };
-    navigationService?: NavigationService;
-    navigate?: (pageId: string) => void;
-    catalogService?: CatalogService;
-    [key: string]: unknown;
 }
 
-export type TGlobalWin = typeof globalThis & IGlobalBridge;
+export type TGlobalWin = typeof globalThis & IGlobalRuntime;

@@ -34,6 +34,11 @@ use tauri::{AppHandle, Manager};
 use tower_http::cors::CorsLayer;
 
 static LOCAL_SERVER_ADDR: std::sync::OnceLock<SocketAddr> = std::sync::OnceLock::new();
+const ALLOWED_LOCAL_ORIGINS: [&str; 3] = [
+    "tauri://localhost",
+    "http://localhost:1420",
+    "http://127.0.0.1:1420",
+];
 
 #[derive(Clone)]
 pub(super) struct AppState {
@@ -46,11 +51,20 @@ pub(super) struct AppState {
     ui_state: UiStateService,
 }
 
+struct SettingsUiLocation {
+    root: PathBuf,
+    entry: PathBuf,
+}
+
+struct SettingsUiAssetPath {
+    target: PathBuf,
+}
+
 /// Returns the current local HTTP server base URL when available.
 pub fn get_local_server_base_url() -> Option<String> {
     LOCAL_SERVER_ADDR
         .get()
-        .map(|address| format!("http://{}", address))
+        .map(|address| format!("http://{address}"))
 }
 
 /// Starts the HTTP API server on port 3000 for local access
@@ -58,77 +72,10 @@ pub fn start_server(
     app: &AppHandle,
     settings_service: crate::infrastructure::config::settings::SettingsService,
 ) {
-    let config_service = std::sync::Arc::clone(
-        app.state::<std::sync::Arc<crate::domain::system::config_service::ConfigService>>()
-            .inner(),
-    );
-
-    let state = AppState {
-        monitor: Arc::clone(app.state::<Arc<SystemMonitorService>>().inner()),
-        config: config_service,
-        settings: settings_service,
-        sessions: Arc::clone(
-            app.state::<Arc<crate::domain::ai::session::ChatSessionManager>>()
-                .inner(),
-        ),
-        engine_manager: Arc::clone(
-            app.state::<Arc<crate::domain::engine::manager::EngineManager>>()
-                .inner(),
-        ),
-        image_generation_state: Arc::clone(
-            app.state::<Arc<crate::domain::ai::ImageGenerationState>>()
-                .inner(),
-        ),
-        ui_state: app.state::<UiStateService>().inner().clone(),
-    };
+    let state = build_app_state(app, settings_service);
 
     tauri::async_runtime::spawn(async move {
-        // ... (CORS logic remains the same)
-        let allowed_origins = [
-            "tauri://localhost",
-            "http://localhost:1420",
-            "http://127.0.0.1:1420",
-        ];
-
-        let mut cors = CorsLayer::new()
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers([HeaderName::from_static("content-type")]);
-
-        for origin in allowed_origins {
-            if let Ok(parsed) = origin.parse::<HeaderValue>() {
-                cors = cors.allow_origin(parsed);
-            }
-        }
-        // Removed the redundant 'cors;' statement here. The 'cors' variable is correctly used below.
-
-        // Build Router
-        let app = Router::new()
-            .route("/api/health", get(health_handler))
-            .route("/api/stats", get(stats_handler))
-            .route("/api/monitoring/stats", get(stats_handler))
-            .route("/api/logs", get(get_logs_handler))
-            .route("/api/logs/clear", post(clear_logs_handler))
-            .route("/api/modules", get(get_modules_handler))
-            .route(
-                "/api/modules/{module_id}/settings-ui",
-                get(module_settings_ui_index_handler),
-            )
-            .route(
-                "/api/modules/{module_id}/settings-ui/{*asset_path}",
-                get(module_settings_ui_asset_handler),
-            )
-            .route("/api/translations", get(translations_handler))
-            .route("/api/gpu/info", get(gpu_info_handler))
-            .route("/api/settings", get(get_settings_handler))
-            .route("/api/settings/save", post(save_setting_handler))
-            .route("/api/config", get(get_config_handler))
-            .route("/api/system/language", get(system_language_handler))
-            .route("/api/ai/chat", post(ui_ai::chat_handler))
-            .route("/api/ai/image", post(ui_ai::image_handler))
-            .route("/api/modules/ai/text", post(module_ai::text_handler))
-            .route("/api/modules/ai/image", post(module_ai::image_handler))
-            .layer(cors)
-            .with_state(state);
+        let app = build_http_router(state);
 
         match bind_local_listener().await {
             Ok(listener) => {
@@ -146,6 +93,77 @@ pub fn start_server(
             }
         }
     });
+}
+
+fn build_app_state(
+    app: &AppHandle,
+    settings_service: crate::infrastructure::config::settings::SettingsService,
+) -> AppState {
+    AppState {
+        monitor: Arc::clone(app.state::<Arc<SystemMonitorService>>().inner()),
+        config: Arc::clone(
+            app.state::<Arc<crate::domain::system::config_service::ConfigService>>()
+                .inner(),
+        ),
+        settings: settings_service,
+        sessions: Arc::clone(
+            app.state::<Arc<crate::domain::ai::session::ChatSessionManager>>()
+                .inner(),
+        ),
+        engine_manager: Arc::clone(
+            app.state::<Arc<crate::domain::engine::manager::EngineManager>>()
+                .inner(),
+        ),
+        image_generation_state: Arc::clone(
+            app.state::<Arc<crate::domain::ai::ImageGenerationState>>()
+                .inner(),
+        ),
+        ui_state: app.state::<UiStateService>().inner().clone(),
+    }
+}
+
+fn build_http_router(state: AppState) -> Router {
+    Router::new()
+        .route("/api/health", get(health_handler))
+        .route("/api/stats", get(stats_handler))
+        .route("/api/monitoring/stats", get(stats_handler))
+        .route("/api/logs", get(get_logs_handler))
+        .route("/api/logs/clear", post(clear_logs_handler))
+        .route("/api/modules", get(get_modules_handler))
+        .route(
+            "/api/modules/{module_id}/settings-ui",
+            get(module_settings_ui_index_handler),
+        )
+        .route(
+            "/api/modules/{module_id}/settings-ui/{*asset_path}",
+            get(module_settings_ui_asset_handler),
+        )
+        .route("/api/translations", get(translations_handler))
+        .route("/api/gpu/info", get(gpu_info_handler))
+        .route("/api/settings", get(get_settings_handler))
+        .route("/api/settings/save", post(save_setting_handler))
+        .route("/api/config", get(get_config_handler))
+        .route("/api/system/language", get(system_language_handler))
+        .route("/api/ai/chat", post(ui_ai::chat_handler))
+        .route("/api/ai/image", post(ui_ai::image_handler))
+        .route("/api/modules/ai/text", post(module_ai::text_handler))
+        .route("/api/modules/ai/image", post(module_ai::image_handler))
+        .layer(build_cors_layer())
+        .with_state(state)
+}
+
+fn build_cors_layer() -> CorsLayer {
+    let mut cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([HeaderName::from_static("content-type")]);
+
+    for origin in ALLOWED_LOCAL_ORIGINS {
+        if let Ok(parsed) = origin.parse::<HeaderValue>() {
+            cors = cors.allow_origin(parsed);
+        }
+    }
+
+    cors
 }
 
 async fn bind_local_listener() -> std::io::Result<tokio::net::TcpListener> {
@@ -385,19 +403,14 @@ async fn serve_module_settings_ui_asset(
         ))
     })?;
 
-    let (settings_root, entry_file) = resolve_settings_ui_root(&module_root, &settings_ui).await?;
-    let target = match asset_path {
-        Some(path) if !path.trim().is_empty() => {
-            resolve_requested_settings_asset(&settings_root, &path).await?
-        }
-        _ => entry_file,
-    };
+    let settings_location = resolve_settings_ui_location(&module_root, &settings_ui).await?;
+    let asset = resolve_settings_ui_asset_path(&settings_location, asset_path.as_deref()).await?;
 
-    let body = tokio::fs::read(&target)
+    let body = tokio::fs::read(&asset.target)
         .await
         .map_err(|error| AppError::Io(error.to_string()))?;
 
-    let mime = guess_content_type(&target);
+    let mime = guess_content_type(&asset.target);
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, mime)
@@ -409,10 +422,19 @@ async fn serve_module_settings_ui_asset(
         })
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 async fn resolve_settings_ui_root(
     module_root: &Path,
     settings_ui: &str,
 ) -> Result<(PathBuf, PathBuf), AppError> {
+    let location = resolve_settings_ui_location(module_root, settings_ui).await?;
+    Ok((location.root, location.entry))
+}
+
+async fn resolve_settings_ui_location(
+    module_root: &Path,
+    settings_ui: &str,
+) -> Result<SettingsUiLocation, AppError> {
     let canonical_module_root = tokio::fs::canonicalize(module_root)
         .await
         .map_err(|error| AppError::NotFound(error.to_string()))?;
@@ -455,13 +477,30 @@ async fn resolve_settings_ui_root(
         .await
         .map_err(|error| AppError::NotFound(error.to_string()))?;
 
-    Ok((canonical_root, entry))
+    Ok(SettingsUiLocation {
+        root: canonical_root,
+        entry,
+    })
 }
 
-async fn resolve_requested_settings_asset(
+async fn resolve_settings_ui_asset_path(
+    settings_location: &SettingsUiLocation,
+    asset_path: Option<&str>,
+) -> Result<SettingsUiAssetPath, AppError> {
+    match asset_path {
+        Some(path) if !path.trim().is_empty() => {
+            resolve_settings_ui_asset_inside_root(&settings_location.root, path).await
+        }
+        _ => Ok(SettingsUiAssetPath {
+            target: settings_location.entry.clone(),
+        }),
+    }
+}
+
+async fn resolve_settings_ui_asset_inside_root(
     settings_root: &Path,
     asset_path: &str,
-) -> Result<PathBuf, AppError> {
+) -> Result<SettingsUiAssetPath, AppError> {
     let relative_path = validate_relative_module_asset(asset_path)?;
     let resolved = tokio::fs::canonicalize(settings_root.join(relative_path))
         .await
@@ -473,7 +512,7 @@ async fn resolve_requested_settings_asset(
         ));
     }
 
-    Ok(resolved)
+    Ok(SettingsUiAssetPath { target: resolved })
 }
 
 fn validate_relative_module_asset(raw_path: &str) -> Result<PathBuf, AppError> {
@@ -514,11 +553,11 @@ fn guess_content_type(path: &Path) -> &'static str {
     {
         Some("html") => "text/html; charset=utf-8",
         Some("css") => "text/css; charset=utf-8",
-        Some("js") | Some("mjs") => "application/javascript; charset=utf-8",
+        Some("js" | "mjs") => "application/javascript; charset=utf-8",
         Some("json") => "application/json; charset=utf-8",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("jpg" | "jpeg") => "image/jpeg",
         Some("gif") => "image/gif",
         Some("webp") => "image/webp",
         Some("ico") => "image/x-icon",

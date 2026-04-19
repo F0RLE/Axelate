@@ -4,9 +4,10 @@
  */
 
 import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAppSettingsUIContext } from './SettingsContext';
 import { APP_PAGES } from '@/shared/config/AppPages';
+import { initGeneralSettingsToggleGroup } from './GeneralSettingsToggleGroup';
 
 interface IToggleItem {
     id: string;
@@ -24,10 +25,20 @@ interface IToggleGroupConfig {
     onToggle: (id: string, enabled: boolean) => void;
 }
 
+interface IGeneralSettingsRendererRuntime {
+    requestAnimationFrame(callback: FrameRequestCallback): number;
+    cancelAnimationFrame(handle: number): void;
+    setTimeout(callback: () => void, delayMs: number): ReturnType<typeof setTimeout>;
+    clearTimeout(handle: ReturnType<typeof setTimeout>): void;
+}
+
 export class GeneralSettingsRenderer {
     private readonly _cleanupFns: Array<() => void> = [];
     private readonly _observers: ResizeObserver[] = [];
     private readonly _resizeFrames = new Map<string, number>();
+    private readonly _monitorElements = new Map<string, HTMLElement>();
+    private _monitorPanel: HTMLElement | null = null;
+    private _monitorDivider: HTMLElement | null = null;
 
     private static readonly _monitorItems: IToggleItem[] = [
         { id: 'cpu', label: 'CPU', icon: '#icon-cpu' },
@@ -43,13 +54,22 @@ export class GeneralSettingsRenderer {
         lower: ['disk', 'network'],
     };
 
-    constructor(private readonly _uiSettings: UISettingsService) {}
+    constructor(
+        private readonly _uiSettings: UISettingsService,
+        private readonly _tracer: LoggerService,
+        private readonly _runtime: IGeneralSettingsRendererRuntime = {
+            requestAnimationFrame: (callback) => globalThis.requestAnimationFrame(callback),
+            cancelAnimationFrame: (handle) => globalThis.cancelAnimationFrame(handle),
+            setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+            clearTimeout: (handle) => globalThis.clearTimeout(handle),
+        },
+    ) {}
 
     /**
      * Initializes the general settings renderer.
      */
     public init(context: IAppSettingsUIContext): void {
-        tracer.info('[GeneralSettingsRenderer] Initializing...');
+        this._tracer.info('[GeneralSettingsRenderer] Initializing...');
         this._initTaskbarToggles(context);
         this._initMonitorToggles(context);
     }
@@ -62,7 +82,7 @@ export class GeneralSettingsRenderer {
             observer.disconnect();
         });
         this._resizeFrames.forEach((frameId) => {
-            globalThis.cancelAnimationFrame(frameId);
+            this._runtime.cancelAnimationFrame(frameId);
         });
         this._resizeFrames.clear();
 
@@ -74,6 +94,9 @@ export class GeneralSettingsRenderer {
         if (monitors !== null) {
             delete monitors.dataset['initialized'];
         }
+        this._monitorElements.clear();
+        this._monitorPanel = null;
+        this._monitorDivider = null;
     }
 
     /**
@@ -82,16 +105,16 @@ export class GeneralSettingsRenderer {
     private _initTaskbarToggles(context: IAppSettingsUIContext): void {
         const container = document.getElementById('taskbar-toggles');
         if (!container) {
-            tracer.warn('[GeneralSettingsRenderer] #taskbar-toggles not found');
+            this._tracer.warn('[GeneralSettingsRenderer] #taskbar-toggles not found');
             return;
         }
         if (container.dataset['initialized'] === 'true') {
-            tracer.debug('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
+            this._tracer.debug('[GeneralSettingsRenderer] #taskbar-toggles already initialized');
             return;
         }
 
         container.dataset['initialized'] = 'true';
-        tracer.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
+        this._tracer.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
 
         const hiddenItems = this._uiSettings.getHiddenNavItems();
         const navItems = APP_PAGES.filter((page) => page.inSettings === true).map((page) => ({
@@ -160,16 +183,16 @@ export class GeneralSettingsRenderer {
     private _initMonitorToggles(context: IAppSettingsUIContext): void {
         const container = document.getElementById('monitor-toggles');
         if (!container) {
-            tracer.warn('[GeneralSettingsRenderer] #monitor-toggles not found');
+            this._tracer.warn('[GeneralSettingsRenderer] #monitor-toggles not found');
             return;
         }
         if (container.dataset['initialized'] === 'true') {
-            tracer.debug('[GeneralSettingsRenderer] #monitor-toggles already initialized');
+            this._tracer.debug('[GeneralSettingsRenderer] #monitor-toggles already initialized');
             return;
         }
 
         container.dataset['initialized'] = 'true';
-        tracer.info('[GeneralSettingsRenderer] Initializing monitor toggles');
+        this._tracer.info('[GeneralSettingsRenderer] Initializing monitor toggles');
 
         const hiddenMonitors = this._uiSettings.getHiddenMonitors();
 
@@ -189,16 +212,15 @@ export class GeneralSettingsRenderer {
         );
 
         hiddenMonitors.forEach((id) => {
-            const element = document.querySelector(
-                `#system-monitor .sysmon-stat[data-monitor-id="${id}"]`,
-            );
+            const element = this._getMonitorElement(id);
             if (element instanceof HTMLElement) {
                 element.classList.add('hidden');
             }
         });
 
-        this._updateMonitorPanelVisibility(false);
-        this._updateMonitorDivider(false);
+        this._cacheMonitorReferences();
+        this._updateMonitorPanelVisibility(hiddenMonitors, false);
+        this._updateMonitorDivider(hiddenMonitors, false);
         this._observeToggleGrid('monitor-toggles');
     }
 
@@ -207,26 +229,24 @@ export class GeneralSettingsRenderer {
      */
     public toggleMonitorItem(id: string, enabled: boolean): void {
         const hidden = this._toggleHiddenItem(this._uiSettings.getHiddenMonitors(), id, enabled);
-        const element = document.querySelector(`#system-monitor .sysmon-stat[data-monitor-id="${id}"]`);
+        const element = this._getMonitorElement(id);
 
         if (enabled) {
-            this._updateMonitorPanelVisibility(true);
-            this._updateMonitorDivider(true);
+            this._updateMonitorPanelVisibility(hidden, true);
+            this._updateMonitorDivider(hidden, true);
             if (element instanceof HTMLElement) {
                 this._showElement(element, 'hiding');
             }
         } else if (element instanceof HTMLElement) {
             this._hideElement(element, 'hiding', () => {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        this._updateMonitorPanelVisibility(true);
-                        this._updateMonitorDivider(true);
-                    });
+                this._runtime.requestAnimationFrame(() => {
+                    this._updateMonitorPanelVisibility(hidden, true);
+                    this._updateMonitorDivider(hidden, true);
                 });
             });
         } else {
-            this._updateMonitorPanelVisibility(true);
-            this._updateMonitorDivider(true);
+            this._updateMonitorPanelVisibility(hidden, true);
+            this._updateMonitorDivider(hidden, true);
         }
 
         this._uiSettings.setHiddenMonitors(hidden);
@@ -235,11 +255,13 @@ export class GeneralSettingsRenderer {
     /**
      * Updates the main monitor panel visibility (hides if all items are hidden).
      */
-    private _updateMonitorPanelVisibility(_animate: boolean = true): void {
-        const monitorPanel = document.getElementById('system-monitor');
+    private _updateMonitorPanelVisibility(
+        hiddenMonitors: string[],
+        _animate: boolean = true,
+    ): void {
+        const monitorPanel = this._monitorPanel;
         if (!monitorPanel) return;
 
-        const hiddenMonitors = this._uiSettings.getHiddenMonitors();
         const allHidden = hiddenMonitors.length === GeneralSettingsRenderer._monitorItems.length;
 
         if (allHidden) {
@@ -252,11 +274,9 @@ export class GeneralSettingsRenderer {
     /**
      * Updates the divider visibility in the monitor panel.
      */
-    private _updateMonitorDivider(animate: boolean = true): void {
-        const divider = document.querySelector('.sysmon-divider');
+    private _updateMonitorDivider(hiddenMonitors: string[], animate: boolean = true): void {
+        const divider = this._monitorDivider;
         if (!(divider instanceof HTMLElement)) return;
-
-        const hiddenMonitors = this._uiSettings.getHiddenMonitors();
         const allAboveHidden = GeneralSettingsRenderer._monitorGroups.upper.every((id) =>
             hiddenMonitors.includes(id),
         );
@@ -283,12 +303,8 @@ export class GeneralSettingsRenderer {
         element.classList.remove('hidden');
         this._syncHiddenAccessibility(element, true);
 
-        element.getBoundingClientRect();
-
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                element.classList.remove(transitionClass);
-            });
+        this._runtime.requestAnimationFrame(() => {
+            element.classList.remove(transitionClass);
         });
     }
 
@@ -313,18 +329,18 @@ export class GeneralSettingsRenderer {
                 return;
             }
             element.removeEventListener('transitionend', handleTransitionEnd);
-            globalThis.clearTimeout(fallbackTimer);
+            this._runtime.clearTimeout(fallbackTimer);
             finalize();
         };
 
-        const fallbackTimer = globalThis.setTimeout(() => {
+        const fallbackTimer = this._runtime.setTimeout(() => {
             element.removeEventListener('transitionend', handleTransitionEnd);
             finalize();
         }, 360);
 
         element.addEventListener('transitionend', handleTransitionEnd, { once: true });
         this._cleanupFns.push(() => {
-            globalThis.clearTimeout(fallbackTimer);
+            this._runtime.clearTimeout(fallbackTimer);
             element.removeEventListener('transitionend', handleTransitionEnd);
         });
         element.classList.add(transitionClass);
@@ -357,12 +373,12 @@ export class GeneralSettingsRenderer {
                 const width = entry.contentRect.width;
                 const pendingFrame = this._resizeFrames.get(id);
                 if (pendingFrame !== undefined) {
-                    globalThis.cancelAnimationFrame(pendingFrame);
+                    this._runtime.cancelAnimationFrame(pendingFrame);
                 }
 
                 const nextCompact = width < 450;
                 const nextSuperCompact = width < 300;
-                const frameId = globalThis.requestAnimationFrame(() => {
+                const frameId = this._runtime.requestAnimationFrame(() => {
                     this._resizeFrames.delete(id);
                     element.classList.toggle('compact', nextCompact);
                     element.classList.toggle('super-compact', nextSuperCompact);
@@ -375,89 +391,11 @@ export class GeneralSettingsRenderer {
         this._observers.push(observer);
     }
 
-    private _initToggleGroup(
-        config: IToggleGroupConfig,
-        translate: IAppSettingsUIContext['t'],
-    ): void {
-        const container = document.getElementById(config.containerId);
-        if (!(container instanceof HTMLElement)) {
-            return;
+    private _initToggleGroup(config: IToggleGroupConfig, translate: IAppSettingsUIContext['t']): void {
+        const cleanup = initGeneralSettingsToggleGroup(config, translate, this._tracer);
+        if (cleanup !== null) {
+            this._cleanupFns.push(cleanup);
         }
-
-        const template = document.getElementById(config.templateId) as HTMLTemplateElement | null;
-        if (template === null) {
-            tracer.error(`[GeneralSettingsRenderer] template #${config.templateId} not found`);
-            return;
-        }
-
-        const fragment = document.createDocumentFragment();
-        config.items.forEach((item) => {
-            fragment.appendChild(
-                this._createToggleItem(
-                    template,
-                    item,
-                    config.hiddenItems,
-                    config.dataKey,
-                    translate,
-                    config.getLabelKey,
-                ),
-            );
-        });
-
-        container.innerHTML = '';
-        container.appendChild(fragment);
-
-        const handleClick = (event: Event) => {
-            const target = event.target;
-            if (!(target instanceof Element)) return;
-
-            const button = target.closest('.monitor-toggle-btn');
-            if (!(button instanceof HTMLElement)) return;
-
-            const itemId = button.dataset[config.dataKey];
-            if (itemId === undefined || itemId === '') return;
-
-            button.classList.toggle('active');
-            config.onToggle(itemId, button.classList.contains('active'));
-        };
-
-        container.addEventListener('click', handleClick);
-        this._cleanupFns.push(() => {
-            container.removeEventListener('click', handleClick);
-        });
-    }
-
-    private _createToggleItem(
-        template: HTMLTemplateElement,
-        item: IToggleItem,
-        hiddenItems: string[],
-        dataKey: IToggleGroupConfig['dataKey'],
-        translate: IAppSettingsUIContext['t'],
-        getLabelKey: IToggleGroupConfig['getLabelKey'],
-    ): DocumentFragment {
-        const labelKey = getLabelKey(item);
-        const clone = template.content.cloneNode(true) as DocumentFragment;
-
-        const button = clone.querySelector('.monitor-toggle-btn');
-        if (button instanceof HTMLElement) {
-            if (hiddenItems.includes(item.id)) {
-                button.classList.remove('active');
-            }
-            button.dataset[dataKey] = item.id;
-        }
-
-        const useElement = clone.querySelector('use');
-        if (useElement !== null) {
-            useElement.setAttribute('href', item.icon);
-        }
-
-        const labelElement = clone.querySelector('.toggle-label');
-        if (labelElement instanceof HTMLElement) {
-            labelElement.dataset['i18n'] = labelKey;
-            labelElement.textContent = translate(labelKey, item.label);
-        }
-
-        return clone;
     }
 
     private _toggleHiddenItem(items: string[], id: string, enabled: boolean): string[] {
@@ -470,5 +408,38 @@ export class GeneralSettingsRenderer {
         }
 
         return [...items, id];
+    }
+
+    private _cacheMonitorReferences(): void {
+        this._monitorPanel = document.getElementById('system-monitor');
+        this._monitorDivider =
+            document.querySelector<HTMLElement>('.sysmon-divider') ?? this._monitorDivider;
+
+        this._monitorElements.clear();
+        document
+            .querySelectorAll<HTMLElement>('#system-monitor .sysmon-stat[data-monitor-id]')
+            .forEach((element) => {
+                const monitorId = element.dataset['monitorId'];
+                if (monitorId !== undefined && monitorId !== '') {
+                    this._monitorElements.set(monitorId, element);
+                }
+            });
+    }
+
+    private _getMonitorElement(id: string): HTMLElement | null {
+        const cached = this._monitorElements.get(id);
+        if (cached instanceof HTMLElement) {
+            return cached;
+        }
+
+        const element = document.querySelector<HTMLElement>(
+            `#system-monitor .sysmon-stat[data-monitor-id="${id}"]`,
+        );
+        if (element instanceof HTMLElement) {
+            this._monitorElements.set(id, element);
+            return element;
+        }
+
+        return null;
     }
 }

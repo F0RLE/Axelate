@@ -73,11 +73,31 @@ describe('DownloadUI', () => {
     // ---------------------------------------------------------- destroy
     describe('destroy', () => {
         it('should remove event listener', () => {
-            ui.init(); // Sets up the listener
-            const spy = vi.spyOn(globalThis, 'removeEventListener');
+            const removeEventListener = vi.fn();
+            const setTimeoutMock = vi.fn((callback: () => void, delay?: number) =>
+                globalThis.setTimeout(callback, delay),
+            ) as unknown as typeof globalThis.setTimeout;
+            const clearTimeoutMock = vi.fn((handle?: ReturnType<typeof setTimeout>) => {
+                if (handle !== undefined) {
+                    globalThis.clearTimeout(handle);
+                }
+            }) as unknown as typeof globalThis.clearTimeout;
+            ui = new DownloadUI(i18nService, {
+                addEventListener: vi.fn(),
+                removeEventListener,
+                setTimeout: setTimeoutMock,
+                clearTimeout: clearTimeoutMock,
+            });
+            ui.init();
             ui.destroy();
-            expect(spy).toHaveBeenCalledWith('download-progress-update', expect.any(Function));
-            expect(spy).toHaveBeenCalledWith('language-changed', expect.any(Function));
+            expect(removeEventListener).toHaveBeenCalledWith(
+                'download-progress-update',
+                expect.any(Function),
+            );
+            expect(removeEventListener).toHaveBeenCalledWith(
+                'language-changed',
+                expect.any(Function),
+            );
         });
 
         it('should be safe to call without init', () => {
@@ -326,12 +346,12 @@ describe('DownloadUI', () => {
         });
     });
 
-    // ---------------------------------------------------------- startDownloadsPolling null element guards
-    describe('startDownloadsPolling without mainCard/emptyText', () => {
+    // ---------------------------------------------------------- bindDownloadProgressEvents null element guards
+    describe('bindDownloadProgressEvents without mainCard/emptyText', () => {
         it.each([
             ['mainCard', 'downloads-main-card'],
             ['emptyText', 'downloads-empty-text'],
-        ])('should handle missing %s in startDownloadsPolling init path', (_, id) => {
+        ])('should handle missing %s in bindDownloadProgressEvents init path', (_, id) => {
             document.getElementById(id)?.remove();
             ui.init();
         });
@@ -463,8 +483,8 @@ describe('DownloadUI', () => {
         );
     });
 
-    // ---------------------------------------------------------- startDownloadsPolling event handling
-    describe('startDownloadsPolling', () => {
+    // ---------------------------------------------------------- bindDownloadProgressEvents event handling
+    describe('bindDownloadProgressEvents', () => {
         it('should handle download progress events', () => {
             ui.init();
 

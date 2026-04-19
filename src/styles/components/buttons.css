@@ -45,14 +45,16 @@
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-    color: white;
-    box-shadow: 0 2px 8px rgba(var(--primary-raw), 0.2);
+    background: var(--premium-purple-bg);
+    color: var(--premium-purple-text);
+    border: 1px solid var(--premium-purple-border);
+    box-shadow: var(--premium-purple-shadow);
 }
 
 .btn-primary:hover {
-    filter: brightness(1.1);
-    box-shadow: 0 6px 24px rgba(var(--primary-raw), 0.4);
+    background: var(--premium-purple-bg-hover);
+    border-color: var(--premium-purple-border-strong);
+    box-shadow: var(--premium-purple-shadow);
 }
 
 .btn-secondary {

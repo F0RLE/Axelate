@@ -12,7 +12,9 @@
  * - Provides unified save API for the rest of the app
  */
 
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type StateManagerLogger = Pick<LoggerService, 'info' | 'warn'>;
 
 export interface StatePersistenceTarget {
     /** Human-readable name for logging */
@@ -26,6 +28,8 @@ export interface StatePersistenceTarget {
 export class StateManager {
     private readonly _targets = new Map<string, StatePersistenceTarget>();
     private _isDestroyed = false;
+
+    constructor(private readonly _tracer: StateManagerLogger) {}
 
     private readonly _boundVisibilityChange = () => {
         if (document.hidden) {
@@ -43,7 +47,7 @@ export class StateManager {
     register(target: StatePersistenceTarget): void {
         if (this._isDestroyed) return;
         this._targets.set(target.name, target);
-        tracer.info(`[StateManager] Registered: ${target.name}`);
+        this._tracer.info(`[StateManager] Registered: ${target.name}`);
     }
 
     /**
@@ -63,7 +67,7 @@ export class StateManager {
         const targets = [...this._targets.values()];
         if (targets.length === 0) return;
 
-        tracer.info(`[StateManager] Saving ${String(targets.length)} targets (async)...`);
+        this._tracer.info(`[StateManager] Saving ${String(targets.length)} targets (async)...`);
 
         const results = await Promise.allSettled(
             targets.map(async (t) => {
@@ -79,13 +83,13 @@ export class StateManager {
                 successCount++;
             } else {
                 failCount++;
-                tracer.warn(
+                this._tracer.warn(
                     `[StateManager] Failed to save ${targets[i]?.name}: ${String(r.reason)}`,
                 );
             }
         });
 
-        tracer.info(
+        this._tracer.info(
             `[StateManager] Save complete: ${String(successCount)} ok, ${String(failCount)} failed`,
         );
     }
@@ -100,14 +104,16 @@ export class StateManager {
         const targets = [...this._targets.values()];
         if (targets.length === 0) return;
 
-        tracer.info(`[StateManager] Saving ${String(targets.length)} targets (immediate)...`);
+        this._tracer.info(
+            `[StateManager] Saving ${String(targets.length)} targets (immediate)...`,
+        );
 
         // Fire all saves — no await, best effort before page unloads
         for (const target of targets) {
             try {
                 target.saveImmediate();
             } catch (e) {
-                tracer.warn(
+                this._tracer.warn(
                     `[StateManager] Immediate save failed for ${target.name}: ${String(e)}`,
                 );
             }
@@ -121,7 +127,7 @@ export class StateManager {
     init(): void {
         document.addEventListener('visibilitychange', this._boundVisibilityChange);
         globalThis.addEventListener('beforeunload', this._boundBeforeUnload);
-        tracer.info('[StateManager] Global listeners registered');
+        this._tracer.info('[StateManager] Global listeners registered');
     }
 
     /**
@@ -138,6 +144,6 @@ export class StateManager {
         globalThis.removeEventListener('beforeunload', this._boundBeforeUnload);
 
         this._targets.clear();
-        tracer.info('[StateManager] Destroyed');
+        this._tracer.info('[StateManager] Destroyed');
     }
 }

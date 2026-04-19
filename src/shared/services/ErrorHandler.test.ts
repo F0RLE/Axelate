@@ -1,28 +1,33 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { errorHandler } from '@/shared/services/ErrorHandler';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import { ErrorHandler } from '@/shared/services/ErrorHandler';
+import { EventBus } from '@/shared/services/EventBus';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('ErrorHandler', () => {
-    let tracerSpy: ReturnType<typeof vi.spyOn>;
+    let errorHandler: ErrorHandler;
+    let testEventBus: EventBus;
+    let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
     const resetHandler = () => {
-        (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-        const win = globalThis as unknown as Record<string, unknown>;
-        delete win['errorHandler'];
+        errorHandler.destroy();
+        errorHandler = new ErrorHandler({ eventBus: testEventBus, tracer });
         errorHandler.init();
         errorHandler.clearErrorLog();
     };
 
     beforeEach(() => {
-        tracerSpy = vi.spyOn(tracer, 'error').mockImplementation(() => {
-            /* no-op */
-        });
+        testEventBus = new EventBus();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+        };
+        errorHandler = new ErrorHandler({ eventBus: testEventBus, tracer });
         resetHandler();
     });
 
     afterEach(() => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-        tracerSpy.mockRestore();
+        errorHandler.destroy();
     });
 
     describe('captureError', () => {
@@ -30,7 +35,7 @@ describe('ErrorHandler', () => {
             const error = new Error('Test error');
             errorHandler.captureError(error, 'test-context');
 
-            expect(tracerSpy).toHaveBeenCalled();
+            expect(tracer.error).toHaveBeenCalled();
         });
 
         it('should add error to error log', () => {
@@ -181,20 +186,9 @@ describe('ErrorHandler', () => {
         });
 
         it('should skip if already initialized', () => {
-            const warnSpy = vi.spyOn(tracer, 'warn').mockImplementation(() => {});
-            (errorHandler as unknown as { _initialized: boolean })._initialized = true;
             errorHandler.init();
-            expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Already initialized'));
-            warnSpy.mockRestore();
-        });
-
-        it('should skip if another instance exists on window', () => {
-            (errorHandler as unknown as { _initialized: boolean })._initialized = false;
-            const win = globalThis as unknown as Record<string, unknown>;
-            win['errorHandler'] = {};
             errorHandler.init();
-            expect((errorHandler as unknown as { _initialized: boolean })._initialized).toBe(false);
-            delete win['errorHandler'];
+            expect(tracer.warn).toHaveBeenCalledWith(expect.stringContaining('Already initialized'));
         });
 
         it('should handle onerror with source and line info', () => {

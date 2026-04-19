@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WindowService, type IWindowConfig } from './WindowService';
 import type { IBridge } from '@/shared/types/IBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('WindowService', () => {
     let mockBridge: {
@@ -17,7 +18,15 @@ describe('WindowService', () => {
         getResolutionZoom: ReturnType<typeof vi.fn>;
         setResolutionZoom: ReturnType<typeof vi.fn>;
     };
+    let mockTracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
     let service: WindowService;
+    let mockRuntime: {
+        addEventListener: ReturnType<typeof vi.fn>;
+        removeEventListener: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        getScreenSize: ReturnType<typeof vi.fn>;
+        setAppZoomCss: ReturnType<typeof vi.fn>;
+    };
 
     const mockWindowConfig: IWindowConfig = {
         breakpoints: { compact: 640, medium: 1024, large: 1440 },
@@ -46,7 +55,33 @@ describe('WindowService', () => {
             setResolutionZoom: vi.fn(),
         };
 
-        service = new WindowService(mockBridge as unknown as IBridge);
+        mockTracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+        };
+
+        const nativeAddEventListener = globalThis.addEventListener.bind(globalThis);
+        const nativeRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
+        mockRuntime = {
+            addEventListener: vi.fn((...args: Parameters<typeof globalThis.addEventListener>) => {
+                nativeAddEventListener(...args);
+            }),
+            removeEventListener: vi.fn(
+                (...args: Parameters<typeof globalThis.removeEventListener>) => {
+                    nativeRemoveEventListener(...args);
+                },
+            ),
+            close: vi.fn(),
+            getScreenSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
+            setAppZoomCss: vi.fn(),
+        };
+
+        service = new WindowService(
+            mockBridge as unknown as IBridge,
+            mockTracer,
+            mockRuntime as unknown as ConstructorParameters<typeof WindowService>[2],
+        );
         service.setUISettingsService(
             mockUISettings as Parameters<typeof service.setUISettingsService>[0],
         );
@@ -92,7 +127,10 @@ describe('WindowService', () => {
         });
 
         it('should fallback to 1 when no UISettingsService is set (L69)', async () => {
-            const bareService = new WindowService(mockBridge as unknown as IBridge);
+            const bareService = new WindowService(
+                mockBridge as unknown as IBridge,
+                mockTracer,
+            );
             // No setUISettingsService called — _uiSettingsService is undefined
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'get_window_config') return Promise.resolve(mockWindowConfig);
@@ -112,16 +150,14 @@ describe('WindowService', () => {
             await service.init();
 
             expect(mockBridge.invoke).not.toHaveBeenCalled();
-            expect(document.documentElement.style.getPropertyValue('--app-zoom')).toBe('1.500');
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.500');
         });
 
         it('should attach Ctrl+Scroll zoom handler in web mode', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-            const addEventSpy = vi.spyOn(globalThis, 'addEventListener');
-
             await service.init();
 
-            expect(addEventSpy).toHaveBeenCalledWith('wheel', expect.any(Function), {
+            expect(mockRuntime.addEventListener).toHaveBeenCalledWith('wheel', expect.any(Function), {
                 passive: false,
             });
         });
@@ -208,10 +244,8 @@ describe('WindowService', () => {
 
         it('should call globalThis.close in web mode', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-            const closeSpy = vi.fn();
-            vi.stubGlobal('close', closeSpy);
             await service.close();
-            expect(closeSpy).toHaveBeenCalled();
+            expect(mockRuntime.close).toHaveBeenCalled();
         });
     });
 
@@ -323,7 +357,15 @@ describe('WindowService', () => {
         it('should apply CSS variable in web mode', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.setZoom(1.5);
-            expect(document.documentElement.style.getPropertyValue('--app-zoom')).toBe('1.500');
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.500');
+        });
+
+        it('should persist resolution zoom using injected runtime screen size', async () => {
+            mockRuntime.getScreenSize.mockReturnValue({ width: 2560, height: 1440 });
+
+            await service.setZoom(1.25);
+
+            expect(mockUISettings.setResolutionZoom).toHaveBeenCalledWith('2560x1440', 1.25);
         });
 
         it('should handle setZoom error gracefully', async () => {
@@ -337,7 +379,10 @@ describe('WindowService', () => {
         });
 
         it('should work without UISettingsService', async () => {
-            const bareService = new WindowService(mockBridge as unknown as IBridge);
+            const bareService = new WindowService(
+                mockBridge as unknown as IBridge,
+                mockTracer,
+            );
             const result = await bareService.setZoom(1.2);
             expect(result).toBe(1.2);
         });
@@ -651,13 +696,16 @@ describe('WindowService', () => {
             mockUISettings.getZoomLevel.mockReturnValue(1);
 
             const captured: { handler: ((e: WheelEvent) => void) | null } = { handler: null };
-            const origAddEvent = globalThis.addEventListener.bind(globalThis);
-            vi.spyOn(globalThis, 'addEventListener').mockImplementation(
-                (type: string, listener: EventListenerOrEventListenerObject, opts?: unknown) => {
+            mockRuntime.addEventListener.mockImplementation(
+                (
+                    type: string,
+                    listener: EventListenerOrEventListenerObject,
+                    opts?: AddEventListenerOptions,
+                ) => {
                     if (type === 'wheel') {
                         captured.handler = listener as (e: WheelEvent) => void;
                     }
-                    return origAddEvent(type, listener, opts as AddEventListenerOptions);
+                    globalThis.addEventListener(type, listener, opts);
                 },
             );
 
@@ -683,7 +731,7 @@ describe('WindowService', () => {
         it('should NOT call changeZoom when ctrlKey is not held', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             const captured: { handler: ((e: WheelEvent) => void) | null } = { handler: null };
-            vi.spyOn(globalThis, 'addEventListener').mockImplementation(
+            mockRuntime.addEventListener.mockImplementation(
                 (type: string, listener: EventListenerOrEventListenerObject) => {
                     if (type === 'wheel') {
                         captured.handler = listener as (e: WheelEvent) => void;

@@ -100,6 +100,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         settings::save_module_settings,
         settings::get_system_language,
         logs::get_logs,
+        logs::get_console_overview,
         logs::clear_logs,
         logs::add_log,
         logs::log_batch,

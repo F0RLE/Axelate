@@ -1,9 +1,13 @@
-import { createMultimodalContent } from '@/features/ai/utils/chatRequestUtils';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import { tracer } from '@/infrastructure/logging/LoggerService';
-import { chatFileHandler } from '../services/ChatFileHandler';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { ChatFileHandler } from '../services/ChatFileHandler';
 import type { ChatService } from '../services/ChatService';
 import type { IChatMessage, IChatAttachment } from '../types/chatTypes';
+import type { IApp } from '@/shared/types/coreTypes';
+import { ChatAutoStartHelper } from '../services/ChatAutoStartHelper';
+import { ChatSendFlow } from '../services/ChatSendFlow';
+
+type ChatSendLogger = Pick<LoggerService, 'info'>;
 
 type StreamingMessageHandle = {
     update: (chunk: string) => void;
@@ -26,14 +30,15 @@ type ImageGenerationHandle = {
 
 type ChatSendControllerOptions = {
     aiBridge: AIBridge;
+    fileHandler: Pick<
+        ChatFileHandler,
+        'hasFiles' | 'getTotalTokenEstimate' | 'processForSend'
+    >;
     service: ChatService;
     getHistory: () => IChatMessage[];
     pushUserMessage: (content: IChatMessage['content']) => void;
     createStreamingHandle: (typingId: string) => StreamingMessageHandle;
-    createImageHandle: (
-        text: string,
-        onRegenerate: () => Promise<void>,
-    ) => ImageGenerationHandle;
+    createImageHandle: (text: string, onRegenerate: () => Promise<void>) => ImageGenerationHandle;
     showTyping: (typingId: string) => void;
     registerReplaceChunk: (
         listenerId: string,
@@ -43,6 +48,7 @@ type ChatSendControllerOptions = {
     clearInput: () => void;
     updateTokenCount: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
+    getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     handleResponse: (
         response: Awaited<ReturnType<ChatService['sendMessage']>>,
         streamingHandle: StreamingMessageHandle | null,
@@ -63,20 +69,31 @@ type ChatSendControllerOptions = {
     handleError: (error: unknown) => void;
     isSending: () => boolean;
     setSending: (value: boolean) => void;
+    tracer: ChatSendLogger;
 };
 
 type UiLock = ReturnType<ChatSendControllerOptions['lockUi']>;
 
 export class ChatSendController {
-    constructor(private readonly _options: ChatSendControllerOptions) {}
+    private readonly _autoStartHelper: ChatAutoStartHelper;
+    private readonly _sendFlow: ChatSendFlow;
+
+    constructor(private readonly _options: ChatSendControllerOptions) {
+        this._autoStartHelper = new ChatAutoStartHelper({
+            aiBridge: _options.aiBridge,
+            getSelectedModule: _options.getSelectedModule,
+            tracer: _options.tracer,
+        });
+        this._sendFlow = new ChatSendFlow({
+            fileHandler: _options.fileHandler,
+            getHistory: _options.getHistory,
+        });
+    }
 
     public destroy(): void {}
 
     public validateInput(text: string): boolean {
-        if (!text && !chatFileHandler.hasFiles()) {
-            return false;
-        }
-        return true;
+        return text !== '' || this._options.fileHandler.hasFiles();
     }
 
     public async sendChat(input: HTMLTextAreaElement | null): Promise<boolean> {
@@ -93,14 +110,12 @@ export class ChatSendController {
         this._options.setSending(true);
 
         try {
-            const tokenCount = await chatFileHandler.getTotalTokenEstimate(text);
-            const { attachments, combinedText } = await chatFileHandler.processForSend(text);
-            const historyHead = this._options.getHistory().slice(-40);
+            const sendPlan = await this._sendFlow.prepare(text);
 
             this._options.clearInput();
             this._options.updateTokenCount(0);
-            this._options.appendUserMessage(text, attachments, tokenCount);
-            this._options.pushUserMessage(createMultimodalContent(combinedText, attachments));
+            this._options.appendUserMessage(text, sendPlan.attachments, sendPlan.tokenCount);
+            this._options.pushUserMessage(sendPlan.userContent);
 
             let streamingHandle: StreamingMessageHandle | null = null;
             let imageHandle: ImageGenerationHandle | null = null;
@@ -132,9 +147,9 @@ export class ChatSendController {
             );
 
             const response = await this._options.service.sendMessage(
-                combinedText,
-                historyHead,
-                attachments,
+                sendPlan.combinedText,
+                sendPlan.historyHead,
+                sendPlan.attachments,
             );
 
             this._options.cleanupStreamingState(listenerId, typingId);
@@ -151,27 +166,6 @@ export class ChatSendController {
     }
 
     public async tryAutoStartAi(): Promise<boolean> {
-        const textModule = uiState.getSelectedModule('ai_text');
-        const imageModule = uiState.getSelectedModule('ai_image');
-        const selectedModule =
-            textModule?.id !== undefined && textModule.id !== '' ? textModule : imageModule;
-
-        if (selectedModule?.id === undefined || selectedModule.id === '') return false;
-
-        tracer.info(`[Chat] Auto-starting selected module: ${selectedModule.id}`);
-        const btn = document.getElementById('chat-actions-send');
-        if (btn) {
-            btn.classList.add('loading');
-            btn.setAttribute('disabled', 'true');
-        }
-
-        const started = await this._options.aiBridge.startProvider(selectedModule.id);
-
-        if (btn) {
-            btn.classList.remove('loading');
-            btn.removeAttribute('disabled');
-        }
-
-        return started;
+        return await this._autoStartHelper.startSelectedModule();
     }
 }

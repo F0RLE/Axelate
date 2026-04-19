@@ -3,18 +3,20 @@
  * @description Placeholder for the future home overview surface and summary widgets.
  */
 
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type HomeOverviewLogger = Pick<LoggerService, 'info'>;
 
 export class HomeOverviewPlaceholderUI {
-    constructor() {
-        tracer.info('[HomeOverviewPlaceholderUI] Constructed');
+    public constructor(private readonly _tracer: HomeOverviewLogger) {
+        this._tracer.info('[HomeOverviewPlaceholderUI] Constructed');
     }
 
     /**
      * Initializes the home overview UI.
      */
     public init(): void {
-        tracer.info('[HomeOverviewPlaceholderUI] Initialized');
+        this._tracer.info('[HomeOverviewPlaceholderUI] Initialized');
         // Home overview widgets and summary panels can be added here later.
     }
 
@@ -22,6 +24,6 @@ export class HomeOverviewPlaceholderUI {
      * Cleans up the home overview UI resources.
      */
     public destroy(): void {
-        tracer.info('[HomeOverviewPlaceholderUI] Destroyed.');
+        this._tracer.info('[HomeOverviewPlaceholderUI] Destroyed.');
     }
 }

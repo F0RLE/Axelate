@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ChatUI } from './ChatUI';
-import { chatFileHandler } from '../services/ChatFileHandler';
+import { ChatFileHandler } from '../services/ChatFileHandler';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 const savedImageFilePath = String.raw`C:\Users\FORLE\Pictures\axelate\axelate_image.png`;
 const savedImageFolderPath = String.raw`C:\Users\FORLE\Pictures\axelate`;
@@ -10,6 +11,53 @@ const assistantImagePayload = {
     images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
     skipAnimation: true,
 };
+const translate = (key: string, fallback?: string) => `t:${key}:${fallback ?? ''}`;
+let fileHandler: ChatFileHandler;
+const fileHandlerTracer: Pick<LoggerService, 'warn' | 'error'> = {
+    warn: vi.fn(),
+    error: vi.fn(),
+};
+const chatUiTracer: Pick<LoggerService, 'warn' | 'error' | 'debug'> = {
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+};
+
+function createChatUI(options?: {
+    showToast?: (
+        message: string,
+        type?: 'success' | 'error' | 'warning' | 'info',
+        duration?: number,
+    ) => void;
+    isTauriRuntime?: boolean;
+}): ChatUI {
+    const showToast = options?.showToast ?? vi.fn();
+    const isTauriRuntime = options?.isTauriRuntime ?? true;
+
+    return new ChatUI({
+        fileHandler,
+        translate,
+        showToast,
+        isTauriRuntime: () => isTauriRuntime,
+        openExternalUrl: async (url: string) => {
+            if (isTauriRuntime) {
+                await invoke('plugin:shell|open', { path: url });
+                return;
+            }
+
+            window.open(url, '_blank');
+        },
+        copyText: async (text: string) => {
+            if (isTauriRuntime) {
+                await invoke('plugin:clipboard-manager|write_text', { text });
+                return;
+            }
+
+            await navigator.clipboard.writeText(text);
+        },
+        tracer: chatUiTracer,
+    });
+}
 
 async function flushPromises(count = 1): Promise<void> {
     for (let index = 0; index < count; index += 1) {
@@ -78,12 +126,8 @@ describe('ChatUI lifecycle', () => {
 
     beforeEach(() => {
         document.body.innerHTML = '<div id="chat-messages"></div>';
-        (
-            globalThis as unknown as {
-                t: (key: string, fallback?: string) => string;
-            }
-        ).t = (key, fallback) => `t:${key}:${fallback ?? ''}`;
         vi.clearAllMocks();
+        fileHandler = new ChatFileHandler(fileHandlerTracer);
     });
 
     afterEach(() => {
@@ -99,7 +143,7 @@ describe('ChatUI lifecycle', () => {
         }
         messages.innerHTML = '<button class="chat-copy-own-btn" data-copy-text="hello"></button>';
 
-        ui = new ChatUI();
+        ui = createChatUI();
         await ui.init();
 
         const button = document.querySelector('.chat-copy-own-btn') as HTMLButtonElement;
@@ -119,7 +163,7 @@ describe('ChatUI lifecycle', () => {
         const unlisten = vi.fn();
         vi.mocked(listen).mockResolvedValueOnce(unlisten);
 
-        ui = new ChatUI();
+        ui = createChatUI();
         await ui.init();
 
         expect(listen).toHaveBeenCalledWith('ai:status:retry', expect.any(Function));
@@ -146,7 +190,7 @@ describe('ChatUI lifecycle', () => {
             <button id="chat-send-btn"></button>
         `;
 
-        ui = new ChatUI();
+        ui = createChatUI();
         ui.refreshTranslations();
 
         expect((document.querySelector('.chat-copy-own-btn') as HTMLButtonElement).title).toBe(
@@ -183,7 +227,7 @@ describe('ChatUI lifecycle', () => {
             <button id="chat-send-btn"></button>
         `;
 
-        ui = new ChatUI();
+        ui = createChatUI();
         ui.updateTokenCount(12);
 
         const tokenEl = document.getElementById('chat-token-count') as HTMLElement;
@@ -197,7 +241,7 @@ describe('ChatUI lifecycle', () => {
     it('should remove orphan streaming message when finalized without answer text', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
-        ui = new ChatUI();
+        ui = createChatUI();
         const handle = ui.createStreamingMessage('assistant');
         handle.finalize('');
 
@@ -211,7 +255,7 @@ describe('ChatUI lifecycle', () => {
         const messages = document.getElementById('chat-messages') as HTMLDivElement;
         Object.defineProperty(messages, 'scrollHeight', { configurable: true, value: 640 });
 
-        ui = new ChatUI();
+        ui = createChatUI();
         ui.renderHistory([
             { role: 'user', content: 'one' },
             { role: 'assistant', content: 'two' },
@@ -224,7 +268,7 @@ describe('ChatUI lifecycle', () => {
 
     it('should ignore stale attachment renders after attachments were cleared', async () => {
         let resolveTokens: ((value: number) => void) | null = null;
-        vi.spyOn(chatFileHandler, 'getFileTokenEstimate').mockImplementation(
+        vi.spyOn(fileHandler, 'getFileTokenEstimate').mockImplementation(
             () =>
                 new Promise<number>((resolve) => {
                     resolveTokens = resolve;
@@ -237,7 +281,7 @@ describe('ChatUI lifecycle', () => {
             <div id="chat-attachments"></div>
         `;
 
-        ui = new ChatUI();
+        ui = createChatUI();
         const file = new File(['content'], 'late.txt', { type: 'text/plain' });
 
         ui.updateAttachments([file], () => {});
@@ -253,13 +297,7 @@ describe('ChatUI lifecycle', () => {
     it('should save generated chat images to the default axelate pictures folder', async () => {
         vi.useFakeTimers();
         const showToast = vi.fn();
-        (
-            globalThis as unknown as {
-                showToast: typeof showToast;
-            }
-        ).showToast = showToast;
-
-        ui = new ChatUI();
+        ui = createChatUI({ showToast });
         await renderAssistantImage(ui);
 
         expect(document.querySelector('.chat-copy-own-btn')).toBeNull();
@@ -284,7 +322,7 @@ describe('ChatUI lifecycle', () => {
 
     it('should open saved image folder from chat action bar', async () => {
         vi.useFakeTimers();
-        ui = new ChatUI();
+        ui = createChatUI();
         await renderAssistantImage(ui);
 
         const saveButton = requireSaveImageButton();
@@ -304,13 +342,7 @@ describe('ChatUI lifecycle', () => {
     it('should restore save button when saved image was removed from disk', async () => {
         vi.useFakeTimers();
         const showToast = vi.fn();
-        (
-            globalThis as unknown as {
-                showToast: typeof showToast;
-            }
-        ).showToast = showToast;
-
-        ui = new ChatUI();
+        ui = createChatUI({ showToast });
         await renderAssistantImage(ui);
 
         const saveButton = requireSaveImageButton();
@@ -329,13 +361,14 @@ describe('ChatUI lifecycle', () => {
         expect(showToast).toHaveBeenCalledWith(
             't:ui.chat.image_missing_resave:Image was removed, save it again',
             'warning',
+            2000,
         );
         vi.useRealTimers();
     });
 
     it('should delete saved image and restore download button on right click', async () => {
         vi.useFakeTimers();
-        ui = new ChatUI();
+        ui = createChatUI();
         await renderAssistantImage(ui);
 
         const saveButton = requireSaveImageButton();
@@ -359,7 +392,7 @@ describe('ChatUI lifecycle', () => {
     });
 
     it('should open image preview on thumbnail click and close on backdrop click', async () => {
-        ui = new ChatUI();
+        ui = createChatUI();
         await renderAssistantImage(ui, true);
 
         const image = requireChatImage();
@@ -378,7 +411,7 @@ describe('ChatUI lifecycle', () => {
     });
 
     it('should remove image viewer body state on destroy', async () => {
-        ui = new ChatUI();
+        ui = createChatUI();
         await renderAssistantImage(ui, true);
 
         const image = requireChatImage();

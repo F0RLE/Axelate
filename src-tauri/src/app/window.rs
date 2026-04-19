@@ -35,6 +35,7 @@ pub fn setup_webview2_cache() {
     }
 }
 
+#[cfg(debug_assertions)]
 fn should_open_devtools() -> bool {
     matches!(
         std::env::var("AXELATE_OPEN_DEVTOOLS"),

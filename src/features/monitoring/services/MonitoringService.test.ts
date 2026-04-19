@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MonitoringService } from './MonitoringService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { ISystemStats } from '../types/monitoringTypes';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('MonitoringService', () => {
     let service: MonitoringService;
     let mockTauri: TauriProvider;
     let mockUnlisten: () => void;
+    let tracer: Pick<LoggerService, 'info' | 'debug' | 'error' | 'warn'>;
 
     const mockStats: ISystemStats = {
         cpu: { percent: 10, cores: 8, name: 'Intel i7' },
@@ -42,7 +44,13 @@ describe('MonitoringService', () => {
             invoke: vi.fn().mockResolvedValue(undefined),
         } as unknown as TauriProvider;
 
-        service = new MonitoringService(mockTauri);
+        tracer = {
+            info: vi.fn(),
+            debug: vi.fn(),
+            error: vi.fn(),
+            warn: vi.fn(),
+        };
+        service = new MonitoringService(mockTauri, tracer);
     });
 
     afterEach(() => {

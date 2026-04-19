@@ -1,21 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineStatusService } from './EngineStatusService';
 import type { Core } from '@/app/init';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('EngineStatusService', () => {
     let service: EngineStatusService;
     let listeners: Record<string, (payload: unknown) => void>;
     let core: Core;
+    let tracer: Pick<LoggerService, 'info' | 'error'>;
 
     beforeEach(() => {
         listeners = {};
         document.body.innerHTML = '';
-        globalThis.t = (_key: string, fallback = '') => fallback;
         (globalThis as unknown as { CSS: { escape: (value: string) => string } }).CSS = {
             escape: (value: string) => value,
         };
 
         core = {
+            i18n: {
+                t: vi.fn((_: string, fallback: string = ''): string => fallback),
+            },
             tauriProvider: {
                 isTauri: vi.fn().mockReturnValue(true),
                 listen: vi
@@ -27,7 +31,11 @@ describe('EngineStatusService', () => {
             },
         } as unknown as Core;
 
-        service = new EngineStatusService();
+        tracer = {
+            info: vi.fn(),
+            error: vi.fn(),
+        };
+        service = new EngineStatusService(tracer);
         service.setCore(core);
     });
 
@@ -93,7 +101,9 @@ describe('EngineStatusService', () => {
     });
 
     it('falls back to untranslated labels and handles cards without modal buttons', () => {
-        delete (globalThis as Record<string, unknown>)['t'];
+        (core as unknown as { i18n: { t: ReturnType<typeof vi.fn> } }).i18n.t.mockImplementation(
+            (_: string, fallback: string = ''): string => fallback,
+        );
         document.body.innerHTML = `
             <div class="app-card selected engine-ready" data-app-id="llamacpp"></div>
             <div class="app-card selected" data-app-id="sdcpp">

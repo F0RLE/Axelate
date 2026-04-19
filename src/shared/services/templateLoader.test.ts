@@ -1,8 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { templateLoader } from './TemplateLoader';
+import { TemplateLoader } from './TemplateLoader';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('TemplateLoader', () => {
+    let templateLoader: TemplateLoader;
+    let tracer: Pick<LoggerService, 'debug' | 'error'>;
+
     beforeEach(() => {
+        tracer = {
+            debug: vi.fn(),
+            error: vi.fn(),
+        };
+        templateLoader = new TemplateLoader(tracer);
         document.body.innerHTML = '<div id="test-container"></div>';
         templateLoader.clearCache();
         (templateLoader as unknown as { _initialized: boolean })._initialized = false;

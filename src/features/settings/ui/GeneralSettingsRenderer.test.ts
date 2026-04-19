@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 class ResizeObserverMock {
     public static instances: ResizeObserverMock[] = [];
@@ -21,13 +22,12 @@ describe('GeneralSettingsRenderer', () => {
         getHiddenMonitors: ReturnType<typeof vi.fn>;
         setHiddenMonitors: ReturnType<typeof vi.fn>;
     };
+    let tracer: LoggerService;
+    let runtime: NonNullable<ConstructorParameters<typeof GeneralSettingsRenderer>[2]>;
 
     beforeEach(() => {
+        vi.useFakeTimers();
         vi.stubGlobal('ResizeObserver', ResizeObserverMock as never);
-        vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-            cb(0);
-            return 1;
-        });
 
         document.body.innerHTML = `
             <div id="taskbar-toggles"></div>
@@ -70,7 +70,28 @@ describe('GeneralSettingsRenderer', () => {
             setHiddenMonitors: vi.fn(),
         };
 
-        renderer = new GeneralSettingsRenderer(uiSettings as never);
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
+
+        runtime = {
+            requestAnimationFrame: vi.fn((callback: FrameRequestCallback) => {
+                callback(0);
+                return 1;
+            }),
+            cancelAnimationFrame: vi.fn(),
+            setTimeout: vi.fn((callback: () => void, delayMs: number) =>
+                globalThis.setTimeout(callback, delayMs),
+            ),
+            clearTimeout: vi.fn((handle: ReturnType<typeof setTimeout>) => {
+                globalThis.clearTimeout(handle);
+            }),
+        };
+
+        renderer = new GeneralSettingsRenderer(uiSettings as never, tracer, runtime);
     });
 
     afterEach(() => {
@@ -100,9 +121,7 @@ describe('GeneralSettingsRenderer', () => {
                 ?.classList.contains('hidden'),
         ).toBe(true);
         expect(
-            document
-                .querySelector('#sidebar .nav-btn[data-page="chat"]')
-                ?.getAttribute('tabindex'),
+            document.querySelector('#sidebar .nav-btn[data-page="chat"]')?.getAttribute('tabindex'),
         ).toBe('-1');
 
         const gpuMonitor = document.querySelector(

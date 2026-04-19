@@ -4,11 +4,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatService } from './ChatService';
 import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('ChatService', () => {
     let chatService: ChatService;
     let mockAIBridge: IAIBridge;
     let mockI18n: I18nService;
+    let tracer: Pick<LoggerService, 'error'>;
 
     beforeEach(() => {
         mockAIBridge = {
@@ -30,7 +32,8 @@ describe('ChatService', () => {
             t: vi.fn((key: string, def: string) => def || key),
         } as unknown as I18nService;
 
-        chatService = new ChatService(mockAIBridge, mockI18n);
+        tracer = { error: vi.fn() };
+        chatService = new ChatService(mockAIBridge, mockI18n, tracer);
     });
 
     it('should return error when AIBridge is not active (L27)', async () => {

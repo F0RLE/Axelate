@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { I18nService } from '@/infrastructure/i18n/I18nService';
-import { eventBus } from '@/shared/services/EventBus';
+import { EventBus } from '@/shared/services/EventBus';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // Mock TauriProvider
 const createMockTauri = (isTauri = false) => ({
@@ -11,19 +12,29 @@ const createMockTauri = (isTauri = false) => ({
 describe('I18nService', () => {
     let i18n: I18nService;
     let mockTauri: ReturnType<typeof createMockTauri>;
+    let testEventBus: EventBus;
+    let tracer: LoggerService;
 
     beforeEach(() => {
         mockTauri = createMockTauri(false);
+        testEventBus = new EventBus();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
         i18n = new I18nService(
             mockTauri as unknown as ConstructorParameters<typeof I18nService>[0],
+            testEventBus,
+            tracer,
         );
         localStorage.clear();
-        eventBus.clear();
         vi.useFakeTimers();
     });
 
     afterEach(() => {
-        eventBus.clear();
+        testEventBus.clear();
         vi.useRealTimers();
         vi.unstubAllGlobals();
     });
@@ -118,8 +129,8 @@ describe('I18nService', () => {
                 languageChangedHandler as EventListener,
             );
             globalThis.addEventListener('lang:changed', legacyLangChangedHandler as EventListener);
-            eventBus.on('i18n:language:change', languageBusHandler);
-            eventBus.on('i18n:translations:loaded', translationsLoadedHandler);
+            testEventBus.on('i18n:language:change', languageBusHandler);
+            testEventBus.on('i18n:translations:loaded', translationsLoadedHandler);
 
             const loadPromise = i18n.loadTranslations('ru');
             await vi.runAllTimersAsync();
@@ -198,7 +209,7 @@ describe('I18nService', () => {
                 'language-changed',
                 languageChangedHandler as EventListener,
             );
-            eventBus.on('i18n:translations:loaded', translationsLoadedHandler);
+            testEventBus.on('i18n:translations:loaded', translationsLoadedHandler);
 
             const loadPromise = i18n.loadTranslations('ru');
             await vi.runAllTimersAsync();
@@ -315,6 +326,8 @@ describe('I18nService', () => {
             tauriMock.invoke.mockResolvedValue('de');
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -326,6 +339,8 @@ describe('I18nService', () => {
             tauriMock.invoke.mockResolvedValue('unknown');
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -337,6 +352,8 @@ describe('I18nService', () => {
             tauriMock.invoke.mockRejectedValue(new Error('Tauri failed'));
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -350,6 +367,8 @@ describe('I18nService', () => {
             );
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -366,6 +385,8 @@ describe('I18nService', () => {
             });
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const initPromise = tauriI18n.init();
             await vi.runAllTimersAsync();
@@ -386,6 +407,8 @@ describe('I18nService', () => {
             });
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
 
             // Trigger via loadTranslations
@@ -412,6 +435,8 @@ describe('I18nService', () => {
             });
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
 
             // Trigger via loadTranslations

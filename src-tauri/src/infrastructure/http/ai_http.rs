@@ -3,6 +3,11 @@ use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
 use crate::models::UIState;
 
+const TEXT_PROVIDER_MISSING_MESSAGE: &str =
+    "Text AI is not active in launcher. Select and launch it first.";
+const IMAGE_PROVIDER_MISSING_MESSAGE: &str =
+    "Image AI is not active in launcher. Select and launch it first.";
+
 #[derive(serde::Deserialize)]
 pub(super) struct HttpAiMessage {
     pub(super) role: String,
@@ -51,7 +56,7 @@ pub(super) fn resolve_web_search_options(
         .ai_web_search_enabled
         .get(provider)
         .copied()
-        .unwrap_or(!is_local_provider(provider));
+        .unwrap_or_else(|| !is_local_provider(provider));
     if !enabled {
         return None;
     }
@@ -67,70 +72,52 @@ pub(super) fn resolve_web_search_options(
     })
 }
 
-pub(super) fn resolve_text_provider(state: &UIState, requested: Option<&str>) -> String {
-    requested
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .or_else(|| {
-            state
-                .selected_modules
-                .get("ai_text")
-                .map(|module| module.id.clone())
-        })
-        .or_else(|| state.last_active_provider.clone())
-        .unwrap_or_else(|| "llamacpp".to_string())
+pub(super) fn resolve_text_provider_strict(
+    state: &UIState,
+    requested: Option<&str>,
+) -> Result<String, AppError> {
+    resolve_active_provider(
+        state,
+        requested,
+        ProviderSlot::Text,
+        ProviderSelectionMode::AllowRequestedOverride,
+    )
 }
 
-pub(super) fn resolve_image_provider(state: &UIState, requested: Option<&str>) -> String {
-    requested
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .or_else(|| {
-            state
-                .selected_modules
-                .get("ai_image")
-                .map(|module| module.id.clone())
-        })
-        .unwrap_or_else(|| "sdcpp".to_string())
+pub(super) fn resolve_image_provider_strict(
+    state: &UIState,
+    requested: Option<&str>,
+) -> Result<String, AppError> {
+    resolve_active_provider(
+        state,
+        requested,
+        ProviderSlot::Image,
+        ProviderSelectionMode::AllowRequestedOverride,
+    )
 }
 
 pub(super) fn resolve_module_text_provider(
     state: &UIState,
     requested: Option<&str>,
 ) -> Result<String, AppError> {
-    let active_provider = state
-        .selected_modules
-        .get("ai_text")
-        .map(|module| module.id.clone())
-        .or_else(|| state.last_active_provider.clone())
-        .ok_or_else(|| {
-            AppError::Validation(
-                "Text AI is not active in launcher. Select and launch it first.".to_string(),
-            )
-        })?;
-
-    ensure_requested_provider_matches_active(&active_provider, requested)?;
-    Ok(active_provider)
+    resolve_active_provider(
+        state,
+        requested,
+        ProviderSlot::Text,
+        ProviderSelectionMode::RequireLauncherSelection,
+    )
 }
 
 pub(super) fn resolve_module_image_provider(
     state: &UIState,
     requested: Option<&str>,
 ) -> Result<String, AppError> {
-    let active_provider = state
-        .selected_modules
-        .get("ai_image")
-        .map(|module| module.id.clone())
-        .ok_or_else(|| {
-            AppError::Validation(
-                "Image AI is not active in launcher. Select and launch it first.".to_string(),
-            )
-        })?;
-
-    ensure_requested_provider_matches_active(&active_provider, requested)?;
-    Ok(active_provider)
+    resolve_active_provider(
+        state,
+        requested,
+        ProviderSlot::Image,
+        ProviderSelectionMode::RequireLauncherSelection,
+    )
 }
 
 pub(super) fn resolve_model(
@@ -193,6 +180,66 @@ fn ensure_requested_provider_matches_active(
     )))
 }
 
+#[derive(Clone, Copy)]
+enum ProviderSlot {
+    Text,
+    Image,
+}
+
+#[derive(Clone, Copy)]
+enum ProviderSelectionMode {
+    AllowRequestedOverride,
+    RequireLauncherSelection,
+}
+
+fn resolve_active_provider(
+    state: &UIState,
+    requested: Option<&str>,
+    slot: ProviderSlot,
+    mode: ProviderSelectionMode,
+) -> Result<String, AppError> {
+    let requested = normalize_requested_provider(requested);
+    match mode {
+        ProviderSelectionMode::AllowRequestedOverride => requested
+            .or_else(|| provider_from_state(state, slot))
+            .ok_or_else(|| AppError::Validation(provider_missing_message(slot).to_string())),
+        ProviderSelectionMode::RequireLauncherSelection => {
+            let active_provider = provider_from_state(state, slot)
+                .ok_or_else(|| AppError::Validation(provider_missing_message(slot).to_string()))?;
+            ensure_requested_provider_matches_active(&active_provider, requested.as_deref())?;
+            Ok(active_provider)
+        }
+    }
+}
+
+fn normalize_requested_provider(requested: Option<&str>) -> Option<String> {
+    requested
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn provider_from_state(state: &UIState, slot: ProviderSlot) -> Option<String> {
+    match slot {
+        ProviderSlot::Text => state
+            .selected_modules
+            .get("ai_text")
+            .map(|module| module.id.clone())
+            .or_else(|| state.last_active_provider.clone()),
+        ProviderSlot::Image => state
+            .selected_modules
+            .get("ai_image")
+            .map(|module| module.id.clone()),
+    }
+}
+
+const fn provider_missing_message(slot: ProviderSlot) -> &'static str {
+    match slot {
+        ProviderSlot::Text => TEXT_PROVIDER_MISSING_MESSAGE,
+        ProviderSlot::Image => IMAGE_PROVIDER_MISSING_MESSAGE,
+    }
+}
+
 pub(super) fn map_http_history(history: Option<Vec<HttpAiMessage>>) -> Vec<ChatMessage> {
     history
         .unwrap_or_default()
@@ -219,8 +266,8 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{
-        resolve_module_image_provider, resolve_module_text_provider, resolve_text_provider,
-        resolve_web_search_options,
+        resolve_image_provider_strict, resolve_module_image_provider, resolve_module_text_provider,
+        resolve_text_provider_strict, resolve_web_search_options,
     };
     use crate::errors::AppError;
     use crate::models::{SelectedModule, UIState};
@@ -293,8 +340,16 @@ mod tests {
     }
 
     #[test]
-    fn generic_text_provider_keeps_old_fallback_behavior() {
+    fn text_provider_requires_active_selection() {
         let state = UIState::default();
-        assert_eq!(resolve_text_provider(&state, None), "llamacpp");
+        let error = resolve_text_provider_strict(&state, None).expect_err("must fail");
+        assert!(matches!(error, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn image_provider_requires_active_selection() {
+        let state = UIState::default();
+        let error = resolve_image_provider_strict(&state, None).expect_err("must fail");
+        assert!(matches!(error, AppError::Validation(_)));
     }
 }

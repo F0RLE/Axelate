@@ -2,16 +2,14 @@ import { BaseComponent } from '../ui/BaseComponent';
 import { type UISettingsService } from '../services/ui/UISettingsService';
 import { type SoundService } from '../services/SoundService';
 import { type WindowService } from '../services/WindowService';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { mountLogos } from '@/assets/logos';
-import { APP_PAGES, type IAppPage } from '@/shared/config/AppPages';
-
-interface ISidebarMenus {
-    mainMenu: HTMLElement;
-    bottomMenu: HTMLElement;
-}
+import { SidebarAutoCompactPolicy } from './SidebarAutoCompactPolicy';
+import { SidebarMonitorVisibilityController } from './SidebarMonitorVisibilityController';
+import { SidebarNavigationRenderer } from './SidebarNavigationRenderer';
 
 interface IMonitoringElements {
+    sidebar: HTMLElement;
     monitor: HTMLElement;
     logo: HTMLElement;
     menu: HTMLElement;
@@ -32,14 +30,28 @@ export class SidebarUI extends BaseComponent {
     private _snappingTimeout: ReturnType<typeof setTimeout> | null = null;
     private _resizeObserver: ResizeObserver | null = null;
     private _monitorCheckFrame: number | null = null;
-    private _minMonitorHeight = 0;
+    private readonly _autoCompactPolicy = new SidebarAutoCompactPolicy({
+        collapsedWidth: SidebarUI._COLLAPSED_WIDTH,
+        expandedWidth: SidebarUI._EXPANDED_WIDTH,
+        autoCompactZoomThreshold: SidebarUI._AUTO_COMPACT_ZOOM_THRESHOLD,
+        autoCompactWarningLeadSteps: SidebarUI._AUTO_COMPACT_WARNING_LEAD_STEPS,
+        autoCompactZoomStep: SidebarUI._AUTO_COMPACT_ZOOM_STEP,
+        autoCompactThresholdFactor: SidebarUI._AUTO_COMPACT_THRESHOLD_FACTOR,
+    });
+    private readonly _monitorVisibilityController: SidebarMonitorVisibilityController;
+    private readonly _navigationRenderer: SidebarNavigationRenderer;
 
     constructor(
         private readonly _state: UISettingsService,
+        private readonly _tracer: LoggerService,
         private readonly _soundService?: SoundService,
         private readonly _windowService?: WindowService,
     ) {
-        super();
+        super(_tracer);
+        this._monitorVisibilityController = new SidebarMonitorVisibilityController(this._tracer);
+        this._navigationRenderer = new SidebarNavigationRenderer({
+            getHiddenNavItems: () => this._state.getHiddenNavItems(),
+        });
     }
 
     /**
@@ -48,7 +60,7 @@ export class SidebarUI extends BaseComponent {
     protected async onInit(): Promise<void> {
         this._sidebar = await this._findSidebar();
         if (this._sidebar === null) {
-            tracer.error('[SidebarUI] Sidebar element not found or empty after 1s');
+            this._tracer.error('[SidebarUI] Sidebar element not found or empty after 1s');
             return;
         }
 
@@ -93,20 +105,10 @@ export class SidebarUI extends BaseComponent {
      * Dynamically renders navigation buttons from APP_PAGES.
      */
     private _renderNavigation(): void {
-        const menus = this._getSidebarMenus();
-        if (menus === null) {
+        if (this._sidebar === null) {
             return;
         }
-
-        const mainButtons = APP_PAGES.filter((page) => page.isBottom !== true).map((page) =>
-            this._createNavButton(page),
-        );
-        const bottomButtons = APP_PAGES.filter((page) => page.isBottom === true).map((page) =>
-            this._createNavButton(page),
-        );
-
-        menus.mainMenu.replaceChildren(...mainButtons);
-        menus.bottomMenu.replaceChildren(...bottomButtons);
+        this._navigationRenderer.render(this._sidebar);
     }
 
     /**
@@ -171,10 +173,10 @@ export class SidebarUI extends BaseComponent {
     private _applySidebarWidth(): void {
         if (this._sidebar === null) return;
 
-        const width =
-            this._isCollapsed || this._isAutoCompact
-                ? SidebarUI._COLLAPSED_WIDTH
-                : SidebarUI._EXPANDED_WIDTH;
+        const width = this._autoCompactPolicy.getSidebarWidth(
+            this._isCollapsed,
+            this._isAutoCompact,
+        );
 
         this._sidebar.classList.toggle('collapsed', width < 100);
         this._sidebar.classList.toggle('auto-compact', this._isAutoCompact);
@@ -184,25 +186,14 @@ export class SidebarUI extends BaseComponent {
 
     private _updateAutoCompactState(): void {
         const zoom = this._state.getZoomLevel();
-        const config = this._windowService?.getConfig();
-
-        if (config !== null && config !== undefined) {
-            const leadZoom =
-                zoom +
-                SidebarUI._AUTO_COMPACT_WARNING_LEAD_STEPS * SidebarUI._AUTO_COMPACT_ZOOM_STEP;
-            const effectiveWidth = globalThis.innerWidth / leadZoom;
-            const effectiveHeight = globalThis.innerHeight / leadZoom;
-            const compactWarningWidth =
-                config.thresholds.warningWidth * SidebarUI._AUTO_COMPACT_THRESHOLD_FACTOR;
-            const compactWarningHeight =
-                config.thresholds.warningHeight * SidebarUI._AUTO_COMPACT_THRESHOLD_FACTOR;
-
-            this._isAutoCompact =
-                effectiveWidth < compactWarningWidth || effectiveHeight < compactWarningHeight;
-            return;
-        }
-
-        this._isAutoCompact = zoom >= SidebarUI._AUTO_COMPACT_ZOOM_THRESHOLD;
+        this._isAutoCompact = this._autoCompactPolicy.isAutoCompact(
+            zoom,
+            this._windowService?.getConfig(),
+            {
+                width: globalThis.innerWidth,
+                height: globalThis.innerHeight,
+            },
+        );
     }
 
     /**
@@ -217,7 +208,7 @@ export class SidebarUI extends BaseComponent {
             return;
         }
 
-        this._minMonitorHeight = elements.monitor.offsetHeight || 300;
+        this._monitorVisibilityController.prime(elements);
 
         this._resizeObserver = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -251,33 +242,7 @@ export class SidebarUI extends BaseComponent {
         if (elements === null) {
             return;
         }
-
-        const sidebarHeight = this._sidebar.clientHeight;
-        const requiredSpace = this._calculateRequiredMonitorSpace(elements);
-        const overflowAllowancePx = Math.max(32, Math.round(elements.bottom.offsetHeight * 0.6));
-        const spaceDeficit = requiredSpace - sidebarHeight;
-        const overflowAmount = Math.max(0, this._sidebar.scrollHeight - sidebarHeight);
-        const isVisible = !elements.monitor.classList.contains('adaptive-hidden');
-
-        if (
-            isVisible &&
-            (spaceDeficit > overflowAllowancePx || overflowAmount > overflowAllowancePx)
-        ) {
-            elements.monitor.classList.add('adaptive-hidden');
-            this._sidebar.classList.add('monitor-hidden');
-            tracer.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
-            return;
-        }
-
-        if (
-            !isVisible &&
-            spaceDeficit <= overflowAllowancePx / 2 &&
-            overflowAmount <= overflowAllowancePx / 2
-        ) {
-            elements.monitor.classList.remove('adaptive-hidden');
-            this._sidebar.classList.remove('monitor-hidden');
-            tracer.debug('[SidebarUI] Showing monitor (space restored)');
-        }
+        this._monitorVisibilityController.update(elements);
     }
 
     private async _findSidebar(): Promise<HTMLElement | null> {
@@ -293,56 +258,6 @@ export class SidebarUI extends BaseComponent {
         }
 
         return null;
-    }
-
-    private _getSidebarMenus(): ISidebarMenus | null {
-        if (this._sidebar === null) {
-            return null;
-        }
-
-        const mainMenu = this._sidebar.querySelector('.main-menu');
-        const bottomMenu = this._sidebar.querySelector('.bottom-menu');
-        if (!(mainMenu instanceof HTMLElement) || !(bottomMenu instanceof HTMLElement)) {
-            return null;
-        }
-
-        return { mainMenu, bottomMenu };
-    }
-
-    private _createNavButton(page: IAppPage): HTMLButtonElement {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'nav-btn';
-        this._applyHiddenNavState(button, page.id);
-        if (page.id === 'console') {
-            button.classList.add('console-trigger');
-        }
-        button.dataset['page'] = page.id;
-
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('class', 'icon');
-
-        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-        use.setAttribute('href', page.icon);
-        svg.appendChild(use);
-
-        const label = document.createElement('span');
-        label.dataset['i18n'] = page.i18nKey;
-        label.textContent = page.defaultLabel;
-
-        button.appendChild(svg);
-        button.appendChild(label);
-        return button;
-    }
-
-    private _applyHiddenNavState(button: HTMLButtonElement, pageId: string): void {
-        if (!this._state.getHiddenNavItems().includes(pageId)) {
-            return;
-        }
-
-        button.classList.add('hidden');
-        button.setAttribute('aria-hidden', 'true');
-        button.setAttribute('tabindex', '-1');
     }
 
     private _startSnappingAnimation(): void {
@@ -384,20 +299,6 @@ export class SidebarUI extends BaseComponent {
             return null;
         }
 
-        return { monitor, logo, menu, bottom };
-    }
-
-    private _calculateRequiredMonitorSpace(elements: IMonitoringElements): number {
-        const paddingAndMargins = 24 * 4;
-        const autoMarginBuffer = 20;
-
-        return (
-            elements.logo.offsetHeight +
-            elements.menu.offsetHeight +
-            elements.bottom.offsetHeight +
-            this._minMonitorHeight +
-            paddingAndMargins +
-            autoMarginBuffer
-        );
+        return { sidebar: this._sidebar, monitor, logo, menu, bottom };
     }
 }

@@ -9,7 +9,9 @@
  */
 
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type EngineConfigLogger = Pick<LoggerService, 'error'>;
 
 /** Subset of EngineConfig that the frontend can read and write. */
 export interface EngineConfig {
@@ -25,7 +27,10 @@ export interface EngineSettingsPayload {
 }
 
 export class EngineConfigService {
-    constructor(private readonly _tauri: TauriProvider) {}
+    constructor(
+        private readonly _tauri: TauriProvider,
+        private readonly _tracer: EngineConfigLogger,
+    ) {}
 
     /**
      * Fetches the persisted config for an engine, falling back to backend defaults
@@ -38,7 +43,7 @@ export class EngineConfigService {
                 engineId,
             });
         } catch (e) {
-            tracer.error('[EngineConfigService] Failed to get engine config:', e);
+            this._tracer.error('[EngineConfigService] Failed to get engine config:', e);
             return null;
         }
     }
@@ -53,7 +58,7 @@ export class EngineConfigService {
                 engineId,
             });
         } catch (e) {
-            tracer.error('[EngineConfigService] Failed to get engine settings payload:', e);
+            this._tracer.error('[EngineConfigService] Failed to get engine settings payload:', e);
             return null;
         }
     }
@@ -67,7 +72,7 @@ export class EngineConfigService {
         try {
             await this._tauri.invoke<void>('set_engine_config', { config });
         } catch (e) {
-            tracer.error('[EngineConfigService] Failed to save engine config:', e);
+            this._tracer.error('[EngineConfigService] Failed to save engine config:', e);
         }
     }
 }

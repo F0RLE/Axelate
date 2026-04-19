@@ -69,7 +69,6 @@
     position: relative;
     width: 140px;
     height: 140px;
-    will-change: transform;
     animation: splashFloat 4s ease-in-out infinite;
 }
 

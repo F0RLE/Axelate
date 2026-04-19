@@ -6,8 +6,10 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
+
+type UiStateStoreLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
 
@@ -33,6 +35,8 @@ export interface IUIState {
     preferred_language?: string | null;
     pending_chat_reveal: boolean;
 }
+
+type UiStateStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 const DEFAULT_UI_STATE: IUIState = {
     sidebar_collapsed: false,
@@ -63,23 +67,27 @@ export class UiStateStore {
     private readonly _STORAGE_KEY = 'axelate_ui_state';
     private _isDestroyed = false;
 
-    constructor(private readonly _bridge: IBridge) {}
+    constructor(
+        private readonly _bridge: IBridge,
+        private readonly _tracer: UiStateStoreLogger,
+        private readonly _storage: UiStateStorage | null = globalThis.localStorage,
+    ) {}
 
     public async loadState(): Promise<IUIState> {
         try {
             if (this._bridge.isTauri()) {
                 const loaded = await this._bridge.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
-                tracer.info('[UiStateStore] Loaded from backend');
+                this._tracer.info('[UiStateStore] Loaded from backend');
             } else {
-                const stored = localStorage.getItem(this._STORAGE_KEY);
+                const stored = this._storage?.getItem(this._STORAGE_KEY) ?? null;
                 if (stored !== null) {
                     this.setState(JSON.parse(stored) as Partial<IUIState>);
-                    tracer.info('[UiStateStore] Loaded from localStorage');
+                    this._tracer.info('[UiStateStore] Loaded from browser storage');
                 }
             }
         } catch (e) {
-            tracer.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
+            this._tracer.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
         }
         return this._state;
     }
@@ -160,11 +168,11 @@ export class UiStateStore {
             if (this._bridge.isTauri()) {
                 await this._bridge.invoke('save_ui_state', { state: this._state });
             } else {
-                localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
             this._isDirty = false;
         } catch (e) {
-            tracer.error(`[UiStateStore] Failed to save state: ${String(e)}`);
+            this._tracer.error(`[UiStateStore] Failed to save state: ${String(e)}`);
         }
     }
 
@@ -174,11 +182,11 @@ export class UiStateStore {
             if (this._bridge.isTauri()) {
                 void this._bridge.invoke('save_ui_state', { state: this._state });
             } else {
-                localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
             this._isDirty = false;
         } catch (e) {
-            tracer.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
+            this._tracer.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
         }
     }
 

@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SkeletonManager } from './SkeletonManager';
 
-vi.mock('@/shared/utils/globalAccessor', () => ({
-    getGlobalWin: vi.fn(() => globalThis),
-}));
-
 describe('SkeletonManager', () => {
     let manager: SkeletonManager;
 
@@ -17,7 +13,6 @@ describe('SkeletonManager', () => {
                 <div id="mods-skeleton-3" style="display:none"></div>
             </div>
         `;
-        delete (globalThis as { showSkeletonLoaders?: unknown }).showSkeletonLoaders;
     });
 
     afterEach(() => {
@@ -39,16 +34,6 @@ describe('SkeletonManager', () => {
         expect((document.getElementById('mods-skeleton-1') as HTMLElement).style.display).toBe(
             'none',
         );
-    });
-
-    it('uses legacy global hook when available', () => {
-        const showSkeletonLoaders = vi.fn();
-        (
-            globalThis as unknown as { showSkeletonLoaders?: typeof showSkeletonLoaders }
-        ).showSkeletonLoaders = showSkeletonLoaders;
-
-        manager.show('mods', 3);
-        expect(showSkeletonLoaders).toHaveBeenCalledWith('mods', 3);
     });
 
     it('toggles loading state on buttons and ignores null buttons', () => {

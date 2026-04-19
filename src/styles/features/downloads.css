@@ -90,24 +90,6 @@
     box-shadow:
         0 0 0 1px rgba(255, 255, 255, 0.025),
         0 18px 40px rgba(var(--primary-raw), 0.12);
-    animation: downloadsIconPulse 2.2s ease-in-out infinite;
-}
-
-@keyframes downloadsIconPulse {
-    0%,
-    100% {
-        transform: translateY(0);
-        box-shadow:
-            0 0 0 1px rgba(255, 255, 255, 0.025),
-            0 18px 40px rgba(var(--primary-raw), 0.12);
-    }
-
-    50% {
-        transform: translateY(-2px);
-        box-shadow:
-            0 0 0 1px rgba(255, 255, 255, 0.025),
-            0 22px 48px rgba(var(--primary-raw), 0.18);
-    }
 }
 
 .downloads-title {
@@ -327,8 +309,6 @@
     width: 0%;
     border-radius: inherit;
     background: linear-gradient(90deg, rgba(122, 60, 214, 0.95), rgba(170, 98, 255, 0.95));
-    background-size: 300% 100%;
-    animation: waveFlow 4s ease-in-out infinite;
     transform-origin: left center;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 0 12px rgba(var(--primary-raw), 0.18);
@@ -519,7 +499,6 @@
     height: 58px;
     opacity: 1;
     color: rgb(var(--primary-raw));
-    filter: drop-shadow(0 10px 22px rgba(var(--primary-raw), 0.2));
 }
 
 .downloads-empty-title {

@@ -101,13 +101,12 @@
 }
 
 .chat-row.user .chat-bubble::before {
-    background:
-        linear-gradient(
-            180deg,
-            rgba(255, 255, 255, 0.07) 0%,
-            rgba(255, 255, 255, 0.02) 42%,
-            rgba(255, 255, 255, 0) 100%
-        );
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.07) 0%,
+        rgba(255, 255, 255, 0.02) 42%,
+        rgba(255, 255, 255, 0) 100%
+    );
     opacity: 1;
 }
 
@@ -449,8 +448,6 @@
     justify-content: center;
     padding: 2rem;
     background: rgba(7, 7, 12, 0.94);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
 }
 
 .chat-image-viewer.hidden {
@@ -611,8 +608,6 @@
     padding: 0;
     border-radius: 18px;
     background: rgba(var(--background-raw), 0.065);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
     border: none;
     box-shadow:
         inset -1px 0 0 rgba(255, 255, 255, 0.018),
@@ -953,7 +948,6 @@
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     padding: 6px;
     box-sizing: border-box;
-    backdrop-filter: blur(10px);
 }
 
 .chat-media-card.is-file {
@@ -1047,7 +1041,6 @@
     padding: 2px 4px;
     border-radius: 4px;
     font-family: var(--app-font-family);
-    backdrop-filter: blur(4px);
 }
 
 .media-remove {
@@ -1126,8 +1119,6 @@
     min-height: 3.45rem;
     border-radius: 18px;
     background: rgba(var(--background-raw), 0.065);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
     border: none;
     box-shadow:
         inset -1px 0 0 rgba(255, 255, 255, 0.018),
@@ -1848,7 +1839,6 @@
 
 #chat-container .chat-input-bar {
     filter: none !important;
-    transform: translateZ(0);
     background-clip: padding-box;
     outline: none !important;
 }

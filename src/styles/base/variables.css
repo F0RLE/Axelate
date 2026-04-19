@@ -57,6 +57,22 @@
         rgba(255, 255, 255, 0.12)
     );
     --module-button-radius: 12px;
+    --premium-purple-bg: linear-gradient(
+        135deg,
+        rgba(145, 53, 255, 0.92) 0%,
+        rgba(191, 92, 255, 0.88) 100%
+    );
+    --premium-purple-bg-hover: linear-gradient(
+        135deg,
+        rgba(154, 67, 255, 0.95) 0%,
+        rgba(199, 108, 255, 0.9) 100%
+    );
+    --premium-purple-border: rgba(235, 204, 255, 0.16);
+    --premium-purple-border-strong: rgba(245, 224, 255, 0.26);
+    --premium-purple-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --premium-purple-chip-bg: rgba(0, 0, 0, 0.15);
+    --premium-purple-chip-border: rgba(0, 0, 0, 0.05);
+    --premium-purple-text: #ffffff;
 
     /* Semantic Slugs */
     --text-primary: #e0e0e0;

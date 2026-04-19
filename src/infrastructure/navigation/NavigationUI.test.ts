@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NavigationUI } from './NavigationUI';
 import type { NavigationService } from './NavigationService';
 import type { SoundService } from '@/shared/services/SoundService';
-import { eventBus } from '@/shared/services/EventBus';
+import { EventBus } from '@/shared/services/EventBus';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 function setupDOM(): void {
     document.body.innerHTML = `
@@ -75,9 +76,16 @@ describe('NavigationUI', () => {
     let navigationService: NavigationService;
     let soundService: SoundService;
     let navigationUI: NavigationUI;
+    let testEventBus: EventBus;
+    let tracer: LoggerService;
+    let runtime: {
+        addWindowListener: ReturnType<typeof vi.fn>;
+        removeWindowListener: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
         setupDOM();
+        testEventBus = new EventBus();
 
         navigationService = {
             getCurrentPage: vi.fn(() => 'home'),
@@ -92,7 +100,33 @@ describe('NavigationUI', () => {
             playToggle: vi.fn(),
         } as unknown as SoundService;
 
-        navigationUI = new NavigationUI(navigationService, soundService);
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
+
+        const nativeAdd = globalThis.addEventListener.bind(globalThis);
+        const nativeRemove = globalThis.removeEventListener.bind(globalThis);
+        runtime = {
+            addWindowListener: vi.fn((...args: Parameters<typeof globalThis.addEventListener>) => {
+                nativeAdd(...args);
+            }),
+            removeWindowListener: vi.fn(
+                (...args: Parameters<typeof globalThis.removeEventListener>) => {
+                    nativeRemove(...args);
+                },
+            ),
+        };
+
+        navigationUI = new NavigationUI(
+            navigationService,
+            testEventBus,
+            tracer,
+            soundService,
+            runtime as unknown as ConstructorParameters<typeof NavigationUI>[4],
+        );
     });
 
     it('should be idempotent across repeated init calls', () => {
@@ -193,6 +227,37 @@ describe('NavigationUI', () => {
         expect(mouseUp.defaultPrevented).toBe(true);
         expect(navigationService.goBack).toHaveBeenCalledTimes(1);
         expect(showPageSpy).toHaveBeenCalledWith('home', null, false, true);
+    });
+
+    it('should not treat side-button events from different targets as duplicates', () => {
+        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
+        navigationUI.init();
+        const firstButton = document.createElement('button');
+        const secondButton = document.createElement('button');
+        document.body.appendChild(firstButton);
+        document.body.appendChild(secondButton);
+
+        dispatchNavigationMouse(
+            navigationUI,
+            new MouseEvent('mousedown', {
+                button: 3,
+                bubbles: true,
+                cancelable: true,
+            }),
+            firstButton,
+        );
+
+        const mouseUp = new MouseEvent('mouseup', {
+            button: 3,
+            bubbles: true,
+            cancelable: true,
+        });
+        dispatchNavigationMouse(navigationUI, mouseUp, secondButton);
+
+        expect(mouseUp.defaultPrevented).toBe(true);
+        expect(navigationService.goBack).toHaveBeenCalledTimes(2);
+        expect(showPageSpy).toHaveBeenNthCalledWith(1, 'home', null, false, true);
+        expect(showPageSpy).toHaveBeenNthCalledWith(2, 'home', null, false, true);
     });
 
     it('should allow re-init after destroy without duplicating listeners', () => {
@@ -385,7 +450,7 @@ describe('NavigationUI', () => {
     });
 
     it('should show target page, emit navigation payload and update active sidebar state', async () => {
-        const emitSpy = vi.spyOn(eventBus, 'emit');
+        const emitSpy = vi.spyOn(testEventBus, 'emit');
         const button = document.querySelector<HTMLElement>('.nav-btn');
 
         await navigationUI.showPage('settings', button);

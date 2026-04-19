@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AIChatTransport } from '@/features/ai/services/AIChatTransport';
 import type { IChatRequest } from '@/features/ai/types/aiTypes';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // ---------- helpers ----------
 function createMockCore(isTauri = true) {
@@ -40,10 +41,16 @@ function deferred<T>() {
 describe('AIChatTransport', () => {
     let transport: AIChatTransport;
     let mockCore: ReturnType<typeof createMockCore>;
+    let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
     beforeEach(() => {
         vi.useFakeTimers();
-        transport = new AIChatTransport();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+        };
+        transport = new AIChatTransport(tracer);
         mockCore = createMockCore();
         transport.setCore(mockCore as unknown as Parameters<typeof transport.setCore>[0]);
     });
@@ -74,7 +81,7 @@ describe('AIChatTransport', () => {
         });
 
         it('should return error when core is null', async () => {
-            const t = new AIChatTransport();
+            const t = new AIChatTransport(tracer);
             const result = await t.send(makeRequest());
             expect(result).toEqual({ ok: false, error: 'IPC host unavailable' });
         });
@@ -260,7 +267,7 @@ describe('AIChatTransport', () => {
         });
 
         it('should return no-op function when core is null', () => {
-            const t = new AIChatTransport();
+            const t = new AIChatTransport(tracer);
             const method = (
                 t as unknown as Record<string, (cb: (c: string) => void) => () => void>
             )[methodName];
@@ -485,7 +492,7 @@ describe('AIChatTransport', () => {
         });
 
         it('onStream should hit core null check (Line 68)', () => {
-            const t = new AIChatTransport();
+            const t = new AIChatTransport(tracer);
             const unsub = t.onStream(vi.fn());
             expect(typeof unsub).toBe('function');
             unsub();

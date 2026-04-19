@@ -1,3 +1,5 @@
+use crate::utils::locale::normalize_supported_language;
+
 /// Action selected in the startup requirement dialog.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartupDialogAction {
@@ -95,17 +97,6 @@ impl EnvironmentValidator {
         }
 
         std::process::exit(1);
-    }
-}
-
-fn normalize_supported_language(language: &str) -> &str {
-    let lower = language.trim().to_ascii_lowercase();
-    if lower.starts_with("ru") {
-        "ru"
-    } else if lower.starts_with("zh") {
-        "zh"
-    } else {
-        "en"
     }
 }
 

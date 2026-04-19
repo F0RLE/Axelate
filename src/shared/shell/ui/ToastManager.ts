@@ -70,16 +70,22 @@ export class ToastManager {
         title: string | null = null,
         id: string | null = null,
     ): void {
+        const normalizedMessage = message.trim();
+        const normalizedTitle = title?.trim() ?? null;
+        if (normalizedMessage === '' && (normalizedTitle === null || normalizedTitle === '')) {
+            return;
+        }
+
         this._normalizeHiddenDialogs();
         const container = this._ensureToastContainer();
         const existingToast = id === null ? null : this._findToastById(id);
 
         if (existingToast !== null) {
-            this._updateExistingToast(existingToast, message, type, title, duration);
+            this._updateExistingToast(existingToast, normalizedMessage, type, normalizedTitle, duration);
             return;
         }
 
-        this._createToast(container, message, type, duration, title, id);
+        this._createToast(container, normalizedMessage, type, duration, normalizedTitle, id);
     }
 
     private _normalizeHiddenDialogs(): void {

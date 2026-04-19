@@ -26,12 +26,13 @@ describe('ModuleSettingsModalController', () => {
             this.open = false;
         });
 
-        (globalThis as unknown as { closeAppSelection?: ReturnType<typeof vi.fn> }).closeAppSelection =
-            vi.fn();
     });
 
     it('opens modal, hides background and wires close actions', () => {
-        const controller = new ModuleSettingsModalController(navigation as never);
+        const closeAppSelection = vi.fn();
+        const controller = new ModuleSettingsModalController(navigation as never, {
+            closeAppSelection,
+        });
         const onClose = vi.fn();
         const onReopen = vi.fn();
 
@@ -39,6 +40,7 @@ describe('ModuleSettingsModalController', () => {
 
         expect(modal.open).toBe(true);
         expect(navigation.pushBackAction).toHaveBeenCalled();
+        expect(closeAppSelection).toHaveBeenCalledTimes(1);
         expect(document.body.classList.contains('settings-modal-open')).toBe(true);
         expect(document.getElementById('sidebar')?.classList.contains('content-hidden')).toBe(true);
 
@@ -47,15 +49,17 @@ describe('ModuleSettingsModalController', () => {
     });
 
     it('closes modal and restores background visibility', () => {
-        const controller = new ModuleSettingsModalController(navigation as never);
+        const controller = new ModuleSettingsModalController(navigation as never, {
+            closeAppSelection: vi.fn(),
+        });
         controller.open('svc', vi.fn(), vi.fn());
 
         controller.close();
 
         expect(navigation.removeBackAction).toHaveBeenCalledWith('module-settings-modal');
         expect(document.body.classList.contains('settings-modal-open')).toBe(false);
-        expect(
-            document.getElementById('sidebar')?.classList.contains('content-hidden'),
-        ).toBe(false);
+        expect(document.getElementById('sidebar')?.classList.contains('content-hidden')).toBe(
+            false,
+        );
     });
 });

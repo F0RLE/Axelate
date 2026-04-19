@@ -6,7 +6,11 @@ use std::path::Path;
 /// Current module API version
 pub const CURRENT_API_VERSION: &str = "1";
 const PRIMARY_MANIFEST_FILE: &str = "axelate-module.toml";
-const LEGACY_MANIFEST_FILE: &str = "module.json";
+
+#[derive(Debug)]
+struct ManifestSource {
+    path: std::path::PathBuf,
+}
 
 /// Module lifecycle trait for start/stop/health management
 pub trait ModuleLifecycle {
@@ -41,7 +45,7 @@ pub enum ModuleHealth {
     Unknown,
 }
 
-/// Module manifest (`axelate-module.toml` or legacy `module.json`)
+/// Module manifest (`axelate-module.toml`)
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ModuleManifest {
     #[serde(default = "default_api_version")]
@@ -124,23 +128,28 @@ pub struct LifecycleScripts {
 pub struct ManifestLoader;
 
 impl ManifestLoader {
-    /// Loads module manifest from `axelate-module.toml` or legacy `module.json`.
+    /// Loads module manifest from `axelate-module.toml`.
     pub fn load(module_dir: &std::path::Path) -> Result<ModuleManifest, AppError> {
+        let source = Self::resolve_manifest_source(module_dir)?;
+        let manifest = Self::load_manifest_source(&source)?;
+        Ok(Self::normalize_manifest(module_dir, manifest))
+    }
+
+    fn resolve_manifest_source(module_dir: &Path) -> Result<ManifestSource, AppError> {
         let primary_manifest_path = module_dir.join(PRIMARY_MANIFEST_FILE);
         if primary_manifest_path.exists() {
-            let manifest = Self::load_toml_manifest(&primary_manifest_path)?;
-            return Ok(Self::normalize_manifest(module_dir, manifest));
-        }
-
-        let legacy_manifest_path = module_dir.join(LEGACY_MANIFEST_FILE);
-        if legacy_manifest_path.exists() {
-            let manifest = Self::load_json_manifest(&legacy_manifest_path)?;
-            return Ok(Self::normalize_manifest(module_dir, manifest));
+            return Ok(ManifestSource {
+                path: primary_manifest_path,
+            });
         }
 
         Err(AppError::NotFound(format!(
-            "Manifest not found. Expected {PRIMARY_MANIFEST_FILE} or {LEGACY_MANIFEST_FILE}"
+            "Manifest not found. Expected {PRIMARY_MANIFEST_FILE}"
         )))
+    }
+
+    fn load_manifest_source(source: &ManifestSource) -> Result<ModuleManifest, AppError> {
+        Self::load_toml_manifest(&source.path)
     }
 
     fn load_toml_manifest(manifest_path: &Path) -> Result<ModuleManifest, AppError> {
@@ -154,20 +163,9 @@ impl ManifestLoader {
         })
     }
 
-    fn load_json_manifest(manifest_path: &Path) -> Result<ModuleManifest, AppError> {
-        let content =
-            std::fs::read_to_string(manifest_path).map_err(|e| AppError::Io(e.to_string()))?;
-        serde_json::from_str(&content).map_err(|e| {
-            AppError::Serialization(format!(
-                "Failed to parse legacy JSON manifest at {}: {e}",
-                manifest_path.display()
-            ))
-        })
-    }
-
     fn normalize_manifest(module_dir: &Path, mut manifest: ModuleManifest) -> ModuleManifest {
-        // Keep older script modules runnable even if a legacy installer dropped `entry`
-        // from the manifest but the standard `src/main.py` layout exists on disk.
+        // Keep older script modules runnable when `entry` is omitted but the
+        // standard `src/main.py` layout exists on disk.
         if manifest.entry.is_none() {
             let default_python_entry = module_dir.join("src").join("main.py");
             if default_python_entry.exists() {
@@ -184,6 +182,7 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{ManifestLoader, PRIMARY_MANIFEST_FILE};
+    use crate::errors::AppError;
     use std::fs;
 
     #[test]
@@ -227,9 +226,9 @@ start = { program = "uv", args = ["run", "src/main.py"] }
     }
 
     #[test]
-    fn falls_back_to_legacy_json_manifest() {
+    fn rejects_non_toml_manifest_files() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
-        let manifest_path = temp_dir.path().join(super::LEGACY_MANIFEST_FILE);
+        let manifest_path = temp_dir.path().join("module.json");
 
         fs::write(
             &manifest_path,
@@ -242,11 +241,31 @@ start = { program = "uv", args = ["run", "src/main.py"] }
   "dependencies": []
 }"#,
         )
-        .expect("write legacy manifest");
+        .expect("write non-toml manifest");
 
-        let manifest = ManifestLoader::load(temp_dir.path()).expect("load legacy manifest");
+        let error = ManifestLoader::load(temp_dir.path()).expect_err("non-toml manifest rejected");
 
-        assert_eq!(manifest.id, "legacy-demo");
-        assert_eq!(manifest.version, "0.1.0");
+        assert!(
+            matches!(error, AppError::NotFound(message) if message.contains(PRIMARY_MANIFEST_FILE))
+        );
+    }
+
+    #[test]
+    fn resolves_manifest_source_to_primary_toml() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        fs::write(
+            temp_dir.path().join(PRIMARY_MANIFEST_FILE),
+            r#"
+api_version = "1"
+id = "primary"
+name = "Primary"
+version = "1.0.0"
+"#,
+        )
+        .expect("write primary");
+
+        let source = ManifestLoader::resolve_manifest_source(temp_dir.path()).expect("source");
+
+        assert_eq!(source.path, temp_dir.path().join(PRIMARY_MANIFEST_FILE));
     }
 }

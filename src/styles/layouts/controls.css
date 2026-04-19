@@ -11,10 +11,6 @@
     padding: 0;
     z-index: 900;
 
-    /* Liquid Glass Effect */
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-
     /* Glossy gradient + extreme transparency */
     background: rgba(var(--background-raw), 0.08);
 
@@ -334,8 +330,6 @@ body[data-platform='macos'] .header-left-group .lang-btn {
         rgba(255, 255, 255, 0.045),
         rgba(255, 255, 255, 0.02)
     ) !important;
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
 }
 
 body[data-platform='macos'] .header-left-group .sound-toggle-btn:hover,

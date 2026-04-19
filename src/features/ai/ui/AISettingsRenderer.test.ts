@@ -6,10 +6,6 @@ vi.mock('dompurify', () => ({
     },
 }));
 
-vi.mock('@/shared/utils/globalAccessor', () => ({
-    getGlobalWin: () => globalThis,
-}));
-
 import { aiSettingsRenderer } from './AISettingsRenderer';
 
 describe('AISettingsRenderer', () => {
@@ -35,6 +31,18 @@ describe('AISettingsRenderer', () => {
         invoke: vi.fn(),
         openUrl: vi.fn(),
     };
+
+    const i18nUI = {
+        applyTranslations: vi.fn(),
+    };
+    const tracer = {
+        info: vi.fn(),
+        debug: vi.fn(),
+        error: vi.fn(),
+    };
+    const showToast = vi.fn();
+
+    const translate = (key: string, fallback: string): string => `${key}:${fallback}`;
 
     const models = [
         {
@@ -71,20 +79,15 @@ describe('AISettingsRenderer', () => {
         tauri.invoke.mockResolvedValue(true);
         tauri.openUrl.mockResolvedValue(undefined);
 
-        (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
-            key,
-            fallback,
-        ) => `${key}:${fallback}`;
-        (globalThis as unknown as { showToast?: ReturnType<typeof vi.fn> }).showToast = vi.fn();
-        (
-            globalThis as unknown as { applyTranslations?: ReturnType<typeof vi.fn> }
-        ).applyTranslations = vi.fn();
-
         aiSettingsRenderer.destroy();
         await aiSettingsRenderer.init(
             settingsService as never,
             aiSettings as never,
             tauri as never,
+            i18nUI as never,
+            translate,
+            tracer,
+            showToast,
         );
     });
 
@@ -150,10 +153,7 @@ describe('AISettingsRenderer', () => {
 
         internetCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         expect(aiSettings.setInternetAccessEnabled).toHaveBeenCalledWith('gpt', false);
-        expect(
-            (globalThis as unknown as { applyTranslations: ReturnType<typeof vi.fn> })
-                .applyTranslations,
-        ).toHaveBeenCalled();
+        expect(i18nUI.applyTranslations).toHaveBeenCalled();
     });
 
     it('reveals stored key on demand and updates selected model stats', async () => {
@@ -199,9 +199,7 @@ describe('AISettingsRenderer', () => {
 
         await aiSettingsRenderer.toggleKeyVisibility('gpt');
 
-        expect(
-            (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
-        ).toHaveBeenCalledWith(
+        expect(showToast).toHaveBeenCalledWith(
             'ui.settings.key_reveal_error:Failed to reveal stored key',
             'error',
         );
@@ -218,9 +216,6 @@ describe('AISettingsRenderer', () => {
 
         const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
         const button = document.getElementById('gpt-key-check-btn') as HTMLButtonElement;
-        const showToast = (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> })
-            .showToast;
-
         input.value = '••••••••••••••••';
         await aiSettingsRenderer.checkKey('gpt');
         expect(showToast).toHaveBeenCalledWith('ui.settings.key_valid:Key is valid', 'success');

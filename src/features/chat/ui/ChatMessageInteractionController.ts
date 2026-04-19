@@ -1,9 +1,10 @@
 import DOMPurify from 'dompurify';
-import { invoke } from '@tauri-apps/api/core';
 
 import type { ChatImageController } from './ChatImageController';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+
+type ChatMessageInteractionLogger = Pick<LoggerService, 'error'>;
 
 type ChatImagePayload = {
     mime: string;
@@ -14,9 +15,16 @@ type ChatMessageInteractionControllerDeps = {
     imageController: ChatImageController;
     isDestroyed: () => boolean;
     setManagedTimeout: (callback: () => void, delayMs: number) => void;
-    showToast: (message: string, type?: 'success' | 'error' | 'warning', duration?: number) => void;
+    showToast: (
+        message: string,
+        type?: 'success' | 'error' | 'warning' | 'info',
+        duration?: number,
+    ) => void;
+    copyText: (text: string) => Promise<void>;
     getEditMessageHandler: () => ((text: string) => void | Promise<void>) | null;
     setLastEditableUserActionBar: (actionBar: HTMLElement) => void;
+    translate: TTranslateFunction;
+    tracer: ChatMessageInteractionLogger;
 };
 
 export class ChatMessageInteractionController {
@@ -35,7 +43,7 @@ export class ChatMessageInteractionController {
         copyBtn.type = 'button';
         copyBtn.className = 'chat-copy-own-btn';
         copyBtn.dataset['copyText'] = content;
-        copyBtn.title = getGlobalWin().t('ui.launcher.web.copy', 'Copy');
+        copyBtn.title = this._deps.translate('ui.launcher.web.copy', 'Copy');
         copyBtn.innerHTML = DOMPurify.sanitize(`
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                 <path d="M4 6h2v14H4zm2 14h12v2H6zM18 6h2v14h-2zM6 4h2v2H6zm10 0h2v2h-2zm-6-2h4v2h-4zm0 4h4v2h-4zM8 2h2v6H8zm6 0h2v6h-2z"></path>
@@ -51,7 +59,7 @@ export class ChatMessageInteractionController {
             editBtn.type = 'button';
             editBtn.className = 'chat-edit-own-btn';
             editBtn.dataset['editText'] = content;
-            editBtn.title = getGlobalWin().t('ui.launcher.web.edit_last', 'Edit last message');
+            editBtn.title = this._deps.translate('ui.launcher.web.edit_last', 'Edit last message');
             editBtn.innerHTML = DOMPurify.sanitize(`
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                     <path d="M15 2h4v2h-4zm-2 2h2v2h-2zm-2 2h2v2h-2zM9 8h2v2H9zM7 10h2v2H7zm-2 2h2v2H5zm-2 2h2v6h6v-2H7v-4H5zm10 2h8v2h-8z"></path>
@@ -95,7 +103,7 @@ export class ChatMessageInteractionController {
                 await this._copyToClipboard(text);
                 this._showCopyResult(ownBtn, true);
             } catch (error) {
-                tracer.error('[ChatUI] Message copy failed:', error);
+                this._deps.tracer.error('[ChatUI] Message copy failed:', error);
                 this._showCopyResult(ownBtn, false);
             }
             return;
@@ -116,7 +124,7 @@ export class ChatMessageInteractionController {
             await this._copyToClipboard(text);
             this._showCopyResult(btn as HTMLElement, true);
         } catch (error) {
-            tracer.error('[ChatUI] Copy failed:', error);
+            this._deps.tracer.error('[ChatUI] Copy failed:', error);
             this._showCopyResult(btn as HTMLElement, false);
         }
     }
@@ -140,24 +148,13 @@ export class ChatMessageInteractionController {
     }
 
     private async _copyToClipboard(text: string): Promise<void> {
-        const win = getGlobalWin();
-        const isTauri = win.__TAURI_INTERNALS__ !== undefined;
-        if (isTauri) {
-            try {
-                await invoke('plugin:clipboard-manager|write_text', { text });
-                return;
-            } catch {
-                /* fallback to navigator */
-            }
-        }
-
-        await navigator.clipboard.writeText(text);
+        await this._deps.copyText(text);
     }
 
     private _showCopyResult(btn: HTMLElement, success: boolean): void {
         if (!success) {
             this._deps.showToast(
-                getGlobalWin().t('ui.launcher.web.copy_failed', 'Failed to copy code'),
+                this._deps.translate('ui.launcher.web.copy_failed', 'Failed to copy code'),
                 'error',
             );
             return;

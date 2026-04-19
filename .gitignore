@@ -6,6 +6,8 @@ src/node_modules/
 src/dist/
 src/coverage/
 src/.vite/
+src/vite*.log
+src/preview*.log
 src/*.tsbuildinfo
 src-tauri/target/
 src-tauri/gen/
@@ -42,5 +44,5 @@ ehthumbs.db
 # Application
 AxelateData/
 data/
-.playwright-cli
-output
+.playwright-cli/
+output/

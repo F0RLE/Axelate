@@ -87,10 +87,9 @@ impl GpuInfo {
             "hip" => AcceleratorClass::AmdGpu,
             "sycl" => AcceleratorClass::IntelGpu,
             "vulkan" => {
-                let lower = self.name.to_ascii_lowercase();
-                if lower.contains("amd") || lower.contains("radeon") {
+                if gpu_name_brand(&self.name) == GpuBrand::Amd {
                     AcceleratorClass::AmdGpu
-                } else if lower.contains("intel") || lower.contains("arc") {
+                } else if gpu_name_brand(&self.name) == GpuBrand::Intel {
                     AcceleratorClass::IntelGpu
                 } else if self.detected {
                     AcceleratorClass::GenericGpu
@@ -276,6 +275,16 @@ async fn probe_linux_drm_names() -> Option<Vec<String>> {
     normalize_names(names)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GpuBrand {
+    Nvidia,
+    Amd,
+    Intel,
+    Apple,
+    Software,
+    Other,
+}
+
 fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
     let primary_name = names
         .iter()
@@ -284,36 +293,8 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
         .or_else(|| names.first().cloned())
         .unwrap_or_else(|| "Integrated / No GPU".to_string());
 
-    let lower = primary_name.to_ascii_lowercase();
-    let backend = if lower.contains("nvidia")
-        || lower.contains("geforce")
-        || lower.contains("quadro")
-        || lower.contains("rtx")
-        || lower.contains("gtx")
-    {
-        "cuda"
-    } else if lower.contains("amd")
-        || lower.contains("radeon")
-        || lower.contains("advanced micro devices")
-    {
-        "hip"
-    } else if lower.contains("intel") || lower.contains("arc") {
-        "sycl"
-    } else if lower.contains("apple")
-        || lower.contains("metal")
-        || lower.contains("m1")
-        || lower.contains("m2")
-        || lower.contains("m3")
-        || lower.contains("m4")
-    {
-        "metal"
-    } else if is_software_adapter(&primary_name) {
-        "cpu"
-    } else {
-        "vulkan"
-    };
-
-    let detected = !is_software_adapter(&primary_name);
+    let backend = preferred_backend_for_gpu_name(&primary_name);
+    let detected = gpu_name_brand(&primary_name) != GpuBrand::Software;
     let (cuda_driver_major, cuda_driver_minor) = if backend == "cuda" {
         detect_cuda_driver_version()
     } else {
@@ -334,6 +315,51 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
     }
 }
 
+fn preferred_backend_for_gpu_name(name: &str) -> &'static str {
+    match gpu_name_brand(name) {
+        GpuBrand::Nvidia => "cuda",
+        GpuBrand::Amd => "hip",
+        GpuBrand::Intel => "sycl",
+        GpuBrand::Apple => "metal",
+        GpuBrand::Software => "cpu",
+        GpuBrand::Other => "vulkan",
+    }
+}
+
+fn gpu_name_brand(name: &str) -> GpuBrand {
+    let lower = name.to_ascii_lowercase();
+
+    if is_software_adapter(name) {
+        return GpuBrand::Software;
+    }
+    if lower.contains("nvidia")
+        || lower.contains("geforce")
+        || lower.contains("quadro")
+        || lower.contains("rtx")
+        || lower.contains("gtx")
+    {
+        return GpuBrand::Nvidia;
+    }
+    if lower.contains("amd") || lower.contains("radeon") || lower.contains("advanced micro devices")
+    {
+        return GpuBrand::Amd;
+    }
+    if lower.contains("intel") || lower.contains("arc") {
+        return GpuBrand::Intel;
+    }
+    if lower.contains("apple")
+        || lower.contains("metal")
+        || lower.contains("m1")
+        || lower.contains("m2")
+        || lower.contains("m3")
+        || lower.contains("m4")
+    {
+        return GpuBrand::Apple;
+    }
+
+    GpuBrand::Other
+}
+
 fn detect_cuda_driver_version() -> (Option<u32>, Option<u32>) {
     let Ok(nvml) = Nvml::init() else {
         return (None, None);
@@ -348,44 +374,15 @@ fn detect_cuda_driver_version() -> (Option<u32>, Option<u32>) {
 }
 
 fn gpu_name_priority(name: &str) -> i32 {
-    let lower = name.to_ascii_lowercase();
-    if is_software_adapter(name) {
-        return 0;
+    match gpu_name_brand(name) {
+        GpuBrand::Software => 0,
+        GpuBrand::Nvidia => 1_000,
+        GpuBrand::Amd => 900,
+        GpuBrand::Apple => 850,
+        GpuBrand::Intel if name.to_ascii_lowercase().contains("arc") => 800,
+        GpuBrand::Intel => 400,
+        GpuBrand::Other => 200,
     }
-
-    if lower.contains("nvidia")
-        || lower.contains("geforce")
-        || lower.contains("quadro")
-        || lower.contains("rtx")
-        || lower.contains("gtx")
-    {
-        return 1_000;
-    }
-
-    if lower.contains("amd") || lower.contains("radeon") || lower.contains("advanced micro devices")
-    {
-        return 900;
-    }
-
-    if lower.contains("apple")
-        || lower.contains("metal")
-        || lower.contains("m1")
-        || lower.contains("m2")
-        || lower.contains("m3")
-        || lower.contains("m4")
-    {
-        return 850;
-    }
-
-    if lower.contains("intel") && lower.contains("arc") {
-        return 800;
-    }
-
-    if lower.contains("intel") {
-        return 400;
-    }
-
-    200
 }
 
 fn is_software_adapter(name: &str) -> bool {

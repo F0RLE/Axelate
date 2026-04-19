@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { eventBus } from '@/shared/services/EventBus';
+import { EventBus } from '@/shared/services/EventBus';
 
 describe('EventBus', () => {
+    let eventBus: EventBus;
+
     beforeEach(() => {
-        eventBus.clear();
+        eventBus = new EventBus();
     });
 
     describe('on/emit', () => {

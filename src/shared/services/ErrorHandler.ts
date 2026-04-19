@@ -1,11 +1,10 @@
 /**
  * @module core/services/ErrorHandler
- * @description Global error boundary and management service for catching and logging application errors
+ * @description Error boundary and management service for catching and logging application errors.
  */
 
-import { eventBus } from './EventBus';
-import { tracer } from '@/infrastructure/logging/LoggerService';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import type { EventBus } from './EventBus';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 /**
  * Detailed error information.
@@ -22,11 +21,22 @@ export interface IErrorInfo {
 
 type ErrorCallback = (_error: IErrorInfo) => void;
 
+type ErrorHandlerDeps = {
+    eventBus: EventBus;
+    tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+};
+
+type UnhandledRejectionHandler = (event: PromiseRejectionEvent) => unknown;
+
 export class ErrorHandler {
     private _initialized = false;
     private _errorLog: IErrorInfo[] = [];
     private readonly _maxLogSize = 100;
     private readonly _callbacks = new Set<ErrorCallback>();
+    private _previousOnError: OnErrorEventHandler | null = null;
+    private _previousOnUnhandledRejection: UnhandledRejectionHandler | null = null;
+
+    public constructor(private readonly _deps: ErrorHandlerDeps) {}
 
     /**
      * Initializes global error handlers.
@@ -34,16 +44,13 @@ export class ErrorHandler {
      */
     public init(): void {
         if (this._initialized) {
-            tracer.warn('[ErrorHandler] Already initialized');
+            this._deps.tracer.warn('[ErrorHandler] Already initialized');
             return;
         }
 
-        const win = getGlobalWin();
-        if (win.errorHandler !== undefined) {
-            tracer.warn('[ErrorHandler] Another instance already initialized. Using existing.');
-            return;
-        }
-        win.errorHandler = this;
+        this._previousOnError = globalThis.onerror;
+        this._previousOnUnhandledRejection =
+            globalThis.onunhandledrejection as unknown as UnhandledRejectionHandler | null;
 
         globalThis.onerror = (message, source, lineno, colno, error) => {
             const extra: { url?: string; line?: number; column?: number } = {};
@@ -66,7 +73,21 @@ export class ErrorHandler {
         };
 
         this._initialized = true;
-        tracer.info('[ErrorHandler] Initialized');
+        this._deps.tracer.info('[ErrorHandler] Initialized');
+    }
+
+    public destroy(): void {
+        if (!this._initialized) {
+            return;
+        }
+
+        globalThis.onerror = this._previousOnError;
+        globalThis.onunhandledrejection = this
+            ._previousOnUnhandledRejection as Window['onunhandledrejection'];
+        this._previousOnError = null;
+        this._previousOnUnhandledRejection = null;
+        this._callbacks.clear();
+        this._initialized = false;
     }
 
     /**
@@ -80,19 +101,19 @@ export class ErrorHandler {
         const errorInfo = this._createErrorInfo(error, context, extra);
         this._pushError(errorInfo);
 
-        tracer.error(`[ErrorHandler] ${context ?? 'Error'} - ${error.message}`, error);
+        this._deps.tracer.error(`[ErrorHandler] ${context ?? 'Error'} - ${error.message}`, error);
 
         const eventPayload: { error: Error; context?: string } = { error };
         if (context !== undefined && context !== '') {
             eventPayload.context = context;
         }
-        eventBus.emit('error:global', eventPayload);
+        this._deps.eventBus.emit('error:global', eventPayload);
 
         this._callbacks.forEach((cb) => {
             try {
                 cb(errorInfo);
             } catch (callbackError) {
-                tracer.error('[ErrorHandler] Callback error:', callbackError);
+                this._deps.tracer.error('[ErrorHandler] Callback error:', callbackError);
             }
         });
 
@@ -246,6 +267,3 @@ export class ErrorHandler {
         return node;
     }
 }
-
-// Singleton export
-export const errorHandler = new ErrorHandler();

@@ -1,0 +1,323 @@
+import { ChatUI } from '../ui/ChatUI';
+import { ChatLifecycleHelper } from './ChatLifecycleHelper';
+import { ChatHistoryController } from '../controllers/ChatHistoryController';
+import { ChatGenerationController } from '../controllers/ChatGenerationController';
+import { ChatSendController } from '../controllers/ChatSendController';
+import type { ChatFileHandler } from './ChatFileHandler';
+import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { EventBus } from '@/shared/services/EventBus';
+import type { PendingChatRevealStore } from '../chat';
+import type { ChatContent } from '@/features/ai/types/aiTypes';
+import type { IApp } from '@/shared/types/coreTypes';
+import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';
+import type { ChatService } from './ChatService';
+
+type ChatTracer = Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
+
+type ChatFactoryDeps = {
+    aiBridge: AIBridge;
+    i18n: I18nService;
+    tracer: ChatTracer;
+    fileHandler: ChatFileHandler;
+};
+
+type ChatUiFactoryDeps = ChatFactoryDeps & {
+    showToast: (
+        message: string,
+        type?: 'success' | 'error' | 'warning' | 'info',
+        duration?: number,
+    ) => void;
+    isTauriRuntime: () => boolean;
+    openExternalUrl: (url: string) => Promise<void>;
+    copyText: (text: string) => Promise<void>;
+};
+
+type ChatLifecycleFactoryDeps = {
+    fileHandler: ChatFileHandler;
+    eventBus: EventBus;
+    refreshTranslations: () => void;
+    ensureHistoryLoaded: () => Promise<void>;
+    scheduleRevealLatestMessage: () => void;
+    bindEvents: () => void;
+    areEventsBound: () => boolean;
+    setEventsBound: (value: boolean) => void;
+    randomizeGreeting: (forceIndex?: number) => void;
+    currentGreetingIndex: () => number;
+    updateAttachmentsFromFiles: (
+        files: ReturnType<ChatFileHandler['getFiles']>,
+        onRemove: (index: number) => void,
+    ) => void;
+    updateTokenCount: () => Promise<void>;
+};
+
+type ChatHistoryFactoryDeps = {
+    aiBridge: AIBridge;
+    getHistory: () => IChatMessage[];
+    setHistory: (history: IChatMessage[]) => void;
+    appendHistoryMessage: (
+        role: 'user' | 'assistant',
+        text: string,
+        options?: Record<string, unknown>,
+    ) => void;
+    revealLatestMessage: () => void;
+    extractRenderableText: (content: ChatContent) => string;
+    buildHistoryRenderOptions: (content: ChatContent) => {
+        images?: Array<{ mime: string; data_base64: string }>;
+    };
+    restoreInputText: (text: string) => void;
+    renderHistory: (history: IChatMessage[]) => void;
+    showEditError: () => void;
+    isDestroyed: () => boolean;
+    getPendingChatRevealStore: () => PendingChatRevealStore | null;
+    tracer: ChatTracer;
+};
+
+type ChatGenerationFactoryDeps = {
+    aiBridge: AIBridge;
+    i18n: I18nService;
+    removeTyping: (typingId: string) => void;
+    appendAssistantMessage: (text: string, options?: Record<string, unknown>) => void;
+    pushAssistantMessage: (content: IChatMessage['content'], thoughtSignature?: string) => void;
+    extractText: (data: unknown) => string;
+    buildGeneratedImageContent: (
+        images: Array<{ mime: string; data_base64: string }>,
+        text: string,
+    ) => ChatContent;
+    estimateReplyTokens: (text: string) => Promise<number>;
+    getFriendlyErrorMessage: (errorMsg: unknown, model?: string) => string;
+    handleError: (errorMsg: unknown, model?: string) => void;
+    isDestroyed: () => boolean;
+    isSending: () => boolean;
+    tracer: ChatTracer;
+};
+
+type ChatSendFactoryDeps = {
+    aiBridge: AIBridge;
+    fileHandler: ChatFileHandler;
+    service: ChatService;
+    getHistory: () => IChatMessage[];
+    pushUserMessage: (content: IChatMessage['content']) => void;
+    createStreamingHandle: (typingId: string) => {
+        update: (chunk: string) => void;
+        replace: (chunk: string) => void;
+        finalize: (text: string, stats?: Record<string, unknown>) => void;
+        discard: () => void;
+    };
+    createImageHandle: (
+        text: string,
+        onRegenerate: () => Promise<void>,
+    ) => {
+        setStatus: (chunk: string) => void;
+        setPreview: (dataUrl: string) => void;
+        finalize: (result: {
+            text: string;
+            images: Array<{ mime: string; data_base64: string }>;
+        }) => void;
+        fail: (message: string) => void;
+        cancel: (message?: string) => void;
+        discard: () => void;
+    };
+    showTyping: (typingId: string) => void;
+    registerReplaceChunk: (
+        listenerId: string,
+        imageHandleRef: () => ReturnType<ChatSendFactoryDeps['createImageHandle']> | null,
+        streamingHandleRef: () => ReturnType<ChatSendFactoryDeps['createStreamingHandle']> | null,
+    ) => void;
+    clearInput: () => void;
+    updateTokenCount: (count: number) => void;
+    appendUserMessage: (
+        text: string,
+        attachments: IChatAttachment[],
+        tokens: number,
+    ) => void;
+    getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
+    handleResponse: (
+        response: IChatResponse,
+        streamingHandle?: ReturnType<ChatSendFactoryDeps['createStreamingHandle']> | null,
+        imageHandle?: ReturnType<ChatSendFactoryDeps['createImageHandle']> | null,
+    ) => Promise<void>;
+    cleanupStreamingState: (listenerId: string, typingId: string) => void;
+    stopImagePreviewPolling: () => void;
+    startImagePreviewPolling: (
+        handle: ReturnType<ChatSendFactoryDeps['createImageHandle']>,
+    ) => void;
+    restoreInputText: (text: string) => void;
+    isImageProvider: (providerId: string | null) => boolean;
+    lockUi: (input: HTMLTextAreaElement | null) => {
+        input: HTMLTextAreaElement | null;
+        sendBtn: HTMLButtonElement | null;
+        voiceBtn: HTMLButtonElement | null;
+        attachBtn: HTMLButtonElement | null;
+    };
+    unlockUi: (els: {
+        input: HTMLTextAreaElement | null;
+        sendBtn: HTMLButtonElement | null;
+        voiceBtn: HTMLButtonElement | null;
+        attachBtn: HTMLButtonElement | null;
+    }) => void;
+    handleError: (error: unknown) => void;
+    isSending: () => boolean;
+    setSending: (value: boolean) => void;
+    tracer: ChatTracer;
+};
+
+export class ChatControllerFactory {
+    public createUi(deps: ChatUiFactoryDeps): ChatUI {
+        return new ChatUI({
+            fileHandler: deps.fileHandler,
+            translate: deps.i18n.t.bind(deps.i18n),
+            showToast: (message, type = 'success', duration = 2000) =>
+                deps.showToast(message, type, duration),
+            isTauriRuntime: () => deps.isTauriRuntime(),
+            openExternalUrl: async (url) => await deps.openExternalUrl(url),
+            copyText: async (text) => await deps.copyText(text),
+            tracer: deps.tracer,
+        });
+    }
+
+    public createLifecycleHelper(deps: ChatLifecycleFactoryDeps): ChatLifecycleHelper {
+        return new ChatLifecycleHelper({
+            fileHandler: deps.fileHandler,
+            eventBus: deps.eventBus,
+            refreshTranslations: () => {
+                deps.refreshTranslations();
+            },
+            ensureHistoryLoaded: () => deps.ensureHistoryLoaded(),
+            scheduleRevealLatestMessage: () => {
+                deps.scheduleRevealLatestMessage();
+            },
+            bindEvents: () => {
+                deps.bindEvents();
+            },
+            areEventsBound: () => deps.areEventsBound(),
+            setEventsBound: (value) => {
+                deps.setEventsBound(value);
+            },
+            randomizeGreeting: (forceIndex) => {
+                deps.randomizeGreeting(forceIndex);
+            },
+            currentGreetingIndex: () => deps.currentGreetingIndex(),
+            updateAttachmentsFromFiles: (files, onRemove) => {
+                deps.updateAttachmentsFromFiles(files, onRemove);
+            },
+            updateTokenCount: () => deps.updateTokenCount(),
+        });
+    }
+
+    public createHistoryController(deps: ChatHistoryFactoryDeps): ChatHistoryController {
+        return new ChatHistoryController({
+            aiBridge: deps.aiBridge,
+            getHistory: () => deps.getHistory(),
+            setHistory: (history) => {
+                deps.setHistory(history);
+            },
+            appendHistoryMessage: (role, text, options) => {
+                deps.appendHistoryMessage(role, text, options);
+            },
+            revealLatestMessage: () => {
+                deps.revealLatestMessage();
+            },
+            extractRenderableText: (content) => deps.extractRenderableText(content),
+            buildHistoryRenderOptions: (content) => deps.buildHistoryRenderOptions(content),
+            restoreInputText: (text) => {
+                deps.restoreInputText(text);
+            },
+            renderHistory: (history) => {
+                deps.renderHistory(history);
+            },
+            showEditError: () => {
+                deps.showEditError();
+            },
+            isDestroyed: () => deps.isDestroyed(),
+            getPendingChatRevealStore: () => deps.getPendingChatRevealStore(),
+            tracer: deps.tracer,
+        });
+    }
+
+    public createGenerationController(deps: ChatGenerationFactoryDeps): ChatGenerationController {
+        return new ChatGenerationController({
+            aiBridge: deps.aiBridge,
+            i18n: deps.i18n,
+            removeTyping: (typingId) => {
+                deps.removeTyping(typingId);
+            },
+            appendAssistantMessage: (text, options = {}) => {
+                deps.appendAssistantMessage(text, options);
+            },
+            pushAssistantMessage: (content, thoughtSignature) => {
+                deps.pushAssistantMessage(content, thoughtSignature);
+            },
+            extractText: (data) => deps.extractText(data),
+            buildGeneratedImageContent: (images, text) =>
+                deps.buildGeneratedImageContent(images, text),
+            estimateReplyTokens: async (text) => await deps.estimateReplyTokens(text),
+            getFriendlyErrorMessage: (errorMsg, model) =>
+                deps.getFriendlyErrorMessage(errorMsg, model),
+            handleError: (errorMsg, model) => {
+                deps.handleError(errorMsg, model);
+            },
+            isDestroyed: () => deps.isDestroyed(),
+            isSending: () => deps.isSending(),
+            tracer: deps.tracer,
+        });
+    }
+
+    public createSendController(deps: ChatSendFactoryDeps): ChatSendController {
+        return new ChatSendController({
+            aiBridge: deps.aiBridge,
+            fileHandler: deps.fileHandler,
+            service: deps.service,
+            getHistory: () => deps.getHistory(),
+            pushUserMessage: (content) => {
+                deps.pushUserMessage(content);
+            },
+            createStreamingHandle: (typingId) => deps.createStreamingHandle(typingId),
+            createImageHandle: (text, onRegenerate) => deps.createImageHandle(text, onRegenerate),
+            showTyping: (typingId) => {
+                deps.showTyping(typingId);
+            },
+            registerReplaceChunk: (listenerId, imageHandleRef, streamingHandleRef) => {
+                deps.registerReplaceChunk(listenerId, imageHandleRef, streamingHandleRef);
+            },
+            clearInput: () => {
+                deps.clearInput();
+            },
+            updateTokenCount: (count) => {
+                deps.updateTokenCount(count);
+            },
+            appendUserMessage: (text, attachments, tokens) => {
+                deps.appendUserMessage(text, attachments, tokens);
+            },
+            getSelectedModule: (category) => deps.getSelectedModule(category),
+            handleResponse: async (response, streamingHandle, imageHandle) =>
+                await deps.handleResponse(response, streamingHandle, imageHandle),
+            cleanupStreamingState: (listenerId, typingId) => {
+                deps.cleanupStreamingState(listenerId, typingId);
+            },
+            stopImagePreviewPolling: () => {
+                deps.stopImagePreviewPolling();
+            },
+            startImagePreviewPolling: (handle) => {
+                deps.startImagePreviewPolling(handle);
+            },
+            restoreInputText: (text) => {
+                deps.restoreInputText(text);
+            },
+            isImageProvider: (providerId) => deps.isImageProvider(providerId),
+            lockUi: (input) => deps.lockUi(input),
+            unlockUi: (els) => {
+                deps.unlockUi(els);
+            },
+            handleError: (error) => {
+                deps.handleError(error);
+            },
+            isSending: () => deps.isSending(),
+            setSending: (value) => {
+                deps.setSending(value);
+            },
+            tracer: deps.tracer,
+        });
+    }
+}

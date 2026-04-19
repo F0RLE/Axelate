@@ -27,6 +27,8 @@ export const commands = {
 	getSystemLanguage: () => typedError<string, AppError>(__TAURI_INVOKE("get_system_language")),
 	// Retrieves log entries since a given timestamp
 	getLogs: (since: number) => typedError<LogEntry[], AppError>(__TAURI_INVOKE("get_logs", { since })),
+	// Returns aggregated console metadata for views and runtime statuses.
+	getConsoleOverview: () => typedError<ConsoleOverview, AppError>(__TAURI_INVOKE("get_console_overview")),
 	// Clears all stored log entries
 	clearLogs: () => typedError<null, AppError>(__TAURI_INVOKE("clear_logs")),
 	// Adds a single log entry to the log store
@@ -471,6 +473,47 @@ export type ConfigField = {
 	options?: string[] | null,
 };
 
+// Console log view metadata for frontend tabs.
+export type ConsoleLogView = {
+	// Stable view identifier.
+	id: string,
+	// Human-readable label.
+	label: string,
+};
+
+// Aggregated console metadata payload.
+export type ConsoleOverview = {
+	// Available log views including the default general tab.
+	views: ConsoleLogView[],
+	// Runtime status rows for engines and modules.
+	status_items: ConsoleStatusItem[],
+};
+
+// Runtime status used by the console overview.
+export type ConsoleRuntimeStatus =
+// Process is currently running.
+"running" |
+// Process is starting or switching.
+"starting" |
+// Process failed or status lookup failed.
+"failed" |
+// Process is stopped.
+"stopped";
+
+// Console status row for engines or modules.
+export type ConsoleStatusItem = {
+	// Stable item identifier.
+	id: string,
+	// Human-readable label.
+	label: string,
+	// Status category discriminator.
+	kind: string,
+	// Runtime status.
+	status: ConsoleRuntimeStatus,
+	// Additional detail text.
+	detail: string,
+};
+
 // Module control request from frontend
 export type ControlRequest = {
 	// Module identifier (optional for global actions)
@@ -753,6 +796,26 @@ export type LogEntry = {
 	level: string,
 	// Log message
 	message: string,
+	// Resolved module/runtime identifier when the log belongs to a module.
+	module_id: string | null,
+	// Parsed time component extracted from the message when present.
+	display_time: string | null,
+	// Normalized level used by the console UI.
+	normalized_level: string | null,
+	// Parsed scope segment when present.
+	scope: string | null,
+	// Precomputed summary message for console rendering.
+	summary_message: string | null,
+	// Human-friendly source label for console rendering.
+	source_label: string | null,
+	// CSS-friendly source class for console rendering.
+	source_class: string | null,
+	// Page identifier extracted from navigation logs.
+	page: string | null,
+	// Action extracted from module control logs.
+	action: string | null,
+	// Expected manifest or artifact hint from error logs.
+	expected: string | null,
 };
 
 // Model capability flags (JSON Compatible)

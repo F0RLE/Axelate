@@ -4,14 +4,15 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IModuleDownloadState } from '../types/coreTypes';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
 import { commands } from '../types/bindings';
 import { invokeSafe } from '../api/invoke';
 
 // Local types for global access
 // IModuleGlobal removed
+
+type ModuleServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
@@ -20,7 +21,10 @@ export class ModuleService {
     private _downloadProgressUnlisten: (() => void) | null = null;
     private _initialized = false;
 
-    constructor(private readonly _bridge: IBridge) {}
+    constructor(
+        private readonly _bridge: IBridge,
+        private readonly _tracer: ModuleServiceLogger,
+    ) {}
 
     /**
      * Initializes the module service and binds to download progress events from the backend.
@@ -62,8 +66,6 @@ export class ModuleService {
                 (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
             }
 
-            this._broadcastState(payload.module_id);
-
             // Dispatch custom event for UI components that don't use this service directly
             const event = new CustomEvent('download-progress-update', { detail: payload });
             globalThis.dispatchEvent(event);
@@ -93,10 +95,10 @@ export class ModuleService {
             if (result.status === 'ok') {
                 return result.data;
             }
-            tracer.warn(`[ModuleService] Check installed failed: ${result.error.message}`);
+            this._tracer.warn(`[ModuleService] Check installed failed: ${result.error.message}`);
             return false;
         } catch (err) {
-            tracer.error(`Check installed error: ${String(err)}`);
+            this._tracer.error(`Check installed error: ${String(err)}`);
             return false;
         }
     }
@@ -113,9 +115,9 @@ export class ModuleService {
         expectedHash?: string,
         dlType?: string,
     ): Promise<void> {
-        tracer.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
+        this._tracer.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
         if (expectedHash !== undefined && expectedHash !== '') {
-            tracer.info(`[ModuleService] Expected hash: ${expectedHash}`);
+            this._tracer.info(`[ModuleService] Expected hash: ${expectedHash}`);
         }
 
         if (!this._bridge.isTauri()) {
@@ -138,9 +140,8 @@ export class ModuleService {
             }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
+            this._tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
             this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
-            this._broadcastState(moduleId);
             throw err;
         }
     }
@@ -150,12 +151,12 @@ export class ModuleService {
      * @param moduleId - The ID of the module whose download to cancel
      */
     public async cancelDownload(moduleId: string): Promise<boolean> {
-        tracer.info(`[ModuleService] Cancelling download: ${moduleId}`);
+        this._tracer.info(`[ModuleService] Cancelling download: ${moduleId}`);
         if (!this._bridge.isTauri()) return false;
         try {
             return await commands.cancelDownload(moduleId);
         } catch (e) {
-            tracer.error(`[ModuleService] Cancel failed: ${String(e)}`);
+            this._tracer.error(`[ModuleService] Cancel failed: ${String(e)}`);
             return false;
         }
     }
@@ -165,7 +166,7 @@ export class ModuleService {
      * @param moduleId - The ID of the module to delete
      */
     public async deleteModule(moduleId: string): Promise<boolean> {
-        tracer.info(`[ModuleService] Deleting module: ${moduleId}`);
+        this._tracer.info(`[ModuleService] Deleting module: ${moduleId}`);
         if (!this._bridge.isTauri()) {
             throw new Error('Delete available only in desktop app');
         }
@@ -175,7 +176,7 @@ export class ModuleService {
             const result = await invokeSafe(commands.deleteModule(moduleId));
 
             if (result.status === 'error') {
-                tracer.error(`[ModuleService] Delete failed: ${result.error.message}`);
+                this._tracer.error(`[ModuleService] Delete failed: ${result.error.message}`);
                 return false;
             }
 
@@ -184,7 +185,7 @@ export class ModuleService {
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {
-            tracer.error(`[ModuleService] Delete exception: ${String(e)}`);
+            this._tracer.error(`[ModuleService] Delete exception: ${String(e)}`);
             return false;
         }
     }
@@ -196,7 +197,7 @@ export class ModuleService {
      * @param action - The action to perform (start, stop, restart)
      */
     public async control(serviceName: string, action: string): Promise<boolean> {
-        tracer.info(`[ModuleService] Control ${serviceName} -> ${action}`);
+        this._tracer.info(`[ModuleService] Control ${serviceName} -> ${action}`);
         if (this._bridge.isTauri()) {
             try {
                 await this._bridge.invoke('control_module', {
@@ -207,11 +208,11 @@ export class ModuleService {
                 });
                 return true;
             } catch (e) {
-                tracer.error(`[ModuleService] Control failed: ${String(e)}`);
+                this._tracer.error(`[ModuleService] Control failed: ${String(e)}`);
                 return false;
             }
         } else {
-            tracer.warn('[ModuleService] Control not available in web mode');
+            this._tracer.warn('[ModuleService] Control not available in web mode');
             return false;
         }
     }
@@ -240,7 +241,7 @@ export class ModuleService {
 
         const progressPercent =
             payload.progress >= 0 ? ` ${(payload.progress * 100).toFixed(1)}%` : '';
-        tracer.info(
+        this._tracer.info(
             `[ModuleService] ${payload.module_id} -> ${payload.status}${progressPercent} ${payload.message}`.trim(),
         );
 
@@ -253,15 +254,4 @@ export class ModuleService {
         }
     }
 
-    // Sync state to legacy window object for UI compatibility
-    /**
-     * Broadcasts download state to global scope for legacy UI compatibility.
-     */
-    private _broadcastState(moduleId: string) {
-        const win = getGlobalWin();
-        win.moduleDownloadState ??= {};
-        // _broadcastState is always called right after setting _downloadState[moduleId]
-        const state = this._downloadState[moduleId] as IModuleDownloadState;
-        win.moduleDownloadState[moduleId] = state;
-    }
 }

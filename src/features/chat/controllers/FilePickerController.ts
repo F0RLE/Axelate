@@ -4,9 +4,8 @@
  * Extracted from ChatController for SRP compliance.
  */
 
-import { chatFileHandler } from '../services/ChatFileHandler';
-import { getTokenCount } from '../utils/chatUtils';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { ChatFileHandler } from '../services/ChatFileHandler';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { ChatUI } from '../ui/ChatUI';
 
@@ -15,6 +14,8 @@ import { desktopDir, dirname } from '@tauri-apps/api/path';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 
+type FilePickerLogger = Pick<LoggerService, 'error' | 'warn'>;
+
 export class FilePickerController {
     private _tokenEstimateRequestId = 0;
     private _lastSelectedDirectory: string | null = null;
@@ -22,14 +23,20 @@ export class FilePickerController {
     constructor(
         private readonly _i18n: I18nService,
         private readonly _ui: ChatUI,
+        private readonly _estimateTokens: (text: string, model?: string) => Promise<number>,
+        private readonly _isNativeRuntime: () => boolean,
+        private readonly _fileHandler: Pick<
+            ChatFileHandler,
+            'addFiles' | 'getTotalTokenEstimate' | 'hasFiles'
+        >,
+        private readonly _tracer: FilePickerLogger,
     ) {}
 
     /**
      * Entry point for picking files (Native or Web fallback).
      */
     public async pick(): Promise<void> {
-        const win = globalThis as { __TAURI_INTERNALS__?: unknown };
-        if (win.__TAURI_INTERNALS__ !== undefined) {
+        if (this._isNativeRuntime()) {
             const success = await this._pickNative();
             if (success) return;
         }
@@ -44,7 +51,7 @@ export class FilePickerController {
     public handleFileSelect(event: Event): void {
         const input = event.target as HTMLInputElement;
         if (input.files) {
-            chatFileHandler.addFiles(input.files);
+            this._fileHandler.addFiles(input.files);
             input.value = '';
             void this.updateTokenCount();
         }
@@ -59,18 +66,18 @@ export class FilePickerController {
         const requestId = ++this._tokenEstimateRequestId;
 
         try {
-            const count = await chatFileHandler.getTotalTokenEstimate(text);
+            const count = await this._fileHandler.getTotalTokenEstimate(text);
             if (requestId !== this._tokenEstimateRequestId) return;
             this._ui.updateTokenCount(count);
         } catch (error) {
-            tracer.error('[FilePickerController] Failed to update token count:', error);
+            this._tracer.error('[FilePickerController] Failed to update token count:', error);
             if (requestId !== this._tokenEstimateRequestId) return;
             try {
-                const fallbackCount = await getTokenCount(text);
+                const fallbackCount = await this._estimateTokens(text);
                 if (requestId !== this._tokenEstimateRequestId) return;
                 this._ui.updateTokenCount(fallbackCount);
             } catch (fallbackError) {
-                tracer.error(
+                this._tracer.error(
                     '[FilePickerController] Fallback token count failed, using rough estimate:',
                     fallbackError,
                 );
@@ -84,14 +91,7 @@ export class FilePickerController {
      * Returns whether the file handler has queued files.
      */
     public hasFiles(): boolean {
-        return chatFileHandler.hasFiles();
-    }
-
-    /**
-     * Returns the file handler singleton for direct access (e.g. processForSend).
-     */
-    public get handler(): typeof chatFileHandler {
-        return chatFileHandler;
+        return this._fileHandler.hasFiles();
     }
 
     // --- Private helpers ---
@@ -127,13 +127,13 @@ export class FilePickerController {
                 }
 
                 if (files.length > 0) {
-                    chatFileHandler.addFiles(files);
+                    this._fileHandler.addFiles(files);
                     void this.updateTokenCount();
                 }
             }
             return true;
         } catch (err) {
-            tracer.error('[FilePickerController] Native file picker failed:', err);
+            this._tracer.error('[FilePickerController] Native file picker failed:', err);
             return false;
         }
     }
@@ -146,7 +146,7 @@ export class FilePickerController {
         try {
             return await desktopDir();
         } catch (err) {
-            tracer.warn('[FilePickerController] Failed to resolve desktop directory:', err);
+            this._tracer.warn('[FilePickerController] Failed to resolve desktop directory:', err);
             return null;
         }
     }
@@ -158,7 +158,7 @@ export class FilePickerController {
         try {
             this._lastSelectedDirectory = await dirname(firstPath);
         } catch (err) {
-            tracer.warn(
+            this._tracer.warn(
                 `[FilePickerController] Failed to resolve selected directory: ${firstPath}`,
                 err,
             );
@@ -185,7 +185,7 @@ export class FilePickerController {
             const mime = mimeMap[ext] ?? 'application/octet-stream';
             return new File([data], name, { type: mime });
         } catch (err) {
-            tracer.error(`[FilePickerController] Failed to read file: ${path}`, err);
+            this._tracer.error(`[FilePickerController] Failed to read file: ${path}`, err);
             return null;
         }
     }

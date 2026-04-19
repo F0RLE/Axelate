@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModalManager } from './ModalManager';
 import { ModuleCardRenderer } from './ModuleCardRenderer';
+import { ModalSelectionPolicy } from './ModalSelectionPolicy';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { IApp } from '../../types/coreTypes';
 
@@ -8,6 +10,7 @@ describe('ModalManager lifecycle', () => {
     let modalManager: ModalManager | null = null;
     let interactionSpy: ReturnType<typeof vi.fn>;
     let navigation: NavigationService;
+    let tracer: LoggerService;
 
     beforeEach(() => {
         document.body.innerHTML = `
@@ -54,17 +57,17 @@ describe('ModalManager lifecycle', () => {
         });
 
         (
-            globalThis as unknown as {
-                t: (key: string, fallback: string) => string;
-                aiBridge: { getState: () => Record<string, never> };
-            }
-        ).t = (_key, fallback) => fallback;
-        (
             globalThis as unknown as { aiBridge: { getState: () => Record<string, never> } }
         ).aiBridge = {
             getState: () => ({}),
         };
         interactionSpy = vi.fn();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
         navigation = {
             pushBackAction: vi.fn(),
             removeBackAction: vi.fn(),
@@ -79,11 +82,13 @@ describe('ModalManager lifecycle', () => {
 
     function createManager(onFilterChange?: (capability: 'text' | 'image') => string | null) {
         return new ModalManager(
-            new ModuleCardRenderer(),
+            new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
             interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
             onFilterChange ?? (() => null),
             vi.fn().mockResolvedValue(undefined),
             vi.fn().mockResolvedValue(undefined),
+            (_key, fallback) => fallback,
+            tracer,
             navigation,
         );
     }
@@ -288,10 +293,6 @@ describe('ModalManager lifecycle', () => {
         const modalAction = document.querySelector(
             '#app-modal-list .app-card-hover-actions button',
         ) as HTMLButtonElement;
-        const privateManager = modalManager as unknown as {
-            _boundModalKeydown: (event: KeyboardEvent) => void;
-            _boundFocusIn: (event: FocusEvent) => void;
-        };
 
         expect(document.activeElement).toBe(closeButton);
 
@@ -312,7 +313,7 @@ describe('ModalManager lifecycle', () => {
             configurable: true,
             value: outsideButton,
         });
-        privateManager._boundFocusIn(focusInEvent);
+        document.dispatchEvent(focusInEvent);
         expect(document.activeElement).toBe(closeButton);
     });
 
@@ -389,15 +390,16 @@ describe('ModalManager lifecycle', () => {
     });
 
     it('should sort by stable module id priority instead of localized names', () => {
-        modalManager = createManager();
-
-        const sorted = (
-            modalManager as unknown as { _getSortedApps: (apps: IApp[]) => IApp[] }
-        )._getSortedApps([
+        const policy = new ModalSelectionPolicy();
+        const sorted = policy.getVisibleApps(
+            [
             { id: 'custom', name: 'A Localized Name', installed: true } as IApp,
             { id: 'gemini', name: 'ZZZ localized', installed: true } as IApp,
             { id: 'gpt', name: 'YYY localized', installed: true } as IApp,
-        ]);
+            ],
+            'services',
+            'text',
+        );
 
         expect(sorted.map((app) => app.id)).toEqual(['gpt', 'gemini', 'custom']);
     });
@@ -461,11 +463,13 @@ describe('ModalManager lifecycle', () => {
         const onDownloadRequest = vi.fn().mockResolvedValue(undefined);
         const onCancelDownloadRequest = vi.fn().mockResolvedValue(undefined);
         modalManager = new ModalManager(
-            new ModuleCardRenderer(),
+            new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
             interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
             () => null,
             onDownloadRequest,
             onCancelDownloadRequest,
+            (_key, fallback) => fallback,
+            tracer,
             navigation,
         );
 

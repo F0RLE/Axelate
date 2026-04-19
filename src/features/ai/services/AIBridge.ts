@@ -4,19 +4,23 @@ import type {
     MessageHandler,
     MessageSource,
     IChunkHandler,
-    IImageGenerationRequest,
     IImageGenerationPreview,
 } from '../types/aiTypes';
-import type { Core } from '@/app/init';
-import { constructChatRequest, createMultimodalContent } from '../utils/chatRequestUtils';
 import { AIProviderManager } from './AIProviderManager';
-import { tracer } from '@/infrastructure/logging/LoggerService';
-import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AIChatTransport, type IChatTransport } from './AIChatTransport';
-import { engineStatusService, type EngineStatusService } from './EngineStatusService';
+import { AIBridgeEvents } from './AIBridgeEvents';
+import { EngineStatusService } from './EngineStatusService';
 import type { IAIBridge } from '../types/IAIBridge';
+import { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
+import type { AIBridgeContext } from './AIBridgeContext';
+import { AIBridgeRuntime } from './AIBridgeRuntime';
+import { AIBridgeInactivityController } from './AIBridgeInactivityController';
+import { AIBridgeMessageController } from './AIBridgeMessageController';
 
 export type { MessageSource, MessageHandler, IChunkHandler } from '../types/aiTypes';
+
+type AIBridgeLogger = Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
 
 /**
  * @class AIBridge
@@ -24,28 +28,62 @@ export type { MessageSource, MessageHandler, IChunkHandler } from '../types/aiTy
  * Implements architectural patterns from Section 36 of Axelate Standards.
  */
 export class AIBridge implements IAIBridge {
-    private _core: Core | null = null;
+    private _context: AIBridgeContext | null = null;
     private readonly _unlisteners: (() => void)[] = [];
     private _initialized = false;
-    private _inactivityTimer: number | NodeJS.Timeout | null = null;
     private readonly INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-    private readonly _listeners = new Map<string, MessageHandler[]>();
-    private readonly _chunkListeners = new Map<string, IChunkHandler[]>();
-    private readonly _replaceChunkListeners = new Map<string, IChunkHandler[]>();
-    private readonly _thoughtListeners = new Map<string, IChunkHandler[]>();
-    private readonly _transport: IChatTransport = new AIChatTransport();
-    private readonly _manager: AIProviderManager = new AIProviderManager();
-    private readonly _engineStatus: EngineStatusService = engineStatusService;
+    private readonly _events = new AIBridgeEvents();
+    private readonly _transport: IChatTransport;
+    private readonly _manager: AIProviderManager;
+    private readonly _engineStatus: EngineStatusService;
+    private readonly _providerPolicy = new AIBridgeProviderPolicy();
+    private readonly _runtime: AIBridgeRuntime;
+    private readonly _inactivityController: AIBridgeInactivityController;
+    private readonly _messageController: AIBridgeMessageController;
+
+    public constructor(private readonly _tracer: AIBridgeLogger) {
+        this._transport = new AIChatTransport(this._tracer);
+        this._manager = new AIProviderManager(this._tracer);
+        this._engineStatus = new EngineStatusService(this._tracer);
+        this._runtime = new AIBridgeRuntime(this._tracer);
+        this._inactivityController = new AIBridgeInactivityController(
+            this.INACTIVITY_TIMEOUT_MS,
+            this._tracer,
+            () => {
+                this.stopProvider();
+            },
+        );
+        this._messageController = new AIBridgeMessageController({
+            getContext: () => this._context,
+            transport: this._transport,
+            manager: this._manager,
+            events: this._events,
+            providerPolicy: this._providerPolicy,
+            tracer: this._tracer,
+            translate: (key, fallback) => this._translate(key, fallback),
+            showToast: (message, type) => this._showToast(message, type),
+            onActivity: () => this._inactivityController.reset(),
+            onSuccessfulResponse: () => {
+                this._context?.chatController.randomizeGreeting();
+            },
+        });
+    }
 
     /**
      * Set the core instance (Dependency Injection).
      * Necessary because AIBridge is imported before Core is fully defined.
      */
-    public setCore(core: Core): void {
-        this._core = core;
-        this._transport.setCore(core);
-        this._manager.setCore(core);
-        this._engineStatus.setCore(core);
+    public setContext(context: AIBridgeContext): void {
+        this._context = context;
+        if (typeof this._transport.setContext === 'function') {
+            this._transport.setContext(context);
+        }
+        this._manager.setContext(context);
+        this._engineStatus.setContext(context);
+    }
+
+    public setCore(context: AIBridgeContext): void {
+        this.setContext(context);
     }
 
     /**
@@ -53,63 +91,40 @@ export class AIBridge implements IAIBridge {
      */
     public async init(): Promise<void> {
         if (this._initialized) {
-            tracer.warn('[AIBridge] Attempted duplicate initialization; operation aborted');
+            this._tracer.warn('[AIBridge] Attempted duplicate initialization; operation aborted');
             return;
         }
 
-        if (this._core === null) {
-            tracer.error('[AIBridge] Initialization aborted: Core dependency is missing');
+        if (this._context === null) {
+            this._tracer.error('[AIBridge] Initialization aborted: Core dependency is missing');
             return;
         }
 
-        const core = this._core;
+        const context = this._context;
 
         try {
             await this._transport.init();
             await this._manager.init();
-
-            if (core.tauriProvider.isTauri()) {
-                const unlistenLog = await core.tauriProvider.listen<{
-                    engine_id: string;
-                    line: string;
-                }>('ai:engine:log', (payload) => {
-                    const line = payload.line;
-                    if (this._manager.activeProviderId === payload.engine_id) {
-                        // Very rough parsing for sdcpp stdout like: "step 15/20 - 2.50it/s" or "32%"
-                        // Extracting standard parts to present a clean progress string:
-                        const progressMatch = line.match(/(\d+\/\d+)|(\d+\.\d+it\/s)|(\d+%)/g);
-                        if (progressMatch) {
-                            this._broadcastReplaceChunk(
-                                `🎨 Generating image... ${progressMatch.join(' - ')}\n`,
-                            );
-                        } else if (line.includes('generating image')) {
-                            this._broadcastReplaceChunk(`🎨 Generating image...\n`);
-                        }
-                    }
-                });
-                this._unlisteners.push(unlistenLog);
-
-                const unlistenChunk = this._transport.onStream((payload: string) => {
+            const unlisteners = await this._runtime.initializeStreaming({
+                context,
+                transport: this._transport,
+                events: this._events,
+                getActiveProviderId: () => this._manager.activeProviderId,
+                broadcastChunk: (payload) => {
                     this._broadcastChunk(payload);
-                });
-                this._unlisteners.push(unlistenChunk);
-
-                const unlistenThought = this._transport.onThought((payload: string) => {
+                },
+                broadcastThought: (payload) => {
                     this._broadcastThought(payload);
-                });
-                this._unlisteners.push(unlistenThought);
-
-                tracer.info('[AIBridge] Streaming active (IPC via Transport)');
-            } else {
-                tracer.info('[AIBridge] Web mode active (Mocks)');
-            }
+                },
+            });
+            this._unlisteners.push(...unlisteners);
 
             this._initialized = true;
 
             // Engine status indicator (ai:engine:* events → card CSS)
             this._engineStatus.init();
         } catch (error: unknown) {
-            tracer.error('[AIBridge] Critical IPC initialization failure:', error);
+            this._tracer.error('[AIBridge] Critical IPC initialization failure:', error);
             this._cleanupTransportState();
         }
     }
@@ -118,49 +133,21 @@ export class AIBridge implements IAIBridge {
      * Initiates a specific AI provider session.
      */
     public async startProvider(providerId: string): Promise<boolean> {
-        tracer.info(`[AIBridge] Starting provider: ${providerId}`);
+        this._tracer.info(`[AIBridge] Starting provider: ${providerId}`);
         const started = await this._manager.startProvider(providerId);
 
-        if (started && this._core?.tauriProvider.isTauri() === true) {
-            this._resetInactivityTimer();
-            // Free up VRAM: Stop text if starting image, stop image if starting text
-            const isImageProvider = this._isImageProvider(providerId);
-            const isManagedLocalImageEngine = this._isManagedLocalImageEngine(providerId);
-            try {
-                if (isImageProvider) {
-                    await this._core.tauriProvider.invoke('stop_engine_slot', {
-                        capability: 'text',
-                    });
-                    if (!isManagedLocalImageEngine) {
-                        await this._core.tauriProvider.invoke('stop_engine_slot', {
-                            capability: 'image',
-                        });
-                    }
-                } else {
-                    await this._core.tauriProvider.invoke('stop_engine_slot', {
-                        capability: 'image',
-                    });
-                }
-            } catch (err) {
-                tracer.warn(
-                    `[AIBridge] Failed to stop cross-slot engine for VRAM savings: ${String(err)}`,
-                );
-            }
+        if (started && this._context?.tauriProvider.isTauri() === true) {
+            this._inactivityController.reset();
+            await this._runtime.stopCrossSlotEngines({
+                context: this._context,
+                providerId,
+                providerPolicy: this._providerPolicy,
+            });
         }
 
         if (!started) {
             // Match AIProviderManager._isLocalProvider: anything not in the cloud set is local.
-            const cloudProviders = new Set([
-                'gpt',
-                'gemini',
-                'openai',
-                'openrouter',
-                'anthropic',
-                'mistral',
-                'claude',
-                'deepseek',
-            ]);
-            const isLocal = !cloudProviders.has(providerId);
+            const isLocal = !this._providerPolicy.isCloudProvider(providerId);
             if (!isLocal && this._manager.apiKey === null) {
                 this._showErrorToast('ui.ai.no_api_key', 'API key missing');
             } else {
@@ -177,16 +164,12 @@ export class AIBridge implements IAIBridge {
      * Terminates the active provider session.
      */
     public stopProvider(): void {
-        tracer.info('[AIBridge] Explicitly stopping provider and clearing inactivity timers');
+        this._tracer.info('[AIBridge] Explicitly stopping provider and clearing inactivity timers');
         this._manager.stopProvider();
-        this._clearInactivityTimer();
+        this._inactivityController.clear();
 
         // Also shut down the backend slots if we're explicitly stopped
-        if (this._core?.tauriProvider.isTauri() === true) {
-            void this._core.tauriProvider.invoke('stop_engine').catch((e) => {
-                tracer.warn(`[AIBridge] Failed to invoke stop_engine: ${String(e)}`);
-            });
-        }
+        this._runtime.stopProviderEngine(this._context);
     }
 
     public isActive(): boolean {
@@ -209,351 +192,102 @@ export class AIBridge implements IAIBridge {
         history: IChatMessage[] = [],
     ): Promise<IBridgeResponse> {
         if (this._manager.activeProviderId === null) {
-            return this._handleMissingProvider(source);
+            return await this._messageController.sendMessage(text, source, attachments, history);
         }
-
-        await this._manager.refreshActiveApiKey();
-
-        // Local engines (llamacpp, sdcpp, etc.) don't require an API key
-        if (this._manager.apiKey === null && this._manager.isActive() === false) {
-            return this._handleMissingApiKey(source);
-        }
-
-        try {
-            this._resetInactivityTimer();
-
-            const providerId = this._manager.activeProviderId;
-            const isImageProvider = this._isImageProvider(providerId);
-
-            if (isImageProvider) {
-                return await this._sendImageMessage(providerId, text, source);
-            }
-
-            return await this._sendTextMessage(providerId, text, attachments, history, source);
-        } catch (error: unknown) {
-            const errorMsg =
-                error instanceof Error
-                    ? error.message
-                    : globalThis.t('ui.ai.communication_failure', 'Communication failure');
-            tracer.error('[AIBridge] Messaging pipeline error:', error);
-            return { ok: false, error: errorMsg };
-        }
-    }
-
-    private async _sendImageMessage(
-        providerId: string,
-        text: string,
-        source: MessageSource,
-    ): Promise<IBridgeResponse> {
-        const settings = this._core?.settingsService.getSettings() as
-            | Record<string, unknown>
-            | undefined;
-        const selectedImageModule = this._core?.stateStore.getSelectedModule('ai_image');
-        const settingsKey = selectedImageModule?.id ?? providerId;
-        const performanceMode = this._isImagePerformanceModeEnabled(settings, settingsKey);
-
-        const request: IImageGenerationRequest = {
-            provider: providerId,
-            prompt: text,
-            original_prompt: text,
-            model: this._manager.model || 'default',
-            settings_key: settingsKey,
-            session_id: this._manager.sessionId,
-        };
-
-        this._broadcastReplaceChunk('🎨 Generating image...\n');
-
-        if (performanceMode) {
-            const backgroundResponse = await this._transport.generateImageBackground(request);
-            if (!backgroundResponse.ok) {
-                return this._handleTransportResponse(backgroundResponse, source);
-            }
-
-            this._showToast(
-                globalThis.t('ui.ai.performance_mode_active', 'Performance mode active'),
-                'success',
-            );
-            await this._core?.windowService.close();
-            return { ok: true, text: '' };
-        }
-
-        const imageResponse = await this._transport.generateImage(request);
-        if (imageResponse.ok && imageResponse.images && imageResponse.images.length > 0) {
-            this._core?.chatController.randomizeGreeting();
-            return {
-                ok: true,
-                text: '',
-                images: imageResponse.images,
-            };
-        }
-
-        return this._handleTransportResponse(imageResponse, source);
-    }
-
-    private async _sendTextMessage(
-        providerId: string,
-        text: string,
-        attachments: { name: string; type: string; data_base64: string }[],
-        history: IChatMessage[],
-        source: MessageSource,
-    ): Promise<IBridgeResponse> {
-        const newMessage: IChatMessage = {
-            role: 'user',
-            content: createMultimodalContent(text, attachments),
-        };
-
-        if (this._manager.isActive() === false) {
-            return this._handleMissingApiKey(source);
-        }
-
-        const request = constructChatRequest(history, newMessage, attachments, {
-            providerId,
-            model: this._manager.model || 'default',
-            apiKey: null,
-            sessionId: this._manager.sessionId,
-            ...this._resolveRequestOptions(providerId),
-        });
-
-        const response = await this._transport.send(request);
-        return this._handleTransportResponse(response, source);
-    }
-
-    private _resolveRequestOptions(providerId: string): {
-        thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
-        maxTokens?: number;
-        webSearchEnabled?: boolean;
-    } {
-        const isLocalProvider = this._manager.apiKey === null;
-        const thinkingLevel =
-            this._core && !isLocalProvider
-                ? this._core.aiSettings.getThinkingLevel(providerId)
-                : undefined;
-        const webSearchEnabled =
-            this._core && !isLocalProvider
-                ? this._core.aiSettings.getInternetAccessEnabled(providerId)
-                : undefined;
-        const effectiveThinkingLevel = thinkingLevel === 'off' ? undefined : thinkingLevel;
-        const maxTokens = isLocalProvider ? undefined : this._manager.maxOutputTokens;
-
-        const requestOptions: {
-            thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
-            maxTokens?: number;
-            webSearchEnabled?: boolean;
-        } = {};
-
-        if (effectiveThinkingLevel !== undefined) {
-            requestOptions.thinkingLevel = effectiveThinkingLevel;
-        }
-
-        if (maxTokens !== undefined) {
-            requestOptions.maxTokens = maxTokens;
-        }
-
-        if (webSearchEnabled === true) {
-            requestOptions.webSearchEnabled = true;
-        }
-
-        return requestOptions;
-    }
-
-    private _handleMissingApiKey(source: MessageSource): IBridgeResponse {
-        const msg = globalThis.t('ui.ai.no_api_key', 'API key missing');
-        this._broadcastResponse(`Error: ${msg}`, source); // Broadcasts to UI listeners if any
-        this._showErrorToast('ui.ai.no_api_key', msg);
-        return { ok: false, error: msg };
-    }
-
-    private _handleMissingProvider(source: MessageSource): IBridgeResponse {
-        const msg = globalThis.t('ui.ai.no_provider', 'No engine found');
-        this._broadcastResponse(msg, source);
-        return { ok: false, error: msg };
-    }
-
-    private _handleTransportResponse(
-        response: IBridgeResponse,
-        source: MessageSource,
-    ): IBridgeResponse {
-        this._core?.chatController.randomizeGreeting();
-
-        if (response.ok && typeof response.text === 'string' && response.text !== '') {
-            this._broadcastResponse(response.text, source);
-        } else if (!response.ok && typeof response.error === 'string' && response.error !== '') {
-            tracer.error('[AIBridge] Backend operation anomaly:', response.error);
-        }
-
-        return response;
-    }
-
-    private _isImagePerformanceModeEnabled(
-        settings: Record<string, unknown> | undefined,
-        settingsKey: string,
-    ): boolean {
-        const resolve = (key: string): boolean => {
-            const value = settings?.[key];
-            if (typeof value === 'boolean') return value;
-            if (typeof value === 'string') {
-                return value.trim().toLowerCase() === 'true';
-            }
-            return false;
-        };
-
-        return resolve(`${settingsKey}_performance_mode`) || resolve('sdcpp_performance_mode');
+        return await this._messageController.sendMessage(text, source, attachments, history);
     }
 
     public onMessage(listenerId: string, handler: MessageHandler): void {
-        if (!this._listeners.has(listenerId)) {
-            this._listeners.set(listenerId, []);
-        }
-        this._listeners.get(listenerId)?.push(handler);
+        this._events.onMessage(listenerId, handler);
     }
 
     public removeListener(listenerId: string): void {
-        this._listeners.delete(listenerId);
+        this._events.removeListener(listenerId);
     }
 
     public onChunk(listenerId: string, handler: IChunkHandler): void {
-        if (!this._chunkListeners.has(listenerId)) {
-            this._chunkListeners.set(listenerId, []);
-        }
-        this._chunkListeners.get(listenerId)?.push(handler);
+        this._events.onChunk(listenerId, handler);
     }
 
     public removeChunkListener(listenerId: string): void {
-        this._chunkListeners.delete(listenerId);
+        this._events.removeChunkListener(listenerId);
     }
 
     public onReplaceChunk(listenerId: string, handler: IChunkHandler): void {
-        if (!this._replaceChunkListeners.has(listenerId)) {
-            this._replaceChunkListeners.set(listenerId, []);
-        }
-        this._replaceChunkListeners.get(listenerId)?.push(handler);
+        this._events.onReplaceChunk(listenerId, handler);
     }
 
     public removeReplaceChunkListener(listenerId: string): void {
-        this._replaceChunkListeners.delete(listenerId);
+        this._events.removeReplaceChunkListener(listenerId);
     }
 
     public onThought(listenerId: string, handler: IChunkHandler): void {
-        if (!this._thoughtListeners.has(listenerId)) {
-            this._thoughtListeners.set(listenerId, []);
-        }
-        this._thoughtListeners.get(listenerId)?.push(handler);
+        this._events.onThought(listenerId, handler);
     }
 
     public removeThoughtListener(listenerId: string): void {
-        this._thoughtListeners.delete(listenerId);
-    }
-
-    private _broadcastResponse(response: string, source: MessageSource): void {
-        this._listeners.forEach((handlers) => {
-            handlers.forEach((handler) => {
-                handler(response, source);
-            });
-        });
-    }
-
-    private _broadcastChunk(chunk: string): void {
-        this._chunkListeners.forEach((handlers) => {
-            handlers.forEach((handler) => {
-                handler(chunk);
-            });
-        });
-    }
-
-    private _broadcastReplaceChunk(chunk: string): void {
-        this._replaceChunkListeners.forEach((handlers) => {
-            handlers.forEach((handler) => {
-                handler(chunk);
-            });
-        });
-    }
-
-    private _broadcastThought(chunk: string): void {
-        this._thoughtListeners.forEach((handlers) => {
-            handlers.forEach((handler) => {
-                handler(chunk);
-            });
-        });
+        this._events.removeThoughtListener(listenerId);
     }
 
     public async getHistory(): Promise<IChatMessage[]> {
-        if (this._core?.tauriProvider.isTauri() === true) {
+        if (this._context?.tauriProvider.isTauri() === true) {
             try {
-                return await (this._core.tauriProvider as unknown as TauriProvider).invoke(
-                    'get_chat_history',
-                    {
-                        sessionId: this._manager.sessionId,
-                    },
-                );
+                return await this._runtime.getHistory(this._context, this._manager.sessionId);
             } catch (e) {
-                tracer.error('[AIBridge] Failed to load history:', e);
+                this._tracer.error('[AIBridge] Failed to load history:', e);
             }
         }
         return [];
     }
 
     public async clearHistory(): Promise<void> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return;
         }
 
         try {
-            await (this._core.tauriProvider as unknown as TauriProvider).invoke(
-                'clear_chat_history',
-                {
-                    sessionId: this._manager.sessionId,
-                },
-            );
+            await this._runtime.clearHistory(this._context, this._manager.sessionId);
         } catch (e) {
-            tracer.error('[AIBridge] Failed to clear history:', e);
+            this._tracer.error('[AIBridge] Failed to clear history:', e);
             throw e;
         }
     }
 
     public async cancelImageGeneration(): Promise<void> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return;
         }
 
         const providerId = this._manager.activeProviderId;
-        if (providerId === null || !this._isImageProvider(providerId)) {
+        if (providerId === null || !this._providerPolicy.isImageProvider(providerId)) {
             return;
         }
 
-        await this._core.tauriProvider.invoke('cancel_image_generation', {
-            provider: providerId,
-        });
+        await this._runtime.cancelImageGeneration(this._context, providerId);
     }
 
     public async getImageGenerationPreview(): Promise<IImageGenerationPreview | null> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return null;
         }
 
         try {
-            return await this._core.tauriProvider.invoke<IImageGenerationPreview | null>(
-                'get_image_generation_preview',
-            );
+            return await this._runtime.getImageGenerationPreview(this._context);
         } catch (error: unknown) {
-            tracer.debug('[AIBridge] Image preview fetch skipped:', error);
+            this._tracer.debug('[AIBridge] Image preview fetch skipped:', error);
             return null;
         }
     }
 
     public async rewindLastTurn(): Promise<string | null> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return null;
         }
 
         try {
-            return await (this._core.tauriProvider as unknown as TauriProvider).invoke(
-                'rewind_last_turn',
-                {
-                    sessionId: this._manager.sessionId,
-                },
-            );
+            return await this._runtime.rewindLastTurn(this._context, this._manager.sessionId);
         } catch (e) {
-            tracer.error('[AIBridge] Failed to rewind last turn:', e);
+            this._tracer.error('[AIBridge] Failed to rewind last turn:', e);
             throw e;
         }
     }
@@ -565,16 +299,6 @@ export class AIBridge implements IAIBridge {
         };
     }
 
-    private _isImageProvider(providerId: string): boolean {
-        return (
-            providerId === 'sdcpp' || providerId === 'stable-diffusion' || providerId === 'comfyui'
-        );
-    }
-
-    private _isManagedLocalImageEngine(providerId: string): boolean {
-        return providerId === 'sdcpp' || providerId === 'stable-diffusion';
-    }
-
     public getSessionId(): string {
         return this._manager.sessionId;
     }
@@ -582,44 +306,52 @@ export class AIBridge implements IAIBridge {
     public destroy(): void {
         this._manager.stopProvider();
         this._cleanupTransportState();
-        this._listeners.clear();
-        this._chunkListeners.clear();
-        this._replaceChunkListeners.clear();
-        this._thoughtListeners.clear();
-        tracer.info('[AIBridge] Resource released');
+        this._events.clear();
+        this._tracer.info('[AIBridge] Resource released');
     }
 
     private _showToast(msg: string, type: 'success' | 'error' | 'info' | 'warning'): void {
-        if (typeof globalThis.showToast === 'function') {
-            globalThis.showToast(msg, type);
-        }
+        this._context?.appUI.showToast(msg, type);
+    }
+
+    public get _listeners(): ReadonlyMap<string, MessageHandler[]> {
+        return this._events.listeners;
+    }
+
+    public get _chunkListeners(): ReadonlyMap<string, IChunkHandler[]> {
+        return this._events.chunkListeners;
+    }
+
+    public get _replaceChunkListeners(): ReadonlyMap<string, IChunkHandler[]> {
+        return this._events.replaceChunkListeners;
+    }
+
+    public get _thoughtListeners(): ReadonlyMap<string, IChunkHandler[]> {
+        return this._events.thoughtListeners;
+    }
+
+    public _broadcastResponse(response: string, source: MessageSource): void {
+        this._events.broadcastResponse(response, source);
+    }
+
+    public _broadcastChunk(chunk: string): void {
+        this._events.broadcastChunk(chunk);
+    }
+
+    public _broadcastReplaceChunk(chunk: string): void {
+        this._events.broadcastReplaceChunk(chunk);
+    }
+
+    public _broadcastThought(chunk: string): void {
+        this._events.broadcastThought(chunk);
     }
 
     private _showErrorToast(key: string, fallback: string): void {
-        this._showToast(globalThis.t(key, fallback), 'error');
+        this._showToast(this._translate(key, fallback), 'error');
     }
 
     protected _showInfoToast(key: string, fallback: string): void {
-        this._showToast(globalThis.t(key, fallback), 'info');
-    }
-
-    // --- Inactivity Management ---
-
-    private _clearInactivityTimer(): void {
-        if (this._inactivityTimer !== null) {
-            clearTimeout(this._inactivityTimer as NodeJS.Timeout);
-            this._inactivityTimer = null;
-        }
-    }
-
-    private _resetInactivityTimer(): void {
-        this._clearInactivityTimer();
-        this._inactivityTimer = setTimeout(() => {
-            tracer.info(
-                '[AIBridge] Engine inactivity timeout reached. Stopping provider to save memory.',
-            );
-            this.stopProvider();
-        }, this.INACTIVITY_TIMEOUT_MS);
+        this._showToast(this._translate(key, fallback), 'info');
     }
 
     private _cleanupTransportState(): void {
@@ -629,11 +361,11 @@ export class AIBridge implements IAIBridge {
         this._unlisteners.length = 0;
         this._transport.destroy();
         this._engineStatus.destroy();
-        this._clearInactivityTimer();
+        this._inactivityController.clear();
         this._initialized = false;
     }
-}
 
-// Singleton instantiation
-export const aiBridge = new AIBridge();
-globalThis.aiBridge = aiBridge;
+    private _translate(key: string, fallback: string): string {
+        return this._context?.i18n.t(key, fallback) ?? fallback;
+    }
+}

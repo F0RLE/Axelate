@@ -1,7 +1,9 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage, IChatResponse } from '../types/chatTypes';
+
+type ChatGenerationLogger = Pick<LoggerService, 'debug'>;
 
 type StreamingMessageHandle = {
     update: (chunk: string) => void;
@@ -26,14 +28,9 @@ type ChatGenerationControllerOptions = {
     aiBridge: AIBridge;
     i18n: I18nService;
     removeTyping: (typingId: string) => void;
-    appendAssistantMessage: (
-        text: string,
-        options?: Record<string, unknown>,
-    ) => void;
-    pushAssistantMessage: (
-        content: IChatMessage['content'],
-        thoughtSignature?: string,
-    ) => void;
+    appendAssistantMessage: (text: string, options?: Record<string, unknown>) => void;
+    pushAssistantMessage: (content: IChatMessage['content'], thoughtSignature?: string) => void;
+    extractText: (data: unknown) => string;
     buildGeneratedImageContent: (
         images: Array<{ mime: string; data_base64: string }>,
         text: string,
@@ -43,6 +40,7 @@ type ChatGenerationControllerOptions = {
     handleError: (errorMsg: unknown, model?: string) => void;
     isDestroyed: () => boolean;
     isSending: () => boolean;
+    tracer: ChatGenerationLogger;
 };
 
 export class ChatGenerationController {
@@ -107,7 +105,7 @@ export class ChatGenerationController {
             this._lastImagePreviewUpdatedAtMs = preview.updated_at_ms;
             handle.setPreview(preview.data_url);
         } catch (error: unknown) {
-            tracer.debug('[Chat] Preview polling skipped:', error);
+            this._options.tracer.debug('[Chat] Preview polling skipped:', error);
         } finally {
             this._imagePreviewPollInFlight = false;
         }
@@ -132,7 +130,7 @@ export class ChatGenerationController {
         imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
         const rawReply = response.message ?? response.reply?.text ?? '';
-        const replyText = this.safeExtractText(rawReply);
+        const replyText = this._options.extractText(rawReply);
         const generatedImages = response.reply?.images ?? [];
 
         if (generatedImages.length > 0) {
@@ -193,58 +191,15 @@ export class ChatGenerationController {
         response: IChatResponse,
         imageHandle?: ImageGenerationHandle | null,
     ): void {
-        const friendlyMsg = this._options.getFriendlyErrorMessage(response.error ?? '', response.model);
+        const friendlyMsg = this._options.getFriendlyErrorMessage(
+            response.error ?? '',
+            response.model,
+        );
         if (imageHandle !== null && imageHandle !== undefined) {
             imageHandle.fail(friendlyMsg);
             return;
         }
 
         this._options.handleError(friendlyMsg, response.model);
-    }
-
-    private extractFromObject(obj: Record<string, unknown>): string {
-        if ('message' in obj && typeof obj['message'] === 'string') return obj['message'];
-        if ('error' in obj && typeof obj['error'] === 'string') return obj['error'];
-        if ('text' in obj && typeof obj['text'] === 'string') return obj['text'];
-
-        try {
-            return JSON.stringify(obj, null, 2);
-        } catch {
-            return this._options.i18n.t(
-                'ui.chat.complex_object_fallback',
-                '[Complex object: cannot display]',
-            );
-        }
-    }
-
-    private safeExtractText(data: unknown): string {
-        if (Array.isArray(data)) {
-            return data
-                .map((part) => this.extractTextPart(part))
-                .filter((part): part is string => part !== '')
-                .join('\n')
-                .trim();
-        }
-        if (typeof data === 'string') return data;
-        if (data instanceof Error) return data.message;
-
-        if (typeof data === 'object' && data !== null) {
-            return this.extractFromObject(data as Record<string, unknown>);
-        }
-
-        return typeof data === 'number' || typeof data === 'boolean' ? String(data) : '';
-    }
-
-    private extractTextPart(part: unknown): string {
-        if (typeof part !== 'object' || part === null) {
-            return '';
-        }
-
-        const contentPart = part as { type?: string; text?: string };
-        if (contentPart.type === 'text' && typeof contentPart.text === 'string') {
-            return contentPart.text;
-        }
-
-        return '';
     }
 }

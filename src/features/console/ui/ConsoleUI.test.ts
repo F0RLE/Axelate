@@ -1,12 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleUI } from './ConsoleUI';
 import type { ConsoleLogService, ILogEntry } from '../services/ConsoleLogService';
-import { eventBus } from '@/shared/services/EventBus';
+import { ConsoleLogNormalizer } from '../services/ConsoleLogNormalizer';
+import { EventBus } from '@/shared/services/EventBus';
 
 describe('ConsoleUI lifecycle', () => {
     let ui: ConsoleUI | null = null;
+    let testEventBus: EventBus;
+    let showToastMock: ReturnType<typeof vi.fn>;
+    const normalizer = new ConsoleLogNormalizer();
+
+    function normalizeLogs(logs: ILogEntry[]): ILogEntry[] {
+        return logs.map((log) => normalizer.normalize(log));
+    }
 
     beforeEach(() => {
+        testEventBus = new EventBus();
         document.body.innerHTML = `
             <input class="debug-slider-1" />
             <span class="debug-slider-1-value">0%</span>
@@ -44,7 +53,7 @@ describe('ConsoleUI lifecycle', () => {
             key,
             fallback,
         ) => `${key}:${fallback}`;
-        (globalThis as unknown as { showToast?: ReturnType<typeof vi.fn> }).showToast = vi.fn();
+        showToastMock = vi.fn();
         vi.clearAllMocks();
     });
 
@@ -58,6 +67,29 @@ describe('ConsoleUI lifecycle', () => {
         await Promise.resolve();
         await Promise.resolve();
         await Promise.resolve();
+    }
+
+    function createDeps() {
+        return {
+            eventBus: testEventBus,
+            translate: (key: string, fallback: string) => `${key}:${fallback}`,
+            showToast: (
+                message: string,
+                type?: 'success' | 'error' | 'warning' | 'info',
+                duration?: number,
+            ) => {
+                (
+                    showToastMock as (
+                        message: string,
+                        type?: 'success' | 'error' | 'warning' | 'info',
+                        duration?: number,
+                    ) => void
+                )(message, type, duration);
+            },
+            copyText: async (text: string) => {
+                await navigator.clipboard.writeText(text);
+            },
+        };
     }
 
     function createServiceMock(
@@ -88,31 +120,8 @@ describe('ConsoleUI lifecycle', () => {
     }
 
     function createConsoleUI(): ConsoleUI {
-        return new ConsoleUI(createServiceMock());
+        return new ConsoleUI(createServiceMock(), createDeps());
     }
-
-    it('should restore previous global debug shims on destroy', () => {
-        const previousSetDebugTab = vi.fn();
-        const previousSetLogView = vi.fn();
-        const previousClearLogs = vi.fn().mockResolvedValue(undefined);
-
-        globalThis.setDebugTab = previousSetDebugTab;
-        globalThis.setLogView = previousSetLogView;
-        globalThis.clearLogs = previousClearLogs;
-
-        ui = createConsoleUI();
-        ui.init();
-
-        expect(globalThis.setDebugTab).not.toBe(previousSetDebugTab);
-        expect(globalThis.setLogView).not.toBe(previousSetLogView);
-        expect(globalThis.clearLogs).not.toBe(previousClearLogs);
-
-        ui.destroy();
-
-        expect(globalThis.setDebugTab).toBe(previousSetDebugTab);
-        expect(globalThis.setLogView).toBe(previousSetLogView);
-        expect(globalThis.clearLogs).toBe(previousClearLogs);
-    });
 
     it('should remove slider listeners on destroy', () => {
         ui = createConsoleUI();
@@ -155,10 +164,7 @@ describe('ConsoleUI lifecycle', () => {
 
         ui.setTab('first', document.querySelector('.debug-tab') as HTMLElement);
         expect(document.getElementById('debug-first-tab')?.classList.contains('active')).toBe(true);
-
-        if (typeof globalThis.setLogView === 'function') {
-            globalThis.setLogView('general', document.querySelector('.console-tab') as HTMLElement);
-        }
+        (document.querySelector('.console-tab') as HTMLElement).click();
         expect(document.getElementById('logs-general')?.classList.contains('active')).toBe(true);
 
         const dropzone = document.querySelector('.debug-dropzone') as HTMLElement;
@@ -177,24 +183,23 @@ describe('ConsoleUI lifecycle', () => {
     it('should clear, copy and render logs through browser clipboard fallback', async () => {
         vi.useFakeTimers();
         const service = createServiceMock({
-            getLogs: vi.fn().mockReturnValue([
+            getLogs: vi.fn().mockReturnValue(normalizeLogs([
                 { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
                 { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
-            ]),
-            getLogsForView: vi.fn().mockReturnValue([
+            ])),
+            getLogsForView: vi.fn().mockReturnValue(normalizeLogs([
                 { level: 'INFO', message: ' hello ', source: 'system', timestamp: 1 },
                 { level: 'ERROR', message: 'boom', source: 'api-gateway', timestamp: 2 },
-            ]),
-            fetchLogs: vi.fn().mockResolvedValue([{ level: 'INFO', message: 'new' }]),
+            ])),
+            fetchLogs: vi.fn().mockResolvedValue(normalizeLogs([{ level: 'INFO', message: 'new', source: 'system', timestamp: 3 }])),
         });
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         const clipboardWrite = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(globalThis.navigator, 'clipboard', {
             configurable: true,
             value: { writeText: clipboardWrite },
         });
-        delete (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 
         ui.init();
         await ui.clearLogs();
@@ -206,24 +211,26 @@ describe('ConsoleUI lifecycle', () => {
 
         (service.getLogsForView as ReturnType<typeof vi.fn>).mockReturnValue([]);
         await ui.copyLogs();
-        expect(
-            (globalThis as unknown as { showToast: ReturnType<typeof vi.fn> }).showToast,
-        ).toHaveBeenCalledWith('ui.debug.logs_empty:No logs to copy', 'warning', 1500);
+        expect(showToastMock).toHaveBeenCalledWith(
+            'ui.debug.logs_empty:No logs to copy',
+            'warning',
+            1500,
+        );
     });
 
     it('should scroll logs to the bottom on the first render', () => {
         const service = createServiceMock({
             getLogs: vi
                 .fn()
-                .mockReturnValue([
+                .mockReturnValue(normalizeLogs([
                     { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ]),
+                ])),
             getLogsForView: vi
                 .fn()
-                .mockReturnValue([
+                .mockReturnValue(normalizeLogs([
                     { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ]),
-            fetchLogs: vi.fn().mockResolvedValue([{ level: 'INFO', message: 'alpha' }]),
+                ])),
+            fetchLogs: vi.fn().mockResolvedValue(normalizeLogs([{ level: 'INFO', message: 'alpha', source: 'system', timestamp: 2 }])),
         });
 
         const container = document.getElementById('console-container') as HTMLDivElement;
@@ -231,7 +238,7 @@ describe('ConsoleUI lifecycle', () => {
         Object.defineProperty(container, 'clientHeight', { configurable: true, value: 200 });
         container.scrollTop = 0;
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         (
             ui as unknown as {
                 renderLogs: (clear?: boolean) => void;
@@ -246,14 +253,14 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogs: vi
                 .fn()
-                .mockReturnValue([
+                .mockReturnValue(normalizeLogs([
                     { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ]),
+                ])),
             getLogsForView: vi
                 .fn()
-                .mockReturnValue([
+                .mockReturnValue(normalizeLogs([
                     { level: 'INFO', message: 'alpha', source: 'system', timestamp: 1 },
-                ]),
+                ])),
             fetchLogs: vi.fn().mockResolvedValue([]),
         });
 
@@ -262,7 +269,7 @@ describe('ConsoleUI lifecycle', () => {
         Object.defineProperty(container, 'clientHeight', { configurable: true, value: 200 });
         container.scrollTop = 0;
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         ui.init();
         await (
             ui as unknown as {
@@ -276,10 +283,10 @@ describe('ConsoleUI lifecycle', () => {
     it('should fetch logs immediately when console page becomes active', async () => {
         const service = createServiceMock();
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         ui.init();
 
-        eventBus.emit('page:change', { pageId: 'console' });
+        testEventBus.emit('page:change', { pageId: 'console' });
         await flushPromises();
 
         expect(service.fetchLogs).toHaveBeenCalledTimes(1);
@@ -288,9 +295,11 @@ describe('ConsoleUI lifecycle', () => {
     it('should render module-specific tabs and filter logs by active view', async () => {
         const service = createServiceMock({
             getLogsForView: vi.fn((view: string) =>
-                view === 'llamacpp'
-                    ? [{ level: 'INFO', message: 'engine line', source: 'llamacpp', timestamp: 1 }]
-                    : [{ level: 'INFO', message: 'general line', source: 'system', timestamp: 1 }],
+                normalizeLogs(
+                    view === 'llamacpp'
+                        ? [{ level: 'INFO', message: 'engine line', source: 'llamacpp', timestamp: 1 }]
+                        : [{ level: 'INFO', message: 'general line', source: 'system', timestamp: 1 }],
+                ),
             ),
             getAvailableViews: vi.fn().mockResolvedValue([
                 { id: 'general', label: 'General' },
@@ -299,7 +308,7 @@ describe('ConsoleUI lifecycle', () => {
             fetchLogs: vi.fn().mockResolvedValue([]),
         });
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         ui.init();
         await flushPromises();
 
@@ -318,27 +327,28 @@ describe('ConsoleUI lifecycle', () => {
             configurable: true,
             value: { writeText: clipboardWrite },
         });
-        delete (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
 
         const service = createServiceMock({
             getLogsForView: vi.fn((view: string) =>
-                view === 'llamacpp'
-                    ? [
-                          {
-                              level: 'INFO',
-                              message: 'engine line',
-                              source: 'llamacpp',
-                              timestamp: 1,
-                          },
-                      ]
-                    : [
-                          {
-                              level: 'INFO',
-                              message: 'general line',
-                              source: 'system',
-                              timestamp: 1,
-                          },
-                      ],
+                normalizeLogs(
+                    view === 'llamacpp'
+                        ? [
+                              {
+                                  level: 'INFO',
+                                  message: 'engine line',
+                                  source: 'llamacpp',
+                                  timestamp: 1,
+                              },
+                          ]
+                        : [
+                              {
+                                  level: 'INFO',
+                                  message: 'general line',
+                                  source: 'system',
+                                  timestamp: 1,
+                              },
+                          ],
+                ),
             ),
             getAvailableViews: vi.fn().mockResolvedValue([
                 { id: 'general', label: 'General' },
@@ -346,7 +356,7 @@ describe('ConsoleUI lifecycle', () => {
             ]),
         });
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         ui.init();
         await flushPromises();
 
@@ -360,7 +370,7 @@ describe('ConsoleUI lifecycle', () => {
     });
 
     it('should group repeated manifest errors without expandable details', async () => {
-        const logs: ILogEntry[] = [
+        const logs = normalizeLogs([
             {
                 level: 'INFO',
                 message: '[AIBridge] Starting provider: llamacpp',
@@ -370,23 +380,23 @@ describe('ConsoleUI lifecycle', () => {
             {
                 level: 'ERROR',
                 message:
-                    '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml or module.json',
+                    '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml',
                 source: 'frontend',
                 timestamp: 2,
             },
             {
                 level: 'ERROR',
                 message:
-                    '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml or module.json',
+                    '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml',
                 source: 'frontend',
                 timestamp: 3,
             },
-        ];
+        ]);
         const service = createServiceMock({
             getLogsForView: vi.fn().mockReturnValue(logs),
         });
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         ui.init();
         await (
             ui as unknown as {
@@ -410,13 +420,13 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogsForView: vi
                 .fn()
-                .mockReturnValue([
+                .mockReturnValue(normalizeLogs([
                     { level: 'INFO', message: 'stable line', source: 'system', timestamp: 1 },
-                ]),
+                ])),
             fetchLogs: vi.fn().mockResolvedValue([]),
         });
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         ui.init();
         await (
             ui as unknown as {
@@ -437,7 +447,7 @@ describe('ConsoleUI lifecycle', () => {
 
     it('should filter logs by selected levels from top menu', async () => {
         const service = createServiceMock({
-            getLogsForView: vi.fn().mockReturnValue([
+            getLogsForView: vi.fn().mockReturnValue(normalizeLogs([
                 {
                     level: 'INFO',
                     message: '[NavigationService] Navigating to: settings',
@@ -447,14 +457,14 @@ describe('ConsoleUI lifecycle', () => {
                 {
                     level: 'ERROR',
                     message:
-                        '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml or module.json',
+                        '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml',
                     source: 'frontend',
                     timestamp: 2,
                 },
-            ]),
+            ])),
         });
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         ui.init();
         await (
             ui as unknown as {
@@ -481,17 +491,17 @@ describe('ConsoleUI lifecycle', () => {
 
     it('should hide launcher source labels like frontend from rendered logs', async () => {
         const service = createServiceMock({
-            getLogsForView: vi.fn().mockReturnValue([
+            getLogsForView: vi.fn().mockReturnValue(normalizeLogs([
                 {
                     level: 'INFO',
                     message: '[NavigationService] Navigating to: settings',
                     source: 'frontend',
                     timestamp: 1,
                 },
-            ]),
+            ])),
         });
 
-        ui = new ConsoleUI(service);
+        ui = new ConsoleUI(service, createDeps());
         await (
             ui as unknown as {
                 _refreshLogsOnConsoleOpen: () => Promise<void>;

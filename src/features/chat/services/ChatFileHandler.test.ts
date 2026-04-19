@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ChatFileHandler } from '@/features/chat/services/ChatFileHandler';
 import type { IBridge } from '@/shared/types/IBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // Mock chatUtils
 vi.mock('@/features/chat/utils/chatUtils', () => ({
@@ -47,6 +48,7 @@ function createBackendFile(name: string, content: string, type = 'text/plain'): 
 
 describe('ChatFileHandler', () => {
     let handler: ChatFileHandler;
+    let tracer: Pick<LoggerService, 'warn' | 'error'>;
     let mockBridge: {
         isTauri: ReturnType<typeof vi.fn>;
         invoke: ReturnType<typeof vi.fn>;
@@ -54,7 +56,14 @@ describe('ChatFileHandler', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        handler = new ChatFileHandler();
+        tracer = {
+            warn: vi.fn(),
+            error: vi.fn(),
+        };
+        handler = new ChatFileHandler(tracer);
+        handler.setTokenEstimator(async (text: string, model?: string) =>
+            await getTokenCount(text, model),
+        );
         mockBridge = {
             isTauri: vi.fn(),
             invoke: vi.fn(),

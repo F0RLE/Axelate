@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModuleService } from '@/shared/services/ModuleService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // TYPES
 type ProgressHandler = ((_: Record<string, unknown>) => void) | undefined;
@@ -22,6 +23,12 @@ const mocks = vi.hoisted(() => {
                 /* no-op */
             }),
         },
+        tracer: {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } satisfies Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>,
     };
 });
 
@@ -57,7 +64,7 @@ describe('ModuleService', () => {
         mocks.commands.deleteModule.mockResolvedValue({ status: 'ok', data: null });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
-        moduleService = new ModuleService(mocks.tauriProvider as any);
+        moduleService = new ModuleService(mocks.tauriProvider as any, mocks.tracer);
     });
 
     describe('init', () => {

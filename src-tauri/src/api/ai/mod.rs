@@ -95,6 +95,232 @@ struct StreamChunkPayload {
     content: String,
 }
 
+#[derive(Clone)]
+struct BackgroundImageGenerationContext {
+    sessions: Arc<ChatSessionManager>,
+    config_service: Arc<ConfigService>,
+    engine_manager: Arc<EngineManager>,
+    image_generation_state: Arc<crate::domain::ai::ImageGenerationState>,
+    settings_service: crate::infrastructure::config::settings::SettingsService,
+    ui_state_service: UiStateService,
+}
+
+fn ensure_request_id(request: &mut ChatRequest) -> String {
+    let request_id = request
+        .request_id
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    request.request_id = Some(request_id.clone());
+    request_id
+}
+
+async fn fill_chat_request_api_key(request: &mut ChatRequest) -> Result<(), AppError> {
+    if !is_local_provider(&request.provider)
+        && request
+            .api_key
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+    {
+        request.api_key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
+    }
+
+    Ok(())
+}
+
+async fn load_stored_openrouter_api_key() -> Result<Option<String>, AppError> {
+    let key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
+    Ok(key.filter(|value| !value.trim().is_empty()))
+}
+
+fn build_background_image_generation_context(
+    sessions: &State<'_, Arc<ChatSessionManager>>,
+    config_service: &State<'_, Arc<ConfigService>>,
+    engine_manager: &State<'_, Arc<EngineManager>>,
+    image_generation_state: &State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
+    settings_service: &State<'_, crate::infrastructure::config::settings::SettingsService>,
+    ui_state_service: &State<'_, UiStateService>,
+) -> BackgroundImageGenerationContext {
+    BackgroundImageGenerationContext {
+        sessions: Arc::clone(sessions.inner()),
+        config_service: Arc::clone(config_service.inner()),
+        engine_manager: Arc::clone(engine_manager.inner()),
+        image_generation_state: Arc::clone(image_generation_state.inner()),
+        settings_service: settings_service.inner().clone(),
+        ui_state_service: ui_state_service.inner().clone(),
+    }
+}
+
+fn spawn_background_image_generation(
+    app_handle: tauri::AppHandle,
+    request: ai::ImageGenerationRequest,
+    context: BackgroundImageGenerationContext,
+) {
+    tauri::async_runtime::spawn(async move {
+        crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");
+        let result = ai_service::process_image_request(
+            request,
+            &context.sessions,
+            &context.config_service,
+            &context.engine_manager,
+            &context.image_generation_state,
+            &context.settings_service,
+        )
+        .await;
+
+        if let Err(error) = &result {
+            tracing::error!("Background image generation failed: {error}");
+        }
+
+        reveal_chat_window_after_background_generation(&context.ui_state_service).await;
+        crate::app::tray::clear_background_generation(&app_handle);
+        restore_or_create_main_window(&app_handle);
+    });
+}
+
+async fn reveal_chat_window_after_background_generation(ui_state_service: &UiStateService) {
+    let mut ui_state = ui_state_service.get_ui_state().await.unwrap_or_default();
+    ui_state.last_page = Some("chat".to_string());
+    ui_state.pending_chat_reveal = true;
+    let _ = ui_state_service.save_ui_state(&ui_state).await;
+}
+
+fn restore_or_create_main_window(app_handle: &tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        show_and_focus_window(&window);
+    } else if let Some(window) = create_main_window(app_handle) {
+        show_and_focus_window(&window);
+    }
+}
+
+async fn cancel_comfyui_job(
+    provider: &str,
+    image_generation_state: &crate::domain::ai::ImageGenerationState,
+) -> Result<(), AppError> {
+    if let Some(job) = image_generation_state.cancel(provider).await {
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("{}/interrupt", job.base_url.trim_end_matches('/')))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::External {
+                request_id: None,
+                message: format!("Failed to interrupt ComfyUI job: {body}"),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn read_image_generation_preview_file(path: &Path) -> Option<ImageGenerationPreview> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            tracing::debug!("Failed to stat preview file {}: {error}", path.display());
+            return None;
+        }
+    };
+
+    if !metadata.is_file() || metadata.len() == 0 {
+        return None;
+    }
+
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            tracing::debug!("Failed to read preview file {}: {error}", path.display());
+            return None;
+        }
+    };
+
+    let updated_at_ms = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0.0, |duration| duration.as_secs_f64() * 1000.0);
+
+    Some(ImageGenerationPreview {
+        data_url: format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
+        updated_at_ms,
+    })
+}
+
+fn image_extension_for_mime_type(mime_type: &str) -> &'static str {
+    match mime_type.to_ascii_lowercase().as_str() {
+        mime if mime.contains("jpeg") || mime.contains("jpg") => "jpg",
+        mime if mime.contains("webp") => "webp",
+        mime if mime.contains("gif") => "gif",
+        _ => "png",
+    }
+}
+
+fn decode_chat_image_payload(base64_data: &str) -> Result<Vec<u8>, AppError> {
+    let payload = base64_data
+        .split_once(',')
+        .map_or(base64_data, |(_, data)| data);
+    STANDARD
+        .decode(payload)
+        .map_err(|error| AppError::Validation(format!("Invalid image data: {error}")))
+}
+
+fn build_chat_image_file_path(target_dir: &Path, ext: &str) -> PathBuf {
+    let file_name = format!(
+        "axelate_image_{}.{}",
+        chrono::Local::now().format("%Y%m%d_%H%M%S_%3f"),
+        ext
+    );
+    target_dir.join(file_name)
+}
+
+fn resolve_chat_image_path(path: &Path, expected_kind: &str) -> Result<PathBuf, AppError> {
+    let target_dir = chat_image_root_dir()?;
+    let resolved = resolve_existing_path_within_root(path, &target_dir, expected_kind)?;
+
+    match expected_kind {
+        "Image folder does not exist" if !resolved.is_dir() => Err(AppError::Validation(format!(
+            "Path is not a directory: {}",
+            resolved.display()
+        ))),
+        "Saved image does not exist" if !resolved.is_file() => Err(AppError::Validation(format!(
+            "Path is not a file: {}",
+            resolved.display()
+        ))),
+        _ => Ok(resolved),
+    }
+}
+
+fn resolve_image_open_target(
+    requested_file: &Path,
+    requested_folder: &Path,
+) -> Result<(PathBuf, bool), AppError> {
+    let open_folder_only = requested_file == requested_folder || requested_file.is_dir();
+    if open_folder_only {
+        return resolve_chat_image_path(requested_folder, "Image folder does not exist")
+            .map(|path| (path, true));
+    }
+
+    resolve_chat_image_path(requested_file, "Saved image does not exist").map(|path| (path, false))
+}
+
+fn image_open_directory(path: &Path, folder_only: bool) -> Result<PathBuf, AppError> {
+    if folder_only {
+        return Ok(path.to_path_buf());
+    }
+
+    path.parent().map(Path::to_path_buf).ok_or_else(|| {
+        AppError::Validation(format!(
+            "Image file has no parent directory: {}",
+            path.display()
+        ))
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 /// Sends a chat message to the AI provider and streams the response
@@ -106,21 +332,8 @@ pub async fn send_chat_message(
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<ChatResponse, AppError> {
     let mut request = request;
-    let request_id = request
-        .request_id
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    request.request_id = Some(request_id.clone());
-
-    if !is_local_provider(&request.provider)
-        && request
-            .api_key
-            .as_deref()
-            .is_none_or(|value| value.trim().is_empty())
-    {
-        request.api_key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
-    }
+    let request_id = ensure_request_id(&mut request);
+    fill_chat_request_api_key(&mut request).await?;
 
     let sink = create_window_stream_sink(window, request_id);
     ai_service::process_chat_request(request, &sessions, &config_service, &engine_manager, sink)
@@ -138,10 +351,7 @@ pub async fn validate_api_key(provider: String, key: String) -> Result<bool, App
 #[specta::specta]
 /// Validates the stored OpenRouter API key without exposing it to the frontend
 pub async fn validate_stored_api_key(provider: String) -> Result<bool, AppError> {
-    let key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
-    if let Some(key) = key
-        && !key.trim().is_empty()
-    {
+    if let Some(key) = load_stored_openrouter_api_key().await? {
         return ai_service::validate_api_key(provider, key).await;
     }
 
@@ -234,43 +444,15 @@ pub async fn generate_image_background(
     settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
     ui_state_service: State<'_, UiStateService>,
 ) -> Result<(), AppError> {
-    let sessions = Arc::clone(&*sessions);
-    let config_service = Arc::clone(&*config_service);
-    let engine_manager = Arc::clone(&*engine_manager);
-    let image_generation_state = Arc::clone(&*image_generation_state);
-    let settings_service = settings_service.inner().clone();
-    let ui_state_service = ui_state_service.inner().clone();
-    let app_handle = app;
-
-    tauri::async_runtime::spawn(async move {
-        crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");
-        let result = ai_service::process_image_request(
-            request,
-            &sessions,
-            &config_service,
-            &engine_manager,
-            &image_generation_state,
-            &settings_service,
-        )
-        .await;
-
-        if let Err(error) = &result {
-            tracing::error!("Background image generation failed: {error}");
-        }
-
-        let mut ui_state = ui_state_service.get_ui_state().await.unwrap_or_default();
-        ui_state.last_page = Some("chat".to_string());
-        ui_state.pending_chat_reveal = true;
-        let _ = ui_state_service.save_ui_state(&ui_state).await;
-
-        crate::app::tray::clear_background_generation(&app_handle);
-
-        if let Some(window) = app_handle.get_webview_window("main") {
-            show_and_focus_window(&window);
-        } else if let Some(window) = create_main_window(&app_handle) {
-            show_and_focus_window(&window);
-        }
-    });
+    let context = build_background_image_generation_context(
+        &sessions,
+        &config_service,
+        &engine_manager,
+        &image_generation_state,
+        &settings_service,
+        &ui_state_service,
+    );
+    spawn_background_image_generation(app, request, context);
 
     Ok(())
 }
@@ -284,23 +466,7 @@ pub async fn cancel_image_generation(
     image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
 ) -> Result<(), AppError> {
     if provider == "comfyui" {
-        if let Some(job) = image_generation_state.cancel(&provider).await {
-            let client = reqwest::Client::new();
-            let response = client
-                .post(format!("{}/interrupt", job.base_url.trim_end_matches('/')))
-                .send()
-                .await?;
-
-            if !response.status().is_success() {
-                let body = response.text().await.unwrap_or_default();
-                return Err(AppError::External {
-                    request_id: None,
-                    message: format!("Failed to interrupt ComfyUI job: {body}"),
-                });
-            }
-        }
-
-        return Ok(());
+        return cancel_comfyui_job(&provider, &image_generation_state).await;
     }
 
     engine_manager.stop_slot(Capability::Image).await
@@ -316,45 +482,12 @@ pub async fn get_image_generation_preview(
         return Ok(None);
     };
 
-    tokio::task::spawn_blocking(move || {
-        let metadata = match std::fs::metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => {
-                tracing::debug!("Failed to stat preview file {}: {error}", path.display());
-                return Ok(None);
-            }
-        };
-
-        if !metadata.is_file() || metadata.len() == 0 {
-            return Ok(None);
-        }
-
-        let bytes = match std::fs::read(&path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => {
-                tracing::debug!("Failed to read preview file {}: {error}", path.display());
-                return Ok(None);
-            }
-        };
-
-        let updated_at_ms = metadata
-            .modified()
-            .ok()
-            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(0.0, |duration| duration.as_secs_f64() * 1000.0);
-
-        Ok(Some(ImageGenerationPreview {
-            data_url: format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
-            updated_at_ms,
-        }))
-    })
-    .await
-    .map_err(|error| AppError::Internal {
-        request_id: None,
-        message: format!("Preview read task failed: {error}"),
-    })?
+    tokio::task::spawn_blocking(move || read_image_generation_preview_file(&path))
+        .await
+        .map_err(|error| AppError::Internal {
+            request_id: None,
+            message: format!("Preview read task failed: {error}"),
+        })
 }
 
 #[tauri::command]
@@ -367,27 +500,9 @@ pub fn save_chat_image_default(
 ) -> Result<SavedChatImage, AppError> {
     let target_dir = chat_image_root_dir()?;
     std::fs::create_dir_all(&target_dir)?;
-
-    let ext = match mime_type.to_ascii_lowercase().as_str() {
-        mime if mime.contains("jpeg") || mime.contains("jpg") => "jpg",
-        mime if mime.contains("webp") => "webp",
-        mime if mime.contains("gif") => "gif",
-        _ => "png",
-    };
-
-    let payload = base64_data
-        .split_once(',')
-        .map_or(base64_data.as_str(), |(_, data)| data);
-    let bytes = STANDARD
-        .decode(payload)
-        .map_err(|e| AppError::Validation(format!("Invalid image data: {e}")))?;
-
-    let file_name = format!(
-        "axelate_image_{}.{}",
-        chrono::Local::now().format("%Y%m%d_%H%M%S_%3f"),
-        ext
-    );
-    let file_path = target_dir.join(file_name);
+    let bytes = decode_chat_image_payload(&base64_data)?;
+    let file_path =
+        build_chat_image_file_path(&target_dir, image_extension_for_mime_type(&mime_type));
     std::fs::write(&file_path, bytes)?;
 
     Ok(SavedChatImage {
@@ -406,16 +521,7 @@ pub fn delete_chat_image(file_path: String) -> Result<(), AppError> {
         return Ok(());
     }
 
-    let target_dir = chat_image_root_dir()?;
-    let file = resolve_existing_path_within_root(&file, &target_dir, "Saved image does not exist")?;
-
-    if !file.is_file() {
-        return Err(AppError::Validation(format!(
-            "Path is not a file: {}",
-            file.display()
-        )));
-    }
-
+    let file = resolve_chat_image_path(&file, "Saved image does not exist")?;
     std::fs::remove_file(&file)?;
     Ok(())
 }
@@ -427,53 +533,8 @@ pub fn delete_chat_image(file_path: String) -> Result<(), AppError> {
 pub fn open_chat_image_location(file_path: String, folder_path: String) -> Result<(), AppError> {
     let requested_file = PathBuf::from(&file_path);
     let requested_folder = PathBuf::from(&folder_path);
-    let open_folder_only = requested_file == requested_folder || requested_file.is_dir();
-    let target_dir = chat_image_root_dir()?;
-
-    let file = if open_folder_only {
-        let folder = resolve_existing_path_within_root(
-            &requested_folder,
-            &target_dir,
-            "Image folder does not exist",
-        )?;
-
-        if !folder.is_dir() {
-            return Err(AppError::Validation(format!(
-                "Path is not a directory: {}",
-                folder.display()
-            )));
-        }
-
-        folder
-    } else {
-        let file = resolve_existing_path_within_root(
-            &requested_file,
-            &target_dir,
-            "Saved image does not exist",
-        )?;
-
-        if !file.is_file() {
-            return Err(AppError::Validation(format!(
-                "Path is not a file: {}",
-                file.display()
-            )));
-        }
-
-        file
-    };
-
-    let path = if open_folder_only {
-        file
-    } else {
-        file.parent()
-            .ok_or_else(|| {
-                AppError::Validation(format!(
-                    "Image file has no parent directory: {}",
-                    file.display()
-                ))
-            })?
-            .to_path_buf()
-    };
+    let (file, open_folder_only) = resolve_image_open_target(&requested_file, &requested_folder)?;
+    let path = image_open_directory(&file, open_folder_only)?;
 
     #[cfg(target_os = "windows")]
     {

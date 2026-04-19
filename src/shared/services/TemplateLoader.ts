@@ -1,20 +1,21 @@
 /**
  * @module core/services/TemplateLoader
  * @description Centralized service for dynamic HTML template loading, caching, and secure injection.
- * Implements the Singleton pattern as defined in Axelate Standards Section 16.1.
  *
  * @example
  * ```typescript
- * import { templateLoader } from './TemplateLoader';
+ * import { TemplateLoader } from './TemplateLoader';
  *
- * await templateLoader.loadAndInject('sidebar', 'sidebar-container');
+ * const loader = new TemplateLoader();
+ * await loader.loadAndInject('sidebar', 'sidebar-container');
  * ```
  */
 
 import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type InsertMode = 'replace' | 'append';
+type TemplateLoaderLogger = Pick<LoggerService, 'debug' | 'error'>;
 
 /**
  * @class TemplateLoader
@@ -23,6 +24,8 @@ type InsertMode = 'replace' | 'append';
 export class TemplateLoader {
     private readonly _cache = new Map<string, string>();
     private _initialized = false;
+
+    constructor(private readonly _tracer: TemplateLoaderLogger) {}
 
     private static readonly _baseSanitizeConfig: DOMPurifyConfig = {
         USE_PROFILES: { html: true, svg: true },
@@ -76,17 +79,13 @@ export class TemplateLoader {
         KEEP_CONTENT: true,
     };
 
-    constructor() {
-        (globalThis as unknown as Record<string, unknown>)['templateLoader'] = this;
-    }
-
     /**
      * Idempotent initialization of the service.
      * Required by Section 16.2 of Axelate Standards.
      */
     public init(): void {
         if (this._initialized) {
-            tracer.debug('[TemplateLoader] Already initialized');
+            this._tracer.debug('[TemplateLoader] Already initialized');
             return;
         }
 
@@ -120,7 +119,7 @@ export class TemplateLoader {
             this._cache.set(path, html);
             return html;
         } catch (error) {
-            tracer.error(`[TemplateLoader] Error loading template ${path}: ${String(error)}`);
+            this._tracer.error(`[TemplateLoader] Error loading template ${path}: ${String(error)}`);
             return '';
         }
     }
@@ -187,7 +186,7 @@ export class TemplateLoader {
         const sanitized = this._sanitizeHtml(html, mode);
         if (mode === 'replace') {
             container.innerHTML = sanitized;
-            tracer.debug(`[TemplateLoader] Injected: ${containerId}`);
+            this._tracer.debug(`[TemplateLoader] Injected: ${containerId}`);
         } else {
             container.insertAdjacentHTML('beforeend', sanitized);
         }
@@ -208,6 +207,3 @@ export class TemplateLoader {
         return DOMPurify.sanitize(html, config);
     }
 }
-
-// Export singleton instance as per Section 16.1
-export const templateLoader = new TemplateLoader();

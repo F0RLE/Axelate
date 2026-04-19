@@ -4,7 +4,7 @@
  * Extracted from ChatController for SRP compliance.
  */
 
-import { voiceInputService } from '../services/VoiceInputService';
+import type { VoiceInputService } from '../services/VoiceInputService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { SoundService } from '@/shared/services/SoundService';
 
@@ -12,6 +12,7 @@ export class VoiceController {
     constructor(
         private readonly _i18n: I18nService,
         private readonly _soundService: SoundService,
+        private readonly _voiceInputService: VoiceInputService,
     ) {}
 
     /**
@@ -19,37 +20,43 @@ export class VoiceController {
      * @param onResult - Callback with the transcribed text when recording finishes.
      */
     public toggle(onResult: (text: string) => void): void {
-        if (voiceInputService.isActive()) {
+        if (this._voiceInputService.isActive()) {
             this.stop();
             return;
         }
 
-        if (!voiceInputService.isSupported()) {
+        if (!this._voiceInputService.isSupported()) {
             return;
         }
 
-        voiceInputService.start(
+        this._voiceInputService.start(
             (text) => onResult(text),
-            (isRecording) => this._onStateChange(isRecording),
+            {
+                onStateChange: ({ state }) => this._onStateChange(state),
+            },
         );
     }
 
     public stop(): void {
-        voiceInputService.stop();
+        this._voiceInputService.stop();
     }
 
-    private _onStateChange(isRecording: boolean): void {
+    private _onStateChange(state: 'idle' | 'starting' | 'listening' | 'stopping'): void {
         const voiceBtn = document.getElementById('chat-voice-btn');
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+        const isListening = state === 'listening' || state === 'starting';
 
-        if (isRecording) {
+        if (state === 'listening') {
             this._soundService.playToggle(true);
+        }
+
+        if (isListening) {
             if (voiceBtn) voiceBtn.classList.add('is-recording');
         } else if (voiceBtn) {
             voiceBtn.classList.remove('is-recording');
         }
 
-        this._setPlaceholder(isRecording, chatInput);
+        this._setPlaceholder(isListening, chatInput);
     }
 
     private _setPlaceholder(isRecording: boolean, input: HTMLTextAreaElement | null): void {

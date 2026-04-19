@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SidebarUI } from './SidebarUI';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 vi.mock('@/assets/logos', () => ({
     mountLogos: vi.fn(),
@@ -33,6 +34,12 @@ describe('SidebarUI', () => {
     const windowService = {
         getConfig: vi.fn(() => null),
     };
+    const tracer = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+    } as unknown as LoggerService;
 
     function setupDom(): void {
         document.body.innerHTML = `
@@ -77,6 +84,7 @@ describe('SidebarUI', () => {
     it('renders navigation buttons into main and bottom menus', async () => {
         const sidebarUi = new SidebarUI(
             uiSettings as never,
+            tracer,
             soundService as never,
             windowService as never,
         );
@@ -94,15 +102,16 @@ describe('SidebarUI', () => {
         uiSettings.getHiddenNavItems.mockReturnValue(['chat', 'downloads']);
         const sidebarUi = new SidebarUI(
             uiSettings as never,
+            tracer,
             soundService as never,
             windowService as never,
         );
 
         await sidebarUi.init();
 
-        expect(document.querySelector('.nav-btn[data-page="chat"]')?.classList.contains('hidden')).toBe(
-            true,
-        );
+        expect(
+            document.querySelector('.nav-btn[data-page="chat"]')?.classList.contains('hidden'),
+        ).toBe(true);
         expect(
             document.querySelector('.nav-btn[data-page="downloads"]')?.classList.contains('hidden'),
         ).toBe(true);
@@ -115,6 +124,7 @@ describe('SidebarUI', () => {
         vi.useFakeTimers();
         const sidebarUi = new SidebarUI(
             uiSettings as never,
+            tracer,
             soundService as never,
             windowService as never,
         );
@@ -141,15 +151,16 @@ describe('SidebarUI', () => {
 
         const sidebarUi = new SidebarUI(
             uiSettings as never,
+            tracer,
             soundService as never,
             windowService as never,
         );
 
         await sidebarUi.init();
 
-        expect(document.getElementById('system-monitor')?.classList.contains('adaptive-hidden')).toBe(
-            true,
-        );
+        expect(
+            document.getElementById('system-monitor')?.classList.contains('adaptive-hidden'),
+        ).toBe(true);
         expect(sidebar.classList.contains('monitor-hidden')).toBe(true);
     });
 
@@ -157,6 +168,7 @@ describe('SidebarUI', () => {
         uiSettings.getZoomLevel.mockReturnValue(3);
         const sidebarUi = new SidebarUI(
             uiSettings as never,
+            tracer,
             soundService as never,
             windowService as never,
         );

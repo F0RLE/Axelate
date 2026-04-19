@@ -6,17 +6,32 @@ vi.mock('dompurify', () => ({
     },
 }));
 
-vi.mock('../../utils/globalAccessor', () => ({
-    getGlobalWin: () => globalThis,
-}));
-
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { ModuleCardRenderer } from './ModuleCardRenderer';
 
 describe('ModuleCardRenderer', () => {
     let renderer: ModuleCardRenderer;
+    let checkInstalled: (moduleId: string) => Promise<boolean>;
+    let openModuleSettingsSpy: ReturnType<typeof vi.fn>;
+    let tracer: LoggerService;
 
     beforeEach(() => {
-        renderer = new ModuleCardRenderer();
+        checkInstalled = vi.fn<(_: string) => Promise<boolean>>(() => Promise.resolve(false));
+        openModuleSettingsSpy = vi.fn();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
+        renderer = new ModuleCardRenderer({
+            checkInstalled,
+            translate: (key, fallback) => `${key}:${fallback}`,
+            tracer,
+            openModuleSettings: (app) => {
+                (openModuleSettingsSpy as unknown as (value: unknown) => void)(app);
+            },
+        });
         document.body.innerHTML = `
             <template id="tpl-module-card">
                 <div class="app-icon-wrapper"></div>
@@ -26,25 +41,11 @@ describe('ModuleCardRenderer', () => {
         `;
         (
             globalThis as unknown as {
-                t?: (key: string, fallback: string) => string;
-                aiBridge?: { getState: () => { activeProviderId?: string } };
-                openModuleSettings?: ReturnType<typeof vi.fn>;
-                checkModuleInstalled?: (id: string) => Promise<boolean>;
-            }
-        ).t = (key, fallback) => `${key}:${fallback}`;
-        (
-            globalThis as unknown as {
                 aiBridge?: { getState: () => { activeProviderId?: string } };
             }
         ).aiBridge = {
             getState: () => ({ activeProviderId: 'Убрать-app' }),
         };
-        (
-            globalThis as unknown as { openModuleSettings?: ReturnType<typeof vi.fn> }
-        ).openModuleSettings = vi.fn();
-        (
-            globalThis as unknown as { checkModuleInstalled?: (id: string) => Promise<boolean> }
-        ).checkModuleInstalled = vi.fn(() => Promise.resolve(false));
     });
 
     afterEach(() => {
@@ -163,9 +164,6 @@ describe('ModuleCardRenderer', () => {
 
     it('opens module settings on right click for installed cards and ignores uninstalled ones', async () => {
         const onClick = vi.fn();
-        const openModuleSettings = (
-            globalThis as unknown as { openModuleSettings: ReturnType<typeof vi.fn> }
-        ).openModuleSettings;
 
         const installedCard = renderer.createCard(
             { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,
@@ -176,12 +174,9 @@ describe('ModuleCardRenderer', () => {
         installedCard.dispatchEvent(
             new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
         );
-        expect(openModuleSettings).toHaveBeenCalled();
+        expect(openModuleSettingsSpy).toHaveBeenCalled();
 
-        const checkModuleInstalled = vi.fn(() => Promise.resolve(true));
-        (
-            globalThis as unknown as { checkModuleInstalled?: typeof checkModuleInstalled }
-        ).checkModuleInstalled = checkModuleInstalled;
+        (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
         const asyncCard = renderer.createCard(
             { id: 'late-install', name: 'Later', desc: 'Desc', installed: false } as never,
             'services',
@@ -194,7 +189,7 @@ describe('ModuleCardRenderer', () => {
 
         expect(asyncCard.classList.contains('is-installed')).toBe(true);
         asyncCard.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-        expect(openModuleSettings).toHaveBeenCalledTimes(2);
+        expect(openModuleSettingsSpy).toHaveBeenCalledTimes(2);
 
         const uninstalledCard = renderer.createCard(
             { id: 'not-installed', name: 'Missing', desc: 'Desc', installed: false } as never,
@@ -205,14 +200,12 @@ describe('ModuleCardRenderer', () => {
         uninstalledCard.dispatchEvent(
             new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
         );
-        expect(openModuleSettings).toHaveBeenCalledTimes(2);
+        expect(openModuleSettingsSpy).toHaveBeenCalledTimes(2);
     });
 
     it('should ignore late async install resolution for detached cards', async () => {
         const onClick = vi.fn();
-        (
-            globalThis as unknown as { checkModuleInstalled?: (id: string) => Promise<boolean> }
-        ).checkModuleInstalled = vi.fn(() => Promise.resolve(true));
+        (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
         const card = renderer.createCard(
             { id: 'late-install-detached', name: 'Later', desc: 'Desc', installed: false } as never,

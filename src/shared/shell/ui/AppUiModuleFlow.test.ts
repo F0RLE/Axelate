@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IApp } from '../../types/coreTypes';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AppUiModuleFlow } from './AppUiModuleFlow';
 
 describe('AppUiModuleFlow', () => {
@@ -23,19 +24,21 @@ describe('AppUiModuleFlow', () => {
     const openAppSelection = vi.fn();
     const markCardAsInstalled = vi.fn();
     const showToast = vi.fn();
+    const translate = vi.fn((_key: string, fallback: string) => fallback);
 
     let flow: AppUiModuleFlow;
 
     beforeEach(() => {
         vi.clearAllMocks();
         document.body.innerHTML = '';
-        (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
-            _key,
-            fallback,
-        ) => fallback;
-
         flow = new AppUiModuleFlow({
             platformService: platformService as never,
+            tracer: {
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
+            } as unknown as LoggerService,
             modalManager,
             getCatalogApps,
             getSelectedAppId,
@@ -43,6 +46,7 @@ describe('AppUiModuleFlow', () => {
             openAppSelection,
             markCardAsInstalled,
             showToast,
+            translate,
         });
     });
 
@@ -57,7 +61,9 @@ describe('AppUiModuleFlow', () => {
 
         expect(app.installed).toBe(false);
         expect(clearModuleCard).toHaveBeenCalledWith('services');
-        expect(openAppSelection).toHaveBeenCalledWith('services', [{ id: 'svc', installed: false }]);
+        expect(openAppSelection).toHaveBeenCalledWith('services', [
+            { id: 'svc', installed: false },
+        ]);
     });
 
     it('refreshes modal selection after successful download', () => {

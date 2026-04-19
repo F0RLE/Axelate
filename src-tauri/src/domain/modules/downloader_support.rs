@@ -7,21 +7,21 @@ const MAX_ARCHIVE_FILE_COUNT: usize = 10000;
 const MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE: usize = 100_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TarEntryAction {
+pub(super) enum TarEntryAction {
     CopyFile,
     CreateDirectory,
     SkipMetadata,
 }
 
 #[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
-pub(crate) struct PartialDownloadMetadata {
-    pub(crate) url: String,
-    pub(crate) etag: Option<String>,
-    pub(crate) last_modified: Option<String>,
-    pub(crate) total_bytes: Option<u64>,
+pub(super) struct PartialDownloadMetadata {
+    pub(super) url: String,
+    pub(super) etag: Option<String>,
+    pub(super) last_modified: Option<String>,
+    pub(super) total_bytes: Option<u64>,
 }
 
-pub(crate) fn normalize_archive_relative_path(path: &Path) -> Result<PathBuf, String> {
+pub(super) fn normalize_archive_relative_path(path: &Path) -> Result<PathBuf, String> {
     let mut normalized = PathBuf::new();
 
     for component in path.components() {
@@ -42,7 +42,7 @@ pub(crate) fn normalize_archive_relative_path(path: &Path) -> Result<PathBuf, St
     Ok(normalized)
 }
 
-pub(crate) fn classify_tar_entry_type(
+pub(super) fn classify_tar_entry_type(
     entry_type: tar::EntryType,
     path: &Path,
 ) -> Result<TarEntryAction, String> {
@@ -68,7 +68,7 @@ pub(crate) fn classify_tar_entry_type(
     ))
 }
 
-pub(crate) fn parse_content_range_total(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+pub(super) fn parse_content_range_total(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     let header_value = headers.get(reqwest::header::CONTENT_RANGE)?;
     let content_range = header_value.to_str().ok()?.trim();
     let total = content_range.rsplit('/').next()?.trim();
@@ -83,13 +83,13 @@ fn partial_metadata_path(dest_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.resume.json", dest_path.to_string_lossy()))
 }
 
-pub(crate) async fn load_partial_metadata(dest_path: &Path) -> Option<PartialDownloadMetadata> {
+pub(super) async fn load_partial_metadata(dest_path: &Path) -> Option<PartialDownloadMetadata> {
     let metadata_path = partial_metadata_path(dest_path);
     let raw = tokio::fs::read_to_string(metadata_path).await.ok()?;
     serde_json::from_str(&raw).ok()
 }
 
-pub(crate) async fn store_partial_metadata(
+pub(super) async fn store_partial_metadata(
     dest_path: &Path,
     metadata: &PartialDownloadMetadata,
 ) -> Result<(), AppError> {
@@ -103,14 +103,14 @@ pub(crate) async fn store_partial_metadata(
         .map_err(|e| AppError::Io(e.to_string()))
 }
 
-pub(crate) async fn remove_partial_metadata(dest_path: &Path) {
+pub(super) async fn remove_partial_metadata(dest_path: &Path) {
     let metadata_path = partial_metadata_path(dest_path);
     if tokio::fs::try_exists(&metadata_path).await.unwrap_or(false) {
         let _ = tokio::fs::remove_file(metadata_path).await;
     }
 }
 
-pub(crate) fn extract_strong_etag(headers: &reqwest::header::HeaderMap) -> Option<String> {
+pub(super) fn extract_strong_etag(headers: &reqwest::header::HeaderMap) -> Option<String> {
     let raw = headers.get(reqwest::header::ETAG)?.to_str().ok()?.trim();
     if raw.starts_with("W/") || raw.is_empty() {
         return None;
@@ -119,7 +119,7 @@ pub(crate) fn extract_strong_etag(headers: &reqwest::header::HeaderMap) -> Optio
     Some(raw.to_string())
 }
 
-pub(crate) fn extract_last_modified(headers: &reqwest::header::HeaderMap) -> Option<String> {
+pub(super) fn extract_last_modified(headers: &reqwest::header::HeaderMap) -> Option<String> {
     headers
         .get(reqwest::header::LAST_MODIFIED)
         .and_then(|value| value.to_str().ok())
@@ -128,14 +128,14 @@ pub(crate) fn extract_last_modified(headers: &reqwest::header::HeaderMap) -> Opt
         .map(str::to_string)
 }
 
-pub(crate) fn if_range_validator(metadata: &PartialDownloadMetadata) -> Option<&str> {
+pub(super) fn if_range_validator(metadata: &PartialDownloadMetadata) -> Option<&str> {
     metadata
         .etag
         .as_deref()
         .or(metadata.last_modified.as_deref())
 }
 
-pub(crate) fn format_archive_extraction_error(message: &str) -> String {
+pub(super) fn format_archive_extraction_error(message: &str) -> String {
     if message.contains("Kind(OutOfMemory)") || message.contains("MaxMemLimited") {
         return "Not enough RAM to extract this archive with the current decoder".to_string();
     }
@@ -143,7 +143,7 @@ pub(crate) fn format_archive_extraction_error(message: &str) -> String {
     message.to_string()
 }
 
-pub(crate) fn shared_archive_root<I>(entry_names: I) -> Option<String>
+pub(super) fn shared_archive_root<I>(entry_names: I) -> Option<String>
 where
     I: IntoIterator,
     I::Item: AsRef<str>,
@@ -174,7 +174,7 @@ where
     if saw_nested_entry { first_root } else { None }
 }
 
-pub(crate) fn strip_archive_root(path: &Path, root_to_skip: Option<&str>) -> PathBuf {
+pub(super) fn strip_archive_root(path: &Path, root_to_skip: Option<&str>) -> PathBuf {
     let Some(root) = root_to_skip else {
         return path.to_path_buf();
     };
@@ -191,7 +191,7 @@ pub(crate) fn strip_archive_root(path: &Path, root_to_skip: Option<&str>) -> Pat
     components.as_path().to_path_buf()
 }
 
-pub(crate) fn archive_file_count_limit(module_id: &str) -> usize {
+pub(super) fn archive_file_count_limit(module_id: &str) -> usize {
     if module_id == "comfyui" {
         return MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE;
     }
@@ -199,7 +199,7 @@ pub(crate) fn archive_file_count_limit(module_id: &str) -> usize {
     MAX_ARCHIVE_FILE_COUNT
 }
 
-pub(crate) fn archive_total_uncompressed_size_limit(module_id: &str) -> u64 {
+pub(super) fn archive_total_uncompressed_size_limit(module_id: &str) -> u64 {
     if module_id == "comfyui" {
         return MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE;
     }

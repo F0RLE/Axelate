@@ -5,12 +5,15 @@
 
 use dashmap::DashMap;
 use std::collections::HashMap;
-use std::fmt::Write as _;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 
+use super::session_context::{
+    build_summary_lines, estimate_message_tokens, estimate_messages_tokens, extract_message_text,
+    find_history_overlap, group_turn_ranges, merge_summary,
+};
 use super::types::{ChatMessage, ChatReply, ChatSession};
 
 const LOCAL_CONTEXT_RESERVE_TOKENS: usize = 1024;
@@ -18,6 +21,19 @@ const LOCAL_RECENT_TURNS: usize = 3;
 const LOCAL_SUMMARY_BUDGET_NUMERATOR: usize = 28;
 const LOCAL_SUMMARY_BUDGET_DENOMINATOR: usize = 100;
 const LOCAL_MIN_SUMMARY_TOKENS: usize = 160;
+
+struct SessionPersistence;
+
+struct LocalContextBudget {
+    available_tokens: usize,
+    summary_tokens: usize,
+}
+
+struct LocalContextState {
+    turn_ranges: Vec<(usize, usize)>,
+    recent_start_index: usize,
+    persisted_summary_count: usize,
+}
 
 /// Manages persistence and retrieval of chat sessions.
 ///
@@ -42,67 +58,13 @@ impl ChatSessionManager {
     // ── Disk I/O ──────────────────────────────────────────────────────────────
 
     fn load_from_disk() -> Result<DashMap<String, ChatSession>, crate::errors::AppError> {
-        let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
-        let tmp_path = path.with_extension("tmp");
-
-        // Crash recovery: if .tmp exists but the real file doesn't, we crashed mid-rename
-        if tmp_path.exists() && !path.exists() {
-            tracing::warn!("Detected crash during last save. Recovering from .tmp...");
-            if let Err(e) = std::fs::rename(&tmp_path, path) {
-                tracing::error!("Crash recovery failed: {e}");
-            }
-        }
-
-        if !path.exists() {
-            return Ok(DashMap::new());
-        }
-
-        let content = std::fs::read_to_string(path)?;
-        let temp_map: HashMap<String, ChatSession> =
-            serde_json::from_str(&content).map_err(|e| crate::errors::AppError::Internal {
-                request_id: None,
-                message: format!("Failed to parse chat history: {e}"),
-            })?;
-
-        let map = DashMap::new();
-        for (k, mut session) in temp_map {
-            // Migration: ensure every message has a UUID
-            for msg in &mut session.history {
-                if msg.id.is_empty() || msg.id == "00000000-0000-0000-0000-000000000000" {
-                    msg.id = uuid::Uuid::new_v4().to_string();
-                }
-            }
-            map.insert(k, session);
-        }
-        Ok(map)
+        SessionPersistence::load_sessions()
     }
 
     fn flush_snapshot(
         snapshot: &HashMap<String, ChatSession>,
     ) -> Result<(), crate::errors::AppError> {
-        let path = &*crate::utils::paths::FILE_CHAT_HISTORY;
-        let tmp_path = path.with_extension("tmp");
-
-        let content = serde_json::to_string_pretty(&snapshot).map_err(|e| {
-            crate::errors::AppError::Internal {
-                request_id: None,
-                message: format!("Failed to serialize chat history: {e}"),
-            }
-        })?;
-
-        let mut file = std::fs::File::create(&tmp_path)?;
-        use std::io::Write;
-        file.write_all(content.as_bytes())?;
-        file.sync_all()?;
-        drop(file);
-
-        if let Err(e) = std::fs::rename(&tmp_path, path) {
-            tracing::warn!("Rename failed ({e}), using fallback for Windows locks...");
-            let _ = std::fs::remove_file(path);
-            std::fs::rename(&tmp_path, path)?;
-        }
-
-        Ok(())
+        SessionPersistence::flush_snapshot(snapshot)
     }
 
     fn take_snapshot(&self) -> HashMap<String, ChatSession> {
@@ -282,14 +244,133 @@ impl ChatSessionManager {
             return Vec::new();
         }
 
-        let context_size = context_size.max(4096);
-        let available_budget = context_size
+        let budget = LocalContextBudget::new(context_size);
+        let state = LocalContextState::from_session(&session);
+        let summary_changed = state.refresh_summary(&mut session, budget.summary_tokens, model);
+        if summary_changed {
+            self.dirty.store(true, Ordering::Relaxed);
+        }
+
+        state.build_context(&session, budget.available_tokens, model)
+    }
+
+    /// Returns the current UNIX timestamp in seconds (used for `last_updated` fields).
+    pub fn current_timestamp() -> f64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64()
+    }
+}
+
+impl SessionPersistence {
+    fn history_path() -> &'static std::path::Path {
+        &crate::utils::paths::FILE_CHAT_HISTORY
+    }
+
+    fn temp_history_path() -> std::path::PathBuf {
+        Self::history_path().with_extension("tmp")
+    }
+
+    fn load_sessions() -> Result<DashMap<String, ChatSession>, crate::errors::AppError> {
+        Self::recover_from_interrupted_write();
+
+        if !Self::history_path().exists() {
+            return Ok(DashMap::new());
+        }
+
+        let content = std::fs::read_to_string(Self::history_path())?;
+        let persisted = Self::parse_sessions(&content)?;
+        Ok(Self::normalize_sessions(persisted))
+    }
+
+    fn recover_from_interrupted_write() {
+        let tmp_path = Self::temp_history_path();
+        if tmp_path.exists() && !Self::history_path().exists() {
+            tracing::warn!("Detected crash during last save. Recovering from .tmp...");
+            if let Err(error) = std::fs::rename(&tmp_path, Self::history_path()) {
+                tracing::error!("Crash recovery failed: {error}");
+            }
+        }
+    }
+
+    fn parse_sessions(
+        content: &str,
+    ) -> Result<HashMap<String, ChatSession>, crate::errors::AppError> {
+        serde_json::from_str(content).map_err(|error| crate::errors::AppError::Internal {
+            request_id: None,
+            message: format!("Failed to parse chat history: {error}"),
+        })
+    }
+
+    fn normalize_sessions(persisted: HashMap<String, ChatSession>) -> DashMap<String, ChatSession> {
+        let sessions = DashMap::new();
+        for (session_id, mut session) in persisted {
+            Self::ensure_message_ids(&mut session);
+            sessions.insert(session_id, session);
+        }
+        sessions
+    }
+
+    fn ensure_message_ids(session: &mut ChatSession) {
+        for message in &mut session.history {
+            if message.id.is_empty() || message.id == "00000000-0000-0000-0000-000000000000" {
+                message.id = uuid::Uuid::new_v4().to_string();
+            }
+        }
+    }
+
+    fn flush_snapshot(
+        snapshot: &HashMap<String, ChatSession>,
+    ) -> Result<(), crate::errors::AppError> {
+        let serialized = serde_json::to_string_pretty(snapshot).map_err(|error| {
+            crate::errors::AppError::Internal {
+                request_id: None,
+                message: format!("Failed to serialize chat history: {error}"),
+            }
+        })?;
+
+        Self::write_atomic(&serialized)
+    }
+
+    fn write_atomic(content: &str) -> Result<(), crate::errors::AppError> {
+        let tmp_path = Self::temp_history_path();
+        let path = Self::history_path();
+
+        let mut file = std::fs::File::create(&tmp_path)?;
+        use std::io::Write;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+
+        if let Err(error) = std::fs::rename(&tmp_path, path) {
+            tracing::warn!("Rename failed ({error}), using fallback for Windows locks...");
+            let _ = std::fs::remove_file(path);
+            std::fs::rename(&tmp_path, path)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl LocalContextBudget {
+    fn new(context_size: usize) -> Self {
+        let normalized_context_size = context_size.max(4096);
+        let available_tokens = normalized_context_size
             .saturating_sub(LOCAL_CONTEXT_RESERVE_TOKENS)
             .max(512);
-        let summary_budget = available_budget.saturating_mul(LOCAL_SUMMARY_BUDGET_NUMERATOR)
+        let summary_tokens = available_tokens.saturating_mul(LOCAL_SUMMARY_BUDGET_NUMERATOR)
             / LOCAL_SUMMARY_BUDGET_DENOMINATOR;
-        let summary_budget = summary_budget.max(LOCAL_MIN_SUMMARY_TOKENS);
 
+        Self {
+            available_tokens,
+            summary_tokens: summary_tokens.max(LOCAL_MIN_SUMMARY_TOKENS),
+        }
+    }
+}
+
+impl LocalContextState {
+    fn from_session(session: &ChatSession) -> Self {
         let turn_ranges = group_turn_ranges(&session.history);
         let recent_start_index = turn_ranges
             .len()
@@ -299,55 +380,102 @@ impl ChatSessionManager {
         let persisted_summary_count =
             usize::try_from(session.summary_message_count).unwrap_or(usize::MAX);
 
-        if recent_start_index < persisted_summary_count {
+        Self {
+            turn_ranges,
+            recent_start_index,
+            persisted_summary_count,
+        }
+    }
+
+    fn refresh_summary(
+        &self,
+        session: &mut ChatSession,
+        summary_budget: usize,
+        model: &str,
+    ) -> bool {
+        if self.recent_start_index < self.persisted_summary_count {
             session.summary = None;
             session.summary_message_count = 0;
-            self.dirty.store(true, Ordering::Relaxed);
+            return true;
         }
 
-        if recent_start_index > persisted_summary_count {
-            if let Some(new_summary_slice) = session
-                .history
-                .get(persisted_summary_count..recent_start_index)
-            {
-                let summary_lines = build_summary_lines(new_summary_slice);
-                if !summary_lines.is_empty() {
-                    session.summary = merge_summary(
-                        session.summary.as_deref(),
-                        &summary_lines,
-                        summary_budget,
-                        model,
-                    );
-                    session.summary_message_count =
-                        u32::try_from(recent_start_index).unwrap_or(u32::MAX);
-                    self.dirty.store(true, Ordering::Relaxed);
-                }
-            }
+        if self.recent_start_index <= self.persisted_summary_count {
+            return false;
         }
 
-        let mut context: Vec<ChatMessage> = Vec::new();
-        let mut used_tokens = 0usize;
+        let Some(new_summary_slice) = session
+            .history
+            .get(self.persisted_summary_count..self.recent_start_index)
+        else {
+            return false;
+        };
 
-        if let Some(summary_content) = session.summary.clone() {
-            let summary_message = ChatMessage {
-                id: uuid::Uuid::new_v4().to_string(),
-                role: "system".to_string(),
-                content: serde_json::Value::String(summary_content),
-                thought_signature: None,
-            };
-            let summary_tokens = estimate_message_tokens(&summary_message, model);
-            if summary_tokens <= available_budget {
-                used_tokens += summary_tokens;
-                context.push(summary_message);
-            }
+        let summary_lines = build_summary_lines(new_summary_slice);
+        if summary_lines.is_empty() {
+            return false;
         }
 
-        let mut kept_recent: Vec<ChatMessage> = Vec::new();
-        let recent_turn_ranges = turn_ranges
+        session.summary = merge_summary(
+            session.summary.as_deref(),
+            &summary_lines,
+            summary_budget,
+            model,
+        );
+        session.summary_message_count = u32::try_from(self.recent_start_index).unwrap_or(u32::MAX);
+        true
+    }
+
+    fn build_context(
+        &self,
+        session: &ChatSession,
+        available_budget: usize,
+        model: &str,
+    ) -> Vec<ChatMessage> {
+        let (mut context, used_tokens) =
+            Self::build_summary_message(session.summary.clone(), available_budget, model);
+        context.extend(self.collect_recent_turns(session, available_budget, used_tokens, model));
+        context
+    }
+
+    fn build_summary_message(
+        summary: Option<String>,
+        available_budget: usize,
+        model: &str,
+    ) -> (Vec<ChatMessage>, usize) {
+        let Some(summary_content) = summary else {
+            return (Vec::new(), 0);
+        };
+
+        let summary_message = ChatMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            role: "system".to_string(),
+            content: serde_json::Value::String(summary_content),
+            thought_signature: None,
+        };
+        let summary_tokens = estimate_message_tokens(&summary_message, model);
+        if summary_tokens > available_budget {
+            return (Vec::new(), 0);
+        }
+
+        (vec![summary_message], summary_tokens)
+    }
+
+    fn collect_recent_turns(
+        &self,
+        session: &ChatSession,
+        available_budget: usize,
+        initial_tokens: usize,
+        model: &str,
+    ) -> Vec<ChatMessage> {
+        let recent_turn_ranges = self
+            .turn_ranges
             .len()
             .checked_sub(LOCAL_RECENT_TURNS)
-            .and_then(|start| turn_ranges.get(start..))
-            .unwrap_or(&turn_ranges);
+            .and_then(|start| self.turn_ranges.get(start..))
+            .unwrap_or(&self.turn_ranges);
+
+        let mut used_tokens = initial_tokens;
+        let mut kept_recent: Vec<ChatMessage> = Vec::new();
 
         for (start, end) in recent_turn_ranges.iter().rev() {
             let Some(turn) = session.history.get(*start..*end) else {
@@ -364,257 +492,8 @@ impl ChatSessionManager {
             used_tokens += turn_tokens;
         }
 
-        context.extend(kept_recent);
-        context
+        kept_recent
     }
-
-    /// Returns the current UNIX timestamp in seconds (used for `last_updated` fields).
-    pub fn current_timestamp() -> f64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs_f64()
-    }
-}
-
-fn messages_equivalent(left: &ChatMessage, right: &ChatMessage) -> bool {
-    left.role == right.role
-        && left.content == right.content
-        && left.thought_signature == right.thought_signature
-}
-
-fn extract_message_text(content: &serde_json::Value) -> Option<String> {
-    match content {
-        serde_json::Value::String(text) => Some(text.clone()),
-        serde_json::Value::Array(parts) => {
-            let text = parts
-                .iter()
-                .filter_map(|part| {
-                    let object = part.as_object()?;
-                    if object.get("type").and_then(serde_json::Value::as_str) != Some("text") {
-                        return None;
-                    }
-                    object
-                        .get("text")
-                        .and_then(serde_json::Value::as_str)
-                        .map(ToOwned::to_owned)
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
-                .trim()
-                .to_string();
-
-            if text.is_empty() { None } else { Some(text) }
-        }
-        other => serde_json::to_string(other).ok(),
-    }
-}
-
-fn find_history_overlap(existing: &[ChatMessage], incoming: &[ChatMessage]) -> usize {
-    let max_overlap = existing.len().min(incoming.len());
-
-    for overlap in (1..=max_overlap).rev() {
-        let Some(existing_suffix) = existing.get(existing.len() - overlap..) else {
-            continue;
-        };
-        let Some(incoming_prefix) = incoming.get(..overlap) else {
-            continue;
-        };
-
-        if existing_suffix
-            .iter()
-            .zip(incoming_prefix.iter())
-            .all(|(left, right)| messages_equivalent(left, right))
-        {
-            return overlap;
-        }
-    }
-
-    0
-}
-
-fn estimate_message_tokens(message: &ChatMessage, model: &str) -> usize {
-    match &message.content {
-        serde_json::Value::String(text) => count_text_tokens(text, model),
-        serde_json::Value::Array(parts) => {
-            let mut text = String::new();
-            let mut image_count = 0usize;
-
-            for part in parts {
-                if let Some(part_type) = part.get("type").and_then(serde_json::Value::as_str) {
-                    if part_type == "text" {
-                        if let Some(value) = part.get("text").and_then(serde_json::Value::as_str) {
-                            if !text.is_empty() {
-                                text.push('\n');
-                            }
-                            text.push_str(value);
-                        }
-                    } else if part_type == "image_url" {
-                        image_count += 1;
-                    }
-                }
-            }
-
-            let text_tokens = if text.trim().is_empty() {
-                0
-            } else {
-                count_text_tokens(text.trim(), model)
-            };
-            text_tokens + image_count * 258
-        }
-        other => count_text_tokens(&other.to_string(), model),
-    }
-}
-
-fn estimate_messages_tokens(messages: &[ChatMessage], model: &str) -> usize {
-    messages
-        .iter()
-        .map(|message| estimate_message_tokens(message, model))
-        .sum()
-}
-
-fn count_text_tokens(text: &str, model: &str) -> usize {
-    super::ai_service::count_tokens(text, Some(model)).unwrap_or_else(|_| {
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
-            0
-        } else {
-            trimmed.chars().count().div_ceil(4)
-        }
-    })
-}
-
-fn group_turn_ranges(history: &[ChatMessage]) -> Vec<(usize, usize)> {
-    let mut turns = Vec::new();
-    let mut turn_start = 0usize;
-
-    for (index, message) in history.iter().enumerate() {
-        if index > 0 && message.role == "user" {
-            turns.push((turn_start, index));
-            turn_start = index;
-        }
-    }
-
-    if !history.is_empty() {
-        turns.push((turn_start, history.len()));
-    }
-
-    turns
-}
-
-fn build_summary_lines(messages: &[ChatMessage]) -> Vec<String> {
-    let mut lines = Vec::new();
-
-    for (start, end) in group_turn_ranges(messages) {
-        let Some(turn) = messages.get(start..end) else {
-            continue;
-        };
-        let user_text = turn
-            .iter()
-            .find(|message| message.role == "user")
-            .map_or_else(String::new, |message| summarize_content(&message.content));
-        let assistant_text = turn
-            .iter()
-            .find(|message| message.role == "assistant")
-            .map_or_else(String::new, |message| summarize_content(&message.content));
-
-        let mut pieces = Vec::new();
-        if !user_text.is_empty() {
-            pieces.push(format!("U: {user_text}"));
-        }
-        if !assistant_text.is_empty() {
-            pieces.push(format!("A: {assistant_text}"));
-        }
-
-        if !pieces.is_empty() {
-            lines.push(format!("- {}", pieces.join(" | ")));
-        }
-    }
-
-    lines
-}
-
-fn summarize_content(content: &serde_json::Value) -> String {
-    let text = match content {
-        serde_json::Value::String(value) => value.clone(),
-        serde_json::Value::Array(parts) => {
-            let mut text_parts = Vec::new();
-            let mut image_count = 0usize;
-
-            for part in parts {
-                if let Some(part_type) = part.get("type").and_then(serde_json::Value::as_str) {
-                    if part_type == "text" {
-                        if let Some(value) = part.get("text").and_then(serde_json::Value::as_str) {
-                            text_parts.push(value.to_string());
-                        }
-                    } else if part_type == "image_url" {
-                        image_count += 1;
-                    }
-                }
-            }
-
-            let mut merged = text_parts.join(" ");
-            if image_count > 0 {
-                if !merged.is_empty() {
-                    merged.push(' ');
-                }
-                let _ = write!(
-                    merged,
-                    "{image_count} image{}",
-                    if image_count == 1 { "" } else { "s" }
-                );
-            }
-            merged
-        }
-        other => other.to_string(),
-    };
-
-    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if normalized.len() <= 96 {
-        normalized
-    } else {
-        let truncated: String = normalized.chars().take(93).collect();
-        format!("{}...", truncated.trim_end())
-    }
-}
-
-fn merge_summary(
-    existing_summary: Option<&str>,
-    new_lines: &[String],
-    token_budget: usize,
-    model: &str,
-) -> Option<String> {
-    let mut body_lines: Vec<String> = existing_summary
-        .map(|summary| {
-            summary
-                .strip_prefix("Conversation recap from earlier turns:\n")
-                .unwrap_or(summary)
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    body_lines.extend(new_lines.iter().cloned());
-
-    if body_lines.is_empty() {
-        return None;
-    }
-
-    while !body_lines.is_empty() {
-        let candidate = format!(
-            "Conversation recap from earlier turns:\n{}",
-            body_lines.join("\n")
-        );
-        if count_text_tokens(&candidate, model) <= token_budget {
-            return Some(candidate);
-        }
-        body_lines.remove(0);
-    }
-
-    None
 }
 
 impl Default for ChatSessionManager {

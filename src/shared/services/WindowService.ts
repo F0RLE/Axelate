@@ -4,25 +4,19 @@
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import { WindowServiceActions } from './WindowServiceActions';
+import { WindowNativeBridgeHelper } from './WindowNativeBridgeHelper';
+import { WindowServicePolicy } from './WindowServicePolicy';
+import {
+    WindowServicePersistence,
+} from './WindowServicePersistence';
+import {
+    WindowServiceZoom,
+    type WindowZoomSettingsStore,
+} from './WindowServiceZoom';
 
-interface IWindowGlobal {
-    __TAURI__?: {
-        window: {
-            getCurrentWindow: () => {
-                setSize: (size: unknown) => Promise<void>;
-                center: () => Promise<void>;
-                isMaximized: () => Promise<boolean>;
-                innerSize: () => Promise<{ width: number; height: number }>;
-                outerPosition: () => Promise<{ x: number; y: number }>;
-            };
-            LogicalSize: new (w: number, h: number) => unknown;
-        };
-        dpi?: {
-            LogicalSize: new (w: number, h: number) => unknown;
-        };
-    };
-}
+type WindowServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
 export interface IWindowBreakpoints {
     compact: number;
@@ -47,23 +41,85 @@ export interface IWindowPolicy {
     showWarning: boolean;
 }
 
+type WindowRuntime = {
+    addEventListener: typeof globalThis.addEventListener;
+    removeEventListener: typeof globalThis.removeEventListener;
+    close: () => void;
+    getScreenSize: () => { width: number; height: number };
+    setAppZoomCss: (zoom: string) => void;
+};
+
+function createDefaultWindowRuntime(): WindowRuntime {
+    return {
+        addEventListener: globalThis.addEventListener.bind(globalThis),
+        removeEventListener: globalThis.removeEventListener.bind(globalThis),
+        close: () => {
+            globalThis.close();
+        },
+        getScreenSize: () => ({
+            width: globalThis.screen.width,
+            height: globalThis.screen.height,
+        }),
+        setAppZoomCss: (zoom: string) => {
+            document.documentElement.style.setProperty('--app-zoom', zoom);
+        },
+    };
+}
+
 export class WindowService {
     private _currentZoom = 1;
-    private _lastResolutionKey = '';
     private readonly _MIN_ZOOM = 0.5;
     private readonly _MAX_ZOOM = 3;
-    private _saveWindowTimer: ReturnType<typeof setTimeout> | null = null;
     private _config: IWindowConfig | null = null;
-    private _moveUnlisten: (() => void) | null = null;
-    private _windowListenersInitialized = false;
-    private _webWheelHandler: ((e: WheelEvent) => void) | null = null;
     private _isDestroyed = false;
     private _beforeClose: (() => Promise<void>) | null = null;
+    private _uiSettingsService: WindowZoomSettingsStore | null = null;
+    private readonly _actions: WindowServiceActions;
+    private readonly _nativeHelper: WindowNativeBridgeHelper;
+    private readonly _persistence: WindowServicePersistence;
+    private readonly _policyService: WindowServicePolicy;
+    private readonly _zoomService: WindowServiceZoom;
     private readonly _boundWindowResize = () => {
-        this._scheduleSaveWindowState();
+        this._persistence.scheduleSave();
     };
 
-    constructor(private readonly _bridge: IBridge) {}
+    constructor(
+        private readonly _bridge: IBridge,
+        private readonly _tracer: WindowServiceLogger,
+        private readonly _runtime: WindowRuntime = createDefaultWindowRuntime(),
+    ) {
+        this._nativeHelper = new WindowNativeBridgeHelper(_bridge);
+        this._actions = new WindowServiceActions({
+            bridge: _bridge,
+            runtime: _runtime,
+            tracer: this._tracer,
+            beforeClose: () => this._beforeClose,
+        });
+        this._zoomService = new WindowServiceZoom({
+            bridge: _bridge,
+            runtime: _runtime,
+            tracer: this._tracer,
+            getSettingsStore: () => this._uiSettingsService,
+            minZoom: this._MIN_ZOOM,
+            maxZoom: this._MAX_ZOOM,
+        });
+        this._persistence = new WindowServicePersistence({
+            bridge: _bridge,
+            runtime: _runtime,
+            tracer: this._tracer,
+            nativeHelper: this._nativeHelper,
+            onResize: this._boundWindowResize,
+            isDestroyed: () => this._isDestroyed,
+        });
+        this._policyService = new WindowServicePolicy({
+            bridge: _bridge,
+            runtime: _runtime,
+            tracer: this._tracer,
+            getCurrentZoom: () => this._currentZoom,
+            setZoom: async (zoom) => this.setZoom(zoom),
+            zoomService: this._zoomService,
+        });
+    }
 
     public setBeforeCloseHook(hook: (() => Promise<void>) | null): void {
         this._beforeClose = hook;
@@ -85,60 +141,37 @@ export class WindowService {
                     (await this._bridge.invoke<IWindowConfig>('get_window_config'));
 
                 // Update breakpoints from backend (placeholder/not used in UI yet)
-                tracer.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
+                this._tracer.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
 
                 // Use pre-loaded initialZoom or determine it
-                const zoom = initialZoom ?? (await this._getInitialZoomWithFallback(fallbackZoom));
+                const zoom =
+                    initialZoom ?? (await this._zoomService.getInitialZoomWithFallback(fallbackZoom));
                 await this.setZoom(zoom);
             } catch (e) {
-                tracer.warn(
+                this._tracer.warn(
                     `[WindowService] Failed to get initial window data, using fallback: ${String(e)}`,
                 );
                 await this.setZoom(fallbackZoom);
             }
-            document.documentElement.style.setProperty('--app-zoom', '1');
+            this._runtime.setAppZoomCss('1');
 
             // Initialize persistence listeners
-            this._initWindowListeners();
+            this._persistence.initWindowListeners();
         } else {
             // Web Fallback: Load from localStorage or default to 1
             this._currentZoom = fallbackZoom;
-            document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
+            this._runtime.setAppZoomCss(this._currentZoom.toFixed(3));
 
             // Enable Ctrl + Scroll implementation for Web Browser
-            if (this._webWheelHandler === null) {
-                this._webWheelHandler = (e: WheelEvent) => {
-                    if (e.ctrlKey) {
-                        e.preventDefault();
-                        // Zoom Step 0.1
-                        const delta = e.deltaY > 0 ? -0.1 : 0.1;
-                        void this.changeZoom(delta);
-                    }
-                };
-                window.addEventListener('wheel', this._webWheelHandler, { passive: false });
-            }
+            this._persistence.bindWebWheelHandler((delta) => {
+                void this.changeZoom(delta);
+            });
         }
     }
 
     public destroy(): void {
         this._isDestroyed = true;
-        if (this._saveWindowTimer !== null) {
-            clearTimeout(this._saveWindowTimer);
-            this._saveWindowTimer = null;
-        }
-
-        if (this._windowListenersInitialized) {
-            window.removeEventListener('resize', this._boundWindowResize);
-            this._windowListenersInitialized = false;
-        }
-
-        this._moveUnlisten?.();
-        this._moveUnlisten = null;
-
-        if (this._webWheelHandler !== null) {
-            window.removeEventListener('wheel', this._webWheelHandler);
-            this._webWheelHandler = null;
-        }
+        this._persistence.destroy();
     }
 
     // --- Window Actions ---
@@ -147,96 +180,43 @@ export class WindowService {
      * Minimizes the application window.
      */
     public async minimize(): Promise<void> {
-        if (this._bridge.isTauri()) {
-            await this._bridge.invoke('minimize_window');
-        } else {
-            tracer.info('[WindowService] minimize (mock)');
-        }
+        await this._actions.minimize();
     }
 
     /**
      * Toggles the maximized state of the window.
      */
     public async toggleMaximize(): Promise<void> {
-        if (this._bridge.isTauri()) {
-            await this._bridge.invoke('maximize_window');
-        } else {
-            tracer.info('[WindowService] toggleMaximize (mock)');
-        }
+        await this._actions.toggleMaximize();
     }
 
     /**
      * Closes the application window or browser tab.
      */
     public async close(): Promise<void> {
-        if (this._bridge.isTauri()) {
-            await this._beforeClose?.();
-            await this._bridge.invoke('close_window');
-        } else {
-            globalThis.close();
-        }
+        await this._actions.close();
     }
 
     /**
      * Hides the window to the system tray.
      */
     public async hideToTray(): Promise<void> {
-        if (this._bridge.isTauri()) {
-            try {
-                await this._bridge.invoke('hide_window');
-            } catch {
-                // Fallback
-                await this.minimize();
-            }
-        } else {
-            tracer.info('[WindowService] hideToTray (mock)');
-        }
+        await this._actions.hideToTray(async () => this.minimize());
     }
 
     /**
      * Shows and focuses the application window.
      */
     public async show(): Promise<void> {
-        if (!this._bridge.isTauri()) {
-            tracer.info('[WindowService] Not in Tauri, skipping native show');
-            return;
-        }
-
-        const maxRetries = 3;
-        for (let i = 0; i < maxRetries; i++) {
-            try {
-                await this._bridge.invoke('show_window');
-                return;
-            } catch (e) {
-                tracer.warn(
-                    `[WindowService] show_window attempt ${(i + 1).toString()} failed: ${String(e)}`,
-                );
-                if (i < maxRetries - 1) {
-                    await new Promise((r) => setTimeout(r, 300)); // Wait before retry
-                }
-            }
-        }
-        tracer.error('[WindowService] All show_window attempts failed. Continuing anyway.');
+        await this._actions.show();
     }
 
     // --- Zoom ---
 
-    private _uiSettingsService: {
-        setZoomLevel: (z: number) => void;
-        getZoomLevel: () => number;
-        getResolutionZoom: (k: string) => number | undefined;
-        setResolutionZoom: (k: string, z: number) => void;
-    } | null = null;
-
     /**
      * Injects the UISettingsService dependency.
      */
-    public setUISettingsService(uiSettingsService: {
-        setZoomLevel: (z: number) => void;
-        getZoomLevel: () => number;
-        getResolutionZoom: (k: string) => number | undefined;
-        setResolutionZoom: (k: string, z: number) => void;
-    }): void {
+    public setUISettingsService(uiSettingsService: WindowZoomSettingsStore): void {
         this._uiSettingsService = uiSettingsService;
     }
 
@@ -244,36 +224,7 @@ export class WindowService {
      * Sets the webview zoom level.
      */
     public async setZoom(zoom: number): Promise<number> {
-        this._currentZoom = Math.max(this._MIN_ZOOM, Math.min(this._MAX_ZOOM, zoom));
-
-        // Persist via UISettingsService (if injected — always true in normal boot)
-
-        if (this._bridge.isTauri()) {
-            try {
-                await this._bridge.invoke('set_webview_zoom', {
-                    zoom: this._currentZoom,
-                });
-            } catch (e) {
-                tracer.error(`[WindowService] Zoom error: ${String(e)}`);
-            }
-        }
-
-        // Apply CSS Variable (for Web fallback UI scaling)
-        if (this._bridge.isTauri()) {
-            document.documentElement.style.setProperty('--app-zoom', '1');
-        } else {
-            document.documentElement.style.setProperty('--app-zoom', this._currentZoom.toFixed(3));
-        }
-
-        // Sync with UISettingsService (DI) for frontend reactivity
-        if (this._uiSettingsService !== null) {
-            this._uiSettingsService.setZoomLevel(this._currentZoom);
-            this._uiSettingsService.setResolutionZoom(
-                `${window.screen.width.toString()}x${window.screen.height.toString()}`,
-                this._currentZoom,
-            );
-        }
-
+        this._currentZoom = await this._zoomService.setZoom(zoom);
         return this._currentZoom;
     }
 
@@ -297,13 +248,7 @@ export class WindowService {
      * Notifies the backend of a change in system monitoring state.
      */
     public async setMonitoringPaused(paused: boolean): Promise<void> {
-        if (this._bridge.isTauri()) {
-            try {
-                await this._bridge.invoke('set_monitoring_paused', { paused });
-            } catch {
-                tracer.error('[WindowService] Failed to set monitoring state');
-            }
-        }
+        await this._actions.setMonitoringPaused(paused);
     }
 
     // --- Small Screen Helpers ---
@@ -316,26 +261,7 @@ export class WindowService {
      * The logic is entirely handled by the backend.
      */
     public async checkPolicy(): Promise<IWindowPolicy> {
-        // Check if resolution changed (monitor switch)
-        const currentRes = `${window.screen.width.toString()}x${window.screen.height.toString()}`;
-        if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
-            tracer.info(
-                `[WindowService] Resolution changed: ${this._lastResolutionKey} -> ${currentRes}`,
-            );
-            this._lastResolutionKey = currentRes;
-            void this._handleResolutionChange();
-        }
-
-        if (!this._bridge.isTauri()) {
-            return { isSmallScreen: false, showWarning: false };
-        }
-
-        try {
-            return await this._bridge.invoke<IWindowPolicy>('get_window_policy');
-        } catch (e) {
-            tracer.error(`[WindowService] Failed to fetch window policy: ${String(e)}`);
-            return { isSmallScreen: false, showWarning: false };
-        }
+        return this._policyService.checkPolicy();
     }
 
     /**
@@ -343,13 +269,7 @@ export class WindowService {
      * Synchronous check for immediate detection during resize/move.
      */
     public checkResolutionChange(): void {
-        const currentRes = `${window.screen.width.toString()}x${window.screen.height.toString()}`;
-        if (currentRes !== this._lastResolutionKey && currentRes !== 'unknown') {
-            const oldRes = this._lastResolutionKey;
-            this._lastResolutionKey = currentRes;
-            tracer.info(`[WindowService] Resolution changed: ${oldRes} -> ${currentRes}`);
-            void this._handleResolutionChange();
-        }
+        this._policyService.checkResolutionChange();
     }
 
     /**
@@ -365,15 +285,9 @@ export class WindowService {
     public async setSize(width: number, height: number): Promise<void> {
         if (this._bridge.isTauri()) {
             try {
-                const win = globalThis as unknown as IWindowGlobal;
-                if (win.__TAURI__?.window) {
-                    const appWindow = win.__TAURI__.window.getCurrentWindow();
-                    const LogicalSize = win.__TAURI__.window.LogicalSize;
-                    await appWindow.setSize(new LogicalSize(width, height));
-                    await appWindow.center();
-                }
+                await this._nativeHelper.setSizeAndCenter(width, height);
             } catch (e) {
-                tracer.warn(`[WindowService] setSize failed: ${String(e)}`);
+                this._tracer.warn(`[WindowService] setSize failed: ${String(e)}`);
             }
         }
     }
@@ -384,10 +298,7 @@ export class WindowService {
     public async isMaximized(): Promise<boolean> {
         if (this._bridge.isTauri()) {
             try {
-                const win = globalThis as unknown as IWindowGlobal;
-                if (win.__TAURI__?.window) {
-                    return await win.__TAURI__.window.getCurrentWindow().isMaximized();
-                }
+                return await this._nativeHelper.isMaximized();
             } catch {
                 return false;
             }
@@ -398,31 +309,11 @@ export class WindowService {
     // --- Persistence ---
 
     /**
-     * Initializes listeners for window resize and move events to persist state.
-     */
-    private _initWindowListeners(): void {
-        if (this._windowListenersInitialized) return;
-        this._windowListenersInitialized = true;
-
-        // DOM Resize event covers window resizing and maximizing
-        window.addEventListener('resize', this._boundWindowResize);
-
-        // Tauri move event (if supported) covers window dragging
-        void this._bridge.listen('tauri://move', this._boundWindowResize).then((unlisten) => {
-            if (this._isDestroyed) {
-                unlisten();
-                return;
-            }
-            this._moveUnlisten = unlisten;
-        });
-    }
-
-    /**
      * Schedules a debounced save of the window state.
      * Exposed for StateManager registration.
      */
     public scheduleSave(): void {
-        this._scheduleSaveWindowState();
+        this._persistence.scheduleSave();
     }
 
     /**
@@ -430,7 +321,7 @@ export class WindowService {
      * Exposed for StateManager registration.
      */
     public async saveAsync(): Promise<void> {
-        await this._saveWindowState();
+        await this._persistence.saveWindowState();
     }
 
     /**
@@ -438,96 +329,6 @@ export class WindowService {
      * Exposed for StateManager registration.
      */
     public saveImmediate(): void {
-        void this._saveWindowState();
-    }
-
-    /**
-     * Schedules a debounced save of the window state.
-     */
-    private _scheduleSaveWindowState(): void {
-        if (this._saveWindowTimer !== null) {
-            clearTimeout(this._saveWindowTimer);
-        }
-        this._saveWindowTimer = setTimeout(() => {
-            void this._saveWindowState();
-        }, 1000);
-    }
-
-    /**
-     * Persists the current window state (size, position, maximized) to the backend.
-     */
-    private async _saveWindowState(): Promise<void> {
-        /* v8 ignore next */
-        if (!this._bridge.isTauri()) return;
-
-        try {
-            const win = globalThis as unknown as IWindowGlobal;
-            if (win.__TAURI__?.window) {
-                const appWindow = win.__TAURI__.window.getCurrentWindow();
-                const isMaximized = await appWindow.isMaximized();
-
-                // Save maximized state
-                await this._bridge.invoke('save_maximized_state', { maximized: isMaximized });
-
-                // Only save specific dimensions if NOT maximized
-                // (Restoring a maximized window with maximized=true is enough,
-                // we don't want to overwrite the "restore" size with the screen size)
-                if (!isMaximized) {
-                    const size = await appWindow.innerSize();
-                    const pos = await appWindow.outerPosition();
-
-                    await this._bridge.invoke('save_window_size', {
-                        width: size.width,
-                        height: size.height,
-                    });
-
-                    await this._bridge.invoke('save_window_position', {
-                        x: pos.x,
-                        y: pos.y,
-                    });
-                }
-            }
-        } catch (e) {
-            tracer.warn(`[WindowService] Failed to save window state: ${String(e)}`);
-        }
-    }
-
-    /**
-     * Helper to retrieve initial zoom with timeout and state service priority.
-     */
-    private async _getInitialZoomWithFallback(fallback: number): Promise<number> {
-        /* v8 ignore next */
-        if (!this._bridge.isTauri()) return fallback;
-
-        try {
-            // Backend is the Source of Truth: It calculates and persists the zoom
-            const zoom = await this._bridge.invoke<number>('get_resolution_zoom');
-
-            if (typeof zoom === 'number' && zoom > 0) {
-                return zoom;
-            }
-        } catch (e) {
-            tracer.error(`[WindowService] Failed to fetch backend zoom: ${String(e)}`);
-        }
-
-        return fallback;
-    }
-
-    /**
-     * Fetches and applies the zoom level for the current resolution.
-     * Used when the window moves between monitors.
-     */
-    private async _handleResolutionChange(): Promise<void> {
-        if (!this._bridge.isTauri()) return;
-
-        try {
-            const zoom = await this._bridge.invoke<number>('get_resolution_zoom');
-
-            if (typeof zoom === 'number' && zoom > 0 && zoom !== this._currentZoom) {
-                await this.setZoom(zoom);
-            }
-        } catch (e) {
-            tracer.error(`[WindowService] Resolution change zoom fetch failed: ${String(e)}`);
-        }
+        void this._persistence.saveWindowState();
     }
 }

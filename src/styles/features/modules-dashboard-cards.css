@@ -1,0 +1,372 @@
+/* Main dashboard launch cards on the modules page */
+.model-card-premium,
+.dashboard-launch-card {
+    background: rgba(var(--background-raw), 0.065);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1.5rem 2rem 1.5rem;
+    display: flex;
+    transition:
+        transform 0.24s ease,
+        background-color 0.24s ease,
+        border-color 0.24s ease,
+        box-shadow 0.24s ease;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden !important;
+    height: auto !important;
+    min-height: 280px;
+    justify-content: flex-start;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
+}
+
+.model-card-premium::before,
+.dashboard-launch-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%) scaleX(0.35);
+    transform-origin: center top;
+    width: 54%;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--primary);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 6;
+    transition:
+        opacity 0.22s ease,
+        transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.model-card-premium.selected,
+.dashboard-launch-card.selected {
+    background: rgba(var(--background-raw), 0.065) !important;
+    border: 1px solid rgba(255, 255, 255, 0.04) !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
+}
+
+.model-card-premium.selected::before,
+.dashboard-launch-card.selected::before {
+    transform: translateX(-50%) scaleX(1);
+    opacity: 0.92;
+}
+
+.model-card-premium:hover,
+.dashboard-launch-card:hover {
+    background: rgba(var(--background-raw), 0.075);
+    transform: translateY(-2px);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.022);
+}
+
+/* Ensure content is above the ::before background effect */
+.model-card-premium > :not(.module-action-badge),
+.dashboard-launch-card > :not(.module-action-badge) {
+    position: relative;
+    z-index: 2;
+    cursor: pointer;
+    pointer-events: none;
+}
+
+.model-card-premium .model-card-action,
+.model-card-premium .card-action-corner,
+.model-card-premium .module-action-badge,
+.dashboard-launch-card .model-card-action,
+.dashboard-launch-card .card-action-corner,
+.dashboard-launch-card .module-action-badge {
+    pointer-events: auto !important;
+}
+
+.model-icon-wrapper {
+    width: 80px;
+    height: 80px;
+    border-radius: 18px;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    transition: transform 0.4s ease;
+    border: none;
+}
+
+.model-card-premium svg,
+.dashboard-launch-card svg {
+    width: 32px;
+    height: 32px;
+    color: var(--text-primary);
+    transition: all 0.3s;
+}
+
+.footer-link {
+    color: #bbb;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.model-card-premium:hover svg,
+.dashboard-launch-card:hover svg {
+    color: #fff;
+}
+
+.model-icon-wrapper > :is(div, span) {
+    font-size: 3.2rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    height: auto;
+}
+
+/* Modal Icons Unification */
+.app-card .app-icon-wrapper {
+    font-size: 2.8rem !important;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.model-card-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.6rem;
+    min-height: 2.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+    white-space: pre-line;
+    text-align: center;
+}
+
+.model-card-desc {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    max-width: 100%;
+    margin: 0;
+}
+
+.model-card-premium .model-card-action {
+    margin-top: auto;
+    margin-bottom: 0.5rem;
+    width: max-content;
+    padding: 0.6rem 2rem;
+    border-radius: var(--module-button-radius);
+    background: var(--module-button-bg-soft);
+    color: var(--module-button-text);
+    border: 1px solid var(--module-button-border);
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition:
+        opacity 0.18s ease,
+        transform 0.18s ease,
+        background-color 0.18s ease,
+        border-color 0.18s ease,
+        color 0.18s ease;
+    opacity: 0;
+    pointer-events: none;
+    cursor: pointer;
+    z-index: 5;
+    white-space: nowrap;
+    min-width: 120px;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    transform: translateY(0);
+}
+
+.model-card-premium:hover .model-card-action {
+    opacity: 1 !important;
+    color: #ffffff !important;
+    pointer-events: auto !important;
+    transform: translateY(-2px);
+}
+
+/* Active Module State */
+.model-card-premium.selected .model-icon-wrapper {
+    width: 80px;
+    height: 80px;
+    border-radius: 18px;
+    margin-top: 1.5rem;
+}
+
+.model-card-premium.selected:hover .model-icon-wrapper {
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.model-card-premium.selected:hover svg {
+    color: var(--text-primary) !important;
+}
+
+.model-card-premium.selected .model-card-title {
+    font-size: 1.3rem;
+    margin-bottom: 0.6rem;
+}
+
+.model-card-premium.selected .model-card-desc {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    margin-bottom: 0;
+}
+
+.model-card-premium .model-card-action.active-module-btn {
+    background: var(--module-button-bg);
+    color: #ffffff;
+    border: 1px solid var(--module-button-border-hover);
+    min-width: 140px;
+}
+
+.model-card-premium.empty .model-card-action:not(.download-module-btn) {
+    display: none !important;
+}
+
+/* The download button - focused on size and performance */
+.model-card-premium .model-card-action.download-module-btn {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    display: inline-flex !important;
+    padding: 1rem 4rem !important;
+    font-size: 1.15rem !important;
+    font-weight: 700 !important;
+    border-radius: 16px !important;
+    min-width: 220px !important;
+    background: rgba(86, 46, 145, 0.96) !important;
+    color: #f6f0ff !important;
+    border: none !important;
+    box-shadow: none;
+    transition:
+        transform 0.2s cubic-bezier(0.2, 0, 0.2, 1),
+        background-color 0.2s ease,
+        box-shadow 0.2s ease !important;
+}
+
+.model-card-premium .model-card-action.download-module-btn:hover {
+    background: var(--module-button-bg-hover) !important;
+    transform: translateY(-2px) scale(1.01) !important;
+    box-shadow: none;
+}
+
+.model-card-premium .model-card-action.active-module-btn:hover {
+    background: var(--module-button-bg-hover) !important;
+    border-color: var(--module-button-border-hover) !important;
+    color: #ffffff !important;
+    transform: translateY(-2px);
+    box-shadow: none;
+}
+
+.shortcut-key {
+    background: #ffffff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--app-font-family);
+    color: #000000 !important;
+    font-weight: 700;
+}
+
+.model-card-premium .model-card-action.active-module-btn.stop-btn:hover {
+    background: #d32f2f !important;
+    border-color: #d32f2f !important;
+    color: #ffffff !important;
+}
+
+.btn-stop-module:hover {
+    background: #b71c1c !important;
+    border-color: #b71c1c !important;
+    color: #ffffff !important;
+}
+
+/* Download Progress Animation */
+.model-card-premium .model-card-action.download-module-btn.downloading,
+.app-card-hover-actions .download-btn.downloading {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-2) !important;
+    color: var(--text-color) !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    box-shadow: none !important;
+    transform: none !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.model-card-premium .model-card-action.download-module-btn.downloading::before,
+.app-card-hover-actions .download-btn.downloading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--download-progress, 0%);
+    background: var(--primary);
+    opacity: 0.2;
+    transition: width 0.3s ease-out;
+    z-index: 1;
+}
+
+.model-card-premium .model-card-action.download-module-btn.downloading.indeterminate::before,
+.app-card-hover-actions .download-btn.downloading.indeterminate::before {
+    width: 100%;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    background-size: 200% 100%;
+    animation: indeterminate-pulse 1.5s infinite linear;
+}
+
+@keyframes indeterminate-pulse {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.model-card-premium .model-card-action.download-module-btn.downloading .btn-content,
+.app-card-hover-actions .download-btn.downloading .btn-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.download-pct {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    min-width: 3ch;
+}
+
+.stop-square-icon {
+    width: 14px;
+    height: 14px;
+    background-color: currentColor;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+/* Specific card icon accent backgrounds removed to keep launcher cards clean */
+
+@media (max-width: 1200px) {
+    .models-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 800px) {
+    .models-grid {
+        grid-template-columns: 1fr;
+    }
+}

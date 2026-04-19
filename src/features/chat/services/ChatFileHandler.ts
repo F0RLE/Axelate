@@ -4,26 +4,28 @@
  *
  * @example
  * ```typescript
- * import { chatFileHandler } from './ChatFileHandler';
+ * import { ChatFileHandler } from './ChatFileHandler';
  *
- * chatFileHandler.addFiles(fileList);
- * const { attachments, combinedText } = await chatFileHandler.processForSend('Base prompt');
+ * const fileHandler = new ChatFileHandler();
+ * fileHandler.addFiles(fileList);
+ * const { attachments, combinedText } = await fileHandler.processForSend('Base prompt');
  * ```
  */
 
 import type { IChatAttachment } from '../types/chatTypes';
 import type { IBridge } from '@/shared/types/IBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import {
     estimateTokenCount,
-    getTokenCount,
     isTextFile,
     readFileAsBase64,
     readFileAsText,
 } from '../utils/chatUtils';
-import { tracer } from '@/infrastructure/logging/LoggerService';
 // ============================================================================
 // Types
 // ============================================================================
+
+type ChatFileHandlerLogger = Pick<LoggerService, 'warn' | 'error'>;
 
 interface IFileProcessResult {
     content?: string;
@@ -46,14 +48,19 @@ export class ChatFileHandler {
     private _onUpdate: AttachmentUpdateCallback | null = null;
     private _initialized = false;
     private _bridge: IBridge | null = null;
+    private _estimateTokens: (text: string, model?: string) => Promise<number> = (text) =>
+        Promise.resolve(estimateTokenCount(text));
 
-    constructor() {
-        // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>)['chatFileHandler'] = this;
-    }
+    constructor(private readonly _tracer: ChatFileHandlerLogger) {}
 
     public setBridge(bridge: IBridge): void {
         this._bridge = bridge;
+    }
+
+    public setTokenEstimator(
+        estimateTokens: (text: string, model?: string) => Promise<number>,
+    ): void {
+        this._estimateTokens = estimateTokens;
     }
 
     /**
@@ -62,7 +69,7 @@ export class ChatFileHandler {
      */
     public init(): void {
         if (this._initialized) {
-            tracer.warn('[ChatFileHandler] Already initialized');
+            this._tracer.warn('[ChatFileHandler] Already initialized');
             return;
         }
 
@@ -235,7 +242,7 @@ export class ChatFileHandler {
 
             return { content: '' };
         } catch (e) {
-            tracer.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
+            this._tracer.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
             return { error: `\n[Error processing ${file.name}]` };
         }
     }
@@ -278,7 +285,7 @@ export class ChatFileHandler {
     // Removed private ZIP methods (_processZipFile, _extractZipEntries, _validateZipEntry, etc.)
 
     public async getTotalTokenEstimate(baseText: string): Promise<number> {
-        let total = await getTokenCount(baseText);
+        let total = await this._estimateTokens(baseText);
         for (const file of this._files) {
             total += await this.getFileTokenEstimate(file);
         }
@@ -321,7 +328,7 @@ export class ChatFileHandler {
         if (isTextFile(file)) {
             try {
                 const t = await readFileAsText(file);
-                return await getTokenCount(t);
+                return await this._estimateTokens(t);
             } catch {
                 return 0;
             }
@@ -342,6 +349,3 @@ export class ChatFileHandler {
         return `${file.name}:${file.size}:${file.type}:${file.lastModified}`;
     }
 }
-
-// Export singleton
-export const chatFileHandler = new ChatFileHandler();

@@ -3,7 +3,6 @@ import { ConsoleLogService, type ILogEntry } from './ConsoleLogService';
 import type { IBridge } from '@/shared/types/IBridge';
 import { createMockBridge } from '@/test/mocks/mockBridge';
 import * as invokeModule from '@/shared/api/invoke';
-import { commands } from '@/shared/types/bindings';
 function setupTauri(bridge: IBridge, isTauri = true, invokeReturn?: unknown) {
     vi.mocked(bridge.isTauri).mockReturnValue(isTauri);
     if (invokeReturn !== undefined) {
@@ -32,7 +31,10 @@ describe('ConsoleLogService', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         bridge = createMockBridge();
-        service = new ConsoleLogService(bridge);
+        service = new ConsoleLogService(bridge, {
+            warn: vi.fn(),
+            error: vi.fn(),
+        });
         // Mock global fetch for fallback
         globalThis.fetch = vi.fn();
     });
@@ -274,53 +276,48 @@ describe('ConsoleLogService', () => {
         const invokeSafeSpy = vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
             status: 'ok',
             data: {
-                ready: {
-                    slots: [
-                        {
-                            capability: 'text',
-                            engine: { id: 'llamacpp', name: 'LLaMA.cpp' },
-                        },
-                    ],
-                },
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'llamacpp', label: 'LLaMA.cpp' },
+                ],
+                status_items: [],
             },
         });
 
         const views = await service.getAvailableViews();
 
-        expect(invokeSafeSpy).toHaveBeenCalledWith(commands.getEngineState());
+        expect(invokeSafeSpy).toHaveBeenCalledWith('get_console_overview');
         expect(views).toEqual([
             { id: 'general', label: 'General' },
             { id: 'llamacpp', label: 'LLaMA.cpp' },
         ]);
     });
 
-    it('should not duplicate module views when engine tab already exists', async () => {
+    it('should trust backend-computed views when running in tauri', async () => {
         setupTauri(bridge, true);
         vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
             status: 'ok',
             data: {
-                ready: {
-                    slots: [
-                        {
-                            capability: 'text',
-                            engine: { id: 'axelate-telegram-bot', name: 'Telegram Bot' },
-                        },
-                    ],
-                },
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'axelate-telegram-bot', label: 'Telegram Bot' },
+                ],
+                status_items: [],
             },
         });
-        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
             if (command === 'get_logs') {
-                return [
+                return Promise.resolve([
                     {
                         timestamp: 1,
                         source: 'module:axelate-telegram-bot',
                         level: 'INFO',
                         message: 'Started',
+                        module_id: 'axelate-telegram-bot',
                     },
-                ];
+                ]);
             }
-            return undefined;
+            return Promise.resolve(undefined);
         });
 
         await service.fetchLogs();
@@ -337,19 +334,16 @@ describe('ConsoleLogService', () => {
         vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
             status: 'ok',
             data: {
-                ready: {
-                    slots: [
-                        {
-                            capability: 'text',
-                            engine: { id: 'llamacpp', name: 'LLaMA.cpp' },
-                        },
-                    ],
-                },
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'llamacpp', label: 'LLaMA.cpp' },
+                ],
+                status_items: [],
             },
         });
-        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
             if (command === 'get_logs') {
-                return [
+                return Promise.resolve([
                     {
                         timestamp: 1,
                         source: 'frontend',
@@ -361,16 +355,18 @@ describe('ConsoleLogService', () => {
                         source: 'frontend',
                         level: 'INFO',
                         message: '[AIBridge] Starting provider: llamacpp',
+                        module_id: 'llamacpp',
                     },
                     {
                         timestamp: 3,
                         source: 'llamacpp',
                         level: 'INFO',
                         message: 'ready line',
+                        module_id: 'llamacpp',
                     },
-                ];
+                ]);
             }
-            return undefined;
+            return Promise.resolve(undefined);
         });
 
         await service.fetchLogs();
@@ -379,13 +375,13 @@ describe('ConsoleLogService', () => {
         expect(service.getLogsForView('general')).toEqual([
             expect.objectContaining({
                 source: 'frontend',
-                message: '[NavigationService] Navigating to: console',
+                message: 'Navigating to: console',
             }),
         ]);
         expect(service.getLogsForView('llamacpp')).toEqual([
             expect.objectContaining({
                 source: 'frontend',
-                message: '[AIBridge] Starting provider: llamacpp',
+                message: 'Starting provider: llamacpp',
             }),
             expect.objectContaining({
                 source: 'llamacpp',
@@ -399,34 +395,28 @@ describe('ConsoleLogService', () => {
         vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
             status: 'ok',
             data: {
-                ready: {
-                    slots: [
-                        {
-                            capability: 'text',
-                            engine: { id: 'llamacpp', name: 'LLaMA.cpp' },
-                        },
-                    ],
-                },
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'llamacpp', label: 'LLaMA.cpp' },
+                ],
+                status_items: [
+                    {
+                        id: 'engine:llamacpp',
+                        label: 'LLaMA.cpp',
+                        kind: 'engine',
+                        status: 'running',
+                        detail: 'text',
+                    },
+                    {
+                        id: 'module:llamacpp',
+                        label: 'Llamacpp',
+                        kind: 'module',
+                        status: 'running',
+                        detail: 'Running',
+                    },
+                ],
             },
         });
-        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
-            if (command === 'get_logs') {
-                return [
-                    {
-                        timestamp: 1,
-                        source: 'module:llamacpp',
-                        level: 'ERROR',
-                        message: 'Manifest not found',
-                    },
-                ];
-            }
-            if (command === 'get_module_status') {
-                return 'running';
-            }
-            return undefined;
-        });
-
-        await service.fetchLogs();
         const items = await service.getStatusItems();
 
         expect(items).toEqual([
@@ -449,14 +439,14 @@ describe('ConsoleLogService', () => {
 
     it('should cache module paths and open module folder', async () => {
         setupTauri(bridge, true);
-        vi.mocked(bridge.invoke).mockImplementation(async (command) => {
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
             if (command === 'get_module_path') {
-                return 'C:/modules/llamacpp';
+                return Promise.resolve('C:/modules/llamacpp');
             }
             if (command === 'plugin:shell|open') {
-                return undefined;
+                return Promise.resolve(undefined);
             }
-            return undefined;
+            return Promise.resolve(undefined);
         });
 
         const firstPath = await service.getModulePath('llamacpp');
