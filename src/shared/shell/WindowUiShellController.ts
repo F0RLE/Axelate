@@ -15,6 +15,8 @@ type WindowUiWarningMetrics = {
     minHeight: number;
 };
 
+const SPLASH_FADE_OUT_DELAY_MS = 180;
+
 export class WindowUiShellController {
     constructor(private readonly _deps: WindowUiShellDeps) {}
 
@@ -84,7 +86,7 @@ export class WindowUiShellController {
                     currentSplash.classList.add('hidden');
                 }
                 document.body.classList.remove('no-overflow');
-            }, 400);
+            }, SPLASH_FADE_OUT_DELAY_MS);
         }
 
         this._showLayoutSections(['sidebar', 'app-header', 'main-area']);

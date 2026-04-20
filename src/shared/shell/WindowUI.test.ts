@@ -197,7 +197,7 @@ describe('WindowUI lifecycle', () => {
         expect(maximizeEvent.defaultPrevented).toBe(true);
 
         uiLocal.hideSplashScreen();
-        vi.advanceTimersByTime(400);
+        vi.advanceTimersByTime(180);
         expect(document.getElementById('splash-screen')?.classList.contains('hidden')).toBe(true);
         expect(document.getElementById('sidebar')?.classList.contains('visible')).toBe(true);
     });

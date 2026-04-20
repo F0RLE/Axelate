@@ -28,6 +28,7 @@ describe('ChatLifecycleHelper', () => {
             ensureHistoryLoaded: vi.fn(),
             scheduleRevealLatestMessage: vi.fn(),
             bindEvents: vi.fn(),
+            canBindEventsNow: vi.fn().mockReturnValue(false),
             areEventsBound: vi.fn().mockReturnValue(false),
             setEventsBound: vi.fn(),
             randomizeGreeting: vi.fn(),
@@ -69,5 +70,15 @@ describe('ChatLifecycleHelper', () => {
         expect(fileHandler.clearUpdateCallback).toHaveBeenCalledTimes(1);
         expect(deps.bindEvents).not.toHaveBeenCalled();
         expect(deps.setEventsBound).toHaveBeenCalledWith(false);
+    });
+
+    it('should bind events immediately when chat input is already mounted', () => {
+        const { helper, deps } = createHelper();
+        deps.canBindEventsNow.mockReturnValue(true);
+
+        helper.start();
+
+        expect(deps.bindEvents).toHaveBeenCalledTimes(1);
+        expect(deps.setEventsBound).toHaveBeenCalledWith(true);
     });
 });

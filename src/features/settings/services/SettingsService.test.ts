@@ -104,6 +104,21 @@ describe('SettingsService', () => {
         });
     });
 
+    describe('getModuleSettingsUiEntryPath', () => {
+        it('should resolve module settings ui entry path from backend', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(
+                '/modules/demo/settings-ui/index.html',
+            );
+
+            const result = await service.getModuleSettingsUiEntryPath('demo');
+
+            expect(result).toBe('/modules/demo/settings-ui/index.html');
+            expect(tauri.invoke).toHaveBeenCalledWith('get_module_settings_ui_entry_path', {
+                moduleId: 'demo',
+            });
+        });
+    });
+
     describe('controlService', () => {
         it('should return true on success', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);

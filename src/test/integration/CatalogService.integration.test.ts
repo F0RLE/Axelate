@@ -117,32 +117,13 @@ describe('CatalogService Integration', () => {
         expect(catalog.ai.at(0)?.installed).toBe(true); // API modules always installed
     });
 
-    it('should work in web mode with fetch fallback', async () => {
+    it('should use bundled fallback when Tauri bridge is unavailable', async () => {
         mockBridge.isTauri.mockReturnValue(false);
-
-        const webConfig = createMockAppConfig({
-            catalog: {
-                ai: [{ id: 'gemini', name: 'Gemini', type: 'api' }],
-                services: [],
-            },
-        });
-
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockImplementation((url: string) => {
-                if (url === '/api/config') {
-                    return Promise.resolve({ ok: true, json: () => Promise.resolve(webConfig) });
-                }
-                return Promise.resolve({ ok: false });
-            }),
-        );
 
         await service.loadCatalog();
 
         const catalog = service.getCatalog();
-        expect(catalog.ai).toHaveLength(1);
-        expect(catalog.ai.at(0)?.id).toBe('gemini');
-
-        vi.unstubAllGlobals();
+        expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+        expect(catalog.services.length).toBe(FALLBACK_CONFIG.catalog.services.length);
     });
 });

@@ -98,9 +98,7 @@ export class ConsoleLogService {
 
     public async fetchLogs(): Promise<ILogEntry[]> {
         try {
-            const logs = this.bridge.isTauri()
-                ? await this._fetchTauriLogs()
-                : await this._fetchBrowserLogs();
+            const logs = await this._fetchTauriLogs();
             return this._processLogs(logs);
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Fetch logs failed:', error);
@@ -113,11 +111,7 @@ export class ConsoleLogService {
         this.lastTimestamp = 0;
 
         try {
-            if (this.bridge.isTauri()) {
-                await this.bridge.invoke('clear_logs');
-            } else {
-                await fetch('/api/logs/clear', { method: 'POST' });
-            }
+            await this.bridge.invoke('clear_logs');
             return true;
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Clear logs failed:', error);
@@ -291,16 +285,6 @@ export class ConsoleLogService {
         });
     }
 
-    private async _fetchBrowserLogs(): Promise<ILogEntry[]> {
-        const response = await fetch(`/api/logs?since=${this.lastTimestamp.toString()}`);
-        if (!response.ok) {
-            throw new Error('Fetch failed');
-        }
-
-        const text = await response.text();
-        return this._safeJsonParse(text, []);
-    }
-
     private _processLogs(newLogs: ILogEntry[]): ILogEntry[] {
         if (!Array.isArray(newLogs) || newLogs.length === 0) {
             return [];
@@ -317,14 +301,6 @@ export class ConsoleLogService {
         this.logs.push(...visibleLogs);
         this._trimLogs();
         return visibleLogs;
-    }
-
-    private _safeJsonParse<T>(text: string, defaultValue: T): T {
-        try {
-            return text ? (JSON.parse(text) as T) : defaultValue;
-        } catch {
-            return defaultValue;
-        }
     }
 
     private _isNoise(entry: ILogEntry): boolean {

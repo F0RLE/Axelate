@@ -6,8 +6,6 @@ pub mod crypto;
 pub mod engine;
 /// Filesystem infrastructure
 pub mod filesystem;
-/// HTTP server infrastructure
-pub mod http;
 /// Logging infrastructure
 pub mod logging;
 /// Monitoring infrastructure

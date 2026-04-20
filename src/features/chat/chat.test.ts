@@ -269,11 +269,24 @@ describe('ChatController', () => {
                 image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
             },
         ]);
-        expect(appendMessage).toHaveBeenCalledWith('user', 'Look here', {
-            tokens: 0,
-            skipAnimation: true,
-            images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
-        });
+        expect(
+            (
+                controller as unknown as {
+                    _ui: { renderHistory: ReturnType<typeof vi.fn> };
+                }
+            )._ui.renderHistory,
+        ).toHaveBeenCalledWith([
+            {
+                role: 'user',
+                content: [
+                    { type: 'text', text: 'Look here' },
+                    {
+                        type: 'image_url',
+                        image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+                    },
+                ],
+            },
+        ]);
     });
 
     it('should localize local model memory errors', () => {
@@ -427,5 +440,34 @@ describe('ChatController', () => {
 
         expect(input.style.height).toBe('200px');
         expect(input.style.overflowY).toBe('auto');
+    });
+
+    it('should send chat on Enter from the textarea', async () => {
+        document.body.innerHTML = `
+            <input id="chat-file-input" />
+            <textarea id="chat-input">hello</textarea>
+            <button id="chat-send-btn"></button>
+            <button id="chat-voice-btn"></button>
+            <button id="chat-attach-btn"></button>
+        `;
+
+        aiBridge.isActive.mockReturnValue(true);
+        const controller = createController() as unknown as ChatControllerTestAccess & {
+            sendChat: () => Promise<void>;
+        };
+        const sendSpy = vi.spyOn(controller, 'sendChat').mockResolvedValue(undefined);
+
+        await controller.init();
+
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement;
+        input.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: 'Enter',
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+
+        expect(sendSpy).toHaveBeenCalledTimes(1);
     });
 });

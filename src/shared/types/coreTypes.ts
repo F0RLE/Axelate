@@ -121,7 +121,6 @@ export interface IBootstrapData {
     uiState: IUIState;
     windowConfig: IWindowConfig;
     systemLanguage: string;
-    modules: IModule[];
     initialZoom: number;
 }
 

@@ -89,10 +89,17 @@ export class ChatController {
     private readonly _state = new ChatControllerState();
     private readonly _boundFileInputChange = (e: Event) => this._filePicker.handleFileSelect(e);
     private readonly _boundChatInputKeydown = (e: KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            void this.sendChat();
+        const isEnterKey =
+            e.key === 'Enter' ||
+            e.key === 'NumpadEnter' ||
+            e.code === 'Enter' ||
+            e.code === 'NumpadEnter';
+        if (!isEnterKey || e.shiftKey || e.defaultPrevented || e.isComposing) {
+            return;
         }
+
+        e.preventDefault();
+        void this.sendChat();
     };
     private readonly _boundChatInputInput = () => {
         this._scheduleAutoResizeInput();
@@ -187,6 +194,7 @@ export class ChatController {
             bindEvents: () => {
                 this._bindEvents();
             },
+            canBindEventsNow: () => this._inputCoordinator.getInput() !== null,
             areEventsBound: () => this._state.eventsBound,
             setEventsBound: (value) => {
                 this._state.eventsBound = value;
@@ -220,14 +228,9 @@ export class ChatController {
             setHistory: (history) => {
                 this._state.history = history;
             },
-            appendHistoryMessage: (role, text, options) => {
-                this._ui.appendMessage(role, text, options);
-            },
             revealLatestMessage: () => {
                 this._ui.revealLatestMessage();
             },
-            extractRenderableText: (content) => this._extractRenderableText(content),
-            buildHistoryRenderOptions: (content) => this._buildHistoryRenderOptions(content),
             restoreInputText: (text) => {
                 this._inputCoordinator.restore(text);
             },
@@ -518,21 +521,11 @@ export class ChatController {
         this._state.pushHistoryMessage(assistantMessage);
     }
 
-    private _extractRenderableText(content: ChatContent): string {
-        return this._contentHelper.extractRenderableText(content);
-    }
-
     private _buildGeneratedImageContent(
         images: Array<{ mime: string; data_base64: string }>,
         text: string,
     ): ChatContent {
         return this._contentHelper.buildGeneratedImageContent(images, text);
-    }
-
-    private _buildHistoryRenderOptions(content: ChatContent): {
-        images?: Array<{ mime: string; data_base64: string }>;
-    } {
-        return this._contentHelper.buildHistoryRenderOptions(content);
     }
 
     private _getFriendlyErrorMessage(errorMsg: unknown, model?: string): string {

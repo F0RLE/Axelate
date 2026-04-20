@@ -1,9 +1,5 @@
 import type { ChatController } from '@/features/chat/chat';
-import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
-import type { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
-import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
-import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
@@ -19,6 +15,11 @@ import type { SidebarUI } from '@/shared/shell/SidebarUI';
 import type { WindowUI } from '@/shared/shell/WindowUI';
 import type { IBootstrapData } from '@/shared/types/coreTypes';
 import type { SettingsService } from '@/features/settings/services/SettingsService';
+import type {
+    ClosableDeferredUiController,
+    DeferredUiController,
+    ModuleSettingsUiController,
+} from './CoreUiContracts';
 import {
     restoreActiveAiProvider,
     restoreSelectedModules as restoreSelectedModulesState,
@@ -51,6 +52,7 @@ type ShowInitialPageArgs = {
 };
 
 type InitializeImmediateUiArgs = {
+    navigation: NavigationService;
     navigationUI: NavigationUI;
     downloadUI: DownloadUI;
     moduleService: ModuleService;
@@ -59,11 +61,11 @@ type InitializeImmediateUiArgs = {
 
 type InitializeDeferredUiArgs = {
     settingsService: SettingsService;
-    monitoringUI: MonitoringUI;
-    settingsUI: SettingsUI;
-    moduleSettingsUI: ModuleSettingsUI;
+    monitoringUI: DeferredUiController;
+    settingsUI: ClosableDeferredUiController;
+    moduleSettingsUI: ModuleSettingsUiController;
     i18nUI: I18nUI;
-    consoleUI: ConsoleUI;
+    consoleUI: DeferredUiController;
     restoreSelectedModules: () => void;
 };
 
@@ -109,11 +111,10 @@ export async function fetchBootstrapData(
     } catch (error) {
         tracer.warn(`[CoreRuntimeSupport] Bootstrap command failed: ${String(error)}`);
 
-        const [uiState, windowConfig, systemLanguage, modules, initialZoom] = await Promise.all([
+        const [uiState, windowConfig, systemLanguage, initialZoom] = await Promise.all([
             tauriProvider.invoke<IBootstrapData['uiState']>('get_ui_state'),
             tauriProvider.invoke<IBootstrapData['windowConfig']>('get_window_config'),
             tauriProvider.invoke<string>('get_system_language'),
-            tauriProvider.invoke<IBootstrapData['modules']>('get_modules'),
             tauriProvider.invoke<number>('get_resolution_zoom'),
         ]);
 
@@ -121,7 +122,6 @@ export async function fetchBootstrapData(
             uiState,
             windowConfig,
             systemLanguage,
-            modules,
             initialZoom,
         };
     }
@@ -130,9 +130,6 @@ export async function fetchBootstrapData(
 export async function hydrateCriticalServices(args: HydrateCriticalServicesArgs): Promise<void> {
     const preferredLanguage = args.bootstrapData.uiState.preferred_language;
     args.stateStore.setState(args.bootstrapData.uiState);
-    args.tracer.debug(
-        `[CoreRuntimeSupport] Bootstrap modules: ${String(args.bootstrapData.modules.length)}`,
-    );
     await loadCriticalTemplates(args.templateLoader);
     await Promise.all([
         args.windowService.init(args.bootstrapData.windowConfig, args.bootstrapData.initialZoom),
@@ -158,10 +155,11 @@ export async function showInitialPage(args: ShowInitialPageArgs): Promise<void> 
     }
 }
 
-export function initializeImmediateUi(args: InitializeImmediateUiArgs): void {
+export async function initializeImmediateUi(args: InitializeImmediateUiArgs): Promise<void> {
+    await args.sidebarUI.init();
     args.navigationUI.init();
+    await args.navigationUI.showPage(args.navigation.getCurrentPage() ?? 'home', null, true, true);
     void args.moduleService.init();
-    void args.sidebarUI.init();
     void args.downloadUI.init();
 }
 
@@ -170,7 +168,7 @@ export async function initializeDeferredUi(args: InitializeDeferredUiArgs): Prom
     void args.monitoringUI.init();
     await args.settingsUI.init();
     await args.moduleSettingsUI.init();
-    args.consoleUI.init();
+    void args.consoleUI.init();
     args.i18nUI.applyTranslations();
     args.restoreSelectedModules();
 }

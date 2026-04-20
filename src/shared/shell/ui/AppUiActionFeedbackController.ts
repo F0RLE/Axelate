@@ -32,11 +32,14 @@ export class AppUiActionFeedbackController {
     }
 
     public clear(): void {
-        if (this._hideTimer === null) {
-            return;
+        if (this._hideTimer !== null) {
+            globalThis.clearTimeout(this._hideTimer);
+            this._hideTimer = null;
         }
 
-        globalThis.clearTimeout(this._hideTimer);
-        this._hideTimer = null;
+        const feedback = document.getElementById('action-feedback');
+        if (feedback instanceof HTMLElement) {
+            feedback.classList.remove('show');
+        }
     }
 }

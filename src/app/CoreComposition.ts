@@ -2,10 +2,6 @@ import type { AppUI } from '@/shared/shell/AppUI';
 import type { SidebarUI } from '@/shared/shell/SidebarUI';
 import type { WindowUI } from '@/shared/shell/WindowUI';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
-import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
-import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
-import type { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
-import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
@@ -30,6 +26,11 @@ import type { TemplateLoader } from '@/shared/services/TemplateLoader';
 import type { EventBus } from '@/shared/services/EventBus';
 import type { ErrorHandler } from '@/shared/services/ErrorHandler';
 import type { StateManager } from '@/shared/services/StateManager';
+import type {
+    ClosableDeferredUiController,
+    DeferredUiController,
+    ModuleSettingsUiController,
+} from './CoreUiContracts';
 import type { Particles } from '@/shared/shell/Particles';
 import type { Core } from './init';
 import { container } from './CoreContainer';
@@ -65,10 +66,10 @@ type CoreUiRegistrationBundle = {
     navigationUI: NavigationUI;
     sidebarUI: SidebarUI;
     downloadUI: DownloadUI;
-    settingsUI: SettingsUI;
-    moduleSettingsUI: ModuleSettingsUI;
-    monitoringUI: MonitoringUI;
-    consoleUI: ConsoleUI;
+    settingsUI: ClosableDeferredUiController;
+    moduleSettingsUI: ModuleSettingsUiController;
+    monitoringUI: DeferredUiController;
+    consoleUI: DeferredUiController;
     particles: Particles;
 };
 
@@ -104,16 +105,16 @@ type DestroyCoreResourcesArgs = {
     eventHandler: { destroy: () => void };
     chatController: ChatController;
     appUI: AppUI;
-    settingsUI: SettingsUI;
-    moduleSettingsUI: ModuleSettingsUI;
+    settingsUI: ClosableDeferredUiController;
+    moduleSettingsUI: ModuleSettingsUiController;
     downloadUI: DownloadUI;
     navigationUI: NavigationUI;
     windowUI: WindowUI;
     windowService: WindowService;
     moduleService: ModuleService;
     i18nUI: I18nUI;
-    consoleUI: ConsoleUI;
-    monitoringUI: MonitoringUI;
+    consoleUI: DeferredUiController;
+    monitoringUI: DeferredUiController;
     monitoringService: MonitoringService;
     sidebarUI: SidebarUI;
     particles: Particles;

@@ -1,9 +1,8 @@
 use crate::api::settings::window_settings::{res_key_from_window, resolve_zoom};
-use crate::domain::modules::controller as module_controller;
 use crate::errors::AppError;
 use crate::infrastructure::config::window_settings::WindowConfig;
 use crate::infrastructure::config::{settings, ui_state, window_settings};
-use crate::models::{Module, UIState};
+use crate::models::UIState;
 use serde::Serialize;
 use specta::Type;
 use tauri::WebviewWindow;
@@ -18,8 +17,6 @@ pub struct BootstrapData {
     pub window_config: WindowConfig,
     /// Detected system language
     pub system_language: String,
-    /// All available modules
-    pub modules: Vec<Module>,
     /// Effective zoom for the current monitor resolution
     pub initial_zoom: f64,
 }
@@ -36,7 +33,6 @@ pub async fn get_app_bootstrap_data(
     let ui_state = ui_service.get_ui_state().await.unwrap_or_default();
     let window_config = window_settings::get_window_config();
     let system_language = settings::get_language_sync();
-    let modules = module_controller::get_all_modules().await;
 
     // Resolve zoom using the canonical priority chain:
     // per-resolution saved > global zoom_level > 1.0
@@ -47,7 +43,6 @@ pub async fn get_app_bootstrap_data(
         ui_state,
         window_config,
         system_language,
-        modules,
         initial_zoom,
     })
 }

@@ -232,7 +232,7 @@ describe('AppUI lifecycle', () => {
         expect(feedback.classList.contains('show')).toBe(false);
     });
 
-    it('should cancel action feedback hide timer on destroy', () => {
+    it('should hide action feedback immediately on destroy', () => {
         vi.useFakeTimers();
         appUI = createAppUI();
 
@@ -245,7 +245,7 @@ describe('AppUI lifecycle', () => {
         appUI.destroy();
         vi.advanceTimersByTime(600);
 
-        expect(feedback.classList.contains('show')).toBe(true);
+        expect(feedback.classList.contains('show')).toBe(false);
         appUI = null;
     });
 

@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 
 // Mock localStorage for JSDOM
 const localStorageMock = (() => {
@@ -23,6 +23,20 @@ const localStorageMock = (() => {
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
 
+function installDefaultTauriGlobals(): void {
+    const win = globalThis as unknown as Record<string, unknown>;
+    win['__TAURI__'] = {
+        invoke: async () => {},
+        core: { invoke: async () => {} },
+        event: { listen: async () => () => {} },
+    };
+    win['__TAURI_INTERNALS__'] = {
+        invoke: async () => {},
+        transformCallback: () => 0,
+    };
+    win['t'] = vi.fn((key: string, fallback?: string) => fallback ?? key);
+}
+
 // Mock Tauri APIs
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: vi.fn().mockImplementation((cmd: string, args?: unknown) => {
@@ -37,6 +51,7 @@ vi.mock('@tauri-apps/api/core', () => ({
         }
         return Promise.resolve();
     }),
+    convertFileSrc: vi.fn((filePath: string) => `asset://localhost/${filePath}`),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -51,21 +66,7 @@ vi.mock('@tauri-apps/api/event', () => ({
     }),
 }));
 
-beforeAll(() => {
-    const win = globalThis as unknown as Record<string, unknown>;
-    win['__TAURI__'] = {
-        invoke: async () => {},
-        core: { invoke: async () => {} },
-        event: { listen: async () => () => {} },
-    };
-    win['__TAURI_INTERNALS__'] = {
-        invoke: async () => {},
-        transformCallback: () => 0,
-    };
-    win['t'] = vi.fn((key: string, _def?: string) => _def || key);
-});
-
-// Clear localStorage before each test
 beforeEach(() => {
     localStorageMock.clear();
+    installDefaultTauriGlobals();
 });

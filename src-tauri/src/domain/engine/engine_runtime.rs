@@ -1,11 +1,14 @@
 use std::fs::File;
 use std::io::Write;
-use std::net::TcpListener;
 use std::time::Duration;
 
 use tokio::io::AsyncRead;
 use tracing::{info, warn};
 
+use crate::domain::system::ports::{
+    ENGINE_LOCAL_PORT_RANGE, LocalPortPurpose,
+    find_available_local_port as find_reserved_local_port,
+};
 use crate::errors::AppError;
 
 use super::events::EngineEventEmitter;
@@ -14,19 +17,15 @@ fn is_progress_log_line(line: &str) -> bool {
     line.contains("it/s") || line.contains("s/it") || line.contains('%')
 }
 
-pub(super) fn find_available_local_port(preferred_port: u16) -> Result<u16, AppError> {
-    const MAX_PORT_PROBES: u16 = 32;
-
-    for offset in 0..MAX_PORT_PROBES {
-        let candidate = preferred_port.saturating_add(offset);
-        if TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
-            return Ok(candidate);
-        }
-    }
-
-    Err(AppError::Config(format!(
-        "No free localhost port found starting from {preferred_port}"
-    )))
+pub(super) fn find_available_local_port(
+    preferred_port: u16,
+    engine_id: &str,
+) -> Result<u16, AppError> {
+    find_reserved_local_port(
+        preferred_port,
+        ENGINE_LOCAL_PORT_RANGE,
+        LocalPortPurpose::Engine(engine_id),
+    )
 }
 
 pub(super) fn classify_engine_start_failure(log: &str) -> Option<String> {

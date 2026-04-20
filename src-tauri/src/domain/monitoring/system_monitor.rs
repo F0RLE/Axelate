@@ -7,6 +7,9 @@ use tokio::sync::RwLock;
 use crate::domain::monitoring::gpu_collector::GpuCollector;
 use crate::models::system::{CpuStats, DiskStats, NetworkStats, RamStats, SystemStats};
 
+/// Default monitoring cadence for background system stats collection.
+pub const DEFAULT_MONITORING_INTERVAL_MS: u64 = 2000;
+
 /// Event sink for delivering fresh system statistics to external layers.
 pub trait SystemStatsEmitter: Send + Sync {
     /// Emits a fresh system statistics snapshot.
@@ -109,7 +112,7 @@ impl SystemMonitorService {
     pub fn new() -> Self {
         Self {
             is_paused: AtomicBool::new(false),
-            interval_ms: AtomicU64::new(1000),
+            interval_ms: AtomicU64::new(DEFAULT_MONITORING_INTERVAL_MS),
             latest_stats: RwLock::new(SystemStats::default()),
             monitor_handle: RwLock::new(None),
         }

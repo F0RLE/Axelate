@@ -1,5 +1,6 @@
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 type TranslateFn = (key: string, defaultValue?: string) => string;
 type ShowToastFn = (
@@ -52,7 +53,7 @@ type SettingsServiceLike = {
     getSettings(): unknown;
     getModuleSettings(moduleId: string): Promise<Record<string, unknown>>;
     saveModuleSettings(moduleId: string, settings: Record<string, unknown>): Promise<void>;
-    getLocalServerBaseUrl(): Promise<string>;
+    getModuleSettingsUiEntryPath(moduleId: string): Promise<string>;
 };
 type ModuleSettingsCustomUiLogger = Pick<LoggerService, 'error'>;
 
@@ -104,14 +105,11 @@ export class ModuleSettingsCustomUiController {
         container.appendChild(shell);
 
         try {
-            const [baseUrl, settings] = await Promise.all([
-                this._deps.service.getLocalServerBaseUrl(),
+            const [entryPath, settings] = await Promise.all([
+                this._deps.service.getModuleSettingsUiEntryPath(app.id),
                 this._deps.service.getModuleSettings(app.id),
             ]);
-            const frameUrl = new URL(
-                `/api/modules/${encodeURIComponent(app.id)}/settings-ui`,
-                baseUrl,
-            );
+            const frameUrl = new URL(convertFileSrc(entryPath));
             const expectedOrigin = frameUrl.origin;
             const context = this._buildContext(app);
 

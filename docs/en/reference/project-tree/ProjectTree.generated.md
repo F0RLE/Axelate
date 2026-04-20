@@ -1,6 +1,6 @@
 # Project Tree
 
-Generated from `git ls-files`. Total tracked files: 544.
+Generated from `git ls-files`. Total tracked files: 523.
 
 ```text
 - .github/
@@ -32,6 +32,7 @@ Generated from `git ls-files`. Total tracked files: 544.
     - AUTOMATION.md
     - CODING_STANDARDS.md
     - getting-started.md
+    - ProjectTree.generated.md
     - ProjectTree.md
     - ROADMAP.md
     - SECURITY_HARDENING.md
@@ -41,22 +42,7 @@ Generated from `git ls-files`. Total tracked files: 544.
   - zh/
     - README_CN.md
 - scripts/
-  - linux/
-    - clear.sh
-    - dev.sh
-    - release.sh
-    - verify.sh
-  - macos/
-    - clear.command
-    - dev.command
-    - release.command
-    - verify.command
-  - windows/
-    - clear.cmd
-    - dev.cmd
-    - release.cmd
-    - verify.cmd
-  - README.md
+  - project-tree.mjs
 - src/
   - app/
     - bridge.test.ts
@@ -248,17 +234,13 @@ Generated from `git ls-files`. Total tracked files: 544.
         - ModuleSettingsBridgeController.ts
         - ModuleSettingsControllerFactory.ts
         - ModuleSettingsCustomUiController.ts
-        - ModuleSettingsEngineExtraArgDocs.ts
-        - ModuleSettingsEngineExtraArgsField.ts
         - ModuleSettingsEngineFieldCatalog.test.ts
         - ModuleSettingsEngineFieldCatalog.ts
         - ModuleSettingsEngineFieldController.ts
         - ModuleSettingsEngineFieldRowRenderer.ts
-        - ModuleSettingsEngineFieldState.ts
+        - ModuleSettingsEngineFieldSupport.ts
         - ModuleSettingsEngineHtmlBuilder.ts
         - ModuleSettingsEngineInfoPopover.ts
-        - ModuleSettingsEngineInputFactory.ts
-        - ModuleSettingsEngineLayoutHelpers.ts
         - ModuleSettingsEngineRenderer.test.ts
         - ModuleSettingsEngineRenderer.ts
         - ModuleSettingsEngineRenderFlow.ts
@@ -360,9 +342,7 @@ Generated from `git ls-files`. Total tracked files: 544.
         - AppUiCardActionFlow.ts
         - AppUiChrome.test.ts
         - AppUiChrome.ts
-        - AppUiControllerFactory.ts
-        - AppUiDashboardCardView.ts
-        - AppUiDashboardController.ts
+        - AppUiDashboardSupport.ts
         - AppUiLifecycleBindings.ts
         - AppUiModuleFlow.test.ts
         - AppUiModuleFlow.ts
@@ -372,18 +352,14 @@ Generated from `git ls-files`. Total tracked files: 544.
         - AppUiSelectionFlow.ts
         - AppUiSelectionState.test.ts
         - AppUiSelectionState.ts
-        - ModalDownloadActions.ts
-        - ModalDownloadProgressHandler.ts
         - ModalFilterTransitionController.ts
-        - ModalFilterUi.ts
         - ModalFocusTrapHelper.test.ts
         - ModalFocusTrapHelper.ts
         - ModalManager.test.ts
         - ModalManager.ts
+        - ModalManagerSupport.ts
         - ModalSelectionPolicy.test.ts
         - ModalSelectionPolicy.ts
-        - ModalSelectionRenderer.ts
-        - ModalSidebarWidth.ts
         - ModuleCardActions.ts
         - ModuleCardDownloadProgress.ts
         - ModuleCardPresentationHelper.test.ts

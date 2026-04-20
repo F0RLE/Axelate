@@ -23,12 +23,8 @@ import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import type { Particles } from '@/shared/shell/Particles';
 import type { MonitoringService } from '@/features/monitoring/services/MonitoringService';
-import type { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
 import type { ConsoleLogService } from '@/features/console/services/ConsoleLogService';
-import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { SettingsService } from '@/features/settings/services/SettingsService';
-import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
-import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { ChatController } from '@/features/chat/chat';
 import type { ModulePlatformService } from '@/shared/services/ModulePlatformService';
@@ -43,6 +39,11 @@ import {
     configureTracerTransport,
     registerCoreContainer,
 } from './CoreComposition';
+import type {
+    ClosableDeferredUiController,
+    DeferredUiController,
+    ModuleSettingsUiController,
+} from './CoreUiContracts';
 
 export class Core {
     // Services - Made public for EventHandler and GlobalBridge
@@ -60,9 +61,9 @@ export class Core {
     public readonly moduleSettings: ModuleSettingsService;
     public readonly particles: Particles;
     public readonly monitoringService: MonitoringService;
-    public readonly monitoringUI: MonitoringUI;
+    public readonly monitoringUI: DeferredUiController;
     public readonly consoleLogService: ConsoleLogService;
-    public readonly consoleUI: ConsoleUI;
+    public readonly consoleUI: DeferredUiController;
     public readonly settingsService: SettingsService;
     public readonly chatController: ChatController;
     public readonly modulePlatformService: ModulePlatformService;
@@ -78,8 +79,8 @@ export class Core {
     public readonly navigationUI: NavigationUI;
     public readonly sidebarUI: SidebarUI;
     public readonly downloadUI: DownloadUI;
-    public readonly settingsUI: SettingsUI;
-    public readonly moduleSettingsUI: ModuleSettingsUI;
+    public readonly settingsUI: ClosableDeferredUiController;
+    public readonly moduleSettingsUI: ModuleSettingsUiController;
     public readonly eventBus: EventBus;
 
     private readonly _bridge: GlobalBridge;

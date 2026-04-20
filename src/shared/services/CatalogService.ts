@@ -83,12 +83,7 @@ export class CatalogService {
      */
     private async _loadConfig(): Promise<AppConfig> {
         try {
-            if (this._bridge.isTauri()) {
-                return await this._bridge.invoke<AppConfig>('get_config');
-            } else {
-                const res = await fetch('/api/config');
-                return res.ok ? ((await res.json()) as AppConfig) : FALLBACK_CONFIG;
-            }
+            return await this._bridge.invoke<AppConfig>('get_config');
         } catch (e) {
             this._tracer.warn(
                 `[CatalogService] Backend config failed, using fallback: ${String(e)}`,
@@ -116,14 +111,9 @@ export class CatalogService {
      */
     private async _loadInstalledModules(): Promise<IModule[]> {
         try {
-            if (this._bridge.isTauri()) {
-                const modules = await this._bridge.invoke<IModule[]>('get_modules');
-                this._tracer.info(`[CatalogService] Fetched ${String(modules.length)} modules.`);
-                return modules;
-            } else {
-                const res = await fetch('/api/modules');
-                return res.ok ? ((await res.json()) as IModule[]) : [];
-            }
+            const modules = await this._bridge.invoke<IModule[]>('get_modules');
+            this._tracer.info(`[CatalogService] Fetched ${String(modules.length)} modules.`);
+            return modules;
         } catch (e) {
             this._tracer.warn(`[CatalogService] Module list failed: ${String(e)}`);
             return [];

@@ -32,16 +32,16 @@ path = "src/main.rs"
 
 # --- Tauri Ecosystem (UI & Runtime) ---
 [dependencies.tauri]
-version  = "2.10.3"
-features = ["image-ico", "image-png", "tray-icon"]
+version  = "~2.10"
+features = ["image-ico", "image-png", "protocol-asset", "tray-icon"]
 
 [dependencies]
-tauri-plugin-shell             = "2.3.5"
-tauri-plugin-dialog            = "2.7.0"
-tauri-plugin-fs                = "2.5.0"
-tauri-plugin-single-instance   = "2.4.1"
-tauri-plugin-global-shortcut   = "2.3.1"
-tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-shell             = "~2.3"
+tauri-plugin-dialog            = "~2.7"
+tauri-plugin-fs                = "~2.5"
+tauri-plugin-single-instance   = "~2.4"
+tauri-plugin-global-shortcut   = "~2.3"
+tauri-plugin-clipboard-manager = "~2.3"
 
 # --- Frontend Bridge (Types & Serialization) ---
 specta           = { version = "2.0.0-rc.24", features = ["derive", "serde_json"] }
@@ -51,11 +51,9 @@ serde            = { version = "1.0.228",     features = ["derive"] }
 serde_json       = "1.0.149"
 toml             = "1.1"
 
-# --- Async Core & Networking (The Server) ---
+# --- Async Core & Networking ---
 tokio        = { version = "1.52.1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
 reqwest      = { version = "0.13.2", features = ["json", "stream", "native-tls", "gzip"], default-features = false }
-axum         = { version = "0.8.9",  features = ["macros", "ws"] }
-tower-http   = { version = "0.6.8",  features = ["fs", "cors", "trace"] }
 futures-util = "0.3.32"
 scraper      = "0.26.0"
 
@@ -115,7 +113,7 @@ windows = { version = "0.62.2", features = [
 
 # --- Build Time ---
 [build-dependencies]
-tauri-build = { version = "2.5.6", features = [] }
+tauri-build = { version = "~2.5", features = [] }
 
 # ==============================================================================
 #  OPTIMIZATION PROFILES (The 0.7 MB Magic)

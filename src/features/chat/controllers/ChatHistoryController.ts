@@ -1,5 +1,4 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import type { ChatContent } from '@/features/ai/types/aiTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage } from '../types/chatTypes';
 
@@ -14,16 +13,7 @@ type ChatHistoryControllerOptions = {
     aiBridge: AIBridge;
     getHistory: () => IChatMessage[];
     setHistory: (history: IChatMessage[]) => void;
-    appendHistoryMessage: (
-        role: 'user' | 'assistant',
-        text: string,
-        options: Record<string, unknown>,
-    ) => void;
     revealLatestMessage: () => void;
-    extractRenderableText: (content: ChatContent) => string;
-    buildHistoryRenderOptions: (content: ChatContent) => {
-        images?: Array<{ mime: string; data_base64: string }>;
-    };
     restoreInputText: (text: string) => void;
     renderHistory: (history: IChatMessage[]) => void;
     showEditError: () => void;
@@ -37,6 +27,7 @@ export class ChatHistoryController {
     private static readonly _chatRevealFollowUpDelayMs = 120;
 
     private _historyLoaded = false;
+    private _loadedSessionId: string | null = null;
     private _historyLoadInFlight: Promise<void> | null = null;
     private _historyRetryTimeout: ReturnType<typeof setTimeout> | null = null;
     private _revealLatestMessageTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -58,13 +49,14 @@ export class ChatHistoryController {
     }
 
     public async ensureHistoryLoaded(): Promise<void> {
-        if (this._historyLoaded) return;
+        const sessionId = this._options.aiBridge.getSessionId();
+        if (this._historyLoaded && this._loadedSessionId === sessionId) return;
         if (this._historyLoadInFlight !== null) {
             await this._historyLoadInFlight;
             return;
         }
 
-        if (this._options.aiBridge.getSessionId() === 'default') {
+        if (sessionId === 'default') {
             this._historyRetryTimeout ??= globalThis.setTimeout(() => {
                 this._historyRetryTimeout = null;
                 void this.ensureHistoryLoaded();
@@ -122,39 +114,33 @@ export class ChatHistoryController {
 
     public async loadHistory(): Promise<void> {
         try {
+            const sessionId = this._options.aiBridge.getSessionId();
             const history = await this._options.aiBridge.getHistory();
             this._historyLoaded = true;
-            if (Array.isArray(history) && history.length > 0) {
+            this._loadedSessionId = sessionId;
+
+            const nextHistory = Array.isArray(history)
+                ? history
+                      .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+                      .map((msg) => {
+                          const historyMessage: IChatMessage = {
+                              role: msg.role as 'user' | 'assistant',
+                              content: msg.content,
+                          };
+                          if (msg.thought_signature !== undefined) {
+                              historyMessage.thought_signature = msg.thought_signature;
+                          }
+                          return historyMessage;
+                      })
+                : [];
+
+            this._options.setHistory(nextHistory);
+            this._options.renderHistory(nextHistory);
+
+            if (nextHistory.length > 0) {
                 this._options.tracer.info(
-                    `[ChatController] Restoring ${String(history.length)} messages from persistence`,
+                    `[ChatController] Restoring ${String(nextHistory.length)} messages from persistence`,
                 );
-
-                const nextHistory = history
-                    .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-                    .map((msg) => {
-                        const historyMessage: IChatMessage = {
-                            role: msg.role as 'user' | 'assistant',
-                            content: msg.content,
-                        };
-                        if (msg.thought_signature !== undefined) {
-                            historyMessage.thought_signature = msg.thought_signature;
-                        }
-                        return historyMessage;
-                    });
-
-                this._options.setHistory(nextHistory);
-
-                nextHistory.forEach((msg) => {
-                    this._options.appendHistoryMessage(
-                        msg.role,
-                        this._options.extractRenderableText(msg.content),
-                        {
-                            tokens: 0,
-                            skipAnimation: true,
-                            ...this._options.buildHistoryRenderOptions(msg.content),
-                        },
-                    );
-                });
             }
 
             if (this.consumePendingChatReveal()) {

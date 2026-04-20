@@ -5,23 +5,22 @@
 
 import type { AppUI } from '@/shared/shell/AppUI';
 import type { ChatController } from '@/features/chat/chat';
-import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
-import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { WindowService } from '@/shared/services/WindowService';
 import type { WindowUI } from '@/shared/shell/WindowUI';
+import type { DeferredUiController, ModuleSettingsUiController } from './CoreUiContracts';
 
 export interface ICoreEvents {
     readonly appUI: AppUI;
     readonly chatController: ChatController;
-    readonly consoleUI: ConsoleUI;
+    readonly consoleUI: DeferredUiController;
     readonly downloadUI: DownloadUI;
     readonly i18nUI: I18nUI;
     readonly navigationUI: NavigationUI;
-    readonly moduleSettingsUI: ModuleSettingsUI;
+    readonly moduleSettingsUI: ModuleSettingsUiController;
     readonly tracer: LoggerService;
     readonly windowService: WindowService;
     readonly windowUI: WindowUI;

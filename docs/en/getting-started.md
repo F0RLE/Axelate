@@ -136,7 +136,7 @@ This repository should use `src/node_modules`. A second root `node_modules` tree
 
 - [Architecture](architecture.md)
 - [Automation](AUTOMATION.md)
-- [Project Tree](ProjectTree.md)
+- [Project Tree](reference/project-tree/ProjectTree.md)
 - [Coding Standards](CODING_STANDARDS.md)
 - [Security Hardening](SECURITY_HARDENING.md)
 - [Roadmap](ROADMAP.md)

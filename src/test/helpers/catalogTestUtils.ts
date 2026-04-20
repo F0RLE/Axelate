@@ -30,22 +30,6 @@ export function setupBridgeMocks(
     });
 }
 
-export function setupFetchMock(webConfig: AppConfig, moduleOk: boolean, moduleJson: unknown[]) {
-    return vi.fn().mockImplementation((url: string) => {
-        if (url === '/api/config') {
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve(webConfig),
-            });
-        }
-
-        return Promise.resolve({
-            ok: moduleOk,
-            json: () => Promise.resolve(moduleJson),
-        });
-    }) as unknown as typeof fetch;
-}
-
 export type MockCatalogBridge = {
     isTauri: ReturnType<typeof vi.fn>;
     invoke: ReturnType<typeof vi.fn>;

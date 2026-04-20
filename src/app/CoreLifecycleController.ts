@@ -13,10 +13,6 @@ import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { ModuleService } from '@/shared/services/ModuleService';
 import type { SidebarUI } from '@/shared/shell/SidebarUI';
 import type { SettingsService } from '@/features/settings/services/SettingsService';
-import type { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
-import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
-import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
-import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { AppUI } from '@/shared/shell/AppUI';
@@ -41,6 +37,11 @@ import {
     waitForNextPaintCycle,
 } from './CoreRuntimeSupport';
 import { destroyCoreResources } from './CoreComposition';
+import type {
+    ClosableDeferredUiController,
+    DeferredUiController,
+    ModuleSettingsUiController,
+} from './CoreUiContracts';
 
 type CoreLifecycleState = {
     isDestroyed: () => boolean;
@@ -62,10 +63,10 @@ type CoreLifecycleDeps = {
     moduleService: ModuleService;
     sidebarUI: SidebarUI;
     settingsService: SettingsService;
-    monitoringUI: MonitoringUI;
-    settingsUI: SettingsUI;
-    moduleSettingsUI: ModuleSettingsUI;
-    consoleUI: ConsoleUI;
+    monitoringUI: DeferredUiController;
+    settingsUI: ClosableDeferredUiController;
+    moduleSettingsUI: ModuleSettingsUiController;
+    consoleUI: DeferredUiController;
     moduleSettings: ModuleSettingsService;
     aiSettings: AISettingsService;
     appUI: AppUI;
@@ -122,7 +123,8 @@ export class CoreLifecycleController {
                 navigationUI: this._deps.navigationUI,
             });
             await this._deps.windowService.show();
-            initializeImmediateUi({
+            await initializeImmediateUi({
+                navigation: this._deps.navigation,
                 navigationUI: this._deps.navigationUI,
                 downloadUI: this._deps.downloadUI,
                 moduleService: this._deps.moduleService,

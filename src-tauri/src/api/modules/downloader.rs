@@ -44,6 +44,18 @@ pub fn get_module_path(module_id: &str) -> Result<String, AppError> {
 
 #[tauri::command]
 #[specta::specta]
+/// Resolves the module-owned settings UI entry file path for asset loading.
+pub async fn get_module_settings_ui_entry_path(module_id: String) -> Result<String, AppError> {
+    Ok(
+        crate::domain::modules::settings_ui::resolve_module_settings_ui_entry_path(&module_id)
+            .await?
+            .to_string_lossy()
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+#[specta::specta]
 /// Deletes a module from local storage
 pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
     downloader::delete_module(module_id).await

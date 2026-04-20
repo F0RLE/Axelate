@@ -70,8 +70,8 @@ mod app_tests {
 
         let path_str = APPDATA_ROOT.to_string_lossy().replace('\\', "/");
         assert!(
-            path_str.ends_with("test_appdata_roaming"),
-            "APPDATA_ROOT should use the test roaming root, got {path_str}"
+            path_str.contains("/axelate-tests/") && path_str.ends_with("/roaming"),
+            "APPDATA_ROOT should use a temp test roaming root, got {path_str}"
         );
     }
 

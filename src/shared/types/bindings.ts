@@ -41,6 +41,8 @@ export const commands = {
 	checkModuleInstalled: (moduleId: string) => typedError<boolean, AppError>(__TAURI_INVOKE("check_module_installed", { moduleId })),
 	// Retrieves the filesystem path to a module's directory
 	getModulePath: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_path", { moduleId })),
+	// Resolves the module-owned settings UI entry file path for asset loading.
+	getModuleSettingsUiEntryPath: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_settings_ui_entry_path", { moduleId })),
 	// Deletes a module from local storage
 	deleteModule: (moduleId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_module", { moduleId })),
 	// Lists all files in a module's directory
@@ -55,8 +57,6 @@ export const commands = {
 	getGpuInfo: () => typedError<GpuInfo, AppError>(__TAURI_INVOKE("get_gpu_info")),
 	// Pauses or resumes system monitoring
 	setMonitoringPaused: (paused: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_monitoring_paused", { paused })),
-	// Returns the current local HTTP server base URL.
-	getLocalServerBaseUrl: () => typedError<string, AppError>(__TAURI_INVOKE("get_local_server_base_url")),
 	// Retrieves list of all available modules (AI and services)
 	getModules: () => typedError<Module[], AppError>(__TAURI_INVOKE("get_modules")),
 	// Controls a module (start, stop, restart)
@@ -335,8 +335,6 @@ export type BootstrapData = {
 	windowConfig: WindowConfig,
 	// Detected system language
 	systemLanguage: string,
-	// All available modules
-	modules: Module[],
 	// Effective zoom for the current monitor resolution
 	initialZoom: number,
 };

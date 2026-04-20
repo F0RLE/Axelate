@@ -27,10 +27,6 @@ import type { WindowUI } from '@/shared/shell/WindowUI';
 import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
 import type { SidebarUI } from '@/shared/shell/SidebarUI';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
-import type { SettingsUI } from '@/features/settings/ui/SettingsUI';
-import type { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
-import type { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
-import type { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import type { Particles } from '@/shared/shell/Particles';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { TemplateLoader } from '@/shared/services/TemplateLoader';
@@ -38,6 +34,11 @@ import type { EventBus } from '@/shared/services/EventBus';
 import type { ErrorHandler } from '@/shared/services/ErrorHandler';
 import type { StateManager } from '@/shared/services/StateManager';
 import type { IApp } from '@/shared/types/coreTypes';
+import type {
+    ClosableDeferredUiController,
+    DeferredUiController,
+    ModuleSettingsUiController,
+} from './CoreUiContracts';
 
 export interface CoreServices {
     core: Core;
@@ -68,10 +69,10 @@ export interface CoreUI {
     navigationUI: NavigationUI;
     sidebarUI: SidebarUI;
     downloadUI: DownloadUI;
-    settingsUI: SettingsUI;
-    moduleSettingsUI: ModuleSettingsUI;
-    monitoringUI: MonitoringUI;
-    consoleUI: ConsoleUI;
+    settingsUI: ClosableDeferredUiController;
+    moduleSettingsUI: ModuleSettingsUiController;
+    monitoringUI: DeferredUiController;
+    consoleUI: DeferredUiController;
     particles: Particles;
 }
 

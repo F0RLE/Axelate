@@ -49,11 +49,3 @@ pub fn set_monitoring_paused(
     monitor.set_paused(paused);
     Ok(())
 }
-
-#[tauri::command]
-#[specta::specta]
-/// Returns the current local HTTP server base URL.
-pub fn get_local_server_base_url() -> Result<String, AppError> {
-    crate::infrastructure::http::server::get_local_server_base_url()
-        .ok_or_else(|| AppError::NotFound("Local HTTP server is not ready yet".to_string()))
-}

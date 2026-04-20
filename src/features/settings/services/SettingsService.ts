@@ -74,8 +74,10 @@ export class SettingsService {
         await this._tauri.invoke('save_module_settings', { moduleId, settings });
     }
 
-    public async getLocalServerBaseUrl(): Promise<string> {
-        return await this._tauri.invoke<string>('get_local_server_base_url');
+    public async getModuleSettingsUiEntryPath(moduleId: string): Promise<string> {
+        return await this._tauri.invoke<string>('get_module_settings_ui_entry_path', {
+            moduleId,
+        });
     }
 
     public async updateSettings(updates: Partial<ISettings>): Promise<void> {

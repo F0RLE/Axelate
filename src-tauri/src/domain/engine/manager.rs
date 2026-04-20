@@ -228,7 +228,7 @@ impl EngineManager {
                 ))
             })?;
 
-        let selected_port = find_available_local_port(definition.default_port)?;
+        let selected_port = find_available_local_port(definition.default_port, &config.engine_id)?;
         if selected_port != definition.default_port {
             info!(
                 engine = %config.engine_id,
@@ -415,6 +415,7 @@ mod tests {
 
     use super::*;
     use crate::domain::engine::engine_runtime::classify_engine_start_failure;
+    use crate::domain::system::ports::ENGINE_LOCAL_PORT_RANGE;
     use std::fs;
     use std::net::TcpListener;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -473,25 +474,26 @@ mod tests {
 
     #[test]
     fn picks_preferred_port_when_it_is_free() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let port = listener.local_addr().unwrap().port();
+        let port = 8085;
+        let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
         drop(listener);
 
-        let selected = find_available_local_port(port).unwrap();
+        let selected = find_available_local_port(port, "llamacpp").unwrap();
 
-        assert!(selected >= port);
-        assert!(selected < port.saturating_add(32));
+        assert_eq!(selected, port);
+        assert!(ENGINE_LOCAL_PORT_RANGE.contains(&selected));
     }
 
     #[test]
     fn skips_busy_port_and_uses_next_free_one() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let busy_port = listener.local_addr().unwrap().port();
+        let busy_port = 8086;
+        let _listener = TcpListener::bind(("127.0.0.1", busy_port)).unwrap();
 
-        let selected = find_available_local_port(busy_port).unwrap();
+        let selected = find_available_local_port(busy_port, "llamacpp").unwrap();
 
         assert_ne!(selected, busy_port);
         assert!(selected > busy_port);
+        assert!(ENGINE_LOCAL_PORT_RANGE.contains(&selected));
     }
 
     #[test]

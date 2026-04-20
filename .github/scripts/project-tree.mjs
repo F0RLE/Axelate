@@ -5,7 +5,14 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const repoRoot = process.cwd();
-const defaultOutput = path.join(repoRoot, 'docs', 'en', 'ProjectTree.generated.md');
+const defaultOutput = path.join(
+    repoRoot,
+    'docs',
+    'en',
+    'reference',
+    'project-tree',
+    'ProjectTree.generated.md',
+);
 const outputPath = path.resolve(repoRoot, process.argv[2] ?? defaultOutput);
 
 function getTrackedFiles() {

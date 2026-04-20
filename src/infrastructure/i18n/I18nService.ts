@@ -35,27 +35,16 @@ export class I18nService {
     }
 
     /**
-     * Detects the system language from backend or browser API.
+     * Detects the system language from the bridge backend.
      */
     public async getSystemLanguage(): Promise<string> {
         try {
-            const backendLang = await this._getBackendLanguage();
+            const backendLang = await this._getTauriLanguage();
             if (backendLang !== null && backendLang !== '') return backendLang;
         } catch (e) {
             this._tracer.warn('[I18n] Failed to get backend language', e);
         }
         return 'en';
-    }
-
-    /**
-     * Fetches language from the backend (Tauri or Mock API).
-     */
-    private async _getBackendLanguage(): Promise<string | null> {
-        if (this._bridge.isTauri()) {
-            return await this._getTauriLanguage();
-        } else {
-            return await this._getBrowserApiLanguage();
-        }
     }
 
     /**
@@ -74,23 +63,6 @@ export class I18nService {
             if (res !== undefined && res !== 'unknown') return res;
         } catch {
             this._tracer.warn('[I18n] Native system language check failed or timed out');
-        }
-        return null;
-    }
-
-    /**
-     * Fetches language from browser-based mock API.
-     */
-    private async _getBrowserApiLanguage(): Promise<string | null> {
-        try {
-            const res = await fetch('/api/system/language');
-            if (res.ok) {
-                const data = (await res.json()) as { language?: string };
-                if (data.language !== undefined && data.language !== 'unknown')
-                    return data.language;
-            }
-        } catch {
-            /* ignore */
         }
         return null;
     }
@@ -133,25 +105,18 @@ export class I18nService {
     }
 
     /**
-     * Fetches translation JSON from host or mock API.
+     * Fetches translation JSON from the bridge backend.
      */
     private async _fetchTranslations(lang: string): Promise<Record<string, string>> {
         const timeoutMs = 2000;
         const failMsg = `Timeout loading translations for ${lang}`;
-
-        if (this._bridge.isTauri()) {
-            const p = this._bridge.invoke<Record<string, string>>('get_translations', { lang });
-            const t = new Promise<Record<string, string>>((_, r) =>
-                setTimeout(() => {
-                    r(new Error(failMsg));
-                }, timeoutMs),
-            );
-            return await Promise.race([p, t]);
-        } else {
-            const res = await fetch(`/api/translations?lang=${lang}`);
-            if (!res.ok) throw new Error(res.statusText);
-            return (await res.json()) as Record<string, string>;
-        }
+        const p = this._bridge.invoke<Record<string, string>>('get_translations', { lang });
+        const t = new Promise<Record<string, string>>((_, r) =>
+            setTimeout(() => {
+                r(new Error(failMsg));
+            }, timeoutMs),
+        );
+        return await Promise.race([p, t]);
     }
 
     /**
@@ -159,21 +124,13 @@ export class I18nService {
      */
     private async _syncToBackend(lang: string) {
         try {
-            if (this._bridge.isTauri()) {
-                const uiState = await this._bridge.invoke<Record<string, unknown>>('get_ui_state');
-                await this._bridge.invoke('save_ui_state', {
-                    state: {
-                        ...uiState,
-                        preferred_language: lang.toLowerCase(),
-                    },
-                });
-            } else {
-                await fetch('/api/settings/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ key: 'LANGUAGE', value: lang }),
-                });
-            }
+            const uiState = await this._bridge.invoke<Record<string, unknown>>('get_ui_state');
+            await this._bridge.invoke('save_ui_state', {
+                state: {
+                    ...uiState,
+                    preferred_language: lang.toLowerCase(),
+                },
+            });
         } catch (e) {
             this._tracer.warn('[I18n] Sync to settings failed', e);
         }

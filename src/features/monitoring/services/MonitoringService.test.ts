@@ -108,20 +108,14 @@ describe('MonitoringService', () => {
     it('should start fallback polling when not in Tauri', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
-
-        // Mock global fetch
-        const mockFetch = vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => await Promise.resolve(mockStats),
-        });
-        globalThis.fetch = mockFetch;
+        vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
         await service.startMonitoring();
 
         // Fast-forward time to trigger interval
-        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(2100);
 
-        expect(mockFetch).toHaveBeenCalledWith('/api/monitoring/stats');
+        expect(mockTauri.invoke).toHaveBeenCalledWith('get_system_stats');
 
         vi.useRealTimers();
     });
@@ -129,12 +123,12 @@ describe('MonitoringService', () => {
     it('should stop polling on stopMonitoring', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
-        const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+        const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
 
         await service.startMonitoring();
         service.stopMonitoring();
 
-        expect(clearIntervalSpy).toHaveBeenCalled();
+        expect(clearTimeoutSpy).toHaveBeenCalled();
         vi.useRealTimers();
     });
 
@@ -153,32 +147,12 @@ describe('MonitoringService', () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(true);
         vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
         vi.useFakeTimers();
-
-        const mockFetch = vi.fn().mockResolvedValue({
-            ok: true,
-            json: (): Promise<unknown> => Promise.resolve(mockStats),
-        });
-        globalThis.fetch = mockFetch;
+        vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
         await service.startMonitoring();
-        await vi.advanceTimersByTimeAsync(1100);
-        expect(mockFetch).toHaveBeenCalledWith('/api/monitoring/stats');
+        await vi.advanceTimersByTimeAsync(2100);
+        expect(mockTauri.invoke).toHaveBeenCalledWith('get_system_stats');
         vi.useRealTimers();
-    });
-
-    it('should bind visibilitychange handler and invoke pause', async () => {
-        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
-        await service.startMonitoring();
-
-        // Simulate visibility change
-        Object.defineProperty(document, 'hidden', {
-            value: true,
-            writable: true,
-            configurable: true,
-        });
-        document.dispatchEvent(new Event('visibilitychange'));
-
-        expect(mockTauri.invoke).toHaveBeenCalledWith('set_monitoring_paused', { paused: true });
     });
 
     it('should catch notifyListeners error without crashing', async () => {
@@ -210,89 +184,34 @@ describe('MonitoringService', () => {
         expect((service as unknown as { listeners: unknown[] }).listeners).toHaveLength(1);
     });
 
-    it('should handle fetch error in fallback polling', async () => {
+    it('should handle invoke error in fallback polling', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
 
-        globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+        vi.mocked(mockTauri.invoke).mockRejectedValue(new Error('Network error'));
 
         await service.startMonitoring();
         // Should not throw
-        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(2100);
         vi.useRealTimers();
     });
 
-    it('should handle visibilitychange without Tauri (L60-64)', async () => {
+    it('should not invoke monitoring pause commands in non-Tauri mode', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
-
-        globalThis.fetch = vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => await Promise.resolve(mockStats),
-        });
+        vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
         await service.startMonitoring();
-
-        // Simulate visibility change in non-Tauri mode
-        Object.defineProperty(document, 'hidden', {
-            value: true,
-            writable: true,
-            configurable: true,
-        });
-        document.dispatchEvent(new Event('visibilitychange'));
-
-        // Should not invoke Tauri commands
-        expect(mockTauri.invoke).not.toHaveBeenCalledWith(
-            'set_monitoring_paused',
-            expect.any(Object),
-        );
+        await vi.advanceTimersByTimeAsync(2100);
+        expect(mockTauri.invoke).toHaveBeenCalledWith('get_system_stats');
 
         vi.useRealTimers();
-    });
-
-    it('should handle visibilitychange in Tauri mode (L60-64)', async () => {
-        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
-        vi.mocked(mockTauri.listen).mockResolvedValue(() => {});
-
-        await service.startMonitoring();
-
-        // Tauri isTauri returns true — visibility handler invokes set_monitoring_paused
-        Object.defineProperty(document, 'hidden', {
-            value: true,
-            writable: true,
-            configurable: true,
-        });
-        document.dispatchEvent(new Event('visibilitychange'));
-
-        expect(mockTauri.invoke).toHaveBeenCalledWith('set_monitoring_paused', { paused: true });
-    });
-
-    it('should skip invoke when isTauri returns false in visibilitychange callback (L61 false)', async () => {
-        // Register handler with isTauri=true
-        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
-        vi.mocked(mockTauri.listen).mockResolvedValue(() => {});
-        await service.startMonitoring();
-
-        // Switch mock to false — now the callback's `if (isTauri())` evaluates to false
-        vi.mocked(mockTauri.invoke).mockClear();
-        vi.mocked(mockTauri.isTauri).mockReturnValue(false);
-
-        document.dispatchEvent(new Event('visibilitychange'));
-
-        expect(mockTauri.invoke).not.toHaveBeenCalledWith(
-            'set_monitoring_paused',
-            expect.anything(),
-        );
     });
 
     it('should clear pollingInterval via stopMonitoring (L82)', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
-
-        globalThis.fetch = vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => await Promise.resolve(mockStats),
-        });
+        vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
         await service.startMonitoring();
         // Now there's a pollingInterval
@@ -304,11 +223,7 @@ describe('MonitoringService', () => {
     it('should not start fallback twice if already polling (L118)', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
-
-        globalThis.fetch = vi.fn().mockResolvedValue({
-            ok: true,
-            json: async () => await Promise.resolve(mockStats),
-        });
+        vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
         await service.startMonitoring();
         // Calling again should guard against double start
@@ -317,17 +232,17 @@ describe('MonitoringService', () => {
         vi.useRealTimers();
     });
 
-    it('should handle non-ok fetch response in fallback (L118-125)', async () => {
+    it('should handle failed invoke response in fallback (L118-125)', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
 
-        globalThis.fetch = vi.fn().mockResolvedValue({ ok: false });
+        vi.mocked(mockTauri.invoke).mockRejectedValue(new Error('Backend unavailable'));
 
         const subscriber = vi.fn();
         service.subscribe(subscriber);
 
         await service.startMonitoring();
-        await vi.advanceTimersByTimeAsync(1100);
+        await vi.advanceTimersByTimeAsync(2100);
 
         // Subscriber should not have been called with stats
         expect(subscriber).not.toHaveBeenCalled();

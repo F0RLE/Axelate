@@ -67,13 +67,12 @@ use app::{
 use domain::ai::custom_model_service;
 use domain::ai::{ChatSessionManager, ImageGenerationState};
 use domain::engine::manager::EngineManager;
-use domain::monitoring::system_monitor::SystemMonitorService;
+use domain::monitoring::system_monitor::{DEFAULT_MONITORING_INTERVAL_MS, SystemMonitorService};
 use infrastructure::{
     config::{
         settings::SettingsService, ui_state::UiStateService, window_settings::WindowSettingsService,
     },
     filesystem::{file_service, local_file_service::LocalFileService},
-    http::server,
     logging::logger,
     persistence::json_store::JsonStore,
 };
@@ -107,6 +106,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         downloader::download_module,
         downloader::check_module_installed,
         downloader::get_module_path,
+        downloader::get_module_settings_ui_entry_path,
         downloader::delete_module,
         downloader::list_module_files,
         downloader::set_download_settings,
@@ -114,7 +114,6 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         system::get_system_stats,
         system::get_gpu_info,
         system::set_monitoring_paused,
-        system::get_local_server_base_url,
         modules::get_modules,
         modules::control_module,
         modules::get_module_status,
@@ -237,7 +236,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
 
     app.manage(file_service);
     app.manage(json_store);
-    app.manage(settings_service.clone());
+    app.manage(settings_service);
     app.manage(ui_state_service);
     app.manage(window_settings_service);
     app.manage(config_service);
@@ -279,12 +278,11 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
             app.handle().clone(),
         ),
     );
-    monitor_service.start_monitoring(monitor_emitter, 2000);
+    monitor_service.start_monitoring(monitor_emitter, DEFAULT_MONITORING_INTERVAL_MS);
 
     #[cfg(desktop)]
     setup_global_shortcut(app)?;
 
-    server::start_server(app.handle(), settings_service);
     setup_system_tray(app)?;
 
     tracing::info!("Axelate is ready");

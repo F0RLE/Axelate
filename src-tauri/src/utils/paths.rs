@@ -13,10 +13,39 @@ fn append_appdata_dir(root: &Path) -> PathBuf {
     root.join(APPDATA_DIR_NAME)
 }
 
+#[cfg(test)]
+const TEST_APPDATA_ROOT_DIR_NAME: &str = "axelate-tests";
+
+#[cfg(test)]
+fn cleanup_legacy_test_roots() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for legacy_root in [
+        manifest_dir.join("test_appdata_roaming"),
+        manifest_dir.join("test_appdata_local"),
+    ] {
+        if !legacy_root.exists() {
+            continue;
+        }
+
+        let _ = fs::remove_dir_all(legacy_root);
+    }
+}
+
+#[cfg(test)]
+fn resolve_test_root(kind: &str) -> PathBuf {
+    static CLEANUP_LEGACY_TEST_ROOTS: LazyLock<()> = LazyLock::new(cleanup_legacy_test_roots);
+    LazyLock::force(&CLEANUP_LEGACY_TEST_ROOTS);
+
+    std::env::temp_dir()
+        .join(TEST_APPDATA_ROOT_DIR_NAME)
+        .join(std::process::id().to_string())
+        .join(kind)
+}
+
 fn resolve_config_root() -> PathBuf {
     #[cfg(test)]
     {
-        PathBuf::from("./test_appdata_roaming")
+        resolve_test_root("roaming")
     }
 
     #[cfg(not(test))]
@@ -45,7 +74,7 @@ fn resolve_config_root() -> PathBuf {
 fn resolve_windows_local_data_root() -> PathBuf {
     #[cfg(test)]
     {
-        PathBuf::from("./test_appdata_local")
+        resolve_test_root("local")
     }
 
     #[cfg(not(test))]
@@ -76,11 +105,21 @@ fn production_resource_dir_candidates() -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
+fn manifest_dir() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+}
+
 fn development_resource_dir_candidates() -> [PathBuf; 3] {
     [
-        PathBuf::from("src-tauri").join(RESOURCES_DIR_NAME),
-        PathBuf::from(RESOURCES_DIR_NAME),
-        PathBuf::from("../src-tauri").join(RESOURCES_DIR_NAME),
+        manifest_dir().join(RESOURCES_DIR_NAME),
+        manifest_dir().parent().map_or_else(
+            || manifest_dir().join(RESOURCES_DIR_NAME),
+            |parent| parent.join(RESOURCES_DIR_NAME),
+        ),
+        manifest_dir().parent().and_then(Path::parent).map_or_else(
+            || manifest_dir().join(RESOURCES_DIR_NAME),
+            |parent| parent.join("src-tauri").join(RESOURCES_DIR_NAME),
+        ),
     ]
 }
 
@@ -97,7 +136,7 @@ fn resolve_resources_dir() -> PathBuf {
         }
     }
 
-    PathBuf::from("src-tauri").join(RESOURCES_DIR_NAME)
+    manifest_dir().join(RESOURCES_DIR_NAME)
 }
 
 /// User/profile data root.
@@ -349,4 +388,35 @@ fn cleanup_old_logs() -> Result<(), AppError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::{RESOURCES_DIR_NAME, development_resource_dir_candidates, manifest_dir};
+
+    #[test]
+    fn development_resource_dir_candidates_are_manifest_relative() {
+        let manifest = manifest_dir();
+        let candidates = development_resource_dir_candidates();
+
+        assert_eq!(candidates[0], manifest.join(RESOURCES_DIR_NAME));
+        assert_eq!(
+            candidates[1],
+            manifest
+                .parent()
+                .expect("manifest dir should have a parent")
+                .join(RESOURCES_DIR_NAME)
+        );
+        assert_eq!(
+            candidates[2],
+            manifest
+                .parent()
+                .and_then(std::path::Path::parent)
+                .expect("workspace root should have a parent")
+                .join("src-tauri")
+                .join(RESOURCES_DIR_NAME)
+        );
+    }
 }

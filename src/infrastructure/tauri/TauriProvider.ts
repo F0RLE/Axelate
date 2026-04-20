@@ -250,8 +250,9 @@ export class TauriProvider implements IBridge {
                 use_gpu: true,
                 debug_mode: false,
             } as Bindings.AppSettings,
+            get_ui_state: {},
             get_module_settings: {},
-            get_local_server_base_url: 'http://127.0.0.1:3000',
+            get_module_settings_ui_entry_path: '/mock/module/settings-ui/index.html',
             get_translations: {},
             get_system_language: 'en',
             get_config: {
@@ -260,6 +261,7 @@ export class TauriProvider implements IBridge {
                 apiProviders: [],
             } as Bindings.AppConfig,
             get_modules: [] satisfies Bindings.Module[],
+            get_logs: [],
             get_app_bootstrap_data: null,
             get_system_stats: {
                 cpu: { percent: 0, cores: 0, name: 'Mock CPU' },
@@ -289,6 +291,8 @@ export class TauriProvider implements IBridge {
             validate_api_key: true,
             has_secure_key: false,
             get_secure_key_meta: { exists: false, length: 0 } satisfies SecureKeyMeta,
+            clear_logs: null,
+            save_ui_state: null,
             save_setting: true,
         };
 

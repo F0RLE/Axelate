@@ -11,6 +11,7 @@ type ChatLifecycleHelperDeps = {
     ensureHistoryLoaded: () => void | Promise<void>;
     scheduleRevealLatestMessage: () => void;
     bindEvents: () => void;
+    canBindEventsNow: () => boolean;
     areEventsBound: () => boolean;
     setEventsBound: (value: boolean) => void;
     randomizeGreeting: (forceIndex?: number) => void;
@@ -41,6 +42,11 @@ export class ChatLifecycleHelper {
         }
 
         void this._deps.ensureHistoryLoaded();
+
+        if (!this._deps.areEventsBound() && this._deps.canBindEventsNow()) {
+            this._deps.bindEvents();
+            this._deps.setEventsBound(true);
+        }
 
         this._pageChangeUnsub = this._deps.eventBus.on('page:change', (data) => {
             this._handlePageChange(data);

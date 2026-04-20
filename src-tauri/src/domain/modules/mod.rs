@@ -13,3 +13,5 @@ mod github_release_selection;
 pub mod github_releases;
 /// Module lifecycle management
 pub mod lifecycle;
+/// Custom module settings UI path resolution
+pub mod settings_ui;

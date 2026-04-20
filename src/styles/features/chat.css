@@ -736,14 +736,18 @@
 }
 
 .chat-token-count {
+    position: absolute;
+    inset-inline: 0;
+    bottom: -1.15rem;
     font-size: 0.65rem;
     color: var(--text-muted);
-    padding: 0 12px;
-    margin-bottom: 2px;
+    padding: 0;
+    margin: 0;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
-    text-align: right;
+    text-align: center;
+    z-index: 1;
 }
 
 .chat-token-count.visible {
@@ -751,12 +755,7 @@
 }
 
 #chat-container:not(.has-messages) #chat-token-count {
-    order: 3;
-    width: 100%;
-    padding: 0;
-    margin: 0.12rem 0 0;
     text-align: center;
-    align-self: center;
 }
 
 #chat-container:not(.has-messages) #chat-attachments {
@@ -764,11 +763,10 @@
 }
 
 #chat-container.has-messages #chat-token-count {
-    order: 0;
-    padding: 0 12px;
-    margin-bottom: 2px;
+    left: auto;
+    right: 0.2rem;
+    bottom: calc(100% + 0.2rem);
     text-align: right;
-    align-self: stretch;
 }
 
 #chat-compose {
@@ -1090,6 +1088,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.55rem;
+    position: relative;
+    overflow: visible;
 }
 
 .chat-input-edge {

@@ -1,10 +1,6 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import { ChatController } from '@/features/chat/chat';
-import { ConsoleUI } from '@/features/console/ui/ConsoleUI';
 import { DownloadUI } from '@/features/downloads/ui/DownloadUI';
-import { MonitoringUI } from '@/features/monitoring/ui/MonitoringUI';
-import { ModuleSettingsUI } from '@/features/settings/ui/ModuleSettingsUI';
-import { SettingsUI } from '@/features/settings/ui/SettingsUI';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
 import { AppUI } from '@/shared/shell/AppUI';
@@ -28,6 +24,18 @@ import { WindowUI } from '@/shared/shell/WindowUI';
 import { estimateTokenCount } from '@/features/chat/utils/chatUtils';
 import type { MonitoringService } from '@/features/monitoring/services/MonitoringService';
 import type { SoundService } from '@/shared/services/SoundService';
+import type { ConsoleLogService } from '@/features/console/services/ConsoleLogService';
+import type {
+    ClosableDeferredUiController,
+    DeferredUiController,
+    ModuleSettingsUiController,
+} from './CoreUiContracts';
+import {
+    LazyConsoleUiAdapter,
+    LazyModuleSettingsUiAdapter,
+    LazyMonitoringUiAdapter,
+    LazySettingsUiAdapter,
+} from './LazyUiAdapters';
 
 export type CoreUiBundle = {
     appUI: AppUI;
@@ -36,11 +44,11 @@ export type CoreUiBundle = {
     navigationUI: NavigationUI;
     sidebarUI: SidebarUI;
     downloadUI: DownloadUI;
-    settingsUI: SettingsUI;
-    moduleSettingsUI: ModuleSettingsUI;
+    settingsUI: ClosableDeferredUiController;
+    moduleSettingsUI: ModuleSettingsUiController;
     particles: Particles;
-    monitoringUI: MonitoringUI;
-    consoleUI: ConsoleUI;
+    monitoringUI: DeferredUiController;
+    consoleUI: DeferredUiController;
     chatController: ChatController;
 };
 
@@ -81,7 +89,7 @@ type CreateModuleSettingsUIDeps = CreateSettingsUIDeps & {
 };
 
 type CreateConsoleUIDeps = {
-    consoleLogService: ConstructorParameters<typeof ConsoleUI>[0];
+    consoleLogService: ConsoleLogService;
     eventBus: EventBus;
     i18n: I18nService;
     tauriProvider: TauriProvider;
@@ -125,7 +133,7 @@ type CreateCoreUiBundleDeps = {
     aiSettings: AISettingsService;
     tauriProvider: TauriProvider;
     monitoringService: MonitoringService;
-    consoleLogService: ConstructorParameters<typeof ConsoleUI>[0];
+    consoleLogService: ConsoleLogService;
 };
 
 type ModuleSettingsGateway = {
@@ -154,7 +162,7 @@ function createToastBridge(
 }
 
 function createModuleSettingsGateway(
-    getModuleSettingsUI: () => ModuleSettingsUI | null,
+    getModuleSettingsUI: () => ModuleSettingsUiController | null,
 ): ModuleSettingsGateway {
     return {
         openModuleSettings: async (app) => {
@@ -246,47 +254,46 @@ export function createDownloadUI(
     return downloadUI;
 }
 
-export function createSettingsUI(deps: CreateSettingsUIDeps): SettingsUI {
-    return new SettingsUI(
-        deps.settingsService,
-        deps.uiSettings,
-        deps.aiSettings,
-        deps.i18n,
-        deps.i18nUI,
-        deps.tauriProvider,
-        deps.navigation,
-        {
-            tracer: deps.tracer,
-            showToast: createToastBridge(deps.appUI),
-        },
-    );
+export function createSettingsUI(deps: CreateSettingsUIDeps): ClosableDeferredUiController {
+    return new LazySettingsUiAdapter({
+        settingsService: deps.settingsService,
+        uiSettings: deps.uiSettings,
+        aiSettings: deps.aiSettings,
+        i18n: deps.i18n,
+        i18nUI: deps.i18nUI,
+        tauriProvider: deps.tauriProvider,
+        navigation: deps.navigation,
+        tracer: deps.tracer,
+        showToast: createToastBridge(deps.appUI),
+    });
 }
 
-export function createModuleSettingsUI(deps: CreateModuleSettingsUIDeps): ModuleSettingsUI {
-    return new ModuleSettingsUI(
-        deps.settingsService,
-        deps.uiSettings,
-        deps.aiSettings,
-        deps.i18n,
-        deps.i18nUI,
-        deps.tauriProvider,
-        deps.navigation,
-        {
-            eventBus: deps.eventBus,
-            tracer: deps.tracer,
-            showToast: createToastBridge(deps.appUI),
-            reopenModuleSettings: (app) => {
-                void deps.moduleSettingsUIRef.openModuleSettings(app);
-            },
-            closeAppSelection: () => {
-                deps.appUI.closeAppSelection();
-            },
+export function createModuleSettingsUI(
+    deps: CreateModuleSettingsUIDeps,
+): ModuleSettingsUiController {
+    return new LazyModuleSettingsUiAdapter({
+        settingsService: deps.settingsService,
+        uiSettings: deps.uiSettings,
+        aiSettings: deps.aiSettings,
+        i18n: deps.i18n,
+        i18nUI: deps.i18nUI,
+        tauriProvider: deps.tauriProvider,
+        navigation: deps.navigation,
+        eventBus: deps.eventBus,
+        tracer: deps.tracer,
+        showToast: createToastBridge(deps.appUI),
+        reopenModuleSettings: (app) => {
+            void deps.moduleSettingsUIRef.openModuleSettings(app);
         },
-    );
+        closeAppSelection: () => {
+            deps.appUI.closeAppSelection();
+        },
+    });
 }
 
-export function createConsoleUI(deps: CreateConsoleUIDeps): ConsoleUI {
-    return new ConsoleUI(deps.consoleLogService, {
+export function createConsoleUI(deps: CreateConsoleUIDeps): DeferredUiController {
+    return new LazyConsoleUiAdapter({
+        consoleLogService: deps.consoleLogService,
         eventBus: deps.eventBus,
         translate: deps.i18n.t.bind(deps.i18n),
         showToast: createToastBridge(deps.appUI),
@@ -353,7 +360,7 @@ export function createStateManager(deps: CreateStateManagerDeps): StateManager {
 export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
     const i18nUI = new I18nUI(deps.i18n);
     const particles = new Particles();
-    let moduleSettingsUI: ModuleSettingsUI | null = null;
+    let moduleSettingsUI: ModuleSettingsUiController | null = null;
     const moduleSettingsGateway = createModuleSettingsGateway(() => moduleSettingsUI);
 
     const appUI = createAppUI({
@@ -412,7 +419,7 @@ export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
         eventBus: deps.eventBus,
         moduleSettingsUIRef: moduleSettingsGateway,
     });
-    const monitoringUI = new MonitoringUI(deps.monitoringService);
+    const monitoringUI = new LazyMonitoringUiAdapter(deps.monitoringService);
     const consoleUI = createConsoleUI({
         consoleLogService: deps.consoleLogService,
         eventBus: deps.eventBus,

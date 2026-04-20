@@ -41,6 +41,7 @@ type ChatLifecycleFactoryDeps = {
     ensureHistoryLoaded: () => Promise<void>;
     scheduleRevealLatestMessage: () => void;
     bindEvents: () => void;
+    canBindEventsNow: () => boolean;
     areEventsBound: () => boolean;
     setEventsBound: (value: boolean) => void;
     randomizeGreeting: (forceIndex?: number) => void;
@@ -56,16 +57,7 @@ type ChatHistoryFactoryDeps = {
     aiBridge: AIBridge;
     getHistory: () => IChatMessage[];
     setHistory: (history: IChatMessage[]) => void;
-    appendHistoryMessage: (
-        role: 'user' | 'assistant',
-        text: string,
-        options?: Record<string, unknown>,
-    ) => void;
     revealLatestMessage: () => void;
-    extractRenderableText: (content: ChatContent) => string;
-    buildHistoryRenderOptions: (content: ChatContent) => {
-        images?: Array<{ mime: string; data_base64: string }>;
-    };
     restoreInputText: (text: string) => void;
     renderHistory: (history: IChatMessage[]) => void;
     showEditError: () => void;
@@ -187,6 +179,7 @@ export class ChatControllerFactory {
             bindEvents: () => {
                 deps.bindEvents();
             },
+            canBindEventsNow: () => deps.canBindEventsNow(),
             areEventsBound: () => deps.areEventsBound(),
             setEventsBound: (value) => {
                 deps.setEventsBound(value);
@@ -209,14 +202,9 @@ export class ChatControllerFactory {
             setHistory: (history) => {
                 deps.setHistory(history);
             },
-            appendHistoryMessage: (role, text, options) => {
-                deps.appendHistoryMessage(role, text, options);
-            },
             revealLatestMessage: () => {
                 deps.revealLatestMessage();
             },
-            extractRenderableText: (content) => deps.extractRenderableText(content),
-            buildHistoryRenderOptions: (content) => deps.buildHistoryRenderOptions(content),
             restoreInputText: (text) => {
                 deps.restoreInputText(text);
             },

@@ -4,26 +4,13 @@ import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 type MonitoringLogger = Pick<LoggerService, 'info' | 'debug' | 'error' | 'warn'>;
 
-interface IMonitoringGlobal {
-    __TAURI__?: {
-        event: {
-            listen: (
-                event: string,
-                handler: (e: { payload: unknown }) => void,
-            ) => Promise<() => void>;
-        };
-    };
-    clearInterval: (id: unknown) => void;
-    setInterval: (cb: () => void, ms: number) => ReturnType<typeof setTimeout>;
-}
+const FALLBACK_MONITORING_POLL_INTERVAL_MS = 2000;
 
 export class MonitoringService {
     private isListening = false;
     private unlistenFn: (() => void) | null = null;
-    private pollingInterval: ReturnType<typeof setTimeout> | null = null;
+    private pollingTimeout: ReturnType<typeof setTimeout> | null = null;
     private listeners: StatsCallback[] = [];
-    private readonly _boundVisibilityChange = this._handleVisibilityChange.bind(this);
-    private _visibilityBound = false;
 
     constructor(
         private readonly _tauri: TauriProvider,
@@ -31,7 +18,7 @@ export class MonitoringService {
     ) {}
 
     /**
-     * Starts listening to system stats from Tauri or starts fallback polling.
+     * Starts listening to system stats or falls back to bridge polling.
      */
     public async startMonitoring(): Promise<void> {
         if (this.isListening) return;
@@ -59,32 +46,9 @@ export class MonitoringService {
                 this._tracer.error('[MonitoringService] Failed to listen to events:', e);
                 this.startFallback();
             }
-
-            // Optimization: Pause backend monitoring when window is hidden
-            this._bindVisibilityHandler();
         } else {
-            this._tracer.info(
-                '[MonitoringService] Non-Tauri environment, starting fallback polling',
-            );
+            this._tracer.info('[MonitoringService] Event transport unavailable, starting polling');
             this.startFallback();
-        }
-    }
-
-    /**
-     * Binds visibility change events to pause/resume backend monitoring.
-     */
-    private _bindVisibilityHandler(): void {
-        if (this._visibilityBound) return;
-        document.addEventListener('visibilitychange', this._boundVisibilityChange);
-        this._visibilityBound = true;
-    }
-
-    private _handleVisibilityChange(): void {
-        /* v8 ignore next */
-        if (this._tauri.isTauri()) {
-            const isHidden = document.hidden;
-            void this._tauri.invoke('set_monitoring_paused', { paused: isHidden });
-            this._tracer.debug(`[MonitoringService] Backend paused: ${String(isHidden)}`);
         }
     }
 
@@ -97,13 +61,9 @@ export class MonitoringService {
             this.unlistenFn(); // In Tauri v2 this is usually synchronous disposer
             this.unlistenFn = null;
         }
-        if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
-            this.pollingInterval = null;
-        }
-        if (this._visibilityBound) {
-            document.removeEventListener('visibilitychange', this._boundVisibilityChange);
-            this._visibilityBound = false;
+        if (this.pollingTimeout !== null) {
+            globalThis.clearTimeout(this.pollingTimeout);
+            this.pollingTimeout = null;
         }
     }
 
@@ -135,22 +95,31 @@ export class MonitoringService {
         });
     }
 
-    private startFallback() {
-        const g = globalThis as IMonitoringGlobal;
-        this.pollingInterval = g.setInterval(() => {
-            void (async () => {
-                try {
-                    const res = await fetch('/api/monitoring/stats');
-                    if (res.ok) {
-                        const stats = (await res.json()) as ISystemStats;
-                        this.notifyListeners(stats);
-                        return;
+    private startFallback(): void {
+        if (this.pollingTimeout !== null) {
+            return;
+        }
+
+        const poll = (): void => {
+            this.pollingTimeout = globalThis.setTimeout(() => {
+                void this._pollFallbackStats().finally(() => {
+                    this.pollingTimeout = null;
+                    if (this.isListening) {
+                        poll();
                     }
-                } catch (e) {
-                    this._tracer.warn('[MonitoringService] Poll failed', e);
-                }
-                // Fallback to mock removed for quality assurance
-            })();
-        }, 1000);
+                });
+            }, FALLBACK_MONITORING_POLL_INTERVAL_MS);
+        };
+
+        poll();
+    }
+
+    private async _pollFallbackStats(): Promise<void> {
+        try {
+            const stats = await this._tauri.invoke<ISystemStats>('get_system_stats');
+            this.notifyListeners(stats);
+        } catch (e) {
+            this._tracer.warn('[MonitoringService] Poll failed', e);
+        }
     }
 }
