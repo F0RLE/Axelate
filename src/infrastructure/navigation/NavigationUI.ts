@@ -23,8 +23,7 @@ type SideMouseEventType = 'mousedown' | 'mouseup';
 
 type SideMouseEventRecord = {
     button: number;
-    target: EventTarget | null;
-    timestamp: number;
+    handledAt: number;
     type: SideMouseEventType;
 };
 
@@ -42,6 +41,7 @@ function createDefaultNavigationRuntime(): NavigationRuntime {
 }
 
 export class NavigationUI {
+    private static readonly _SIDE_MOUSE_DEDUP_WINDOW_MS = 250;
     private _lastHandledSideMouseEvent: SideMouseEventRecord | null = null;
     private _mouseDownHandler: ((e: MouseEvent) => void) | null = null;
     private _mouseUpHandler: ((e: MouseEvent) => void) | null = null;
@@ -127,23 +127,21 @@ export class NavigationUI {
     private _isDuplicateSideMouseEvent(e: MouseEvent): boolean {
         const timestamp = performance.now();
         const previous = this._lastHandledSideMouseEvent;
+        const currentType: SideMouseEventType = e.type === 'mouseup' ? 'mouseup' : 'mousedown';
 
         if (
             previous !== null &&
             previous.button === e.button &&
-            previous.target === e.target &&
-            previous.type !== e.type &&
-            timestamp - previous.timestamp < 400
+            previous.type !== currentType &&
+            timestamp - previous.handledAt < NavigationUI._SIDE_MOUSE_DEDUP_WINDOW_MS
         ) {
-            this._lastHandledSideMouseEvent = null;
             return true;
         }
 
         this._lastHandledSideMouseEvent = {
             button: e.button,
-            target: e.target,
-            timestamp,
-            type: e.type === 'mouseup' ? 'mouseup' : 'mousedown',
+            handledAt: timestamp,
+            type: currentType,
         };
         return false;
     }

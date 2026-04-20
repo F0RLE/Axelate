@@ -229,7 +229,7 @@ describe('NavigationUI', () => {
         expect(showPageSpy).toHaveBeenCalledWith('home', null, false, true);
     });
 
-    it('should not treat side-button events from different targets as duplicates', () => {
+    it('should suppress the duplicate side-button mouseup even when the target changes', () => {
         const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
         navigationUI.init();
         const firstButton = document.createElement('button');
@@ -255,9 +255,41 @@ describe('NavigationUI', () => {
         dispatchNavigationMouse(navigationUI, mouseUp, secondButton);
 
         expect(mouseUp.defaultPrevented).toBe(true);
-        expect(navigationService.goBack).toHaveBeenCalledTimes(2);
-        expect(showPageSpy).toHaveBeenNthCalledWith(1, 'home', null, false, true);
-        expect(showPageSpy).toHaveBeenNthCalledWith(2, 'home', null, false, true);
+        expect(navigationService.goBack).toHaveBeenCalledTimes(1);
+        expect(showPageSpy).toHaveBeenCalledTimes(1);
+        expect(showPageSpy).toHaveBeenCalledWith('home', null, false, true);
+    });
+
+    it('should still navigate on mouseup when no earlier side-button event was handled', () => {
+        const showPageSpy = vi.spyOn(navigationUI, 'showPage').mockResolvedValue();
+        navigationUI.init();
+        const firstButton = document.createElement('button');
+        const secondButton = document.createElement('button');
+        document.body.appendChild(firstButton);
+        document.body.appendChild(secondButton);
+
+        dispatchNavigationMouse(
+            navigationUI,
+            new MouseEvent('mousedown', {
+                button: 3,
+                bubbles: true,
+                cancelable: true,
+                ctrlKey: true,
+            }),
+            firstButton,
+        );
+
+        const mouseUp = new MouseEvent('mouseup', {
+            button: 3,
+            bubbles: true,
+            cancelable: true,
+        });
+        dispatchNavigationMouse(navigationUI, mouseUp, secondButton);
+
+        expect(mouseUp.defaultPrevented).toBe(true);
+        expect(navigationService.goBack).toHaveBeenCalledTimes(1);
+        expect(showPageSpy).toHaveBeenCalledTimes(1);
+        expect(showPageSpy).toHaveBeenCalledWith('home', null, false, true);
     });
 
     it('should allow re-init after destroy without duplicating listeners', () => {
