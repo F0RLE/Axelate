@@ -15,6 +15,8 @@ pub fn build_default_engine_config(def: &EngineDefinition) -> EngineConfig {
         gpu_layers: def.default_gpu_layers,
         context_size: def.default_context_size,
         model_path: None,
+        vae_path: None,
+        llm_path: None,
         extra_args: vec![],
     })
 }
@@ -32,6 +34,8 @@ pub fn merge_user_engine_config(def: &EngineDefinition, saved: &EngineConfig) ->
         gpu_layers: saved.gpu_layers,
         context_size: saved.context_size,
         model_path: saved.model_path.clone(),
+        vae_path: saved.vae_path.clone(),
+        llm_path: saved.llm_path.clone(),
         extra_args: saved.extra_args.clone(),
     })
 }
@@ -77,6 +81,8 @@ mod tests {
             gpu_layers: 12,
             context_size: 8192,
             model_path: Some("C:/models/test.gguf".to_string()),
+            vae_path: Some("C:/models/test.vae.safetensors".to_string()),
+            llm_path: Some("C:/models/test-mm.gguf".to_string()),
             extra_args: vec!["--flash-attn".to_string()],
         };
 
@@ -85,5 +91,10 @@ mod tests {
         assert_eq!(merged.gpu_layers, 12);
         assert_eq!(merged.context_size, 8192);
         assert_eq!(merged.model_path.as_deref(), Some("C:/models/test.gguf"));
+        assert_eq!(
+            merged.vae_path.as_deref(),
+            Some("C:/models/test.vae.safetensors")
+        );
+        assert_eq!(merged.llm_path.as_deref(), Some("C:/models/test-mm.gguf"));
     }
 }

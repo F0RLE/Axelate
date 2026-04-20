@@ -60,10 +60,10 @@ describe('EngineStatusService', () => {
     it('tracks starting, ready, swapping and error events on selected cards', () => {
         document.body.innerHTML = `
             <div class="app-card selected" data-app-id="llamacpp">
-                <div class="app-card-hover-actions"><button class="modal-btn">Select</button></div>
+                <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
             </div>
             <div class="app-card" data-app-id="sdcpp">
-                <div class="app-card-hover-actions"><button class="modal-btn">Select</button></div>
+                <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
             </div>
         `;
 
@@ -107,7 +107,7 @@ describe('EngineStatusService', () => {
         document.body.innerHTML = `
             <div class="app-card selected engine-ready" data-app-id="llamacpp"></div>
             <div class="app-card selected" data-app-id="sdcpp">
-                <div class="app-card-hover-actions"><button class="modal-btn">Select</button></div>
+                <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
             </div>
         `;
 

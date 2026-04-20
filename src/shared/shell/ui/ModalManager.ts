@@ -2,13 +2,16 @@ import type { IApp } from '../../types/coreTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { ModuleCardRenderer } from './ModuleCardRenderer';
-import { cancelModalDownload } from './ModalDownloadActions';
-import { createModalDownloadProgressHandler } from './ModalDownloadProgressHandler';
 import { ModalFilterTransitionController } from './ModalFilterTransitionController';
-import { populateModalAppList, transitionSelectionButton } from './ModalSelectionRenderer';
+import {
+    cancelModalDownload,
+    createModalDownloadProgressHandler,
+    populateModalAppList,
+    transitionSelectionButton,
+    updateModalSidebarWidth,
+} from './ModalManagerSupport';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { ModalFocusTrapHelper } from './ModalFocusTrapHelper';
-import { updateModalSidebarWidth } from './ModalSidebarWidth';
 
 /**
  * @class ModalManager

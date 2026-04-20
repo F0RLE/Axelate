@@ -1,50 +1,46 @@
 # Project Tree
 
-This is a maintained overview, not an exhaustive dump of every file.
+This is the maintained high-signal tree, not a raw file dump.
 
 ```text
 Axelate/
-|-- .github/
-|   |-- .husky/        git hooks
-|   |-- scripts/       workflow runner and helper scripts
-|   `-- workflows/     CI and release workflows
-|-- docs/
-|   |-- en/            English docs
-|   |-- ru/            Russian docs
-|   `-- zh/            Chinese docs
-|-- scripts/
-|   |-- windows/       double-click scripts for Windows
-|   |-- macos/         double-click scripts for macOS
-|   `-- linux/         double-click scripts for Linux
-|-- src/
-|   |-- app/           frontend startup and composition
-|   |-- assets/        icons, logos, fonts
-|   |-- features/      ai, chat, settings, downloads, monitoring, console, home-overview
-|   |-- infrastructure/ frontend adapters such as i18n and navigation
-|   |-- public/        static frontend assets
-|   |-- scripts/       frontend maintenance scripts
-|   |-- shared/        shared services, shell UI, types, utils
-|   |-- styles/        CSS
-|   `-- test/          test helpers and integration tests
-|-- src-tauri/
-|   |-- src/
-|   |   |-- api/       Tauri command adapters
-|   |   |-- app/       backend wiring
-|   |   |-- bin/       helper binaries
-|   |   |-- domain/    core business logic
-|   |   |-- infrastructure/
-|   |   |-- models/
-|   |   `-- utils/
-|   |-- resources/     locales, config, assets
-|   `-- tauri.conf.json
-|-- package.json       root task entrypoints
-`-- README.md
+├── .github/
+│   ├── .husky/        git hooks
+│   ├── scripts/       shared workflow and helper scripts
+│   └── workflows/     CI and release workflows
+├── docs/
+│   ├── en/            English docs
+│   ├── ru/            Russian docs
+│   └── zh/            Chinese docs
+├── src/
+│   ├── app/           startup, composition, bridge wiring
+│   ├── assets/        icons, logos, fonts
+│   ├── features/      ai, chat, settings, downloads, monitoring, console
+│   ├── infrastructure/ frontend adapters
+│   ├── public/        static templates and assets
+│   ├── scripts/       frontend maintenance scripts
+│   ├── shared/        shell UI, services, shared types, helpers
+│   ├── styles/        global and feature CSS
+│   └── test/          test helpers and integration coverage
+├── src-tauri/
+│   ├── resources/     locales and bundled resources
+│   ├── src/
+│   │   ├── api/       Tauri command adapters
+│   │   ├── app/       backend bootstrap
+│   │   ├── bin/       helper binaries
+│   │   ├── domain/    business logic
+│   │   ├── infrastructure/
+│   │   ├── models/
+│   │   └── utils/
+│   └── tauri.conf.json
+├── package.json       root task proxy
+└── README.md
 ```
 
 ## Notes
 
-- frontend dependencies live in `src/node_modules`
-- the root package does not own a second dependency tree
-- generated TypeScript bindings are emitted from Rust and belong under `src/shared/types/`
-- `scripts/` is optional convenience only; the canonical interface is still `npm run ...`
-- the shared root workflow runner lives in `.github/scripts/workflow.mjs`
+- Frontend dependencies live in `src/node_modules`.
+- The root package does not own a separate dependency tree.
+- Specta-generated bindings are emitted into `src/shared/types/`.
+- The shared root workflow runner lives in `.github/scripts/workflow.mjs`.
+- Rust owns backend contracts; TypeScript consumes them.

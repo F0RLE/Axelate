@@ -4,9 +4,9 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start !important; /* Managed by auto-margins for better control */
-    background: rgba(var(--background-raw), 0.065) !important;
-    font-family: var(--app-font-family) !important; /* Global brand font restorated */
+    justify-content: flex-start; /* Managed by auto-margins for better control */
+    background: rgba(var(--background-raw), 0.065);
+    font-family: var(--app-font-family); /* Global brand font restorated */
     /* Improved border rendering to avoid subpixel gaps */
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
     border-right: none;
@@ -19,7 +19,7 @@
     overflow-x: hidden;
     -webkit-app-region: no-drag;
     transition: width 0.3s var(--ease-smooth);
-    z-index: 1000;
+    z-index: auto;
     box-sizing: border-box;
 }
 
@@ -113,6 +113,12 @@
     background: var(--success);
     box-shadow: 0 0 8px var(--success);
     animation: pulse 2s infinite;
+}
+
+body > #sidebar {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    height: 100vh;
 }
 
 .launcher-status-badge.offline .status-dot {
@@ -389,7 +395,7 @@
     transform: translateX(-10px);
     transition: all 0.2s;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
+    z-index: 10;
 }
 
 #sidebar-lang-menu.open {
@@ -462,15 +468,15 @@
     gap: 0.72rem;
     width: 100%;
     padding: 0.72rem 1rem;
-    background: rgba(255, 255, 255, 0.007) !important;
-    border: none !important; /* Fixed: Flat design requested */
+    background: rgba(255, 255, 255, 0.007);
+    border: none; /* Fixed: Flat design requested */
     font-size: 1rem;
     font-weight: 600;
-    color: var(--text-primary) !important;
-    cursor: pointer !important;
+    color: var(--text-primary);
+    cursor: pointer;
     border-radius: 14px;
     margin-bottom: 0.45rem;
-    font-family: var(--app-font-family) !important;
+    font-family: var(--app-font-family);
     -webkit-app-region: no-drag;
     position: relative;
     overflow: hidden;
@@ -480,14 +486,13 @@
         opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
         margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         background 0.2s ease,
         border-color 0.2s ease,
         box-shadow 0.2s ease,
         color 0.2s ease;
     height: 44px;
     max-height: 44px;
-    outline: none !important;
+    outline: none;
 }
 
 .nav-btn.nav-item-hiding,
@@ -499,7 +504,7 @@
     max-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-    border: none !important;
+    border: none;
     pointer-events: none;
     transform: scale(0.95);
     overflow: hidden;
@@ -517,29 +522,35 @@
 }
 
 .nav-btn:active {
-    transform: scale(0.995);
-    transition: all 0.1s ease;
+    transition:
+        background 0.1s ease,
+        color 0.1s ease;
 }
 
 .nav-btn.active {
-    background: rgba(var(--primary-raw), 0.085);
-    color: white;
+    background: rgba(255, 255, 255, 0.007);
+    color: var(--text-primary);
     font-weight: 600;
     border: none;
     box-shadow: none;
 }
 
+.nav-btn.active:hover {
+    background: rgba(255, 255, 255, 0.007);
+    color: var(--text-primary);
+}
+
 .nav-btn.active::after {
     content: '';
     position: absolute;
-    left: 0;
+    left: 0.35rem;
     top: 50%;
     transform: translateY(-50%);
-    width: 3px;
-    height: 52%;
-    background: var(--primary);
-    border-radius: 0 3px 3px 0;
-    opacity: 0.9;
+    width: 4px;
+    height: 44%;
+    background: linear-gradient(180deg, var(--primary), var(--primary-light));
+    border-radius: 999px;
+    opacity: 1;
 }
 
 @keyframes navIndicatorPulse {
@@ -557,16 +568,7 @@
     position: static;
     width: 22px;
     height: 22px;
-    transition: transform 0.25s var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1));
     flex-shrink: 0;
-}
-
-.nav-btn:hover .icon {
-    transform: scale(1.08);
-}
-
-.nav-btn.active .icon {
-    transform: scale(1.05);
 }
 
 .nav-btn svg,

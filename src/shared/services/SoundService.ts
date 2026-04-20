@@ -240,7 +240,7 @@ export class SoundService {
         // 1. Mouse Over (Hover & Expansion)
         const handleMouseOver = (e: Event): void => {
             const target = (e.target as Element).closest(
-                'button, .nav-btn, .toggle, .sidebar-toggle-btn, .taskbar-toggle-btn, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .model-card-action, .app-card, .model-card-premium, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn',
+                'button, .nav-btn, .toggle, .sidebar-toggle-btn, .taskbar-toggle-btn, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .module-slot-card-action, .app-card, .module-slot-card, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn',
             );
 
             if (target) {
@@ -268,7 +268,7 @@ export class SoundService {
         const handleMouseDown = (e: Event): void => {
             if (
                 (e.target as HTMLElement).closest(
-                    'button, .nav-btn, .toggle, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .model-card-action, .app-card, .model-card-premium, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn',
+                    'button, .nav-btn, .toggle, .taskbar-toggle-item, .monitor-toggle-btn, .action-btn-small, .module-slot-card-action, .app-card, .module-slot-card, .card-action-corner, .ai-model-card, .thinking-option-card, .ai-check-btn, .ai-icon-btn',
                 )
             ) {
                 this.playClick();

@@ -23,7 +23,9 @@ body {
     color: var(--text-primary);
     margin: 0;
     padding: 0;
-    display: flex;
+    display: grid;
+    grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr);
+    grid-template-rows: var(--header-height, 60px) minmax(0, 1fr);
     height: 100%;
     width: 100%;
     overflow: hidden;

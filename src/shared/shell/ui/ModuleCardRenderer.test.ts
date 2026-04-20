@@ -34,9 +34,9 @@ describe('ModuleCardRenderer', () => {
         });
         document.body.innerHTML = `
             <template id="tpl-module-card">
-                <div class="app-icon-wrapper"></div>
-                <div class="app-card-title"></div>
-                <div class="app-card-desc"></div>
+                <div class="module-selection-card-icon"></div>
+                <div class="module-selection-card-title"></div>
+                <div class="module-selection-card-description"></div>
             </template>
         `;
         (
@@ -56,7 +56,7 @@ describe('ModuleCardRenderer', () => {
     it('creates download cards and reacts to download progress', () => {
         const onClick = vi.fn();
         const onDownload = vi.fn();
-        const card = renderer.createCard(
+        const card = renderer.createSelectionCard(
             {
                 id: 'local-app',
                 name: 'Local App',
@@ -72,7 +72,9 @@ describe('ModuleCardRenderer', () => {
 
         expect(card.classList.contains('is-installed')).toBe(false);
         expect(card.querySelector('.download-btn')).not.toBeNull();
-        expect(card.querySelector('.app-card-title')?.textContent).toContain('Local App');
+        expect(card.querySelector('.module-selection-card-title')?.textContent).toContain(
+            'Local App',
+        );
 
         (card.querySelector('.download-btn') as HTMLButtonElement).click();
         expect(onDownload).toHaveBeenCalled();
@@ -96,7 +98,7 @@ describe('ModuleCardRenderer', () => {
     it('creates action buttons for selected and Убрать modules', () => {
         const onClick = vi.fn();
 
-        const selectedCard = renderer.createCard(
+        const selectedCard = renderer.createSelectionCard(
             { id: 'Убрать-app', name: 'Runner', desc: 'Desc', installed: true } as never,
             'services',
             true,
@@ -104,7 +106,7 @@ describe('ModuleCardRenderer', () => {
         );
         expect(selectedCard.textContent).toContain('Убрать');
 
-        const removableCard = renderer.createCard(
+        const removableCard = renderer.createSelectionCard(
             { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,
             'services',
             true,
@@ -112,7 +114,7 @@ describe('ModuleCardRenderer', () => {
         );
         expect(removableCard.textContent).toContain('Убрать');
 
-        const selectCard = renderer.createCard(
+        const selectCard = renderer.createSelectionCard(
             { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,
             'services',
             false,
@@ -128,7 +130,7 @@ describe('ModuleCardRenderer', () => {
         const onClick = vi.fn();
         const onDownload = vi.fn();
 
-        const card = renderer.createCard(
+        const card = renderer.createSelectionCard(
             {
                 id: 'future-image',
                 name: 'Future Image',
@@ -151,7 +153,7 @@ describe('ModuleCardRenderer', () => {
 
     it('renders delete badge emoji for installed local modules', () => {
         const onClick = vi.fn();
-        const card = renderer.createCard(
+        const card = renderer.createSelectionCard(
             { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,
             'services',
             false,
@@ -165,7 +167,7 @@ describe('ModuleCardRenderer', () => {
     it('opens module settings on right click for installed cards and ignores uninstalled ones', async () => {
         const onClick = vi.fn();
 
-        const installedCard = renderer.createCard(
+        const installedCard = renderer.createSelectionCard(
             { id: 'installed-app', name: 'Installed', desc: 'Desc', installed: true } as never,
             'services',
             false,
@@ -177,7 +179,7 @@ describe('ModuleCardRenderer', () => {
         expect(openModuleSettingsSpy).toHaveBeenCalled();
 
         (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
-        const asyncCard = renderer.createCard(
+        const asyncCard = renderer.createSelectionCard(
             { id: 'late-install', name: 'Later', desc: 'Desc', installed: false } as never,
             'services',
             false,
@@ -191,7 +193,7 @@ describe('ModuleCardRenderer', () => {
         asyncCard.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
         expect(openModuleSettingsSpy).toHaveBeenCalledTimes(2);
 
-        const uninstalledCard = renderer.createCard(
+        const uninstalledCard = renderer.createSelectionCard(
             { id: 'not-installed', name: 'Missing', desc: 'Desc', installed: false } as never,
             'services',
             false,
@@ -207,7 +209,7 @@ describe('ModuleCardRenderer', () => {
         const onClick = vi.fn();
         (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
-        const card = renderer.createCard(
+        const card = renderer.createSelectionCard(
             { id: 'late-install-detached', name: 'Later', desc: 'Desc', installed: false } as never,
             'services',
             false,
@@ -224,16 +226,16 @@ describe('ModuleCardRenderer', () => {
     it('updates dashboard card content and marks cards as installed', () => {
         const card = document.createElement('div');
         card.innerHTML = `
-            <div class="model-icon-wrapper"></div>
-            <div class="model-card-title" data-i18n="stale"></div>
-            <div class="model-card-desc" data-i18n="stale"></div>
-            <div class="app-card-hover-actions"></div>
+            <div class="module-slot-card-icon"></div>
+            <div class="module-slot-card-title" data-i18n="stale"></div>
+            <div class="module-slot-card-description" data-i18n="stale"></div>
+            <div class="module-selection-card-actions"></div>
             <div class="app-type-badge not-installed"></div>
             <div class="app-card-overlay"></div>
         `;
 
-        renderer.updateCardAttributes(card, { id: 'gpt', name: 'GPT' } as never);
-        renderer.updateCardContent(card, {
+        renderer.updateSlotCardAttributes(card, { id: 'gpt', name: 'GPT' } as never);
+        renderer.updateSlotCardContent(card, {
             id: 'axelate',
             name: 'Ignored',
             desc: 'Desc',
@@ -241,11 +243,11 @@ describe('ModuleCardRenderer', () => {
             descKey: 'desc.key',
         } as never);
         expect(card.dataset['currentModule']).toBe('gpt');
-        expect(card.querySelector('.model-card-title')?.textContent).toBe(
+        expect(card.querySelector('.module-slot-card-title')?.textContent).toBe(
             'ui.launcher.web.app_title:Axelate',
         );
 
-        renderer.updateCardContent(card, {
+        renderer.updateSlotCardContent(card, {
             id: 'custom',
             name: 'Custom',
             nameKey: 'name.key',
@@ -253,15 +255,17 @@ describe('ModuleCardRenderer', () => {
             descKey: 'desc.key',
             icon: '<i>📡</i>',
         } as never);
-        expect(card.querySelector('.model-card-title')?.textContent).toBe('name.key:Custom');
-        expect(card.querySelector('.model-card-desc')?.textContent).toBe('desc.key:Custom desc');
+        expect(card.querySelector('.module-slot-card-title')?.textContent).toBe('name.key:Custom');
+        expect(card.querySelector('.module-slot-card-description')?.textContent).toBe(
+            'desc.key:Custom desc',
+        );
 
         const configureActionBtn = vi.fn((targetCard: HTMLElement) => {
             targetCard
-                .querySelector('.app-card-hover-actions')
+                .querySelector('.module-selection-card-actions')
                 ?.appendChild(document.createElement('button'));
         });
-        renderer.markCardAsInstalled(
+        renderer.markSlotCardAsInstalled(
             card,
             { id: 'custom', name: 'Custom', installed: true } as never,
             configureActionBtn,

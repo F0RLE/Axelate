@@ -15,6 +15,7 @@ type EngineFieldRowOptions = {
     max?: number;
     isFile?: boolean;
     isImage?: boolean;
+    fileKind?: 'model' | 'vae' | 'llm';
     description?: string;
     fullWidth?: boolean;
     showInfoButton?: boolean;
@@ -83,6 +84,7 @@ export class ModuleSettingsEngineFieldRowRenderer {
         if (options.isFile === true && engineInput instanceof HTMLInputElement) {
             engineInput.readOnly = true;
             engineInput.classList.add('local-engine-input--readonly');
+            engineInput.dataset['fileKind'] = options.fileKind ?? 'model';
             engineInput.dataset['fullPath'] = engineInput.value;
             if (engineInput.value.trim() !== '') {
                 engineInput.value = this._deps.getModelFileName(engineInput.value);

@@ -1089,7 +1089,12 @@
 }
 
 .local-engine-field-hint {
-    display: none;
+    display: block;
+    margin: 0 0 0.18rem;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 0.76rem;
+    line-height: 1.35;
+    text-align: center;
 }
 
 .local-engine-input-row {
@@ -1268,7 +1273,16 @@
 /* Combined with the other .local-engine-input--readonly below */
 
 .local-engine-input::placeholder {
-    color: rgba(255, 255, 255, 0.28);
+    color: rgba(255, 255, 255, 0.16);
+    opacity: 1;
+    font-style: italic;
+}
+
+.local-engine-input--readonly::placeholder {
+    color: rgba(255, 255, 255, 0.16) !important;
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.16);
+    opacity: 1;
+    font-style: italic;
 }
 
 .local-engine-input--select {

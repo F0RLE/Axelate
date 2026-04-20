@@ -38,9 +38,9 @@ describe('ModalManager lifecycle', () => {
             </div>
             <template id="tpl-empty-state-module"><span></span></template>
             <template id="tpl-module-card">
-                <div class="app-icon-wrapper"></div>
-                <div class="app-card-title"></div>
-                <div class="app-card-desc"></div>
+                <div class="module-selection-card-icon"></div>
+                <div class="module-selection-card-title"></div>
+                <div class="module-selection-card-description"></div>
             </template>
         `;
 
@@ -291,7 +291,7 @@ describe('ModalManager lifecycle', () => {
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
         const closeButton = document.getElementById('close-app-selection-btn') as HTMLButtonElement;
         const modalAction = document.querySelector(
-            '#app-modal-list .app-card-hover-actions button',
+            '#app-modal-list .module-selection-card-actions button',
         ) as HTMLButtonElement;
 
         expect(document.activeElement).toBe(closeButton);
@@ -409,11 +409,11 @@ describe('ModalManager lifecycle', () => {
         const list = document.getElementById('app-modal-list') as HTMLElement;
         list.innerHTML = `
             <div class="app-card selected engine-ready" data-app-id="gpt">
-                <div class="app-card-hover-actions"><button class="modal-btn">Select</button></div>
+                <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
                 <button class="download-btn"><span class="download-label">Download</span><span class="download-pct"></span></button>
             </div>
             <div class="app-card" data-app-id="gemini">
-                <div class="app-card-hover-actions"><button class="modal-btn">Select</button></div>
+                <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
             </div>
         `;
         (

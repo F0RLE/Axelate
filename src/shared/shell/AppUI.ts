@@ -2,21 +2,19 @@ import type { IApp } from '../types/coreTypes';
 import type { EventBus } from '../services/EventBus';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
-import type { ToastManager } from './ui/ToastManager';
-import type { AppUiChrome } from './ui/AppUiChrome';
-import type { AppUiActionFeedbackController } from './ui/AppUiActionFeedbackController';
-import type { AppUiCardActionFlow } from './ui/AppUiCardActionFlow';
-import type { AppUiDashboardController } from './ui/AppUiDashboardController';
-import type { AppUiLifecycleBindings } from './ui/AppUiLifecycleBindings';
-import type { AppUiModuleFlow } from './ui/AppUiModuleFlow';
-import type { AppUiModuleLifecycle } from './ui/AppUiModuleLifecycle';
-import type { AppUiSelectionFlow } from './ui/AppUiSelectionFlow';
 import { AppUiSelectionState } from './ui/AppUiSelectionState';
-import type { AppUiDashboardCardView } from './ui/AppUiDashboardCardView';
-import type { ModuleCardRenderer } from './ui/ModuleCardRenderer';
-import type { ModalManager } from './ui/ModalManager';
-import type { SkeletonManager } from './ui/SkeletonManager';
-import { AppUiControllerFactory } from './ui/AppUiControllerFactory';
+import { AppUiChrome } from './ui/AppUiChrome';
+import { AppUiActionFeedbackController } from './ui/AppUiActionFeedbackController';
+import { AppUiCardActionFlow } from './ui/AppUiCardActionFlow';
+import { AppUiDashboardSupport } from './ui/AppUiDashboardSupport';
+import { AppUiLifecycleBindings } from './ui/AppUiLifecycleBindings';
+import { AppUiModuleFlow } from './ui/AppUiModuleFlow';
+import { AppUiModuleLifecycle } from './ui/AppUiModuleLifecycle';
+import { AppUiSelectionFlow } from './ui/AppUiSelectionFlow';
+import { ModalManager } from './ui/ModalManager';
+import { ModuleCardRenderer } from './ui/ModuleCardRenderer';
+import { SkeletonManager } from './ui/SkeletonManager';
+import { ToastManager } from './ui/ToastManager';
 import type { ModulePlatformService } from '../services/ModulePlatformService';
 import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
 
@@ -34,16 +32,6 @@ type AppUIDeps = {
     stopAiProvider: () => void;
 };
 
-type AppUiFactoryCore = {
-    platformService: ModulePlatformService;
-    navigation: NavigationService;
-    eventBus: EventBus;
-    catalogResolver: (category: string) => IApp[];
-    translate: (key: string, fallback: string) => string;
-    deps: AppUIDeps;
-    selectionState: AppUiSelectionState;
-};
-
 /**
  * @class AppUI
  * @description Facade for UI components. Delegates to specific managers.
@@ -56,7 +44,7 @@ export class AppUI {
     private readonly _toastManager: ToastManager;
     private readonly _modalManager: ModalManager;
     private readonly _cardRenderer: ModuleCardRenderer;
-    private readonly _dashboardController: AppUiDashboardController;
+    private readonly _dashboardSupport: AppUiDashboardSupport;
     private readonly _skeletonManager: SkeletonManager;
     private readonly _actionFeedbackController: AppUiActionFeedbackController;
     private readonly _cardActionFlow: AppUiCardActionFlow;
@@ -64,11 +52,9 @@ export class AppUI {
     private readonly _moduleFlow: AppUiModuleFlow;
     private readonly _moduleLifecycle: AppUiModuleLifecycle;
     private readonly _selectionFlow: AppUiSelectionFlow;
-    private readonly _dashboardCardView: AppUiDashboardCardView;
     private readonly _platformService: ModulePlatformService;
     private readonly _deps: AppUIDeps;
     private readonly _selectionState = new AppUiSelectionState();
-    private readonly _factory = new AppUiControllerFactory();
     public get _selectedApps(): Map<string, IApp> {
         return this._selectionState.asMap();
     }
@@ -83,125 +69,126 @@ export class AppUI {
     ) {
         this._platformService = platformService;
         this._deps = deps;
-        const factoryCore = this._createFactoryCore();
-        this._chrome = this._factory.createChrome(factoryCore);
-        this._toastManager = this._factory.createToastManager();
-        this._cardRenderer = this._factory.createCardRenderer(factoryCore);
-        this._dashboardController = this._factory.createDashboardController(
-            factoryCore,
-            this._chrome,
-            this._cardRenderer,
-            this._createDashboardControllerBridge(),
-        );
-        this._dashboardCardView = this._factory.createDashboardCardView(
-            factoryCore,
-            this._chrome,
-            this._cardRenderer,
-            this._createDashboardCardViewBridge(),
-        );
-        this._skeletonManager = this._factory.createSkeletonManager();
-        this._actionFeedbackController = this._factory.createActionFeedbackController(this._chrome);
-        this._modalManager = this._factory.createModalManager(factoryCore, this._cardRenderer, {
-            handleAppCardClick: async (e, app, category) =>
-                await this._handleAppCardClick(e, app, category),
+        this._chrome = new AppUiChrome(this._translate, this._deps.tracer);
+        this._toastManager = new ToastManager();
+        this._cardRenderer = new ModuleCardRenderer({
+            checkInstalled: async (moduleId) =>
+                await this._platformService.checkInstalled(moduleId),
+            translate: this._translate,
+            tracer: this._deps.tracer,
+            openModuleSettings: (app) => {
+                this._deps.openModuleSettings(app);
+            },
         });
-        this._moduleFlow = this._factory.createModuleFlow(
-            factoryCore,
-            this._modalManager,
-            this._dashboardCardView,
-            this._createModuleFlowBridge(),
+        this._dashboardSupport = new AppUiDashboardSupport({
+            tracer: this._deps.tracer,
+            chrome: this._chrome,
+            cardRenderer: this._cardRenderer,
+            selectionState: this._selectionState,
+            isApiModule: (app) => this._platformService.isApiModule(app),
+            openModuleSettings: (app) => {
+                this._deps.openModuleSettings(app);
+            },
+            clearModuleCard: (category) => this.clearModuleCard(category),
+            removeSelectedModule: (category) => {
+                this._deps.uiState.removeSelectedModule(category);
+            },
+            openAppSelection: (category) => this.openAppSelection(category),
+            updateMultiSlotBadge: () => this._updateMultiSlotBadge(),
+        });
+        this._skeletonManager = new SkeletonManager();
+        this._actionFeedbackController = new AppUiActionFeedbackController(this._chrome);
+        this._modalManager = new ModalManager(
+            this._cardRenderer,
+            async (e, app, category) => await this._handleAppCardClick(e, app, category),
+            (capability) => this._selectionState.get(`ai_${capability}`)?.id ?? null,
+            async (app) => await this._platformService.download(app),
+            async (app) => {
+                await this._platformService.cancelDownload(app.id);
+                await this._platformService.delete(app);
+            },
+            this._translate,
+            this._deps.tracer,
+            this._navigation,
         );
-        this._cardActionFlow = this._factory.createCardActionFlow(factoryCore, this._moduleFlow, {
+        this._moduleFlow = new AppUiModuleFlow({
+            platformService: this._platformService,
+            tracer: this._deps.tracer,
+            modalManager: this._modalManager,
+            getCatalogApps: (category) => this._getCatalogApps(category),
+            getSelectedAppId: (category) => this._selectionState.get(category)?.id ?? null,
+            clearModuleCard: (category) => this.clearModuleCard(category),
+            openAppSelection: (category, apps) => this.openAppSelection(category, apps),
+            markSlotCardAsInstalled: (card, app) =>
+                this._dashboardSupport.markSlotCardAsInstalled(card, app),
+            showToast: (message, type = 'info') => this.showToast(message, type),
+            translate: this._translate,
+        });
+        this._cardActionFlow = new AppUiCardActionFlow({
+            platformService: this._platformService,
+            tracer: this._deps.tracer,
             isComingSoonApp: (app) => this._isComingSoonApp(app),
             showComingSoonToast: () => this._showComingSoonToast(),
             showToast: (message, type = 'info') => this.showToast(message, type),
             handleDeleteModule: async (app, category) =>
                 await this._handleDeleteModule(app, category),
+            handleDownloadModule: (app, category, btn) =>
+                this._moduleFlow.handleDownloadModule(app, category, btn),
+            resetDownloadButton: (btn) => this._moduleFlow.resetDownloadButton(btn),
+            restoreDownloadButtonLabel: (btn) => this._moduleFlow.restoreDownloadButtonLabel(btn),
             performSelectionAction: (category, app) => this._performSelectionAction(category, app),
+            translate: this._translate,
         });
-        this._moduleLifecycle = this._factory.createModuleLifecycle(factoryCore, {
+        this._moduleLifecycle = new AppUiModuleLifecycle({
+            platformService: this._platformService,
+            tracer: this._deps.tracer,
+            getSelectedApp: (category) => this._selectionState.get(category),
+            isSelectedInAnotherAiSlot: (category, appId) =>
+                this._selectionState.isSelectedInAnotherAiSlot(category, appId),
             resolveAppById: (appId) => this._resolveAppById(appId),
+            translate: this._translate,
             showToast: (message, type = 'info') => this.showToast(message, type),
         });
-        this._selectionFlow = this._factory.createSelectionFlow(
-            factoryCore,
-            this._moduleLifecycle,
-            this._modalManager,
-            this._createSelectionFlowBridge(),
-        );
-        this._lifecycleBindings = this._factory.createLifecycleBindings(
-            factoryCore,
-            this._modalManager,
-            this._createLifecycleBindingsBridge(),
-        );
+        this._selectionFlow = new AppUiSelectionFlow({
+            getSelectedApp: (category) => this._selectionState.get(category),
+            clearModuleCard: (category) => this.clearModuleCard(category),
+            updateModuleCard: (category, app) => this.updateModuleCard(category, app),
+            updateModalSelection: (appId) => this._modalManager.updateSelection(appId),
+            bumpLaunchSelectionVersion: (category) =>
+                this._moduleLifecycle.bumpLaunchSelectionVersion(category),
+            stopSelectedApp: (app) => this._platformService.stop(app),
+            launchSelectedApp: (category, app, launchSelectionVersion, launchApp) =>
+                this._moduleLifecycle.launchSelectedApp(
+                    category,
+                    app,
+                    launchSelectionVersion,
+                    launchApp,
+                ),
+            removeSelectedModule: (category) => {
+                this._deps.uiState.removeSelectedModule(category);
+            },
+            setSelectedModule: (category, moduleData) => {
+                this._deps.uiState.setSelectedModule(category, moduleData);
+            },
+            launchApp: (moduleId) => this._deps.launchApp(moduleId),
+        });
+        this._lifecycleBindings = new AppUiLifecycleBindings({
+            eventBus: this._eventBus,
+            onLanguageChanged: () => {
+                this._modalManager.refreshCurrentSelection();
+            },
+            onPageChange: ({ pageId }) => {
+                if (pageId !== 'modules' && pageId !== 'page-modules') {
+                    this.closeAppSelection();
+                }
+            },
+        });
 
         this._initDashboardCardListeners();
     }
 
-    private _createFactoryCore(): AppUiFactoryCore {
-        return {
-            platformService: this._platformService,
-            navigation: this._navigation,
-            eventBus: this._eventBus,
-            catalogResolver: this._catalogResolver,
-            translate: this._translate,
-            deps: this._deps,
-            selectionState: this._selectionState,
-        };
-    }
-
-    private _createDashboardControllerBridge(): {
-        clearModuleCard: (category: string) => void;
-        openAppSelection: (category: string) => void;
-        updateMultiSlotBadge: () => void;
-    } {
-        return {
-            clearModuleCard: (category) => this.clearModuleCard(category),
-            openAppSelection: (category) => this.openAppSelection(category),
-            updateMultiSlotBadge: () => this._updateMultiSlotBadge(),
-        };
-    }
-
-    private _createDashboardCardViewBridge(): {
-        clearModuleCard: (category: string) => void;
-    } {
-        return {
-            clearModuleCard: (category) => this.clearModuleCard(category),
-        };
-    }
-
-    private _createModuleFlowBridge(): {
-        clearModuleCard: (category: string) => void;
-        openAppSelection: (category: string, apps?: IApp[]) => void;
-        showToast: (message: string, type?: string) => void;
-    } {
-        return {
-            clearModuleCard: (category) => this.clearModuleCard(category),
-            openAppSelection: (category, apps) => this.openAppSelection(category, apps),
-            showToast: (message, type = 'info') => this.showToast(message, type),
-        };
-    }
-
-    private _createSelectionFlowBridge(): {
-        clearModuleCard: (category: string) => void;
-        updateModuleCard: (category: string, app: IApp) => void;
-    } {
-        return {
-            clearModuleCard: (category) => this.clearModuleCard(category),
-            updateModuleCard: (category, app) => this.updateModuleCard(category, app),
-        };
-    }
-
-    private _createLifecycleBindingsBridge(): {
-        closeAppSelection: () => void;
-    } {
-        return {
-            closeAppSelection: () => this.closeAppSelection(),
-        };
-    }
-
     public destroy(): void {
-        this._dashboardController.cancelPendingSwitch();
+        this._dashboardSupport.cancelPendingSwitch();
         this._actionFeedbackController.clear();
         this._selectionState.clear();
         this._lifecycleBindings.destroy();
@@ -213,11 +200,11 @@ export class AppUI {
      * Initializes permanent listeners for dashboard cards to handle interactions safely.
      */
     private _initDashboardCardListeners(): void {
-        this._dashboardController.initListeners();
+        this._dashboardSupport.initListeners();
     }
 
     private _removeDashboardCardListeners(): void {
-        this._dashboardController.destroy();
+        this._dashboardSupport.destroy();
     }
 
     // --- Toast System ---
@@ -294,16 +281,16 @@ export class AppUI {
      * @param {IApp} app - The app data.
      */
     public updateModuleCard(category: string, app: IApp): void {
-        const card = this._dashboardCardView.getDashboardCard(category);
+        const card = this._dashboardSupport.getDashboardCard(category);
         if (!(card instanceof HTMLElement)) {
-            const cardId = this._dashboardCardView.getCardId(category);
+            const cardId = this._dashboardSupport.getCardId(category);
             this._deps.tracer.warn(`[AppUI] Could not find module card: ${cardId}`);
             return;
         }
 
-        this._dashboardController.cancelPendingSwitch();
+        this._dashboardSupport.cancelPendingSwitch();
         this._moduleLifecycle.stopPreviousModule(card, app, category);
-        this._dashboardCardView.applySelectedCardState(card, app, category);
+        this._dashboardSupport.applySelectedCardState(card, app, category);
         this._selectionState.set(category, app);
         this._updateMultiSlotBadge();
     }
@@ -313,10 +300,10 @@ export class AppUI {
      * @param {string} category - The module category.
      */
     public clearModuleCard(category: string): void {
-        const card = this._dashboardCardView.getDashboardCard(category);
+        const card = this._dashboardSupport.getDashboardCard(category);
         if (!(card instanceof HTMLElement)) return;
 
-        this._dashboardController.cancelPendingSwitch();
+        this._dashboardSupport.cancelPendingSwitch();
         this._moduleLifecycle.bumpLaunchSelectionVersion(category);
 
         const currentApp = this._selectionState.get(category);
@@ -329,12 +316,12 @@ export class AppUI {
             const otherSlot = this._selectionState.getOtherAiSlot(category);
             const otherApp = this._selectionState.get(otherSlot);
             if (otherApp) {
-                this._dashboardCardView.applySelectedCardState(card, otherApp, otherSlot);
+                this._dashboardSupport.applySelectedCardState(card, otherApp, otherSlot);
             } else {
-                this._dashboardCardView.resetCardToEmpty(card);
+                this._dashboardSupport.resetCardToEmpty(card);
             }
         } else {
-            this._dashboardCardView.resetCardToEmpty(card);
+            this._dashboardSupport.resetCardToEmpty(card);
         }
 
         this._stopAiProviderIfNoSlots(category);
@@ -370,7 +357,7 @@ export class AppUI {
      *   - Purple accent to indicate "extra capability" (not a danger/action intent)
      */
     private _updateMultiSlotBadge(): void {
-        this._dashboardController.updateMultiSlotBadge();
+        this._dashboardSupport.updateMultiSlotBadge();
     }
 
     // --- Private Helper Methods ---
@@ -415,11 +402,11 @@ export class AppUI {
     }
 
     private _resolveModalCategory(category: string): string {
-        return this._dashboardCardView.resolveModalCategory(category);
+        return this._dashboardSupport.resolveModalCategory(category);
     }
 
     private _resolveModalCatalogApps(category: string): IApp[] {
-        return this._getCatalogApps(this._dashboardCardView.resolveCatalogCategory(category));
+        return this._getCatalogApps(this._dashboardSupport.resolveCatalogCategory(category));
     }
 
     public _resolveCategoryFromCard(card: HTMLElement): string {

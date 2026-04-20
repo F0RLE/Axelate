@@ -425,6 +425,8 @@ mod tests {
             gpu_layers: -1,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
+            vae_path: None,
+            llm_path: None,
             extra_args: vec![],
         }
     }
@@ -435,6 +437,8 @@ mod tests {
             gpu_layers: -1,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
+            vae_path: None,
+            llm_path: None,
             extra_args: vec![],
         }
     }

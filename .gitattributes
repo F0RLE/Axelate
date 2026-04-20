@@ -23,6 +23,5 @@
 *.dll   binary
 
 # Linguist (GitHub) classification
-docs/**    linguist-documentation
-scripts/** linguist-vendored
-assets/**  linguist-vendored
+docs/**       linguist-documentation
+src/assets/** linguist-vendored

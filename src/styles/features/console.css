@@ -14,6 +14,7 @@
 }
 
 .debug-layout {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -27,12 +28,10 @@
 @keyframes debugContentRise {
     from {
         opacity: 0.72;
-        transform: translateY(10px) scale(0.992);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
     }
 }
 
@@ -538,10 +537,10 @@
 }
 
 #debug-overlay {
-    position: fixed;
+    position: absolute;
     right: 10px;
     bottom: 10px;
-    z-index: 10000;
+    z-index: 5;
     display: none;
     max-height: 200px;
     overflow-y: auto;

@@ -19,6 +19,8 @@ export interface EngineConfig {
     gpu_layers: number;
     context_size: number;
     model_path: string | null;
+    vae_path?: string | null;
+    llm_path?: string | null;
     extra_args: string[];
 }
 

@@ -114,7 +114,7 @@
     --sidebar-width: 280px;
     --sidebar-collapsed-width: 80px;
     --header-height: 60px;
-    --content-padding-top: 90px;
+    --content-padding-top: 1.5rem;
 
     /* Window Controls Positioning */
     --win-controls-x: -2px;

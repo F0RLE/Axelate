@@ -155,7 +155,7 @@ export class EngineStatusService {
 
     private _updateCardButton(card: HTMLElement, state: EngineState): void {
         const btn = card.querySelector<HTMLButtonElement>(
-            '.app-card-hover-actions button.modal-btn',
+            '.module-selection-card-actions button.modal-btn',
         );
         if (!btn) return;
 

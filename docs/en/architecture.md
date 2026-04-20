@@ -1,135 +1,130 @@
 # Architecture
 
-This document describes the current codebase structure and runtime flow.
+This document describes the current repository shape and the runtime boundaries that matter.
 
-## Principles
+## Core posture
 
-- Rust owns domain logic and shared types
-- TypeScript is the UI shell and orchestration layer
-- Specta generates Rust to TypeScript bindings
-- Tauri command adapters stay thin
-- optional external systems stay behind adapters
+- Rust owns domain logic, security-sensitive state, and shared contracts.
+- TypeScript owns desktop UI composition and view orchestration.
+- Specta-generated bindings are the Rust to TypeScript contract.
+- Tauri commands stay thin and should not absorb business logic.
+- Optional integrations must stay behind adapters so the core still works without them.
 
-## Top-level structure
+## Top-level shape
 
 ```text
 Axelate/
-├── src/
-├── src-tauri/
-├── .github/
-├── scripts/
-├── docs/
-└── .github/
+├── .github/     workflows, hook runner, shared workflow scripts
+├── docs/        project documentation
+├── src/         frontend app
+├── src-tauri/   Rust backend and Tauri setup
+└── package.json root task proxy
 ```
 
-## Frontend structure
+## Frontend
 
 ```text
 src/
-├── app/             app startup and composition
-├── features/        feature modules such as ai, chat, settings, monitoring
-├── infrastructure/  technical adapters such as i18n and navigation
-├── shared/          shared services, shell UI, types, utils
-├── styles/          CSS
+├── app/             startup, composition, bridge wiring
+├── assets/          icons, logos, fonts
+├── features/        ai, chat, settings, downloads, monitoring, console
+├── infrastructure/  adapters such as i18n, navigation, tauri provider
+├── public/          static templates
 ├── scripts/         frontend maintenance scripts
-└── test/            test helpers and integration tests
+├── shared/          shell UI, shared services, types, utilities
+├── styles/          global and feature CSS
+└── test/            test helpers and integration coverage
 ```
 
 Frontend rules:
 
-- DOM work stays in UI classes
-- business logic stays in services/controllers
-- rendered HTML must be sanitized
-- generated bindings come from Rust, not from hand-written TypeScript copies
+- DOM updates stay explicit.
+- Business logic stays outside UI classes.
+- Shared shell behavior should be reusable, not copied between features.
+- Sanitization is mandatory for rendered rich content.
+- TypeScript does not redefine Rust-owned contracts by hand.
 
-## Backend structure
+## Backend
 
 ```text
 src-tauri/src/
 ├── api/             Tauri command adapters
-├── app/             backend app wiring
+├── app/             backend bootstrap and app wiring
 ├── bin/             helper binaries such as the Specta exporter
 ├── domain/          business logic
-├── infrastructure/  filesystem, crypto, http, logging, system glue
-├── models/          shared data structures
-└── utils/           small helpers
+├── infrastructure/  http, config, crypto, logging, system glue
+├── models/          shared data models
+└── utils/           narrow utility helpers
 ```
 
 Backend rules:
 
-- async code must not block
-- domain logic should not depend on UI concerns
-- infrastructure details stay outside domain where practical
-- errors should stay explicit and typed
+- Async code must not block.
+- Domain modules should stay readable and task-focused.
+- Infrastructure code should serve the domain, not leak into it.
+- Errors should stay explicit and typed.
 
 ## Runtime flow
 
 ### App startup
 
-1. Tauri starts the Rust backend
-2. startup checks run
-3. frontend boot code creates the application container
-4. Specta-generated bindings define the TypeScript contract
-5. UI subscribes to backend events and services
+1. Tauri boots the Rust backend.
+2. Startup checks and app state initialization run on the Rust side.
+3. The frontend creates the core container and service graph.
+4. Specta bindings define the frontend-visible contract.
+5. UI modules subscribe to backend events and local services.
 
 ### Chat flow
 
-1. frontend builds the chat request
-2. request goes through the Tauri bridge
-3. backend resolves settings and secure credentials
-4. backend streams the response
-5. frontend renders only events for the active request id
+1. The frontend builds the request and active UI state.
+2. The request crosses the Tauri bridge.
+3. Rust resolves the active provider, settings, credentials, and session context.
+4. Streaming responses are emitted back to the frontend.
+5. The frontend only renders events for the active request id.
 
 ### Local engine flow
 
-1. frontend asks to install or start a module
-2. backend probes hardware
-3. backend selects the best compatible GitHub release asset
-4. downloader verifies digest and extracts into staging
-5. manager starts the engine on a free localhost port
-6. frontend uses the active endpoint from backend state
+1. The frontend asks to install, start, stop, or inspect a module.
+2. Rust probes hardware and resolves the best compatible asset.
+3. Downloads are verified and extracted safely.
+4. Engine lifecycle logic starts the process on a safe localhost port.
+5. The frontend reads state from backend-owned status rather than inventing ports or paths.
 
-The user does not choose engine ports manually.
+## Ownership boundaries
 
-## Data ownership
+- Rust is the source of truth for shared types and secure values.
+- The frontend mostly owns presentation state, orchestration, and user interaction.
+- Module lifecycle, provider routing, and hardware-aware decisions belong on the backend side.
 
-- Rust types are the source of truth
-- secure values are stored on the backend side
-- frontend state is mostly view state and request orchestration
-
-## Important subsystems
+## High-value subsystems
 
 ### AI
 
-- OpenRouter-backed cloud chat
+- cloud chat routing
 - local engine routing
-- streaming transport with request isolation
+- request/session orchestration
+- streaming transport isolation
 
 ### Modules
 
 - GitHub release discovery
-- hardware-aware asset selection
-- safe archive extraction
+- hardware-aware bundle selection
+- safe extraction and staging
 - process lifecycle management
 
-### System
+### Shell
 
-- startup checks
-- logs
-- hardware probing across supported platforms
+- window management
+- navigation history
+- sidebar and modal orchestration
+- console, downloads, and settings surfaces
 
 ## Build and verification
 
-Project verification is centered around:
-
-- root scripts in `package.json`
-- the shared runner in `.github/scripts/workflow.mjs`
-- optional convenience scripts in `scripts/`
-- legacy PowerShell helpers in `.github/scripts`
-- GitHub workflows in `.github/workflows`
-
-The main gate is:
+The main local gate is:
 
 ```bash
 npm run verify
 ```
+
+That gate is driven by the shared runner in `.github/scripts/workflow.mjs` and covers Rust checks, frontend checks, build output validation, and size checks.

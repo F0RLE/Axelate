@@ -516,12 +516,10 @@
 @keyframes chatContentRise {
     from {
         opacity: 0.72;
-        transform: translateY(10px) scale(0.992);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
     }
 }
 
@@ -595,11 +593,11 @@
 /* Clear chat button - Small fixed button, expands on hover */
 .chat-clear-btn {
     display: none;
-    position: fixed;
+    position: absolute;
     bottom: 1rem;
     left: 1rem;
     right: auto;
-    z-index: 100;
+    z-index: 2;
     align-items: center;
     justify-content: center;
     gap: 0;
@@ -1171,13 +1169,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 14px;
+    border-radius: 0;
     box-shadow: none !important;
     transition:
-        color 0.22s ease,
-        transform 0.22s ease,
-        opacity 0.22s ease,
-        background 0.22s ease;
+        color 0.18s ease,
+        background-color 0.18s ease,
+        transform 0.18s ease,
+        opacity 0.18s ease;
     color: var(--text-secondary);
     flex: 0 0 auto;
 }
@@ -1189,15 +1187,15 @@
 }
 
 .chat-action-btn:hover {
-    background: rgba(255, 255, 255, 0.018) !important;
-    color: var(--text-primary);
-    transform: translateY(-1px);
+    background: transparent !important;
+    color: var(--text-primary) !important;
+    transform: scale(1.05);
 }
 
 .chat-action-btn:active {
-    background: rgba(255, 255, 255, 0.026) !important;
-    transform: scale(0.96);
-    opacity: 0.75;
+    background: transparent !important;
+    transform: scale(0.9);
+    opacity: 0.7;
 }
 
 .chat-action-btn.primary {
@@ -1207,35 +1205,11 @@
     border-radius: 0;
 }
 
-.chat-action-btn.primary:hover {
-    background: transparent !important;
-    color: var(--text-primary);
-    transform: scale(1.05);
-}
-
-.chat-action-btn.primary:active {
-    background: transparent !important;
-    transform: scale(0.9);
-    opacity: 0.7;
-}
-
-#chat-voice-btn {
+.chat-action-btn--edge {
     background: transparent !important;
     border: none !important;
     border-radius: 0;
     color: var(--text-secondary);
-}
-
-#chat-voice-btn:hover {
-    background: transparent !important;
-    color: var(--text-primary);
-    transform: scale(1.05);
-}
-
-#chat-voice-btn:active {
-    background: transparent !important;
-    transform: scale(0.9);
-    opacity: 0.7;
 }
 
 .chat-action-btn svg,

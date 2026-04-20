@@ -116,9 +116,9 @@ describe('AppUI lifecycle', () => {
     function mountAiCard(currentModule = 'text-model'): HTMLElement {
         document.body.innerHTML = `
             <div id="ai-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -292,9 +292,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="ai-module-card" class="empty">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -325,9 +325,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -348,9 +348,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -374,9 +374,9 @@ describe('AppUI lifecycle', () => {
         platformServiceMock.stop.mockRejectedValueOnce(new Error('stop failed'));
         document.body.innerHTML = `
             <div id="services-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -400,9 +400,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -423,9 +423,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="ai-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -443,10 +443,10 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="ai-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
-                <div class="model-card-action" data-running="true"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+                <div class="module-slot-card-action" data-running="true"></div>
             </div>
         `;
 
@@ -469,9 +469,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="selected">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -491,9 +491,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="ai-module-card" class="empty">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -516,9 +516,9 @@ describe('AppUI lifecycle', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="empty">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 
@@ -561,7 +561,7 @@ describe('AppUI lifecycle', () => {
         const card = document.createElement('div');
         card.className = 'app-card';
         card.innerHTML = `
-            <div class="app-card-hover-actions"></div>
+            <div class="module-selection-card-actions"></div>
             <div class="app-type-badge not-installed"></div>
             <div class="app-card-overlay"></div>
         `;
@@ -640,9 +640,9 @@ describe('AppUI lifecycle', () => {
 
         document.body.innerHTML = `
             <div id="services-module-card" class="empty">
-                <div class="model-icon-wrapper"></div>
-                <div class="model-card-title"></div>
-                <div class="model-card-desc"></div>
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
             </div>
         `;
 

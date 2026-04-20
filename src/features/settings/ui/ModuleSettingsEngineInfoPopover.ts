@@ -1,4 +1,4 @@
-import { getEngineExtraArgDocs } from './ModuleSettingsEngineExtraArgDocs';
+import { getEngineExtraArgDocs } from './ModuleSettingsEngineFieldSupport';
 
 export type EngineInfoPopoverRuntime = {
     requestAnimationFrame: (callback: FrameRequestCallback) => number;

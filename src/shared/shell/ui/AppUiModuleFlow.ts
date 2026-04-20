@@ -16,7 +16,7 @@ type AppUiModuleFlowDeps = {
     getSelectedAppId: (category: string) => string | null;
     clearModuleCard: (category: string) => void;
     openAppSelection: (category: string, apps?: IApp[]) => void;
-    markCardAsInstalled: (card: HTMLElement, app: IApp) => void;
+    markSlotCardAsInstalled: (card: HTMLElement, app: IApp) => void;
     showToast: (message: string, type?: string) => void;
     translate: (key: string, fallback: string) => string;
 };
@@ -111,10 +111,10 @@ export class AppUiModuleFlow {
         this.resetDownloadButton(btn);
 
         const card =
-            btn?.closest<HTMLElement>('.model-card-premium') ??
+            btn?.closest<HTMLElement>('.module-slot-card') ??
             btn?.closest<HTMLElement>('.app-card');
         if (card instanceof HTMLElement) {
-            this._deps.markCardAsInstalled(card, app);
+            this._deps.markSlotCardAsInstalled(card, app);
         }
 
         if (this._deps.modalManager.isViewingCategory(category)) {

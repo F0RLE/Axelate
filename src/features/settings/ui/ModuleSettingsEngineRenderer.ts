@@ -22,15 +22,13 @@ import {
 } from './ModuleSettingsEngineSelectField';
 import {
     createEngineExtraArgsField,
-    type EngineExtraArgsControl,
-} from './ModuleSettingsEngineExtraArgsField';
-import {
+    formatEngineFieldSaveValue,
+    ModuleSettingsEngineInputFactory,
     renderEnginePerformanceModeField,
     syncEnginePromptTextareaHeights,
-} from './ModuleSettingsEngineLayoutHelpers';
-import { formatEngineFieldSaveValue } from './ModuleSettingsEngineFieldState';
+    type EngineExtraArgsControl,
+} from './ModuleSettingsEngineFieldSupport';
 import { ModuleSettingsEngineHtmlBuilder } from './ModuleSettingsEngineHtmlBuilder';
-import { ModuleSettingsEngineInputFactory } from './ModuleSettingsEngineInputFactory';
 import { ModuleSettingsEngineRenderFlow } from './ModuleSettingsEngineRenderFlow';
 import { ModuleSettingsEngineFieldRowRenderer } from './ModuleSettingsEngineFieldRowRenderer';
 
@@ -43,6 +41,7 @@ type EngineFieldControlOptions = {
     key: string;
     isEngineConfig: boolean;
     appId: string;
+    fileKind?: 'model' | 'vae' | 'llm';
     placeholder?: string;
     min?: number;
     max?: number;
@@ -165,7 +164,8 @@ export class ModuleSettingsEngineRenderer {
             },
             translate: (key, fallback) => this._translate(key, fallback),
             getModelFileName: (modelPath) => this._getModelFileName(modelPath),
-            getModelFileFilters: (isImage) => this._getModelFileFilters(isImage),
+            getModelFileFilters: (fileKind, isImage) =>
+                this._getModelFileFilters(fileKind, isImage),
             tracer: this._deps.tracer,
         };
     }
@@ -184,7 +184,12 @@ export class ModuleSettingsEngineRenderer {
             getModelFileName: (path) => this._getModelFileName(path),
             isTauri: () => this._deps.tauri.isTauri(),
             addFileBrowseButton: (container, input, isImage) => {
-                this._addFileBrowseButton(container, input, isImage);
+                this._addFileBrowseButton(
+                    container,
+                    input,
+                    isImage,
+                    (input.dataset['fileKind'] as 'model' | 'vae' | 'llm' | undefined) ?? 'model',
+                );
             },
             getExtraArgsInfoText: () =>
                 this._translate('ui.settings.engine.extra_args.info', 'Extra arguments info'),
@@ -239,6 +244,8 @@ export class ModuleSettingsEngineRenderer {
             getTextFields: (translate) => this._fieldCatalog.buildTextEngineFields(translate),
             getCoreModelField: (translate, modelPlaceholder, isImage) =>
                 this._fieldCatalog.buildCoreModelField(translate, modelPlaceholder, isImage),
+            getImageCompanionFields: (translate, appId) =>
+                this._fieldCatalog.buildImageCompanionFields(translate, appId),
             getImageExtraArgsField: (translate) =>
                 this._fieldCatalog.buildImageExtraArgsField(translate),
         });
@@ -481,11 +488,23 @@ export class ModuleSettingsEngineRenderer {
         container: HTMLElement,
         input: HTMLInputElement,
         isImage: boolean,
+        fileKind: 'model' | 'vae' | 'llm',
     ): void {
-        this._fieldController.addFileBrowseButton(container, input, isImage);
+        this._fieldController.addFileBrowseButton(container, input, isImage, fileKind);
     }
 
-    private _getModelFileFilters(isImage: boolean): ModelFileFilter[] {
+    private _getModelFileFilters(
+        fileKind: 'model' | 'vae' | 'llm',
+        isImage: boolean,
+    ): ModelFileFilter[] {
+        if (fileKind === 'vae') {
+            return [{ name: 'SafeTensors', extensions: ['safetensors'] }];
+        }
+
+        if (fileKind === 'llm') {
+            return [{ name: 'GGUF Models', extensions: ['gguf'] }];
+        }
+
         if (isImage) {
             return [
                 { name: 'SD Models', extensions: ['gguf', 'safetensors'] },

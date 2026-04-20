@@ -1,6 +1,6 @@
 import type { IApp } from '../../types/coreTypes';
 import type { ModalSelectionPolicy } from './ModalSelectionPolicy';
-import { applyImageFilterAvailability } from './ModalFilterUi';
+import { applyImageFilterAvailability } from './ModalManagerSupport';
 
 type FilterType = 'text' | 'image';
 

@@ -582,6 +582,10 @@ export type EngineConfig = {
 	context_size?: number,
 	// Path to model file
 	model_path: string | null,
+	// Optional companion VAE path for image engines
+	vae_path?: string | null,
+	// Optional companion LLM path for multimodal image engines
+	llm_path?: string | null,
 	// Extra CLI arguments
 	extra_args?: string[],
 };

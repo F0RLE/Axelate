@@ -81,7 +81,7 @@ export class ModuleCardRenderer {
         this._tracer = deps.tracer;
     }
 
-    public createCard(
+    public createSelectionCard(
         app: IApp,
         _category: string,
         isSelected: boolean,
@@ -89,7 +89,7 @@ export class ModuleCardRenderer {
         onDownload?: (app: IApp) => void,
     ): HTMLElement {
         const card = document.createElement('div');
-        card.className = 'app-card module-picker-card';
+        card.className = 'app-card module-selection-card';
         if (isSelected) {
             card.classList.add('selected');
         }
@@ -144,7 +144,7 @@ export class ModuleCardRenderer {
             clone.insertBefore(deleteBadge, clone.firstChild);
         }
 
-        const iconWrapper = clone.querySelector('.app-icon-wrapper');
+        const iconWrapper = clone.querySelector('.module-selection-card-icon');
         const typeBadge = this._createHtmlFragmentElement(
             this._presentation.getTypeBadgeHtml(state.isApi, state.isInstalled),
         );
@@ -154,15 +154,15 @@ export class ModuleCardRenderer {
     }
 
     private _injectCoreContent(clone: DocumentFragment, app: IApp): void {
-        const iconWrapper = clone.querySelector('.app-icon-wrapper');
+        const iconWrapper = clone.querySelector('.module-selection-card-icon');
         if (iconWrapper) {
             iconWrapper.innerHTML = this._presentation.getSanitizedIconMarkup(app);
         }
 
-        const titleEl = clone.querySelector('.app-card-title');
+        const titleEl = clone.querySelector('.module-selection-card-title');
         if (titleEl) titleEl.textContent = this._presentation.getAppName(app);
 
-        const descEl = clone.querySelector('.app-card-desc');
+        const descEl = clone.querySelector('.module-selection-card-description');
         if (descEl) descEl.textContent = this._presentation.getAppDesc(app);
     }
 
@@ -182,7 +182,7 @@ export class ModuleCardRenderer {
         }
 
         const actionsContainer = document.createElement('div');
-        actionsContainer.className = 'app-card-hover-actions';
+        actionsContainer.className = 'module-selection-card-actions';
 
         if (state.isComingSoon) {
             actionsContainer.appendChild(buildModuleCardComingSoonButton(this._translate));
@@ -326,7 +326,7 @@ export class ModuleCardRenderer {
         this._ensureDeleteBadge(card, isApi);
     }
 
-    public updateCardAttributes(card: HTMLElement, app: IApp, capability?: string): void {
+    public updateSlotCardAttributes(card: HTMLElement, app: IApp, capability?: string): void {
         card.dataset['currentModule'] = app.id;
         card.dataset['currentModuleName'] = app.name ?? app.id;
         if (capability !== undefined && capability !== '') {
@@ -338,21 +338,21 @@ export class ModuleCardRenderer {
     }
 
     /**
-     * Updates the icon, title, and description of a **dashboard card** (`.model-card-premium`).
+     * Updates the icon, title, and description of a **dashboard card** (`.module-slot-card`).
      *
-     * NOTE: This method targets `.model-icon-wrapper`, `.model-card-title`, `.model-card-desc` —
+     * NOTE: This method targets `.module-slot-card-icon`, `.module-slot-card-title`, `.module-slot-card-description` —
      * the CSS classes used by the static HTML in `modules.html`. These are intentionally
-     * different from the `.app-icon-wrapper`/`.app-card-title`/`.app-card-desc` classes that
-     * `createCard()` generates for modal cards. Do NOT call this on modal `.app-card` elements.
+     * different from the `.module-selection-card-icon`/`.module-selection-card-title`/`.module-selection-card-description` classes that
+     * `createSelectionCard()` generates for modal cards. Do NOT call this on modal `.app-card` elements.
      */
-    public updateCardContent(card: HTMLElement, app: IApp): void {
+    public updateSlotCardContent(card: HTMLElement, app: IApp): void {
         this._updateCardIcon(card, app);
         this._updateCardTitle(card, app);
         this._updateCardDesc(card, app);
     }
 
     private _updateCardIcon(card: HTMLElement, app: IApp): void {
-        const iconWrapper = card.querySelector('.model-icon-wrapper');
+        const iconWrapper = card.querySelector('.module-slot-card-icon');
         if (iconWrapper === null) return;
 
         iconWrapper.innerHTML = this._presentation.getSanitizedIconMarkup(
@@ -362,7 +362,7 @@ export class ModuleCardRenderer {
     }
 
     private _updateCardTitle(card: HTMLElement, app: IApp): void {
-        const title = card.querySelector('.model-card-title');
+        const title = card.querySelector('.module-slot-card-title');
         if (!(title instanceof HTMLElement)) return;
 
         if (['axelate', 'axelate-platform'].includes(app.id)) {
@@ -375,13 +375,13 @@ export class ModuleCardRenderer {
     }
 
     private _updateCardDesc(card: HTMLElement, app: IApp): void {
-        const desc = card.querySelector('.model-card-desc');
+        const desc = card.querySelector('.module-slot-card-description');
         if (!(desc instanceof HTMLElement)) return;
 
         desc.textContent = this._resolveTranslatedText(desc.dataset, app.descKey, app.desc ?? '');
     }
 
-    public markCardAsInstalled(
+    public markSlotCardAsInstalled(
         card: HTMLElement,
         app: IApp,
         configureActionBtn: (card: HTMLElement, app: IApp) => void,
@@ -410,7 +410,7 @@ export class ModuleCardRenderer {
     }
 
     private _replaceCardActions(card: HTMLElement, actionButton: HTMLElement): void {
-        const actionsContainer = card.querySelector('.app-card-hover-actions');
+        const actionsContainer = card.querySelector('.module-selection-card-actions');
         if (actionsContainer === null) {
             return;
         }

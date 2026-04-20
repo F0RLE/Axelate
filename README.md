@@ -40,8 +40,8 @@
 
 ## Experience the Future
 
-**Axelate** is a dedicated desktop workspace for AI workflows.
-<br>Built for those who care about **privacy**, **speed**, and **control**.
+**Axelate** is a desktop shell for AI workflows, local engines, and managed modules.
+<br>Built for people who want **local control**, **predictable tooling**, and **clear ownership of data**.
 
 </div>
 
@@ -49,9 +49,9 @@
 
 <div align="center">
 
-| Secure Local Storage | Native Desktop Runtime | Local Engine Management |
-| :---: | :---: | :---: |
-| Sensitive values are stored locally and handled on the backend side. | Powered by **Rust**, **Tauri v2**, and **vanilla TypeScript**. | Install and run `llama.cpp` and `stable-diffusion.cpp` with hardware-aware release selection. |
+|                         Secure Local Storage                          |                     Native Desktop Runtime                     |                               Module And Engine Orchestration                               |
+| :-------------------------------------------------------------------: | :------------------------------------------------------------: | :-----------------------------------------------------------------------------------------: |
+| Sensitive values stay on the backend side and are not frontend-owned. | Powered by **Rust**, **Tauri v2**, and **vanilla TypeScript**. | Start, stop, install, and inspect local engines and module runtimes from one desktop shell. |
 
 </div>
 
@@ -66,7 +66,7 @@
   <br>
   <b>2. Run</b> `Axelate Setup.exe`.
   <br>
-  <b>3. Open</b> Settings, add your OpenRouter key, then install local modules if needed.
+  <b>3. Open</b> Settings, add your provider key, then install local engines or modules if needed.
 </p>
 
 </div>
@@ -75,7 +75,7 @@
 
 <h2 align="center">For Developers</h2>
 
-Axelate uses Rust for domain logic and a thin TypeScript shell for the desktop UI.
+Axelate uses Rust for domain logic and a thin TypeScript shell for desktop UI orchestration.
 
 <div align="center">
 
@@ -90,47 +90,49 @@ Axelate uses Rust for domain logic and a thin TypeScript shell for the desktop U
 
 ```text
 Axelate/
-├── src/         frontend app and npm dependencies
-├── src-tauri/   Rust backend and Tauri configuration
 ├── .github/     workflows, templates, helpers, workflow runner
-├── scripts/     optional double-click entrypoints by platform
+├── src/         frontend app
+├── src-tauri/   Rust backend and Tauri configuration
 └── docs/        project documentation
 ```
 
-`src/` is the only npm project with real dependencies. The root `package.json` only proxies commands.
+`src/` is the only npm project with real dependencies. The root `package.json` is a task proxy over the shared workflow runner.
 
 ### Common commands
 
 ```bash
+npm run doctor
 npm run setup
 npm run dev
+npm run test
+npm run typecheck
+npm run lint
 npm run verify
 npm run build
+npm run tauri:build
+npm run release
 npm run clear
 ```
 
-`npm run setup` is the first-run command. It checks local prerequisites, installs `src/node_modules`, and configures Git hooks.
-`npm run doctor` only checks the local machine/toolchain state without changing anything.
-`npm run dev`, `npm run dev:webview`, `npm run dev:app`, and `npm run tauri:dev` start the frontend inside the Tauri desktop WebView with Rust IPC enabled.
-`npm run dev:inspect` also opens desktop DevTools and enables WebView remote debugging on port `9223` for automation tools.
-`npm run dev:release-like` rebuilds the frontend and starts Tauri against the built static assets without Vite HMR.
-`scripts/*/dev.*` is the kept double-click development entrypoint and opens the inspect-enabled desktop dev flow.
-`npm run clear` removes build artifacts and frontend caches when you want to reset the workspace state.
+`npm run setup` is the first-run command. It validates prerequisites, installs `src/node_modules`, and configures Git hooks.
+`npm run doctor` checks the local machine/toolchain state without changing anything.
+`npm run dev` starts the desktop app in Tauri development mode.
+`npm run verify` is the local release gate: Rust checks, frontend checks, build, and size budget.
+`npm run clear` removes build artifacts and caches.
 
 On Windows, install WebView2 Runtime, Windows SDK, and Microsoft C++ Build Tools first.
 Portable Node/Rust toolchains are supported through `AXELATE_DEPS_DIR`, `./.deps`, or `%USERPROFILE%/Axelate-deps`.
-Double-click scripts are grouped under `scripts/windows`, `scripts/macos`, and `scripts/linux`.
 Release packaging uses the same Windows prerequisites and will only pass after `npm run verify` is green.
 
 ### Current product scope
 
 Today Axelate is:
 
-- a launcher for local AI engines
-- an API-backed AI chat shell
-- a unified desktop UI for downloads, settings, monitoring, and console tooling
+- a desktop AI shell with backend-owned state
+- a launcher for local engines and module runtimes
+- a frontend for chat, downloads, settings, monitoring, and console flows
 
-The `Marketplace` page already exists in the UI shell, but marketplace purchase, entitlement, and managed remote execution are still roadmap work.
+The `Marketplace` page already exists in the shell, but managed distribution, purchases, and entitlements are still roadmap work.
 
 ### More docs
 
@@ -146,11 +148,11 @@ The `Marketplace` page already exists in the UI shell, but marketplace purchase,
 
 <br>
 
-  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
-  &nbsp;
-  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
-  &nbsp;
-  <a href=".github/SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
+<a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+&nbsp;
+<a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+&nbsp;
+<a href=".github/SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
 
 <br>
 <br>

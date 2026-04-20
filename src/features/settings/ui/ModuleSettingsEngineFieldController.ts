@@ -7,7 +7,7 @@ import {
     formatEngineFieldSaveValue,
     parseEngineFieldValue,
     setupInitialEngineFieldValue,
-} from './ModuleSettingsEngineFieldState';
+} from './ModuleSettingsEngineFieldSupport';
 
 type EngineFieldType = 'number' | 'text' | 'select' | 'password' | 'textarea';
 type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
@@ -19,7 +19,10 @@ type ModuleSettingsEngineFieldControllerDeps = {
     showSaveIndicator: () => void;
     translate: (key: string, fallback: string) => string;
     getModelFileName: (modelPath: string) => string;
-    getModelFileFilters: (isImage: boolean) => Array<{ name: string; extensions: string[] }>;
+    getModelFileFilters: (
+        fileKind: 'model' | 'vae' | 'llm',
+        isImage: boolean,
+    ) => Array<{ name: string; extensions: string[] }>;
     tracer: Pick<LoggerService, 'error'>;
 };
 
@@ -97,6 +100,7 @@ export class ModuleSettingsEngineFieldController {
         container: HTMLElement,
         input: HTMLInputElement,
         isImage: boolean,
+        fileKind: 'model' | 'vae' | 'llm',
     ): void {
         const browseBtn = document.createElement('button');
         browseBtn.className = 'btn btn-secondary local-engine-browse-btn';
@@ -106,7 +110,7 @@ export class ModuleSettingsEngineFieldController {
             try {
                 const selected = await open({
                     multiple: false,
-                    filters: this._deps.getModelFileFilters(isImage),
+                    filters: this._deps.getModelFileFilters(fileKind, isImage),
                     title: this._deps.translate(
                         'ui.settings.engine.select_model_file',
                         'Select Model File',

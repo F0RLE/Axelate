@@ -1,28 +1,32 @@
 # Automation
 
-Axelate uses a shared cross-platform workflow runner plus optional platform launchers.
+Axelate uses one shared workflow runner. The root `package.json` is the public interface, and `.github/scripts/workflow.mjs` is the implementation.
 
-## Main commands
+## Canonical commands
 
-Run all commands from the repository root.
+Run commands from the repository root.
 
-| Command | What it does |
-| --- | --- |
-| `npm run doctor` | check local development prerequisites |
-| `npm run setup` | validate prerequisites, install frontend dependencies, configure hooks |
-| `npm run install-deps` | install frontend dependencies into `src/node_modules` |
-| `npm run dev` | start the desktop app in development mode |
-| `npm run tauri:dev` | start Tauri dev directly |
-| `npm run verify` | full verification gate |
-| `npm run build` | frontend production build |
-| `npm run clear` | remove build artifacts and caches |
-| `npm run tauri:build` | desktop production build |
-| `npm run release` | verify first, then build the desktop release bundle |
-| `npm run clean` | clean build outputs and caches |
+| Command                | Purpose                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `npm run doctor`       | check machine prerequisites                                    |
+| `npm run setup`        | validate prerequisites, install frontend deps, configure hooks |
+| `npm run dev`          | start the desktop app in development mode                      |
+| `npm run build`        | build the frontend bundle                                      |
+| `npm run tauri:build`  | build the desktop app                                          |
+| `npm run verify`       | run the full local verification gate                           |
+| `npm run release`      | verify first, then build release bundles                       |
+| `npm run clear`        | remove build outputs and caches                                |
+| `npm run lint`         | frontend lint                                                  |
+| `npm run format`       | format frontend files                                          |
+| `npm run format:check` | verify frontend formatting                                     |
+| `npm run test`         | frontend tests                                                 |
+| `npm run typecheck`    | frontend type checks                                           |
+| `npm run check-size`   | validate frontend bundle budgets                               |
+| `npm run update`       | update npm and cargo dependencies, then verify                 |
 
-## Primary workflow
+## Shared workflow runner
 
-The main entrypoint is:
+Primary entrypoint:
 
 ```text
 .github/scripts/workflow.mjs
@@ -30,62 +34,61 @@ The main entrypoint is:
 
 It is responsible for:
 
-- checking local prerequisites through `doctor`
-- preparing the repository through `setup`
-- resolving portable Node/Rust toolchains
-- adding Windows SDK / MSVC tools when needed
-- running root commands in a cross-platform way
-- keeping `npm run ...` as the canonical interface
+- prerequisite checks
+- portable toolchain resolution
+- frontend dependency installation in `src/node_modules`
+- Specta binding sync before app/build tasks
+- cross-platform command execution
+- the full verify gate
 
-## Optional convenience scripts
+## What `verify` really does
 
-Double-click scripts live in:
+`npm run verify` runs:
 
-- `scripts/windows`
-- `scripts/macos`
-- `scripts/linux`
+- `doctor`
+- Rust format check
+- Rust clippy with warnings denied
+- Rust check
+- Rust tests
+- fresh frontend install with `npm ci`
+- frontend format
+- frontend typecheck
+- frontend lint
+- frontend format check
+- frontend tests
+- frontend build
+- frontend size gate
 
-These are convenience wrappers only.
-The kept script set is intentionally small:
-
-- `dev.*` for inspect-enabled desktop development
-- `build.*` for builds
-- `clear.*` for cleanup
-- `verify.*` for the full verification gate
-
-## Legacy PowerShell scripts
-
-PowerShell scripts still live in `.github/scripts/`.
-
-They are now helper or compatibility entrypoints, not the primary development interface.
-
-- `common.ps1` - helper functions and Windows bootstrap logic
-- `dev.ps1` - legacy development flow
-- `verify-all.ps1` - legacy verification flow
-- `clear.ps1` - cleanup helper
-- `release.ps1` - legacy release helper with checksum and release hardening checks
-- `update.ps1` - legacy dependency update helper
+This is the repository’s real local release gate.
 
 ## Git hooks
 
-Hooks live in `.github/.husky`.
+Hooks live in:
 
-They use tooling from `src/node_modules`, not from a root npm dependency tree.
+```text
+.github/.husky
+```
 
-Current hooks:
-
-- `pre-commit`
-- `commit-msg`
-
-Git hook installation is handled by:
+Installation is handled by:
 
 ```text
 src/scripts/setup-git-hooks.mjs
 ```
 
+Current active hooks:
+
+- `pre-commit`
+- `commit-msg`
+
 ## CI and release
 
 GitHub workflows live in `.github/workflows`.
 
-- `ci.yml` runs the verification pipeline
-- `release.yml` uses the official Tauri GitHub Action, release audits, checksum generation, and release hardening checks
+- `ci.yml` runs repository verification in CI.
+- `release.yml` builds the desktop release path and runs release hardening checks.
+
+## Notes
+
+- Frontend dependencies belong in `src/node_modules`, not at the repo root.
+- The root `package.json` is a task proxy, not a second npm workspace.
+- Old platform wrapper scripts are no longer part of the main workflow.

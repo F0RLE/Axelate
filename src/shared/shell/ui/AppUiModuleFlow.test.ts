@@ -22,7 +22,7 @@ describe('AppUiModuleFlow', () => {
     const getSelectedAppId = vi.fn();
     const clearModuleCard = vi.fn();
     const openAppSelection = vi.fn();
-    const markCardAsInstalled = vi.fn();
+    const markSlotCardAsInstalled = vi.fn();
     const showToast = vi.fn();
     const translate = vi.fn((_key: string, fallback: string) => fallback);
 
@@ -44,7 +44,7 @@ describe('AppUiModuleFlow', () => {
             getSelectedAppId,
             clearModuleCard,
             openAppSelection,
-            markCardAsInstalled,
+            markSlotCardAsInstalled,
             showToast,
             translate,
         });
@@ -81,7 +81,7 @@ describe('AppUiModuleFlow', () => {
 
         expect(app.installed).toBe(true);
         expect(btn.classList.contains('downloading')).toBe(false);
-        expect(markCardAsInstalled).toHaveBeenCalledWith(card, app);
+        expect(markSlotCardAsInstalled).toHaveBeenCalledWith(card, app);
         expect(modalManager.refreshCurrentSelection).toHaveBeenCalledWith([app], 'svc');
     });
 

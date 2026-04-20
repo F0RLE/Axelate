@@ -23,7 +23,7 @@
 
 /* Shared launcher glass shell used by modules cards and chat compose controls. */
 .launcher-glass-panel,
-.model-card-premium {
+.module-slot-card {
     background: var(
         --launcher-glass-background,
         radial-gradient(circle at top left, rgba(var(--primary-raw), 0.14), transparent 36%),

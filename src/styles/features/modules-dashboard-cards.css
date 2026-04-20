@@ -1,16 +1,12 @@
 /* Main dashboard launch cards on the modules page */
-.model-card-premium,
-.dashboard-launch-card {
+.module-slot-card,
+.module-slot-card {
     background: rgba(var(--background-raw), 0.065);
     border: 1px solid rgba(255, 255, 255, 0.03);
     border-radius: var(--radius-lg);
     padding: 1.5rem 1.5rem 2rem 1.5rem;
     display: flex;
-    transition:
-        transform 0.24s ease,
-        background-color 0.24s ease,
-        border-color 0.24s ease,
-        box-shadow 0.24s ease;
+    transition: box-shadow 0.24s ease;
     flex-direction: column;
     align-items: center;
     text-align: center;
@@ -23,65 +19,93 @@
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
 }
 
-.model-card-premium::before,
-.dashboard-launch-card::before {
+.module-slot-card::before,
+.module-slot-card::before {
     content: '';
     position: absolute;
-    top: 0;
+    top: 0.08rem;
     left: 50%;
-    transform: translateX(-50%) scaleX(0.35);
-    transform-origin: center top;
-    width: 54%;
-    height: 3px;
-    border-radius: 0 0 3px 3px;
-    background: var(--primary);
-    opacity: 0;
+    transform: translateX(-50%) scaleX(0.82);
+    transform-origin: center center;
+    width: 2.9rem;
+    height: 0.18rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    opacity: 1;
     pointer-events: none;
     z-index: 6;
     transition:
-        opacity 0.22s ease,
-        transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+        background 0.18s ease,
+        box-shadow 0.18s ease,
+        transform 0.18s ease;
 }
 
-.model-card-premium.selected,
-.dashboard-launch-card.selected {
+.module-slot-card.selected,
+.module-slot-card.selected {
     background: rgba(var(--background-raw), 0.065) !important;
     border: 1px solid rgba(255, 255, 255, 0.04) !important;
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
 }
 
-.model-card-premium.selected::before,
-.dashboard-launch-card.selected::before {
+.module-slot-card.selected::before,
+.module-slot-card.selected::before {
     transform: translateX(-50%) scaleX(1);
-    opacity: 0.92;
+    background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    box-shadow: 0 0 12px rgba(var(--primary-raw), 0.22);
+    animation: selectedCardMarkerIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.model-card-premium:hover,
-.dashboard-launch-card:hover {
+.module-slot-card.engine-error::before,
+.module-slot-card.engine-error::before,
+.module-slot-card.selected.engine-error::before,
+.module-slot-card.selected.engine-error::before {
+    transform: translateX(-50%) scaleX(1);
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--danger) 88%, #ffffff 12%),
+        var(--danger)
+    );
+    box-shadow: 0 0 12px rgba(var(--danger-raw), 0.24);
+    animation: selectedCardMarkerIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes selectedCardMarkerIn {
+    from {
+        transform: translateX(-50%) scaleX(0.55);
+        opacity: 0.6;
+    }
+
+    to {
+        transform: translateX(-50%) scaleX(1);
+        opacity: 1;
+    }
+}
+
+.module-slot-card:hover,
+.module-slot-card:hover {
     background: rgba(var(--background-raw), 0.075);
-    transform: translateY(-2px);
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.022);
 }
 
 /* Ensure content is above the ::before background effect */
-.model-card-premium > :not(.module-action-badge),
-.dashboard-launch-card > :not(.module-action-badge) {
+.module-slot-card > :not(.module-action-badge),
+.module-slot-card > :not(.module-action-badge) {
     position: relative;
     z-index: 2;
     cursor: pointer;
     pointer-events: none;
 }
 
-.model-card-premium .model-card-action,
-.model-card-premium .card-action-corner,
-.model-card-premium .module-action-badge,
-.dashboard-launch-card .model-card-action,
-.dashboard-launch-card .card-action-corner,
-.dashboard-launch-card .module-action-badge {
+.module-slot-card .module-slot-card-action,
+.module-slot-card .card-action-corner,
+.module-slot-card .module-action-badge,
+.module-slot-card .module-slot-card-action,
+.module-slot-card .card-action-corner,
+.module-slot-card .module-action-badge {
     pointer-events: auto !important;
 }
 
-.model-icon-wrapper {
+.module-slot-card-icon {
     width: 80px;
     height: 80px;
     border-radius: 18px;
@@ -95,8 +119,8 @@
     border: none;
 }
 
-.model-card-premium svg,
-.dashboard-launch-card svg {
+.module-slot-card svg,
+.module-slot-card svg {
     width: 32px;
     height: 32px;
     color: var(--text-primary);
@@ -109,12 +133,12 @@
     transition: color 0.2s;
 }
 
-.model-card-premium:hover svg,
-.dashboard-launch-card:hover svg {
+.module-slot-card:hover svg,
+.module-slot-card:hover svg {
     color: #fff;
 }
 
-.model-icon-wrapper > :is(div, span) {
+.module-slot-card-icon > :is(div, span) {
     font-size: 3.2rem;
     line-height: 1;
     display: flex;
@@ -125,7 +149,7 @@
 }
 
 /* Modal Icons Unification */
-.app-card .app-icon-wrapper {
+.app-card .module-selection-card-icon {
     font-size: 2.8rem !important;
     line-height: 1;
     display: flex;
@@ -133,7 +157,7 @@
     justify-content: center;
 }
 
-.model-card-title {
+.module-slot-card-title {
     font-size: 1.3rem;
     font-weight: 600;
     color: var(--text-primary);
@@ -147,7 +171,7 @@
     text-align: center;
 }
 
-.model-card-desc {
+.module-slot-card-description {
     font-size: 0.95rem;
     color: var(--text-secondary);
     line-height: 1.4;
@@ -155,7 +179,7 @@
     margin: 0;
 }
 
-.model-card-premium .model-card-action {
+.module-slot-card .module-slot-card-action {
     margin-top: auto;
     margin-bottom: 0.5rem;
     width: max-content;
@@ -184,7 +208,7 @@
     transform: translateY(0);
 }
 
-.model-card-premium:hover .model-card-action {
+.module-slot-card:hover .module-slot-card-action {
     opacity: 1 !important;
     color: #ffffff !important;
     pointer-events: auto !important;
@@ -192,45 +216,45 @@
 }
 
 /* Active Module State */
-.model-card-premium.selected .model-icon-wrapper {
+.module-slot-card.selected .module-slot-card-icon {
     width: 80px;
     height: 80px;
     border-radius: 18px;
     margin-top: 1.5rem;
 }
 
-.model-card-premium.selected:hover .model-icon-wrapper {
+.module-slot-card.selected:hover .module-slot-card-icon {
     border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
-.model-card-premium.selected:hover svg {
+.module-slot-card.selected:hover svg {
     color: var(--text-primary) !important;
 }
 
-.model-card-premium.selected .model-card-title {
+.module-slot-card.selected .module-slot-card-title {
     font-size: 1.3rem;
     margin-bottom: 0.6rem;
 }
 
-.model-card-premium.selected .model-card-desc {
+.module-slot-card.selected .module-slot-card-description {
     font-size: 0.95rem;
     line-height: 1.4;
     margin-bottom: 0;
 }
 
-.model-card-premium .model-card-action.active-module-btn {
+.module-slot-card .module-slot-card-action.active-module-btn {
     background: var(--module-button-bg);
     color: #ffffff;
     border: 1px solid var(--module-button-border-hover);
     min-width: 140px;
 }
 
-.model-card-premium.empty .model-card-action:not(.download-module-btn) {
+.module-slot-card.empty .module-slot-card-action:not(.download-module-btn) {
     display: none !important;
 }
 
 /* The download button - focused on size and performance */
-.model-card-premium .model-card-action.download-module-btn {
+.module-slot-card .module-slot-card-action.download-module-btn {
     opacity: 1 !important;
     pointer-events: auto !important;
     display: inline-flex !important;
@@ -249,13 +273,13 @@
         box-shadow 0.2s ease !important;
 }
 
-.model-card-premium .model-card-action.download-module-btn:hover {
+.module-slot-card .module-slot-card-action.download-module-btn:hover {
     background: var(--module-button-bg-hover) !important;
     transform: translateY(-2px) scale(1.01) !important;
     box-shadow: none;
 }
 
-.model-card-premium .model-card-action.active-module-btn:hover {
+.module-slot-card .module-slot-card-action.active-module-btn:hover {
     background: var(--module-button-bg-hover) !important;
     border-color: var(--module-button-border-hover) !important;
     color: #ffffff !important;
@@ -272,7 +296,7 @@
     font-weight: 700;
 }
 
-.model-card-premium .model-card-action.active-module-btn.stop-btn:hover {
+.module-slot-card .module-slot-card-action.active-module-btn.stop-btn:hover {
     background: #d32f2f !important;
     border-color: #d32f2f !important;
     color: #ffffff !important;
@@ -285,8 +309,8 @@
 }
 
 /* Download Progress Animation */
-.model-card-premium .model-card-action.download-module-btn.downloading,
-.app-card-hover-actions .download-btn.downloading {
+.module-slot-card .module-slot-card-action.download-module-btn.downloading,
+.module-selection-card-actions .download-btn.downloading {
     position: relative;
     overflow: hidden;
     background: var(--surface-2) !important;
@@ -298,8 +322,8 @@
     border: 1px solid var(--border-color) !important;
 }
 
-.model-card-premium .model-card-action.download-module-btn.downloading::before,
-.app-card-hover-actions .download-btn.downloading::before {
+.module-slot-card .module-slot-card-action.download-module-btn.downloading::before,
+.module-selection-card-actions .download-btn.downloading::before {
     content: '';
     position: absolute;
     top: 0;
@@ -312,8 +336,8 @@
     z-index: 1;
 }
 
-.model-card-premium .model-card-action.download-module-btn.downloading.indeterminate::before,
-.app-card-hover-actions .download-btn.downloading.indeterminate::before {
+.module-slot-card .module-slot-card-action.download-module-btn.downloading.indeterminate::before,
+.module-selection-card-actions .download-btn.downloading.indeterminate::before {
     width: 100%;
     background: linear-gradient(90deg, transparent, var(--primary), transparent);
     background-size: 200% 100%;
@@ -330,8 +354,8 @@
     }
 }
 
-.model-card-premium .model-card-action.download-module-btn.downloading .btn-content,
-.app-card-hover-actions .download-btn.downloading .btn-content {
+.module-slot-card .module-slot-card-action.download-module-btn.downloading .btn-content,
+.module-selection-card-actions .download-btn.downloading .btn-content {
     position: relative;
     z-index: 2;
     display: flex;

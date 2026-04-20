@@ -140,7 +140,7 @@ export class EventHandler {
         if (!(moduleCard instanceof HTMLElement)) return false;
 
         const actionTarget = target.closest(
-            '.model-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
+            '.module-slot-card-action, .module-action-badge, .download-module-btn, .stop-btn, .module-settings-btn, .module-close-btn',
         );
         if (actionTarget !== null) return true;
 

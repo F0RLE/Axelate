@@ -1,29 +1,27 @@
 # Getting Started
 
-This document describes the current repository layout and the commands that actually work today.
+This document describes the commands and prerequisites that actually matter today.
 
 ## Requirements
 
 - Node.js 20+
 - npm 10+
 - Rust stable
-- Windows: Visual Studio Build Tools and Windows SDK
+- Windows: Visual Studio Build Tools, Windows SDK, and WebView2 Runtime
 
-Tauri on Windows also needs WebView2 at runtime. Current installers use the bootstrapper flow instead of bundling the full runtime.
+Tauri on Windows depends on machine-level native tooling. Portable Node and Rust are supported, but MSVC, SDK tools, and WebView2 still need to exist on the machine.
 
-### Windows prerequisites
+## Windows prerequisites
 
-For local development on Windows, install:
+Install:
 
 - Microsoft C++ Build Tools with the `Desktop development with C++` workload
-- Windows 10/11 SDK (`rc.exe` must be available)
+- Windows 10/11 SDK so `rc.exe` is available
 - Microsoft Edge WebView2 Runtime
 
-These are machine-level prerequisites. The repository scripts can use portable Node/Rust toolchains.
+## Portable toolchains
 
-### Portable toolchains
-
-The shared workflow runner looks for portable dependencies in this order:
+The workflow runner checks for portable tools in this order:
 
 1. `AXELATE_DEPS_DIR`
 2. `<repo>/.deps`
@@ -45,8 +43,6 @@ deps-root/
     └── rustup-home/
 ```
 
-This keeps the repo team-friendly: no user-specific paths in the main workflow, and each developer can choose repo-local or external portable toolchains.
-
 ## Install
 
 From the repository root:
@@ -57,96 +53,55 @@ cd Axelate
 npm run setup
 ```
 
-`npm run setup` is the canonical first-run command.
-It checks the local toolchain, installs frontend dependencies into `src/node_modules`, and configures Git hooks.
-The root package is only a proxy and should not have its own dependency tree.
+`npm run setup` is the canonical first-run command. It runs `doctor`, installs frontend dependencies into `src/node_modules`, and configures Git hooks.
 
-## Development
+## Daily development
 
-Recommended:
+Recommended start:
 
 ```bash
 npm run dev
 ```
 
-Before development, you can run:
+Useful commands:
 
 ```bash
 npm run doctor
-```
-
-This validates the local environment without changing files.
-
-`npm run dev` runs the shared Node workflow, resolves portable tools when available, syncs Specta bindings, and starts Tauri.
-
-Direct commands:
-
-```bash
-npm run tauri:dev
+npm run test
+npm run typecheck
+npm run lint
 npm run verify
 ```
 
-### What is needed for development on Windows
+What they do:
 
-Machine-level prerequisites:
+- `doctor` checks prerequisites without changing files.
+- `dev` starts the desktop app in Tauri development mode.
+- `verify` runs the full local gate.
 
-- Microsoft C++ Build Tools with `Desktop development with C++`
-- Windows 10/11 SDK
-- Microsoft Edge WebView2 Runtime
-
-Portable or local prerequisites:
-
-- Node.js 20+
-- npm 10+
-- Rust stable
-
-The repository scripts support portable Node/Rust toolchains, but they still expect the Windows-native SDK and MSVC toolchain to exist on the machine.
-
-## Build
-
-From the repository root:
+## Build and release
 
 ```bash
 npm run build
-npm run clear
 npm run tauri:build
 npm run release
 ```
 
-`npm run build` builds the frontend only.
-`npm run clear` removes build outputs and frontend/tool caches.
-`npm run tauri:build` builds the desktop application.
-`npm run release` runs the repository verification pipeline first, then creates the Tauri release bundle.
+- `build` builds the frontend bundle.
+- `tauri:build` builds the desktop app.
+- `release` runs verification first, then produces release bundles.
 
-### What is needed for release builds on Windows
+## First app launch
 
-Release builds use the same prerequisites as development:
+Current happy path:
 
-- Microsoft C++ Build Tools
-- Windows SDK
-- WebView2 Runtime
-- Node.js / npm
-- Rust stable
-
-Current bundle targets are `msi` and `nsis`, so the Windows toolchain must stay available during release packaging.
-
-### Current repository status
-
-The local Windows environment is ready when `npm run verify` succeeds.
-If `npm run release` still fails, the remaining blockers are in repository checks or release packaging details, not in the machine setup.
-Run `npm run verify` first and fix any failing tests or lint errors before packaging.
-
-## First launch
-
-Current user flow:
-
-1. open the app
+1. open Axelate
 2. go to Settings
-3. add the OpenRouter API key
-4. select a model
-5. optionally install local engines such as `llama.cpp` or `stable-diffusion.cpp`
+3. add an OpenRouter key
+4. choose an active model/provider
+5. optionally install local engines or modules
 
-## Verification
+## Verification gate
 
 Before release work, run:
 
@@ -154,36 +109,34 @@ Before release work, run:
 npm run verify
 ```
 
-This checks:
+That gate includes:
 
-- doctor prerequisites first
-- build artifacts are cleaned before verification
-- `cargo fmt --all --check`
-- `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo check --all-targets --all-features`
-- `cargo test --all-targets --all-features`
-- frontend typecheck, lint, format check, tests, build, size budget
-- fresh frontend dependency install with `npm ci`
+- prerequisite check
+- Rust format, clippy, check, and tests
+- frontend install
+- frontend format, typecheck, lint, format check, tests, build, and size budget
+
+If `verify` is red, the repository is not ready for release work.
 
 ## Common issues
 
 ### WebView2 missing
 
-Install the Microsoft Edge WebView2 Runtime.
+Install Microsoft Edge WebView2 Runtime.
 
 ### `rc.exe` missing
 
-Install Windows SDK through Visual Studio Build Tools.
+Install the Windows SDK through Visual Studio Build Tools.
 
-### Two `node_modules` folders
+### Wrong dependency layout
 
-That is wrong for this repository. Dependencies should live only in `src/node_modules`.
+This repository should use `src/node_modules`. A second root `node_modules` tree is not part of the intended workflow.
 
 ## Related docs
 
 - [Architecture](architecture.md)
-- [Roadmap](ROADMAP.md)
 - [Automation](AUTOMATION.md)
+- [Project Tree](ProjectTree.md)
 - [Coding Standards](CODING_STANDARDS.md)
 - [Security Hardening](SECURITY_HARDENING.md)
-- [Project Tree](ProjectTree.md)
+- [Roadmap](ROADMAP.md)

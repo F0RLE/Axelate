@@ -12,6 +12,9 @@ export type EngineFieldDefinition = {
     max?: number;
     fullWidth?: boolean;
     showInfoButton?: boolean;
+    isFile?: boolean;
+    fileKind?: 'model' | 'vae' | 'llm';
+    description?: string;
 };
 
 export type ImageEngineFieldGroups = {
@@ -28,12 +31,27 @@ export class ModuleSettingsEngineFieldCatalog {
         isImage: boolean,
     ): EngineFieldDefinition {
         return {
-            label: t('ui.settings.engine.model_path', 'Model Path (*.gguf, *.safetensors)'),
+            label: t(
+                isImage ? 'ui.settings.engine.image_model_path' : 'ui.settings.engine.model_path',
+                isImage
+                    ? 'Image Model Path (*.gguf, *.safetensors)'
+                    : 'Model Path (*.gguf, *.safetensors)',
+            ),
             key: 'model_path',
             type: 'text',
             isEngineConfig: true,
             placeholder: modelPlaceholder,
             fullWidth: !isImage,
+            isFile: true,
+            fileKind: 'model',
+            ...(isImage
+                ? {
+                      description: t(
+                          'ui.settings.engine.image_model_path_hint',
+                          'Main image model. Use your SD model here, or a qwen-image*.gguf file for Qwen Image.',
+                      ),
+                  }
+                : {}),
         };
     }
 
@@ -204,6 +222,43 @@ export class ModuleSettingsEngineFieldCatalog {
         };
     }
 
+    public buildImageCompanionFields(t: TranslateFn, appId: string): EngineFieldDefinition[] {
+        if (appId !== 'sdcpp' && appId !== 'stable-diffusion') {
+            return [];
+        }
+
+        return [
+            {
+                label: t('ui.settings.engine.vae_path', 'Qwen Image VAE (*.safetensors)'),
+                key: 'vae_path',
+                type: 'text',
+                isEngineConfig: true,
+                placeholder: String.raw`e.g. C:\Models\qwen_image_vae.safetensors`,
+                isFile: true,
+                fileKind: 'vae',
+                fullWidth: true,
+                description: t(
+                    'ui.settings.engine.vae_path_hint',
+                    'Only needed for qwen-image*.gguf models. Leave empty for обычные SD models.',
+                ),
+            },
+            {
+                label: t('ui.settings.engine.llm_path', 'Qwen Image LLM (*.gguf)'),
+                key: 'llm_path',
+                type: 'text',
+                isEngineConfig: true,
+                placeholder: String.raw`e.g. C:\Models\Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf`,
+                isFile: true,
+                fileKind: 'llm',
+                fullWidth: true,
+                description: t(
+                    'ui.settings.engine.llm_path_hint',
+                    'Only needed for qwen-image*.gguf models. This is the companion multimodal LLM.',
+                ),
+            },
+        ];
+    }
+
     public buildImageExtraArgsField(t: TranslateFn): EngineFieldDefinition {
         return {
             label: t('ui.settings.engine.extra_args', 'Extra Arguments'),
@@ -214,6 +269,10 @@ export class ModuleSettingsEngineFieldCatalog {
             defaultValue: '',
             fullWidth: true,
             showInfoButton: true,
+            description: t(
+                'ui.settings.engine.extra_args_hint',
+                'Advanced startup flags only. VAE and LLM companion files are configured in the dedicated fields above.',
+            ),
         };
     }
 }

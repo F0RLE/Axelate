@@ -110,18 +110,23 @@ fn find_companion_model_file(
 
 fn resolve_qwen_image_support_file(
     model_path: &Path,
+    configured_path: Option<&str>,
     extra_args: &[String],
     arg_names: &[&str],
     stems: &[&str],
     extensions: &[&str],
 ) -> Option<String> {
-    extract_arg_value(extra_args, arg_names)
+    configured_path
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| extract_arg_value(extra_args, arg_names))
         .or_else(|| find_companion_model_file(model_path, stems, extensions))
 }
 
 fn qwen_image_requirements_error(model_path: &str) -> AppError {
     AppError::Validation(format!(
-        "Qwen Image model '{model_path}' needs companion files for stable-diffusion.cpp. Add '--vae <qwen_image_vae.safetensors>' and '--llm <Qwen2.5-VL-7B-Instruct*.gguf>' in Extra Arguments, or place those files next to the model."
+        "Qwen Image model '{model_path}' needs companion files for stable-diffusion.cpp. Set VAE Path to 'qwen_image_vae.safetensors' and LLM Path to 'Qwen2.5-VL-7B-Instruct*.gguf' in launcher settings, pass '--vae' and '--llm' in Extra Arguments, or place those files next to the model."
     ))
 }
 
@@ -133,6 +138,7 @@ pub(super) fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Result<Vec<S
             let model_path_buf = Path::new(model_path);
             let vae_path = resolve_qwen_image_support_file(
                 model_path_buf,
+                config.vae_path.as_deref(),
                 &config.extra_args,
                 &["--vae"],
                 &["qwen_image_vae", "qwen-image-vae"],
@@ -140,6 +146,7 @@ pub(super) fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Result<Vec<S
             );
             let llm_path = resolve_qwen_image_support_file(
                 model_path_buf,
+                config.llm_path.as_deref(),
                 &config.extra_args,
                 &["--llm"],
                 &["qwen2.5-vl", "qwen2_5_vl", "qwen25-vl", "qwen25_vl"],

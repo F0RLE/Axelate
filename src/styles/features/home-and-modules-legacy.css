@@ -34,12 +34,10 @@
 @keyframes homeEntry {
     0% {
         opacity: 0;
-        transform: translateY(15px) scale(0.98);
     }
 
     100% {
         opacity: 1;
-        transform: translateY(0) scale(1);
     }
 }
 /* Modules Page Styles */
@@ -239,18 +237,15 @@ body[data-platform='macos'] .module-card:hover {
 /* State when model selection or settings is open */
 .models-container.content-hidden {
     opacity: 0;
-    transform: translateY(6px) scale(0.992);
     pointer-events: none;
 }
 
 @keyframes modelsPageFadeIn {
     from {
         opacity: 0;
-        transform: translateY(20px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
@@ -568,7 +563,7 @@ body.ui-hidden .modal-backdrop {
         color 0.3s ease;
 }
 
-.model-card-premium.selected:hover .card-action-corner {
+.module-slot-card.selected:hover .card-action-corner {
     opacity: 1;
 }
 
@@ -667,7 +662,7 @@ body.ui-hidden .modal-backdrop {
     transform: translateX(0); /* Bring text back */
 }
 
-.model-card-premium:not(.selected) .card-action-corner {
+.module-slot-card:not(.selected) .card-action-corner {
     display: none;
 }
 
@@ -852,60 +847,55 @@ body.ui-hidden .modal-backdrop {
     }
 }
 
-.model-card-premium.resetting {
+.module-slot-card.resetting {
     animation: cardResetPulse 0.4s ease-out;
 }
 
 /* --- Selected Module Card Style (has a module chosen) --- */
-.model-card-premium.selected:hover {
-    background: rgba(var(--background-raw), 0.075) !important;
+.module-slot-card.selected:hover {
+    background: rgba(var(--background-raw), 0.065) !important;
     border-color: rgba(255, 255, 255, 0.04) !important;
-    transform: translateY(-2px) !important;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.022) !important;
+    transform: none !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
     cursor: pointer !important;
 }
 
 /* --- Empty Module Card Style (no module chosen yet) --- */
-.model-card-premium.empty {
+.module-slot-card.empty {
     background: rgba(var(--background-raw), 0.065);
     border: 1px solid rgba(255, 255, 255, 0.03);
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
-    transition:
-        transform 0.24s ease,
-        background-color 0.24s ease,
-        border-color 0.24s ease,
-        box-shadow 0.24s ease;
+    transition: box-shadow 0.24s ease;
 }
 
-.model-card-premium.empty .model-icon-wrapper {
+.module-slot-card.empty .module-slot-card-icon {
     background: transparent;
     border: none;
     filter: saturate(0.92);
     opacity: 0.9;
 }
 
-.model-card-premium.empty .model-card-title {
+.module-slot-card.empty .module-slot-card-title {
     color: rgba(255, 255, 255, 0.92);
 }
 
-.model-card-premium.empty .model-card-desc {
+.module-slot-card.empty .module-slot-card-description {
     color: rgba(255, 255, 255, 0.58);
 }
 
-.model-card-premium.empty:hover {
+.module-slot-card.empty:hover {
     background: rgba(var(--background-raw), 0.075);
     cursor: pointer;
-    transform: translateY(-2px);
     box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.022);
 }
 
-.model-card-premium.empty:hover .model-icon-wrapper {
+.module-slot-card.empty:hover .module-slot-card-icon {
     filter: none;
     opacity: 1;
     background: transparent;
 }
 
-.model-card-premium.empty .model-card-action {
+.module-slot-card.empty .module-slot-card-action {
     background: var(--module-button-bg-soft);
     border: 1px solid var(--module-button-border);
     color: var(--module-button-text);
@@ -925,7 +915,7 @@ body.ui-hidden .modal-backdrop {
     margin-top: auto;
 }
 
-.model-card-premium.empty:hover .model-card-action {
+.module-slot-card.empty:hover .module-slot-card-action {
     background: var(--module-button-bg-hover);
     border-color: var(--module-button-border-hover);
     color: white;
@@ -1295,8 +1285,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 /* Show on card hover */
 .app-card:hover .module-action-badge,
 .app-card.selected:hover .module-action-badge,
-.model-card-premium:hover .module-action-badge,
-.model-card-premium.selected:hover .module-action-badge {
+.module-slot-card:hover .module-action-badge,
+.module-slot-card.selected:hover .module-action-badge {
     opacity: 1;
 }
 
@@ -1544,21 +1534,21 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 /* Final normalization for main Modules page cards.
    Mirror the selectable modal cards, not the modal shell itself. */
-.models-grid .model-card-premium,
-.models-grid .dashboard-launch-card,
-.models-grid .model-card-premium.empty,
-.models-grid .model-card-premium.selected,
-.models-grid .dashboard-launch-card.selected {
+.models-grid .module-slot-card,
+.models-grid .module-slot-card,
+.models-grid .module-slot-card.empty,
+.models-grid .module-slot-card.selected,
+.models-grid .module-slot-card.selected {
     background: rgba(255, 255, 255, 0.007) !important;
     border: none !important;
     border-radius: 18px !important;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
 }
 
-.models-grid .model-card-premium:hover,
-.models-grid .dashboard-launch-card:hover,
-.models-grid .model-card-premium.empty:hover,
-.models-grid .model-card-premium.selected:hover {
+.models-grid .module-slot-card:hover,
+.models-grid .module-slot-card:hover,
+.models-grid .module-slot-card.empty:hover,
+.models-grid .module-slot-card.selected:hover {
     background: rgba(255, 255, 255, 0.018) !important;
     border: none !important;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.045) !important;
