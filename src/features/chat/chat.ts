@@ -418,7 +418,7 @@ export class ChatController {
         this._voice.stop();
     }
 
-    public clearChat(): void {
+    public async clearChat(): Promise<void> {
         this._activationCoordinator.clearInactiveAiErrorTimeout();
         this._generationController.stopImagePreviewPolling();
         this._state.clearHistory();
@@ -426,9 +426,11 @@ export class ChatController {
         this._ui.clear();
         this._ui.updateTokenCount(0);
         this._scheduleAutoResizeInput();
-        void this._aiBridge.clearHistory().catch((e: unknown) => {
+        try {
+            await this._aiBridge.clearHistory();
+        } catch (e: unknown) {
             this._tracer.error('[Chat] Failed to clear persisted history:', e);
-        });
+        }
     }
 
     // --- Send Message ---

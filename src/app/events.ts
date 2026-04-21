@@ -150,7 +150,7 @@ export class EventHandler {
 
     private async _handleChatActionClick(target: Element): Promise<void> {
         if (target.closest('#clear-chat-btn') !== null) {
-            this._core.chatController.clearChat();
+            await this._core.chatController.clearChat();
             return;
         }
 

@@ -362,11 +362,12 @@ pub async fn validate_stored_api_key(provider: String) -> Result<bool, AppError>
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)]
 /// Clears chat history for a specific session
-pub fn clear_chat_history(
+pub async fn clear_chat_history(
     session_id: &str,
     sessions: State<'_, Arc<ChatSessionManager>>,
 ) -> Result<(), AppError> {
     sessions.clear_chat_history(session_id);
+    let _ = sessions.force_save().await;
     Ok(())
 }
 

@@ -23,24 +23,17 @@ type ChatHistoryControllerOptions = {
 };
 
 export class ChatHistoryController {
-    private static readonly _historyRetryDelayMs = 300;
     private static readonly _chatRevealFollowUpDelayMs = 120;
 
     private _historyLoaded = false;
     private _loadedSessionId: string | null = null;
     private _historyLoadInFlight: Promise<void> | null = null;
-    private _historyRetryTimeout: ReturnType<typeof setTimeout> | null = null;
     private _revealLatestMessageTimeout: ReturnType<typeof setTimeout> | null = null;
     private _revealLatestMessageFrame: number | null = null;
 
     constructor(private readonly _options: ChatHistoryControllerOptions) {}
 
     public destroy(): void {
-        if (this._historyRetryTimeout !== null) {
-            globalThis.clearTimeout(this._historyRetryTimeout);
-            this._historyRetryTimeout = null;
-        }
-
         this.clearRevealLatestMessageTimeout();
         if (this._revealLatestMessageFrame !== null) {
             globalThis.cancelAnimationFrame(this._revealLatestMessageFrame);
@@ -54,19 +47,6 @@ export class ChatHistoryController {
         if (this._historyLoadInFlight !== null) {
             await this._historyLoadInFlight;
             return;
-        }
-
-        if (sessionId === 'default') {
-            this._historyRetryTimeout ??= globalThis.setTimeout(() => {
-                this._historyRetryTimeout = null;
-                void this.ensureHistoryLoaded();
-            }, ChatHistoryController._historyRetryDelayMs);
-            return;
-        }
-
-        if (this._historyRetryTimeout !== null) {
-            globalThis.clearTimeout(this._historyRetryTimeout);
-            this._historyRetryTimeout = null;
         }
 
         this._historyLoadInFlight = this.loadHistory();

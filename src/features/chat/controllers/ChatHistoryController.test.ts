@@ -89,4 +89,18 @@ describe('ChatHistoryController', () => {
         expect(deps.setHistory).toHaveBeenLastCalledWith([]);
         expect(deps.renderHistory).toHaveBeenLastCalledWith([]);
     });
+
+    it('should load persisted history for the default session id', async () => {
+        const defaultHistory: IChatMessage[] = [{ role: 'user', content: 'persisted-default' }];
+        const { controller, deps, aiBridge } = createController({
+            sessionId: 'default',
+            history: defaultHistory,
+        });
+
+        await controller.ensureHistoryLoaded();
+
+        expect(aiBridge.getHistory).toHaveBeenCalledTimes(1);
+        expect(deps.setHistory).toHaveBeenLastCalledWith(defaultHistory);
+        expect(deps.renderHistory).toHaveBeenLastCalledWith(defaultHistory);
+    });
 });
