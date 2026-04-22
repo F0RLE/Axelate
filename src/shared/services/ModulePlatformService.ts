@@ -108,6 +108,24 @@ export class ModulePlatformService {
     }
 
     /**
+     * Pauses an in-progress download for a module.
+     * @param moduleId The ID of the module to pause downloading.
+     */
+    public async pauseDownload(moduleId: string): Promise<boolean> {
+        this._tracer.info(`[ModulePlatformService] Pausing download: ${moduleId}`);
+        return await this._moduleService.pauseDownload(moduleId);
+    }
+
+    /**
+     * Resumes a paused download for a module.
+     * @param moduleId The ID of the module to resume downloading.
+     */
+    public async resumeDownload(moduleId: string): Promise<boolean> {
+        this._tracer.info(`[ModulePlatformService] Resuming download: ${moduleId}`);
+        return await this._moduleService.resumeDownload(moduleId);
+    }
+
+    /**
      * Checks whether a local module is installed.
      */
     public async checkInstalled(moduleId: string): Promise<boolean> {

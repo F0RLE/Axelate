@@ -1,5 +1,7 @@
 import type { ChatContent, IChatMessage, IChatRequest, ChatContentPart } from '../types/aiTypes';
 
+type RequestThinkingLevel = 'none' | 'off' | 'low' | 'medium' | 'high';
+
 /**
  * Creates a multimodal content object from text and attachments.
  */
@@ -35,7 +37,7 @@ export function constructChatRequest(
         model: string;
         apiKey: string | null;
         sessionId: string;
-        thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
+        thinkingLevel?: RequestThinkingLevel;
         maxTokens?: number | undefined;
         webSearchEnabled?: boolean;
     },
@@ -62,7 +64,7 @@ export function constructChatRequest(
         attachments,
     };
 
-    if (thinkingLevel !== undefined && thinkingLevel !== 'off') {
+    if (thinkingLevel !== undefined) {
         request.thinking_level = thinkingLevel;
     }
 

@@ -1,7 +1,14 @@
+import {
+    isCloudProviderId,
+    isImageProviderId,
+    isManagedLocalImageProviderId,
+} from '@/shared/utils/providerSupport';
+
 type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
+type CloudReasoningEffort = 'none' | Exclude<ThinkingLevel, 'off'>;
 
 export type AIBridgeRequestOptions = {
-    thinkingLevel?: Exclude<ThinkingLevel, 'off'>;
+    thinkingLevel?: CloudReasoningEffort;
     maxTokens?: number;
     webSearchEnabled?: boolean;
 };
@@ -14,29 +21,16 @@ type RequestOptionInput = {
 };
 
 export class AIBridgeProviderPolicy {
-    private static readonly _cloudProviders = new Set([
-        'gpt',
-        'gemini',
-        'openai',
-        'openrouter',
-        'anthropic',
-        'mistral',
-        'claude',
-        'deepseek',
-    ]);
-    private static readonly _imageProviders = new Set(['sdcpp', 'stable-diffusion', 'comfyui']);
-    private static readonly _managedLocalImageEngines = new Set(['sdcpp', 'stable-diffusion']);
-
     public isCloudProvider(providerId: string): boolean {
-        return AIBridgeProviderPolicy._cloudProviders.has(providerId);
+        return isCloudProviderId(providerId);
     }
 
     public isImageProvider(providerId: string): boolean {
-        return AIBridgeProviderPolicy._imageProviders.has(providerId);
+        return isImageProviderId(providerId);
     }
 
     public isManagedLocalImageEngine(providerId: string): boolean {
-        return AIBridgeProviderPolicy._managedLocalImageEngines.has(providerId);
+        return isManagedLocalImageProviderId(providerId);
     }
 
     public buildRequestOptions(input: RequestOptionInput): AIBridgeRequestOptions {
@@ -45,8 +39,12 @@ export class AIBridgeProviderPolicy {
         }
 
         const requestOptions: AIBridgeRequestOptions = {};
-        const effectiveThinkingLevel =
-            input.thinkingLevel !== 'off' ? input.thinkingLevel : undefined;
+        const effectiveThinkingLevel: CloudReasoningEffort | undefined =
+            input.thinkingLevel === undefined
+                ? undefined
+                : input.thinkingLevel === 'off'
+                  ? 'none'
+                  : input.thinkingLevel;
 
         if (effectiveThinkingLevel !== undefined) {
             requestOptions.thinkingLevel = effectiveThinkingLevel;

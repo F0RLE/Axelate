@@ -3,6 +3,13 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('@tauri-apps/api/core', () => ({
+    Channel: class<T> {
+        public onmessage: ((message: T) => void) | null = null;
+    },
+    invoke: vi.fn(),
+}));
+
 // Deep mock of Tauri API
 const mockInvoke = vi.fn().mockResolvedValue(null);
 const mockListen = vi.fn().mockResolvedValue(() => {
@@ -39,9 +46,7 @@ const mockCore = {
     aiSettings: {
         setAiSessionId: vi.fn(),
         setSelectedAIModel: vi.fn(),
-        setLastActiveProvider: vi.fn(),
         getSelectedAIModel: vi.fn(),
-        getLastActiveProvider: vi.fn(),
         getThinkingLevel: vi.fn().mockReturnValue('high'),
         getInternetAccessEnabled: vi.fn().mockReturnValue(true),
         getLocalMaxOutputTokens: vi.fn().mockReturnValue(384),

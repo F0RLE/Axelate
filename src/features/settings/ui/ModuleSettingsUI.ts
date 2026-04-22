@@ -33,6 +33,7 @@ import type { ModuleSettingsSpecializedRenderer } from './ModuleSettingsSpeciali
 import { resolveModuleSettingsRenderPlan } from './ModuleSettingsRenderPlan';
 import { ModuleSettingsViewHelper } from './ModuleSettingsViewHelper';
 import { ModuleSettingsControllerFactory } from './ModuleSettingsControllerFactory';
+import { supportsModuleSettings } from '@/shared/utils/moduleSettingsSupport';
 type ModuleSettingsUIDeps = {
     eventBus: EventBus;
     tracer: Pick<LoggerService, 'error' | 'warn' | 'info' | 'debug'>;
@@ -134,7 +135,6 @@ export class ModuleSettingsUI {
 
         this._subscribeCoreEvents();
         this._loadCardWidths();
-        this._bindEvents();
         this._initCardResizer();
 
         this._bridgeController.install(
@@ -146,6 +146,7 @@ export class ModuleSettingsUI {
     public close(): void {
         this._resetAutosaveState();
         this._resetDynamicModuleState();
+        this._unbindDropdownEvents();
         delete this._context.currentModule;
         this._modalController.close();
     }
@@ -218,7 +219,7 @@ export class ModuleSettingsUI {
     }
 
     private _unbindGlobalEvents(): void {
-        document.removeEventListener('click', this._boundDropdownDocumentClick);
+        this._unbindDropdownEvents();
         globalThis.removeEventListener('lang:changed', this._boundLangChanged);
     }
 
@@ -264,9 +265,6 @@ export class ModuleSettingsUI {
                 return;
             case 'telegram-bot':
                 this._getSpecializedRenderer().renderTelegramBotSettings(container);
-                return;
-            case 'comfyui':
-                this._getSpecializedRenderer().renderComfyUiSettings(container, app);
                 return;
             case 'local-engine':
                 await this._renderLocalEngineConfig(container, app);
@@ -340,7 +338,12 @@ export class ModuleSettingsUI {
      * Binds global events (e.g. clicking outside dropdowns).
      */
     private _bindEvents() {
+        document.removeEventListener('click', this._boundDropdownDocumentClick);
         document.addEventListener('click', this._boundDropdownDocumentClick);
+    }
+
+    private _unbindDropdownEvents(): void {
+        document.removeEventListener('click', this._boundDropdownDocumentClick);
     }
 
     private _registerModuleCleanup(cleanup: () => void): void {
@@ -360,6 +363,10 @@ export class ModuleSettingsUI {
      * Helper to open the settings modal for a specific module.
      */
     private async _openModuleSettingsHelper(app: IApp) {
+        if (!supportsModuleSettings(app)) {
+            return;
+        }
+
         const elements = this._getModalElements();
         if (elements === null) return;
 
@@ -369,6 +376,7 @@ export class ModuleSettingsUI {
 
         await this._renderSpecializedModuleConfig(elements.container, app);
         this._context.i18nUI.applyTranslations(elements.container);
+        this._bindEvents();
 
         this._modalController.open(
             app.id,

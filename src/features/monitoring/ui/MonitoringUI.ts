@@ -2,6 +2,63 @@ import { BaseComponent } from '../../../shared/ui/BaseComponent';
 import { type MonitoringService } from '../services/MonitoringService';
 import type { ISystemStats } from '../types/monitoringTypes';
 
+export interface IFormattedRate {
+    val1: string;
+    val2: string;
+    unit: string;
+}
+
+const DISK_SCALE_SOFT_MAX_MB_PER_SEC = 2048;
+const NETWORK_SCALE_SOFT_MAX_MB_PER_SEC = 125;
+const MIN_ACTIVITY_VISIBLE_PERCENT = 4;
+
+export function formatSmartRate(b1: number, b2: number): IFormattedRate {
+    const gb1 = b1 / (1024 * 1024 * 1024);
+    const gb2 = b2 / (1024 * 1024 * 1024);
+    const peakGb = Math.max(gb1, gb2);
+    if (peakGb >= 1) {
+        return { val1: gb1.toFixed(1), val2: gb2.toFixed(1), unit: 'GB/s' };
+    }
+
+    const mb1 = b1 / (1024 * 1024);
+    const mb2 = b2 / (1024 * 1024);
+    const peakMb = Math.max(mb1, mb2);
+    if (peakMb >= 10) {
+        return { val1: Math.round(mb1).toString(), val2: Math.round(mb2).toString(), unit: 'MB/s' };
+    }
+    if (peakMb >= 1) {
+        return { val1: mb1.toFixed(1), val2: mb2.toFixed(1), unit: 'MB/s' };
+    }
+
+    const kb1 = b1 / 1024;
+    const kb2 = b2 / 1024;
+    const peakKb = Math.max(kb1, kb2);
+    if (peakKb >= 1) {
+        return { val1: Math.round(kb1).toString(), val2: Math.round(kb2).toString(), unit: 'KB/s' };
+    }
+
+    return { val1: Math.round(b1).toString(), val2: Math.round(b2).toString(), unit: 'B/s' };
+}
+
+export function scaleThroughputToPercent(
+    totalBytesPerSecond: number,
+    softMaxMegabytesPerSecond: number,
+): number {
+    if (totalBytesPerSecond <= 0 || softMaxMegabytesPerSecond <= 0) {
+        return 0;
+    }
+
+    const totalMegabytesPerSecond = totalBytesPerSecond / (1024 * 1024);
+    const ratio = totalMegabytesPerSecond / softMaxMegabytesPerSecond;
+    const curved = Math.sqrt(Math.max(0, ratio));
+    const percent = Math.max(0, Math.min(100, curved * 100));
+    if (percent <= 0) {
+        return 0;
+    }
+
+    return Math.max(MIN_ACTIVITY_VISIBLE_PERCENT, percent);
+}
+
 export class MonitoringUI extends BaseComponent {
     private readonly _boundUpdateUI = this.updateUI.bind(this);
 
@@ -62,12 +119,16 @@ export class MonitoringUI extends BaseComponent {
             stats.network.downloadRate,
             stats.network.uploadRate,
         );
-        this._updateText(el, `↓${val1}·↑${val2}`, unit);
-        el.title =
-            stats.network.utilization > 0
-                ? `Usage: ${stats.network.utilization.toFixed(1)}%`
-                : 'Activity-based indicator';
-        this._updateProgressBar(cache.bar, stats.network.activityPercent, true);
+        this._updateText(el, `↓${val1} ↑${val2}`, unit);
+        el.title = `Network activity indicator, responsive up to ${String(NETWORK_SCALE_SOFT_MAX_MB_PER_SEC)} MB/s total throughput`;
+        this._updateProgressBar(
+            cache.bar,
+            scaleThroughputToPercent(
+                stats.network.downloadRate + stats.network.uploadRate,
+                NETWORK_SCALE_SOFT_MAX_MB_PER_SEC,
+            ),
+            true,
+        );
     }
 
     private _updateDisk(stats: ISystemStats) {
@@ -79,9 +140,16 @@ export class MonitoringUI extends BaseComponent {
             stats.disk.readRate,
             stats.disk.writeRate,
         );
-        this._updateText(el, `R${val1}·W${val2}`, unit);
-        el.title = `Usage: ${stats.disk.utilization.toFixed(1)}%`;
-        this._updateProgressBar(cache.bar, stats.disk.activityPercent, true);
+        this._updateText(el, `R${val1} W${val2}`, unit);
+        el.title = `Disk activity indicator, responsive up to ${String(DISK_SCALE_SOFT_MAX_MB_PER_SEC)} MB/s total throughput`;
+        this._updateProgressBar(
+            cache.bar,
+            scaleThroughputToPercent(
+                stats.disk.readRate + stats.disk.writeRate,
+                DISK_SCALE_SOFT_MAX_MB_PER_SEC,
+            ),
+            true,
+        );
     }
 
     private _animateMainValue(el: HTMLElement, targetVal: number, decimals = 0, suffix = '') {
@@ -196,6 +264,7 @@ export class MonitoringUI extends BaseComponent {
         // GPU Friendly: Use transform instead of width
         bar.style.transform = `scaleX(${p / 100})`;
 
+        bar.classList.toggle('activity', isActivity);
         bar.classList.toggle('high', p >= 85);
         bar.classList.toggle('medium', p >= 70 && p < 85);
         bar.classList.toggle('low', p < 70);
@@ -203,17 +272,12 @@ export class MonitoringUI extends BaseComponent {
 
         if (isActivity) {
             bar.classList.toggle('pulse', p > 5);
+        } else {
+            bar.classList.remove('pulse');
         }
     }
 
     private _formatSmartRate(b1: number, b2: number): { val1: string; val2: string; unit: string } {
-        const mb1 = b1 / (1024 * 1024);
-        const mb2 = b2 / (1024 * 1024);
-        const peak = Math.max(mb1, mb2);
-
-        if (peak >= 1024) {
-            return { val1: (mb1 / 1024).toFixed(1), val2: (mb2 / 1024).toFixed(1), unit: 'GB/s' };
-        }
-        return { val1: Math.round(mb1).toString(), val2: Math.round(mb2).toString(), unit: 'MB/s' };
+        return formatSmartRate(b1, b2);
     }
 }

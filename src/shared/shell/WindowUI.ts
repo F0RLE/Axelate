@@ -67,7 +67,7 @@ export class WindowUI {
         this._interactionController = new WindowUiInteractionController({
             runtime: _runtime,
             toggleMaximize: async () => {
-                await this._service.toggleMaximize();
+                await this.toggleMaximize();
             },
             changeZoom: async (delta) => {
                 await this._service.changeZoom(delta);
@@ -108,6 +108,7 @@ export class WindowUI {
         this._applySmallScreenProtection().catch((err: unknown) => {
             this._tracer.warn('[WindowUI] Failed to apply small screen protection:', err);
         });
+        void this._syncMaximizeState();
 
         this._checkWidth();
         this._initSoundState();
@@ -168,10 +169,13 @@ export class WindowUI {
      * Handles window resize events with debouncing.
      */
     private _handleResize(): void {
-        this._checkWidth();
         this._service.checkResolutionChange();
         const resizeCheckVersion = ++this._resizeCheckVersion;
         this._timingController.scheduleResize(() => {
+            if (!this._initialized) {
+                return;
+            }
+            this._checkWidth();
             void this._performResizeCheck(resizeCheckVersion);
         }, 200);
     }
@@ -236,6 +240,11 @@ export class WindowUI {
         this._viewportController.updateMaximizeIcon(this._maximizeIcon, isMaximized);
     }
 
+    public async toggleMaximize(): Promise<void> {
+        await this._service.toggleMaximize();
+        await this._syncMaximizeState();
+    }
+
     /**
      * Toggles the global sound state and updates the UI.
      * @sideeffect Modifies SoundService and DOM
@@ -268,20 +277,19 @@ export class WindowUI {
      * @sideeffect Shows/hides warning overlays in the DOM
      */
     private _checkWidth(): void {
-        const computedStyle = getComputedStyle(document.documentElement) as CSSStyleDeclaration & {
-            zoom?: string;
-        };
-        const zoom = Number.parseFloat(computedStyle.zoom || '1') || 1;
-
         const viewport = this._runtime.getInnerSize();
-        const width = viewport.width / zoom;
-        const height = viewport.height / zoom;
-
         const config = this._service.getConfig();
         const minWidth = config?.thresholds.warningWidth ?? 0;
         const minHeight = config?.thresholds.warningHeight ?? 0;
+        const zoom = this._service.getZoom();
+        const effectiveZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
 
-        this._shellController.updateWidthWarning({ width, height, minWidth, minHeight });
+        this._shellController.updateWidthWarning({
+            width: viewport.width / effectiveZoom,
+            height: viewport.height / effectiveZoom,
+            minWidth,
+            minHeight,
+        });
     }
 
     /**
@@ -320,5 +328,14 @@ export class WindowUI {
                 self._maximizeIcon = value;
             },
         };
+    }
+
+    private async _syncMaximizeState(): Promise<void> {
+        try {
+            const isMaximized = await this._service.isMaximized();
+            this.updateMaximizeIcon(isMaximized);
+        } catch (error) {
+            this._tracer.warn('[WindowUI] Failed to sync maximize state:', error);
+        }
     }
 }

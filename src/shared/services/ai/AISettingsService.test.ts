@@ -3,7 +3,6 @@ import { AISettingsService } from './AISettingsService';
 import type { UiStateStore } from '../state/UiStateStore';
 
 import { createMockStore } from '@/test/mocks/mockUiStateStore';
-
 describe('AISettingsService', () => {
     let store: UiStateStore;
     let service: AISettingsService;
@@ -32,8 +31,9 @@ describe('AISettingsService', () => {
         expect(service.getThinkingLevel('gemini')).toBe('low');
     });
 
-    it('should enable internet access by default for cloud providers', () => {
-        expect(service.getInternetAccessEnabled('gpt')).toBe(true);
+    it('should disable internet access by default for cloud providers', () => {
+        expect(service.getInternetAccessEnabled('gpt')).toBe(false);
+        expect(service.getInternetAccessEnabled('openrouter-custom-text')).toBe(false);
     });
 
     it('should disable internet access by default for local providers', () => {
@@ -55,18 +55,6 @@ describe('AISettingsService', () => {
 
         service.setLocalMaxOutputTokens('llamacpp', 999999);
         expect(service.getLocalMaxOutputTokens('llamacpp')).toBe(32768);
-    });
-
-    it('should get and set last active provider', () => {
-        expect(service.getLastActiveProvider()).toBeNull();
-        service.setLastActiveProvider('gemini');
-        expect(service.getLastActiveProvider()).toBe('gemini');
-    });
-
-    it('should set last active provider to null', () => {
-        service.setLastActiveProvider('gemini');
-        service.setLastActiveProvider(null);
-        expect(service.getLastActiveProvider()).toBeNull();
     });
 
     it('should get and set AI session ID', () => {

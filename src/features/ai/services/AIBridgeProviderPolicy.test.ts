@@ -1,19 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
+import {
+    CUSTOM_IMAGE_PROVIDER_ID,
+    CUSTOM_TEXT_PROVIDER_ID,
+} from '@/shared/utils/customProviderSupport';
 
 describe('AIBridgeProviderPolicy', () => {
     const policy = new AIBridgeProviderPolicy();
 
     it('should classify cloud and image providers consistently', () => {
         expect(policy.isCloudProvider('gemini')).toBe(true);
+        expect(policy.isCloudProvider('seedream-image')).toBe(true);
+        expect(policy.isCloudProvider(CUSTOM_TEXT_PROVIDER_ID)).toBe(true);
+        expect(policy.isCloudProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
         expect(policy.isCloudProvider('llamacpp')).toBe(false);
         expect(policy.isImageProvider('comfyui')).toBe(true);
+        expect(policy.isImageProvider('seedream-image')).toBe(true);
+        expect(policy.isImageProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
         expect(policy.isImageProvider('gemini')).toBe(false);
+        expect(policy.isImageProvider(CUSTOM_TEXT_PROVIDER_ID)).toBe(false);
         expect(policy.isManagedLocalImageEngine('sdcpp')).toBe(true);
         expect(policy.isManagedLocalImageEngine('comfyui')).toBe(false);
     });
 
-    it('should build cloud request options without off thinking level', () => {
+    it('should map off thinking level to explicit OpenRouter none effort', () => {
         expect(
             policy.buildRequestOptions({
                 hasApiKey: true,
@@ -22,6 +32,7 @@ describe('AIBridgeProviderPolicy', () => {
                 webSearchEnabled: true,
             }),
         ).toEqual({
+            thinkingLevel: 'none',
             maxTokens: 2048,
             webSearchEnabled: true,
         });

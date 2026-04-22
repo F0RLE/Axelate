@@ -1,5 +1,8 @@
 import type { IApp } from '@/shared/types/coreTypes';
-import { type SettingsService } from '@/features/settings/services/SettingsService';
+import {
+    type ICustomModel,
+    type SettingsService,
+} from '@/features/settings/services/SettingsService';
 import { type AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
@@ -7,6 +10,8 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAIModelData } from '../types/aiTypes';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import { isCustomProviderId } from '@/shared/utils/customProviderSupport';
+import { SHARED_CLOUD_KEY_PROVIDER_ID } from '@/shared/utils/providerSupport';
 import { bindAISettingsInteractions } from './AISettingsInteractionBinder';
 import { AISettingsViewPolicy } from './AISettingsViewPolicy';
 import { AISettingsKeyController } from './AISettingsKeyController';
@@ -26,6 +31,10 @@ const ICONS = {
 type TranslateFunc = (key: string, fallback: string) => string;
 type ShowToast = (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 type AISettingsRendererLogger = Pick<LoggerService, 'info' | 'debug' | 'error'>;
+type AISettingsActiveRenderTarget = {
+    container: HTMLElement;
+    app: IApp;
+};
 
 // IAISettingsGlobal removed as it's no longer used for strictness reasons
 
@@ -34,7 +43,6 @@ type AISettingsRendererLogger = Pick<LoggerService, 'info' | 'debug' | 'error'>;
  * @description Manages the lifecycle and rendering of AI-specific settings modules.
  */
 class AISettingsRenderer extends BaseComponent {
-    private static readonly _SHARED_API_KEY_PROVIDER = 'openrouter';
     private _settingsService: SettingsService | null = null;
     private _aiSettings: AISettingsService | null = null;
     private _tauri: TauriProvider | null = null;
@@ -43,6 +51,7 @@ class AISettingsRenderer extends BaseComponent {
     private _translate: TranslateFunc = (_key, fallback) => fallback;
     private _showToastCallback: ShowToast = () => undefined;
     private _renderAbortController: AbortController | null = null;
+    private _activeRenderTarget: AISettingsActiveRenderTarget | null = null;
     private readonly _buttonResetTimers = new Map<
         HTMLButtonElement,
         ReturnType<typeof setTimeout>
@@ -114,6 +123,7 @@ class AISettingsRenderer extends BaseComponent {
         this._translate = (_key, fallback) => fallback;
         this._showToastCallback = () => undefined;
         this._selectionController.reset();
+        this._activeRenderTarget = null;
         this._cleanupRenderScope();
     }
 
@@ -131,10 +141,10 @@ class AISettingsRenderer extends BaseComponent {
         }
 
         this._cleanupRenderScope();
+        this._activeRenderTarget = { container, app };
 
         const appId = app.id;
-        const providerData = app.apiProviderData ?? {};
-        const models = (providerData['models'] as IAIModelData[] | undefined) ?? [];
+        const models = await this._getProviderModels(app);
 
         const firstModel = models.length > 0 ? models[0] : undefined;
         const defaultModelId = firstModel ? firstModel.id : '';
@@ -151,6 +161,8 @@ class AISettingsRenderer extends BaseComponent {
             appId,
             models,
             savedModel,
+            showModelStats: this._viewPolicy.shouldShowModelStats(appId),
+            showCustomModelComposer: isCustomProviderId(appId),
             translate: t,
             viewPolicy: this._viewPolicy,
             supportsInternetAccess: this._viewPolicy.supportsInternetAccess(appId),
@@ -177,7 +189,12 @@ class AISettingsRenderer extends BaseComponent {
      * @param modelKey - Unique model identifier
      */
     public renderModelStats(appId: string, modelKey: string): string {
-        return this._selectionController.renderModelStats(appId, modelKey, this._getTranslator());
+        return this._selectionController.renderModelStats(
+            appId,
+            modelKey,
+            this._getTranslator(),
+            this._viewPolicy,
+        );
     }
 
     /**
@@ -220,6 +237,8 @@ class AISettingsRenderer extends BaseComponent {
             toggleKeyVisibility: async () => this.toggleKeyVisibility(appId),
             checkKey: async () => this.checkKey(appId),
             selectModel: (modelKey) => this.selectModel(appId, modelKey),
+            submitCustomModel: async () => this._submitCustomModel(appId),
+            removeCustomModel: async (modelKey) => this._removeCustomModel(appId, modelKey),
             setThinkingLevel: (level: ThinkingLevel) => {
                 this._aiSettings?.setThinkingLevel(appId, level);
             },
@@ -275,6 +294,7 @@ class AISettingsRenderer extends BaseComponent {
             translate: this._getTranslator(),
             i18nUI: this._i18nUI,
             contentRenderer: this._contentRenderer,
+            viewPolicy: this._viewPolicy,
         });
     }
 
@@ -297,12 +317,161 @@ class AISettingsRenderer extends BaseComponent {
         this._showToastCallback(message, type);
     }
 
+    private async _getProviderModels(app: IApp): Promise<IAIModelData[]> {
+        const providerData = app.apiProviderData ?? {};
+        const builtInModels = (providerData['models'] as IAIModelData[] | undefined) ?? [];
+
+        if (!isCustomProviderId(app.id) || this._settingsService === null) {
+            return builtInModels;
+        }
+
+        const customModels = await this._settingsService.getCustomModels();
+        const providerCustomModels = customModels.filter((model) => model.provider_id === app.id);
+
+        return this._mergeCustomModels(builtInModels, providerCustomModels);
+    }
+
+    private _mergeCustomModels(
+        builtInModels: IAIModelData[],
+        customModels: ICustomModel[],
+    ): IAIModelData[] {
+        const existingIds = new Set(builtInModels.map((model) => model.id));
+        const translate = this._getTranslator();
+        const mappedCustomModels: IAIModelData[] = customModels
+            .filter((model) => !existingIds.has(model.id))
+            .map((model) => ({
+                id: model.id,
+                name: model.name.trim() !== '' ? model.name : model.id,
+                desc: translate('ui.settings.custom_model_desc', 'Manual OpenRouter model ID'),
+                isCustom: true,
+            }));
+
+        return [...builtInModels, ...mappedCustomModels];
+    }
+
+    private async _submitCustomModel(appId: string): Promise<void> {
+        if (this._settingsService === null) {
+            return;
+        }
+
+        const modelIdInput = this._queryActiveElement<HTMLInputElement>(
+            `#${appId}-custom-model-id-input`,
+        );
+        const modelId = modelIdInput?.value.trim() ?? '';
+        const translate = this._getTranslator();
+
+        if (modelId === '' || /\s/u.test(modelId)) {
+            this._showToast(
+                translate(
+                    'ui.settings.custom_model_invalid',
+                    'Enter a valid model ID without spaces',
+                ),
+                'warning',
+            );
+            modelIdInput?.focus();
+            return;
+        }
+
+        try {
+            await this._settingsService.addCustomModel(
+                appId,
+                modelId,
+                this._deriveCustomModelName(modelId),
+            );
+            this._aiSettings?.setSelectedAIModel(appId, modelId);
+            if (modelIdInput !== null) {
+                modelIdInput.value = '';
+            }
+            this._showToast(
+                translate('ui.settings.custom_model_added', 'Custom model added'),
+                'success',
+            );
+            await this._rerenderActiveApp();
+        } catch (error) {
+            this._logger?.error('[AISettingsRenderer] Failed to add custom model', error);
+            this._showToast(
+                translate('ui.settings.custom_model_add_failed', 'Failed to add custom model'),
+                'error',
+            );
+        }
+    }
+
+    private async _removeCustomModel(appId: string, modelId: string): Promise<void> {
+        if (this._settingsService === null) {
+            return;
+        }
+
+        const translate = this._getTranslator();
+
+        try {
+            await this._settingsService.removeCustomModel(modelId);
+
+            const nextModels = await this._getProviderModels(
+                this._activeRenderTarget?.app ?? { id: appId, apiProviderData: { models: [] } },
+            );
+            const fallbackModelId = nextModels.find((model) => model.id !== modelId)?.id ?? '';
+            if ((this._aiSettings?.getSelectedAIModel(appId) ?? '') === modelId) {
+                this._aiSettings?.setSelectedAIModel(appId, fallbackModelId);
+            }
+
+            this._showToast(
+                translate('ui.settings.custom_model_removed', 'Custom model removed'),
+                'success',
+            );
+            await this._rerenderActiveApp();
+        } catch (error) {
+            this._logger?.error('[AISettingsRenderer] Failed to remove custom model', error);
+            this._showToast(
+                translate(
+                    'ui.settings.custom_model_remove_failed',
+                    'Failed to remove custom model',
+                ),
+                'error',
+            );
+        }
+    }
+
+    private _deriveCustomModelName(modelId: string): string {
+        const rawName = modelId.split('/').at(-1) ?? modelId;
+        const parts = rawName
+            .split(/[-_]+/u)
+            .filter((part) => part !== '')
+            .map((part) => {
+                if (/^[a-z]{1,3}\d*(\.\d+)?$/iu.test(part)) {
+                    return part.toUpperCase();
+                }
+
+                return part.charAt(0).toUpperCase() + part.slice(1);
+            });
+
+        const firstPart = parts[0];
+        const secondPart = parts[1];
+        if (
+            firstPart !== undefined &&
+            secondPart !== undefined &&
+            /^[A-Z]{2,6}$/u.test(firstPart) &&
+            /^\d/u.test(secondPart)
+        ) {
+            return [`${firstPart}-${secondPart}`, ...parts.slice(2)].join(' ');
+        }
+
+        return parts.join(' ');
+    }
+
+    private async _rerenderActiveApp(): Promise<void> {
+        if (this._activeRenderTarget === null) {
+            return;
+        }
+
+        await this.render(this._activeRenderTarget.container, this._activeRenderTarget.app);
+    }
+
     private _getKeyProviderId(_appId: string): string {
-        return AISettingsRenderer._SHARED_API_KEY_PROVIDER;
+        return SHARED_CLOUD_KEY_PROVIDER_ID;
     }
 
     private _getKeyProviderUrl(providerId: string): string {
-        if (providerId === AISettingsRenderer._SHARED_API_KEY_PROVIDER) {
+        if (providerId === SHARED_CLOUD_KEY_PROVIDER_ID) {
             return 'https://openrouter.ai/settings/keys';
         }
 

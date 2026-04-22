@@ -19,7 +19,6 @@ function createMockStore(): UiStateStore {
         ai_thinking_level: {},
         ai_web_search_enabled: {},
         local_max_output_tokens: {},
-        last_active_provider: null,
         ai_session_id: null,
         pending_chat_reveal: false,
     };

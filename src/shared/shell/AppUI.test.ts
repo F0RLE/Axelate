@@ -5,13 +5,16 @@ import type { ModulePlatformService } from '../services/ModulePlatformService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '../types/coreTypes';
+import {
+    CUSTOM_IMAGE_PROVIDER_ID,
+    CUSTOM_TEXT_PROVIDER_ID,
+} from '../utils/customProviderSupport';
 
 describe('AppUI lifecycle', () => {
     let appUI: AppUI | null = null;
     let testEventBus: EventBus;
     let uiStateMocks: {
         removeSelectedModule: ReturnType<typeof vi.fn>;
-        updateState: ReturnType<typeof vi.fn>;
         setSelectedModule: ReturnType<typeof vi.fn>;
     };
     let launchAppMock: ReturnType<typeof vi.fn>;
@@ -32,7 +35,6 @@ describe('AppUI lifecycle', () => {
         document.body.innerHTML = '';
         uiStateMocks = {
             removeSelectedModule: vi.fn(),
-            updateState: vi.fn(),
             setSelectedModule: vi.fn(),
         };
         launchAppMock = vi.fn().mockResolvedValue(undefined);
@@ -92,16 +94,11 @@ describe('AppUI lifecycle', () => {
                             ) => void
                         )(category, moduleData);
                     },
-                    updateState: (updates: { last_active_provider: string | null }) => {
-                        (
-                            uiStateMocks.updateState as (value: {
-                                last_active_provider: string | null;
-                            }) => void
-                        )(updates);
-                    },
                 },
-                launchApp: async (moduleId: string) => {
-                    await (launchAppMock as (id: string) => Promise<void>)(moduleId);
+                launchApp: async (category: string, app: IApp) => {
+                    await (
+                        launchAppMock as (selectedCategory: string, selectedApp: IApp) => Promise<void>
+                    )(category, app);
                 },
                 openModuleSettings: (app: IApp) => {
                     (openModuleSettingsMock as (targetApp: IApp) => void)(app);
@@ -259,6 +256,35 @@ describe('AppUI lifecycle', () => {
         expect(document.getElementById('action-feedback')?.classList.contains('error')).toBe(true);
     });
 
+    it('injects dedicated custom providers into ai modal selections', () => {
+        getCatalogCategoryMock.mockReturnValue([
+            {
+                id: 'gpt',
+                name: 'GPT',
+                type: 'api',
+                capability: 'text',
+                installed: true,
+            },
+        ]);
+        appUI = createAppUI();
+        const modalManager = (appUI as unknown as {
+            _modalManager: { openAppSelection: (category: string, apps: IApp[]) => void };
+        })._modalManager;
+        const openSpy = vi.spyOn(modalManager, 'openAppSelection');
+
+        appUI.openAppSelection('ai');
+
+        expect(openSpy).toHaveBeenCalledWith(
+            'ai_text',
+            expect.arrayContaining([
+                expect.objectContaining({ id: 'gpt' }),
+                expect.objectContaining({ id: CUSTOM_TEXT_PROVIDER_ID }),
+                expect.objectContaining({ id: CUSTOM_IMAGE_PROVIDER_ID }),
+            ]),
+            undefined,
+        );
+    });
+
     it('should render a visible action feedback icon', () => {
         appUI = createAppUI();
 
@@ -314,9 +340,6 @@ describe('AppUI lifecycle', () => {
         appUI.clearModuleCard('ai_image');
         expect(card.classList.contains('empty')).toBe(true);
         expect(stopAiProviderMock).toHaveBeenCalled();
-        expect(uiStateMocks.updateState).toHaveBeenCalledWith({
-            last_active_provider: null,
-        });
         expect(platformServiceMock.stop).toHaveBeenCalledWith(textApp);
         expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp);
     });
@@ -512,6 +535,66 @@ describe('AppUI lifecycle', () => {
         expect(resolvedCategory).toBe('ai_image');
     });
 
+    it('should retarget AI card settings and close actions after wheel switching slots', () => {
+        vi.useFakeTimers();
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="empty">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+
+        const textApp = { id: 'text-model', name: 'Text Model', installed: true } as IApp;
+        const imageApp = { id: 'image-model', name: 'Image Model', installed: true } as IApp;
+
+        appUI.updateModuleCard('ai_text', textApp);
+        appUI.updateModuleCard('ai_image', imageApp);
+        appUI.updateModuleCard('ai_text', textApp);
+
+        const card = document.getElementById('ai-module-card') as HTMLElement;
+        card.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 1 }));
+        vi.advanceTimersByTime(150);
+
+        const settingsBadge = card.querySelector('.module-action-badge.left.settings');
+        if (!(settingsBadge instanceof HTMLElement)) {
+            throw new Error('Settings badge was not rendered');
+        }
+        settingsBadge.click();
+
+        expect(openModuleSettingsMock).toHaveBeenCalledWith(imageApp);
+
+        const closeBadge = card.querySelector('.module-action-badge.right.close');
+        if (!(closeBadge instanceof HTMLElement)) {
+            throw new Error('Close badge was not rendered');
+        }
+        closeBadge.click();
+
+        expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('ai_image');
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp);
+        expect(card.dataset['currentModule']).toBe('text-model');
+    });
+
+    it('should hide the settings badge for placeholder comfyui cards', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="empty">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+
+        appUI.updateModuleCard(
+            'ai_image',
+            { id: 'comfyui', name: 'ComfyUI', installed: true } as IApp,
+        );
+
+        const card = document.getElementById('ai-module-card') as HTMLElement;
+        expect(card.querySelector('.module-action-badge.left.settings')).toBeNull();
+    });
+
     it('should perform selection action for select and deselect flows', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
@@ -539,7 +622,7 @@ describe('AppUI lifecycle', () => {
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenCalledWith('svc');
         expect(uiStateMocks.setSelectedModule).toHaveBeenCalled();
-        expect(launchAppMock).toHaveBeenCalledWith('svc');
+        expect(launchAppMock).toHaveBeenCalledWith('services', serviceApp);
 
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenLastCalledWith(null);
@@ -653,8 +736,8 @@ describe('AppUI lifecycle', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(launchApp).toHaveBeenNthCalledWith(1, 'svc-a');
-        expect(launchApp).toHaveBeenNthCalledWith(2, 'svc-b');
+        expect(launchApp).toHaveBeenNthCalledWith(1, 'services', firstApp);
+        expect(launchApp).toHaveBeenNthCalledWith(2, 'services', secondApp);
         expect(platformServiceMock.stop).toHaveBeenCalledWith(firstApp);
     });
 

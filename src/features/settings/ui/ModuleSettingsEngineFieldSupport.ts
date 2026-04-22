@@ -272,12 +272,14 @@ export function createEngineExtraArgsField(translate: ExtraArgsTranslate): Engin
     const getGroups = (): string[] => parseGroups(hiddenInput.value);
 
     const syncTokens = () => {
-        chips.innerHTML = '';
-        getGroups().forEach((group, index) => {
+        const groups = getGroups();
+        chips.replaceChildren(
+            ...groups.map((group, index) => {
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'local-engine-tag-chip';
             chip.title = translate('ui.settings.engine.extra_args.remove', 'Remove');
+            chip.dataset['groupIndex'] = String(index);
 
             const label = document.createElement('span');
             label.className = 'local-engine-tag-chip-label';
@@ -288,12 +290,9 @@ export function createEngineExtraArgsField(translate: ExtraArgsTranslate): Engin
             remove.textContent = 'x';
 
             chip.append(label, remove);
-            chip.addEventListener('click', () => {
-                const updated = getGroups().filter((_, groupIndex) => groupIndex !== index);
-                setGroups(updated);
-            });
-            chips.appendChild(chip);
-        });
+                return chip;
+            }),
+        );
     };
 
     const setGroups = (groups: string[]) => {
@@ -304,6 +303,25 @@ export function createEngineExtraArgsField(translate: ExtraArgsTranslate): Engin
     };
 
     root.append(chips, hiddenInput);
+    chips.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+
+        const chip = target.closest<HTMLButtonElement>('.local-engine-tag-chip');
+        if (!(chip instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        const groupIndex = Number(chip.dataset['groupIndex']);
+        if (Number.isNaN(groupIndex)) {
+            return;
+        }
+
+        const updated = getGroups().filter((_, index) => index !== groupIndex);
+        setGroups(updated);
+    });
 
     return { input: hiddenInput, root, syncTokens, getGroups, setGroups };
 }

@@ -23,16 +23,12 @@ export class SidebarAutoCompactPolicy {
         viewport: SidebarViewport,
     ): boolean {
         if (windowConfig !== null && windowConfig !== undefined) {
-            const leadZoom =
-                zoom + this._config.autoCompactWarningLeadSteps * this._config.autoCompactZoomStep;
-            const effectiveWidth = viewport.width / leadZoom;
-            const effectiveHeight = viewport.height / leadZoom;
             const compactWarningWidth =
                 windowConfig.thresholds.warningWidth * this._config.autoCompactThresholdFactor;
             const compactWarningHeight =
                 windowConfig.thresholds.warningHeight * this._config.autoCompactThresholdFactor;
 
-            return effectiveWidth < compactWarningWidth || effectiveHeight < compactWarningHeight;
+            return viewport.width < compactWarningWidth || viewport.height < compactWarningHeight;
         }
 
         return zoom >= this._config.autoCompactZoomThreshold;

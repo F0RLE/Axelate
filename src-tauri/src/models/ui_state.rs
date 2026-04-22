@@ -59,9 +59,6 @@ pub struct UIState {
     /// Enables provider-side internet search by AI provider
     #[serde(default)]
     pub ai_web_search_enabled: std::collections::HashMap<String, bool>,
-    /// Last provider activated in the UI
-    #[serde(default)]
-    pub last_active_provider: Option<String>,
     /// Current persistent AI session identifier
     #[serde(default)]
     pub ai_session_id: Option<String>,
@@ -91,7 +88,6 @@ impl Default for UIState {
             sound_enabled: true,
             ai_thinking_level: std::collections::HashMap::new(),
             ai_web_search_enabled: std::collections::HashMap::new(),
-            last_active_provider: None,
             ai_session_id: None,
             preferred_language: None,
             pending_chat_reveal: false,

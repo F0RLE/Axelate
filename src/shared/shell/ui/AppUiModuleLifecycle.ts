@@ -2,7 +2,7 @@ import type { IApp } from '../../types/coreTypes';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
-type LaunchAppFn = (id: string) => Promise<void>;
+type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 
 type AppUiModuleLifecycleDeps = {
     platformService: ModulePlatformService;
@@ -32,7 +32,7 @@ export class AppUiModuleLifecycle {
         launchApp: LaunchAppFn,
     ): Promise<void> {
         try {
-            await launchApp(app.id);
+            await launchApp(category, app);
         } catch (err: unknown) {
             this._deps.tracer.error(`[AppUI] Failed to launch selected module ${app.id}:`, err);
             return;

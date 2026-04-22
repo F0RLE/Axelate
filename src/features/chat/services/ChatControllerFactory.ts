@@ -121,6 +121,7 @@ type ChatSendFactoryDeps = {
     updateTokenCount: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
+    getPreferredAiCategory: () => 'ai_text' | 'ai_image';
     handleResponse: (
         response: IChatResponse,
         streamingHandle?: ReturnType<ChatSendFactoryDeps['createStreamingHandle']> | null,
@@ -275,6 +276,7 @@ export class ChatControllerFactory {
                 deps.appendUserMessage(text, attachments, tokens);
             },
             getSelectedModule: (category) => deps.getSelectedModule(category),
+            getPreferredAiCategory: () => deps.getPreferredAiCategory(),
             handleResponse: async (response, streamingHandle, imageHandle) =>
                 await deps.handleResponse(response, streamingHandle, imageHandle),
             cleanupStreamingState: (listenerId, typingId) => {

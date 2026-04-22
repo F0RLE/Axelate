@@ -10,10 +10,8 @@ use std::sync::Arc;
 use super::ai_dispatch::{
     LocalEngineAccess, PreparedChatDispatch, persist_successful_response, prepare_chat_dispatch,
 };
-#[cfg(test)]
-use super::ai_dispatch::{inject_grounding_message, latest_user_query};
 use super::session::ChatSessionManager;
-use super::streaming::{AiProvider, OpenRouterProvider, StreamEvent, StreamSink};
+use super::streaming::{AiProvider, OpenAiCompatibleProvider, StreamEvent, StreamSink};
 pub use super::types::{
     ChatMessage, ChatReply, ChatRequest, ChatResponse, ChatSession, TokenUsage,
 };
@@ -21,7 +19,7 @@ pub use super::types::{
 const AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
 struct PreparedRequestExecution {
-    provider: OpenRouterProvider,
+    provider: OpenAiCompatibleProvider,
     effective_request: ChatRequest,
     request_id: String,
     message_id: String,
@@ -242,7 +240,7 @@ async fn prepare_request_execution(
     );
 
     Ok(PreparedRequestExecution {
-        provider: OpenRouterProvider::new(&base_url),
+        provider: OpenAiCompatibleProvider::new(&base_url),
         effective_request,
         request_id,
         message_id,
@@ -463,56 +461,6 @@ mod tests {
     fn test_count_tokens_empty() {
         let count = count_tokens("", None).expect("count_tokens empty should not fail");
         assert_eq!(count, 0, "Empty string should produce 0 tokens");
-    }
-
-    #[test]
-    fn test_latest_user_query_supports_string_and_multimodal_content() {
-        let messages = vec![
-            ChatMessage {
-                id: "1".to_string(),
-                role: "assistant".to_string(),
-                content: serde_json::Value::String("old".to_string()),
-                thought_signature: None,
-            },
-            ChatMessage {
-                id: "2".to_string(),
-                role: "user".to_string(),
-                content: serde_json::json!([
-                    { "type": "text", "text": "найди свежие новости по Rust" },
-                    { "type": "image_url", "image_url": { "url": "data:image/png;base64,abc" } }
-                ]),
-                thought_signature: None,
-            },
-        ];
-
-        assert_eq!(
-            latest_user_query(&messages).as_deref(),
-            Some("найди свежие новости по Rust")
-        );
-    }
-
-    #[test]
-    fn test_inject_grounding_message_preserves_system_prefix() {
-        let mut messages = vec![
-            ChatMessage {
-                id: "1".to_string(),
-                role: "system".to_string(),
-                content: serde_json::Value::String("base rules".to_string()),
-                thought_signature: None,
-            },
-            ChatMessage {
-                id: "2".to_string(),
-                role: "user".to_string(),
-                content: serde_json::Value::String("query".to_string()),
-                thought_signature: None,
-            },
-        ];
-
-        inject_grounding_message(&mut messages, "grounding".to_string());
-
-        assert_eq!(messages[0].role, "system");
-        assert_eq!(messages[1].role, "system");
-        assert_eq!(messages[2].role, "user");
     }
 
     #[test]

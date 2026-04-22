@@ -31,9 +31,9 @@ export class DownloadUiDynamicListController {
 
         if (activeDownloads.size === 0) {
             list.innerHTML = '';
-            if (emptyText !== null) emptyText.classList.add('hidden');
+            if (emptyText !== null) emptyText.classList.remove('hidden');
             if (mainCard !== null) mainCard.style.display = 'none';
-            if (infoCard !== null) infoCard.classList.add('hidden');
+            if (infoCard !== null) infoCard.classList.remove('hidden');
             return;
         }
 

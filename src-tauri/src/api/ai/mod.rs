@@ -3,7 +3,7 @@ use crate::domain::ai::{
     self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
 };
-use crate::domain::ai::{ChannelSink, StreamEvent, StreamSink};
+use crate::domain::ai::{StreamEvent, StreamSink};
 use crate::domain::engine::manager::EngineManager;
 use crate::domain::engine::types::Capability;
 use crate::domain::system::config_service::ConfigService;
@@ -14,9 +14,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
-use tauri::Emitter;
+use tauri::ipc::Channel;
 use tauri::{Manager, State, Window};
-use tokio::sync::mpsc;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
@@ -88,11 +87,52 @@ fn resolve_existing_path_within_root(
     Ok(canonical_candidate)
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-struct StreamChunkPayload {
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+/// Streaming payload delivered from the backend to the frontend chat channels.
+pub struct StreamChunkPayload {
+    /// Correlates the chunk with the originating frontend request.
+    pub request_id: String,
+    /// Identifies the assistant message currently being streamed.
+    pub message_id: String,
+    /// The incremental text fragment emitted by the model.
+    pub content: String,
+}
+
+#[derive(Clone)]
+struct TauriStreamSink {
     request_id: String,
-    message_id: String,
-    content: String,
+    chat_channel: Channel<StreamChunkPayload>,
+    thought_channel: Channel<StreamChunkPayload>,
+}
+
+impl StreamSink for TauriStreamSink {
+    fn emit(&self, event: StreamEvent) {
+        match event {
+            StreamEvent::ChatChunk {
+                message_id,
+                content,
+            } => {
+                let payload = StreamChunkPayload {
+                    request_id: self.request_id.clone(),
+                    message_id,
+                    content,
+                };
+                let _ = self.chat_channel.send(payload);
+            }
+            StreamEvent::ThoughtChunk {
+                message_id,
+                content,
+            } => {
+                let payload = StreamChunkPayload {
+                    request_id: self.request_id.clone(),
+                    message_id,
+                    content,
+                };
+                let _ = self.thought_channel.send(payload);
+            }
+            StreamEvent::Done { .. } => {}
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -115,22 +155,69 @@ fn ensure_request_id(request: &mut ChatRequest) -> String {
     request_id
 }
 
-async fn fill_chat_request_api_key(request: &mut ChatRequest) -> Result<(), AppError> {
-    if !is_local_provider(&request.provider)
-        && request
-            .api_key
-            .as_deref()
-            .is_none_or(|value| value.trim().is_empty())
+fn normalize_secret_service_name(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn configured_provider_secret_service(
+    config_service: &ConfigService,
+    provider: &str,
+) -> Option<String> {
+    let provider = provider.trim();
+    if provider.is_empty() {
+        return None;
+    }
+
+    if let Ok(config) = config_service.load_full_config()
+        && let Some(provider_config) = config
+            .api_providers
+            .iter()
+            .find(|candidate| candidate.id == provider)
     {
-        request.api_key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
+        return Some(normalize_secret_service_name(
+            provider_config
+                .api_key_env
+                .as_deref()
+                .unwrap_or("openrouter_api_key"),
+        ));
+    }
+
+    default_secret_service_for_provider(provider)
+}
+
+fn default_secret_service_for_provider(provider: &str) -> Option<String> {
+    if is_local_provider(provider) {
+        return None;
+    }
+
+    Some("openrouter_api_key".to_string())
+}
+
+async fn load_stored_provider_api_key(
+    config_service: &ConfigService,
+    provider: &str,
+) -> Result<Option<String>, AppError> {
+    let Some(service) = configured_provider_secret_service(config_service, provider) else {
+        return Ok(None);
+    };
+
+    let key = SecureStorage::get_key_async(service).await?;
+    Ok(key.filter(|value| !value.trim().is_empty()))
+}
+
+async fn fill_chat_request_api_key(
+    request: &mut ChatRequest,
+    config_service: &ConfigService,
+) -> Result<(), AppError> {
+    if request
+        .api_key
+        .as_deref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        request.api_key = load_stored_provider_api_key(config_service, &request.provider).await?;
     }
 
     Ok(())
-}
-
-async fn load_stored_openrouter_api_key() -> Result<Option<String>, AppError> {
-    let key = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
-    Ok(key.filter(|value| !value.trim().is_empty()))
 }
 
 fn build_background_image_generation_context(
@@ -325,17 +412,18 @@ fn image_open_directory(path: &Path, folder_only: bool) -> Result<PathBuf, AppEr
 #[specta::specta]
 /// Sends a chat message to the AI provider and streams the response
 pub async fn send_chat_message(
-    window: Window,
     request: ChatRequest,
+    chat_channel: Channel<StreamChunkPayload>,
+    thought_channel: Channel<StreamChunkPayload>,
     sessions: State<'_, Arc<ChatSessionManager>>,
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<ChatResponse, AppError> {
     let mut request = request;
     let request_id = ensure_request_id(&mut request);
-    fill_chat_request_api_key(&mut request).await?;
+    fill_chat_request_api_key(&mut request, &config_service).await?;
 
-    let sink = create_window_stream_sink(window, request_id);
+    let sink = create_stream_sink(request_id, chat_channel, thought_channel);
     ai_service::process_chat_request(request, &sessions, &config_service, &engine_manager, sink)
         .await
 }
@@ -349,9 +437,12 @@ pub async fn validate_api_key(provider: String, key: String) -> Result<bool, App
 
 #[tauri::command]
 #[specta::specta]
-/// Validates the stored OpenRouter API key without exposing it to the frontend
-pub async fn validate_stored_api_key(provider: String) -> Result<bool, AppError> {
-    if let Some(key) = load_stored_openrouter_api_key().await? {
+/// Validates the stored provider key without exposing it to the frontend
+pub async fn validate_stored_api_key(
+    provider: String,
+    config_service: State<'_, Arc<ConfigService>>,
+) -> Result<bool, AppError> {
+    if let Some(key) = load_stored_provider_api_key(&config_service, &provider).await? {
         return ai_service::validate_api_key(provider, key).await;
     }
 
@@ -700,47 +791,16 @@ fn percent_decode_path(value: &str) -> String {
     result
 }
 
-fn create_window_stream_sink(window: Window, request_id: String) -> Arc<dyn StreamSink> {
-    let (tx, mut rx) = mpsc::channel::<StreamEvent>(64);
-    let sink: Arc<dyn StreamSink> = Arc::new(ChannelSink::new(tx));
-
-    tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                StreamEvent::ChatChunk {
-                    message_id,
-                    content,
-                } => {
-                    let _ = window.emit(
-                        "ai:chat:chunk",
-                        StreamChunkPayload {
-                            request_id: request_id.clone(),
-                            message_id,
-                            content,
-                        },
-                    );
-                }
-                StreamEvent::ThoughtChunk {
-                    message_id,
-                    content,
-                } => {
-                    let _ = window.emit(
-                        "ai:thought:chunk",
-                        StreamChunkPayload {
-                            request_id: request_id.clone(),
-                            message_id,
-                            content,
-                        },
-                    );
-                }
-                StreamEvent::Done { usage, .. } => {
-                    let _ = window.emit("ai:chat:done", usage);
-                }
-            }
-        }
-    });
-
-    sink
+fn create_stream_sink(
+    request_id: String,
+    chat_channel: Channel<StreamChunkPayload>,
+    thought_channel: Channel<StreamChunkPayload>,
+) -> Arc<dyn StreamSink> {
+    Arc::new(TauriStreamSink {
+        request_id,
+        chat_channel,
+        thought_channel,
+    })
 }
 
 fn is_local_provider(provider: &str) -> bool {
@@ -748,6 +808,9 @@ fn is_local_provider(provider: &str) -> bool {
         provider,
         "gpt"
             | "gemini"
+            | "gemini-image"
+            | "gpt-image"
+            | "seedream-image"
             | "openai"
             | "openrouter"
             | "anthropic"

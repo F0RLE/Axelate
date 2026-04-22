@@ -2,6 +2,14 @@ use std::fmt::Write as _;
 
 use super::types::ChatMessage;
 
+const LEGACY_SUMMARY_PREFIXES: [&str; 5] = [
+    "Conversation recap from earlier turns:\n",
+    "Conversation recap from earlier turns:",
+    "Context:\n",
+    "Context:",
+    "Контекст:",
+];
+
 pub(super) fn extract_message_text(content: &serde_json::Value) -> Option<String> {
     match content {
         serde_json::Value::String(text) => Some(text.clone()),
@@ -149,16 +157,7 @@ pub(super) fn merge_summary(
     model: &str,
 ) -> Option<String> {
     let mut body_lines: Vec<String> = existing_summary
-        .map(|summary| {
-            summary
-                .strip_prefix("Conversation recap from earlier turns:\n")
-                .unwrap_or(summary)
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>()
-        })
+        .map(normalize_summary_lines)
         .unwrap_or_default();
 
     body_lines.extend(new_lines.iter().cloned());
@@ -168,10 +167,7 @@ pub(super) fn merge_summary(
     }
 
     while !body_lines.is_empty() {
-        let candidate = format!(
-            "Conversation recap from earlier turns:\n{}",
-            body_lines.join("\n")
-        );
+        let candidate = body_lines.join("\n");
         if count_text_tokens(&candidate, model) <= token_budget {
             return Some(candidate);
         }
@@ -179,6 +175,20 @@ pub(super) fn merge_summary(
     }
 
     None
+}
+
+fn normalize_summary_lines(summary: &str) -> Vec<String> {
+    let stripped = LEGACY_SUMMARY_PREFIXES
+        .iter()
+        .find_map(|prefix| summary.strip_prefix(prefix))
+        .unwrap_or(summary);
+
+    stripped
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && *line != "Summary:")
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 fn messages_equivalent(left: &ChatMessage, right: &ChatMessage) -> bool {

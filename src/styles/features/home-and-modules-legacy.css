@@ -113,13 +113,16 @@ body[data-platform='macos'] .module-card:hover {
     justify-content: center;
     color: var(--primary);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition:
+        background-color 0.3s ease,
+        border-color 0.3s ease,
+        color 0.3s ease,
+        opacity 0.3s ease;
 }
 
 .module-card:hover .module-icon {
     background: rgba(var(--primary-raw), 0.2);
     border-color: rgba(var(--primary-raw), 0.4);
-    transform: scale(1.05);
 }
 
 .module-icon svg {
@@ -182,7 +185,12 @@ body[data-platform='macos'] .module-card:hover {
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        box-shadow 0.2s ease,
+        opacity 0.2s ease;
     font-size: 0.9rem;
     display: flex;
     align-items: center;
@@ -204,7 +212,6 @@ body[data-platform='macos'] .module-card:hover {
 
 .btn-module.primary:hover {
     background: var(--module-button-bg-hover);
-    transform: translateY(-2px);
     box-shadow: none;
 }
 
@@ -220,7 +227,7 @@ body[data-platform='macos'] .module-card:hover {
 
 .models-container {
     width: 100%;
-    max-width: 1200px;
+    max-width: 1480px;
     display: flex;
     flex-direction: column;
     gap: 3rem;
@@ -281,7 +288,6 @@ body[data-platform='macos'] .module-card:hover {
     /* Ensure no interaction underneath just in case, though modal does this */
     z-index: 999999 !important;
     animation: fadeInOverlay 0.4s ease;
-    zoom: calc(1 / var(--app-zoom, 1));
 }
 
 .width-warning[open] {
@@ -525,14 +531,14 @@ body.ui-hidden .modal-backdrop {
 .models-grid {
     display: flex;
     justify-content: center;
-    gap: 2rem;
+    gap: 1.5rem;
     width: 100%;
     flex-wrap: wrap;
 }
 
 .models-grid > * {
-    flex: 0 1 300px;
-    max-width: 300px;
+    flex: 1 1 320px;
+    max-width: 360px;
 }
 
 /* --- Card Corner Actions (Settings and Reset) --- */
@@ -651,15 +657,18 @@ body.ui-hidden .modal-backdrop {
     letter-spacing: 0.5px;
 
     opacity: 0;
-    transform: translateX(10px); /* Push text out */
-    transition: all 0.3s;
+    max-width: 0;
+    overflow: hidden;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease;
     transition-delay: 0.1s;
     white-space: nowrap;
 }
 
 .card-action-corner:hover .action-text {
     opacity: 1;
-    transform: translateX(0); /* Bring text back */
+    max-width: 96px;
 }
 
 .module-slot-card:not(.selected) .card-action-corner {
@@ -902,14 +911,17 @@ body.ui-hidden .modal-backdrop {
 
     /* Hidden by default, behaves like standard cards */
     opacity: 0;
-    transform: translateY(10px);
     pointer-events: none;
 
     border-radius: var(--module-button-radius);
     padding: 0.8rem 1.5rem;
     font-weight: 600;
     font-size: 0.9rem;
-    transition: all 0.3s;
+    transition:
+        opacity 0.3s ease,
+        background-color 0.3s ease,
+        border-color 0.3s ease,
+        color 0.3s ease;
     position: relative;
     z-index: 10;
     margin-top: auto;
@@ -920,7 +932,6 @@ body.ui-hidden .modal-backdrop {
     border-color: var(--module-button-border-hover);
     color: white;
     opacity: 1;
-    transform: translateY(0);
     pointer-events: auto;
 }
 
@@ -948,12 +959,12 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     position: relative;
     overflow: hidden;
     transition:
-        transform 0.18s ease,
-        background-color 0.18s ease;
+        background-color 0.18s ease,
+        box-shadow 0.18s ease,
+        opacity 0.18s ease;
 }
 
 .app-download-btn:hover:not(:disabled) {
-    transform: translateY(-2px);
     background: var(--module-button-bg-hover);
     box-shadow: none;
 }
@@ -1012,8 +1023,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     transition:
         opacity 0.18s ease,
         background-color 0.18s ease,
-        box-shadow 0.18s ease,
-        transform 0.18s ease;
+        box-shadow 0.18s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 
     opacity: 0;
@@ -1022,7 +1032,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 .app-card:hover .app-delete-badge,
 #app-modal-list .app-card:hover .app-delete-badge {
     opacity: 1;
-    transform: translateY(0);
 }
 
 .app-delete-badge:hover {
@@ -1036,7 +1045,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.3s ease;
 }
 
 .app-delete-badge .badge-icon svg {
@@ -1045,10 +1053,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     display: block;
     fill: currentColor;
     stroke: none;
-}
-
-.app-delete-badge:hover .badge-icon {
-    transform: scale(1.1);
 }
 
 .app-delete-badge .badge-text {
@@ -1062,7 +1066,10 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
     opacity: 0;
     max-width: 0;
-    transition: all 0.3s ease;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease,
+        padding-right 0.3s ease;
 }
 
 .app-delete-badge:hover .badge-text {
@@ -1108,7 +1115,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .type-badge .action-text {
     opacity: 0 !important;
-    transform: translateX(10px) !important;
+    max-width: 0 !important;
+    overflow: hidden;
     font-size: 0.8rem !important;
     margin-left: 0 !important;
     display: inline-block;
@@ -1116,12 +1124,14 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     text-transform: uppercase;
     white-space: nowrap;
     color: #fff !important; /* Maximum contrast */
-    transition: all 0.3s;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease;
 }
 
 .type-badge:hover .action-text {
     opacity: 1 !important;
-    transform: translateX(0) !important;
+    max-width: 100px !important;
 }
 
 /* Specific Colors & Hovers (FIX RED HOVER ISSUE) */
@@ -1189,7 +1199,10 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
     cursor: default;
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 
     opacity: 0;
@@ -1207,12 +1220,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.3s ease;
     order: 1; /* Move icon to right */
-}
-
-.module-type-badge:hover .badge-icon {
-    transform: scale(1.1);
 }
 
 .module-type-badge .badge-text {
@@ -1225,7 +1233,10 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
     opacity: 0;
     max-width: 0;
-    transition: all 0.3s ease;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease,
+        padding-left 0.3s ease;
 }
 
 .module-type-badge:hover .badge-text {
@@ -1274,7 +1285,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     overflow: hidden;
     transition:
         opacity 0.18s ease,
-        transform 0.18s ease,
         background-color 0.18s ease,
         box-shadow 0.18s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
@@ -1299,11 +1309,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.3s ease;
-}
-
-.module-action-badge:hover .badge-icon {
-    transform: scale(1.1);
 }
 
 /* Text styles - same as app-delete-badge */
@@ -1317,7 +1322,11 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
     opacity: 0;
     max-width: 0;
-    transition: all 0.3s ease;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease,
+        padding-left 0.3s ease,
+        padding-right 0.3s ease;
 }
 
 .module-action-badge:hover .badge-text {
@@ -1375,13 +1384,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     width: 18px;
     height: 18px;
     stroke: currentColor;
-    transition:
-        stroke 0.3s ease,
-        transform 0.2s ease;
-}
-
-.module-action-badge.close:hover .badge-icon svg {
-    transform: scale(1.15);
+    transition: stroke 0.3s ease;
 }
 
 /* Pointer events */

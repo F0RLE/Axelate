@@ -7,8 +7,16 @@ vi.mock('dompurify', () => ({
 }));
 
 import { aiSettingsRenderer } from './AISettingsRenderer';
+import { CUSTOM_TEXT_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
 
 describe('AISettingsRenderer', () => {
+    let customModelsState: Array<{
+        id: string;
+        name: string;
+        provider_id: string;
+        base_model_id: string;
+    }>;
+
     const settingsService = {
         getSecureKeyMeta: vi.fn(),
         getSecureKey: vi.fn(),
@@ -16,6 +24,9 @@ describe('AISettingsRenderer', () => {
         hasSecureKey: vi.fn(),
         validateApiKey: vi.fn(),
         validateStoredApiKey: vi.fn(),
+        addCustomModel: vi.fn(),
+        getCustomModels: vi.fn(),
+        removeCustomModel: vi.fn(),
     };
 
     const aiSettings = {
@@ -43,6 +54,10 @@ describe('AISettingsRenderer', () => {
     const showToast = vi.fn();
 
     const translate = (key: string, fallback: string): string => `${key}:${fallback}`;
+    const flushAsyncWork = async (): Promise<void> => {
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
 
     const models = [
         {
@@ -67,12 +82,34 @@ describe('AISettingsRenderer', () => {
 
     beforeEach(async () => {
         document.body.innerHTML = `<div id="root"></div>`;
+        customModelsState = [];
         settingsService.getSecureKeyMeta.mockResolvedValue({ exists: true, length: 16 });
         settingsService.getSecureKey.mockResolvedValue('stored-secret');
         settingsService.saveSecureKey.mockResolvedValue(undefined);
         settingsService.hasSecureKey.mockResolvedValue(true);
         settingsService.validateApiKey.mockResolvedValue(true);
         settingsService.validateStoredApiKey.mockResolvedValue(true);
+        settingsService.getCustomModels.mockImplementation(() =>
+            Promise.resolve([...customModelsState]),
+        );
+        settingsService.addCustomModel.mockImplementation(
+            (providerId: string, id: string, name: string) => {
+                customModelsState = customModelsState.filter(
+                    (model) => !(model.provider_id === providerId && model.id === id),
+                );
+                customModelsState.push({
+                    id,
+                    name,
+                    provider_id: providerId,
+                    base_model_id: id,
+                });
+                return Promise.resolve();
+            },
+        );
+        settingsService.removeCustomModel.mockImplementation((id: string) => {
+            customModelsState = customModelsState.filter((model) => model.id !== id);
+            return Promise.resolve();
+        });
         aiSettings.getSelectedAIModel.mockReturnValue('reasoner');
         aiSettings.getThinkingLevel.mockReturnValue('medium');
         aiSettings.getInternetAccessEnabled.mockReturnValue(true);
@@ -92,6 +129,7 @@ describe('AISettingsRenderer', () => {
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         aiSettingsRenderer.destroy();
         document.body.innerHTML = '';
         vi.clearAllMocks();
@@ -257,5 +295,100 @@ describe('AISettingsRenderer', () => {
             'ui.settings.key_invalid_check:Key is invalid or missing',
             'error',
         );
+    });
+
+    it('hides model stats for custom providers', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            apiProviderData: { models },
+        } as never);
+
+        expect(container.querySelector(`#${CUSTOM_TEXT_PROVIDER_ID}-model-stats`)).toBeNull();
+    });
+
+    it('shows the thinking section on first render for custom text providers', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+        customModelsState = [
+            {
+                id: 'google/gemma-4-31b-it:free',
+                name: 'Gemma 4 31b It:free',
+                provider_id: CUSTOM_TEXT_PROVIDER_ID,
+                base_model_id: 'google/gemma-4-31b-it:free',
+            },
+        ];
+        aiSettings.getSelectedAIModel.mockReturnValue('google/gemma-4-31b-it:free');
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            apiProviderData: { models: [] },
+        } as never);
+
+        expect(
+            container
+                .querySelector(`#${CUSTOM_TEXT_PROVIDER_ID}-thinking-section`)
+                ?.classList.contains('is-hidden'),
+        ).toBe(false);
+    });
+
+    it('adds a custom model from the composer card and derives the title from model id', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            apiProviderData: { models: [] },
+        } as never);
+
+        const input = container.querySelector(
+            `#${CUSTOM_TEXT_PROVIDER_ID}-custom-model-id-input`,
+        ) as HTMLInputElement;
+        const button = container.querySelector(
+            `#${CUSTOM_TEXT_PROVIDER_ID}-custom-model-save-btn`,
+        ) as HTMLButtonElement;
+
+        input.value = 'openai/gpt-5.4-nano';
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await flushAsyncWork();
+
+        expect(settingsService.addCustomModel).toHaveBeenCalledWith(
+            CUSTOM_TEXT_PROVIDER_ID,
+            'openai/gpt-5.4-nano',
+            'GPT-5.4 Nano',
+        );
+        expect(container.textContent).toContain('GPT-5.4 Nano');
+    });
+
+    it('shows remove control for custom models and removes on click', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+        customModelsState = [
+            {
+                id: 'openai/gpt-5.4-nano',
+                name: 'GPT-5.4 Nano',
+                provider_id: CUSTOM_TEXT_PROVIDER_ID,
+                base_model_id: 'openai/gpt-5.4-nano',
+            },
+        ];
+        aiSettings.getSelectedAIModel.mockReturnValue('openai/gpt-5.4-nano');
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            apiProviderData: { models: [] },
+        } as never);
+
+        const removeButton = container.querySelector(
+            '.ai-model-card-remove[data-model-remove="openai/gpt-5.4-nano"]',
+        ) as HTMLButtonElement;
+        removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await flushAsyncWork();
+
+        expect(settingsService.removeCustomModel).toHaveBeenCalledWith('openai/gpt-5.4-nano');
+        expect(
+            container.querySelector('.ai-model-card[data-model-key="openai/gpt-5.4-nano"]'),
+        ).toBeNull();
     });
 });

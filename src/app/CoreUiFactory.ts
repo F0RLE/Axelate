@@ -61,7 +61,7 @@ type CreateAppUIDeps = {
     tracer: LoggerService;
     stateStore: UiStateStore;
     bridge: {
-        launchApp: (moduleId: string) => Promise<void>;
+        launchApp: (category: string, app: IApp) => Promise<void>;
     };
     moduleSettingsUI: {
         openModuleSettings: (app: IApp) => Promise<void>;
@@ -123,7 +123,7 @@ type CreateCoreUiBundleDeps = {
     tracer: LoggerService;
     stateStore: UiStateStore;
     bridge: {
-        launchApp: (moduleId: string) => Promise<void>;
+        launchApp: (category: string, app: IApp) => Promise<void>;
     };
     aiBridge: AIBridge;
     windowService: WindowService;
@@ -226,12 +226,9 @@ export function createAppUI(deps: CreateAppUIDeps): AppUI {
                 setSelectedModule: (category, moduleData) => {
                     deps.stateStore.setSelectedModule(category, moduleData);
                 },
-                updateState: (updates) => {
-                    deps.stateStore.updateState(updates);
-                },
             },
-            launchApp: async (moduleId) => {
-                await deps.bridge.launchApp(moduleId);
+            launchApp: async (category, app) => {
+                await deps.bridge.launchApp(category, app);
             },
             openModuleSettings: (app) => {
                 void deps.moduleSettingsUI.openModuleSettings(app);
@@ -248,6 +245,12 @@ export function createDownloadUI(
     modulePlatformService: ModulePlatformService,
 ): DownloadUI {
     const downloadUI = new DownloadUI(i18n);
+    downloadUI.setOnPause((moduleId: string) => {
+        void modulePlatformService.pauseDownload(moduleId);
+    });
+    downloadUI.setOnResume((moduleId: string) => {
+        void modulePlatformService.resumeDownload(moduleId);
+    });
     downloadUI.setOnCancel((moduleId: string) => {
         void modulePlatformService.cancelDownload(moduleId);
     });
@@ -336,6 +339,7 @@ export function createChatController(deps: CreateChatControllerDeps): ChatContro
         hostBridge: deps.tauriProvider,
         eventBus: deps.eventBus,
         getSelectedModule: (category) => deps.stateStore.getSelectedModule(category),
+        getPreferredAiCategory: () => deps.appUI.getPreferredAiCategory(),
         tracer: deps.tracer,
     });
 }

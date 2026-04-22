@@ -205,6 +205,20 @@ describe('ModuleCardRenderer', () => {
         expect(openModuleSettingsSpy).toHaveBeenCalledTimes(2);
     });
 
+    it('should not open settings for modules with settings disabled', () => {
+        const onClick = vi.fn();
+        const comfyUiCard = renderer.createSelectionCard(
+            { id: 'comfyui', name: 'ComfyUI', desc: 'Desc', installed: true } as never,
+            'ai',
+            false,
+            onClick,
+        );
+
+        comfyUiCard.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+        expect(openModuleSettingsSpy).not.toHaveBeenCalled();
+    });
+
     it('should ignore late async install resolution for detached cards', async () => {
         const onClick = vi.fn();
         (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);

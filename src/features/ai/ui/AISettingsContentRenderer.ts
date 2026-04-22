@@ -8,6 +8,7 @@ import type { AISettingsViewPolicy } from './AISettingsViewPolicy';
 import {
     renderInternetAccessSection,
     renderModelCard,
+    renderCustomModelComposer,
     renderThinkingSection,
 } from './AISettingsMarkup';
 
@@ -18,6 +19,8 @@ type AISettingsRenderContext = {
     appId: string;
     models: IAIModelData[];
     savedModel: string;
+    showModelStats: boolean;
+    showCustomModelComposer: boolean;
     translate: TranslateFunc;
     viewPolicy: AISettingsViewPolicy;
     supportsInternetAccess: boolean;
@@ -137,13 +140,25 @@ export class AISettingsContentRenderer {
                             </div>
                             <div class="ai-models-grid" role="listbox" aria-label="Available Models">
                                 ${models.map((model) => renderModelCard(model.id, model, savedModel === model.id, translate, viewPolicy)).join('')}
+                                ${context.showCustomModelComposer ? renderCustomModelComposer(appId, translate) : ''}
                             </div>
                         </div>
                     </section>
 
-                    ${renderThinkingSection(appId, savedModel, models, translate, context.supportsThinking, context.thinkingLevel)}
+                    ${renderThinkingSection(
+                        appId,
+                        savedModel,
+                        models,
+                        translate,
+                        context.supportsThinking,
+                        context.thinkingLevel,
+                        context.viewPolicy.shouldForceThinkingVisibility(appId),
+                    )}
                     ${context.supportsInternetAccess ? renderInternetAccessSection(appId, translate, context.internetAccessEnabled) : ''}
 
+                    ${
+                        context.showModelStats
+                            ? `
                     <section id="${appId}-model-stats" class="ai-stats-section" aria-live="polite">
                         <div class="ai-content-panel">
                             <div class="settings-card-header-center">
@@ -151,7 +166,9 @@ export class AISettingsContentRenderer {
                             </div>
                             ${context.renderModelStats(appId, savedModel)}
                         </div>
-                    </section>
+                    </section>`
+                            : ''
+                    }
                 </div>
             </div>
         `;

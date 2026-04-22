@@ -46,6 +46,7 @@ type ChatSendControllerOptions = {
     updateTokenCount: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
+    getPreferredAiCategory: () => 'ai_text' | 'ai_image';
     handleResponse: (
         response: Awaited<ReturnType<ChatService['sendMessage']>>,
         streamingHandle: StreamingMessageHandle | null,
@@ -79,6 +80,7 @@ export class ChatSendController {
         this._autoStartHelper = new ChatAutoStartHelper({
             aiBridge: _options.aiBridge,
             getSelectedModule: _options.getSelectedModule,
+            getPreferredAiCategory: _options.getPreferredAiCategory,
             tracer: _options.tracer,
         });
         this._sendFlow = new ChatSendFlow({
@@ -91,6 +93,10 @@ export class ChatSendController {
 
     public validateInput(text: string): boolean {
         return text !== '' || this._options.fileHandler.hasFiles();
+    }
+
+    public resolveSelectedModuleId(): string | null {
+        return this._autoStartHelper.resolveSelectedModuleId();
     }
 
     public async sendChat(input: HTMLTextAreaElement | null): Promise<boolean> {
@@ -131,7 +137,7 @@ export class ChatSendController {
                 imageHandle = this._options.createImageHandle(text, queueRegenerate);
                 this._options.startImagePreviewPolling(imageHandle);
             } else {
-                this._options.showTyping(typingId);
+                streamingHandle = ensureStreamingHandle();
                 this._options.aiBridge.onChunk(listenerId, (chunk) => {
                     ensureStreamingHandle().update(chunk);
                 });

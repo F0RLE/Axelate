@@ -11,6 +11,7 @@ import type { IChatTransport } from './AIChatTransport';
 import type { AIProviderManager } from './AIProviderManager';
 import type { AIBridgeEvents } from './AIBridgeEvents';
 import type { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
+import { resolveCustomProviderBackendId } from '@/shared/utils/customProviderSupport';
 
 type AIBridgeMessageLogger = Pick<LoggerService, 'error'>;
 
@@ -82,9 +83,10 @@ export class AIBridgeMessageController {
             settings,
             settingsKey,
         );
+        const backendProviderId = resolveCustomProviderBackendId(providerId);
 
         const request: IImageGenerationRequest = {
-            provider: providerId,
+            provider: backendProviderId,
             prompt: text,
             original_prompt: text,
             model: this._deps.manager.model || 'default',
@@ -138,8 +140,9 @@ export class AIBridgeMessageController {
             return this._handleMissingApiKey(source);
         }
 
+        const backendProviderId = resolveCustomProviderBackendId(providerId);
         const request = constructChatRequest(history, newMessage, attachments, {
-            providerId,
+            providerId: backendProviderId,
             model: this._deps.manager.model || 'default',
             apiKey: null,
             sessionId: this._deps.manager.sessionId,
@@ -172,9 +175,8 @@ export class AIBridgeMessageController {
         response: IBridgeResponse,
         source: MessageSource,
     ): IBridgeResponse {
-        this._deps.onSuccessfulResponse();
-
         if (response.ok && typeof response.text === 'string' && response.text !== '') {
+            this._deps.onSuccessfulResponse();
             this._deps.events.broadcastResponse(response.text, source);
         } else if (!response.ok && typeof response.error === 'string' && response.error !== '') {
             this._deps.tracer.error('[AIBridge] Backend operation anomaly:', response.error);

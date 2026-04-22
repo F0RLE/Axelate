@@ -4,9 +4,13 @@
     "private": true,
     "description": "Root proxy for Axelate",
     "scripts": {
+        "preinstall": "node .github/scripts/guard-root-install.mjs",
         "dev": "node .github/scripts/workflow.mjs dev",
         "build": "node .github/scripts/workflow.mjs build",
         "clear": "node .github/scripts/workflow.mjs clear",
+        "cleanup:project": "node .github/scripts/cleanup-project.mjs",
+        "cleanup:project:dry": "node .github/scripts/cleanup-project.mjs --dry-run",
+        "cleanup:project:deep": "node .github/scripts/cleanup-project.mjs --deep",
         "tauri:build": "node .github/scripts/workflow.mjs tauri:build",
         "release": "node .github/scripts/workflow.mjs release",
         "run": "node .github/scripts/workflow.mjs run",

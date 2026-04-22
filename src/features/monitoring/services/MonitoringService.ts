@@ -11,6 +11,7 @@ export class MonitoringService {
     private unlistenFn: (() => void) | null = null;
     private pollingTimeout: ReturnType<typeof setTimeout> | null = null;
     private listeners: StatsCallback[] = [];
+    private _lifecycleToken = 0;
 
     constructor(
         private readonly _tauri: TauriProvider,
@@ -23,26 +24,38 @@ export class MonitoringService {
     public async startMonitoring(): Promise<void> {
         if (this.isListening) return;
         this.isListening = true;
+        const lifecycleToken = ++this._lifecycleToken;
 
         if (this._tauri.isTauri()) {
             try {
-                this.unlistenFn = await this._tauri.listen<ISystemStats>(
+                const unlistenFn = await this._tauri.listen<ISystemStats>(
                     'system_stats',
                     (payload) => {
                         this.notifyListeners(payload);
                     },
                 );
+                if (!this.isListening || lifecycleToken !== this._lifecycleToken) {
+                    unlistenFn();
+                    return;
+                }
+
+                this.unlistenFn = unlistenFn;
                 this._tracer.info('[MonitoringService] Started listening to system_stats');
 
                 // Fetch cached stats immediately so UI doesn't flash empty
                 // (the Rust loop sleeps 1s before the first emit)
                 try {
                     const cached = await this._tauri.invoke<ISystemStats>('get_system_stats');
-                    this.notifyListeners(cached);
+                    if (this.isListening && lifecycleToken === this._lifecycleToken) {
+                        this.notifyListeners(cached);
+                    }
                 } catch {
                     this._tracer.debug('[MonitoringService] Initial stats fetch skipped');
                 }
             } catch (e) {
+                if (!this.isListening || lifecycleToken !== this._lifecycleToken) {
+                    return;
+                }
                 this._tracer.error('[MonitoringService] Failed to listen to events:', e);
                 this.startFallback();
             }
@@ -56,6 +69,7 @@ export class MonitoringService {
      * Stops monitoring and cleans up listeners and intervals.
      */
     public stopMonitoring(): void {
+        this._lifecycleToken += 1;
         this.isListening = false;
         if (this.unlistenFn) {
             this.unlistenFn(); // In Tauri v2 this is usually synchronous disposer
@@ -83,6 +97,9 @@ export class MonitoringService {
 
     public unsubscribe(callback: StatsCallback): void {
         this.listeners = this.listeners.filter((cb) => cb !== callback);
+        if (this.listeners.length === 0) {
+            this.stopMonitoring();
+        }
     }
 
     private notifyListeners(stats: ISystemStats): void {

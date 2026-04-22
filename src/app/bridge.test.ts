@@ -1,22 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GlobalBridge, type ICoreBridge } from './bridge';
+import type { IApp } from '@/shared/types/coreTypes';
 
 function createCoreBridgeMock(): ICoreBridge {
     return {
-        aiSettings: {
-            setLastActiveProvider: vi.fn(),
-            getLastActiveProvider: vi.fn().mockReturnValue('gpt'),
-            getInternetAccessEnabled: vi.fn().mockReturnValue(true),
-            getSelectedAIModel: vi.fn().mockReturnValue('gpt-4'),
-        } as never,
         aiBridge: {
             startProvider: vi.fn().mockResolvedValue(true),
-        } as never,
-        catalog: {
-            getCatalog: vi.fn().mockReturnValue({
-                ai: [{ id: 'gpt', name: 'GPT' }],
-                services: [],
-            }),
         } as never,
         tracer: {
             debug: vi.fn(),
@@ -41,36 +30,32 @@ describe('GlobalBridge', () => {
         core = createCoreBridgeMock();
     });
 
-    it('starts AI provider before launching AI app', async () => {
+    it('starts the selected AI provider directly from the selected slot', async () => {
         const bridge = new GlobalBridge(core);
-        core.tauriProvider.invoke = vi
-            .fn()
-            .mockResolvedValue({ action: 'navigate', provider: 'gpt' });
+        const app = { id: 'gpt', name: 'GPT', type: 'api' } as IApp;
 
-        await bridge.launchApp('gpt');
+        await bridge.launchApp('ai_text', app);
 
         expect(core.aiBridge.startProvider).toHaveBeenCalledWith('gpt');
-        expect(core.tauriProvider.invoke).toHaveBeenCalledWith('launch_module', {
-            moduleId: 'gpt',
-        });
-        expect(core.aiSettings.setLastActiveProvider).toHaveBeenCalledWith('gpt');
+        expect(core.moduleService.control).not.toHaveBeenCalled();
     });
 
-    it('starts local module when backend requests start_local', async () => {
+    it('starts local service modules through control_module without launch heuristics', async () => {
         const bridge = new GlobalBridge(core);
-        core.tauriProvider.invoke = vi.fn().mockResolvedValue({ action: 'start_local' });
+        const app = { id: 'service-x', name: 'Service X', type: 'local' } as IApp;
 
-        await bridge.launchApp('service-x');
+        await bridge.launchApp('services', app);
 
         expect(core.moduleService.control).toHaveBeenCalledWith('service-x', 'start');
     });
 
-    it('stores API provider in web mode without tauri launch', async () => {
+    it('skips local launches in web mode', async () => {
         core.tauriProvider.isTauri = vi.fn().mockReturnValue(false);
         const bridge = new GlobalBridge(core);
+        const app = { id: 'service-x', name: 'Service X', type: 'local' } as IApp;
 
-        await bridge.launchApp('gemini');
+        await bridge.launchApp('services', app);
 
-        expect(core.aiSettings.setLastActiveProvider).toHaveBeenCalledWith('gemini');
+        expect(core.moduleService.control).not.toHaveBeenCalled();
     });
 });

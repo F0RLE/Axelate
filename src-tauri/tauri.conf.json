@@ -24,10 +24,10 @@
         "windows": [
             {
                 "title": "Axelate",
-                "width": 1400,
-                "height": 900,
-                "minWidth": 1000,
-                "minHeight": 600,
+                "width": 1520,
+                "height": 980,
+                "minWidth": 1180,
+                "minHeight": 720,
                 "center": true,
                 "resizable": true,
                 "fullscreen": false,

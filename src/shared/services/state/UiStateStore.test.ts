@@ -48,7 +48,6 @@ describe('UiStateStore', () => {
             expect(state.sidebar_width).toBe(280);
             expect(state.zoom_level).toBe(1);
             expect(state.sound_enabled).toBe(true);
-            expect(state.last_active_provider).toBeNull();
             expect(state.ai_session_id).toBeNull();
         });
 
@@ -111,6 +110,19 @@ describe('UiStateStore', () => {
 
             const result = await store.loadState();
             expect(result.sidebar_width).toBe(350);
+        });
+
+        it('should clamp legacy zoom values when loading state', async () => {
+            storageState['axelate_ui_state'] = JSON.stringify({
+                zoom_level: 3,
+                resolution_zoom: { '1920x1080': 3.2, '2560x1440': 2.4 },
+            });
+            store = new UiStateStore(bridge, tracer, storage);
+
+            const result = await store.loadState();
+            expect(result.zoom_level).toBe(2.6);
+            expect(result.resolution_zoom['1920x1080']).toBe(2.6);
+            expect(result.resolution_zoom['2560x1440']).toBe(2.4);
         });
 
         it('should use defaults when localStorage is null (L67)', async () => {

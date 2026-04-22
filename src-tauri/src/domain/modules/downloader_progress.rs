@@ -46,6 +46,22 @@ pub struct ProgressEvent<'a> {
 pub struct DownloadResult {
     pub asset_downloaded: u64,
     pub snapshot: ProgressSnapshot,
+    pub interruption: Option<DownloadInterruption>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DownloadInterruption {
+    Cancelled,
+    Paused,
+}
+
+impl DownloadInterruption {
+    pub const fn as_error_message(self) -> &'static str {
+        match self {
+            Self::Cancelled => "Download cancelled",
+            Self::Paused => "Download paused",
+        }
+    }
 }
 
 impl DownloadProgressReporter<'_> {

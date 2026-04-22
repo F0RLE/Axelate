@@ -7,6 +7,93 @@ export type EngineCustomSelectControl = {
     destroy: () => void;
 };
 
+type ActiveEngineSelect = {
+    root: HTMLDivElement;
+    trigger: HTMLButtonElement;
+    menu: HTMLDivElement;
+    updateMenuPosition: () => void;
+    closeMenu: () => void;
+};
+
+type SharedEngineSelectListeners = {
+    controller: AbortController;
+    refs: number;
+};
+
+let _activeEngineSelect: ActiveEngineSelect | null = null;
+let _sharedEngineSelectListeners: SharedEngineSelectListeners | null = null;
+
+function _closeActiveEngineSelect(exceptRoot?: HTMLDivElement): void {
+    if (
+        _activeEngineSelect === null ||
+        (exceptRoot instanceof HTMLDivElement && _activeEngineSelect.root === exceptRoot)
+    ) {
+        return;
+    }
+
+    _activeEngineSelect.closeMenu();
+    _activeEngineSelect = null;
+}
+
+function _ensureSharedEngineSelectListeners(runtime: EngineInfoPopoverRuntime): AbortSignal {
+    if (_sharedEngineSelectListeners !== null) {
+        _sharedEngineSelectListeners.refs += 1;
+        return _sharedEngineSelectListeners.controller.signal;
+    }
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    document.addEventListener(
+        'click',
+        (event) => {
+            if (_activeEngineSelect === null) {
+                return;
+            }
+
+            const target = event.target;
+            if (
+                target instanceof Node &&
+                (_activeEngineSelect.root.contains(target) || _activeEngineSelect.menu.contains(target))
+            ) {
+                return;
+            }
+
+            _closeActiveEngineSelect();
+        },
+        { signal },
+    );
+
+    const repositionActiveMenu = () => {
+        _activeEngineSelect?.updateMenuPosition();
+    };
+
+    runtime.addWindowListener('resize', repositionActiveMenu, { signal });
+    runtime.addWindowListener('scroll', repositionActiveMenu, { capture: true, signal });
+
+    _sharedEngineSelectListeners = {
+        controller,
+        refs: 1,
+    };
+
+    return signal;
+}
+
+function _releaseSharedEngineSelectListeners(): void {
+    if (_sharedEngineSelectListeners === null) {
+        return;
+    }
+
+    _sharedEngineSelectListeners.refs -= 1;
+    if (_sharedEngineSelectListeners.refs > 0) {
+        return;
+    }
+
+    _sharedEngineSelectListeners.controller.abort();
+    _sharedEngineSelectListeners = null;
+    _activeEngineSelect = null;
+}
+
 export function createEngineCustomSelectField(
     runtime: EngineInfoPopoverRuntime,
     options: { options?: string[] },
@@ -17,6 +104,7 @@ export function createEngineCustomSelectField(
         document.getElementById('module-settings-modal') ?? document.body;
     const controller = new AbortController();
     const signal = controller.signal;
+    _ensureSharedEngineSelectListeners(runtime);
 
     const hiddenInput = document.createElement('input');
     hiddenInput.type = 'hidden';
@@ -64,6 +152,9 @@ export function createEngineCustomSelectField(
         root.classList.remove('open');
         trigger.setAttribute('aria-expanded', 'false');
         menu.classList.remove('open');
+        if (_activeEngineSelect?.root === root) {
+            _activeEngineSelect = null;
+        }
     };
 
     const syncDisplay = () => {
@@ -101,22 +192,20 @@ export function createEngineCustomSelectField(
         'click',
         () => {
             const willOpen = !root.classList.contains('open');
-            document.querySelectorAll('.local-engine-select.open').forEach((element) => {
-                element.classList.remove('open');
-                const button = element.querySelector('.local-engine-select-trigger');
-                if (button instanceof HTMLElement) {
-                    button.setAttribute('aria-expanded', 'false');
-                }
-            });
-            document.querySelectorAll('.local-engine-select-menu.open').forEach((element) => {
-                element.classList.remove('open');
-            });
+            _closeActiveEngineSelect(root);
 
             if (willOpen) {
                 updateMenuPosition();
                 root.classList.add('open');
                 trigger.setAttribute('aria-expanded', 'true');
                 menu.classList.add('open');
+                _activeEngineSelect = {
+                    root,
+                    trigger,
+                    menu,
+                    updateMenuPosition,
+                    closeMenu,
+                };
                 return;
             }
 
@@ -124,37 +213,6 @@ export function createEngineCustomSelectField(
         },
         { signal },
     );
-
-    document.addEventListener(
-        'click',
-        (event) => {
-            if (!root.contains(event.target as Node) && !menu.contains(event.target as Node)) {
-                closeMenu();
-            }
-        },
-        { signal },
-    );
-
-    runtime.addWindowListener(
-        'resize',
-        () => {
-            if (root.classList.contains('open')) {
-                updateMenuPosition();
-            }
-        },
-        { signal },
-    );
-
-    runtime.addWindowListener(
-        'scroll',
-        () => {
-            if (root.classList.contains('open')) {
-                updateMenuPosition();
-            }
-        },
-        { capture: true, signal },
-    );
-
     root.append(hiddenInput, trigger);
 
     return {
@@ -165,6 +223,7 @@ export function createEngineCustomSelectField(
             controller.abort();
             closeMenu();
             menu.remove();
+            _releaseSharedEngineSelectListeners();
         },
     };
 }

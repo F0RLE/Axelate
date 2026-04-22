@@ -94,6 +94,8 @@ type ChatControllerTestAccess = {
 describe('ChatController', () => {
     const aiBridge = {
         isActive: vi.fn(),
+        getState: vi.fn().mockReturnValue({ activeProviderId: null, isRunning: false }),
+        stopProvider: vi.fn(),
         getSessionId: vi.fn().mockReturnValue('session-1'),
         getHistory: vi.fn().mockResolvedValue([]),
         clearHistory: vi.fn().mockResolvedValue(undefined),
@@ -124,6 +126,7 @@ describe('ChatController', () => {
         },
         eventBus: new EventBus(),
         getSelectedModule: vi.fn().mockReturnValue(undefined),
+        getPreferredAiCategory: vi.fn().mockReturnValue('ai_text'),
         tracer: {
             info: vi.fn(),
             warn: vi.fn(),
@@ -366,11 +369,11 @@ describe('ChatController', () => {
         );
 
         expect(message).toBe(
-            'Error: OpenRouter quota or rate limit reached. Check your balance and limits.',
+            'Error: OpenRouter or the selected provider hit a rate limit. Wait a bit and try again.',
         );
         expect(i18n.t).toHaveBeenCalledWith(
             'ui.chat.error.quota',
-            'Error: OpenRouter quota or rate limit reached. Check your balance and limits.',
+            'Error: OpenRouter or the selected provider hit a rate limit. Wait a bit and try again.',
         );
     });
 

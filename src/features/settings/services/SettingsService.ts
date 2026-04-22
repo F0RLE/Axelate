@@ -214,12 +214,21 @@ export class SettingsService {
     }
 
     public async addCustomModel(provider: string, id: string, name: string): Promise<void> {
+        await this.addCustomModelWithBase(provider, id, name, id);
+    }
+
+    public async addCustomModelWithBase(
+        provider: string,
+        id: string,
+        name: string,
+        baseModelId: string,
+    ): Promise<void> {
         try {
             await this._tauri.invoke('add_custom_model', {
                 providerId: provider,
                 id: id,
                 name: name,
-                baseModelId: id,
+                baseModelId,
             });
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to add custom model:', e);
@@ -233,6 +242,15 @@ export class SettingsService {
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to get custom models:', e);
             return [];
+        }
+    }
+
+    public async removeCustomModel(id: string): Promise<void> {
+        try {
+            await this._tauri.invoke('remove_custom_model', { id });
+        } catch (e) {
+            this._tracer.error('[SettingsService] Failed to remove custom model:', e);
+            throw e;
         }
     }
 }

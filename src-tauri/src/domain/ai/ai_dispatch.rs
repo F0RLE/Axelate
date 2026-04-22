@@ -1,6 +1,5 @@
 use super::session::ChatSessionManager;
 use super::types::{ChatMessage, ChatRequest, ChatResponse};
-use super::web_grounding;
 use crate::domain::engine::config::{build_default_engine_config, merge_user_engine_config};
 use crate::infrastructure::config::engine_settings::load_engine_config_map;
 
@@ -56,8 +55,6 @@ pub(super) async fn prepare_chat_dispatch(
             &mut model_max_tokens,
         );
     }
-
-    maybe_inject_grounding_message(request, is_local_engine, &mut messages_context).await?;
 
     let effective_request = ChatRequest {
         messages: messages_context,
@@ -298,79 +295,10 @@ fn resolve_cloud_provider_request(
     }
 }
 
-async fn maybe_inject_grounding_message(
-    request: &ChatRequest,
-    is_local_engine: bool,
-    messages_context: &mut Vec<ChatMessage>,
-) -> Result<(), crate::errors::AppError> {
-    if is_local_engine
-        && let Some(options) = request.web_search.as_ref()
-        && options.enabled
-        && let Some(query) = latest_user_query(&request.messages)
-        && let Some(grounding_message) =
-            web_grounding::build_grounding_message(&query, options).await?
-    {
-        inject_grounding_message(messages_context, grounding_message);
-    }
-
-    Ok(())
-}
-
 fn clamp_max_tokens(request_limit: Option<u32>, model_limit: Option<u32>) -> Option<u32> {
     match (request_limit, model_limit) {
         (Some(request_limit), Some(model_limit)) => Some(std::cmp::min(request_limit, model_limit)),
         (None, Some(model_limit)) => Some(model_limit),
         (request_limit, None) => request_limit,
     }
-}
-
-pub(super) fn latest_user_query(messages: &[ChatMessage]) -> Option<String> {
-    messages.iter().rev().find_map(|message| {
-        if message.role != "user" {
-            return None;
-        }
-
-        match &message.content {
-            serde_json::Value::String(text) => {
-                let trimmed = text.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed.to_string())
-                }
-            }
-            serde_json::Value::Array(parts) => {
-                let text = parts
-                    .iter()
-                    .filter_map(|part| {
-                        let part_type = part.get("type")?.as_str()?;
-                        if part_type != "text" {
-                            return None;
-                        }
-                        part.get("text")?.as_str().map(str::trim)
-                    })
-                    .filter(|text| !text.is_empty())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-
-                if text.is_empty() { None } else { Some(text) }
-            }
-            _ => None,
-        }
-    })
-}
-
-pub(super) fn inject_grounding_message(messages: &mut Vec<ChatMessage>, grounding_message: String) {
-    let grounding = ChatMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        role: "system".to_string(),
-        content: serde_json::Value::String(grounding_message),
-        thought_signature: None,
-    };
-
-    let insert_at = messages
-        .iter()
-        .position(|message| message.role != "system")
-        .unwrap_or(messages.len());
-    messages.insert(insert_at, grounding);
 }

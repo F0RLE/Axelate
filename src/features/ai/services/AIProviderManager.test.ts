@@ -6,6 +6,7 @@ import { AIProviderManager } from '@/features/ai/services/AIProviderManager';
 import type { Core } from '@/app/init';
 import { getMostPowerfulModel, getModelData } from '@/features/ai/utils/catalogHelpers';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import { CUSTOM_TEXT_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
 
 // Mock catalogHelpers used internally
 vi.mock('@/features/ai/utils/catalogHelpers', () => ({
@@ -32,7 +33,6 @@ function createMockCore(
         aiSettings: {
             setAiSessionId: vi.fn(),
             setSelectedAIModel: vi.fn(),
-            setLastActiveProvider: vi.fn(),
             getSelectedAIModel: vi.fn().mockReturnValue(null),
         },
     } as unknown as Core;
@@ -136,7 +136,7 @@ describe('AIProviderManager', () => {
             expect(result).toBe(false);
         });
 
-        it('should persist model and provider via aiSettings', async () => {
+        it('should persist the resolved model via aiSettings', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-test'));
             manager.setCore(mockCore);
 
@@ -146,7 +146,6 @@ describe('AIProviderManager', () => {
                 'gemini',
                 expect.any(String),
             );
-            expect(mockCore.aiSettings.setLastActiveProvider).toHaveBeenCalledWith('gemini');
         });
     });
 
@@ -182,6 +181,17 @@ describe('AIProviderManager', () => {
             await manager.startProvider('llamacpp');
 
             expect(manager.isActive()).toBe(true);
+        });
+
+        it('should treat custom providers as cloud providers requiring the shared key', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            manager.setCore(mockCore);
+
+            const result = await manager.startProvider(CUSTOM_TEXT_PROVIDER_ID);
+
+            expect(result).toBe(true);
+            expect(manager.isActive()).toBe(true);
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith('openrouter_api_key');
         });
     });
 
@@ -235,6 +245,7 @@ describe('AIProviderManager', () => {
         it('getProviderDisplayName should return known names', () => {
             expect(manager.getProviderDisplayName('gpt')).toBe('OpenAI GPT');
             expect(manager.getProviderDisplayName('gemini')).toBe('Google Gemini');
+            expect(manager.getProviderDisplayName(CUSTOM_TEXT_PROVIDER_ID)).toBe('Custom');
             expect(manager.getProviderDisplayName('llamacpp')).toBe('llamacpp');
             expect(manager.getProviderDisplayName('unknown-id')).toBe('unknown-id');
         });
@@ -287,6 +298,19 @@ describe('AIProviderManager', () => {
 
             expect(result).toBe(true);
             expect(manager.model).toBe('default');
+        });
+
+        it('should reflect model changes from settings without restarting the provider', async () => {
+            let selectedModel = 'gemini-3.1-pro';
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockImplementation(() => selectedModel);
+            manager.setCore(mockCore);
+
+            await manager.startProvider('gemini');
+            expect(manager.model).toBe('gemini-3.1-pro');
+
+            selectedModel = 'gemini-3-flash';
+            expect(manager.model).toBe('gemini-3-flash');
         });
     });
 });

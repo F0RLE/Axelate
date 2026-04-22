@@ -248,6 +248,20 @@ describe('ChatUI lifecycle', () => {
         expect(document.querySelector('.chat-row')).toBeNull();
     });
 
+    it('should show streaming dots until first text chunk arrives', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        const handle = ui.createStreamingMessage('assistant');
+
+        expect(document.querySelector('.chat-streaming-status .typing-dots')).not.toBeNull();
+
+        handle.update('hello');
+
+        expect(document.querySelector('.chat-streaming-status')).toBeNull();
+        expect(document.querySelector('.markdown-body')?.textContent).toBe('hello');
+    });
+
     it('should scroll chat history to the bottom after restore', () => {
         vi.useFakeTimers();
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';

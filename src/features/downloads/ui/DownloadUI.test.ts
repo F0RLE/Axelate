@@ -68,6 +68,11 @@ describe('DownloadUI', () => {
             ui.setOnCancel(cancelFn);
             // Stored internally — tested via dynamic card cancel button
         });
+
+        it('should set pause and resume callbacks', () => {
+            ui.setOnPause(vi.fn());
+            ui.setOnResume(vi.fn());
+        });
     });
 
     // ---------------------------------------------------------- destroy
@@ -160,14 +165,14 @@ describe('DownloadUI', () => {
             expect(speed?.textContent).toBe('1.00 MB/s');
         });
 
-        it('should hide main card and keep empty state hidden when no active download', () => {
+        it('should hide main card and show empty state when no active download', () => {
             ui.renderDownloadsProgress({ hasActive: false });
 
             const mainCard = document.getElementById('downloads-main-card');
             const emptyText = document.getElementById('downloads-empty-text');
 
             expect(mainCard?.classList.contains('hidden')).toBe(true);
-            expect(emptyText?.classList.contains('hidden')).toBe(true);
+            expect(emptyText?.classList.contains('hidden')).toBe(false);
         });
 
         it('should show indeterminate progress for negative percent', () => {
@@ -730,6 +735,52 @@ describe('DownloadUI', () => {
 
             if (cancelBtn !== null) (cancelBtn as HTMLElement).click();
             expect(cancelFn).toHaveBeenCalledWith('mod-cancel');
+        });
+
+        it('should wire pause button on downloading card', () => {
+            const pauseFn = vi.fn();
+            ui.setOnPause(pauseFn);
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-pause',
+                        progress: 0.4,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const pauseBtn = list?.querySelector('.download-pause-btn');
+            expect(pauseBtn).not.toBeNull();
+
+            if (pauseBtn !== null) (pauseBtn as HTMLElement).click();
+            expect(pauseFn).toHaveBeenCalledWith('mod-pause');
+        });
+
+        it('should wire resume button on paused card', () => {
+            const resumeFn = vi.fn();
+            ui.setOnResume(resumeFn);
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-resume',
+                        progress: 0.4,
+                        status: 'paused',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const resumeBtn = list?.querySelector('.download-resume-btn');
+            expect(resumeBtn).not.toBeNull();
+
+            if (resumeBtn !== null) (resumeBtn as HTMLElement).click();
+            expect(resumeFn).toHaveBeenCalledWith('mod-resume');
         });
 
         it('should not add cancel button for complete status', () => {

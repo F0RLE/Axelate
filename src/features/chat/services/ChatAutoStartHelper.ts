@@ -7,6 +7,7 @@ type ChatAutoStartLogger = Pick<LoggerService, 'info'>;
 type ChatAutoStartHelperDeps = {
     aiBridge: Pick<AIBridge, 'startProvider'>;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
+    getPreferredAiCategory: () => 'ai_text' | 'ai_image';
     tracer: ChatAutoStartLogger;
 };
 
@@ -14,12 +15,14 @@ export class ChatAutoStartHelper {
     public constructor(private readonly _deps: ChatAutoStartHelperDeps) {}
 
     public resolveSelectedModuleId(): string | null {
-        const textModuleId = this._getModuleId('ai_text');
-        if (textModuleId !== null) {
-            return textModuleId;
+        const preferredCategory = this._deps.getPreferredAiCategory();
+        const preferredModuleId = this._getModuleId(preferredCategory);
+        if (preferredModuleId !== null) {
+            return preferredModuleId;
         }
 
-        return this._getModuleId('ai_image');
+        const fallbackCategory = preferredCategory === 'ai_text' ? 'ai_image' : 'ai_text';
+        return this._getModuleId(fallbackCategory);
     }
 
     public async startSelectedModule(): Promise<boolean> {

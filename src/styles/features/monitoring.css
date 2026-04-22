@@ -217,6 +217,25 @@
     transition: transform 0.12s linear;
 }
 
+.sysmon-fill.activity {
+    background: linear-gradient(90deg, rgba(212, 66, 255, 0.7), rgba(212, 66, 255, 0.95));
+    opacity: 0.8;
+}
+
+.sysmon-fill.activity.low,
+.sysmon-fill.activity.medium,
+.sysmon-fill.activity.high {
+    background: linear-gradient(90deg, rgba(212, 66, 255, 0.7), rgba(212, 66, 255, 0.95));
+}
+
+.sysmon-fill.activity.critical {
+    box-shadow: 0 0 10px rgba(212, 66, 255, 0.35);
+}
+
+.sysmon-fill.activity.pulse {
+    animation: sysmonActivityPulse 1.4s ease-in-out infinite;
+}
+
 .sysmon-fill.low {
     background: linear-gradient(90deg, #8a2be2, #d442ff);
 }
@@ -227,6 +246,17 @@
 
 .sysmon-fill.high {
     background: linear-gradient(90deg, #ff4444, #ff6666);
+}
+
+@keyframes sysmonActivityPulse {
+    0%,
+    100% {
+        opacity: 0.72;
+    }
+
+    50% {
+        opacity: 1;
+    }
 }
 
 /* Sidebar Footer & Status Badge */

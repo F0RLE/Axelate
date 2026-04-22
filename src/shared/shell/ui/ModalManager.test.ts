@@ -5,6 +5,7 @@ import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { IApp } from '../../types/coreTypes';
+import { CUSTOM_TEXT_PROVIDER_ID } from '../../utils/customProviderSupport';
 
 describe('ModalManager lifecycle', () => {
     let modalManager: ModalManager | null = null;
@@ -49,6 +50,9 @@ describe('ModalManager lifecycle', () => {
             throw new Error('Modal root not mounted');
         }
 
+        (modal as HTMLDialogElement).show = vi.fn(() => {
+            modal.setAttribute('open', '');
+        });
         (modal as HTMLDialogElement).showModal = vi.fn(() => {
             modal.setAttribute('open', '');
         });
@@ -171,7 +175,7 @@ describe('ModalManager lifecycle', () => {
         modalManager.refreshCurrentSelection();
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
         expect(
-            (document.getElementById('app-selection-modal') as HTMLDialogElement).showModal,
+            (document.getElementById('app-selection-modal') as HTMLDialogElement).show,
         ).toHaveBeenCalledTimes(1);
     });
 
@@ -211,7 +215,7 @@ describe('ModalManager lifecycle', () => {
             'svc-b',
         );
 
-        expect(modal.showModal).toHaveBeenCalledTimes(1);
+        expect(modal.show).toHaveBeenCalledTimes(1);
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
         expect(
             (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
@@ -272,7 +276,7 @@ describe('ModalManager lifecycle', () => {
         modalManager.openAppSelection('services', apps, 'svc');
         modalManager.openAppSelection('services', apps, 'svc');
 
-        expect(modal.showModal).toHaveBeenCalledTimes(1);
+        expect(modal.show).toHaveBeenCalledTimes(1);
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
     });
 
@@ -402,6 +406,25 @@ describe('ModalManager lifecycle', () => {
         );
 
         expect(sorted.map((app) => app.id)).toEqual(['gpt', 'gemini', 'custom']);
+    });
+
+    it('should place custom providers after cloud apis but before local engines', () => {
+        const policy = new ModalSelectionPolicy();
+        const sorted = policy.getVisibleApps(
+            [
+                { id: 'llamacpp', name: 'llama.cpp', type: 'local', installed: true } as IApp,
+                { id: CUSTOM_TEXT_PROVIDER_ID, name: 'Custom', type: 'api', installed: true } as IApp,
+                { id: 'claude', name: 'Claude', type: 'api', installed: true } as IApp,
+            ],
+            'ai',
+            'text',
+        );
+
+        expect(sorted.map((app) => app.id)).toEqual([
+            'claude',
+            CUSTOM_TEXT_PROVIDER_ID,
+            'llamacpp',
+        ]);
     });
 
     it('should react to download progress events and update selection labels', () => {

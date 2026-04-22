@@ -1,4 +1,5 @@
 import type { IApp } from '../../types/coreTypes';
+import { supportsModuleSettings } from '../../utils/moduleSettingsSupport';
 
 import type { AppUiSelectionState } from './AppUiSelectionState';
 import type { ModuleCardRenderer } from './ModuleCardRenderer';
@@ -19,6 +20,7 @@ type AppUiDashboardControllerDeps = {
     removeSelectedModule: (category: string) => void;
     openAppSelection: (category: string) => void;
     updateMultiSlotBadge: () => void;
+    activateAiSlot: (category: 'ai_text' | 'ai_image', app: IApp) => void;
 };
 
 export class AppUiDashboardSupport {
@@ -139,6 +141,10 @@ export class AppUiDashboardSupport {
             return;
         }
 
+        if (!supportsModuleSettings(app)) {
+            return;
+        }
+
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -213,9 +219,9 @@ export class AppUiDashboardSupport {
                 return;
             }
 
-            this._deps.cardRenderer.updateSlotCardContent(card, nextApp);
-            this._deps.cardRenderer.updateSlotCardAttributes(card, nextApp, nextCategory);
+            this.applySelectedCardState(card, nextApp, nextCategory);
             this._deps.updateMultiSlotBadge();
+            this._deps.activateAiSlot(nextCategory, nextApp);
             this._resetDashboardSwitchStyles(card);
         }, 150);
     };
@@ -248,10 +254,12 @@ export class AppUiDashboardSupport {
             element.remove();
         });
 
-        const settingsButton = this._deps.chrome.createSettingsBadge(app, (targetApp) => {
-            this._deps.openModuleSettings(targetApp);
-        });
-        card.appendChild(settingsButton);
+        if (supportsModuleSettings(app)) {
+            const settingsButton = this._deps.chrome.createSettingsBadge(app, (targetApp) => {
+                this._deps.openModuleSettings(targetApp);
+            });
+            card.appendChild(settingsButton);
+        }
 
         const closeButton = this._deps.chrome.createCloseBadge(category, (resolvedCategory) => {
             this._deps.clearModuleCard(resolvedCategory);

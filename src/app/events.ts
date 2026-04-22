@@ -254,7 +254,7 @@ export class EventHandler {
             {
                 selector: '#maximize-btn',
                 action: async () => {
-                    await this._core.windowService.toggleMaximize();
+                    await this._core.windowUI.toggleMaximize();
                 },
             },
             {

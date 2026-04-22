@@ -7,6 +7,10 @@ export type WindowZoomSettingsStore = {
     setResolutionZoom: (k: string, z: number) => void;
 };
 
+export type WindowZoomApplyOptions = {
+    syncNativeZoom?: boolean;
+};
+
 type WindowZoomRuntime = {
     getScreenSize: () => { width: number; height: number };
     setAppZoomCss: (zoom: string) => void;
@@ -28,10 +32,11 @@ type WindowServiceZoomDeps = {
 export class WindowServiceZoom {
     constructor(private readonly _deps: WindowServiceZoomDeps) {}
 
-    public async setZoom(zoom: number): Promise<number> {
+    public async setZoom(zoom: number, options: WindowZoomApplyOptions = {}): Promise<number> {
         const nextZoom = Math.max(this._deps.minZoom, Math.min(this._deps.maxZoom, zoom));
+        const shouldSyncNativeZoom = options.syncNativeZoom ?? true;
 
-        if (this._deps.bridge.isTauri()) {
+        if (shouldSyncNativeZoom && this._deps.bridge.isTauri()) {
             try {
                 await this._deps.bridge.invoke('set_webview_zoom', {
                     zoom: nextZoom,
@@ -41,11 +46,7 @@ export class WindowServiceZoom {
             }
         }
 
-        if (this._deps.bridge.isTauri()) {
-            this._deps.runtime.setAppZoomCss('1');
-        } else {
-            this._deps.runtime.setAppZoomCss(nextZoom.toFixed(3));
-        }
+        this._deps.runtime.setAppZoomCss(nextZoom.toFixed(3));
 
         const settingsStore = this._deps.getSettingsStore();
         if (settingsStore !== null) {

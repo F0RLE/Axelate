@@ -1,3 +1,4 @@
+import { Channel } from '@tauri-apps/api/core';
 import type {
     IChatRequest,
     IChatResponse,
@@ -50,8 +51,9 @@ export interface IChatTransport {
 export class AIChatTransport implements IChatTransport {
     private _context: AITransportContext | null = null;
     private readonly _unlisteners = new Set<() => void>();
-    private _activeStreamRequestId: string | null = null;
     private _requestCounter = 0;
+    private readonly _streamListeners = new Set<(chunk: string) => void>();
+    private readonly _thoughtListeners = new Set<(chunk: string) => void>();
 
     public constructor(private readonly _tracer: AIChatTransportLogger) {}
 
@@ -86,12 +88,24 @@ export class AIChatTransport implements IChatTransport {
             ...request,
             request_id: requestId,
         };
-        this._activeStreamRequestId = requestId;
+        const chatChannel = new Channel<IStreamChunkEnvelope>();
+        chatChannel.onmessage = (payload) => {
+            this._emitListeners(this._streamListeners, payload.content);
+        };
+
+        const thoughtChannel = new Channel<IStreamChunkEnvelope>();
+        thoughtChannel.onmessage = (payload) => {
+            this._emitListeners(this._thoughtListeners, payload.content);
+        };
 
         try {
             return await this._runWithTimeout(
                 this._context.tauriProvider
-                    .invoke<IChatResponse>('send_chat_message', { request: requestWithId })
+                    .invoke<IChatResponse>('send_chat_message', {
+                        request: requestWithId,
+                        chatChannel,
+                        thoughtChannel,
+                    })
                     .then((response) => this._normalizeResponse(response)),
                 90000,
                 'AI request timed out',
@@ -100,8 +114,6 @@ export class AIChatTransport implements IChatTransport {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] IPC error:', error);
             return { ok: false, error: errorMsg };
-        } finally {
-            this._clearActiveRequest(requestId);
         }
     }
 
@@ -158,62 +170,31 @@ export class AIChatTransport implements IChatTransport {
      * Returns an unlisten function.
      */
     public onStream(listener: (chunk: string) => void): () => void {
-        return this._createListener('ai:chat:chunk', listener);
+        return this._registerListener(this._streamListeners, listener);
     }
 
     public onThought(listener: (chunk: string) => void): () => void {
-        return this._createListener('ai:thought:chunk', listener);
+        return this._registerListener(this._thoughtListeners, listener);
     }
 
-    private _createListener(eventName: string, listener: (chunk: string) => void): () => void {
+    private _registerListener(
+        target: Set<(chunk: string) => void>,
+        listener: (chunk: string) => void,
+    ): () => void {
         if (this._context?.tauriProvider.isTauri() !== true) {
             return () => {};
         }
 
-        // In Tauri v2, listen returns a Promise<UnlistenFn>.
-        // Since we need to return synchronous cleanup, we manage the promise internally.
-        let unlistenFn: (() => void) | undefined;
-        let isActive = true;
-
         const cleanup = (): void => {
-            if (!isActive) {
+            if (!this._unlisteners.has(cleanup)) {
                 return;
             }
-            isActive = false;
-            if (unlistenFn) unlistenFn();
+            target.delete(listener);
             this._unlisteners.delete(cleanup);
         };
 
+        target.add(listener);
         this._unlisteners.add(cleanup);
-
-        void this._context.tauriProvider
-            .listen<unknown>(eventName, (event: unknown) => {
-                const payload = this._parseStreamPayload(event);
-                if (payload === null) {
-                    this._tracer.warn(`[AIChatTransport] Ignoring malformed ${eventName} payload`);
-                    return;
-                }
-
-                if (
-                    isActive &&
-                    this._activeStreamRequestId !== null &&
-                    payload.request_id === this._activeStreamRequestId
-                ) {
-                    listener(payload.content);
-                }
-            })
-            .then((fn) => {
-                if (isActive) {
-                    unlistenFn = fn;
-                } else {
-                    fn(); // If already cancelled, clean up immediately
-                }
-            })
-            .catch((error: unknown) => {
-                this._tracer.error(`[AIChatTransport] Failed to listen for ${eventName}:`, error);
-                this._unlisteners.delete(cleanup);
-            });
-
         return cleanup;
     }
 
@@ -279,41 +260,19 @@ export class AIChatTransport implements IChatTransport {
         return `req_${Date.now().toString(36)}_${this._requestCounter.toString(36)}`;
     }
 
-    private _clearActiveRequest(requestId: string): void {
-        if (this._activeStreamRequestId === requestId) {
-            this._activeStreamRequestId = null;
-        }
-    }
-
-    private _parseStreamPayload(event: unknown): IStreamChunkEnvelope | null {
-        const candidate =
-            typeof event === 'object' && event !== null && 'payload' in event
-                ? (event as { payload: unknown }).payload
-                : event;
-
-        if (typeof candidate !== 'object' || candidate === null) {
-            return null;
-        }
-
-        const payload = candidate as Record<string, unknown>;
-        if (
-            typeof payload['request_id'] !== 'string' ||
-            typeof payload['message_id'] !== 'string' ||
-            typeof payload['content'] !== 'string'
-        ) {
-            return null;
-        }
-
-        return {
-            request_id: payload['request_id'],
-            message_id: payload['message_id'],
-            content: payload['content'],
-        };
+    private _emitListeners(
+        listeners: ReadonlySet<(chunk: string) => void>,
+        payload: string,
+    ): void {
+        listeners.forEach((listener) => {
+            listener(payload);
+        });
     }
 
     public destroy(): void {
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.clear();
-        this._activeStreamRequestId = null;
+        this._streamListeners.clear();
+        this._thoughtListeners.clear();
     }
 }

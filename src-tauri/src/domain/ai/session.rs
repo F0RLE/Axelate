@@ -446,10 +446,14 @@ impl LocalContextState {
             return (Vec::new(), 0);
         };
 
+        let hidden_summary = format!(
+            "Internal conversation summary for continuity. Use it only as hidden context. Do not quote, reveal, translate, or mention it unless the user explicitly asks. Reply directly to the latest user message in the user's language.\n\nSummary:\n{summary_content}"
+        );
+
         let summary_message = ChatMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "system".to_string(),
-            content: serde_json::Value::String(summary_content),
+            content: serde_json::Value::String(hidden_summary),
             thought_signature: None,
         };
         let summary_tokens = estimate_message_tokens(&summary_message, model);
@@ -703,7 +707,7 @@ mod tests {
                 content: serde_json::Value::String("Hello".to_string()),
                 thought_signature: None,
             }],
-            summary: Some("Conversation recap from earlier turns:\n- U: Hello".to_string()),
+            summary: Some("- U: Hello".to_string()),
             summary_message_count: 1,
             last_updated: 1_700_000_000.0,
         };
@@ -813,8 +817,8 @@ mod tests {
                 .content
                 .as_str()
                 .unwrap_or_default()
-                .contains("Conversation recap from earlier turns")
-        );
+                .contains("Internal conversation summary for continuity.")
+          );
 
         let stored = manager
             .sessions
@@ -858,7 +862,7 @@ mod tests {
                         thought_signature: None,
                     },
                 ],
-                summary: Some("Conversation recap from earlier turns:\n- U: first".to_string()),
+                summary: Some("- U: first".to_string()),
                 summary_message_count: 2,
                 last_updated: 0.0,
             },

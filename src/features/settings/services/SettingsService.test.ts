@@ -323,6 +323,24 @@ describe('SettingsService', () => {
         });
     });
 
+    describe('addCustomModelWithBase', () => {
+        it('should invoke add_custom_model with provided base model id', async () => {
+            await service.addCustomModelWithBase(
+                'gemini-image',
+                'black-forest-labs/flux.2-max',
+                'FLUX.2 Max',
+                'google/gemini-3-pro-image-preview',
+            );
+
+            expect(tauri.invoke).toHaveBeenCalledWith('add_custom_model', {
+                providerId: 'gemini-image',
+                id: 'black-forest-labs/flux.2-max',
+                name: 'FLUX.2 Max',
+                baseModelId: 'google/gemini-3-pro-image-preview',
+            });
+        });
+    });
+
     describe('getCustomModels', () => {
         it('should return models from backend', async () => {
             const models = [{ id: 'm1', name: 'Model 1' }];
@@ -335,6 +353,22 @@ describe('SettingsService', () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
             const result = await service.getCustomModels();
             expect(result).toEqual([]);
+        });
+    });
+
+    describe('removeCustomModel', () => {
+        it('should invoke remove_custom_model', async () => {
+            await service.removeCustomModel('custom-1');
+
+            expect(tauri.invoke).toHaveBeenCalledWith('remove_custom_model', {
+                id: 'custom-1',
+            });
+        });
+
+        it('should rethrow remove errors', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+
+            await expect(service.removeCustomModel('custom-1')).rejects.toThrow('fail');
         });
     });
 });

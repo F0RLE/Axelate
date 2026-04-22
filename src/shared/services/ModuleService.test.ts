@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
             checkModuleInstalled: vi.fn(),
             downloadModule: vi.fn(),
             deleteModule: vi.fn(),
+            pauseDownload: vi.fn().mockResolvedValue(true),
             cancelDownload: vi.fn().mockResolvedValue(true),
         },
         tauriProvider: {
@@ -324,6 +325,55 @@ describe('ModuleService', () => {
             // cancelDownload calls commands.cancelDownload directly, so mock it
             mocks.commands.cancelDownload.mockRejectedValue(new Error('Cancel error'));
             const result = await moduleService.cancelDownload('test-module');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('pauseDownload', () => {
+        it('should pause a download in Tauri mode', async () => {
+            const result = await moduleService.pauseDownload('test-module');
+
+            expect(result).toBe(true);
+            expect(mocks.commands.pauseDownload).toHaveBeenCalledWith('test-module');
+        });
+
+        it('should return false when not in Tauri', async () => {
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
+            const result = await moduleService.pauseDownload('test-module');
+            expect(result).toBe(false);
+        });
+
+        it('should return false on error', async () => {
+            mocks.commands.pauseDownload.mockRejectedValueOnce(new Error('Pause error'));
+            const result = await moduleService.pauseDownload('test-module');
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('resumeDownload', () => {
+        it('should resume a paused download using cached request metadata', async () => {
+            mocks.invokeSafe.mockResolvedValue({ status: 'ok' });
+
+            await moduleService.downloadModule(
+                'resume-module',
+                'https://repo.com/archive.zip',
+                'hash-1',
+                'release',
+            );
+
+            const result = await moduleService.resumeDownload('resume-module');
+
+            expect(result).toBe(true);
+            expect(mocks.commands.downloadModule).toHaveBeenLastCalledWith(
+                'resume-module',
+                'https://repo.com/archive.zip',
+                'hash-1',
+                'release',
+            );
+        });
+
+        it('should return false when no request metadata is cached', async () => {
+            const result = await moduleService.resumeDownload('missing-module');
             expect(result).toBe(false);
         });
     });

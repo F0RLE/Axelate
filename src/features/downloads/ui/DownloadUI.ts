@@ -43,6 +43,8 @@ export class DownloadUI {
     private readonly _stateController = new DownloadUiStateController();
     private readonly _terminalCleanupController: DownloadUiTerminalCleanupController;
     private _onCancel: ((moduleId: string) => void) | null = null;
+    private _onPause: ((moduleId: string) => void) | null = null;
+    private _onResume: ((moduleId: string) => void) | null = null;
     private _initialized = false;
 
     constructor(
@@ -79,7 +81,11 @@ export class DownloadUI {
             formatSpeed: (bytesPerSec) => this._formatSpeed(bytesPerSec),
             displayModuleName: (moduleId) => this._displayModuleName(moduleId),
             statusLabel: (status) => this._statusLabel(status),
-            isActiveStatus: (status) => this._presenter.isActiveStatus(status),
+            isPausableStatus: (status) => this._presenter.isPausableStatus(status),
+            isResumableStatus: (status) => this._presenter.isResumableStatus(status),
+            isCancellableStatus: (status) => this._presenter.isCancellableStatus(status),
+            onPause: (moduleId) => this._onPause?.(moduleId),
+            onResume: (moduleId) => this._onResume?.(moduleId),
             onCancel: (moduleId) => this._onCancel?.(moduleId),
         };
     }
@@ -104,6 +110,20 @@ export class DownloadUI {
      */
     public setOnCancel(cb: (moduleId: string) => void): void {
         this._onCancel = cb;
+    }
+
+    /**
+     * Sets the pause callback for active downloads.
+     */
+    public setOnPause(cb: (moduleId: string) => void): void {
+        this._onPause = cb;
+    }
+
+    /**
+     * Sets the resume callback for paused downloads.
+     */
+    public setOnResume(cb: (moduleId: string) => void): void {
+        this._onResume = cb;
     }
 
     /**
@@ -143,7 +163,7 @@ export class DownloadUI {
 
     private _applyProgressState(els: DownloadUiElements, state: DownloadProgress): void {
         this._updateDownloadsLayout(els, state.hasActive);
-        this._updateEmptyText(els);
+        this._updateEmptyText(els, state.hasActive);
         this._updateProgressVisuals(els, state);
         this._updateStatus(els, state);
         this._updateEta(els, state);
@@ -165,10 +185,10 @@ export class DownloadUI {
         hasActive: boolean,
     ): void {
         if (els.mainCard) els.mainCard.classList.toggle('hidden', !hasActive);
-        if (els.infoCard) els.infoCard.classList.add('hidden');
+        if (els.infoCard) els.infoCard.classList.toggle('hidden', hasActive);
         if (els.downloadsBody) {
             els.downloadsBody.classList.toggle('empty-state', !hasActive);
-            els.downloadsBody.classList.toggle('hidden', !hasActive);
+            els.downloadsBody.classList.remove('hidden');
         }
         if (els.downloadsHeader) {
             els.downloadsHeader.classList.toggle('hidden', hasActive);
@@ -182,8 +202,8 @@ export class DownloadUI {
     /**
      * Updates the empty state text visibility.
      */
-    private _updateEmptyText(els: { emptyText: HTMLElement | null }): void {
-        if (els.emptyText) els.emptyText.classList.add('hidden');
+    private _updateEmptyText(els: { emptyText: HTMLElement | null }, hasActive: boolean): void {
+        if (els.emptyText) els.emptyText.classList.toggle('hidden', hasActive);
     }
 
     /**
@@ -333,7 +353,9 @@ export class DownloadUI {
     }
 
     private _renderProgressFromModuleState(moduleId: string, state: ModuleDownloadState): void {
-        this.renderDownloadsProgress(this._presenter.buildProgressFromModuleState(moduleId, state));
+        const progress = this._presenter.buildProgressFromModuleState(moduleId, state);
+        progress.hasActive = this._stateController.getAll().size > 0;
+        this.renderDownloadsProgress(progress);
     }
 
     private _refreshTranslations(): void {

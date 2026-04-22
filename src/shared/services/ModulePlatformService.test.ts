@@ -10,6 +10,8 @@ function createMockModuleService(): ModuleService {
         downloadModule: vi.fn().mockResolvedValue(undefined),
         deleteModule: vi.fn().mockResolvedValue(true),
         control: vi.fn().mockResolvedValue(true),
+        pauseDownload: vi.fn().mockResolvedValue(true),
+        resumeDownload: vi.fn().mockResolvedValue(true),
         cancelDownload: vi.fn().mockResolvedValue(true),
     } as unknown as ModuleService;
 }
@@ -131,6 +133,22 @@ describe('ModulePlatformService', () => {
             const result = await service.cancelDownload('test-module');
             expect(result).toBe(true);
             expect(moduleService.cancelDownload).toHaveBeenCalledWith('test-module');
+        });
+    });
+
+    describe('pauseDownload', () => {
+        it('should pause a download', async () => {
+            const result = await service.pauseDownload('test-module');
+            expect(result).toBe(true);
+            expect(moduleService.pauseDownload).toHaveBeenCalledWith('test-module');
+        });
+    });
+
+    describe('resumeDownload', () => {
+        it('should resume a paused download', async () => {
+            const result = await service.resumeDownload('test-module');
+            expect(result).toBe(true);
+            expect(moduleService.resumeDownload).toHaveBeenCalledWith('test-module');
         });
     });
 

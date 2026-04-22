@@ -15,6 +15,7 @@ type ParticlesRuntime = {
     addWindowListener: typeof globalThis.addEventListener;
     matchMedia: typeof globalThis.matchMedia;
     requestAnimationFrame: typeof globalThis.requestAnimationFrame;
+    cancelAnimationFrame: typeof globalThis.cancelAnimationFrame;
 };
 
 function createDefaultParticlesRuntime(): ParticlesRuntime {
@@ -28,6 +29,7 @@ function createDefaultParticlesRuntime(): ParticlesRuntime {
         addWindowListener: globalThis.addEventListener.bind(globalThis),
         matchMedia: globalThis.matchMedia.bind(globalThis),
         requestAnimationFrame: globalThis.requestAnimationFrame.bind(globalThis),
+        cancelAnimationFrame: globalThis.cancelAnimationFrame.bind(globalThis),
     };
 }
 
@@ -72,6 +74,7 @@ export class Particles {
 
     private _isRunning = false;
     private _lastFrameTime = 0;
+    private _resizeFrameId: number | null = null;
     private readonly _cleanupAbort: AbortController = new AbortController();
 
     constructor(private readonly _runtime: ParticlesRuntime = createDefaultParticlesRuntime()) {
@@ -107,6 +110,12 @@ export class Particles {
     }
 
     private _resize(reseedParticles = false): void {
+        const previousCanvasWidth = this._canvasWidth;
+        const previousCanvasHeight = this._canvasHeight;
+        const previousWorldWidth = this._worldWidth;
+        const previousWorldHeight = this._worldHeight;
+        const previousOverscanX = this._overscanX;
+        const previousOverscanY = this._overscanY;
         const dpr = this._runtime.getDevicePixelRatio();
         const viewport = this._runtime.getViewportSize();
         const nextCanvasWidth = Math.round(viewport.width * dpr);
@@ -118,8 +127,10 @@ export class Particles {
         this._devicePixelRatio = dpr;
         this._canvasWidth = nextCanvasWidth;
         this._canvasHeight = nextCanvasHeight;
-        this._canvas.width = this._canvasWidth;
-        this._canvas.height = this._canvasHeight;
+        if (canvasChanged || dprChanged) {
+            this._canvas.width = this._canvasWidth;
+            this._canvas.height = this._canvasHeight;
+        }
 
         const nextOverscanX = Math.max(
             32,
@@ -140,12 +151,24 @@ export class Particles {
         this._worldWidth = this._canvasWidth + this._overscanX * 2;
         this._worldHeight = this._canvasHeight + this._overscanY * 2;
 
-        if (
-            this._isTauriRuntime &&
-            (reseedParticles || canvasChanged || dprChanged || worldChanged)
-        ) {
-            this._init();
+        if (!this._isTauriRuntime || (!reseedParticles && !canvasChanged && !dprChanged && !worldChanged)) {
+            return;
         }
+
+        if (this._particles.length === 0 || reseedParticles || previousWorldWidth <= 0 || previousWorldHeight <= 0) {
+            this._init();
+            return;
+        }
+
+        this._reflowParticles({
+            previousCanvasWidth,
+            previousCanvasHeight,
+            previousWorldWidth,
+            previousWorldHeight,
+            previousOverscanX,
+            previousOverscanY,
+        });
+        this._syncParticlePopulation();
     }
 
     /**
@@ -154,6 +177,10 @@ export class Particles {
     public destroy(): void {
         this.stop();
         this._cleanupAbort.abort();
+        if (this._resizeFrameId !== null) {
+            this._runtime.cancelAnimationFrame(this._resizeFrameId);
+            this._resizeFrameId = null;
+        }
         this._canvas.remove();
         this._particles = [];
         this._particlesByColor = {};
@@ -170,32 +197,7 @@ export class Particles {
         this._particlesByColor = {};
 
         for (let i = 0; i < particleCount; i++) {
-            let color = 'rgba(255, 255, 255, 0.1)';
-            const rand = this._random();
-
-            if (rand > 0.6) {
-                color = 'rgba(138, 43, 226, 0.4)';
-            } else if (rand > 0.5) {
-                color = 'rgba(147, 51, 234, 0.3)';
-            }
-
-            const p = {
-                x: this._random() * this._worldWidth - this._overscanX,
-                y: this._random() * this._worldHeight - this._overscanY,
-                vx: (this._random() - 0.5) * 0.1,
-                vy: (this._random() - 0.5) * 0.1,
-                size: Math.floor(this._random() * 3) + 2, // Fixed Physical Size
-                color: color,
-            };
-
-            this._particles.push(p);
-
-            let group = this._particlesByColor[color];
-            if (!group) {
-                group = [];
-                this._particlesByColor[color] = group;
-            }
-            group.push(p);
+            this._pushParticle(this._createParticle());
         }
     }
 
@@ -212,7 +214,7 @@ export class Particles {
         this._runtime.addWindowListener(
             'resize',
             () => {
-                this._resize(true);
+                this._scheduleResize();
             },
             { signal },
         );
@@ -262,6 +264,17 @@ export class Particles {
         };
         motionQuery.addEventListener('change', handleMotion, { signal });
         handleMotion(); // Initial check
+    }
+
+    private _scheduleResize(): void {
+        if (this._resizeFrameId !== null) {
+            this._runtime.cancelAnimationFrame(this._resizeFrameId);
+        }
+
+        this._resizeFrameId = this._runtime.requestAnimationFrame(() => {
+            this._resizeFrameId = null;
+            this._resize(false);
+        });
     }
 
     private _checkReducedMotionAndStart(): void {
@@ -333,6 +346,116 @@ export class Particles {
         });
     }
 
+    private _createParticle(): {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        color: string;
+    } {
+        let color = 'rgba(255, 255, 255, 0.1)';
+        const rand = this._random();
+
+        if (rand > 0.6) {
+            color = 'rgba(138, 43, 226, 0.4)';
+        } else if (rand > 0.5) {
+            color = 'rgba(147, 51, 234, 0.3)';
+        }
+
+        return {
+            x: this._random() * this._worldWidth - this._overscanX,
+            y: this._random() * this._worldHeight - this._overscanY,
+            vx: (this._random() - 0.5) * 0.1,
+            vy: (this._random() - 0.5) * 0.1,
+            size: Math.floor(this._random() * 3) + 2,
+            color,
+        };
+    }
+
+    private _pushParticle(particle: {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        color: string;
+    }): void {
+        this._particles.push(particle);
+
+        let group = this._particlesByColor[particle.color];
+        if (!group) {
+            group = [];
+            this._particlesByColor[particle.color] = group;
+        }
+        group.push(particle);
+    }
+
+    private _reflowParticles(previous: {
+        previousCanvasWidth: number;
+        previousCanvasHeight: number;
+        previousWorldWidth: number;
+        previousWorldHeight: number;
+        previousOverscanX: number;
+        previousOverscanY: number;
+    }): void {
+        for (const particle of this._particles) {
+            const normalizedX =
+                (particle.x + previous.previousOverscanX) / previous.previousWorldWidth;
+            const normalizedY =
+                (particle.y + previous.previousOverscanY) / previous.previousWorldHeight;
+
+            particle.x = normalizedX * this._worldWidth - this._overscanX;
+            particle.y = normalizedY * this._worldHeight - this._overscanY;
+        }
+
+        const mouseScaleX =
+            previous.previousCanvasWidth > 0 ? this._canvasWidth / previous.previousCanvasWidth : 1;
+        const mouseScaleY =
+            previous.previousCanvasHeight > 0 ? this._canvasHeight / previous.previousCanvasHeight : 1;
+        this._mouse.x *= mouseScaleX;
+        this._mouse.y *= mouseScaleY;
+    }
+
+    private _syncParticlePopulation(): void {
+        const targetCount = Math.max(
+            1,
+            Math.floor((this._canvasWidth * this._canvasHeight) / Particles._DENSITY),
+        );
+
+        while (this._particles.length < targetCount) {
+            this._pushParticle(this._createParticle());
+        }
+
+        if (this._particles.length <= targetCount) {
+            return;
+        }
+
+        const keep = this._particles.slice(0, targetCount);
+        this._particles = keep;
+        this._particlesByColor = {};
+
+        for (const particle of keep) {
+            this._pushParticleToGroup(particle);
+        }
+    }
+
+    private _pushParticleToGroup(particle: {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+        color: string;
+    }): void {
+        let group = this._particlesByColor[particle.color];
+        if (!group) {
+            group = [];
+            this._particlesByColor[particle.color] = group;
+        }
+        group.push(particle);
+    }
+
     private _updateParticle(p: {
         x: number;
         y: number;
@@ -350,7 +473,7 @@ export class Particles {
         const dy = this._mouse.y - p.y;
 
         // Interaction radius (Physical Pixels)
-        const radius = 150 * this._runtime.getDevicePixelRatio();
+        const radius = 150 * this._devicePixelRatio;
 
         if (Math.abs(dx) < radius && Math.abs(dy) < radius) {
             const dist = Math.hypot(dx, dy);

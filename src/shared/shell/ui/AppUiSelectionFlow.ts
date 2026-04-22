@@ -1,6 +1,6 @@
 import type { IApp } from '../../types/coreTypes';
 
-type LaunchAppFn = (id: string) => Promise<void>;
+type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 
 type AppUiSelectionFlowDeps = {
     getSelectedApp: (category: string) => IApp | undefined;
@@ -59,5 +59,13 @@ export class AppUiSelectionFlow {
             descKey: app.descKey ?? '',
             desc: app.desc ?? '',
         });
+    }
+
+    public activateExistingSelection(category: string, app: IApp): void {
+        if (typeof this._deps.launchApp !== 'function') {
+            return;
+        }
+
+        void this._deps.launchApp(category, app);
     }
 }

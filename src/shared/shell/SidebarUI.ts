@@ -22,14 +22,17 @@ export class SidebarUI extends BaseComponent {
     private static readonly _AUTO_COMPACT_ZOOM_THRESHOLD = 3;
     private static readonly _AUTO_COMPACT_WARNING_LEAD_STEPS = 0;
     private static readonly _AUTO_COMPACT_ZOOM_STEP = 0.1;
-    private static readonly _AUTO_COMPACT_THRESHOLD_FACTOR = 0.5;
+    private static readonly _AUTO_COMPACT_THRESHOLD_FACTOR = 1.1;
 
     private _sidebar: HTMLElement | null = null;
     private _isCollapsed = false;
     private _isAutoCompact = false;
+    private _hasManualSidebarOverride = false;
     private _snappingTimeout: ReturnType<typeof setTimeout> | null = null;
     private _resizeObserver: ResizeObserver | null = null;
     private _monitorCheckFrame: number | null = null;
+    private _layoutUpdateFrame: number | null = null;
+    private _monitoringElements: IMonitoringElements | null = null;
     private readonly _autoCompactPolicy = new SidebarAutoCompactPolicy({
         collapsedWidth: SidebarUI._COLLAPSED_WIDTH,
         expandedWidth: SidebarUI._EXPANDED_WIDTH,
@@ -75,8 +78,14 @@ export class SidebarUI extends BaseComponent {
             globalThis.addEventListener(
                 'resize',
                 () => {
-                    this._updateAutoCompactState();
-                    this._applySidebarWidth();
+                    this._scheduleLayoutUpdate();
+                },
+                { signal },
+            );
+            globalThis.addEventListener(
+                'axelate:zoom-changed',
+                () => {
+                    this._scheduleLayoutUpdate(true);
                 },
                 { signal },
             );
@@ -99,6 +108,11 @@ export class SidebarUI extends BaseComponent {
             globalThis.cancelAnimationFrame(this._monitorCheckFrame);
             this._monitorCheckFrame = null;
         }
+        if (this._layoutUpdateFrame !== null) {
+            globalThis.cancelAnimationFrame(this._layoutUpdateFrame);
+            this._layoutUpdateFrame = null;
+        }
+        this._monitoringElements = null;
     }
 
     /**
@@ -141,7 +155,9 @@ export class SidebarUI extends BaseComponent {
         const toggle = (): void => {
             if (this._sidebar === null) return;
 
-            this._isCollapsed = !this._isCollapsed;
+            const isEffectiveAutoCompact = this._isAutoCompact && !this._hasManualSidebarOverride;
+            this._isCollapsed = isEffectiveAutoCompact ? false : !this._isCollapsed;
+            this._hasManualSidebarOverride = true;
             this._startSnappingAnimation();
             this._updateAutoCompactState();
             this._applySidebarWidth();
@@ -173,25 +189,32 @@ export class SidebarUI extends BaseComponent {
     private _applySidebarWidth(): void {
         if (this._sidebar === null) return;
 
+        const isEffectiveAutoCompact = this._isAutoCompact && !this._hasManualSidebarOverride;
         const width = this._autoCompactPolicy.getSidebarWidth(
             this._isCollapsed,
-            this._isAutoCompact,
+            isEffectiveAutoCompact,
         );
 
         this._sidebar.classList.toggle('collapsed', width < 100);
-        this._sidebar.classList.toggle('auto-compact', this._isAutoCompact);
+        this._sidebar.classList.toggle('auto-compact', isEffectiveAutoCompact);
         document.documentElement.style.setProperty('--sidebar-width', `${String(width)}px`);
         this._sidebar.style.width = `${String(width)}px`;
     }
 
     private _updateAutoCompactState(): void {
         const zoom = this._state.getZoomLevel();
+        const effectiveZoom =
+            this._windowService !== undefined
+                ? this._windowService.getZoom()
+                : zoom;
+        const normalizedZoom =
+            Number.isFinite(effectiveZoom) && effectiveZoom > 0 ? effectiveZoom : 1;
         this._isAutoCompact = this._autoCompactPolicy.isAutoCompact(
             zoom,
             this._windowService?.getConfig(),
             {
-                width: globalThis.innerWidth,
-                height: globalThis.innerHeight,
+                width: globalThis.innerWidth / normalizedZoom,
+                height: globalThis.innerHeight / normalizedZoom,
             },
         );
     }
@@ -224,6 +247,22 @@ export class SidebarUI extends BaseComponent {
         this._checkMonitorVisibility();
     }
 
+    private _scheduleLayoutUpdate(checkMonitorVisibility = false): void {
+        if (this._layoutUpdateFrame !== null) {
+            globalThis.cancelAnimationFrame(this._layoutUpdateFrame);
+        }
+
+        this._layoutUpdateFrame = globalThis.requestAnimationFrame(() => {
+            this._layoutUpdateFrame = null;
+            this._resetManualSidebarOverride();
+            this._updateAutoCompactState();
+            this._applySidebarWidth();
+            if (checkMonitorVisibility) {
+                this._checkMonitorVisibility();
+            }
+        });
+    }
+
     private _scheduleMonitorVisibilityCheck(): void {
         if (this._monitorCheckFrame !== null) {
             globalThis.cancelAnimationFrame(this._monitorCheckFrame);
@@ -236,8 +275,6 @@ export class SidebarUI extends BaseComponent {
     }
 
     private _checkMonitorVisibility(): void {
-        if (this._sidebar === null) return;
-
         const elements = this._getMonitoringElements();
         if (elements === null) {
             return;
@@ -246,18 +283,54 @@ export class SidebarUI extends BaseComponent {
     }
 
     private async _findSidebar(): Promise<HTMLElement | null> {
-        let attempts = 0;
-        while (attempts < 10) {
-            const sidebar = this.getElement<HTMLElement>('sidebar');
-            if (sidebar !== null && sidebar.children.length > 0) {
-                return sidebar;
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            attempts++;
+        const existingSidebar = this.getElement<HTMLElement>('sidebar');
+        if (existingSidebar !== null && existingSidebar.children.length > 0) {
+            return existingSidebar;
         }
 
-        return null;
+        return await new Promise<HTMLElement | null>((resolve) => {
+            let settled = false;
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+            let observer: MutationObserver | null = null;
+
+            const cleanup = () => {
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
+                observer?.disconnect();
+                observer = null;
+            };
+
+            const finish = (sidebar: HTMLElement | null) => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                cleanup();
+                resolve(sidebar);
+            };
+
+            const resolveSidebar = () => {
+                const sidebar = this.getElement<HTMLElement>('sidebar');
+                if (sidebar !== null && sidebar.children.length > 0) {
+                    finish(sidebar);
+                }
+            };
+
+            timeoutId = setTimeout(() => {
+                finish(null);
+            }, 1000);
+
+            observer = new MutationObserver(resolveSidebar);
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+            });
+
+            resolveSidebar();
+        });
     }
 
     private _startSnappingAnimation(): void {
@@ -280,7 +353,15 @@ export class SidebarUI extends BaseComponent {
         this._state.setSidebarCollapsed(this._isCollapsed);
     }
 
+    private _resetManualSidebarOverride(): void {
+        this._hasManualSidebarOverride = false;
+    }
+
     private _getMonitoringElements(): IMonitoringElements | null {
+        if (this._monitoringElements !== null) {
+            return this._monitoringElements;
+        }
+
         if (this._sidebar === null) {
             return null;
         }
@@ -299,6 +380,7 @@ export class SidebarUI extends BaseComponent {
             return null;
         }
 
-        return { sidebar: this._sidebar, monitor, logo, menu, bottom };
+        this._monitoringElements = { sidebar: this._sidebar, monitor, logo, menu, bottom };
+        return this._monitoringElements;
     }
 }

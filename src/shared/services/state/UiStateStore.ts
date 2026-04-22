@@ -30,7 +30,6 @@ export interface IUIState {
     ai_thinking_level: Record<string, ThinkingLevel>;
     ai_web_search_enabled: Record<string, boolean>;
     local_max_output_tokens: Record<string, number>;
-    last_active_provider: string | null;
     ai_session_id: string | null;
     preferred_language?: string | null;
     pending_chat_reveal: boolean;
@@ -54,11 +53,13 @@ const DEFAULT_UI_STATE: IUIState = {
     ai_thinking_level: {},
     ai_web_search_enabled: {},
     local_max_output_tokens: {},
-    last_active_provider: null,
     ai_session_id: null,
     preferred_language: null,
     pending_chat_reveal: false,
 };
+
+const MIN_UI_ZOOM = 0.95;
+const MAX_UI_ZOOM = 2.6;
 
 export class UiStateStore {
     private _state: IUIState = { ...DEFAULT_UI_STATE };
@@ -93,7 +94,7 @@ export class UiStateStore {
     }
 
     public setState(state: Partial<IUIState>): void {
-        this._state = { ...this._state, ...state };
+        this._state = this._normalizeState({ ...this._state, ...state });
     }
 
     public getState(): IUIState {
@@ -198,5 +199,26 @@ export class UiStateStore {
             globalThis.clearTimeout(this._autoSaveTimer);
             this._autoSaveTimer = null;
         }
+    }
+
+    private _normalizeState(state: IUIState): IUIState {
+        return {
+            ...state,
+            zoom_level: this._clampZoom(state.zoom_level),
+            resolution_zoom: Object.fromEntries(
+                Object.entries(state.resolution_zoom).map(([key, zoom]) => [
+                    key,
+                    this._clampZoom(zoom),
+                ]),
+            ),
+        };
+    }
+
+    private _clampZoom(zoom: number): number {
+        if (!Number.isFinite(zoom)) {
+            return DEFAULT_UI_STATE.zoom_level;
+        }
+
+        return Math.min(MAX_UI_ZOOM, Math.max(MIN_UI_ZOOM, zoom));
     }
 }

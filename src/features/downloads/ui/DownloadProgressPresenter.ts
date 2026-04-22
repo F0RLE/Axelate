@@ -64,8 +64,12 @@ export class DownloadProgressPresenter {
                 return this._deps.translate('ui.downloads.status.connecting', 'Connecting');
             case 'downloading':
                 return this._deps.translate('ui.downloads.status.in_progress', 'Downloading');
+            case 'verifying':
+                return this._deps.translate('ui.downloads.status.verifying', 'Verifying');
             case 'extracting':
                 return this._deps.translate('ui.downloads.status.extracting', 'Extracting');
+            case 'paused':
+                return this._deps.translate('ui.downloads.status.paused', 'Paused');
             case 'complete':
                 return this._deps.translate('ui.downloads.status.completed', 'Completed');
             case 'error':
@@ -115,7 +119,10 @@ export class DownloadProgressPresenter {
             normalized === 'connecting...' ||
             normalized === 'downloading...' ||
             normalized === 'extracting...' ||
-            normalized === 'success'
+            normalized === 'success' ||
+            normalized === 'download paused' ||
+            normalized === 'download cancelled' ||
+            normalized.startsWith('verifying')
         ) {
             return localizedStatus;
         }
@@ -136,6 +143,23 @@ export class DownloadProgressPresenter {
     }
 
     public isActiveStatus(status: string): boolean {
-        return status === 'downloading' || status === 'connecting' || status === 'extracting';
+        return (
+            status === 'downloading' ||
+            status === 'connecting' ||
+            status === 'verifying' ||
+            status === 'extracting'
+        );
+    }
+
+    public isPausableStatus(status: string): boolean {
+        return status === 'downloading' || status === 'connecting';
+    }
+
+    public isResumableStatus(status: string): boolean {
+        return status === 'paused';
+    }
+
+    public isCancellableStatus(status: string): boolean {
+        return status === 'downloading' || status === 'connecting';
     }
 }

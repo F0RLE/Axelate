@@ -9,7 +9,11 @@ import { WindowServiceActions } from './WindowServiceActions';
 import { WindowNativeBridgeHelper } from './WindowNativeBridgeHelper';
 import { WindowServicePolicy } from './WindowServicePolicy';
 import { WindowServicePersistence } from './WindowServicePersistence';
-import { WindowServiceZoom, type WindowZoomSettingsStore } from './WindowServiceZoom';
+import {
+    WindowServiceZoom,
+    type WindowZoomApplyOptions,
+    type WindowZoomSettingsStore,
+} from './WindowServiceZoom';
 
 type WindowServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
@@ -56,15 +60,21 @@ function createDefaultWindowRuntime(): WindowRuntime {
             height: globalThis.screen.height,
         }),
         setAppZoomCss: (zoom: string) => {
+            const viewport = document.getElementById('app-viewport');
             document.documentElement.style.setProperty('--app-zoom', zoom);
+            if (viewport instanceof HTMLElement) {
+                viewport.style.transform = `scale(${zoom})`;
+                viewport.style.width = `calc(100% / ${zoom})`;
+                viewport.style.height = `calc(100% / ${zoom})`;
+            }
         },
     };
 }
 
 export class WindowService {
     private _currentZoom = 1;
-    private readonly _MIN_ZOOM = 0.5;
-    private readonly _MAX_ZOOM = 3;
+    private readonly _MIN_ZOOM = 0.95;
+    private readonly _MAX_ZOOM = 2.6;
     private _config: IWindowConfig | null = null;
     private _isDestroyed = false;
     private _beforeClose: (() => Promise<void>) | null = null;
@@ -111,7 +121,7 @@ export class WindowService {
             runtime: _runtime,
             tracer: this._tracer,
             getCurrentZoom: () => this._currentZoom,
-            setZoom: async (zoom) => this.setZoom(zoom),
+            setZoom: async (zoom, options) => this.setZoom(zoom, options),
             zoomService: this._zoomService,
         });
     }
@@ -142,14 +152,14 @@ export class WindowService {
                 const zoom =
                     initialZoom ??
                     (await this._zoomService.getInitialZoomWithFallback(fallbackZoom));
-                await this.setZoom(zoom);
+                await this.setZoom(zoom, { syncNativeZoom: false });
             } catch (e) {
                 this._tracer.warn(
                     `[WindowService] Failed to get initial window data, using fallback: ${String(e)}`,
                 );
-                await this.setZoom(fallbackZoom);
+                await this.setZoom(fallbackZoom, { syncNativeZoom: false });
             }
-            this._runtime.setAppZoomCss('1');
+            this._runtime.setAppZoomCss(this._currentZoom.toFixed(3));
 
             // Initialize persistence listeners
             this._persistence.initWindowListeners();
@@ -160,7 +170,7 @@ export class WindowService {
 
             // Enable Ctrl + Scroll implementation for Web Browser
             this._persistence.bindWebWheelHandler((delta) => {
-                void this.changeZoom(delta);
+                void this.changeZoom(delta, { syncNativeZoom: false });
             });
         }
     }
@@ -219,8 +229,16 @@ export class WindowService {
     /**
      * Sets the webview zoom level.
      */
-    public async setZoom(zoom: number): Promise<number> {
-        this._currentZoom = await this._zoomService.setZoom(zoom);
+    public async setZoom(zoom: number, options: WindowZoomApplyOptions = {}): Promise<number> {
+        this._currentZoom = await this._zoomService.setZoom(zoom, {
+            syncNativeZoom: false,
+            ...options,
+        });
+        globalThis.dispatchEvent(
+            new CustomEvent('axelate:zoom-changed', {
+                detail: { zoom: this._currentZoom },
+            }),
+        );
         return this._currentZoom;
     }
 
@@ -234,8 +252,8 @@ export class WindowService {
     /**
      * Increments/decrements the current zoom level.
      */
-    public changeZoom(delta: number): Promise<number> {
-        return this.setZoom(this._currentZoom + delta);
+    public changeZoom(delta: number, options: WindowZoomApplyOptions = {}): Promise<number> {
+        return this.setZoom(this._currentZoom + delta, options);
     }
 
     // --- Monitoring State ---

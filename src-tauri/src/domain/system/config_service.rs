@@ -46,6 +46,11 @@ impl ConfigService {
         // 1. Process API Providers (Auto-generate virtual modules)
         for provider in &providers {
             let mut config_schema = HashMap::new();
+            let capabilities = provider
+                .capabilities
+                .clone()
+                .filter(|items| !items.is_empty())
+                .unwrap_or_else(|| vec!["text".to_string()]);
 
             // API Key is always required for cloud providers
             config_schema.insert(
@@ -80,7 +85,7 @@ impl ConfigService {
                 icon: provider.icon.clone().unwrap_or_else(|| "cloud".to_string()),
                 type_name: "api".to_string(),
                 dl_type: None,
-                capabilities: vec!["text".to_string()],
+                capabilities,
                 binary: None,
                 raw_config_schema: None,
                 repo_url: None,

@@ -21,7 +21,7 @@ import type {
     ModuleSettingsUiController,
 } from './CoreUiContracts';
 import {
-    restoreActiveAiProvider,
+    restoreSelectedAiProvider,
     restoreSelectedModules as restoreSelectedModulesState,
 } from './CoreStateRestore';
 
@@ -176,10 +176,9 @@ export async function initializeDeferredUi(args: InitializeDeferredUiArgs): Prom
 export function restoreSelectedModules(args: {
     tracer: RuntimeLogger;
     moduleSettings: Parameters<typeof restoreSelectedModulesState>[0]['moduleSettings'];
-    aiSettings: Parameters<typeof restoreActiveAiProvider>[0]['aiSettings'];
     catalog: Parameters<typeof restoreSelectedModulesState>[0]['catalog'];
     appUI: Parameters<typeof restoreSelectedModulesState>[0]['appUI'];
-    aiBridge: Parameters<typeof restoreActiveAiProvider>[0]['aiBridge'];
+    aiBridge: Parameters<typeof restoreSelectedAiProvider>[0]['aiBridge'];
 }): void {
     const restoredSelections = restoreSelectedModulesState({
         tracer: args.tracer,
@@ -188,9 +187,8 @@ export function restoreSelectedModules(args: {
         appUI: args.appUI,
     });
 
-    restoreActiveAiProvider({
+    restoreSelectedAiProvider({
         tracer: args.tracer,
-        aiSettings: args.aiSettings,
         aiBridge: args.aiBridge,
         restoredSelections,
     });

@@ -280,6 +280,9 @@ pub struct ApiProvider {
     /// Available models configuration
     #[serde(default)]
     pub models: Option<Vec<AiModel>>,
+    /// Provider output capabilities exposed in the launcher catalog
+    #[serde(default)]
+    pub capabilities: Option<Vec<String>>,
     /// Model aliases (UI name → API ID mappings)
     #[serde(default)]
     pub model_aliases: Option<std::collections::HashMap<String, String>>,

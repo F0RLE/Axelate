@@ -51,6 +51,13 @@ export const svgIcons = `
                 <path d="M6 4h2v2H6zm2 2h2v2H8zm2 2h2v2h-2zm2 2h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2H8zm-2 2h2v2H6zm4-10h2v8h-2zm2 2h2v4h-2z"></path>
             </symbol>
             <symbol
+                id="icon-pause"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+            >
+                <path d="M6 4h4v2H6zm8 0h4v2h-4zM4 6h2v12H4zm6 0h2v12h-2zm2 12h2v2h-2zm6-12h2v12h-2zm-2 12h2v2h-2z"></path>
+            </symbol>
+            <symbol
                 id="icon-stop"
                 viewBox="0 0 24 24"
                 fill="currentColor"

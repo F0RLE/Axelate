@@ -136,10 +136,12 @@ export class ModalManager {
         // Prevent Chromium from painting an intermediate frame with stale/default dialog visuals.
         modal.style.visibility = 'hidden';
         modal.classList.remove('hidden');
-        if (typeof modal.showModal === 'function') {
+        if (typeof modal.show === 'function') {
+            modal.show();
+        } else if (typeof modal.showModal === 'function') {
             modal.showModal();
         } else {
-            modal.show();
+            modal.setAttribute('open', '');
         }
         this._focusTrap.focusFirstElement(modal);
         requestAnimationFrame(() => {

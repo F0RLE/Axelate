@@ -5,7 +5,13 @@
     font-weight: 600;
     font-size: 0.85rem;
     cursor: pointer;
-    transition: all var(--transition-fast) var(--ease-smooth);
+    transition:
+        background-color var(--transition-fast) var(--ease-smooth),
+        border-color var(--transition-fast) var(--ease-smooth),
+        color var(--transition-fast) var(--ease-smooth),
+        box-shadow var(--transition-fast) var(--ease-smooth),
+        filter var(--transition-fast) var(--ease-smooth),
+        opacity var(--transition-fast) var(--ease-smooth);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -34,12 +40,10 @@
 }
 
 .btn:hover {
-    transform: translateY(-3px);
     box-shadow: 0 6px 20px rgba(var(--primary-raw), 0.35);
 }
 
 .btn:active {
-    transform: translateY(-1px) scale(0.97);
     box-shadow: 0 2px 8px rgba(var(--primary-raw), 0.25);
     transition-duration: 0.1s;
 }
@@ -114,11 +118,6 @@
 .btn-icon .icon {
     width: 18px;
     height: 18px;
-    transition: transform 0.2s var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1));
-}
-
-.btn-icon:hover .icon {
-    transform: scale(1.15);
 }
 
 /* Small button */

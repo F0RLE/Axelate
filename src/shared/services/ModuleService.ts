@@ -13,9 +13,15 @@ import { invokeSafe } from '../api/invoke';
 // IModuleGlobal removed
 
 type ModuleServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+type DownloadRequest = {
+    repoUrl: string;
+    expectedHash?: string;
+    dlType?: string;
+};
 
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
+    private readonly _downloadRequests: Record<string, DownloadRequest> = {};
     private readonly _deletedModules = new Set<string>();
     private readonly _lastLoggedDownloadPhase = new Map<string, string>();
     private _downloadProgressUnlisten: (() => void) | null = null;
@@ -51,7 +57,9 @@ export class ModuleService {
                     | 'pending'
                     | 'connecting'
                     | 'downloading'
+                    | 'verifying'
                     | 'extracting'
+                    | 'paused'
                     | 'complete'
                     | 'error'
                     | 'cancelled',
@@ -64,6 +72,10 @@ export class ModuleService {
 
             if (payload.status === 'complete') {
                 (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
+            }
+            if (payload.status === 'complete' || payload.status === 'cancelled') {
+                // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+                delete this._downloadRequests[payload.module_id];
             }
 
             // Dispatch custom event for UI components that don't use this service directly
@@ -126,6 +138,11 @@ export class ModuleService {
 
         try {
             this._deletedModules.delete(moduleId);
+            this._downloadRequests[moduleId] = {
+                repoUrl,
+                ...(expectedHash !== undefined ? { expectedHash } : {}),
+                ...(dlType !== undefined ? { dlType } : {}),
+            };
             // Sanitize expectedHash: pass null if empty string or undefined to ensure rust gets None
             const hashToPass =
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
@@ -162,6 +179,49 @@ export class ModuleService {
     }
 
     /**
+     * Pauses an in-progress module download while preserving partial data.
+     * @param moduleId - The ID of the module whose download to pause
+     */
+    public async pauseDownload(moduleId: string): Promise<boolean> {
+        this._tracer.info(`[ModuleService] Pausing download: ${moduleId}`);
+        if (!this._bridge.isTauri()) return false;
+        try {
+            return await commands.pauseDownload(moduleId);
+        } catch (e) {
+            this._tracer.error(`[ModuleService] Pause failed: ${String(e)}`);
+            return false;
+        }
+    }
+
+    /**
+     * Resumes a paused module download using the last known request metadata.
+     * @param moduleId - The ID of the module whose download to resume
+     */
+    public async resumeDownload(moduleId: string): Promise<boolean> {
+        this._tracer.info(`[ModuleService] Resuming download: ${moduleId}`);
+        const request = this._downloadRequests[moduleId];
+        if (request === undefined) {
+            this._tracer.warn(
+                `[ModuleService] Resume skipped: missing download metadata for ${moduleId}`,
+            );
+            return false;
+        }
+
+        try {
+            await this.downloadModule(
+                moduleId,
+                request.repoUrl,
+                request.expectedHash,
+                request.dlType,
+            );
+            return true;
+        } catch (e) {
+            this._tracer.error(`[ModuleService] Resume failed: ${String(e)}`);
+            return false;
+        }
+    }
+
+    /**
      * Deletes a module from the local disk
      * @param moduleId - The ID of the module to delete
      */
@@ -183,6 +243,8 @@ export class ModuleService {
             this._deletedModules.add(moduleId);
             // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._downloadState[moduleId];
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete this._downloadRequests[moduleId];
             return true;
         } catch (e) {
             this._tracer.error(`[ModuleService] Delete exception: ${String(e)}`);

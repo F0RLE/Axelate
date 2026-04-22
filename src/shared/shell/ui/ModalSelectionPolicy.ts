@@ -1,4 +1,5 @@
 import type { IApp } from '../../types/coreTypes';
+import { isCustomProviderId } from '../../utils/customProviderSupport';
 
 export class ModalSelectionPolicy {
     public getModalTitleInfo(category: string): { key: string; defaultText: string } {
@@ -78,6 +79,17 @@ export class ModalSelectionPolicy {
         const priority = ['axelate', 'gpt', 'gemini'];
 
         return [...apps].sort((a, b) => {
+            const availabilityDiff = this._getAvailabilityRank(a) - this._getAvailabilityRank(b);
+            if (availabilityDiff !== 0) {
+                return availabilityDiff;
+            }
+
+            const providerClassDiff =
+                this._getProviderClassRank(a) - this._getProviderClassRank(b);
+            if (providerClassDiff !== 0) {
+                return providerClassDiff;
+            }
+
             const idA = a.id.toLowerCase();
             const idB = b.id.toLowerCase();
             const nameA = (a.name ?? a.id).toLowerCase();
@@ -98,5 +110,25 @@ export class ModalSelectionPolicy {
 
             return nameA.localeCompare(nameB);
         });
+    }
+
+    private _getAvailabilityRank(app: IApp): number {
+        if (app.comingSoon === true) {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    private _getProviderClassRank(app: IApp): number {
+        if (isCustomProviderId(app.id)) {
+            return 1;
+        }
+
+        if (app.type === 'local') {
+            return 2;
+        }
+
+        return 0;
     }
 }

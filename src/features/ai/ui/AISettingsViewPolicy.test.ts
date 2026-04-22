@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { AISettingsViewPolicy } from './AISettingsViewPolicy';
+import {
+    CUSTOM_IMAGE_PROVIDER_ID,
+    CUSTOM_TEXT_PROVIDER_ID,
+} from '@/shared/utils/customProviderSupport';
 
 describe('AISettingsViewPolicy', () => {
     const policy = new AISettingsViewPolicy();
@@ -10,8 +14,17 @@ describe('AISettingsViewPolicy', () => {
         expect(policy.isCleanApp('gpt')).toBe(false);
         expect(policy.supportsInternetAccess('gpt')).toBe(true);
         expect(policy.supportsInternetAccess('axelate')).toBe(false);
+        expect(policy.supportsInternetAccess('gemini-image')).toBe(false);
+        expect(policy.supportsInternetAccess('seedream-image')).toBe(false);
+        expect(policy.supportsInternetAccess(CUSTOM_TEXT_PROVIDER_ID)).toBe(true);
         expect(policy.supportsThinking('gpt')).toBe(true);
         expect(policy.supportsThinking('openrouter')).toBe(false);
+        expect(policy.supportsThinking(CUSTOM_TEXT_PROVIDER_ID)).toBe(true);
+        expect(policy.isImageOnlyProvider('gemini-image')).toBe(true);
+        expect(policy.isImageOnlyProvider('seedream-image')).toBe(true);
+        expect(policy.isImageOnlyProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
+        expect(policy.shouldShowModelStats(CUSTOM_TEXT_PROVIDER_ID)).toBe(false);
+        expect(policy.shouldForceThinkingVisibility(CUSTOM_TEXT_PROVIDER_ID)).toBe(true);
     });
 
     it('should format context windows compactly', () => {

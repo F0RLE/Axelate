@@ -223,6 +223,25 @@ function stopRunningApp() {
         return;
     }
 
+    const env = toolEnv();
+    const taskListInvocation = buildCommandInvocation(
+        'tasklist',
+        ['/FI', 'IMAGENAME eq Axelate.exe'],
+        env,
+    );
+    const taskListResult = spawnSync(taskListInvocation.command, taskListInvocation.args, {
+        cwd: repoRoot,
+        env,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false,
+    });
+
+    const taskListOutput = `${taskListResult.stdout ?? ''}\n${taskListResult.stderr ?? ''}`;
+    if (!taskListOutput.includes('Axelate.exe')) {
+        return;
+    }
+
     run('taskkill', ['/F', '/IM', 'Axelate.exe', '/T'], {
         allowFailure: true,
     });

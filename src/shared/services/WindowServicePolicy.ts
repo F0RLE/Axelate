@@ -1,3 +1,4 @@
+import type { WindowZoomApplyOptions } from './WindowServiceZoom';
 import type { IBridge } from '@/shared/types/IBridge';
 
 import type { IWindowPolicy } from './WindowService';
@@ -17,7 +18,7 @@ type WindowServicePolicyDeps = {
     runtime: WindowPolicyRuntime;
     tracer: WindowPolicyLogger;
     getCurrentZoom: () => number;
-    setZoom: (zoom: number) => Promise<number>;
+    setZoom: (zoom: number, options?: WindowZoomApplyOptions) => Promise<number>;
     zoomService: WindowServiceZoom;
 };
 
@@ -74,7 +75,7 @@ export class WindowServicePolicy {
             this._deps.getCurrentZoom(),
         );
         if (zoom !== null) {
-            await this._deps.setZoom(zoom);
+            await this._deps.setZoom(zoom, { syncNativeZoom: false });
         }
     }
 }

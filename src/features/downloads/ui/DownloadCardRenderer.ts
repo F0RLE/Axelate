@@ -10,7 +10,11 @@ type DownloadCardRendererDeps = {
     formatSpeed: (bytesPerSec: number) => string;
     displayModuleName: (moduleId: string) => string;
     statusLabel: (status: string) => string;
-    isActiveStatus: (status: string) => boolean;
+    isPausableStatus: (status: string) => boolean;
+    isResumableStatus: (status: string) => boolean;
+    isCancellableStatus: (status: string) => boolean;
+    onPause: (moduleId: string) => void;
+    onResume: (moduleId: string) => void;
     onCancel: (moduleId: string) => void;
 };
 
@@ -46,29 +50,38 @@ export class DownloadCardRenderer {
     }
 
     public patchCard(card: HTMLElement, state: ModuleDownloadState): void {
+        const moduleId = card.dataset['moduleId'] ?? '';
         const pct = state.progress < 0 ? -1 : Math.round(state.progress * 100);
         const pctText = pct < 0 ? '--' : `${String(pct)}%`;
 
         this.patchProgressBar(card, pct);
 
         const pctEl = card.querySelector('.downloads-progress-percent');
-        if (pctEl) pctEl.textContent = pctText;
+        if (pctEl !== null) {
+            pctEl.textContent = pctText;
+        }
 
-        this.patchStatusPill(card, state.status);
         this.patchCardTranslations(card);
+        this.patchActionArea(card, moduleId, state.status);
+
+        const moduleCode = card.querySelector('.downloads-label');
+        if (moduleCode !== null) {
+            moduleCode.textContent = moduleId.toUpperCase();
+        }
 
         const downloaded = state.downloaded ?? 0;
         const total = state.total ?? 0;
         const speed = state.speed ?? 0;
         const statValues = card.querySelectorAll('.downloads-stat-value');
         if (statValues[0]) statValues[0].textContent = this._deps.formatBytes(downloaded);
-        if (statValues[1])
+        if (statValues[1]) {
             statValues[1].textContent = total > 0 ? this._deps.formatBytes(total) : '--';
+        }
         if (statValues[2]) statValues[2].textContent = this._deps.formatSpeed(speed);
 
         const itemLabel = card.querySelector('.downloads-item-label');
         if (itemLabel !== null) {
-            itemLabel.textContent = this._deps.displayModuleName(card.dataset['moduleId'] ?? '');
+            itemLabel.textContent = this._deps.displayModuleName(moduleId);
         }
     }
 
@@ -99,13 +112,6 @@ export class DownloadCardRenderer {
             speedLabel.textContent = this._deps.translate('ui.launcher.web.speed', 'Speed');
         }
 
-        const cancelBtn = card.querySelector('.download-cancel-btn');
-        if (cancelBtn !== null) {
-            const cancelText = this._deps.translate('ui.launcher.button.cancel', 'Cancel');
-            cancelBtn.setAttribute('title', cancelText);
-            cancelBtn.setAttribute('aria-label', cancelText);
-        }
-
         const moduleId = card.dataset['moduleId'] ?? '';
         const itemLabel = card.querySelector('.downloads-item-label');
         if (itemLabel !== null) {
@@ -115,7 +121,7 @@ export class DownloadCardRenderer {
 
     public renderCard(moduleId: string, state: ModuleDownloadState): HTMLElement {
         const card = document.createElement('div');
-        card.className = 'downloads-card-main download-item-card';
+        card.className = 'downloads-card-main launcher-glass-panel download-item-card';
         card.dataset['moduleId'] = moduleId;
 
         const pct = state.progress < 0 ? -1 : Math.round(state.progress * 100);
@@ -123,13 +129,6 @@ export class DownloadCardRenderer {
         const downloaded = state.downloaded ?? 0;
         const total = state.total ?? 0;
         const speed = state.speed ?? 0;
-
-        const statusText = this._deps.statusLabel(state.status);
-        let statusClass = 'active';
-        if (state.status === 'complete') statusClass = 'completed';
-        else if (state.status === 'error') statusClass = 'error';
-
-        const isCancellable = this._deps.isActiveStatus(state.status);
 
         card.innerHTML = DOMPurify.sanitize(
             `
@@ -139,13 +138,12 @@ export class DownloadCardRenderer {
                         <svg class="icon downloads-file-icon"><use href="#icon-folder"></use></svg>
                     </div>
                     <div class="downloads-meta-content">
-                        <div class="downloads-label">${moduleId}</div>
+                        <div class="downloads-label">${moduleId.toUpperCase()}</div>
                         <div class="downloads-item-label">${this._deps.displayModuleName(moduleId)}</div>
                     </div>
                 </div>
                 <div class="downloads-card-actions">
-                    <div class="downloads-status-pill ${statusClass}">${statusText}</div>
-                    ${isCancellable ? `<button class="download-cancel-btn" title="${this._deps.translate('ui.launcher.button.cancel', 'Cancel')}" aria-label="${this._deps.translate('ui.launcher.button.cancel', 'Cancel')}"><span class="stop-square-icon"></span></button>` : ''}
+                    ${this.renderActionArea(state.status)}
                 </div>
             </div>
             <div class="downloads-progress-section">
@@ -184,35 +182,117 @@ export class DownloadCardRenderer {
             DownloadCardRenderer._purifyConfig,
         );
 
-        if (isCancellable) {
-            const cancelBtn = card.querySelector('.download-cancel-btn');
-            cancelBtn?.addEventListener('click', () => {
-                this._deps.onCancel(moduleId);
+        this.bindActionButtons(card, moduleId, state.status);
+        return card;
+    }
+
+    private patchActionArea(card: HTMLElement, moduleId: string, status: string): void {
+        const actionArea = card.querySelector<HTMLElement>('.downloads-card-actions');
+        if (actionArea === null) {
+            return;
+        }
+
+        actionArea.innerHTML = DOMPurify.sanitize(
+            this.renderActionArea(status),
+            DownloadCardRenderer._purifyConfig,
+        );
+        this.bindActionButtons(card, moduleId, status);
+    }
+
+    private renderActionArea(status: string): string {
+        const buttons: string[] = [];
+        const pauseTitle = this._deps.translate('ui.launcher.button.pause', 'Pause');
+        const resumeTitle = this._deps.translate('ui.launcher.button.resume', 'Resume');
+        const cancelTitle = this._deps.translate('ui.launcher.button.cancel', 'Cancel');
+
+        if (this._deps.isPausableStatus(status)) {
+            buttons.push(
+                this.renderActionButton('download-pause-btn pause', pauseTitle, '#icon-pause'),
+            );
+        }
+        if (this._deps.isResumableStatus(status)) {
+            buttons.push(
+                this.renderActionButton('download-resume-btn resume', resumeTitle, '#icon-start'),
+            );
+        }
+        if (this._deps.isCancellableStatus(status)) {
+            buttons.push(
+                this.renderActionButton('download-cancel-btn cancel', cancelTitle, '#icon-stop'),
+            );
+        }
+
+        const controls =
+            buttons.length > 0
+                ? `<div class="downloads-control-group">${buttons.join('')}</div>`
+                : '';
+
+        return `
+            <div class="downloads-status-pill ${this.statusClass(status)}">${this._deps.statusLabel(status)}</div>
+            ${controls}
+        `;
+    }
+
+    private renderActionButton(className: string, title: string, iconHref: string): string {
+        return `
+            <button class="downloads-action-btn ${className}" title="${title}" aria-label="${title}">
+                <svg class="icon downloads-action-icon"><use href="${iconHref}"></use></svg>
+            </button>
+        `;
+    }
+
+    private bindActionButtons(card: HTMLElement, moduleId: string, status: string): void {
+        if (this._deps.isPausableStatus(status)) {
+            card.querySelector('.download-pause-btn')?.addEventListener('click', () => {
+                this._deps.onPause(moduleId);
             });
         }
 
-        return card;
+        if (this._deps.isResumableStatus(status)) {
+            card.querySelector('.download-resume-btn')?.addEventListener('click', () => {
+                this._deps.onResume(moduleId);
+            });
+        }
+
+        if (this._deps.isCancellableStatus(status)) {
+            card.querySelector('.download-cancel-btn')?.addEventListener('click', () => {
+                this._deps.onCancel(moduleId);
+            });
+        }
     }
 
     private patchProgressBar(card: HTMLElement, pct: number): void {
         const bar = card.querySelector<HTMLElement>('.downloads-bar-inner');
-        if (!bar) return;
+        if (bar === null) return;
+
         if (pct < 0) {
             bar.classList.add('indeterminate-bar');
             bar.style.width = '100%';
-        } else {
-            bar.classList.remove('indeterminate-bar');
-            bar.style.width = `${String(Math.min(pct, 100))}%`;
+            return;
         }
+
+        bar.classList.remove('indeterminate-bar');
+        bar.style.width = `${String(Math.min(pct, 100))}%`;
     }
 
-    private patchStatusPill(card: HTMLElement, status: string): void {
-        const pill = card.querySelector('.downloads-status-pill');
-        if (!pill) return;
-        pill.textContent = this._deps.statusLabel(status);
-        pill.className = 'downloads-status-pill';
-        if (status === 'complete') pill.classList.add('completed');
-        else if (status === 'error') pill.classList.add('error');
-        else pill.classList.add('active');
+    private statusClass(status: string): string {
+        switch (status) {
+            case 'downloading':
+                return 'active';
+            case 'connecting':
+                return 'processing';
+            case 'paused':
+                return 'paused';
+            case 'verifying':
+            case 'extracting':
+                return 'processing';
+            case 'complete':
+                return 'completed';
+            case 'error':
+                return 'error';
+            case 'cancelled':
+                return 'cancelled';
+            default:
+                return 'waiting';
+        }
     }
 }

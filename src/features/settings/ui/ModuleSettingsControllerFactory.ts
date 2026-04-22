@@ -82,7 +82,6 @@ export class ModuleSettingsControllerFactory {
     public createSpecializedRenderer(): ModuleSettingsSpecializedRenderer {
         return new ModuleSettingsSpecializedRenderer({
             service: this._deps.service,
-            tauri: this._deps.tauri,
             getContext: () => this._deps.getContext(),
             debouncedSave: (key, value) => {
                 this._deps.debouncedSave(key, value);

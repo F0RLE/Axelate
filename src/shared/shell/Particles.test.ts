@@ -47,10 +47,29 @@ describe('Particles', () => {
         vi.restoreAllMocks();
     });
 
-    it('builds particles from the viewport and rebuilds them after resize', () => {
+    it('reflows particles on resize without rebuilding the whole background', () => {
         const particles = new Particles();
-        const initialCount = (particles as unknown as { _particles: unknown[] })._particles.length;
+        const initialParticles = (
+            particles as unknown as {
+                _particles: {
+                    x: number;
+                    y: number;
+                    vx: number;
+                    vy: number;
+                    size: number;
+                    color: string;
+                }[];
+            }
+        )._particles;
+        const initialCount = initialParticles.length;
         const initialWorldWidth = (particles as unknown as { _worldWidth: number })._worldWidth;
+        const initialFirstParticle = initialParticles[0];
+        expect(initialFirstParticle).toBeDefined();
+        if (initialFirstParticle === undefined) {
+            throw new Error('Expected first particle to exist');
+        }
+        const initialFirstParticleX = initialFirstParticle.x;
+        const initialFirstParticleY = initialFirstParticle.y;
 
         expect(initialCount).toBe(Math.floor((1200 * 800) / 25000));
         expect(initialWorldWidth).toBe(1200 + Math.max(32, Math.round(1200 * 0.1)) * 2);
@@ -58,12 +77,37 @@ describe('Particles', () => {
         Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1600 });
         Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 900 });
         globalThis.dispatchEvent(new Event('resize'));
+        const resizeCallback = (globalThis.requestAnimationFrame as unknown as ReturnType<typeof vi.fn>)
+            .mock.calls.at(-1)?.[0] as FrameRequestCallback | undefined;
+        resizeCallback?.(performance.now());
 
-        const resizedCount = (particles as unknown as { _particles: unknown[] })._particles.length;
+        const resizedParticles = (
+            particles as unknown as {
+                _particles: {
+                    x: number;
+                    y: number;
+                    vx: number;
+                    vy: number;
+                    size: number;
+                    color: string;
+                }[];
+            }
+        )._particles;
+        const resizedCount = resizedParticles.length;
         const resizedWorldWidth = (particles as unknown as { _worldWidth: number })._worldWidth;
+        const resizedFirstParticle = resizedParticles[0];
+        expect(resizedFirstParticle).toBeDefined();
+        if (resizedFirstParticle === undefined) {
+            throw new Error('Expected resized first particle to exist');
+        }
 
         expect(resizedCount).toBe(Math.floor((1600 * 900) / 25000));
         expect(resizedWorldWidth).toBe(1600 + Math.max(32, Math.round(1600 * 0.1)) * 2);
+        expect(resizedFirstParticle).toBe(initialParticles[0]);
+        expect(resizedFirstParticle.color).toBe(initialFirstParticle.color);
+        expect(resizedFirstParticle.size).toBe(initialFirstParticle.size);
+        expect(resizedFirstParticle.x).not.toBe(initialFirstParticleX);
+        expect(resizedFirstParticle.y).not.toBe(initialFirstParticleY);
 
         particles.destroy();
     });

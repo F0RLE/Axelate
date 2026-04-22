@@ -14,7 +14,6 @@ import type { ModuleService } from '@/shared/services/ModuleService';
 import type { SidebarUI } from '@/shared/shell/SidebarUI';
 import type { SettingsService } from '@/features/settings/services/SettingsService';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
-import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
 import type { AppUI } from '@/shared/shell/AppUI';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { ChatController } from '@/features/chat/chat';
@@ -68,7 +67,6 @@ type CoreLifecycleDeps = {
     moduleSettingsUI: ModuleSettingsUiController;
     consoleUI: DeferredUiController;
     moduleSettings: ModuleSettingsService;
-    aiSettings: AISettingsService;
     appUI: AppUI;
     aiBridge: AIBridge;
     chatController: ChatController;
@@ -162,7 +160,6 @@ export class CoreLifecycleController {
                 restoreSelectedModules({
                     tracer: this._deps.tracer,
                     moduleSettings: this._deps.moduleSettings,
-                    aiSettings: this._deps.aiSettings,
                     catalog: this._deps.catalog,
                     appUI: this._deps.appUI,
                     aiBridge: this._deps.aiBridge,

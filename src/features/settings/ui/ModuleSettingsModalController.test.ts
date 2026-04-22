@@ -19,6 +19,9 @@ describe('ModuleSettingsModalController', () => {
         `;
 
         const modal = document.getElementById('module-settings-modal') as HTMLDialogElement;
+        modal.show = vi.fn(function (this: HTMLDialogElement) {
+            this.open = true;
+        });
         modal.showModal = vi.fn(function (this: HTMLDialogElement) {
             this.open = true;
         });

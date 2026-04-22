@@ -1,7 +1,8 @@
 use super::downloader_comfyui::build_temp_archive_path;
 use super::downloader_install::{ArchiveExtractor, FileVerifier};
 use super::downloader_progress::{
-    AggregateDownloadContext, ProgressEvent, ProgressSnapshot, emit_progress,
+    AggregateDownloadContext, DownloadInterruption, ProgressEvent, ProgressSnapshot,
+    compute_progress, emit_progress,
 };
 use super::downloader_service::resolve_existing_module_path;
 use super::downloader_support::remove_partial_metadata;
@@ -84,7 +85,7 @@ pub async fn download_module(
 ) -> Result<(), AppError> {
     validate_module_id(&module_id)?;
 
-    let cancel_token = downloader.request_token(&module_id);
+    let control = downloader.request_control(&module_id);
     let mut temp_archives: Vec<PathBuf> = Vec::new();
     let mut staging_path: Option<PathBuf> = None;
     let mut final_progress_snapshot = ProgressSnapshot::default();
@@ -166,7 +167,7 @@ pub async fn download_module(
                         url: asset_url,
                         dest_path: &archive_path,
                         module_id: &module_id,
-                        cancel_token: &cancel_token,
+                        control: &control,
                     },
                     aggregate_total_bytes.map(|total_bytes| AggregateDownloadContext {
                         completed_bytes_before: completed_downloaded_bytes,
@@ -178,6 +179,23 @@ pub async fn download_module(
                 completed_downloaded_bytes =
                     completed_downloaded_bytes.saturating_add(download_result.asset_downloaded);
                 latest_progress_snapshot = download_result.snapshot;
+
+                if let Some(interruption) = download_result.interruption {
+                    return Err(match interruption {
+                        DownloadInterruption::Cancelled => {
+                            AppError::External {
+                                request_id: None,
+                                message: interruption.as_error_message().to_string(),
+                            }
+                        }
+                        DownloadInterruption::Paused => {
+                            AppError::External {
+                                request_id: None,
+                                message: interruption.as_error_message().to_string(),
+                            }
+                        }
+                    });
+                }
 
                 FileVerifier::verify(
                     &app,
@@ -212,11 +230,14 @@ pub async fn download_module(
     .await;
 
     // Always cleanup token
-    downloader.remove_token(&module_id);
+    downloader.remove_control(&module_id);
 
     let cleanup_archives = match &result {
         Ok(()) => true,
-        Err(error) => error.to_string().contains("Integrity check failed"),
+        Err(error) => {
+            let message = error.to_string();
+            message.contains("Integrity check failed") || message.contains("cancelled")
+        }
     };
     if cleanup_archives {
         for archive_path in &temp_archives {
@@ -235,7 +256,10 @@ pub async fn download_module(
     }
 
     if let Err(e) = result {
-        let status = if e.to_string().contains("cancelled") {
+        let error_message = e.to_string();
+        let status = if error_message.contains("paused") {
+            "paused"
+        } else if error_message.contains("cancelled") {
             "cancelled"
         } else {
             "error"
@@ -244,8 +268,8 @@ pub async fn download_module(
             app: &app,
             module_id: &module_id,
             status,
-            message: &e.to_string(),
-            progress: 0.0,
+            message: &error_message,
+            progress: compute_progress(final_progress_snapshot),
             downloaded: final_progress_snapshot.downloaded,
             total: final_progress_snapshot.total,
             speed: 0,

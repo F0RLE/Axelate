@@ -62,6 +62,7 @@ type ChatControllerDeps = {
     hostBridge: IBridge;
     eventBus: EventBus;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
+    getPreferredAiCategory: () => 'ai_text' | 'ai_image';
     tracer: Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
 };
 
@@ -327,6 +328,7 @@ export class ChatController {
                 this._ui.appendMessage('user', text, { attachments, tokens });
             },
             getSelectedModule: (category) => deps.getSelectedModule(category),
+            getPreferredAiCategory: () => deps.getPreferredAiCategory(),
             handleResponse: async (response, streamingHandle, imageHandle) =>
                 await this._generationController.handleChatResponse(
                     response,
@@ -365,6 +367,7 @@ export class ChatController {
         return new ChatActivationCoordinator({
             aiBridge,
             uiStateHelper: this._uiStateHelper,
+            getSelectedProviderId: () => this._sendController.resolveSelectedModuleId(),
             tryAutoStartAi: async () => await this._sendController.tryAutoStartAi(),
             tracer: this._tracer,
         });

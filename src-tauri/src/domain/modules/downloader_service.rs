@@ -4,11 +4,35 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+#[derive(Debug, Default)]
+pub(super) struct DownloadControl {
+    cancel_requested: AtomicBool,
+    pause_requested: AtomicBool,
+}
+
+impl DownloadControl {
+    pub(super) fn request_cancel(&self) {
+        self.cancel_requested.store(true, Ordering::Relaxed);
+    }
+
+    pub(super) fn request_pause(&self) {
+        self.pause_requested.store(true, Ordering::Relaxed);
+    }
+
+    pub(super) fn is_cancel_requested(&self) -> bool {
+        self.cancel_requested.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn is_pause_requested(&self) -> bool {
+        self.pause_requested.load(Ordering::Relaxed)
+    }
+}
+
 /// Downloader service for managing module downloads
 #[derive(Debug)]
 pub struct DownloaderService {
     settings: Arc<Mutex<DownloaderSettings>>,
-    cancel_tokens: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    controls: Arc<Mutex<HashMap<String, Arc<DownloadControl>>>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -31,7 +55,7 @@ impl DownloaderService {
     pub fn new() -> Self {
         Self {
             settings: Arc::new(Mutex::new(DownloaderSettings::default())),
-            cancel_tokens: Arc::new(Mutex::new(HashMap::new())),
+            controls: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -55,21 +79,21 @@ impl DownloaderService {
         })
     }
 
-    /// Creates a cancellation token for a module download and returns it
-    pub fn request_token(&self, module_id: &str) -> Arc<AtomicBool> {
-        let token = Arc::new(AtomicBool::new(false));
-        if let Ok(mut tokens) = self.cancel_tokens.lock() {
-            tokens.insert(module_id.to_string(), Arc::clone(&token));
+    /// Creates a control handle for a module download and returns it
+    pub(super) fn request_control(&self, module_id: &str) -> Arc<DownloadControl> {
+        let control = Arc::new(DownloadControl::default());
+        if let Ok(mut controls) = self.controls.lock() {
+            controls.insert(module_id.to_string(), Arc::clone(&control));
         }
-        token
+        control
     }
 
     /// Signals cancellation for a specific module download
     pub fn cancel(&self, module_id: &str) -> bool {
-        if let Ok(tokens) = self.cancel_tokens.lock()
-            && let Some(token) = tokens.get(module_id)
+        if let Ok(controls) = self.controls.lock()
+            && let Some(control) = controls.get(module_id)
         {
-            token.store(true, Ordering::Relaxed);
+            control.request_cancel();
             tracing::info!("Cancellation requested for module: {module_id}");
             return true;
         }
@@ -77,10 +101,23 @@ impl DownloaderService {
         false
     }
 
-    /// Removes a cancellation token after download finishes
-    pub fn remove_token(&self, module_id: &str) {
-        if let Ok(mut tokens) = self.cancel_tokens.lock() {
-            tokens.remove(module_id);
+    /// Signals pause for a specific module download
+    pub fn pause(&self, module_id: &str) -> bool {
+        if let Ok(controls) = self.controls.lock()
+            && let Some(control) = controls.get(module_id)
+        {
+            control.request_pause();
+            tracing::info!("Pause requested for module: {module_id}");
+            return true;
+        }
+
+        false
+    }
+
+    /// Removes a control handle after download finishes
+    pub fn remove_control(&self, module_id: &str) {
+        if let Ok(mut controls) = self.controls.lock() {
+            controls.remove(module_id);
         }
     }
 }
@@ -94,4 +131,28 @@ impl Default for DownloaderService {
 pub(super) fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
     let path = MODULES_DIR.join(module_id);
     (path.exists() && path.is_dir()).then_some(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DownloaderService;
+
+    #[test]
+    fn pause_and_cancel_toggle_active_control_flags() {
+        let service = DownloaderService::new();
+        let control = service.request_control("demo");
+
+        assert!(service.pause("demo"));
+        assert!(service.cancel("demo"));
+        assert!(control.is_pause_requested());
+        assert!(control.is_cancel_requested());
+    }
+
+    #[test]
+    fn pause_and_cancel_ignore_unknown_module() {
+        let service = DownloaderService::new();
+
+        assert!(!service.pause("missing"));
+        assert!(!service.cancel("missing"));
+    }
 }

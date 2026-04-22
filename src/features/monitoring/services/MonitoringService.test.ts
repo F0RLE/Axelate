@@ -143,6 +143,18 @@ describe('MonitoringService', () => {
         expect(true).toBe(true);
     });
 
+    it('should stop monitoring automatically when the last subscriber unsubscribes', async () => {
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+
+        const subscriber = vi.fn();
+        service.subscribe(subscriber);
+        await service.startMonitoring();
+
+        service.unsubscribe(subscriber);
+
+        expect(mockUnlisten).toHaveBeenCalledTimes(1);
+    });
+
     it('should fall back to polling when Tauri listen fails', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(true);
         vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
@@ -247,5 +259,26 @@ describe('MonitoringService', () => {
         // Subscriber should not have been called with stats
         expect(subscriber).not.toHaveBeenCalled();
         vi.useRealTimers();
+    });
+
+    it('should dispose a late listener when monitoring is stopped before listen resolves', async () => {
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+
+        let resolveListen: ((value: () => void) => void) | undefined;
+        vi.mocked(mockTauri.listen).mockImplementation(
+            () =>
+                new Promise<() => void>((resolve) => {
+                    resolveListen = resolve;
+                }),
+        );
+
+        const startPromise = service.startMonitoring();
+        service.stopMonitoring();
+
+        resolveListen?.(mockUnlisten);
+        await startPromise;
+
+        expect(mockUnlisten).toHaveBeenCalledTimes(1);
+        expect((service as unknown as { unlistenFn: (() => void) | null }).unlistenFn).toBeNull();
     });
 });

@@ -1,8 +1,8 @@
 use super::downloader_progress::{
-    AggregateDownloadContext, DownloadProgressReporter, DownloadResult, ProgressEvent,
-    calculate_speed, emit_progress,
+    AggregateDownloadContext, DownloadInterruption, DownloadProgressReporter, DownloadResult,
+    ProgressEvent, calculate_speed, emit_progress,
 };
-use super::downloader_service::DownloaderService;
+use super::downloader_service::{DownloadControl, DownloaderService};
 use super::downloader_support::{
     PartialDownloadMetadata, extract_last_modified, extract_strong_etag, if_range_validator,
     load_partial_metadata, parse_content_range_total, remove_partial_metadata,
@@ -13,7 +13,6 @@ use crate::utils::paths::TEMP_DIR;
 use futures_util::StreamExt;
 use std::fs;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -172,7 +171,7 @@ pub(super) struct DownloadTask<'a> {
     pub(super) url: &'a str,
     pub(super) dest_path: &'a Path,
     pub(super) module_id: &'a str,
-    pub(super) cancel_token: &'a AtomicBool,
+    pub(super) control: &'a DownloadControl,
 }
 
 pub(super) async fn download_file(
@@ -217,6 +216,7 @@ pub(super) async fn download_file(
             return Ok(DownloadResult {
                 asset_downloaded: existing_bytes,
                 snapshot,
+                interruption: None,
             });
         }
 
@@ -276,9 +276,25 @@ pub(super) async fn download_file(
     }
 
     while let Some(item) = stream.next().await {
-        if task.cancel_token.load(Ordering::Relaxed) {
+        if task.control.is_cancel_requested() {
             tracing::info!("Download cancelled for module: {}", task.module_id);
-            return Err(AppError::Validation("Download cancelled".to_string()));
+            let snapshot =
+                progress.emit_download(bytes_downloaded, total_size, last_speed_bytes_per_sec);
+            return Ok(DownloadResult {
+                asset_downloaded: bytes_downloaded,
+                snapshot,
+                interruption: Some(DownloadInterruption::Cancelled),
+            });
+        }
+        if task.control.is_pause_requested() {
+            tracing::info!("Download paused for module: {}", task.module_id);
+            let snapshot =
+                progress.emit_download(bytes_downloaded, total_size, last_speed_bytes_per_sec);
+            return Ok(DownloadResult {
+                asset_downloaded: bytes_downloaded,
+                snapshot,
+                interruption: Some(DownloadInterruption::Paused),
+            });
         }
 
         let chunk_start = std::time::Instant::now();
@@ -331,5 +347,6 @@ pub(super) async fn download_file(
     Ok(DownloadResult {
         asset_downloaded: bytes_downloaded,
         snapshot,
+        interruption: None,
     })
 }

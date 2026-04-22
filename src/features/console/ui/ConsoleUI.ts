@@ -57,6 +57,8 @@ export class ConsoleUI {
     private readonly _translateFn: ConsoleTranslate;
     private readonly _showToast: ConsoleShowToast;
     private readonly _eventBus: EventBus;
+    private _activeTabButton: HTMLElement | null = null;
+    private _activePane: HTMLElement | null = null;
 
     constructor(
         private readonly service: ConsoleLogService,
@@ -137,12 +139,16 @@ export class ConsoleUI {
         this._interactionHelper.bindDropzone();
         this.bindTabs();
         this._filterControlHelper.bindControls();
-        this.startLogPolling();
+        this._syncPollingForActivePage();
         void this.refreshLogViews();
         this._pageChangeUnsub = this._eventBus.on('page:change', (data) => {
             if (data.pageId === 'console') {
+                this._syncPollingForActivePage();
                 void this._refreshLogsOnConsoleOpen();
+                return;
             }
+
+            this._syncPollingForActivePage();
         });
     }
 
@@ -151,6 +157,8 @@ export class ConsoleUI {
         if (!(toolbar instanceof HTMLElement)) {
             return;
         }
+
+        this._activeTabButton = toolbar.querySelector<HTMLElement>('.console-tab.active');
 
         const handleClick = (event: Event) => {
             const target = event.target;
@@ -182,7 +190,6 @@ export class ConsoleUI {
     private setLogView(view: string, btn: HTMLElement): void {
         this._viewState.activeViewId = view;
         this._activateTab('.console-tab', '.logs-pane', `logs-${view}`, btn);
-        this._viewHelper.syncLogPanes(this._viewState.activeViewId);
         this.renderLogs(true);
     }
 
@@ -224,6 +231,15 @@ export class ConsoleUI {
         this._pollingController.start(2000);
     }
 
+    private _syncPollingForActivePage(): void {
+        if (this._isConsolePageActive()) {
+            this.startLogPolling();
+            return;
+        }
+
+        this._pollingController.stop();
+    }
+
     private async _refreshLogsOnConsoleOpen(): Promise<void> {
         await this._refreshCoordinator.refreshOnOpen();
     }
@@ -239,7 +255,7 @@ export class ConsoleUI {
         this._viewState.ensureKnownActiveView(new Set(views.map((view) => view.id)));
 
         if (!this._viewHelper.shouldRebuildViews(toolbar, views)) {
-            this._viewHelper.syncLogPanes(this._viewState.activeViewId);
+            this._syncActivePane(`logs-${this._viewState.activeViewId}`);
             return false;
         }
 
@@ -253,7 +269,9 @@ export class ConsoleUI {
             logsRoot,
             views.map((view) => this._viewHelper.createLogPane(view, this._viewState.activeViewId)),
         );
-        this._viewHelper.syncLogPanes(this._viewState.activeViewId);
+        this._activeTabButton = toolbar.querySelector<HTMLElement>('.console-tab.active');
+        this._activePane = null;
+        this._syncActivePane(`logs-${this._viewState.activeViewId}`);
         return true;
     }
 
@@ -264,12 +282,7 @@ export class ConsoleUI {
 
         const renderDecision = this._viewState.captureRenderDecision(scrollContainer, clear);
 
-        this._viewHelper.syncLogPanes(this._viewState.activeViewId);
-        document.querySelectorAll<HTMLElement>('.logs-pane').forEach((logsPane) => {
-            if (logsPane !== pane) {
-                logsPane.replaceChildren();
-            }
-        });
+        this._syncActivePane(pane.id);
 
         if (clear) {
             pane.replaceChildren();
@@ -299,20 +312,15 @@ export class ConsoleUI {
     }
 
     private _activateTab(
-        buttonSelector: string,
-        paneSelector: string,
+        _buttonSelector: string,
+        _paneSelector: string,
         paneId: string,
         button?: HTMLElement,
     ): void {
-        document.querySelectorAll(buttonSelector).forEach((element) => {
-            element.classList.remove('active');
-        });
-        document.querySelectorAll(paneSelector).forEach((element) => {
-            element.classList.remove('active');
-        });
-
+        this._activeTabButton?.classList.remove('active');
         button?.classList.add('active');
-        document.getElementById(paneId)?.classList.add('active');
+        this._activeTabButton = button ?? null;
+        this._syncActivePane(paneId);
     }
 
     private _translate(key: string, fallback: string): string {
@@ -339,5 +347,28 @@ export class ConsoleUI {
 
     private _isConsolePageActive(): boolean {
         return document.getElementById('page-console')?.classList.contains('active') === true;
+    }
+
+    private _syncActivePane(paneId: string): void {
+        if (this._activePane?.id === paneId) {
+            this._activePane.classList.add('active');
+            this._activePane.hidden = false;
+            return;
+        }
+
+        if (this._activePane instanceof HTMLElement) {
+            this._activePane.classList.remove('active');
+            this._activePane.hidden = true;
+        }
+
+        const nextPane = document.getElementById(paneId);
+        if (nextPane instanceof HTMLElement) {
+            nextPane.classList.add('active');
+            nextPane.hidden = false;
+            this._activePane = nextPane;
+            return;
+        }
+
+        this._activePane = null;
     }
 }

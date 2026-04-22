@@ -83,6 +83,7 @@
     "icon": "🧩",
     "type": "local",
     "dlType": "release",
+    "comingSoon": true,
     "capabilities": ["image"],
     "repoUrl": "https://github.com/Comfy-Org/ComfyUI",
     "configSchema": {

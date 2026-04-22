@@ -1,4 +1,5 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
+import { AIBridgeProviderPolicy } from '@/features/ai/services/AIBridgeProviderPolicy';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage, IChatResponse } from '../types/chatTypes';
@@ -44,9 +45,11 @@ type ChatGenerationControllerOptions = {
 };
 
 export class ChatGenerationController {
-    private _imagePreviewPollTimer: ReturnType<typeof setInterval> | null = null;
+    private static readonly _IMAGE_PREVIEW_POLL_INTERVAL_MS = 850;
+    private _imagePreviewPollTimer: ReturnType<typeof setTimeout> | null = null;
     private _imagePreviewPollInFlight = false;
     private _lastImagePreviewUpdatedAtMs = 0;
+    private readonly _providerPolicy = new AIBridgeProviderPolicy();
 
     constructor(private readonly _options: ChatGenerationControllerOptions) {}
 
@@ -58,23 +61,18 @@ export class ChatGenerationController {
     }
 
     public isImageProvider(providerId: string | null): boolean {
-        return (
-            providerId === 'sdcpp' || providerId === 'stable-diffusion' || providerId === 'comfyui'
-        );
+        return providerId !== null && this._providerPolicy.isImageProvider(providerId);
     }
 
     public startImagePreviewPolling(handle: ImageGenerationHandle): void {
         this.stopImagePreviewPolling();
         this._lastImagePreviewUpdatedAtMs = 0;
-        void this.pollImagePreview(handle);
-        this._imagePreviewPollTimer = globalThis.setInterval(() => {
-            void this.pollImagePreview(handle);
-        }, 850);
+        this._scheduleNextImagePreviewPoll(handle, 0);
     }
 
     public stopImagePreviewPolling(): void {
         if (this._imagePreviewPollTimer !== null) {
-            globalThis.clearInterval(this._imagePreviewPollTimer);
+            globalThis.clearTimeout(this._imagePreviewPollTimer);
             this._imagePreviewPollTimer = null;
         }
         this._imagePreviewPollInFlight = false;
@@ -108,7 +106,28 @@ export class ChatGenerationController {
             this._options.tracer.debug('[Chat] Preview polling skipped:', error);
         } finally {
             this._imagePreviewPollInFlight = false;
+            if (!this._options.isDestroyed() && this._options.isSending()) {
+                this._scheduleNextImagePreviewPoll(
+                    handle,
+                    ChatGenerationController._IMAGE_PREVIEW_POLL_INTERVAL_MS,
+                );
+            }
         }
+    }
+
+    private _scheduleNextImagePreviewPoll(handle: ImageGenerationHandle, delayMs: number): void {
+        if (this._options.isDestroyed() || !this._options.isSending()) {
+            return;
+        }
+
+        if (this._imagePreviewPollTimer !== null) {
+            globalThis.clearTimeout(this._imagePreviewPollTimer);
+        }
+
+        this._imagePreviewPollTimer = globalThis.setTimeout(() => {
+            this._imagePreviewPollTimer = null;
+            void this.pollImagePreview(handle);
+        }, delayMs);
     }
 
     public async handleChatResponse(
@@ -117,7 +136,7 @@ export class ChatGenerationController {
         imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
         if (!response.ok) {
-            this.handleFailedChatResponse(response, imageHandle);
+            this.handleFailedChatResponse(response, streamingHandle, imageHandle);
             return;
         }
 
@@ -189,6 +208,7 @@ export class ChatGenerationController {
 
     private handleFailedChatResponse(
         response: IChatResponse,
+        streamingHandle?: StreamingMessageHandle | null,
         imageHandle?: ImageGenerationHandle | null,
     ): void {
         const friendlyMsg = this._options.getFriendlyErrorMessage(
@@ -200,6 +220,7 @@ export class ChatGenerationController {
             return;
         }
 
+        streamingHandle?.discard();
         this._options.handleError(friendlyMsg, response.model);
     }
 }

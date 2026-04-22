@@ -14,22 +14,22 @@ export class ChatContentHelper {
     private static readonly _defaultProviderName = 'OpenRouter';
     private static readonly _errorRules: ErrorRule[] = [
         {
+            patterns: ['402', 'payment required', 'credits', 'balance', 'insufficient credit'],
+            key: 'ui.chat.error.payment_required',
+            fallback:
+                'Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).',
+        },
+        {
+            patterns: ['429', 'rate limit', 'too many requests'],
+            key: 'ui.chat.error.quota',
+            fallback:
+                'Error: OpenRouter or the selected provider hit a rate limit. Wait a bit and try again.',
+        },
+        {
             patterns: ['503', 'unavailable', 'overloaded'],
             key: 'ui.chat.error.server',
             fallback:
                 'Error: OpenRouter service is temporarily unavailable. Please try again later.',
-        },
-        {
-            patterns: ['429', 'quota', 'limit reached'],
-            key: 'ui.chat.error.quota',
-            fallback:
-                'Error: OpenRouter quota or rate limit reached. Check your balance and limits.',
-        },
-        {
-            patterns: ['402', 'payment required', 'credits'],
-            key: 'ui.chat.error.payment_required',
-            fallback:
-                'Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).',
         },
         {
             patterns: ['403', 'permission_denied', 'api key'],

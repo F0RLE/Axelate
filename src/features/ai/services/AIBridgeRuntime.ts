@@ -5,6 +5,7 @@ import type { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
 import type { IChatTransport } from './AIChatTransport';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
+import { resolveCustomProviderBackendId } from '@/shared/utils/customProviderSupport';
 
 type AIBridgeRuntimeLogger = Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
 
@@ -144,7 +145,7 @@ export class AIBridgeRuntime {
         }
 
         await context.tauriProvider.invoke('cancel_image_generation', {
-            provider: providerId,
+            provider: resolveCustomProviderBackendId(providerId),
         });
     }
 

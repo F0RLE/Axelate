@@ -12,20 +12,17 @@ html {
     scroll-behavior: smooth;
     overflow: hidden;
     height: 100%;
-    /* Fluid Scaling: Min 14px, Ideal 15px + 0.2vw, Max 20px */
-    font-size: clamp(14px, 15px + 0.2vw, 20px);
+    font-size: 16px;
+    --app-zoom: 1;
     background: var(--bg-dark); /* Moved from body */
 }
 
 body {
     font-family: var(--app-font-family);
-    background: transparent; /* Allow particles layer to show through */
+    background: var(--bg-dark);
     color: var(--text-primary);
     margin: 0;
     padding: 0;
-    display: grid;
-    grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr);
-    grid-template-rows: var(--header-height, 60px) minmax(0, 1fr);
     height: 100%;
     width: 100%;
     overflow: hidden;
@@ -35,6 +32,18 @@ body {
     /* Changed for splash screen handling */
     transition: opacity 0.5s ease-in;
     position: relative;
+}
+
+#app-viewport {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr);
+    grid-template-rows: var(--header-height, 60px) minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+    transform-origin: top left;
+    will-change: transform;
 }
 
 .particles-layer {

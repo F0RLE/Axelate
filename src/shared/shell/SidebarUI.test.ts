@@ -33,6 +33,7 @@ describe('SidebarUI', () => {
 
     const windowService = {
         getConfig: vi.fn(() => null),
+        getZoom: vi.fn(() => 1),
     };
     const tracer = {
         info: vi.fn(),
@@ -67,11 +68,17 @@ describe('SidebarUI', () => {
 
     beforeEach(() => {
         vi.stubGlobal('ResizeObserver', ResizeObserverMock as never);
+        vi.stubGlobal('requestAnimationFrame', ((callback: FrameRequestCallback) => {
+            callback(performance.now());
+            return 1;
+        }) as typeof globalThis.requestAnimationFrame);
+        vi.stubGlobal('cancelAnimationFrame', vi.fn());
         setupDom();
         uiSettings.getSidebarCollapsed.mockReturnValue(false);
         uiSettings.getZoomLevel.mockReturnValue(1);
         uiSettings.getHiddenNavItems.mockReturnValue([]);
         windowService.getConfig.mockReturnValue(null);
+        windowService.getZoom.mockReturnValue(1);
         vi.clearAllMocks();
     });
 
@@ -178,5 +185,77 @@ describe('SidebarUI', () => {
         const sidebar = document.getElementById('sidebar') as HTMLElement;
         expect(sidebar.classList.contains('auto-compact')).toBe(true);
         expect(sidebar.style.width).toBe('80px');
+    });
+
+    it('updates auto compact when zoom changes after init', async () => {
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(false);
+
+        uiSettings.getZoomLevel.mockReturnValue(3);
+        globalThis.dispatchEvent(new CustomEvent('axelate:zoom-changed', { detail: { zoom: 3 } }));
+
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+    });
+
+    it('does not double-apply zoom when config thresholds are available', async () => {
+        windowService.getConfig.mockReturnValue({
+            thresholds: {
+                warningWidth: 800,
+                warningHeight: 600,
+                smallScreenWidth: 1024,
+                smallScreenHeight: 768,
+            },
+        } as never);
+        uiSettings.getZoomLevel.mockReturnValue(2);
+        Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 960 });
+        Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 720 });
+        windowService.getZoom.mockReturnValue(2);
+
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+    });
+
+    it('keeps manual logo toggle as priority while auto compact is active', async () => {
+        uiSettings.getZoomLevel.mockReturnValue(3);
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        const logoArea = document.querySelector('.logo-area') as HTMLElement;
+
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+
+        logoArea.click();
+
+        expect(sidebar.classList.contains('auto-compact')).toBe(false);
+        expect(sidebar.style.width).toBe('280px');
+        expect(uiSettings.setSidebarCollapsed).toHaveBeenCalledWith(false);
     });
 });

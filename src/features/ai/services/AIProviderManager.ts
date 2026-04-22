@@ -2,6 +2,11 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
 import type { IAICatalogApp } from '../types/aiTypes';
 import type { AIProviderManagerContext } from './AIBridgeContext';
+import {
+    getCustomProviderDisplayName,
+    isCustomProviderId,
+} from '@/shared/utils/customProviderSupport';
+import { isCloudProviderId, resolveProviderSecretService } from '@/shared/utils/providerSupport';
 
 type AIProviderManagerLogger = Pick<LoggerService, 'info' | 'error'>;
 
@@ -9,7 +14,6 @@ export class AIProviderManager {
     private _context: AIProviderManagerContext | null = null;
     private _activeProviderId: string | null = null;
     private _hasApiKey = false;
-    private _model = '';
 
     // Session Management
     private _sessionId: string = 'default';
@@ -61,12 +65,10 @@ export class AIProviderManager {
 
             this._activeProviderId = providerId;
             this._hasApiKey = isLocal || hasApiKey;
-            this._model = model;
 
             // Persist state
             if (this._context) {
                 this._context.aiSettings.setSelectedAIModel(providerId, model);
-                this._context.aiSettings.setLastActiveProvider(providerId);
             }
 
             return true;
@@ -80,7 +82,6 @@ export class AIProviderManager {
         if (this._activeProviderId !== null) {
             this._activeProviderId = null;
             this._hasApiKey = false;
-            this._model = '';
             this._tracer.info('[AIProviderManager] Provider stopped');
         }
     }
@@ -103,7 +104,11 @@ export class AIProviderManager {
     }
 
     public get model(): string {
-        return this._model;
+        if (this._activeProviderId === null) {
+            return '';
+        }
+
+        return this._resolveModel(this._activeProviderId);
     }
 
     public get sessionId(): string {
@@ -115,12 +120,17 @@ export class AIProviderManager {
         const modelData = getModelData(
             this._getAiCatalogApps(),
             this._activeProviderId,
-            this._model,
+            this.model,
         );
         return modelData?.maxOutputTokens ?? undefined;
     }
 
     public getProviderDisplayName(id: string): string {
+        const customDisplayName = getCustomProviderDisplayName(id);
+        if (customDisplayName !== null) {
+            return customDisplayName;
+        }
+
         const providers: Record<string, string> = {
             gpt: 'OpenAI GPT',
             gemini: 'Google Gemini',
@@ -142,9 +152,12 @@ export class AIProviderManager {
     // --- Private Helpers ---
 
     private async _resolveHasApiKey(providerId: string): Promise<boolean> {
-        if (this._isLocalProvider(providerId)) return false;
+        const secretService = resolveProviderSecretService(providerId);
+        if (secretService === null) {
+            return false;
+        }
 
-        return await this._hasSecureVal('openrouter_api_key');
+        return await this._hasSecureVal(secretService);
     }
 
     /**
@@ -153,17 +166,11 @@ export class AIProviderManager {
      * Any ID that doesn't match a known cloud provider prefix is treated as local.
      */
     private _isLocalProvider(providerId: string): boolean {
-        const cloudProviders = new Set([
-            'gpt',
-            'gemini',
-            'openai',
-            'openrouter',
-            'anthropic',
-            'mistral',
-            'claude',
-            'deepseek',
-        ]);
-        return !cloudProviders.has(providerId);
+        if (isCustomProviderId(providerId)) {
+            return false;
+        }
+
+        return !isCloudProviderId(providerId);
     }
 
     private _getPersistedModel(providerId: string): string | null {

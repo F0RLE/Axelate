@@ -110,3 +110,14 @@ pub fn cancel_download(
 ) -> bool {
     downloader.cancel(&module_id)
 }
+
+#[tauri::command]
+#[specta::specta]
+/// Pauses an in-progress module download while preserving partial files for resume
+#[allow(clippy::needless_pass_by_value)]
+pub fn pause_download(
+    downloader: tauri::State<'_, downloader::DownloaderService>,
+    module_id: String,
+) -> bool {
+    downloader.pause(&module_id)
+}

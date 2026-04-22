@@ -77,19 +77,29 @@ export class WindowUiShellController {
 
     public hideSplashScreen(schedule: (callback: () => void, delayMs: number) => void): void {
         const splash = this._deps.getElements().splash;
-        if (splash !== null) {
-            splash.classList.add('fade-out');
-            schedule(() => {
-                const currentSplash = this._deps.getElements().splash;
-                if (currentSplash !== null) {
-                    currentSplash.classList.remove('fade-out');
-                    currentSplash.classList.add('hidden');
-                }
-                document.body.classList.remove('no-overflow');
-            }, SPLASH_FADE_OUT_DELAY_MS);
+        const revealLayout = (): void => {
+            this._showLayoutSections(['sidebar', 'app-header', 'main-area']);
+            document.body.classList.remove('no-overflow');
+        };
+
+        if (splash === null || splash.classList.contains('hidden')) {
+            revealLayout();
+            return;
         }
 
-        this._showLayoutSections(['sidebar', 'app-header', 'main-area']);
+        if (splash.classList.contains('fade-out')) {
+            return;
+        }
+
+        splash.classList.add('fade-out');
+        schedule(() => {
+            const currentSplash = this._deps.getElements().splash;
+            if (currentSplash !== null) {
+                currentSplash.classList.remove('fade-out');
+                currentSplash.classList.add('hidden');
+            }
+            revealLayout();
+        }, SPLASH_FADE_OUT_DELAY_MS);
     }
 
     private _moveTitlesToDataset(elements: NodeListOf<Element>): void {
@@ -113,16 +123,18 @@ export class WindowUiShellController {
     }
 
     private _showGlobalWarning(globalWarning: HTMLDialogElement): void {
+        document.body.classList.add('ui-hidden');
+
         if (globalWarning.open) {
             return;
         }
 
         globalWarning.showModal();
-        document.body.classList.add('ui-hidden');
     }
 
     private _hideGlobalWarning(globalWarning: HTMLDialogElement): void {
         if (globalWarning.open !== true) {
+            document.body.classList.remove('ui-hidden');
             return;
         }
 

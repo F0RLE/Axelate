@@ -1,7 +1,4 @@
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import type { IApp } from '@/shared/types/coreTypes';
-
 import type { SettingsService } from '../services/SettingsService';
 import type { IModuleSettingsUIContext } from './SettingsContext';
 
@@ -30,14 +27,8 @@ type SelectFieldOptions = SimpleFieldBaseOptions & {
     options: Array<{ value: string; label: string }>;
 };
 
-type ComfyUiLaunchState = {
-    url: string;
-    shouldStartLocalModule: boolean;
-};
-
 type SpecializedRendererDeps = {
     service: SettingsService;
-    tauri: TauriProvider;
     getContext: () => IModuleSettingsUIContext;
     debouncedSave: (key: string, value: string | number | boolean | null) => void;
     tracer: Pick<LoggerService, 'error'>;
@@ -211,51 +202,6 @@ export class ModuleSettingsSpecializedRenderer {
         container.appendChild(wrapper);
     }
 
-    public renderComfyUiSettings(container: HTMLElement, app: IApp): void {
-        const t = this._context.t;
-        container.innerHTML = '';
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'ai-module-config';
-
-        const panel = document.createElement('section');
-        panel.className = 'ai-content-panel';
-
-        const title = document.createElement('h3');
-        title.textContent = t('ui.settings.comfyui.title', 'Configure in ComfyUI');
-
-        const description = document.createElement('p');
-        description.className = 'stats-note';
-        description.textContent = t(
-            'ui.settings.comfyui.desc',
-            'Models, custom nodes, workflows and manager settings are configured in the ComfyUI browser UI.',
-        );
-
-        const note = document.createElement('p');
-        note.className = 'stats-note';
-        note.textContent = t(
-            'ui.settings.comfyui.note',
-            'Axelate starts the local ComfyUI module and sends generation requests through its HTTP API.',
-        );
-
-        const actions = document.createElement('div');
-        actions.style.display = 'flex';
-        actions.style.justifyContent = 'center';
-        actions.style.marginTop = '0.5rem';
-
-        const openButton = document.createElement('button');
-        openButton.className = 'modal-btn modal-btn-primary';
-        openButton.textContent = t('ui.settings.comfyui.open', 'Open ComfyUI');
-        openButton.addEventListener('click', () => {
-            void this._openComfyUi(app);
-        });
-
-        actions.appendChild(openButton);
-        panel.append(title, description, note, actions);
-        wrapper.appendChild(panel);
-        container.appendChild(wrapper);
-    }
-
     private _getSettings(): ModuleSettingsMap {
         return this._deps.service.getSettings() as ModuleSettingsMap;
     }
@@ -352,88 +298,5 @@ export class ModuleSettingsSpecializedRenderer {
 
         row.append(label, control, help);
         form.appendChild(row);
-    }
-
-    private async _openComfyUi(app: IApp): Promise<void> {
-        const launchState = await this._prepareComfyUiLaunch(app);
-
-        try {
-            if (launchState.shouldStartLocalModule) {
-                await this._startComfyUiModule(app.id);
-            }
-
-            await this._waitForComfyUiStartup();
-            await this._deps.tauri.openUrl(launchState.url);
-        } catch (error: unknown) {
-            this._deps.tracer.error(
-                '[ModuleSettingsSpecializedRenderer] Failed to open ComfyUI browser settings',
-                error,
-            );
-            this._context.showToast(
-                this._context.t(
-                    'ui.settings.comfyui.open_failed',
-                    'Failed to open ComfyUI in your browser.',
-                ),
-                'error',
-            );
-        }
-    }
-
-    private async _prepareComfyUiLaunch(app: IApp): Promise<ComfyUiLaunchState> {
-        if (!this._deps.tauri.isTauri()) {
-            return {
-                url: this._resolveComfyUiBaseUrl(),
-                shouldStartLocalModule: false,
-            };
-        }
-
-        const result = await this._deps.tauri.invoke<{ action?: string }>('launch_module', {
-            moduleId: app.id,
-        });
-
-        return {
-            url: this._resolveComfyUiBaseUrl(),
-            shouldStartLocalModule: result.action === 'start_local',
-        };
-    }
-
-    private async _startComfyUiModule(moduleId: string): Promise<void> {
-        await this._deps.tauri.invoke('control_module', {
-            request: {
-                module_id: moduleId,
-                action: 'start',
-            },
-        });
-    }
-
-    private async _waitForComfyUiStartup(): Promise<void> {
-        await new Promise((resolve) => {
-            globalThis.setTimeout(resolve, 1200);
-        });
-    }
-
-    private _resolveComfyUiBaseUrl(): string {
-        const raw = this._getSettings()['comfyui_base_url']?.trim() ?? '';
-
-        const normalized = this._trimTrailingSlashes(raw);
-
-        if (normalized === '') {
-            return 'http://127.0.0.1:8188';
-        }
-
-        if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-            return normalized;
-        }
-
-        return `http://${normalized}`;
-    }
-
-    private _trimTrailingSlashes(value: string): string {
-        let end = value.length;
-        while (end > 0 && value[end - 1] === '/') {
-            end -= 1;
-        }
-
-        return value.slice(0, end);
     }
 }

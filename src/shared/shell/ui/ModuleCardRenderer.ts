@@ -1,6 +1,7 @@
 import type { IApp } from '../../types/coreTypes';
 import type { LoggerService } from '../../../infrastructure/logging/LoggerService';
 import { isApiApp } from '../../utils/moduleTypeUtils';
+import { supportsModuleSettings } from '../../utils/moduleSettingsSupport';
 import {
     buildModuleCardActionButton,
     buildModuleCardComingSoonButton,
@@ -245,6 +246,10 @@ export class ModuleCardRenderer {
                     this._tracer?.debug(
                         `[ModuleCardRenderer] Ignored right-click on uninstalled module: ${app.id}`,
                     );
+                    return;
+                }
+
+                if (!supportsModuleSettings(app)) {
                     return;
                 }
 

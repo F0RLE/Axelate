@@ -10,6 +10,8 @@ type AISettingsInteractionBinderDeps = {
     toggleKeyVisibility: () => Promise<void>;
     checkKey: () => Promise<void>;
     selectModel: (modelKey: string) => void;
+    submitCustomModel: () => Promise<void>;
+    removeCustomModel: (modelKey: string) => Promise<void>;
     setThinkingLevel: (level: ThinkingLevel) => void;
     getSelectedModel: () => string;
     setInternetAccessEnabled: (enabled: boolean) => void;
@@ -52,7 +54,62 @@ export function bindAISettingsInteractions(deps: AISettingsInteractionBinderDeps
         void deps.checkKey();
     });
 
+    const submitCustomModel = (event?: Event): void => {
+        event?.preventDefault();
+        void deps.submitCustomModel();
+    };
+
+    addListener(container.querySelector(`#${appId}-custom-model-save-btn`), 'click', (event) => {
+        submitCustomModel(event);
+    });
+
+    const customModelInputs = [
+        container.querySelector(`#${appId}-custom-model-id-input`),
+        container.querySelector(`#${appId}-custom-model-name-input`),
+    ];
+
+    customModelInputs.forEach((input) => {
+        addListener(input, 'keydown', (event) => {
+            const keyEvent = event as KeyboardEvent;
+            if (keyEvent.key !== 'Enter') {
+                return;
+            }
+
+            submitCustomModel(event);
+        });
+    });
+
+    const handleCustomModelRemoval = (event: Event) => {
+        const removeButton = (event.target as Element).closest<HTMLElement>(
+            '.ai-model-card-remove[data-model-remove]',
+        );
+        if (!removeButton) {
+            return;
+        }
+
+        const keyEvent = event as KeyboardEvent;
+        if (event.type === 'keydown' && keyEvent.key !== 'Enter' && keyEvent.key !== ' ') {
+            return;
+        }
+
+        const modelKey = removeButton.dataset['modelRemove'];
+        if (modelKey === undefined || modelKey === '') {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        void deps.removeCustomModel(modelKey);
+    };
+
+    container.addEventListener('click', handleCustomModelRemoval, { signal });
+    container.addEventListener('keydown', handleCustomModelRemoval, { signal });
+
     const handleModelSelection = (event: Event) => {
+        if ((event.target as Element).closest('.ai-model-card-remove') !== null) {
+            return;
+        }
+
         const card = (event.target as Element).closest<HTMLElement>(
             '.ai-model-card[data-model-key]',
         );

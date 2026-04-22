@@ -51,22 +51,8 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
     const addAllBtn = document.createElement('button');
     addAllBtn.type = 'button';
     addAllBtn.className = 'local-engine-args-copy-all';
+    addAllBtn.dataset['action'] = 'add-all';
     addAllBtn.textContent = deps.translate('ui.settings.engine.extra_args.add_all', 'Add all');
-    addAllBtn.addEventListener('click', () => {
-        const added = deps.appendExtraArgs(
-            appId,
-            docs.items.map((item) => item.flag),
-        );
-        deps.showToast(
-            added > 0
-                ? deps.translate('ui.settings.engine.extra_args.add_all_success', 'Arguments added')
-                : deps.translate(
-                      'ui.settings.engine.extra_args.add_all_exists',
-                      'Arguments already added',
-                  ),
-            added > 0 ? 'success' : 'info',
-        );
-    });
     actions.appendChild(addAllBtn);
 
     const list = document.createElement('div');
@@ -77,6 +63,7 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         row.className = 'local-engine-args-item';
         row.tabIndex = 0;
         row.setAttribute('role', 'button');
+        row.dataset['flag'] = item.flag;
         row.setAttribute(
             'aria-label',
             deps
@@ -97,33 +84,80 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
 
         meta.append(flag, desc);
 
-        const addFlag = () => {
-            const added = deps.appendExtraArgs(appId, [item.flag]);
-            deps.showToast(
-                (added > 0
-                    ? deps.translate('ui.settings.engine.extra_args.flag_added', '{flag} added')
-                    : deps.translate(
-                          'ui.settings.engine.extra_args.flag_exists',
-                          '{flag} already added',
-                      )
-                ).replace('{flag}', item.flag),
-                added > 0 ? 'success' : 'info',
-            );
-        };
-
-        row.addEventListener('click', addFlag);
-        row.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                addFlag();
-            }
-        });
-
         row.appendChild(meta);
         list.appendChild(row);
     });
 
     popover.append(title, subtitle, actions, list);
+    const appendFlags = (flags: string[]) => {
+        const added = deps.appendExtraArgs(appId, flags);
+        if (flags.length > 1) {
+            deps.showToast(
+                added > 0
+                    ? deps.translate('ui.settings.engine.extra_args.add_all_success', 'Arguments added')
+                    : deps.translate(
+                          'ui.settings.engine.extra_args.add_all_exists',
+                          'Arguments already added',
+                      ),
+                added > 0 ? 'success' : 'info',
+            );
+            return;
+        }
+
+        const [flag] = flags;
+        if (flag === undefined) {
+            return;
+        }
+
+        deps.showToast(
+            (added > 0
+                ? deps.translate('ui.settings.engine.extra_args.flag_added', '{flag} added')
+                : deps.translate(
+                      'ui.settings.engine.extra_args.flag_exists',
+                      '{flag} already added',
+                  )
+            ).replace('{flag}', flag),
+            added > 0 ? 'success' : 'info',
+        );
+    };
+
+    popover.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+
+        const addAllAction = target.closest<HTMLButtonElement>('[data-action="add-all"]');
+        if (addAllAction instanceof HTMLButtonElement) {
+            appendFlags(docs.items.map((item) => item.flag));
+            return;
+        }
+
+        const row = target.closest<HTMLElement>('.local-engine-args-item[data-flag]');
+        const flag = row?.dataset['flag'];
+        if (typeof flag === 'string' && flag !== '') {
+            appendFlags([flag]);
+        }
+    });
+    popover.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+
+        const row = target.closest<HTMLElement>('.local-engine-args-item[data-flag]');
+        const flag = row?.dataset['flag'];
+        if (typeof flag !== 'string' || flag === '') {
+            return;
+        }
+
+        event.preventDefault();
+        appendFlags([flag]);
+    });
     const modal = document.getElementById('module-settings-modal');
     if (modal === null) {
         document.body.appendChild(popover);
@@ -208,19 +242,7 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
     document.addEventListener('keydown', handleEscape);
     runtime.addWindowListener('resize', handleReposition);
     runtime.addWindowListener('scroll', handleReposition, true);
-
-    const startTime = performance.now();
-    const syncAnimation = (time: number) => {
-        if (isClosed) {
-            return;
-        }
-
-        updatePosition();
-        if (time - startTime < 400) {
-            runtime.requestAnimationFrame(syncAnimation);
-        }
-    };
-    runtime.requestAnimationFrame(syncAnimation);
+    updatePosition();
 
     return {
         popover,

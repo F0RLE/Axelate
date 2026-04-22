@@ -55,6 +55,10 @@ export function createChatStreamingMessage(
 
     const textNode = document.createElement('div');
     textNode.className = 'markdown-body';
+    const statusNode = document.createElement('div');
+    statusNode.className = 'chat-streaming-status';
+    statusNode.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+    bubble.appendChild(statusNode);
     bubble.appendChild(textNode);
 
     row.appendChild(bubble);
@@ -66,8 +70,12 @@ export function createChatStreamingMessage(
     let lastRenderTime = Date.now();
     let renderVersion = 0;
     let isDiscarded = false;
-    let renderTimer: ReturnType<typeof setTimeout> | null = null;
+    let renderFrame: number | null = null;
     let pendingScrollToBottom = false;
+
+    const hideStatus = (): void => {
+        statusNode.remove();
+    };
 
     const isStreamingTargetLive = (version: number): boolean =>
         !deps.isDestroyed() &&
@@ -131,14 +139,14 @@ export function createChatStreamingMessage(
     const scheduleRender = (immediate = false, scrollToBottom = false): void => {
         pendingScrollToBottom ||= scrollToBottom;
 
-        if (renderTimer !== null) {
+        if (renderFrame !== null) {
             if (!immediate) return;
-            clearTimeout(renderTimer);
-            renderTimer = null;
+            globalThis.cancelAnimationFrame(renderFrame);
+            renderFrame = null;
         }
 
         const runRender = () => {
-            renderTimer = null;
+            renderFrame = null;
             const shouldScroll = pendingScrollToBottom;
             pendingScrollToBottom = false;
             flushRender(shouldScroll);
@@ -149,27 +157,38 @@ export function createChatStreamingMessage(
             return;
         }
 
-        const delay = Math.max(0, 100 - (Date.now() - lastRenderTime));
-        renderTimer = globalThis.setTimeout(runRender, delay);
+        const renderOnFrame = () => {
+            const elapsed = Date.now() - lastRenderTime;
+            if (elapsed >= 100) {
+                runRender();
+                return;
+            }
+
+            renderFrame = globalThis.requestAnimationFrame(renderOnFrame);
+        };
+
+        renderFrame = globalThis.requestAnimationFrame(renderOnFrame);
     };
 
     return {
         textNode,
         update: (chunk: unknown) => {
             const safeChunk = safeExtractText(chunk, deps.translate);
+            if (safeChunk !== '') {
+                hideStatus();
+            }
             accumulatedText += safeChunk;
+            textNode.textContent = accumulatedText;
+            deps.scrollToBottom(true);
             if (copyBtn instanceof HTMLElement) {
                 copyBtn.dataset['copyText'] = accumulatedText;
             }
-            renderCounter++;
-            const now = Date.now();
-            const shouldRender =
-                renderCounter <= 3 || now - lastRenderTime > 100 || renderCounter % 4 === 0;
-
-            scheduleRender(shouldRender, true);
         },
         replace: (text: string) => {
             accumulatedText = text;
+            if (text.trim() !== '') {
+                hideStatus();
+            }
             if (copyBtn instanceof HTMLElement) {
                 copyBtn.dataset['copyText'] = accumulatedText;
             }
@@ -179,9 +198,9 @@ export function createChatStreamingMessage(
         discard: () => {
             isDiscarded = true;
             renderVersion += 1;
-            if (renderTimer !== null) {
-                clearTimeout(renderTimer);
-                renderTimer = null;
+            if (renderFrame !== null) {
+                globalThis.cancelAnimationFrame(renderFrame);
+                renderFrame = null;
             }
             row.remove();
         },
@@ -190,15 +209,16 @@ export function createChatStreamingMessage(
             if (safeFullContent.trim() === '') {
                 isDiscarded = true;
                 renderVersion += 1;
-                if (renderTimer !== null) {
-                    clearTimeout(renderTimer);
-                    renderTimer = null;
+                if (renderFrame !== null) {
+                    globalThis.cancelAnimationFrame(renderFrame);
+                    renderFrame = null;
                 }
                 row.remove();
                 return;
             }
 
             accumulatedText = safeFullContent;
+            hideStatus();
             if (copyBtn instanceof HTMLElement) {
                 copyBtn.dataset['copyText'] = safeFullContent;
             }

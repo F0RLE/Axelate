@@ -122,6 +122,20 @@ describe('chatRequestUtils', () => {
             expect(request.thinking_level).toBeUndefined();
         });
 
+        it('should preserve explicit none reasoning effort for OpenRouter requests', () => {
+            const config = {
+                providerId: 'gpt',
+                model: 'gpt-5.4',
+                apiKey: 'sk-123',
+                sessionId: 'session-1',
+                thinkingLevel: 'none' as const,
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.thinking_level).toBe('none');
+        });
+
         it('should keep the raw model key and leave model resolution to backend', () => {
             const config = {
                 providerId: 'gemini',

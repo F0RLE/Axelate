@@ -316,6 +316,34 @@ describe('ConsoleUI lifecycle', () => {
         expect(service.fetchLogs).toHaveBeenCalledTimes(1);
     });
 
+    it('should start polling only while console page is active', () => {
+        const service = createServiceMock();
+
+        document.getElementById('page-console')?.classList.remove('active');
+        ui = new ConsoleUI(service, createDeps());
+
+        const pollingController = (
+            ui as unknown as {
+                _pollingController: { start: (intervalMs: number) => void; stop: () => void };
+            }
+        )._pollingController;
+        const startSpy = vi.spyOn(pollingController, 'start');
+        const stopSpy = vi.spyOn(pollingController, 'stop');
+
+        ui.init();
+        expect(startSpy).not.toHaveBeenCalled();
+        expect(stopSpy).toHaveBeenCalledTimes(1);
+
+        document.getElementById('page-console')?.classList.add('active');
+        testEventBus.emit('page:change', { pageId: 'console' });
+        expect(startSpy).toHaveBeenCalledTimes(1);
+        expect(stopSpy).toHaveBeenCalledTimes(2);
+
+        document.getElementById('page-console')?.classList.remove('active');
+        testEventBus.emit('page:change', { pageId: 'home' });
+        expect(stopSpy).toHaveBeenCalledTimes(3);
+    });
+
     it('should render module-specific tabs and filter logs by active view', async () => {
         const service = createServiceMock({
             getLogsForView: vi.fn((view: string) =>

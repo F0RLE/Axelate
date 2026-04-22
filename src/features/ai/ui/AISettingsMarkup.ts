@@ -50,6 +50,7 @@ export function renderThinkingSection(
     translate: TranslateFunc,
     supportsThinking: boolean,
     savedLevel: ThinkingLevel | null | undefined,
+    forceVisibility = false,
 ): string {
     if (!supportsThinking) return '';
 
@@ -59,7 +60,7 @@ export function renderThinkingSection(
     const isHigh = savedLevel === 'high';
 
     const selectedModelData = models.find((model) => model.id === savedModel);
-    const hasReasoning = selectedModelData?.capabilities?.reasoning === true;
+    const hasReasoning = selectedModelData?.capabilities?.reasoning === true || forceVisibility;
 
     return `
         <section id="${appId}-thinking-section" class="thinking-level-section ${hasReasoning ? '' : 'is-hidden'}" aria-labelledby="${appId}-thinking-title">
@@ -91,13 +92,15 @@ export function renderInternetAccessSection(
     translate: TranslateFunc,
     isEnabled: boolean,
 ): string {
+    const title = translate('ui.settings.internet_access', 'Allow AI Internet Access');
+
     return `
         <section id="${appId}-internet-section" class="ai-web-section" aria-labelledby="${appId}-internet-title">
             <div class="ai-content-panel">
                 <div class="settings-card-header-center">
-                    <h3 id="${appId}-internet-title">🌐 <span data-i18n="ui.settings.internet_access">${translate('ui.settings.internet_access', 'Internet Access')}</span></h3>
+                    <h3 id="${appId}-internet-title">🌐 <span data-i18n="ui.settings.internet_access">${title}</span></h3>
                 </div>
-                <div id="${appId}-internet-grid" class="thinking-grid" role="radiogroup" aria-label="${translate('ui.settings.internet_access', 'Internet Access')}">
+                <div id="${appId}-internet-grid" class="thinking-grid" role="radiogroup" aria-label="${title}">
                     <div class="thinking-option-card internet-access-card ${isEnabled ? 'selected' : ''}" role="radio" aria-checked="${String(isEnabled)}" tabindex="0" data-value="on">
                         <div class="thinking-option-title" data-i18n="ui.common.on">${translate('ui.common.on', 'On')}</div>
                     </div>
@@ -119,16 +122,66 @@ export function renderModelCard(
 ): string {
     const pricingHtml = renderPricing(model.pricing, translate);
     const contextHtml = renderContextWindow(model.contextWindow, translate, viewPolicy);
+    const removeButton =
+        model.isCustom === true
+            ? `
+            <button
+                type="button"
+                class="ai-model-card-remove ai-model-card-action"
+                data-model-remove="${DOMPurify.sanitize(key, PURIFY_CONFIG)}"
+                aria-label="${translate('ui.settings.custom_model_remove', 'Remove custom model')}"
+                title="${translate('ui.settings.custom_model_remove', 'Remove custom model')}"
+            >
+                ${translate('ui.settings.custom_model_remove_button', 'Delete')}
+            </button>
+        `
+            : '';
 
     return `
-        <div class="ai-model-card ${isSelected ? 'selected' : ''}" 
+        <div class="ai-model-card ${isSelected ? 'selected' : ''} ${model.isCustom === true ? 'ai-model-card--custom' : ''}" 
             role="option" 
             aria-selected="${String(isSelected)}" 
             tabindex="0"
             data-model-key="${key}">
-            <div class="model-name">${DOMPurify.sanitize(model.name, PURIFY_CONFIG)}</div>
-            <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(translate(model.descKey ?? '', model.desc), PURIFY_CONFIG)}</div>
-            <div class="model-pricing">${pricingHtml}${contextHtml}</div>
+            <div class="ai-model-card-copy">
+                <div class="model-name">${DOMPurify.sanitize(model.name, PURIFY_CONFIG)}</div>
+                <div class="model-desc" data-i18n="${model.descKey ?? ''}">${DOMPurify.sanitize(translate(model.descKey ?? '', model.desc), PURIFY_CONFIG)}</div>
+                <div class="model-pricing">${pricingHtml}${contextHtml}</div>
+            </div>
+            ${removeButton}
+        </div>
+    `;
+}
+
+export function renderCustomModelComposer(appId: string, translate: TranslateFunc): string {
+    return `
+        <div class="ai-model-card ai-model-card--composer" role="presentation">
+            <div class="model-name" data-i18n="ui.settings.custom_model_add">
+                ${translate('ui.settings.custom_model_add', 'Add Model')}
+            </div>
+            <div class="model-desc">
+                ${translate('ui.settings.custom_model_id', 'Model ID')}
+            </div>
+            <div class="model-pricing ai-custom-model-composer-body">
+                <div class="ai-key-input-row ai-custom-model-input-row">
+                    <input
+                        id="${appId}-custom-model-id-input"
+                        class="ai-custom-model-input"
+                        type="text"
+                        spellcheck="false"
+                        autocomplete="off"
+                        placeholder="openai/gpt-5.4-nano"
+                    />
+                </div>
+                <button
+                    id="${appId}-custom-model-save-btn"
+                    class="ai-check-btn ai-custom-model-save-btn"
+                    type="button"
+                    data-i18n="ui.settings.custom_model_add"
+                >
+                    ${translate('ui.settings.custom_model_add', 'Add Model')}
+                </button>
+            </div>
         </div>
     `;
 }

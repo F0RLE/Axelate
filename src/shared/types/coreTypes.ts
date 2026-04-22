@@ -102,7 +102,9 @@ export interface IModuleDownloadState {
         | 'pending'
         | 'connecting'
         | 'downloading'
+        | 'verifying'
         | 'extracting'
+        | 'paused'
         | 'complete'
         | 'error'
         | 'cancelled';

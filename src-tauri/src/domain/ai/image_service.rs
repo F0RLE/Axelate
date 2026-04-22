@@ -11,6 +11,7 @@ use crate::domain::engine::manager::{EngineManager, resolve_sdcpp_preview_path};
 use crate::domain::engine::types::Capability;
 use crate::errors::AppError;
 use crate::infrastructure::config::settings::SettingsService;
+use crate::infrastructure::crypto::secure_storage::SecureStorage;
 use crate::models::AppSettings;
 
 struct PreparedImageDispatch {
@@ -94,6 +95,8 @@ async fn process_image_request_with_local_engine_access(
     let images = if request.provider == "comfyui" {
         stop_conflicting_local_engine(engine_manager, Capability::Image).await?;
         process_comfyui_request(&request, image_generation_state, settings_service).await?
+    } else if is_cloud_image_provider(&request.provider) {
+        process_cloud_image_request(&request).await?
     } else {
         let dispatch =
             prepare_local_image_dispatch(&request, engine_manager, local_engine_access).await?;
@@ -167,6 +170,10 @@ async fn prepare_local_image_dispatch(
         response_format,
         preview_path,
     })
+}
+
+fn is_cloud_image_provider(provider: &str) -> bool {
+    matches!(provider, "gemini-image" | "gpt-image" | "seedream-image")
 }
 
 async fn resolve_local_image_endpoint(
@@ -278,6 +285,118 @@ fn build_local_image_payload(
     })
 }
 
+async fn process_cloud_image_request(
+    request: &ImageGenerationRequest,
+) -> Result<Vec<String>, AppError> {
+    let api_key = SecureStorage::get_key_async("openrouter_api_key".to_string())
+        .await?
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AppError::Validation("OpenRouter API key is missing".to_string()))?;
+
+    let client = build_image_client(Duration::from_secs(180))?;
+    let response = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {api_key}"))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .json(&build_cloud_image_payload(request))
+        .send()
+        .await
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!("Cloud image request failed: {error}"),
+        })?;
+
+    let body = parse_image_response_body(response).await?;
+    let images = parse_openrouter_generated_images(&body);
+    if images.is_empty() {
+        return Err(AppError::External {
+            request_id: None,
+            message: "Cloud image provider returned no images".to_string(),
+        });
+    }
+
+    Ok(images)
+}
+
+fn build_cloud_image_payload(request: &ImageGenerationRequest) -> serde_json::Value {
+    let model = resolve_cloud_image_model(request);
+    let mut payload = serde_json::json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": request.prompt
+            }
+        ],
+        "modalities": resolve_openrouter_modalities(model)
+    });
+
+    if let Some(session_id) = request.session_id.as_ref().map(|value| value.trim())
+        && !session_id.is_empty()
+        && let Some(payload_object) = payload.as_object_mut()
+    {
+        payload_object.insert(
+            "session_id".to_string(),
+            serde_json::Value::String(session_id.to_string()),
+        );
+    }
+
+    if let Some(image_config) = build_openrouter_image_config(request) {
+        if let Some(payload_object) = payload.as_object_mut() {
+            payload_object.insert("image_config".to_string(), image_config);
+        }
+    }
+
+    payload
+}
+
+fn resolve_cloud_image_model(request: &ImageGenerationRequest) -> &str {
+    if request.model.trim().is_empty() || request.model == "default" {
+        return match request.provider.as_str() {
+            "gpt-image" => "openai/gpt-5-image",
+            "seedream-image" => "bytedance-seed/seedream-4.5",
+            _ => "google/gemini-3.1-flash-image-preview",
+        };
+    } else {
+        request.model.as_str()
+    }
+}
+
+fn resolve_openrouter_modalities(model: &str) -> &'static [&'static str] {
+    if supports_text_with_generated_images(model) {
+        &["image", "text"]
+    } else {
+        &["image"]
+    }
+}
+
+fn supports_text_with_generated_images(model: &str) -> bool {
+    let normalized = model.trim().to_ascii_lowercase();
+
+    normalized.starts_with("google/gemini-")
+        || normalized.starts_with("openai/gpt-5-image")
+        || normalized.starts_with("openai/gpt-image")
+}
+
+fn build_openrouter_image_config(request: &ImageGenerationRequest) -> Option<serde_json::Value> {
+    let aspect_ratio = resolve_aspect_ratio(request.width, request.height)?;
+    Some(serde_json::json!({
+        "aspect_ratio": aspect_ratio
+    }))
+}
+
+fn resolve_aspect_ratio(width: Option<u32>, height: Option<u32>) -> Option<&'static str> {
+    let (width, height) = (width?, height?);
+    match (width, height) {
+        (1024, 1024) | (512, 512) => Some("1:1"),
+        (1152, 896) | (1216, 832) => Some("4:3"),
+        (896, 1152) | (832, 1216) => Some("3:4"),
+        (1344, 768) | (1536, 864) => Some("16:9"),
+        (768, 1344) | (864, 1536) => Some("9:16"),
+        _ => None,
+    }
+}
+
 fn build_image_client(timeout: Duration) -> Result<reqwest::Client, AppError> {
     reqwest::Client::builder()
         .timeout(timeout)
@@ -335,6 +454,52 @@ fn parse_generated_images(
             })
             .collect(),
     }
+}
+
+fn parse_openrouter_generated_images(body: &serde_json::Value) -> Vec<String> {
+    body.get("choices")
+        .and_then(|value| value.as_array())
+        .into_iter()
+        .flat_map(|items| items.iter())
+        .filter_map(|item| item.get("message"))
+        .flat_map(extract_images_from_openrouter_message)
+        .collect()
+}
+
+fn extract_images_from_openrouter_message(message: &serde_json::Value) -> Vec<String> {
+    if let Some(images) = message.get("images").and_then(|value| value.as_array()) {
+        return images
+            .iter()
+            .filter_map(extract_openrouter_image_url)
+            .collect();
+    }
+
+    if let Some(content) = message.get("content").and_then(|value| value.as_array()) {
+        return content
+            .iter()
+            .filter_map(|item| {
+                item.get("image_url")
+                    .and_then(|value| value.get("url"))
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+            })
+            .collect();
+    }
+
+    Vec::new()
+}
+
+fn extract_openrouter_image_url(item: &serde_json::Value) -> Option<String> {
+    item.get("image_url")
+        .and_then(|value| value.get("url"))
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            item.get("imageUrl")
+                .and_then(|value| value.get("url"))
+                .and_then(|value| value.as_str())
+                .map(str::to_string)
+        })
 }
 
 async fn process_comfyui_request(
@@ -1103,5 +1268,85 @@ fn normalize_sdcpp_scheduler(value: Option<&str>) -> String {
         "lcm" => "lcm".to_string(),
         "bong tangent" | "bong_tangent" => "bong_tangent".to_string(),
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_cloud_image_payload;
+    use crate::domain::ai::ImageGenerationRequest;
+    use serde_json::json;
+
+    fn make_cloud_request(model: &str) -> ImageGenerationRequest {
+        ImageGenerationRequest {
+            provider: "gpt-image".to_string(),
+            prompt: "draw a cat".to_string(),
+            original_prompt: None,
+            model: model.to_string(),
+            settings_key: None,
+            session_id: None,
+            steps: None,
+            cfg_scale: None,
+            width: None,
+            height: None,
+            sampler: None,
+            seed: None,
+            clip_skip: None,
+            negative_prompt: None,
+            batch_size: None,
+            scheduler: None,
+        }
+    }
+
+    #[test]
+    fn build_cloud_image_payload_uses_image_only_modalities_for_flux_models() {
+        let payload =
+            build_cloud_image_payload(&make_cloud_request("black-forest-labs/flux.2-max"));
+
+        assert_eq!(payload.get("modalities"), Some(&json!(["image"])));
+    }
+
+    #[test]
+    fn build_cloud_image_payload_uses_image_only_modalities_for_seedream_models() {
+        let payload = build_cloud_image_payload(&make_cloud_request("bytedance-seed/seedream-4.5"));
+
+        assert_eq!(payload.get("modalities"), Some(&json!(["image"])));
+    }
+
+    #[test]
+    fn build_cloud_image_payload_keeps_text_output_for_gemini_image_models() {
+        let payload =
+            build_cloud_image_payload(&make_cloud_request("google/gemini-3.1-flash-image-preview"));
+
+        assert_eq!(payload.get("modalities"), Some(&json!(["image", "text"])));
+    }
+
+    #[test]
+    fn build_cloud_image_payload_keeps_text_output_for_gpt_image_models() {
+        let payload = build_cloud_image_payload(&make_cloud_request("openai/gpt-5-image-mini"));
+
+        assert_eq!(payload.get("modalities"), Some(&json!(["image", "text"])));
+    }
+
+    #[test]
+    fn build_cloud_image_payload_uses_provider_specific_default_model() {
+        let payload = build_cloud_image_payload(&ImageGenerationRequest {
+            provider: "gpt-image".to_string(),
+            model: "default".to_string(),
+            ..make_cloud_request("default")
+        });
+
+        assert_eq!(payload.get("model"), Some(&json!("openai/gpt-5-image")));
+
+        let payload = build_cloud_image_payload(&ImageGenerationRequest {
+            provider: "seedream-image".to_string(),
+            model: "".to_string(),
+            ..make_cloud_request("")
+        });
+
+        assert_eq!(
+            payload.get("model"),
+            Some(&json!("bytedance-seed/seedream-4.5"))
+        );
     }
 }

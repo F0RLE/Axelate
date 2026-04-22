@@ -1,4 +1,5 @@
 import type { IApp } from '../types/coreTypes';
+import { appendCustomProviderApps } from '../utils/customProviderSupport';
 import type { EventBus } from '../services/EventBus';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
@@ -21,13 +22,12 @@ import { type NavigationService } from '@/infrastructure/navigation/NavigationSe
 type AppUIStateDeps = {
     removeSelectedModule: (category: string) => void;
     setSelectedModule: (category: string, moduleData: Partial<IApp>) => void;
-    updateState: (updates: { last_active_provider: string | null }) => void;
 };
 
 type AppUIDeps = {
     tracer: LoggerService;
     uiState: AppUIStateDeps;
-    launchApp: (moduleId: string) => Promise<void>;
+    launchApp: (category: string, app: IApp) => Promise<void>;
     openModuleSettings: (app: IApp) => void;
     stopAiProvider: () => void;
 };
@@ -95,6 +95,9 @@ export class AppUI {
             },
             openAppSelection: (category) => this.openAppSelection(category),
             updateMultiSlotBadge: () => this._updateMultiSlotBadge(),
+            activateAiSlot: (category, app) => {
+                this._selectionFlow.activateExistingSelection(category, app);
+            },
         });
         this._skeletonManager = new SkeletonManager();
         this._actionFeedbackController = new AppUiActionFeedbackController(this._chrome);
@@ -170,7 +173,7 @@ export class AppUI {
             setSelectedModule: (category, moduleData) => {
                 this._deps.uiState.setSelectedModule(category, moduleData);
             },
-            launchApp: (moduleId) => this._deps.launchApp(moduleId),
+            launchApp: (category, app) => this._deps.launchApp(category, app),
         });
         this._lifecycleBindings = new AppUiLifecycleBindings({
             eventBus: this._eventBus,
@@ -317,6 +320,7 @@ export class AppUI {
             const otherApp = this._selectionState.get(otherSlot);
             if (otherApp) {
                 this._dashboardSupport.applySelectedCardState(card, otherApp, otherSlot);
+                this._selectionFlow.activateExistingSelection(otherSlot as 'ai_text' | 'ai_image', otherApp);
             } else {
                 this._dashboardSupport.resetCardToEmpty(card);
             }
@@ -345,7 +349,6 @@ export class AppUI {
         if (!category.startsWith('ai')) return;
         if (!this._selectionState.hasAnyAiSlot()) {
             this._deps.stopAiProvider();
-            this._deps.uiState.updateState({ last_active_provider: null });
         }
     }
 
@@ -418,9 +421,30 @@ export class AppUI {
         return card.id === 'ai-module-card' ? 'ai_text' : 'services';
     }
 
+    public getPreferredAiCategory(): 'ai_text' | 'ai_image' {
+        const card = this._dashboardSupport.getDashboardCard('ai_text');
+        if (card instanceof HTMLElement) {
+            const resolvedCategory = this._selectionState.resolveCategoryFromCard(card);
+            if (resolvedCategory === 'ai_image') {
+                return 'ai_image';
+            }
+        }
+
+        if (this._selectionState.has('ai_text')) {
+            return 'ai_text';
+        }
+
+        if (this._selectionState.has('ai_image')) {
+            return 'ai_image';
+        }
+
+        return 'ai_text';
+    }
+
     private _getCatalogApps(category: string): IApp[] {
         try {
-            return this._catalogResolver(category);
+            const apps = this._catalogResolver(category);
+            return category === 'ai' ? appendCustomProviderApps(apps) : apps;
         } catch (err: unknown) {
             this._deps.tracer.warn(
                 `[AppUI] Failed to read catalog category ${category}: ${String(err)}`,

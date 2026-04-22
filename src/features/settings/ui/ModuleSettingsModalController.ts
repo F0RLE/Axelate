@@ -35,7 +35,13 @@ export class ModuleSettingsModalController {
 
         modal.classList.remove('hidden');
         this._navigation.pushBackAction('module-settings-modal', onClose, onReopen);
-        modal.showModal();
+        if (typeof modal.show === 'function') {
+            modal.show();
+        } else if (typeof modal.showModal === 'function') {
+            modal.showModal();
+        } else {
+            modal.setAttribute('open', '');
+        }
 
         this._deps.closeAppSelection();
 

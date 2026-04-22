@@ -138,9 +138,7 @@ export class Core {
 
         // 3. Init bridge before UI factories that depend on launcher actions
         this._bridge = new GlobalBridge({
-            aiSettings: this.aiSettings,
             aiBridge: this.aiBridge,
-            catalog: this.catalog,
             tracer: this.tracer,
             moduleService: this.moduleService,
             tauriProvider: this.tauriProvider,
@@ -241,7 +239,6 @@ export class Core {
             moduleSettingsUI: this.moduleSettingsUI,
             consoleUI: this.consoleUI,
             moduleSettings: this.moduleSettings,
-            aiSettings: this.aiSettings,
             appUI: this.appUI,
             aiBridge: this.aiBridge,
             chatController: this.chatController,

@@ -7,6 +7,9 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 // 1. Setup mocks BEFORE imports
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: vi.fn(),
+    Channel: class<T> {
+        public onmessage: ((message: T) => void) | null = null;
+    },
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({

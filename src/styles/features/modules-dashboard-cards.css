@@ -1,10 +1,42 @@
 /* Main dashboard launch cards on the modules page */
+#page-modules .models-container {
+    width: 100%;
+    max-width: 52rem;
+    margin: 0 auto;
+    align-items: center;
+    gap: 2rem;
+}
+
+#page-modules .models-header {
+    align-items: center;
+    text-align: center;
+}
+
+#page-modules .models-subtitle {
+    text-align: center;
+}
+
+#page-modules .models-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(19rem, 22rem));
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+#page-modules .models-grid > .module-slot-card {
+    flex: initial;
+    width: min(100%, 22rem);
+    max-width: 22rem;
+    justify-self: center;
+}
+
 .module-slot-card,
 .module-slot-card {
     background: rgba(var(--background-raw), 0.065);
-    border: 1px solid rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-lg);
-    padding: 1.5rem 1.5rem 2rem 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 24px;
+    padding: 2.6rem 1.15rem 1.35rem;
     display: flex;
     transition: box-shadow 0.24s ease;
     flex-direction: column;
@@ -13,22 +45,26 @@
     cursor: pointer;
     position: relative;
     overflow: hidden !important;
+    width: 100%;
     height: auto !important;
-    min-height: 280px;
+    min-height: 24.5rem;
+    box-sizing: border-box;
     justify-content: flex-start;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 18px 42px rgba(0, 0, 0, 0.18);
 }
 
 .module-slot-card::before,
 .module-slot-card::before {
     content: '';
     position: absolute;
-    top: 0.08rem;
+    top: 0.18rem;
     left: 50%;
-    transform: translateX(-50%) scaleX(0.82);
+    transform: translateX(-50%) scaleX(0.86);
     transform-origin: center center;
-    width: 2.9rem;
-    height: 0.18rem;
+    width: 2.2rem;
+    height: 3px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.06);
     opacity: 1;
@@ -43,15 +79,17 @@
 .module-slot-card.selected,
 .module-slot-card.selected {
     background: rgba(var(--background-raw), 0.065) !important;
-    border: 1px solid rgba(255, 255, 255, 0.04) !important;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 18px 42px rgba(0, 0, 0, 0.18) !important;
 }
 
 .module-slot-card.selected::before,
 .module-slot-card.selected::before {
     transform: translateX(-50%) scaleX(1);
     background: linear-gradient(90deg, var(--primary), var(--primary-light));
-    box-shadow: 0 0 12px rgba(var(--primary-raw), 0.22);
+    box-shadow: 0 0 10px rgba(var(--primary-raw), 0.18);
     animation: selectedCardMarkerIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -84,7 +122,9 @@
 .module-slot-card:hover,
 .module-slot-card:hover {
     background: rgba(var(--background-raw), 0.075);
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.022);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 22px 52px rgba(0, 0, 0, 0.22);
 }
 
 /* Ensure content is above the ::before background effect */
@@ -113,8 +153,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-top: 1.5rem;
-    margin-bottom: 1rem;
+    margin-top: 0.8rem;
+    margin-bottom: 1.35rem;
     transition: transform 0.4s ease;
     border: none;
 }
@@ -124,7 +164,7 @@
     width: 32px;
     height: 32px;
     color: var(--text-primary);
-    transition: all 0.3s;
+    transition: color 0.3s ease;
 }
 
 .footer-link {
@@ -158,11 +198,13 @@
 }
 
 .module-slot-card-title {
+    width: 100%;
+    max-width: 16rem;
     font-size: 1.3rem;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 0.6rem;
-    min-height: 2.4rem;
+    margin-bottom: 0.85rem;
+    min-height: 2.6rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -175,14 +217,17 @@
     font-size: 0.95rem;
     color: var(--text-secondary);
     line-height: 1.4;
-    max-width: 100%;
+    width: 100%;
+    max-width: 16rem;
     margin: 0;
+    flex: 1 1 auto;
 }
 
 .module-slot-card .module-slot-card-action {
     margin-top: auto;
     margin-bottom: 0.5rem;
-    width: max-content;
+    width: 100%;
+    max-width: 18.75rem;
     padding: 0.6rem 2rem;
     border-radius: var(--module-button-radius);
     background: var(--module-button-bg-soft);
@@ -192,7 +237,6 @@
     font-size: 0.95rem;
     transition:
         opacity 0.18s ease,
-        transform 0.18s ease,
         background-color 0.18s ease,
         border-color 0.18s ease,
         color 0.18s ease;
@@ -201,18 +245,17 @@
     cursor: pointer;
     z-index: 5;
     white-space: nowrap;
-    min-width: 120px;
+    min-width: 0;
+    min-height: 3.25rem;
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    transform: translateY(0);
 }
 
 .module-slot-card:hover .module-slot-card-action {
     opacity: 1 !important;
     color: #ffffff !important;
     pointer-events: auto !important;
-    transform: translateY(-2px);
 }
 
 /* Active Module State */
@@ -220,7 +263,7 @@
     width: 80px;
     height: 80px;
     border-radius: 18px;
-    margin-top: 1.5rem;
+    margin-top: 0.8rem;
 }
 
 .module-slot-card.selected:hover .module-slot-card-icon {
@@ -233,7 +276,7 @@
 
 .module-slot-card.selected .module-slot-card-title {
     font-size: 1.3rem;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.85rem;
 }
 
 .module-slot-card.selected .module-slot-card-description {
@@ -268,14 +311,13 @@
     border: none !important;
     box-shadow: none;
     transition:
-        transform 0.2s cubic-bezier(0.2, 0, 0.2, 1),
         background-color 0.2s ease,
-        box-shadow 0.2s ease !important;
+        box-shadow 0.2s ease,
+        opacity 0.2s ease !important;
 }
 
 .module-slot-card .module-slot-card-action.download-module-btn:hover {
     background: var(--module-button-bg-hover) !important;
-    transform: translateY(-2px) scale(1.01) !important;
     box-shadow: none;
 }
 
@@ -283,7 +325,6 @@
     background: var(--module-button-bg-hover) !important;
     border-color: var(--module-button-border-hover) !important;
     color: #ffffff !important;
-    transform: translateY(-2px);
     box-shadow: none;
 }
 
@@ -313,13 +354,26 @@
 .module-selection-card-actions .download-btn.downloading {
     position: relative;
     overflow: hidden;
-    background: var(--surface-2) !important;
-    color: var(--text-color) !important;
+    background: rgba(255, 255, 255, 0.028) !important;
+    color: var(--text-primary) !important;
     cursor: pointer !important;
     pointer-events: auto !important;
     box-shadow: none !important;
     transform: none !important;
-    border: 1px solid var(--border-color) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    opacity: 1 !important;
+    animation: none !important;
+}
+
+.module-slot-card .module-slot-card-action.download-module-btn.downloading:hover,
+.module-selection-card-actions .download-btn.downloading:hover,
+.module-selection-card-actions .modal-btn.modal-btn-primary.download-btn.downloading,
+.module-selection-card-actions .modal-btn.modal-btn-primary.download-btn.downloading:hover {
+    background: rgba(255, 255, 255, 0.028) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+    box-shadow: none !important;
+    filter: none !important;
 }
 
 .module-slot-card .module-slot-card-action.download-module-btn.downloading::before,
@@ -330,8 +384,8 @@
     left: 0;
     bottom: 0;
     width: var(--download-progress, 0%);
-    background: var(--primary);
-    opacity: 0.2;
+    background: linear-gradient(90deg, rgba(var(--primary-raw), 0.55), rgba(var(--primary-raw), 0.82));
+    opacity: 1;
     transition: width 0.3s ease-out;
     z-index: 1;
 }
@@ -392,5 +446,11 @@
 @media (max-width: 800px) {
     .models-grid {
         grid-template-columns: 1fr;
+    }
+
+    .module-slot-card,
+    .module-slot-card {
+        min-height: 22.5rem;
+        padding: 2.15rem 1rem 1.15rem;
     }
 }

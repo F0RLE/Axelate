@@ -1,6 +1,10 @@
 const DEVTOOLS_SHORTCUT_KEYS = ['I', 'J', 'C'] as const;
 const RELOAD_SHORTCUT_KEYS = ['r', 'R', 'к', 'К'] as const;
 const BLOCKED_CTRL_KEYS = ['u', 'p', 's', 'f', 'g'] as const;
+const ZOOM_FRAME_DELAY_MS = 16;
+const MIN_WHEEL_ZOOM_STEP = 0.02;
+const MAX_WHEEL_ZOOM_STEP = 0.08;
+const BASE_WHEEL_DELTA = 120;
 
 type WindowUiInteractionRuntime = {
     addWindowListener: typeof globalThis.addEventListener;
@@ -19,9 +23,24 @@ type WindowUiInteractionDeps = {
 };
 
 export class WindowUiInteractionController {
+    private _pendingZoomDelta = 0;
+    private _zoomTimer: ReturnType<typeof setTimeout> | null = null;
+
     constructor(private readonly _deps: WindowUiInteractionDeps) {}
 
     public bind(signal: AbortSignal): ReturnType<typeof setTimeout> {
+        signal.addEventListener(
+            'abort',
+            () => {
+                if (this._zoomTimer !== null) {
+                    clearTimeout(this._zoomTimer);
+                    this._zoomTimer = null;
+                }
+                this._pendingZoomDelta = 0;
+            },
+            { once: true },
+        );
+
         document.addEventListener(
             'contextmenu',
             (e) => {
@@ -57,15 +76,8 @@ export class WindowUiInteractionController {
                 const ev = e as WheelEvent;
                 if (ev.ctrlKey) {
                     ev.preventDefault();
-                    const delta = ev.deltaY < 0 ? 0.1 : -0.1;
-                    this._deps
-                        .changeZoom(delta)
-                        .then(() => {
-                            this._deps.onZoomChanged();
-                        })
-                        .catch(() => {
-                            /* ignore */
-                        });
+                    const delta = this._getWheelZoomDelta(ev.deltaY);
+                    this._scheduleZoomChange(delta);
                 }
             },
             { passive: false, signal },
@@ -75,6 +87,44 @@ export class WindowUiInteractionController {
         this._deps.runtime.addWindowListener('resize', this._deps.onResize, { signal });
 
         return setTimeout(updateMonitoring, 1000);
+    }
+
+    private _scheduleZoomChange(delta: number): void {
+        this._pendingZoomDelta += delta;
+        if (this._zoomTimer !== null) {
+            return;
+        }
+
+        this._zoomTimer = setTimeout(() => {
+            const pendingZoomDelta = this._pendingZoomDelta;
+            this._pendingZoomDelta = 0;
+            this._zoomTimer = null;
+
+            if (pendingZoomDelta === 0) {
+                return;
+            }
+
+            this._deps
+                .changeZoom(pendingZoomDelta)
+                .then(() => {
+                    this._deps.onZoomChanged();
+                })
+                .catch(() => {
+                    /* ignore */
+                });
+        }, ZOOM_FRAME_DELAY_MS);
+    }
+
+    private _getWheelZoomDelta(deltaY: number): number {
+        if (deltaY === 0) {
+            return 0;
+        }
+
+        const intensity = Math.min(Math.abs(deltaY) / BASE_WHEEL_DELTA, 1);
+        const step =
+            MIN_WHEEL_ZOOM_STEP + (MAX_WHEEL_ZOOM_STEP - MIN_WHEEL_ZOOM_STEP) * intensity;
+
+        return deltaY < 0 ? step : -step;
     }
 
     private _handleKeydown(e: KeyboardEvent): void {

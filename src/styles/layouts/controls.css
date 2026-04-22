@@ -62,7 +62,6 @@ body.snapping #app-header {
     transition:
         color 0.18s ease,
         background-color 0.18s ease,
-        transform 0.18s ease,
         opacity 0.18s ease;
     color: var(--text-secondary);
     -webkit-app-region: no-drag !important;
@@ -83,17 +82,18 @@ body.snapping #app-header {
 .window-control-btn:hover {
     background: transparent !important;
     color: var(--text-primary) !important;
-    transform: scale(1.05);
 }
 
 .window-control-btn:active {
     background: transparent !important;
-    transform: scale(0.9);
     opacity: 0.7;
 }
 
 .close-btn {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        color 0.18s ease,
+        background-color 0.18s ease,
+        opacity 0.18s ease;
     /* Removed rounding as per user request */
     border-radius: 0 !important;
     overflow: hidden;
@@ -102,13 +102,11 @@ body.snapping #app-header {
 .close-btn:hover {
     background: transparent !important;
     color: var(--danger) !important;
-    transform: rotate(90deg);
 }
 
 .close-btn:active {
     background: transparent !important;
     color: var(--danger) !important;
-    transform: rotate(90deg) scale(0.9);
     opacity: 0.8;
 }
 

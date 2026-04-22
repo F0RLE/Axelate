@@ -18,7 +18,6 @@
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-app-region: no-drag;
-    transition: width 0.3s var(--ease-smooth);
     z-index: auto;
     box-sizing: border-box;
 }
@@ -42,7 +41,7 @@
     padding: 0;
     transition:
         background 0.2s ease,
-        transform 0.2s ease;
+        opacity 0.2s ease;
 }
 
 .logo-icon-wrapper {
@@ -115,10 +114,10 @@
     animation: pulse 2s infinite;
 }
 
-body > #sidebar {
+#app-viewport > #sidebar {
     grid-column: 1;
     grid-row: 1 / span 2;
-    height: 100vh;
+    height: 100%;
 }
 
 .launcher-status-badge.offline .status-dot {
@@ -135,10 +134,7 @@ body > #sidebar {
     height: 48px;
     margin: 0 auto;
     cursor: pointer;
-    transition:
-        opacity 0.3s var(--ease-smooth),
-        transform 0.3s var(--ease-smooth);
-    transform: scale(1);
+    transition: opacity 0.3s var(--ease-smooth);
 }
 
 @keyframes logoTextFloat {
@@ -163,8 +159,8 @@ body > #sidebar {
 }
 
 .sidebar-logo-icon:active svg {
-    transform: scale(0.9);
-    transition: transform 0.1s;
+    opacity: 0.82;
+    transition: opacity 0.1s ease;
 }
 
 @keyframes logoPopIn {
@@ -584,13 +580,21 @@ body > #sidebar {
     display: inline-block;
     vertical-align: middle;
     width: auto;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+body.snapping #sidebar {
+    transition: width 0.3s var(--ease-smooth);
+}
+
+body.snapping .nav-btn span,
+body.snapping #sidebar.collapsed .nav-btn span {
     transition:
         opacity 0.3s var(--ease-smooth),
         width 0.3s var(--ease-smooth),
         visibility 0.3s;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
 }
 
 #sidebar:not(.collapsed).monitor-hidden .nav-btn {
@@ -711,7 +715,12 @@ body > #sidebar {
     cursor: pointer;
     display: grid;
     place-items: center;
-    transition: all 0.2s;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        opacity 0.2s ease,
+        box-shadow 0.2s ease;
     flex-shrink: 0;
     -webkit-app-region: no-drag;
 }
@@ -719,12 +728,11 @@ body > #sidebar {
 .btn-toggle-service:hover {
     background: var(--primary);
     color: white;
-    transform: translateY(-1px);
     border: none;
 }
 
 .btn-toggle-service:active {
-    transform: translateY(0px) scale(0.95);
+    opacity: 0.85;
 }
 
 .btn-toggle-service.stop:hover {
@@ -742,7 +750,6 @@ body > #sidebar {
     background: var(--warning);
     border-color: var(--warning);
     opacity: 1;
-    transform: translateY(-1px) rotate(180deg);
 }
 
 .btn-toggle-service .icon {

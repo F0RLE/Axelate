@@ -1,4 +1,5 @@
 use crate::errors::AppError;
+use crate::infrastructure::config::window_settings::{SCALING_MAX_ZOOM, SCALING_MIN_ZOOM};
 use crate::infrastructure::persistence::json_store::JsonStore;
 use crate::models::UIState;
 use crate::utils::paths::FILE_UI_STATE;
@@ -18,12 +19,16 @@ impl UiStateService {
 
     /// Get UI state from file, or return defaults (Async version for runtime)
     pub async fn get_ui_state(&self) -> Result<UIState, AppError> {
-        self.json_store.load_async(&FILE_UI_STATE).await
+        let state: UIState = self.json_store.load_async(&FILE_UI_STATE).await?;
+        Ok(normalize_ui_state(state))
     }
 
     /// Save UI state to file
     pub async fn save_ui_state(&self, state: &UIState) -> Result<(), AppError> {
-        self.json_store.save_async(&FILE_UI_STATE, state).await
+        let normalized = normalize_ui_state(state.clone());
+        self.json_store
+            .save_async(&FILE_UI_STATE, &normalized)
+            .await
     }
 }
 
@@ -48,11 +53,30 @@ fn load_ui_state_bootstrap(path: &std::path::Path) -> UIState {
         }
     };
 
-    serde_json::from_str(&content).unwrap_or_else(|error| {
+    let state = serde_json::from_str(&content).unwrap_or_else(|error| {
         tracing::error!(
             "Failed to parse UI state at {}, resetting to defaults: {error}",
             path.display()
         );
         UIState::default()
-    })
+    });
+
+    normalize_ui_state(state)
+}
+
+fn normalize_ui_state(mut state: UIState) -> UIState {
+    state.zoom_level = clamp_zoom(state.zoom_level);
+    state
+        .resolution_zoom
+        .values_mut()
+        .for_each(|zoom| *zoom = clamp_zoom(*zoom));
+    state
+}
+
+fn clamp_zoom(zoom: f64) -> f64 {
+    if !zoom.is_finite() {
+        return UIState::default().zoom_level;
+    }
+
+    zoom.clamp(SCALING_MIN_ZOOM, SCALING_MAX_ZOOM)
 }

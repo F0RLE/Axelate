@@ -5,6 +5,7 @@ import type { IAIModelData } from '../types/aiTypes';
 import { getModelDataFromModels } from '../utils/catalogHelpers';
 import { renderModelStats } from './AISettingsMarkup';
 import type { AISettingsContentRenderer } from './AISettingsContentRenderer';
+import type { AISettingsViewPolicy } from './AISettingsViewPolicy';
 
 type TranslateFunc = (key: string, fallback: string) => string;
 
@@ -21,6 +22,7 @@ type AISettingsSelectionSyncOptions = {
     translate: TranslateFunc;
     i18nUI: I18nUI | null;
     contentRenderer: AISettingsContentRenderer;
+    viewPolicy: AISettingsViewPolicy;
 };
 
 export class AISettingsSelectionController {
@@ -57,11 +59,17 @@ export class AISettingsSelectionController {
     }
 
     public getInternetAccessEnabled(appId: string, aiSettings: AISettingsService | null): boolean {
-        return aiSettings?.getInternetAccessEnabled(appId) ?? true;
+        return aiSettings?.getInternetAccessEnabled(appId) ?? false;
     }
 
-    public renderModelStats(appId: string, modelKey: string, translate: TranslateFunc): string {
+    public renderModelStats(
+        appId: string,
+        modelKey: string,
+        translate: TranslateFunc,
+        viewPolicy: AISettingsViewPolicy,
+    ): string {
         const modelData = this.getModelData(appId, modelKey);
+        void viewPolicy.isImageOnlyProvider(appId);
         return renderModelStats(modelData, translate);
     }
 
@@ -69,11 +77,14 @@ export class AISettingsSelectionController {
         options.aiSettings?.setSelectedAIModel(options.appId, options.modelKey);
 
         const modelData = this.getModelData(options.appId, options.modelKey);
-        const hasReasoning = modelData?.capabilities?.reasoning === true;
-        const statsMarkup = this._buildStatsMarkup(
+        const hasReasoning =
+            modelData?.capabilities?.reasoning === true ||
+            options.viewPolicy.shouldForceThinkingVisibility(options.appId);
+        const statsMarkup = this.renderModelStats(
             options.appId,
             options.modelKey,
             options.translate,
+            options.viewPolicy,
         );
 
         options.contentRenderer.syncSelectedModelView(
@@ -84,17 +95,6 @@ export class AISettingsSelectionController {
             statsMarkup,
             options.i18nUI,
         );
-    }
-
-    private _buildStatsMarkup(appId: string, modelKey: string, translate: TranslateFunc): string {
-        return `
-            <div class="ai-content-panel">
-                <div class="settings-card-header-center">
-                    <h3>📊 <span data-i18n="ui.settings.model_stats">${translate('ui.settings.model_stats', 'Model Stats')}</span></h3>
-                </div>
-                ${this.renderModelStats(appId, modelKey, translate)}
-            </div>
-        `;
     }
 
     private getModelData(appId: string, modelKey: string): IAIModelData | null {

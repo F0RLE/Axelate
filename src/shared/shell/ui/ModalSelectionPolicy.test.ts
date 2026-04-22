@@ -44,4 +44,30 @@ describe('ModalSelectionPolicy', () => {
             defaultLabel: 'Booting...',
         });
     });
+
+    it('places coming-soon apps after available apps in modal lists', () => {
+        const policy = new ModalSelectionPolicy();
+
+        const visible = policy.getVisibleApps(
+            [
+                {
+                    id: 'sdcpp',
+                    name: 'Stable Diffusion.cpp',
+                    capability: 'image',
+                    installed: false,
+                },
+                {
+                    id: 'comfyui',
+                    name: 'ComfyUI',
+                    capability: 'image',
+                    installed: false,
+                    comingSoon: true,
+                },
+            ],
+            'ai_image',
+            'image',
+        );
+
+        expect(visible.map((app) => app.id)).toEqual(['sdcpp', 'comfyui']);
+    });
 });

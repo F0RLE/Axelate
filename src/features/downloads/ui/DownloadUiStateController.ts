@@ -20,7 +20,7 @@ export class DownloadUiStateController {
     }
 
     public getPrimaryEntry(): [string, ModuleDownloadState] | undefined {
-        const activeStatuses = new Set(['connecting', 'downloading', 'extracting']);
+        const activeStatuses = new Set(['connecting', 'downloading', 'verifying', 'extracting']);
 
         for (const entry of this._activeDownloads.entries()) {
             if (activeStatuses.has(entry[1].status)) {
