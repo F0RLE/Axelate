@@ -47,7 +47,7 @@
         "@tauri-apps/plugin-dialog": "~2.7.0",
         "@tauri-apps/plugin-fs": "~2.5.0",
         "axelate-root": "file:..",
-        "dompurify": "^3.4.0",
+        "dompurify": "^3.4.1",
         "marked": "^18.0.2",
         "marked-alert": "^2.1.2",
         "marked-footnote": "^1.4.0",
