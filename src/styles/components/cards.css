@@ -18,9 +18,32 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
     animation: cardSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+
+/* Shared launcher glass shell used by modules cards and chat compose controls. */
+.launcher-glass-panel,
+.module-slot-card {
+    background: var(
+        --launcher-glass-background,
+        radial-gradient(circle at top left, rgba(var(--primary-raw), 0.14), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.03))
+    );
+    border: 1px solid var(--launcher-glass-border, var(--glass-border));
+    box-shadow: var(
+        --launcher-glass-shadow,
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 18px 42px rgba(0, 0, 0, 0.22)
+    );
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* Flat shell used by the launcher frame/sidebar core. No outer glow, no hard border. */
+.launcher-frame-surface {
+    background: rgba(var(--background-raw), 0.065) !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
+    border: none !important;
 }
 
 .settings-card:nth-child(1) {

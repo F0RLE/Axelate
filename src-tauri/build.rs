@@ -4,7 +4,8 @@
 
 fn main() {
     // Watch resource files for changes to trigger rebuild during dev
-    println!("cargo:rerun-if-changed=resources/config/defaults.json");
+    println!("cargo:rerun-if-changed=resources/config/app.json");
+    println!("cargo:rerun-if-changed=resources/config/local_modules.json");
     println!("cargo:rerun-if-changed=resources/locales");
     println!("cargo:rerun-if-changed=resources/api_providers.json");
 

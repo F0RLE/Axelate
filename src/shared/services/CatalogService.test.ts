@@ -1,70 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CatalogService } from './CatalogService';
-import type { IModule, ICatalogData } from '@/shared/types/coreTypes';
-import type { AppConfig } from '@/shared/types/bindings';
+import type { CatalogService } from './CatalogService';
+import type { IModule } from '@/shared/types/coreTypes';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
-import type { IBridge } from '@/shared/types/IBridge';
-import { createMockBridge } from '@/test/mocks/mockBridge';
-
-function createMockAppConfig(overrides?: unknown): AppConfig {
-    return {
-        catalog: { ai: [], services: [] },
-        apiProviders: [],
-        autoStartModules: [],
-        ...(overrides as Record<string, unknown>),
-    } as unknown as AppConfig;
-}
-
-function setupBridgeMocks(
-    bridge: { isTauri: ReturnType<typeof vi.fn>; invoke: ReturnType<typeof vi.fn> },
-    config: AppConfig | null,
-    modules: IModule[] = [],
-) {
-    bridge.isTauri.mockReturnValue(true);
-    bridge.invoke.mockImplementation((cmd: string) => {
-        if (cmd === 'get_config') return Promise.resolve(config);
-        if (cmd === 'get_modules') return Promise.resolve(modules);
-        return Promise.resolve(undefined);
-    });
-}
-
-function setupFetchMock(webConfig: AppConfig, moduleOk: boolean, moduleJson: unknown[]) {
-    return vi.fn().mockImplementation((url: string) => {
-        if (url === '/api/config') {
-            return Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve(webConfig),
-            });
-        }
-        // /api/modules
-        return Promise.resolve({
-            ok: moduleOk,
-            json: () => Promise.resolve(moduleJson),
-        });
-    }) as unknown as typeof fetch;
-}
+import {
+    createCatalogHarness,
+    createMockAppConfig,
+    setupBridgeMocks,
+    type MockCatalogBridge,
+} from '@/test/helpers/catalogTestUtils';
 
 describe('CatalogService', () => {
-    let mockBridge: {
-        isTauri: ReturnType<typeof vi.fn>;
-        invoke: ReturnType<typeof vi.fn>;
-        listen: ReturnType<typeof vi.fn>;
-    };
+    let mockBridge: MockCatalogBridge;
     let service: CatalogService;
 
     beforeEach(() => {
-        // Mock global window object
-        globalThis.APP_DATA = { ai: [], services: [] } as unknown as ICatalogData;
-        globalThis.getCatalogCategory = vi.fn();
-        globalThis.dispatchEvent = vi.fn();
-
-        mockBridge = createMockBridge() as unknown as {
-            isTauri: ReturnType<typeof vi.fn>;
-            invoke: ReturnType<typeof vi.fn>;
-            listen: ReturnType<typeof vi.fn>;
-        };
-
-        service = new CatalogService(mockBridge as unknown as IBridge);
+        ({ mockBridge, service } = createCatalogHarness());
     });
 
     afterEach(() => {
@@ -72,13 +22,10 @@ describe('CatalogService', () => {
     });
 
     describe('Initialization', () => {
-        it('should correctly expose global sync points on instantiation', () => {
-            expect(globalThis.APP_DATA).toBeDefined();
-            expect(typeof globalThis.getCatalogCategory).toBe('function');
-
-            // Check that getCatalogCategory returns internal arrays
-            const categoryReturn = globalThis.getCatalogCategory('ai');
-            expect(Array.isArray(categoryReturn)).toBe(true);
+        it('should correctly initialize catalog state on instantiation', () => {
+            const catalog = service.getCatalog();
+            expect(Array.isArray(catalog.ai)).toBe(true);
+            expect(Array.isArray(catalog.services)).toBe(true);
         });
     });
 
@@ -104,6 +51,31 @@ describe('CatalogService', () => {
             expect(catalog.ai[0]?.id).toBe('test-ai');
             expect(catalog.ai[0]?.configSchema).toEqual({ setting: {} });
             expect(catalog.ai[0]?.type).toBe('api'); // is mapped to api if no type provided in AI
+        });
+
+        it('should preserve comingSoon placeholders as non-installed AI apps', async () => {
+            const mockConfig = createMockAppConfig({
+                catalog: {
+                    ai: [
+                        {
+                            id: 'future-image',
+                            name: 'Future Image',
+                            type: 'local',
+                            comingSoon: true,
+                        },
+                    ],
+                    services: [],
+                },
+            });
+
+            setupBridgeMocks(mockBridge, mockConfig);
+
+            await service.loadCatalog();
+
+            const app = service.getAppById('future-image');
+            expect(app?.comingSoon).toBe(true);
+            expect(app?.installed).toBe(false);
+            expect(app?.type).toBe('local');
         });
 
         it('should fallback to FALLBACK_CONFIG if config is empty or invalid', async () => {
@@ -164,9 +136,11 @@ describe('CatalogService', () => {
     // ---------------------------------------------------------- getCatalogCategory fallback (lines 39-40)
     describe('getCatalogCategory fallback', () => {
         it('should return empty array for unknown category', () => {
-            const result = globalThis.getCatalogCategory('unknown');
-            expect(Array.isArray(result)).toBe(true);
-            expect(result.length).toBe(0);
+            // getCatalogCategory is now on GlobalBridge, not CatalogService
+            // Test service-level method instead
+            const catalog = service.getCatalog();
+            expect(Array.isArray(catalog.ai)).toBe(true);
+            expect(Array.isArray(catalog.services)).toBe(true);
         });
 
         it('should return services array for services category', async () => {
@@ -181,66 +155,47 @@ describe('CatalogService', () => {
 
             await service.loadCatalog();
 
-            const result = globalThis.getCatalogCategory('services');
-            expect(Array.isArray(result)).toBe(true);
+            const catalog = service.getCatalog();
+            expect(catalog.services.length).toBe(1);
+            expect(catalog.services.at(0)?.id).toBe('svc');
         });
     });
 
-    // ---------------------------------------------------------- fetch fallback (web mode, lines 106-111, 125-130)
-    describe('web mode fetch fallback', () => {
-        it('should fetch config from /api/config in web mode', async () => {
+    // ---------------------------------------------------------- invoke fallback
+    describe('bridge fallback', () => {
+        it('should load config through bridge even when isTauri=false', async () => {
             const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'fetched-ai', name: 'Fetched AI' }], services: [] },
             });
 
             mockBridge.isTauri.mockReturnValue(false);
-
-            vi.stubGlobal(
-                'fetch',
-                vi.fn().mockImplementation((url: string) => {
-                    if (url === '/api/config') {
-                        return Promise.resolve({
-                            ok: true,
-                            json: () => Promise.resolve(mockConfig),
-                        });
-                    }
-                    return Promise.resolve({ ok: false });
-                }),
-            );
+            setupBridgeMocks(mockBridge, mockConfig);
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
             expect(catalog.ai.length).toBeGreaterThan(0);
-
-            vi.unstubAllGlobals();
+            expect(mockBridge.invoke).toHaveBeenCalledWith('get_config');
         });
 
-        it('should fallback to FALLBACK_CONFIG when fetch returns non-ok', async () => {
+        it('should fallback to FALLBACK_CONFIG when bridge returns null config', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-
-            vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+            setupBridgeMocks(mockBridge, null);
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
             expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
-
-            vi.unstubAllGlobals();
         });
 
-        it('should fallback when fetch throws', async () => {
+        it('should fallback when bridge throws', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-
-            vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
+            mockBridge.invoke.mockRejectedValue(new Error('Bridge error'));
 
             await service.loadCatalog();
 
-            // _loadConfig catches fetch error → returns FALLBACK_CONFIG
             const catalog = service.getCatalog();
             expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
-
-            vi.unstubAllGlobals();
         });
     });
 
@@ -301,6 +256,25 @@ describe('CatalogService', () => {
             expect(apiApp?.installed).toBe(true);
             expect(localApp?.installed).not.toBe(true);
         });
+
+        it('should mark non-engine local modules as installed when present in installed modules', async () => {
+            const config = createMockAppConfig({
+                catalog: {
+                    ai: [],
+                    services: [{ id: 'local-mod', name: 'Local Module', type: 'local' }],
+                },
+            });
+
+            setupBridgeMocks(mockBridge, config, [
+                { id: 'local-mod', configSchema: { setting: {} } } as unknown as IModule,
+            ]);
+
+            await service.loadCatalog();
+
+            const localApp = service.getAppById('local-mod');
+            expect(localApp?.installed).toBe(true);
+            expect(localApp?.configSchema).toEqual({ setting: {} });
+        });
     });
 
     describe('_initGlobalExposures DEV branch (L29)', () => {
@@ -308,36 +282,41 @@ describe('CatalogService', () => {
             const origDev = import.meta.env['DEV'];
             (import.meta.env as Record<string, unknown>)['DEV'] = false;
 
-            const s = new CatalogService(mockBridge as unknown as IBridge);
+            const { service: s } = createCatalogHarness();
             expect(s).toBeDefined();
 
             (import.meta.env as Record<string, unknown>)['DEV'] = origDev;
         });
     });
 
-    describe('_loadModuleList web fetch branches (L126)', () => {
+    describe('_loadModuleList bridge branches (L126)', () => {
         const webConfig = createMockAppConfig({
             catalog: { ai: [{ id: 'ai1', name: 'AI' }], services: [] },
         });
 
-        it('should return modules when fetch response is ok (L126 true branch)', async () => {
+        it('should return modules when bridge response is ok (L126 true branch)', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-
-            const origFetch = globalThis.fetch;
-            globalThis.fetch = setupFetchMock(webConfig, true, [{ id: 'mod1', name: 'Module 1' }]);
+            setupBridgeMocks(mockBridge, webConfig, [
+                { id: 'mod1', name: 'Module 1' },
+            ] as IModule[]);
 
             await service.loadCatalog();
-            globalThis.fetch = origFetch;
+
+            expect(mockBridge.invoke).toHaveBeenCalledWith('get_modules');
         });
 
-        it('should return empty array when fetch response is not ok (L126 false branch)', async () => {
+        it('should return empty array when bridge response fails (L126 false branch)', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-
-            const origFetch = globalThis.fetch;
-            globalThis.fetch = setupFetchMock(webConfig, false, []);
+            mockBridge.invoke.mockImplementation((cmd: string) => {
+                if (cmd === 'get_config') return Promise.resolve(webConfig);
+                if (cmd === 'get_modules') return Promise.reject(new Error('modules failed'));
+                if (cmd === 'get_engine_definitions') return Promise.resolve([]);
+                return Promise.resolve(undefined);
+            });
 
             await service.loadCatalog();
-            globalThis.fetch = origFetch;
+
+            expect(service.getCatalog().ai.length).toBeGreaterThan(0);
         });
     });
 });

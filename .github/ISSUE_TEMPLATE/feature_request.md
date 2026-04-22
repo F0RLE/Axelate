@@ -1,27 +1,36 @@
 ---
-name: Запрос функции
-about: Предложите идею для этого проекта
+name: Feature request
+about: Suggest an improvement for Axelate
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''
 ---
 
-## Описание функции
+<div align="center">
+  <br />
+  <img src="../src-tauri/icons/icon.png" alt="Axelate Logo" width="96" height="96" />
+  <br />
+  <h1 style="border-bottom: none; margin-bottom: 0;">Feature Request</h1>
+  <p style="font-size: 1.05em; color: #888; font-style: italic;">Share the problem first, then the proposed solution.</p>
+  <br />
+</div>
 
-Четкое и краткое описание того, что вы хотите.
+## What do you want?
 
-## Проблема, которую это решает
+Describe the feature or improvement you would like to see.
 
-Четкое и краткое описание проблемы. Например: "Мне всегда было неудобно, когда [...]"
+## What problem does it solve?
 
-## Предлагаемое решение
+Explain the current pain point or limitation.
 
-Четкое и краткое описание того, что вы хотите, чтобы произошло.
+## Proposed Solution
 
-## Альтернативы
+Describe the behavior, workflow, or UI you expect.
 
-Четкое и краткое описание любых альтернативных решений или функций, которые вы рассматривали.
+## Alternatives Considered
 
-## Дополнительная информация
+List any other approaches you considered.
 
-Любая другая информация или скриншоты о запросе функции.
+## Additional Context
+
+Add mockups, examples, screenshots, or links if helpful.

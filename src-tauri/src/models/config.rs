@@ -197,6 +197,12 @@ pub struct ModuleItem {
     pub repo_url: Option<String>,
     /// SHA-256 hash for integrity verification
     pub expected_hash: Option<String>,
+    /// Marks catalog entries that should render as placeholders and not be launchable yet
+    #[serde(default)]
+    pub coming_soon: bool,
+    /// True when the launcher should treat this engine as user-managed and skip install checks
+    #[serde(default)]
+    pub managed_externally: bool,
     /// Semantic version (e.g., "1.0.0")
     #[serde(default = "default_version")]
     pub version: String,
@@ -207,7 +213,7 @@ pub struct ModuleItem {
     #[serde(rename = "configSchema", default)]
     pub raw_config_schema: Option<serde_json::Value>,
     /// Configuration schema definition (runtime only, built from raw_config_schema)
-    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_deserializing, default)]
     pub config_schema: Option<std::collections::HashMap<String, ConfigField>>,
 }
 
@@ -254,28 +260,31 @@ pub struct ApiProvider {
     /// Display name (e.g., "GPT", "Gemini")
     pub name: String,
     /// Localization key for description
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub desc_key: Option<String>,
     /// Direct description text
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub description: Option<String>,
     /// Icon/emoji for UI display
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub icon: Option<String>,
     /// Provider type
     #[serde(rename = "type")]
     pub provider_type: Option<ProviderType>,
     /// Base URL for API endpoints
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub base_url: Option<String>,
     /// Environment variable name for API key
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub api_key_env: Option<String>,
     /// Available models configuration
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub models: Option<Vec<AiModel>>,
+    /// Provider output capabilities exposed in the launcher catalog
+    #[serde(default)]
+    pub capabilities: Option<Vec<String>>,
     /// Model aliases (UI name → API ID mappings)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub model_aliases: Option<std::collections::HashMap<String, String>>,
 }
 

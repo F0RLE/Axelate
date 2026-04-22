@@ -36,13 +36,14 @@ jobs:
       - name: Check Formatting
         run: |
           cd src
+          npm run format
           npm run format:check
 
       - name: Type Check & Build
         run: |
           cd src
           npm run build
-        # 'npm run build' runs 'tsc && vite build', so this enforces type safety
+        # 'npm run build' runs bindings sync + typecheck + vite build
 
       - name: Check Bundle Size
         run: |
@@ -69,7 +70,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
-          components: clippy
+          components: clippy, llvm-tools-preview
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
@@ -88,12 +89,17 @@ jobs:
           cargo clippy -- -D warnings
         # Fails if there are any warnings
 
-      - name: Run Tests (Compile Only)
+      - name: Check App Binary
         run: |
           cd src-tauri
-          cargo test --verbose --no-run
-        # We use --no-run because GitHub Windows runners lack WebView2Loader.dll
-        # required for Tauri app integration tests to execute cleanly.
+          cargo check --bins --verbose
+
+      - name: Compile Library Tests
+        run: |
+          cd src-tauri
+          cargo test --lib --verbose --no-run
+        # Compile library tests only. Tauri app/bin test harnesses pull in extra
+        # Windows runtime pieces and are noisy on hosted runners.
 
       - name: Security Audit (Rust)
         run: |
@@ -101,3 +107,17 @@ jobs:
           cd src-tauri
           cargo audit
         continue-on-error: true  # Don't fail CI, but report issues
+
+      - name: Install Coverage Tool
+        run: cargo install cargo-llvm-cov --locked --quiet
+
+      - name: Generate Rust Coverage Report
+        run: |
+          cd src-tauri
+          cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload Rust Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-lcov
+          path: src-tauri/lcov.info

@@ -2,10 +2,14 @@
  * TauriProvider Unit Tests — Full Coverage
  */
 import { vi, describe, it, expect, beforeEach, afterEach, type Mock } from 'vitest';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // 1. Setup mocks BEFORE imports
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: vi.fn(),
+    Channel: class<T> {
+        public onmessage: ((message: T) => void) | null = null;
+    },
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -29,6 +33,15 @@ const tauriMock = {
 // Must set BEFORE import
 (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
 
+function createTracer(): LoggerService {
+    return {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+    } as unknown as LoggerService;
+}
+
 // Helper implementation for listen that calls callback immediately
 function createListenWithPayload(payload: unknown) {
     return (_: unknown, internalCb: (e: { payload: unknown }) => void) => {
@@ -51,7 +64,7 @@ function setupWebMode(): {
     delete win['__TAURI__'];
     delete win['__TAURI_INTERNALS__'];
 
-    return { win, origTauri, origInternals, provider: new TauriProvider() };
+    return { win, origTauri, origInternals, provider: new TauriProvider(createTracer()) };
 }
 
 import { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
@@ -63,7 +76,7 @@ describe('TauriProvider', () => {
         vi.clearAllMocks();
         // Ensure Tauri is set
         (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
-        provider = new TauriProvider();
+        provider = new TauriProvider(createTracer());
     });
 
     afterEach(() => {
@@ -94,7 +107,7 @@ describe('TauriProvider', () => {
             delete win['__TAURI__'];
             win['__TAURI_INTERNALS__'] = {};
 
-            const p = new TauriProvider();
+            const p = new TauriProvider(createTracer());
             expect(p.isTauri()).toBe(true);
 
             delete win['__TAURI_INTERNALS__'];
@@ -131,7 +144,7 @@ describe('TauriProvider', () => {
             (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
                 new Error('Handshake fail'),
             );
-            const p = new TauriProvider();
+            const p = new TauriProvider(createTracer());
             p.init();
 
             // Wait for handshake to fail → _isTauriDetected becomes false
@@ -329,6 +342,54 @@ describe('TauriProvider', () => {
         });
     });
 
+    // ---------------------------------------------------------- hasSecureKey
+    describe('hasSecureKey', () => {
+        it('should return key presence when invoke succeeds', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(true);
+
+            const result = await provider.hasSecureKey('openai_api');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('has_secure_key', {
+                service: 'openai_api',
+            });
+            expect(result).toBe(true);
+        });
+
+        it('should return false when invoke fails', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Presence check failed'),
+            );
+
+            const result = await provider.hasSecureKey('unknown_service');
+
+            expect(result).toBe(false);
+        });
+    });
+
+    describe('getSecureKeyMeta', () => {
+        it('should return non-sensitive metadata when invoke succeeds', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce({
+                exists: true,
+                length: 24,
+            });
+
+            const result = await provider.getSecureKeyMeta('openai_api');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('get_secure_key_meta', {
+                service: 'openai_api',
+            });
+            expect(result).toEqual({ exists: true, length: 24 });
+        });
+
+        it('should return empty metadata when invoke fails', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(new Error('meta fail'));
+
+            const result = await provider.getSecureKeyMeta('unknown_service');
+
+            expect(result).toEqual({ exists: false, length: 0 });
+        });
+    });
+
     // ---------------------------------------------------------- writeToClipboard
     describe('writeToClipboard', () => {
         it('should call clipboard plugin in Tauri', async () => {
@@ -431,7 +492,7 @@ describe('TauriProvider', () => {
                 new Error('Handshake failed'),
             );
 
-            const provider2 = new TauriProvider();
+            const provider2 = new TauriProvider(createTracer());
             provider2.init();
 
             // After failed handshake, isTauri falls back to static detection (globalThis.__TAURI__ present)

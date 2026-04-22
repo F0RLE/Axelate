@@ -1,185 +1,142 @@
-<div align="center">
-  <br />
-  <img src="../../src-tauri/icons/icon.png" alt="Axelate Logo" width="120" height="120" />
-  <br />
-  <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
-  <p style="font-size: 1.1em; color: #888; font-style: italic;">Getting Started</p>
-  <br />
-  <p>
-    <a href="../../README.md"><img src="https://img.shields.io/badge/Home-31303a?style=for-the-badge&logo=house&logoColor=white" height="30" alt="Home"/></a>
-    &nbsp;
-    <a href="architecture.md"><img src="https://img.shields.io/badge/Architecture-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Architecture"/></a>
-    &nbsp;
-    <a href="CODING_STANDARDS.md"><img src="https://img.shields.io/badge/Standards-31303a?style=for-the-badge&logo=eslint&logoColor=white" height="30" alt="Standards"/></a>
-  </p>
-  <br />
-</div>
+# Getting Started
 
----
+This document describes the commands and prerequisites that actually matter today.
 
-## What is Axelate?
+## Requirements
 
-**Axelate** is a secure desktop environment for next-generation AI agents. It provides:
+- Node.js 20+
+- npm 10+
+- Rust stable
+- Windows: Visual Studio Build Tools, Windows SDK, and WebView2 Runtime
 
-- 🛡️ **Hardware-Bound Security** — AES-256-GCM encryption tied to your motherboard
-- ⚡ **Native Performance** — Rust kernel + V8 shell, instant startup
-- 🧩 **Isolated Modules** — Run AI tools without cross-contamination
+Tauri on Windows depends on machine-level native tooling. Portable Node and Rust are supported, but MSVC, SDK tools, and WebView2 still need to exist on the machine.
 
----
+## Windows prerequisites
 
-## Quick Install (Users)
+Install:
 
-1. **Download** the installer from [Releases](https://github.com/F0RLE/Axelate/releases)
-2. **Run** `Axelate Setup.exe`
-3. **Launch** Axelate from Start Menu or Desktop
+- Microsoft C++ Build Tools with the `Desktop development with C++` workload
+- Windows 10/11 SDK so `rc.exe` is available
+- Microsoft Edge WebView2 Runtime
 
-### First Launch
+## Portable toolchains
 
-1. Go to **Settings** → **AI Providers**
-2. Select a provider (OpenAI GPT, Google Gemini)
-3. Enter your API key (stored securely via OS keychain)
-4. Click **Save**
+The workflow runner checks for portable tools in this order:
 
----
+1. `AXELATE_DEPS_DIR`
+2. `<repo>/.deps`
+3. `%USERPROFILE%/Axelate-deps`
 
-## Developer Setup
+Expected layout:
 
-### Prerequisites
+```text
+deps-root/
+├── bin/
+│   ├── cargo.cmd
+│   ├── node.cmd
+│   ├── npm.cmd
+│   ├── npx.cmd
+│   └── rustup.cmd
+├── node/
+└── rust/
+    ├── cargo-home/
+    └── rustup-home/
+```
 
-| Tool | Required Version | Installation |
-| :--- | :--- | :--- |
-| **Rust** | `1.93.0`+ (Stable) | [rustup.rs](https://rustup.rs/) |
-| **Node.js** | `20.x`+ (LTS) | [nodejs.org](https://nodejs.org/) |
-| **npm** | `10.x`+ | Bundled with Node.js |
-| **Visual Studio Build Tools** | 2022+ | Required for Windows Rust compilation |
+## Install
 
-### Installation
+From the repository root:
 
 ```bash
-# Clone repository
 git clone https://github.com/F0RLE/Axelate.git
 cd Axelate
-
-# Install dependencies
-npm install
-cd src && npm install
+npm run setup
 ```
 
-### Launch Dev Server
+`npm run setup` is the canonical first-run command. It runs `doctor`, installs frontend dependencies into `src/node_modules`, and configures Git hooks.
+
+## Daily development
+
+Recommended start:
 
 ```bash
-cd src
-npm run tauri:dev
+npm run dev
 ```
 
-This will:
-1. Start Vite dev server on `http://localhost:1420`
-2. Compile Rust backend
-3. Launch Tauri application with hot-reload
+Useful commands:
 
----
-
-## Project Structure
-
-```
-Axelate/
-├── src/                           # Frontend (TypeScript + Vite)
-│   ├── app/                       # Boot sequence (init, router, events, bridge)
-│   ├── features/                  # Feature modules
-│   │   ├── ai/                    # AI Bridge & providers
-│   │   ├── chat/                  # Chat interface
-│   │   ├── settings/              # App settings
-│   │   └── monitoring/            # System monitoring
-│   ├── shared/                    # Cross-feature services, components, types
-│   │   ├── services/              # EventBus, StateService, LoggerService, ...
-│   │   ├── components/            # AppUI, SidebarUI, WindowUI
-│   │   └── types/                 # bindings.ts (auto-generated), coreTypes.ts
-│   ├── infrastructure/            # Technical adapters
-│   │   ├── tauri/                 # TauriProvider (IPC abstraction)
-│   │   ├── i18n/                  # I18nService + I18nUI
-│   │   └── navigation/           # NavigationService + NavigationUI
-│   └── styles/                    # CSS (design tokens, BEM components)
-│
-├── src-tauri/                     # Backend (Rust + Tauri v2)
-│   └── src/
-│       ├── api/                   # Tauri command adapters (thin, no logic)
-│       ├── domain/                # Business logic (ai/, modules/, monitoring/)
-│       ├── infrastructure/        # Config, crypto, HTTP, logging
-│       ├── models/                # Shared data structures
-│       └── utils/                 # Helper functions
-│
-└── docs/                          # Documentation (en/, ru/)
-```
-
----
-
-## Key Concepts
-
-| Concept | Description |
-|---------|-------------|
-| **Core** | Central orchestrator (`src/app/init.ts`) — wires all services via constructor DI |
-| **EventBus** | Type-safe pub/sub for inter-module communication (`shared/services/EventBus.ts`) |
-| **StateService** | Persistent UI state via Tauri IPC (backend-first) |
-| **AIBridge** | Routes messages to AI providers (GPT, Gemini) via streaming |
-| **TauriProvider** | Abstraction layer for Tauri IPC with mock support for testing |
-| **BaseComponent** | Abstract UI class with lifecycle (`init`/`destroy`), AbortController cleanup |
-
----
-
-## Development Commands
-
-| Command | Description |
-| :--- | :--- |
-| `npm run dev` | **Start Dev Server** (Auto-formats code + Checks Env) |
-| `npm run verify-all` | **Release Gate** (Must pass before committing) |
-| `npm run tauri:dev` | Standard Tauri dev mode |
-| `npm run build` | Filtered production build |
-| `npm run release` | Full release pipeline (Verify + Build) |
-| `npm run check-size` | Audit bundle size |
-| `npm run test` | Run all tests (Vitest) |
-| `npm run lint` | ESLint check |
-| `npm run format` | Prettier auto-format |
-
-All commands run from project root. Root `package.json` proxies to `src/`.
-
----
-
-## Debugging
-
-### Frontend (DevTools)
-- Press `F12` or `Ctrl+Shift+I` to open DevTools
-- Console logs use prefixes: `[ModuleName] Message`
-
-### Backend (Rust Logs)
 ```bash
-RUST_LOG=debug npm run tauri:dev
+npm run doctor
+npm run test
+npm run typecheck
+npm run lint
+npm run verify
 ```
-Log files: `%APPDATA%/AxelateData/System/Logs/`
 
----
+What they do:
 
-## Common Issues
+- `doctor` checks prerequisites without changing files.
+- `dev` starts the desktop app in Tauri development mode.
+- `verify` runs the full local gate.
 
-| Issue | Solution |
-| :--- | :--- |
-| `WebView2 not found` | Install [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) |
-| `cargo build` fails | Run `rustup update` and install Visual Studio Build Tools |
-| Port 1420 in use | Kill process or change port in `vite.config.ts` and `tauri.conf.json` |
-| White screen | Check DevTools console for errors |
+## Build and release
 
----
+```bash
+npm run build
+npm run tauri:build
+npm run release
+```
 
-## Useful Links
+- `build` builds the frontend bundle.
+- `tauri:build` builds the desktop app.
+- `release` runs verification first, then produces release bundles.
 
-- [Architecture Spec](architecture.md)
+## First app launch
+
+Current happy path:
+
+1. open Axelate
+2. go to Settings
+3. add an OpenRouter key
+4. choose an active model/provider
+5. optionally install local engines or modules
+
+## Verification gate
+
+Before release work, run:
+
+```bash
+npm run verify
+```
+
+That gate includes:
+
+- prerequisite check
+- Rust format, clippy, check, and tests
+- frontend install
+- frontend format, typecheck, lint, format check, tests, build, and size budget
+
+If `verify` is red, the repository is not ready for release work.
+
+## Common issues
+
+### WebView2 missing
+
+Install Microsoft Edge WebView2 Runtime.
+
+### `rc.exe` missing
+
+Install the Windows SDK through Visual Studio Build Tools.
+
+### Wrong dependency layout
+
+This repository should use `src/node_modules`. A second root `node_modules` tree is not part of the intended workflow.
+
+## Related docs
+
+- [Architecture](architecture.md)
+- [Automation](AUTOMATION.md)
+- [Project Tree](reference/project-tree/ProjectTree.md)
 - [Coding Standards](CODING_STANDARDS.md)
-- [File Tree](FileTree.md)
-- [Security Policy](../../SECURITY.md)
-- [Contributing](../../CONTRIBUTING.md)
-
----
-
-<div align="center">
-  <br>
-  <sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
-</div>
+- [Security Hardening](SECURITY_HARDENING.md)
+- [Roadmap](ROADMAP.md)

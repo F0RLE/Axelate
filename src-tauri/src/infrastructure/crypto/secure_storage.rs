@@ -3,12 +3,12 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
 };
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex, MutexGuard};
 
 /// Encrypted secure data container
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -23,9 +23,35 @@ pub struct SecureStorage;
 
 use crate::errors::AppError;
 
+static STORE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+#[cfg(test)]
+static TEST_STORE_DIR: LazyLock<Mutex<Option<PathBuf>>> = LazyLock::new(|| Mutex::new(None));
+
 impl SecureStorage {
+    fn lock_store() -> Result<MutexGuard<'static, ()>, AppError> {
+        STORE_LOCK.lock().map_err(|_| AppError::External {
+            request_id: None,
+            message: "Secure storage lock is poisoned".to_string(),
+        })
+    }
+
     fn get_store_path() -> Result<PathBuf, AppError> {
-        let path = crate::utils::paths::CONFIG_DIR.as_path();
+        #[cfg(test)]
+        let path_buf = {
+            let override_dir = TEST_STORE_DIR.lock().map_err(|_| AppError::External {
+                request_id: None,
+                message: "Secure storage test path lock is poisoned".to_string(),
+            })?;
+            override_dir
+                .clone()
+                .unwrap_or_else(|| crate::utils::paths::CONFIG_DIR.as_path().to_path_buf())
+        };
+
+        #[cfg(not(test))]
+        let path_buf = crate::utils::paths::CONFIG_DIR.as_path().to_path_buf();
+
+        let path = path_buf.as_path();
 
         if !path.exists() {
             fs::create_dir_all(path).map_err(|e| AppError::Io(e.to_string()))?;
@@ -64,7 +90,7 @@ impl SecureStorage {
         let cipher = Aes256Gcm::new(&key_bytes.into());
 
         let mut nonce_bytes = [0u8; 12];
-        rand::rng().fill_bytes(&mut nonce_bytes);
+        rand::fill(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         let ciphertext =
@@ -80,19 +106,44 @@ impl SecureStorage {
         payload.extend_from_slice(&ciphertext);
 
         let path = Self::get_store_path()?;
-        let tmp_path = path.with_extension("tmp");
+        let pending_path = path.with_extension("pending");
+        let backup_path = path.with_extension("bak");
 
-        let mut file = fs::File::create(&tmp_path).map_err(|e| AppError::Io(e.to_string()))?;
+        let mut file = fs::File::create(&pending_path).map_err(|e| AppError::Io(e.to_string()))?;
         use std::io::Write;
         file.write_all(&payload)
             .map_err(|e| AppError::Io(e.to_string()))?;
         file.sync_all().map_err(|e| AppError::Io(e.to_string()))?;
         drop(file);
 
-        if let Err(e) = fs::rename(&tmp_path, &path) {
-            tracing::warn!("Rename failed ({e}), using fallback for Windows locks...");
-            let _ = fs::remove_file(&path);
-            fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
+        if backup_path.exists() {
+            fs::remove_file(&backup_path).map_err(|e| AppError::Io(e.to_string()))?;
+        }
+
+        if path.exists() {
+            fs::rename(&path, &backup_path).map_err(|e| AppError::Io(e.to_string()))?;
+        }
+
+        if let Err(error) = fs::copy(&pending_path, &path) {
+            if backup_path.exists() {
+                let _ = fs::rename(&backup_path, &path);
+            }
+            let _ = fs::remove_file(&pending_path);
+            return Err(AppError::Io(error.to_string()));
+        }
+
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .and_then(|file| file.sync_all())
+            .map_err(|e| AppError::Io(e.to_string()))?;
+
+        if pending_path.exists() {
+            fs::remove_file(&pending_path).map_err(|e| AppError::Io(e.to_string()))?;
+        }
+
+        if backup_path.exists() {
+            fs::remove_file(&backup_path).map_err(|e| AppError::Io(e.to_string()))?;
         }
 
         Ok(())
@@ -100,38 +151,72 @@ impl SecureStorage {
 
     /// Saves an encrypted key to secure storage
     pub fn save_key(service: String, value: String) -> Result<(), AppError> {
-        let mut data = Self::load_data().unwrap_or_else(|_| SecureData {
-            keys: HashMap::new(),
-        });
+        let _guard = Self::lock_store()?;
+        let mut data = Self::load_data()?;
         data.keys.insert(service, value);
         Self::encrypt_and_save(&data)
     }
 
+    /// Saves an encrypted key without blocking the async runtime.
+    pub async fn save_key_async(service: String, value: String) -> Result<(), AppError> {
+        tauri::async_runtime::spawn_blocking(move || Self::save_key(service, value))
+            .await
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Secure storage task join failure: {e}"),
+            })?
+    }
+
     /// Retrieves an encrypted key from secure storage
     pub fn get_key(service: &str) -> Result<Option<String>, AppError> {
+        let _guard = Self::lock_store()?;
         let data = Self::load_data()?;
         Ok(data.keys.get(service).cloned())
     }
 
+    /// Retrieves an encrypted key without blocking the async runtime.
+    pub async fn get_key_async(service: String) -> Result<Option<String>, AppError> {
+        tauri::async_runtime::spawn_blocking(move || Self::get_key(&service))
+            .await
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Secure storage task join failure: {e}"),
+            })?
+    }
+
     /// Removes an encrypted key from secure storage
     pub fn remove_key(service: &str) -> Result<(), AppError> {
-        let mut data = Self::load_data().unwrap_or_else(|_| SecureData {
-            keys: HashMap::new(),
-        });
+        let _guard = Self::lock_store()?;
+        let mut data = Self::load_data()?;
         if data.keys.remove(service).is_some() {
             Self::encrypt_and_save(&data)?;
         }
         Ok(())
     }
 
+    /// Removes an encrypted key without blocking the async runtime.
+    pub async fn remove_key_async(service: String) -> Result<(), AppError> {
+        tauri::async_runtime::spawn_blocking(move || Self::remove_key(&service))
+            .await
+            .map_err(|e| AppError::External {
+                request_id: None,
+                message: format!("Secure storage task join failure: {e}"),
+            })?
+    }
+
     fn load_data() -> Result<SecureData, AppError> {
         let path = Self::get_store_path()?;
-        let tmp_path = path.with_extension("tmp");
+        let pending_path = path.with_extension("pending");
+        let backup_path = path.with_extension("bak");
 
-        // Crash recovery: if main file is missing but .tmp exists, it means we crashed between remove and rename
-        if tmp_path.exists() && !path.exists() {
-            tracing::warn!("Detected crash during last secure storage save. Recovering...");
-            fs::rename(&tmp_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
+        if !path.exists() {
+            if backup_path.exists() {
+                tracing::warn!("Recovering secure storage from backup file");
+                fs::rename(&backup_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
+            } else if pending_path.exists() {
+                tracing::warn!("Recovering secure storage from pending file");
+                fs::rename(&pending_path, &path).map_err(|e| AppError::Io(e.to_string()))?;
+            }
         }
 
         if !path.exists() {
@@ -173,9 +258,23 @@ impl SecureStorage {
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::redundant_clone)]
     use super::*;
+    use std::sync::{LazyLock, Mutex};
+
+    static TEST_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    fn set_test_store_dir(path: PathBuf) {
+        *TEST_STORE_DIR.lock().unwrap() = Some(path);
+    }
+
+    fn clear_test_store_dir() {
+        *TEST_STORE_DIR.lock().unwrap() = None;
+    }
 
     #[test]
     fn test_secure_storage_lifecycle() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        set_test_store_dir(temp_dir.path().to_path_buf());
         // Test Data
         let service = "openai_api_key".to_string();
         let secret = "sk-unique-secret-123".to_string();
@@ -211,6 +310,57 @@ mod tests {
         let missing = SecureStorage::get_key("non_existent").unwrap();
         assert_eq!(missing, None, "Found key that shouldn't exist");
 
-        std::fs::remove_file(expected_path).unwrap();
+        std::fs::remove_file(&expected_path).unwrap();
+        let backup_path = expected_path.with_extension("bak");
+        let pending_path = expected_path.with_extension("pending");
+        if backup_path.exists() {
+            std::fs::remove_file(backup_path).unwrap();
+        }
+        if pending_path.exists() {
+            std::fs::remove_file(pending_path).unwrap();
+        }
+        clear_test_store_dir();
+    }
+
+    #[test]
+    fn test_secure_storage_recovers_backup_when_main_file_missing() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        let temp_dir = tempfile::tempdir().unwrap();
+        set_test_store_dir(temp_dir.path().to_path_buf());
+        let expected_path = SecureStorage::get_store_path().unwrap();
+        let backup_path = expected_path.with_extension("bak");
+        let pending_path = expected_path.with_extension("pending");
+
+        if expected_path.exists() {
+            std::fs::remove_file(&expected_path).unwrap();
+        }
+        if backup_path.exists() {
+            std::fs::remove_file(&backup_path).unwrap();
+        }
+        if pending_path.exists() {
+            std::fs::remove_file(&pending_path).unwrap();
+        }
+
+        let data = SecureData {
+            keys: HashMap::from([("ai_session_id".to_string(), "session-123".to_string())]),
+        };
+        SecureStorage::encrypt_and_save(&data).unwrap();
+        std::fs::rename(&expected_path, &backup_path).unwrap();
+
+        let loaded = SecureStorage::get_key("ai_session_id").unwrap();
+        assert_eq!(loaded, Some("session-123".to_string()));
+        assert!(
+            expected_path.exists(),
+            "main file should be restored from backup"
+        );
+
+        std::fs::remove_file(&expected_path).unwrap();
+        if backup_path.exists() {
+            std::fs::remove_file(backup_path).unwrap();
+        }
+        if pending_path.exists() {
+            std::fs::remove_file(pending_path).unwrap();
+        }
+        clear_test_store_dir();
     }
 }

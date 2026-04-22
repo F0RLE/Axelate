@@ -3,10 +3,18 @@ import { WindowUI } from './WindowUI';
 import type { WindowService } from '../services/WindowService';
 import type { UISettingsService } from '../services/ui/UISettingsService';
 import type { SoundService } from '../services/SoundService';
+import type { I18nService } from '@/infrastructure/i18n/I18nService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('WindowUI lifecycle', () => {
     let ui: WindowUI | null = null;
     let reloadSpy: ReturnType<typeof vi.fn>;
+    let runtime: {
+        addWindowListener: ReturnType<typeof vi.fn>;
+        getScreen: ReturnType<typeof vi.fn>;
+        getInnerSize: ReturnType<typeof vi.fn>;
+        reload: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
         document.body.innerHTML = `
@@ -22,6 +30,18 @@ describe('WindowUI lifecycle', () => {
             configurable: true,
             value: { reload: reloadSpy },
         });
+        const nativeAdd = globalThis.addEventListener.bind(globalThis);
+        runtime = {
+            addWindowListener: vi.fn((...args: Parameters<typeof globalThis.addEventListener>) => {
+                nativeAdd(...args);
+            }),
+            getScreen: vi.fn(() => globalThis.screen),
+            getInnerSize: vi.fn(() => ({
+                width: globalThis.innerWidth,
+                height: globalThis.innerHeight,
+            })),
+            reload: reloadSpy,
+        };
     });
 
     afterEach(() => {
@@ -39,6 +59,7 @@ describe('WindowUI lifecycle', () => {
             toggleMaximize: vi.fn().mockResolvedValue(undefined),
             setSize: vi.fn().mockResolvedValue(undefined),
             changeZoom: vi.fn().mockResolvedValue(1),
+            getZoom: vi.fn().mockReturnValue(1),
             getConfig: vi.fn().mockReturnValue(null),
         } as unknown as WindowService;
 
@@ -52,7 +73,24 @@ describe('WindowUI lifecycle', () => {
             isEnabled: vi.fn().mockReturnValue(true),
         } as unknown as SoundService;
 
-        return new WindowUI(service, state, sound);
+        const i18n = {
+            t: vi.fn((_: string, fallback: string = ''): string => fallback),
+        } as unknown as I18nService;
+        const tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
+
+        return new WindowUI(
+            service,
+            state,
+            sound,
+            tracer,
+            i18n,
+            runtime as unknown as ConstructorParameters<typeof WindowUI>[5],
+        );
     }
 
     it('should remove and restore contextmenu prevention across destroy and re-init', () => {
@@ -92,6 +130,47 @@ describe('WindowUI lifecycle', () => {
         expect(document.getElementById('sound-toggle-btn')?.classList.contains('muted')).toBe(true);
 
         ui.updateMaximizeIcon(true);
+        expect(document.body.classList.contains('maximized')).toBe(true);
+        expect(document.getElementById('maximize-btn')?.getAttribute('aria-label')).toBe('Restore');
+        expect(document.querySelector('#maximize-icon use')?.getAttribute('href')).toBe(
+            '#icon-restore',
+        );
+    });
+
+    it('should sync maximize state on init', async () => {
+        const uiLocal = createWindowUI();
+        ui = uiLocal;
+        const service = (uiLocal as unknown as { _service: WindowService })._service as unknown as {
+            isMaximized: ReturnType<typeof vi.fn>;
+        };
+        service.isMaximized.mockResolvedValue(true);
+
+        uiLocal.init();
+        await Promise.resolve();
+
+        expect(document.body.classList.contains('maximized')).toBe(true);
+        expect(document.getElementById('maximize-btn')?.getAttribute('aria-label')).toBe('Restore');
+        expect(document.querySelector('#maximize-icon use')?.getAttribute('href')).toBe(
+            '#icon-restore',
+        );
+    });
+
+    it('should update maximize UI immediately after toggle', async () => {
+        const uiLocal = createWindowUI();
+        ui = uiLocal;
+        const service = (uiLocal as unknown as { _service: WindowService })._service as unknown as {
+            toggleMaximize: ReturnType<typeof vi.fn>;
+            isMaximized: ReturnType<typeof vi.fn>;
+        };
+        service.isMaximized
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+
+        uiLocal.init();
+        await Promise.resolve();
+        await uiLocal.toggleMaximize();
+
+        expect(service.toggleMaximize).toHaveBeenCalledTimes(1);
         expect(document.body.classList.contains('maximized')).toBe(true);
         expect(document.getElementById('maximize-btn')?.getAttribute('aria-label')).toBe('Restore');
         expect(document.querySelector('#maximize-icon use')?.getAttribute('href')).toBe(
@@ -149,6 +228,7 @@ describe('WindowUI lifecycle', () => {
         document.getElementById('splash-screen')?.classList.add('hidden');
         (uiLocal as unknown as { _checkWidth: () => void })._checkWidth();
         expect(dialog.showModal).toHaveBeenCalled();
+        expect(document.body.classList.contains('ui-hidden')).toBe(true);
 
         const maximizeEvent = new KeyboardEvent('keydown', {
             key: 'F11',
@@ -160,7 +240,8 @@ describe('WindowUI lifecycle', () => {
         expect(maximizeEvent.defaultPrevented).toBe(true);
 
         uiLocal.hideSplashScreen();
-        vi.advanceTimersByTime(400);
+        expect(document.getElementById('sidebar')?.classList.contains('visible')).toBe(true);
+        vi.advanceTimersByTime(180);
         expect(document.getElementById('splash-screen')?.classList.contains('hidden')).toBe(true);
         expect(document.getElementById('sidebar')?.classList.contains('visible')).toBe(true);
     });
@@ -221,6 +302,13 @@ describe('WindowUI lifecycle', () => {
         document.getElementById('context-target')?.dispatchEvent(allowedContext);
         expect(allowedContext.defaultPrevented).toBe(false);
 
+        const inputContext = new MouseEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+        });
+        document.getElementById('editor-input')?.dispatchEvent(inputContext);
+        expect(inputContext.defaultPrevented).toBe(false);
+
         const selectionBlocked = new Event('selectstart', { bubbles: true, cancelable: true });
         document.getElementById('plain-target')?.dispatchEvent(selectionBlocked);
         expect(selectionBlocked.defaultPrevented).toBe(true);
@@ -236,6 +324,43 @@ describe('WindowUI lifecycle', () => {
         });
         document.getElementById('plain-target')?.dispatchEvent(dblClick);
         expect(dblClick.defaultPrevented).toBe(true);
+    });
+
+    it('should block window-level shortcuts while a dialog is open', () => {
+        document.body.innerHTML = `
+            <div id="splash-screen" class="hidden"></div>
+            <dialog id="global-width-warning"></dialog>
+            <dialog id="module-settings-modal" open></dialog>
+            <button id="maximize-btn" title="Maximize"></button>
+            <div id="maximize-icon"></div>
+            <button id="sound-toggle-btn"><svg><use href="#icon-volume"></use></svg></button>
+        `;
+
+        ui = createWindowUI();
+        ui.init();
+
+        const service = (ui as unknown as { _service: WindowService })._service as unknown as {
+            toggleMaximize: ReturnType<typeof vi.fn>;
+        };
+
+        const maximizeEvent = new KeyboardEvent('keydown', {
+            key: 'F11',
+            bubbles: true,
+            cancelable: true,
+        });
+        document.dispatchEvent(maximizeEvent);
+        expect(maximizeEvent.defaultPrevented).toBe(true);
+        expect(service.toggleMaximize).not.toHaveBeenCalled();
+
+        const refreshEvent = new KeyboardEvent('keydown', {
+            key: 'r',
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+        });
+        document.dispatchEvent(refreshEvent);
+        expect(refreshEvent.defaultPrevented).toBe(true);
+        expect(reloadSpy).not.toHaveBeenCalled();
     });
 
     it('should manage monitoring, wheel zoom, tooltip suppression and maximize icon rebuild', async () => {
@@ -293,8 +418,8 @@ describe('WindowUI lifecycle', () => {
             }),
         );
         await Promise.resolve();
-        vi.advanceTimersByTime(60);
-        expect(service.changeZoom).toHaveBeenCalledWith(0.1);
+        vi.advanceTimersByTime(20);
+        expect(service.changeZoom).toHaveBeenCalledWith(0.07);
 
         service.changeZoom.mockRejectedValueOnce(new Error('zoom failed'));
         document.dispatchEvent(
@@ -306,6 +431,74 @@ describe('WindowUI lifecycle', () => {
             }),
         );
         await Promise.resolve();
+    });
+
+    it('should cancel pending zoom width check on destroy', async () => {
+        vi.useFakeTimers();
+        ui = createWindowUI();
+        ui.init();
+
+        const checkWidthSpy = vi.spyOn(ui as unknown as { _checkWidth: () => void }, '_checkWidth');
+        checkWidthSpy.mockClear();
+
+        document.dispatchEvent(
+            new WheelEvent('wheel', {
+                bubbles: true,
+                cancelable: true,
+                ctrlKey: true,
+                deltaY: -100,
+            }),
+        );
+        await Promise.resolve();
+
+        ui.destroy();
+        vi.advanceTimersByTime(20);
+
+        expect(checkWidthSpy).not.toHaveBeenCalled();
+    });
+
+    it('should ignore stale resize check results', async () => {
+        let releasePolicy!: (value: { isSmallScreen: boolean }) => void;
+        let releaseMaximized!: (value: boolean) => void;
+
+        ui = createWindowUI();
+        const service = (ui as unknown as { _service: WindowService })._service as unknown as {
+            checkPolicy: ReturnType<typeof vi.fn>;
+            isMaximized: ReturnType<typeof vi.fn>;
+        };
+
+        service.checkPolicy.mockImplementationOnce(
+            () =>
+                new Promise((resolve: (value: { isSmallScreen: boolean }) => void) => {
+                    releasePolicy = resolve;
+                }),
+        );
+        service.isMaximized.mockImplementationOnce(
+            () =>
+                new Promise((resolve: (value: boolean) => void) => {
+                    releaseMaximized = resolve;
+                }),
+        );
+
+        ui.init();
+        const updateMaximizeIconSpy = vi.spyOn(
+            ui as unknown as { updateMaximizeIcon: (isMaximized: boolean) => void },
+            'updateMaximizeIcon',
+        );
+        updateMaximizeIconSpy.mockClear();
+
+        (ui as unknown as { _resizeCheckVersion: number })._resizeCheckVersion = 1;
+        const staleResizeCheck = (
+            ui as unknown as { _performResizeCheck: (resizeCheckVersion: number) => Promise<void> }
+        )._performResizeCheck(1);
+
+        ui.destroy();
+        releasePolicy({ isSmallScreen: true });
+        releaseMaximized(true);
+        await staleResizeCheck;
+
+        expect(updateMaximizeIconSpy).toHaveBeenCalledTimes(1);
+        expect(updateMaximizeIconSpy).toHaveBeenCalledWith(true);
     });
 
     it('should apply small-screen protection, resize safely and close warnings when size recovers', async () => {
@@ -350,7 +543,7 @@ describe('WindowUI lifecycle', () => {
         });
 
         uiLocal.init();
-        await Promise.resolve();
+        await vi.runAllTimersAsync();
         expect(service.toggleMaximize).toHaveBeenCalled();
         (
             uiLocal as unknown as {
@@ -367,6 +560,7 @@ describe('WindowUI lifecycle', () => {
 
         globalThis.dispatchEvent(new Event('resize'));
         vi.advanceTimersByTime(250);
+        expect(dialog.open).toBe(true);
         expect(service.checkResolutionChange).toHaveBeenCalled();
         await (
             uiLocal as unknown as {
@@ -384,5 +578,59 @@ describe('WindowUI lifecycle', () => {
         await (
             uiLocal as unknown as { _performResizeCheck: () => Promise<void> }
         )._performResizeCheck();
+    });
+
+    it('should account for css zoom when checking warnings', () => {
+        document.body.innerHTML = `
+            <div id="splash-screen" class="hidden"></div>
+            <dialog id="global-width-warning"></dialog>
+            <button id="maximize-btn"></button>
+            <div id="maximize-icon"><svg><use href="#icon-maximize"></use></svg></div>
+            <button id="sound-toggle-btn"><svg><use href="#icon-volume"></use></svg></button>
+        `;
+
+        runtime.getInnerSize.mockReturnValue({ width: 900, height: 700 });
+
+        const uiLocal = createWindowUI();
+        ui = uiLocal;
+        const service = (uiLocal as unknown as { _service: WindowService })._service as unknown as {
+            getConfig: ReturnType<typeof vi.fn>;
+            getZoom: ReturnType<typeof vi.fn>;
+        };
+        service.getConfig.mockReturnValue({
+            thresholds: { warningWidth: 800, warningHeight: 600 },
+        });
+        service.getZoom.mockReturnValue(2);
+
+        const dialog = document.getElementById('global-width-warning') as HTMLDialogElement;
+        dialog.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
+            Object.defineProperty(this, 'open', { configurable: true, value: true });
+        });
+        dialog.close = vi.fn(function close(this: HTMLDialogElement) {
+            Object.defineProperty(this, 'open', { configurable: true, value: false });
+        });
+
+        uiLocal.init();
+
+        expect(dialog.showModal).toHaveBeenCalled();
+    });
+
+    it('should not toggle maximize on small-screen init if window is already maximized', async () => {
+        const uiLocal = createWindowUI();
+        ui = uiLocal;
+        const service = (uiLocal as unknown as { _service: WindowService })._service as unknown as {
+            checkPolicy: ReturnType<typeof vi.fn>;
+            isMaximized: ReturnType<typeof vi.fn>;
+            toggleMaximize: ReturnType<typeof vi.fn>;
+        };
+
+        service.checkPolicy.mockResolvedValue({ isSmallScreen: true });
+        service.isMaximized.mockResolvedValue(true);
+
+        uiLocal.init();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(service.toggleMaximize).not.toHaveBeenCalled();
     });
 });

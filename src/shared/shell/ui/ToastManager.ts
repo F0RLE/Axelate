@@ -1,5 +1,6 @@
 import DOMPurify from 'dompurify';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+
+type ToastType = 'success' | 'error' | 'warning' | 'info' | (string & {});
 
 /**
  * @interface ToastElement
@@ -15,6 +16,9 @@ export interface ToastElement extends HTMLElement {
  * @description Handles the lifecycle, queueing, and rendering of toast notifications.
  */
 export class ToastManager {
+    private static readonly _containerId = 'toast-container';
+    private static readonly _leavingDurationMs = 300;
+
     private readonly _purifyConfig = {
         ALLOWED_TAGS: [
             'b',
@@ -50,7 +54,6 @@ export class ToastManager {
         ],
         ALLOW_DATA_ATTR: true,
     };
-    private toastQueue: ToastElement[] = [];
 
     /**
      * Shows a toast notification.
@@ -62,109 +65,158 @@ export class ToastManager {
      */
     public show(
         message: string,
-        type = 'info',
+        type: ToastType = 'info',
         duration = 3000,
         title: string | null = null,
         id: string | null = null,
     ): void {
-        const container = this._ensureToastContainer();
-
-        // Check for existing toast with this ID
-        if (id !== null) {
-            const existingToast = document.getElementById(`toast-${id}`);
-            if (existingToast !== null) {
-                this._updateExistingToast(
-                    existingToast as ToastElement,
-                    message,
-                    type,
-                    title,
-                    duration,
-                );
-                return;
-            }
+        const normalizedMessage = message.trim();
+        const normalizedTitle = title?.trim() ?? null;
+        if (normalizedMessage === '' && (normalizedTitle === null || normalizedTitle === '')) {
+            return;
         }
 
-        this._createToast(container, message, type, duration, title, id);
+        this._normalizeHiddenDialogs();
+        const container = this._ensureToastContainer();
+        const existingToast = id === null ? null : this._findToastById(id);
+
+        if (existingToast !== null) {
+            this._updateExistingToast(
+                existingToast,
+                normalizedMessage,
+                type,
+                normalizedTitle,
+                duration,
+            );
+            return;
+        }
+
+        this._createToast(container, normalizedMessage, type, duration, normalizedTitle, id);
+    }
+
+    private _normalizeHiddenDialogs(): void {
+        document.querySelectorAll<HTMLDialogElement>('dialog.hidden').forEach((dialog) => {
+            if (!dialog.open) {
+                dialog.removeAttribute('open');
+                return;
+            }
+
+            try {
+                dialog.close();
+            } catch {
+                dialog.removeAttribute('open');
+            }
+        });
     }
 
     private _ensureToastContainer(): HTMLElement {
-        let container = document.getElementById('toast-container');
+        const host = this._resolveToastHost();
+        let container = document.getElementById(ToastManager._containerId);
         if (container === null) {
             container = document.createElement('div');
             container.className = 'toast-container';
-            container.id = 'toast-container';
-            container.style.zIndex = '9999';
-            const win = getGlobalWin();
-            // Fallback for translation if not available
-            const containerTitle =
-                typeof win.t === 'function' ? win.t('ui.toast.container', '') : '';
-            container.innerHTML = DOMPurify.sanitize(containerTitle, this._purifyConfig);
-            document.body.appendChild(container);
+            container.id = ToastManager._containerId;
+            host.appendChild(container);
+        } else if (container.parentElement !== host) {
+            host.appendChild(container);
         }
+
+        container.classList.toggle('toast-container--modal', host instanceof HTMLDialogElement);
         return container;
+    }
+
+    private _resolveToastHost(): HTMLElement {
+        const dialogs = Array.from(document.querySelectorAll<HTMLDialogElement>('dialog[open]'));
+        for (let index = dialogs.length - 1; index >= 0; index -= 1) {
+            const dialog = dialogs[index];
+            if (dialog === undefined) {
+                continue;
+            }
+            if (!dialog.classList.contains('hidden')) {
+                return dialog;
+            }
+        }
+
+        return document.body;
+    }
+
+    private _findToastById(id: string): ToastElement | null {
+        const toast = document.getElementById(`toast-${id}`);
+        return toast instanceof HTMLElement ? (toast as ToastElement) : null;
     }
 
     private _updateExistingToast(
         toast: ToastElement,
         message: string,
-        type: string,
+        type: ToastType,
         title: string | null,
         duration: number,
     ): void {
-        const contentEl = toast.querySelector('.toast-content');
-        if (contentEl) {
-            contentEl.innerHTML = DOMPurify.sanitize(
-                `
-                ${title !== null && title !== '' ? `<div class="toast-title">${title}</div>` : ''}
-                <div class="toast-message">${message}</div>
-            `,
-                this._purifyConfig,
-            );
+        const contentElement = toast.querySelector('.toast-content');
+        if (contentElement instanceof HTMLElement) {
+            contentElement.innerHTML = this._renderToastContent(message, title);
         }
 
         toast.className = `toast ${type}`;
-        this._clearToastTimers(toast);
-
         toast.classList.remove('leaving');
+        this._clearToastTimers(toast);
         this._scheduleToastRemoval(toast, duration);
     }
 
     private _createToast(
         container: HTMLElement,
         message: string,
-        type: string,
+        type: ToastType,
         duration: number,
         title: string | null,
         id: string | null,
-    ) {
+    ): void {
         const toast = document.createElement('div') as ToastElement;
         toast.className = `toast ${type}`;
-        if (id !== null) toast.id = `toast-${id}`;
 
-        toast.innerHTML = DOMPurify.sanitize(
-            `
+        if (id !== null) {
+            toast.id = `toast-${id}`;
+        }
+
+        toast.innerHTML = this._sanitizeHtml(`
             <div class="toast-content">
-                ${title !== null && title !== '' ? `<div class="toast-title">${title}</div>` : ''}
+                ${this._buildToastTitleMarkup(title)}
                 <div class="toast-message">${message}</div>
             </div>
-        `,
-            this._purifyConfig,
-        );
+        `);
 
         container.appendChild(toast);
-        this.toastQueue.push(toast);
-
         this._scheduleToastRemoval(toast, duration);
+    }
+
+    private _renderToastContent(message: string, title: string | null): string {
+        return this._sanitizeHtml(`
+            ${this._buildToastTitleMarkup(title)}
+            <div class="toast-message">${message}</div>
+        `);
+    }
+
+    private _buildToastTitleMarkup(title: string | null): string {
+        if (title === null || title === '') {
+            return '';
+        }
+
+        return `<div class="toast-title">${title}</div>`;
+    }
+
+    private _sanitizeHtml(html: string): string {
+        return DOMPurify.sanitize(html, this._purifyConfig);
     }
 
     private _scheduleToastRemoval(toast: ToastElement, duration: number): void {
         toast._timeout = setTimeout(() => {
+            delete toast._timeout;
             toast.classList.add('leaving');
             toast._removeTimeout = setTimeout(() => {
                 delete toast._removeTimeout;
                 toast.remove();
-                this.toastQueue = this.toastQueue.filter((t) => t !== toast);
-            }, 300);
+                this._cleanupContainer();
+            }, ToastManager._leavingDurationMs);
         }, duration);
     }
 
@@ -177,6 +229,17 @@ export class ToastManager {
         if (toast._removeTimeout !== undefined) {
             clearTimeout(toast._removeTimeout);
             delete toast._removeTimeout;
+        }
+    }
+
+    private _cleanupContainer(): void {
+        const container = document.getElementById(ToastManager._containerId);
+        if (container === null) {
+            return;
+        }
+
+        if (container.childElementCount === 0) {
+            container.remove();
         }
     }
 }

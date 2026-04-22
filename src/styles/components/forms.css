@@ -112,12 +112,16 @@ select:hover:not(:focus) {
 }
 
 .btn-primary {
-    background: var(--primary);
-    color: white;
+    background: var(--premium-purple-bg);
+    color: var(--premium-purple-text);
+    border: 1px solid var(--premium-purple-border);
+    box-shadow: var(--premium-purple-shadow);
 }
 
 .btn-primary:hover {
-    filter: brightness(1.15);
+    background: var(--premium-purple-bg-hover);
+    border-color: var(--premium-purple-border-strong);
+    box-shadow: var(--premium-purple-shadow);
 }
 
 .btn-danger {

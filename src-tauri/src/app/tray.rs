@@ -1,7 +1,7 @@
 //! System tray setup and event handling
 
 use crate::app::window::{create_main_window, show_and_focus_window};
-use crate::domain::monitoring::system_monitor;
+use crate::domain::monitoring::system_monitor::SystemMonitorService;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
@@ -12,9 +12,10 @@ use super::IS_QUITTING;
 const TRAY_ID: &str = "main-tray";
 const DEFAULT_TOOLTIP: &str = "Axelate";
 
-/// Managed tray status state used for background generation updates.
+/// Managed tray state used for language-aware labels and background status tooltip updates.
 pub struct TrayStatusState {
-    status_item: MenuItem<tauri::Wry>,
+    show_item: MenuItem<tauri::Wry>,
+    quit_item: MenuItem<tauri::Wry>,
     background_active: AtomicBool,
 }
 
@@ -39,11 +40,7 @@ impl TrayStatusState {
     }
 }
 
-fn apply_tray_status(app: &tauri::AppHandle, status: &str, tooltip: &str) {
-    if let Some(state) = app.try_state::<TrayStatusState>() {
-        let _ = state.status_item.set_text(status);
-    }
-
+fn apply_tray_tooltip(app: &tauri::AppHandle, tooltip: &str) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let _ = tray.set_tooltip(Some(tooltip));
     }
@@ -56,20 +53,20 @@ fn preferred_language() -> String {
         .to_lowercase()
 }
 
-fn is_russian() -> bool {
-    preferred_language().starts_with("ru")
-}
-
-fn t_en_ru(en: &'static str, ru: &'static str) -> &'static str {
-    if is_russian() { ru } else { en }
-}
-
-fn idle_status_text() -> &'static str {
-    t_en_ru("Background: idle", "Фон: ожидание")
+fn t_label(en: &'static str, ru: &'static str, zh: &'static str) -> &'static str {
+    match preferred_language().as_str() {
+        lang if lang.starts_with("ru") => ru,
+        lang if lang.starts_with("zh") => zh,
+        _ => en,
+    }
 }
 
 fn generating_status_text() -> &'static str {
-    t_en_ru("Generating image...", "Генерация изображения...")
+    t_label(
+        "Generating image...",
+        "Генерация изображения...",
+        "正在生成图像...",
+    )
 }
 
 fn format_progress_summary(progress: &str) -> String {
@@ -88,25 +85,51 @@ fn format_progress_summary(progress: &str) -> String {
 
     match (percent, fraction, rate) {
         (Some(p), Some(f), Some(r)) => {
-            format!("{}: {} - {} - {}", t_en_ru("Image", "Картинка"), p, f, r)
+            format!(
+                "{}: {} - {} - {}",
+                t_label("Image", "Картинка", "图像"),
+                p,
+                f,
+                r
+            )
         }
-        (Some(p), Some(f), None) => format!("{}: {} - {}", t_en_ru("Image", "Картинка"), p, f),
-        (None, Some(f), Some(r)) => format!("{}: {} - {}", t_en_ru("Image", "Картинка"), f, r),
-        (Some(p), None, None) => format!("{}: {}", t_en_ru("Progress", "Прогресс"), p),
+        (Some(p), Some(f), None) => {
+            format!("{}: {} - {}", t_label("Image", "Картинка", "图像"), p, f)
+        }
+        (None, Some(f), Some(r)) => {
+            format!("{}: {} - {}", t_label("Image", "Картинка", "图像"), f, r)
+        }
+        (Some(p), None, None) => format!("{}: {}", t_label("Progress", "Прогресс", "进度"), p),
         _ => generating_status_text().to_string(),
     }
 }
 
-/// Marks background generation as active and updates tray text immediately.
+/// Refreshes tray menu labels and tooltip after the preferred UI language changes.
+pub fn refresh_tray_language(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<TrayStatusState>() {
+        let _ = state.show_item.set_text(t_label("Open", "Открыть", "打开"));
+        let _ = state.quit_item.set_text(t_label("Quit", "Выход", "退出"));
+
+        let tooltip = if state.is_active() {
+            generating_status_text()
+        } else {
+            DEFAULT_TOOLTIP
+        };
+
+        apply_tray_tooltip(app, tooltip);
+    }
+}
+
+/// Marks background generation as active and updates tray tooltip immediately.
 pub fn set_background_generation_active(app: &tauri::AppHandle, _status: &str) {
     if let Some(state) = app.try_state::<TrayStatusState>() {
         state.set_active(true);
     }
     let status = generating_status_text();
-    apply_tray_status(app, status, &format!("{DEFAULT_TOOLTIP} - {status}"));
+    apply_tray_tooltip(app, &format!("{DEFAULT_TOOLTIP} - {status}"));
 }
 
-/// Updates the tray progress line while a background generation is active.
+/// Updates tray tooltip while a background generation is active.
 pub fn update_background_generation_progress(app: &tauri::AppHandle, progress: &str) {
     if let Some(state) = app.try_state::<TrayStatusState>() {
         if !state.is_active() {
@@ -117,34 +140,36 @@ pub fn update_background_generation_progress(app: &tauri::AppHandle, progress: &
     }
 
     let status = format_progress_summary(progress);
-    apply_tray_status(app, &status, &format!("{DEFAULT_TOOLTIP} - {status}"));
+    apply_tray_tooltip(app, &format!("{DEFAULT_TOOLTIP} - {status}"));
 }
 
-/// Clears background generation status and restores the default tray text.
+/// Clears background generation status and restores the default tray tooltip.
 pub fn clear_background_generation(app: &tauri::AppHandle) {
     if let Some(state) = app.try_state::<TrayStatusState>() {
         state.set_active(false);
     }
-    apply_tray_status(app, idle_status_text(), DEFAULT_TOOLTIP);
+    apply_tray_tooltip(app, DEFAULT_TOOLTIP);
 }
 
-/// Setup system tray icon with menu
+/// Setup system tray icon with menu.
 pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    // Create menu items
-    let show_item = MenuItem::with_id(app, "show", t_en_ru("Open", "Открыть"), true, None::<&str>)?;
-    let status_item = MenuItem::with_id(
+    let show_item = MenuItem::with_id(
         app,
-        "background-status",
-        idle_status_text(),
-        false,
+        "show",
+        t_label("Open", "Открыть", "打开"),
+        true,
         None::<&str>,
     )?;
-    let quit_item = MenuItem::with_id(app, "quit", t_en_ru("Quit", "Выход"), true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(
+        app,
+        "quit",
+        t_label("Quit", "Выход", "退出"),
+        true,
+        None::<&str>,
+    )?;
 
-    // Create menu
-    let menu = Menu::with_items(app, &[&show_item, &status_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
-    // Build tray icon
     let icon = app
         .default_window_icon()
         .ok_or("System must have a default window icon configured in tauri.conf.json")?
@@ -155,50 +180,50 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
         .tooltip(DEFAULT_TOOLTIP)
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app: &tauri::AppHandle, event| {
-            match event.id.as_ref() {
-                "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        show_and_focus_window(&window);
-                        system_monitor::set_paused(false);
-                    } else {
-                        // Does not exist: Create it.
-                        // It will show ITSELF when the frontend is ready (to avoid white flash).
-                        create_main_window(app);
+        .on_menu_event(|app: &tauri::AppHandle, event| match event.id.as_ref() {
+            "show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    show_and_focus_window(&window);
+                    if let Some(monitor) = app.try_state::<std::sync::Arc<SystemMonitorService>>() {
+                        monitor.set_paused(false);
                     }
+                } else {
+                    create_main_window(app);
                 }
-                "quit" => {
-                    // Graceful shutdown
-                    IS_QUITTING.store(true, Ordering::Relaxed);
-                    system_monitor::stop_monitoring();
-
-                    // Force immediate save of all chat history before exit.
-                    let sessions_arc = app
-                        .try_state::<std::sync::Arc<crate::domain::ai::ChatSessionManager>>()
-                        .map(|s| std::sync::Arc::clone(&*s));
-                    if let Some(sessions) = sessions_arc {
-                        std::thread::spawn(move || {
-                            if let Err(e) = sessions.save_to_disk() {
-                                tracing::error!(
-                                    "Failed to save chat history during shutdown: {e:?}"
-                                );
-                            } else {
-                                tracing::info!("AI history flushed successfully during shutdown.");
-                            }
-                        });
-                    }
-
-                    app.exit(0);
-                }
-                _ => {}
             }
+            "quit" => {
+                IS_QUITTING.store(true, Ordering::Relaxed);
+                if let Some(monitor) = app.try_state::<std::sync::Arc<SystemMonitorService>>() {
+                    std::sync::Arc::clone(&*monitor).stop_monitoring();
+                }
+
+                let sessions_arc = app
+                    .try_state::<std::sync::Arc<crate::domain::ai::ChatSessionManager>>()
+                    .map(|s| std::sync::Arc::clone(&*s));
+                if let Some(sessions) = sessions_arc {
+                    std::thread::spawn(move || {
+                        if let Err(error) = sessions.save_to_disk() {
+                            tracing::error!(
+                                "Failed to save chat history during shutdown: {error:?}"
+                            );
+                        } else {
+                            tracing::info!("AI history flushed successfully during shutdown.");
+                        }
+                    });
+                }
+
+                app.exit(0);
+            }
+            _ => {}
         })
         .on_tray_icon_event(|tray: &tauri::tray::TrayIcon, event| {
             if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
                     show_and_focus_window(&window);
-                    system_monitor::set_paused(false);
+                    if let Some(monitor) = app.try_state::<std::sync::Arc<SystemMonitorService>>() {
+                        monitor.set_paused(false);
+                    }
                 } else {
                     create_main_window(app);
                 }
@@ -207,7 +232,8 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
         .build(app)?;
 
     app.manage(TrayStatusState {
-        status_item,
+        show_item,
+        quit_item,
         background_active: AtomicBool::new(false),
     });
 

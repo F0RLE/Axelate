@@ -41,6 +41,8 @@ pub struct ProcessedFile {
     pub is_archive: bool,
     /// Processing error if any
     pub error: Option<String>,
+    /// Estimated token count for extracted text content.
+    pub token_estimate: u32,
 }
 
 #[tauri::command]
@@ -65,6 +67,7 @@ pub async fn process_file_content(name: String, data: Vec<u8>) -> Result<Process
             Ok(s) => {
                 return Ok(ProcessedFile {
                     name,
+                    token_estimate: estimate_token_count(&s),
                     content: s,
                     is_archive: false,
                     error: None,
@@ -76,6 +79,7 @@ pub async fn process_file_content(name: String, data: Vec<u8>) -> Result<Process
                     content: "[Binary or non-UTF8 content skipped]".to_string(),
                     is_archive: false,
                     error: Some("Encoding error".to_string()),
+                    token_estimate: 0,
                 });
             }
         }
@@ -88,6 +92,7 @@ pub async fn process_file_content(name: String, data: Vec<u8>) -> Result<Process
         content: String::new(),
         is_archive: false,
         error: None,
+        token_estimate: 0,
     })
 }
 
@@ -176,10 +181,18 @@ fn process_zip(name: String, data: Vec<u8>) -> Result<ProcessedFile, String> {
 
     Ok(ProcessedFile {
         name,
+        token_estimate: estimate_token_count(&combined_text),
         content: combined_text,
         is_archive: true,
         error: None,
     })
+}
+
+fn estimate_token_count(content: &str) -> u32 {
+    let estimate = crate::domain::ai::ai_service::count_tokens(content, None)
+        .unwrap_or_else(|_| content.split_whitespace().count());
+
+    u32::try_from(estimate).unwrap_or(u32::MAX)
 }
 
 fn should_ignore(path: &str) -> bool {

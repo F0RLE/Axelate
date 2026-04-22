@@ -1,8 +1,0 @@
-/* TestFeature Feature Styles */
-.testfeature-root {
-    padding: var(--spacing-lg);
-}
-
-.testfeature-container {
-    animation: fadeIn var(--transition-normal) ease-out;
-}

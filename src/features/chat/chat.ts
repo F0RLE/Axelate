@@ -5,109 +5,402 @@
  */
 
 import { ChatService } from './services/ChatService';
-import { ChatUI } from './ui/ChatUI';
+import type { ChatUI } from './ui/ChatUI';
 import type { IChatMessage, IChatResponse } from './types/chatTypes';
-import { chatFileHandler } from './services/ChatFileHandler';
-import { getTokenCount } from './utils/chatUtils';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import { ChatFileHandler } from './services/ChatFileHandler';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { SoundService } from '@/shared/services/SoundService';
-import { eventBus } from '@/shared/services/EventBus';
 import { VoiceController } from './controllers/VoiceController';
 import { FilePickerController } from './controllers/FilePickerController';
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+import type { ChatHistoryController } from './controllers/ChatHistoryController';
+import type { ChatGenerationController } from './controllers/ChatGenerationController';
+import type { ChatSendController } from './controllers/ChatSendController';
+import type { ChatContent } from '@/features/ai/types/aiTypes';
+import { ChatContentHelper } from './services/ChatContentHelper';
+import { ChatInputCoordinator } from './services/ChatInputCoordinator';
+import { ChatActivationCoordinator } from './services/ChatActivationCoordinator';
+import { ChatUiStateHelper } from './services/ChatUiStateHelper';
+import { ChatViewHelper } from './services/ChatViewHelper';
+import type { ChatLifecycleHelper } from './services/ChatLifecycleHelper';
+import { ChatControllerFactory } from './services/ChatControllerFactory';
+import type { IBridge } from '@/shared/types/IBridge';
+import { VoiceInputService } from './services/VoiceInputService';
+import type { EventBus } from '@/shared/services/EventBus';
+import type { IApp } from '@/shared/types/coreTypes';
+import { ChatControllerState } from './services/ChatControllerState';
+
+type ImageGenerationHandle = {
+    setStatus: (chunk: string) => void;
+    setPreview: (dataUrl: string) => void;
+    finalize: (result: {
+        text: string;
+        images: Array<{ mime: string; data_base64: string }>;
+    }) => void;
+    fail: (message: string) => void;
+    cancel: (message?: string) => void;
+    discard: () => void;
+};
+
+export type PendingChatRevealStore = {
+    getState: () => { pending_chat_reveal?: boolean };
+    updateState: (updates: { pending_chat_reveal: boolean }) => void;
+};
+
+type ChatControllerDeps = {
+    showToast: (
+        message: string,
+        type?: 'success' | 'error' | 'warning' | 'info',
+        duration?: number,
+    ) => void;
+    isTauriRuntime: () => boolean;
+    openExternalUrl: (url: string) => Promise<void>;
+    copyText: (text: string) => Promise<void>;
+    getPendingChatRevealStore: () => PendingChatRevealStore | null;
+    estimateTokens: (text: string, model?: string) => Promise<number>;
+    hostBridge: IBridge;
+    eventBus: EventBus;
+    getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
+    getPreferredAiCategory: () => 'ai_text' | 'ai_image';
+    tracer: Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
+};
 
 export class ChatController {
+    private static readonly _maxInputHeightPx = 200;
+    private static readonly _baseInputHeightPx = 42;
+
+    private readonly _tracer: Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
     private readonly _service: ChatService;
+    private readonly _contentHelper: ChatContentHelper;
+    private readonly _inputCoordinator: ChatInputCoordinator;
+    private readonly _activationCoordinator: ChatActivationCoordinator;
+    private readonly _uiStateHelper: ChatUiStateHelper;
+    private readonly _viewHelper: ChatViewHelper;
+    private readonly _lifecycleHelper: ChatLifecycleHelper;
+    private readonly _factory = new ChatControllerFactory();
+    private readonly _fileHandler: ChatFileHandler;
+    private readonly _voiceInputService: VoiceInputService;
     private readonly _ui: ChatUI;
     private readonly _voice: VoiceController;
     private readonly _filePicker: FilePickerController;
-    private _chatHistory: IChatMessage[] = [];
-    private _currentGreetingIndex = 1;
-    private _isSending = false;
-    private _historyLoaded = false;
-    private _historyLoadInFlight: Promise<void> | null = null;
-    private _eventsBound = false;
-    private _pageChangeUnsub: (() => void) | null = null;
-    private _translationsLoadedUnsub: (() => void) | null = null;
+    private readonly _historyController: ChatHistoryController;
+    private readonly _generationController: ChatGenerationController;
+    private readonly _sendController: ChatSendController;
+    private readonly _state = new ChatControllerState();
     private readonly _boundFileInputChange = (e: Event) => this._filePicker.handleFileSelect(e);
     private readonly _boundChatInputKeydown = (e: KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            void this.sendChat();
-        } else {
-            setTimeout(() => this._autoResizeInput(), 0);
+        const isEnterKey =
+            e.key === 'Enter' ||
+            e.key === 'NumpadEnter' ||
+            e.code === 'Enter' ||
+            e.code === 'NumpadEnter';
+        if (!isEnterKey || e.shiftKey || e.defaultPrevented || e.isComposing) {
+            return;
         }
+
+        e.preventDefault();
+        void this.sendChat();
     };
-    private readonly _boundChatInputInput = () => this._autoResizeInput();
+    private readonly _boundChatInputInput = () => {
+        this._scheduleAutoResizeInput();
+        void this._filePicker.updateTokenCount();
+    };
 
     constructor(
         private readonly _aiBridge: AIBridge,
         private readonly _i18n: I18nService,
         _soundService: SoundService,
+        deps: ChatControllerDeps,
     ) {
-        this._service = new ChatService(_aiBridge, _i18n);
-        this._ui = new ChatUI();
-        this._voice = new VoiceController(_i18n, _soundService);
-        this._filePicker = new FilePickerController(_i18n, this._ui);
+        this._tracer = deps.tracer;
+        this._service = new ChatService(_aiBridge, _i18n, this._tracer);
+        this._fileHandler = new ChatFileHandler(this._tracer);
+        this._voiceInputService = new VoiceInputService(this._tracer, () =>
+            this._i18n.getCurrentLang(),
+        );
+        this._fileHandler.setTokenEstimator((text, model) => deps.estimateTokens(text, model));
+        this._fileHandler.setBridge(deps.hostBridge);
+        this._contentHelper = new ChatContentHelper(
+            _i18n,
+            (text, model) => deps.estimateTokens(text, model),
+            this._tracer,
+        );
+        this._inputCoordinator = this._createInputCoordinator();
+        this._ui = this._createUi(deps);
+        this._uiStateHelper = this._createUiStateHelper(_aiBridge, _i18n);
+        this._viewHelper = this._createViewHelper(_i18n);
+        this._lifecycleHelper = this._createLifecycleHelper(deps);
+        this._voice = new VoiceController(_i18n, _soundService, this._voiceInputService);
+        this._filePicker = this._createFilePicker(_i18n, deps);
+        this._historyController = this._createHistoryController(deps);
+        this._generationController = this._createGenerationController(_aiBridge, _i18n);
+        this._sendController = this._createSendController(_aiBridge, deps);
+        this._activationCoordinator = this._createActivationCoordinator(_aiBridge);
+    }
+
+    private _createInputCoordinator(): ChatInputCoordinator {
+        return new ChatInputCoordinator(
+            () => this._scheduleAutoResizeInput(),
+            async (text) => this._filePicker.updateTokenCount(text),
+        );
+    }
+
+    private _createUi(deps: ChatControllerDeps): ChatUI {
+        return this._factory.createUi({
+            aiBridge: this._aiBridge,
+            i18n: this._i18n,
+            tracer: this._tracer,
+            fileHandler: this._fileHandler,
+            showToast: deps.showToast,
+            isTauriRuntime: deps.isTauriRuntime,
+            openExternalUrl: deps.openExternalUrl,
+            copyText: deps.copyText,
+        });
+    }
+
+    private _createUiStateHelper(aiBridge: AIBridge, i18n: I18nService): ChatUiStateHelper {
+        return new ChatUiStateHelper({
+            aiBridge,
+            i18n,
+            appendAssistantError: (message) => {
+                this._ui.appendMessage('assistant', message, { error: true });
+            },
+            getChatInput: () => this._inputCoordinator.getInput(),
+            maxInputHeightPx: ChatController._maxInputHeightPx,
+            baseInputHeightPx: ChatController._baseInputHeightPx,
+        });
+    }
+
+    private _createViewHelper(i18n: I18nService): ChatViewHelper {
+        return new ChatViewHelper({
+            i18n,
+            onFileInputChange: this._boundFileInputChange,
+            onChatInputKeydown: this._boundChatInputKeydown,
+            onChatInputInput: this._boundChatInputInput,
+        });
+    }
+
+    private _createLifecycleHelper(deps: ChatControllerDeps): ChatLifecycleHelper {
+        return this._factory.createLifecycleHelper({
+            fileHandler: this._fileHandler,
+            eventBus: deps.eventBus,
+            refreshTranslations: () => {
+                this._ui.refreshTranslations();
+            },
+            ensureHistoryLoaded: () => this._ensureHistoryLoaded(),
+            scheduleRevealLatestMessage: () => {
+                this._historyController.scheduleRevealLatestMessage();
+            },
+            bindEvents: () => {
+                this._bindEvents();
+            },
+            canBindEventsNow: () => this._inputCoordinator.getInput() !== null,
+            areEventsBound: () => this._state.eventsBound,
+            setEventsBound: (value) => {
+                this._state.eventsBound = value;
+            },
+            randomizeGreeting: (forceIndex) => {
+                this.randomizeGreeting(forceIndex);
+            },
+            currentGreetingIndex: () => this._state.currentGreetingIndex,
+            updateAttachmentsFromFiles: (files, onRemove) => {
+                this._ui.updateAttachments(files, onRemove);
+            },
+            updateTokenCount: () => this._filePicker.updateTokenCount(),
+        });
+    }
+
+    private _createFilePicker(i18n: I18nService, deps: ChatControllerDeps): FilePickerController {
+        return new FilePickerController(
+            i18n,
+            this._ui,
+            (text, model) => deps.estimateTokens(text, model),
+            () => deps.isTauriRuntime(),
+            this._fileHandler,
+            this._tracer,
+        );
+    }
+
+    private _createHistoryController(deps: ChatControllerDeps): ChatHistoryController {
+        return this._factory.createHistoryController({
+            aiBridge: this._aiBridge,
+            getHistory: () => this._state.history,
+            setHistory: (history) => {
+                this._state.history = history;
+            },
+            revealLatestMessage: () => {
+                this._ui.revealLatestMessage();
+            },
+            restoreInputText: (text) => {
+                this._inputCoordinator.restore(text);
+            },
+            renderHistory: (history) => {
+                this._ui.renderHistory(history);
+            },
+            showEditError: () => {
+                this._ui.showToast(
+                    this._i18n.t('ui.chat.edit_last_turn_failed', 'Failed to edit last turn'),
+                    'error',
+                );
+            },
+            isDestroyed: () => this._state.isDestroyed,
+            getPendingChatRevealStore: () => deps.getPendingChatRevealStore(),
+            tracer: this._tracer,
+        });
+    }
+
+    private _createGenerationController(
+        aiBridge: AIBridge,
+        i18n: I18nService,
+    ): ChatGenerationController {
+        return this._factory.createGenerationController({
+            aiBridge,
+            i18n,
+            removeTyping: (typingId) => {
+                this._ui.removeTyping(typingId);
+            },
+            appendAssistantMessage: (text, options = {}) => {
+                this._ui.appendMessage('assistant', text, options);
+            },
+            pushAssistantMessage: (content, thoughtSignature) => {
+                this._pushAssistantMessage(content, thoughtSignature);
+            },
+            extractText: (data) => this._contentHelper.extractText(data),
+            buildGeneratedImageContent: (images, text) =>
+                this._buildGeneratedImageContent(images, text),
+            estimateReplyTokens: async (text) => await this._estimateReplyTokens(text),
+            getFriendlyErrorMessage: (errorMsg, model) =>
+                this._getFriendlyErrorMessage(errorMsg, model),
+            handleError: (errorMsg, model) => {
+                this._handleError(errorMsg, model);
+            },
+            isDestroyed: () => this._state.isDestroyed,
+            isSending: () => this._state.isSending,
+            tracer: this._tracer,
+        });
+    }
+
+    private _createSendController(
+        aiBridge: AIBridge,
+        deps: ChatControllerDeps,
+    ): ChatSendController {
+        return this._factory.createSendController({
+            aiBridge,
+            fileHandler: this._fileHandler,
+            service: this._service,
+            getHistory: () => this._state.history,
+            pushUserMessage: (content) => {
+                this._state.pushHistoryMessage({ role: 'user', content });
+            },
+            createStreamingHandle: (typingId) => {
+                this._ui.removeTyping(typingId);
+                return this._ui.createStreamingMessage('assistant');
+            },
+            createImageHandle: (_text, onRegenerate) =>
+                this._ui.createImageGenerationMessage({
+                    onCancel: async () => {
+                        this._generationController.stopImagePreviewPolling();
+                        await this._aiBridge.cancelImageGeneration();
+                    },
+                    onRegenerate,
+                }),
+            showTyping: (typingId) => {
+                this._ui.showTyping(typingId);
+            },
+            registerReplaceChunk: (listenerId, imageHandleRef, streamingHandleRef) => {
+                this._aiBridge.onReplaceChunk(listenerId, (chunk) => {
+                    const imageHandle = imageHandleRef();
+                    if (imageHandle !== null) {
+                        imageHandle.setStatus(chunk.trim());
+                        return;
+                    }
+                    streamingHandleRef()?.replace(chunk);
+                });
+            },
+            clearInput: () => {
+                this._inputCoordinator.clear();
+            },
+            updateTokenCount: (count) => {
+                this._ui.updateTokenCount(count);
+            },
+            appendUserMessage: (text, attachments, tokens) => {
+                this._ui.appendMessage('user', text, { attachments, tokens });
+            },
+            getSelectedModule: (category) => deps.getSelectedModule(category),
+            getPreferredAiCategory: () => deps.getPreferredAiCategory(),
+            handleResponse: async (response, streamingHandle, imageHandle) =>
+                await this._generationController.handleChatResponse(
+                    response,
+                    streamingHandle,
+                    imageHandle,
+                ),
+            cleanupStreamingState: (listenerId, typingId) => {
+                this._generationController.cleanupStreamingState(listenerId, typingId);
+            },
+            stopImagePreviewPolling: () => {
+                this._generationController.stopImagePreviewPolling();
+            },
+            startImagePreviewPolling: (handle) => {
+                this._generationController.startImagePreviewPolling(handle);
+            },
+            restoreInputText: (text) => {
+                this._inputCoordinator.restore(text);
+            },
+            isImageProvider: (providerId) => this._generationController.isImageProvider(providerId),
+            lockUi: (input) => this._lockUI(input),
+            unlockUi: (els) => {
+                this._unlockUI(els);
+            },
+            handleError: (error) => {
+                this._handleError(error);
+            },
+            isSending: () => this._state.isSending,
+            setSending: (value) => {
+                this._state.isSending = value;
+            },
+            tracer: this._tracer,
+        });
+    }
+
+    private _createActivationCoordinator(aiBridge: AIBridge): ChatActivationCoordinator {
+        return new ChatActivationCoordinator({
+            aiBridge,
+            uiStateHelper: this._uiStateHelper,
+            getSelectedProviderId: () => this._sendController.resolveSelectedModuleId(),
+            tryAutoStartAi: async () => await this._sendController.tryAutoStartAi(),
+            tracer: this._tracer,
+        });
     }
 
     // --- Lifecycle ---
 
     public init(): void {
-        tracer.info('[Chat] Initializing TS Controller...');
+        if (this._state.isInitialized) return;
+        this._state.isInitialized = true;
+        this._state.isDestroyed = false;
+
+        this._tracer.info('[Chat] Initializing TS Controller...');
         void this._ui.init().catch((err: unknown) => {
-            tracer.error(`[Chat] UI init failed: ${String(err)}`);
+            this._tracer.error(`[Chat] UI init failed: ${String(err)}`);
         });
         this._ui.setEditMessageHandler(async (text) => {
             await this._editLastTurn(text);
         });
-
-        chatFileHandler.setUpdateCallback((files, onRemove) => {
-            this._ui.updateAttachments(files, onRemove);
-            void this._filePicker.updateTokenCount();
-        });
-
-        if (chatFileHandler.hasFiles()) {
-            this._ui.updateAttachments(chatFileHandler.getFiles(), (idx) => {
-                chatFileHandler.removeFile(idx);
-            });
-        }
-
-        void this._ensureHistoryLoaded();
-
-        this._pageChangeUnsub = eventBus.on('page:change', (data) => {
-            if (data.pageId === 'chat') {
-                // Bind DOM events the first time the chat page is actually shown
-                if (!this._eventsBound) {
-                    this._bindEvents();
-                    this._eventsBound = true;
-                }
-                this.randomizeGreeting();
-                this._ui.refreshTranslations();
-                void this._ensureHistoryLoaded();
-            }
-        });
-
-        this._translationsLoadedUnsub = eventBus.on('i18n:translations:loaded', () => {
-            this.randomizeGreeting(this._currentGreetingIndex);
-            this._ui.refreshTranslations();
-        });
+        this._lifecycleHelper.start();
     }
 
     public destroy(): void {
-        this._pageChangeUnsub?.();
-        this._pageChangeUnsub = null;
-        this._translationsLoadedUnsub?.();
-        this._translationsLoadedUnsub = null;
-
-        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
-        fileInput?.removeEventListener('change', this._boundFileInputChange);
-
-        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        chatInput?.removeEventListener('keydown', this._boundChatInputKeydown);
-        chatInput?.removeEventListener('input', this._boundChatInputInput);
+        if (this._state.isDestroyed) return;
+        this._state.isDestroyed = true;
+        this._state.isInitialized = false;
+        this._lifecycleHelper.stop();
+        this._viewHelper.unbindEvents();
+        this._stopImagePreviewPolling();
+        this._uiStateHelper.dispose();
+        this._sendController.destroy();
+        this._historyController.destroy();
+        this._voice.stop();
 
         this._ui.destroy();
     }
@@ -120,11 +413,7 @@ export class ChatController {
 
     public toggleVoiceInput(): void {
         this._voice.toggle((text) => {
-            const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-            if (chatInput) {
-                chatInput.value += (chatInput.value ? ' ' : '') + text;
-                this._autoResizeInput();
-            }
+            this._inputCoordinator.appendVoiceText(text);
         });
     }
 
@@ -132,433 +421,134 @@ export class ChatController {
         this._voice.stop();
     }
 
-    public clearChat(): void {
-        this._chatHistory = [];
-        chatFileHandler.clear();
+    public async clearChat(): Promise<void> {
+        this._activationCoordinator.clearInactiveAiErrorTimeout();
+        this._generationController.stopImagePreviewPolling();
+        this._state.clearHistory();
+        this._fileHandler.clear();
         this._ui.clear();
-        this._autoResizeInput();
-        void this._aiBridge.clearHistory().catch((e: unknown) => {
-            tracer.error('[Chat] Failed to clear persisted history:', e);
-        });
-        this._ui.showToast(this._i18n.t('ui.chat.cleared', 'Chat cleared'), 'success');
+        this._ui.updateTokenCount(0);
+        this._scheduleAutoResizeInput();
+        try {
+            await this._aiBridge.clearHistory();
+        } catch (e: unknown) {
+            this._tracer.error('[Chat] Failed to clear persisted history:', e);
+        }
     }
 
     // --- Send Message ---
 
     public async sendChat(): Promise<void> {
-        if (this._isSending) return;
+        const input = this._inputCoordinator.getInput();
+        const text = input?.value.trim() ?? '';
+        if (!this._sendController.validateInput(text)) {
+            this._ui.showToast(
+                this._i18n.t('ui.chat.input_required', 'Enter a message or attach a file'),
+                'error',
+            );
+            return;
+        }
 
-        const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        const text = (input ? input.value : '').trim();
-
-        if (!this._validateInput(text)) return;
-
-        const isActive = await this._checkAIActive(input);
+        const isActive = await this._activationCoordinator.ensureActive(input);
         if (!isActive) return;
 
-        const uiElements = this._lockUI(input);
-        const typingId = `typing-${String(Date.now())}`;
-        const listenerId = `chat-stream-${String(Date.now())}`;
-
-        this._isSending = true;
-
-        try {
-            const tokenCount = await chatFileHandler.getTotalTokenEstimate(text);
-            const { attachments, combinedText } = await chatFileHandler.processForSend(text);
-            const historyHead = this._chatHistory.slice(-40);
-
-            this._ui.updateTokenCount(0);
-            this._ui.appendMessage('user', text, { attachments: attachments, tokens: tokenCount });
-            this._chatHistory.push({ role: 'user', content: combinedText });
-
-            this._ui.showTyping(typingId);
-
-            let streamingHandle: {
-                update: (chunk: string) => void;
-                replace: (chunk: string) => void;
-                finalize: (text: string, stats?: Record<string, unknown>) => void;
-            } | null = null;
-
-            this._aiBridge.onChunk(listenerId, (chunk) => {
-                if (!streamingHandle) {
-                    this._ui.removeTyping(typingId);
-                    streamingHandle = this._ui.createStreamingMessage('assistant');
-                }
-                streamingHandle.update(chunk);
-            });
-
-            this._aiBridge.onReplaceChunk(listenerId, (chunk) => {
-                if (!streamingHandle) {
-                    this._ui.removeTyping(typingId);
-                    streamingHandle = this._ui.createStreamingMessage('assistant');
-                }
-                streamingHandle.replace(chunk);
-            });
-
-            const response = await this._service.sendMessage(
-                combinedText,
-                historyHead,
-                attachments,
-            );
-
-            this._aiBridge.removeChunkListener(listenerId);
-            this._aiBridge.removeReplaceChunkListener(listenerId);
-            this._ui.removeTyping(typingId);
-
-            await this._handleChatResponse(response, streamingHandle);
-        } catch (e: unknown) {
-            this._aiBridge.removeChunkListener(listenerId);
-            this._aiBridge.removeReplaceChunkListener(listenerId);
-            this._ui.removeTyping(typingId);
-            this._handleError(e);
-        } finally {
-            this._unlockUI(uiElements);
-            this._isSending = false;
-        }
+        await this._sendController.sendChat(input);
     }
 
     // --- Greeting ---
 
     public randomizeGreeting(forceIndex?: number): void {
-        const el = document.getElementById('chat-header-question');
-        if (el) {
-            if (typeof forceIndex === 'number') {
-                this._currentGreetingIndex = forceIndex;
-            } else {
-                const array = new Uint32Array(1);
-                crypto.getRandomValues(array);
-                this._currentGreetingIndex = ((array[0] ?? 0) % 50) + 1;
-            }
-
-            const translation = this._i18n.t(
-                `ui.chat.greeting.${String(this._currentGreetingIndex)}`,
-                '',
-            );
-
-            if (
-                translation === '' ||
-                translation === `ui.chat.greeting.${String(this._currentGreetingIndex)}`
-            ) {
-                const fallbackGreeting = this._i18n.t(
-                    'ui.chat.greeting.default',
-                    'How can I help you today?',
-                );
-                if (el.textContent === '' || el.textContent === fallbackGreeting) {
-                    el.textContent = fallbackGreeting;
-                }
-                return;
-            }
-
-            el.textContent = translation;
-        }
+        this._state.currentGreetingIndex = this._viewHelper.randomizeGreeting(
+            this._state.currentGreetingIndex,
+            forceIndex,
+        );
     }
 
     // --- Private Helpers ---
 
     private _bindEvents(): void {
-        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
-        if (fileInput) {
-            fileInput.addEventListener('change', this._boundFileInputChange);
-        }
-
-        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        if (chatInput) {
-            chatInput.addEventListener('keydown', this._boundChatInputKeydown);
-            chatInput.addEventListener('input', this._boundChatInputInput);
-            this._autoResizeInput();
-        }
+        this._viewHelper.bindEvents();
+        this._scheduleAutoResizeInput();
     }
 
     private async _ensureHistoryLoaded(): Promise<void> {
-        if (this._historyLoaded) return;
-        if (this._historyLoadInFlight !== null) {
-            await this._historyLoadInFlight;
-            return;
-        }
-
-        if (this._aiBridge.getSessionId() === 'default') {
-            globalThis.setTimeout(() => {
-                void this._ensureHistoryLoaded();
-            }, 300);
-            return;
-        }
-
-        this._historyLoadInFlight = this._loadHistory();
-        await this._historyLoadInFlight;
-        this._historyLoadInFlight = null;
+        await this._historyController.ensureHistoryLoaded();
     }
 
     private async _editLastTurn(text: string): Promise<void> {
-        if (this._isSending) return;
-
-        try {
-            const removedText = await this._aiBridge.rewindLastTurn();
-            const nextText = removedText ?? text;
-
-            this._rewindLocalHistory();
-            this._ui.renderHistory(this._chatHistory);
-            this._restoreInputText(nextText);
-        } catch (error: unknown) {
-            tracer.error('[Chat] Failed to rewind last turn:', error);
-            this._ui.showToast(
-                this._i18n.t('ui.chat.edit_last_turn_failed', 'Failed to edit last turn'),
-                'error',
-            );
-        }
+        await this._historyController.editLastTurn(this._state.isSending, text);
     }
 
-    private _rewindLocalHistory(): void {
-        while (this._chatHistory.length > 0) {
-            const lastMessage = this._chatHistory[this._chatHistory.length - 1];
-            if (lastMessage?.role === 'user') {
-                break;
-            }
-            this._chatHistory.pop();
-        }
-
-        const lastMessage = this._chatHistory[this._chatHistory.length - 1];
-        if (lastMessage?.role === 'user') {
-            this._chatHistory.pop();
-        }
+    public async _loadHistory(): Promise<void> {
+        await this._historyController.loadHistory();
     }
 
-    private _restoreInputText(text: string): void {
-        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        if (!(chatInput instanceof HTMLTextAreaElement)) return;
-
-        chatInput.value = text;
-        chatInput.dispatchEvent(new Event('input', { bubbles: true }));
-        chatInput.focus();
-        chatInput.setSelectionRange(text.length, text.length);
-        this._autoResizeInput();
+    private _stopImagePreviewPolling(): void {
+        this._generationController.stopImagePreviewPolling();
     }
 
-    private async _loadHistory(): Promise<void> {
-        const history = await this._aiBridge.getHistory();
-        this._historyLoaded = true;
-        if (Array.isArray(history) && history.length > 0) {
-            tracer.info(
-                `[ChatController] Restoring ${String(history.length)} messages from persistence`,
-            );
-
-            this._chatHistory = history
-                .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
-                .map((msg) => ({
-                    role: msg.role as 'user' | 'assistant',
-                    content: this._safeExtractText(msg.content),
-                }));
-
-            this._chatHistory.forEach((msg) => {
-                this._ui.appendMessage(msg.role, msg.content, {
-                    tokens: 0,
-                    skipAnimation: true,
-                });
-            });
-        }
-
-        if (this._consumePendingChatReveal()) {
-            this._ui.revealLatestMessage();
-        }
+    public async _checkAIActive(input: HTMLTextAreaElement | null): Promise<boolean> {
+        return await this._activationCoordinator.ensureActive(input);
     }
 
-    private _consumePendingChatReveal(): boolean {
-        type PendingUiState = {
-            getState: () => { pending_chat_reveal?: boolean };
-            updateState: (updates: { pending_chat_reveal: boolean }) => void;
-        };
-        const win = getGlobalWin() as unknown as Window & {
-            uiState?: {
-                getState?: PendingUiState['getState'];
-                updateState?: PendingUiState['updateState'];
-            };
-        };
-
-        const uiState = win.uiState as PendingUiState | undefined;
-        const pendingState = uiState?.getState();
-        const shouldReveal = pendingState?.pending_chat_reveal === true;
-        if (shouldReveal) {
-            uiState?.updateState({ pending_chat_reveal: false });
-        }
-        return shouldReveal;
+    public _clearInactiveAiErrorTimeout(): void {
+        this._activationCoordinator.clearInactiveAiErrorTimeout();
     }
 
-    private _validateInput(text: string): boolean {
-        if (!text && !chatFileHandler.hasFiles()) {
-            this._ui.showToast(
-                this._i18n.t('ui.chat.input_required', 'Enter a message or attach a file'),
-                'error',
-            );
-            return false;
-        }
-        return true;
+    public async _tryAutoStartAI(): Promise<boolean> {
+        return await this._sendController.tryAutoStartAi();
     }
 
-    private async _tryAutoStartAI(): Promise<boolean> {
-        const textModule = uiState.getSelectedModule('ai_text');
-        const imageModule = uiState.getSelectedModule('ai_image');
-
-        // Prefer text module for chat naturally, but allow image module if active
-        const selectedModule =
-            textModule?.id !== undefined && textModule.id !== '' ? textModule : imageModule;
-
-        if (selectedModule?.id === undefined || selectedModule.id === '') return false;
-
-        tracer.info(`[Chat] Auto-starting selected module: ${selectedModule.id}`);
-        const btn = document.getElementById('chat-actions-send');
-        if (btn) {
-            btn.classList.add('loading');
-            btn.setAttribute('disabled', 'true');
-        }
-
-        const started = await this._aiBridge.startProvider(selectedModule.id);
-
-        if (btn) {
-            btn.classList.remove('loading');
-            btn.removeAttribute('disabled');
-        }
-
-        return started;
-    }
-
-    private async _checkAIActive(input: HTMLTextAreaElement | null): Promise<boolean> {
-        if (this._aiBridge.isActive()) return true;
-
-        const started = await this._tryAutoStartAI();
-        if (started) return true;
-
-        const text = input ? input.value.trim() : '';
-        if (text !== '') this._ui.appendMessage('user', text);
-        setTimeout(() => {
-            this._ui.appendMessage(
-                'assistant',
-                this._i18n.t(
-                    'ui.ai.no_provider',
-                    'No AI module running. Please select and launch a module first.',
-                ),
-                { error: true },
-            );
-        }, 500);
-        if (input) input.value = '';
-        return false;
-    }
-
-    private async _handleChatResponse(
+    public async _handleChatResponse(
         response: IChatResponse,
         streamingHandle?: {
             update: (chunk: string) => void;
+            replace: (chunk: string) => void;
             finalize: (text: string, stats?: Record<string, unknown>) => void;
+            discard: () => void;
         } | null,
+        imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
-        if (response.ok) {
-            const rawReply = response.message ?? response.reply?.text ?? '';
-            const replyText = this._safeExtractText(rawReply);
-
-            if (replyText !== '') {
-                const tokens = await getTokenCount(replyText);
-
-                if (streamingHandle) {
-                    streamingHandle.finalize(replyText, { tokens });
-                } else {
-                    this._ui.appendMessage('assistant', replyText, { tokens });
-                }
-
-                this._chatHistory.push({ role: 'assistant', content: replyText });
-            }
-        } else {
-            const friendlyMsg = this._getFriendlyErrorMessage(response.error ?? '', response.model);
-            this._handleError(friendlyMsg, response.model);
-        }
+        await this._generationController.handleChatResponse(response, streamingHandle, imageHandle);
     }
 
-    private _extractFromObject(obj: Record<string, unknown>): string {
-        if ('message' in obj && typeof obj['message'] === 'string') return obj['message'];
-        if ('error' in obj && typeof obj['error'] === 'string') return obj['error'];
-        if ('text' in obj && typeof obj['text'] === 'string') return obj['text'];
-
-        try {
-            return JSON.stringify(obj, null, 2);
-        } catch {
-            return this._i18n.t(
-                'ui.chat.complex_object_fallback',
-                '[Complex object: cannot display]',
-            );
+    private _pushAssistantMessage(
+        content: IChatMessage['content'],
+        thoughtSignature?: string,
+    ): void {
+        const assistantMessage: IChatMessage = {
+            role: 'assistant',
+            content,
+        };
+        if (thoughtSignature !== undefined) {
+            assistantMessage.thought_signature = thoughtSignature;
         }
+        this._state.pushHistoryMessage(assistantMessage);
     }
 
-    private _safeExtractText(data: unknown): string {
-        if (typeof data === 'string') return data;
-        if (data instanceof Error) return data.message;
-
-        if (typeof data === 'object' && data !== null) {
-            return this._extractFromObject(data as Record<string, unknown>);
-        }
-
-        return typeof data === 'number' || typeof data === 'boolean' ? String(data) : '';
+    private _buildGeneratedImageContent(
+        images: Array<{ mime: string; data_base64: string }>,
+        text: string,
+    ): ChatContent {
+        return this._contentHelper.buildGeneratedImageContent(images, text);
     }
 
     private _getFriendlyErrorMessage(errorMsg: unknown, model?: string): string {
-        const msgStr = this._safeExtractText(errorMsg) || 'Unknown Error';
-        const msg = msgStr.toLowerCase();
-        const modelName = model ?? 'Gemini';
-
-        if (msg.includes('503') || msg.includes('unavailable') || msg.includes('overloaded')) {
-            return this._i18n
-                .t('ui.gemini.error.unavailable', `Error 503: Service Unavailable (${modelName})`)
-                .replace('{model}', modelName);
-        }
-
-        if (msg.includes('429') || msg.includes('quota') || msg.includes('limit reached')) {
-            return this._i18n
-                .t('ui.gemini.error.quota', `Error 429: Quota Exceeded (${modelName})`)
-                .replace('{model}', modelName);
-        }
-
-        if (msg.includes('402') || msg.includes('payment required') || msg.includes('credits')) {
-            return this._i18n
-                .t(
-                    'ui.chat.error.payment_required',
-                    `Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).`,
-                )
-                .replace('{model}', modelName);
-        }
-
-        if (msg.includes('403') || msg.includes('permission_denied') || msg.includes('api key')) {
-            return this._i18n
-                .t('ui.gemini.error.auth', `Error 403: Invalid API Key (${modelName})`)
-                .replace('{model}', modelName);
-        }
-
-        if (msg.includes('quota'))
-            return this._i18n.t('ui.chat.error.quota', 'Quota limit reached');
-        if (msg.includes('auth') || msg.includes('api key'))
-            return this._i18n.t('ui.chat.error.auth', 'Invalid API Key');
-        if (msg.includes('server error') || msg.includes('500'))
-            return this._i18n.t('ui.chat.error.server', 'Server error. Please try again later.');
-
-        return msgStr;
+        return this._contentHelper.getFriendlyErrorMessage(errorMsg, model);
     }
 
     private _handleError(errorMsg: unknown = 'Unknown Error', _model?: string): void {
-        const msgStr = this._safeExtractText(errorMsg) || 'Unknown Error';
+        const msgStr = this._contentHelper.extractText(errorMsg) || 'Unknown Error';
 
         this._ui.appendMessage('assistant', msgStr, { error: true });
     }
 
+    private async _estimateReplyTokens(text: string): Promise<number> {
+        return this._contentHelper.estimateReplyTokens(text);
+    }
+
     private _lockUI(input: HTMLTextAreaElement | null) {
-        const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement | null;
-        const voiceBtn = document.getElementById('chat-voice-btn') as HTMLButtonElement | null;
-        const attachBtn = document.getElementById('chat-attach-btn') as HTMLButtonElement | null;
-
-        if (input) {
-            input.value = '';
-            input.disabled = true;
-            this._autoResizeInput();
-        }
-        if (sendBtn) sendBtn.disabled = true;
-        if (voiceBtn) voiceBtn.disabled = true;
-        if (attachBtn) attachBtn.disabled = true;
-
-        return { input, sendBtn, voiceBtn, attachBtn };
+        return this._uiStateHelper.lockUi(input);
     }
 
     private _unlockUI(els: {
@@ -567,21 +557,22 @@ export class ChatController {
         voiceBtn: HTMLButtonElement | null;
         attachBtn: HTMLButtonElement | null;
     }) {
-        if (els.input) {
-            els.input.disabled = false;
-            els.input.focus();
-        }
-        if (els.sendBtn) els.sendBtn.disabled = false;
-        if (els.voiceBtn) els.voiceBtn.disabled = false;
-        if (els.attachBtn) els.attachBtn.disabled = false;
+        this._uiStateHelper.unlockUi(els);
     }
 
-    private _autoResizeInput(): void {
-        const el = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        if (el) {
-            el.style.height = 'auto';
-            const newHeight = Math.min(el.scrollHeight, 200);
-            el.style.height = `${String(newHeight)}px`;
-        }
+    private _scheduleAutoResizeInput(): void {
+        this._uiStateHelper.scheduleAutoResizeInput();
+    }
+
+    public _autoResizeInput(): void {
+        this._uiStateHelper.autoResizeInput();
+    }
+
+    public get _chatHistory(): IChatMessage[] {
+        return this._state.history;
+    }
+
+    public set _chatHistory(history: IChatMessage[]) {
+        this._state.history = history;
     }
 }

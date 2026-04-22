@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 class ResizeObserverMock {
     public static instances: ResizeObserverMock[] = [];
@@ -21,13 +22,12 @@ describe('GeneralSettingsRenderer', () => {
         getHiddenMonitors: ReturnType<typeof vi.fn>;
         setHiddenMonitors: ReturnType<typeof vi.fn>;
     };
+    let tracer: LoggerService;
+    let runtime: NonNullable<ConstructorParameters<typeof GeneralSettingsRenderer>[2]>;
 
     beforeEach(() => {
+        vi.useFakeTimers();
         vi.stubGlobal('ResizeObserver', ResizeObserverMock as never);
-        vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-            cb(0);
-            return 1;
-        });
 
         document.body.innerHTML = `
             <div id="taskbar-toggles"></div>
@@ -49,7 +49,7 @@ describe('GeneralSettingsRenderer', () => {
                 <button class="nav-btn" data-page="chat"></button>
                 <button class="nav-btn" data-page="modules"></button>
                 <button class="nav-btn" data-page="marketplace"></button>
-                <button class="nav-btn" data-page="debug"></button>
+                <button class="nav-btn" data-page="console"></button>
                 <button class="nav-btn" data-page="downloads"></button>
             </div>
             <div id="system-monitor">
@@ -70,7 +70,28 @@ describe('GeneralSettingsRenderer', () => {
             setHiddenMonitors: vi.fn(),
         };
 
-        renderer = new GeneralSettingsRenderer(uiSettings as never);
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
+
+        runtime = {
+            requestAnimationFrame: vi.fn((callback: FrameRequestCallback) => {
+                callback(0);
+                return 1;
+            }),
+            cancelAnimationFrame: vi.fn(),
+            setTimeout: vi.fn((callback: () => void, delayMs: number) =>
+                globalThis.setTimeout(callback, delayMs),
+            ),
+            clearTimeout: vi.fn((handle: ReturnType<typeof setTimeout>) => {
+                globalThis.clearTimeout(handle);
+            }),
+        };
+
+        renderer = new GeneralSettingsRenderer(uiSettings as never, tracer, runtime);
     });
 
     afterEach(() => {
@@ -99,6 +120,9 @@ describe('GeneralSettingsRenderer', () => {
                 .querySelector('#sidebar .nav-btn[data-page="chat"]')
                 ?.classList.contains('hidden'),
         ).toBe(true);
+        expect(
+            document.querySelector('#sidebar .nav-btn[data-page="chat"]')?.getAttribute('tabindex'),
+        ).toBe('-1');
 
         const gpuMonitor = document.querySelector(
             '#monitor-toggles .monitor-toggle-btn[data-monitor-id="gpu"]',
@@ -112,7 +136,6 @@ describe('GeneralSettingsRenderer', () => {
     });
 
     it('toggles nav items and monitor items, persisting hidden lists', () => {
-        vi.useFakeTimers();
         renderer.init({
             t: (_key: string, fallback: string) => fallback,
         } as never);
@@ -124,13 +147,17 @@ describe('GeneralSettingsRenderer', () => {
             '#sidebar .nav-btn[data-page="home"]',
         ) as HTMLElement;
         expect(homeNav.classList.contains('nav-item-hiding')).toBe(true);
-        vi.advanceTimersByTime(351);
+        homeNav.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(homeNav.classList.contains('hidden')).toBe(true);
+        expect(homeNav.getAttribute('tabindex')).toBe('-1');
+        expect(homeNav.getAttribute('aria-hidden')).toBe('true');
 
         uiSettings.getHiddenNavItems.mockReturnValue(['chat', 'home']);
         renderer.toggleNavItem('home', true);
         expect(uiSettings.setHiddenNavItems).toHaveBeenLastCalledWith(['chat']);
         expect(homeNav.classList.contains('hidden')).toBe(false);
+        expect(homeNav.hasAttribute('tabindex')).toBe(false);
+        expect(homeNav.hasAttribute('aria-hidden')).toBe(false);
 
         renderer.toggleMonitorItem('cpu', false);
         expect(uiSettings.setHiddenMonitors).toHaveBeenCalledWith(['gpu', 'cpu']);
@@ -138,7 +165,7 @@ describe('GeneralSettingsRenderer', () => {
         const cpuStat = document.querySelector(
             '#system-monitor .sysmon-stat[data-monitor-id="cpu"]',
         ) as HTMLElement;
-        vi.advanceTimersByTime(351);
+        cpuStat.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(cpuStat.classList.contains('hidden')).toBe(true);
 
         uiSettings.getHiddenMonitors.mockReturnValue(['gpu', 'cpu']);
@@ -147,8 +174,27 @@ describe('GeneralSettingsRenderer', () => {
         expect(cpuStat.classList.contains('hidden')).toBe(false);
     });
 
+    it('does not mutate hidden state arrays returned by settings service', () => {
+        const hiddenNavItems = ['chat'];
+        const hiddenMonitors = ['gpu'];
+
+        uiSettings.getHiddenNavItems.mockReturnValue(hiddenNavItems);
+        uiSettings.getHiddenMonitors.mockReturnValue(hiddenMonitors);
+
+        renderer.init({
+            t: (_key: string, fallback: string) => fallback,
+        } as never);
+
+        renderer.toggleNavItem('home', false);
+        renderer.toggleMonitorItem('cpu', false);
+
+        expect(hiddenNavItems).toEqual(['chat']);
+        expect(hiddenMonitors).toEqual(['gpu']);
+        expect(uiSettings.setHiddenNavItems).toHaveBeenLastCalledWith(['chat', 'home']);
+        expect(uiSettings.setHiddenMonitors).toHaveBeenLastCalledWith(['gpu', 'cpu']);
+    });
+
     it('updates monitor panel and divider visibility based on hidden monitors', () => {
-        vi.useFakeTimers();
         renderer.init({
             t: (_key: string, fallback: string) => fallback,
         } as never);
@@ -167,11 +213,16 @@ describe('GeneralSettingsRenderer', () => {
             'network',
         ]);
         renderer.toggleMonitorItem('network', false);
+        const networkStat = document.querySelector(
+            '#system-monitor .sysmon-stat[data-monitor-id="network"]',
+        ) as HTMLElement;
+        expect(panel.classList.contains('adaptive-hidden')).toBe(false);
+        networkStat.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(panel.classList.contains('adaptive-hidden')).toBe(true);
 
         uiSettings.getHiddenMonitors.mockReturnValue(['cpu', 'gpu', 'ram', 'vram']);
         renderer.toggleMonitorItem('disk', false);
-        vi.advanceTimersByTime(351);
+        divider.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
         expect(divider.classList.contains('hidden')).toBe(true);
     });
 

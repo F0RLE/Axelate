@@ -1,3 +1,4 @@
+import { Channel } from '@tauri-apps/api/core';
 import type {
     IChatRequest,
     IChatResponse,
@@ -5,8 +6,10 @@ import type {
     IImageGenerationRequest,
     IImageGenerationResponse,
 } from '../types/aiTypes';
-import type { Core } from '@/app/init';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { AITransportContext } from './AIBridgeContext';
+
+type AIChatTransportLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
 /**
  * Safely extracts a human-readable error string from any error shape.
@@ -24,6 +27,12 @@ function extractError(error: unknown): string {
     return JSON.stringify(error);
 }
 
+interface IStreamChunkEnvelope {
+    request_id: string;
+    message_id: string;
+    content: string;
+}
+
 export interface IChatTransport {
     init(): Promise<void>;
     send(request: IChatRequest): Promise<IBridgeResponse>;
@@ -31,7 +40,8 @@ export interface IChatTransport {
     generateImageBackground(request: IImageGenerationRequest): Promise<IBridgeResponse>;
     onStream(listener: (chunk: string) => void): () => void;
     onThought(listener: (chunk: string) => void): () => void;
-    setCore(core: Core): void;
+    setContext(context: AITransportContext): void;
+    destroy(): void;
 }
 
 /**
@@ -39,19 +49,28 @@ export interface IChatTransport {
  * Isolates transport mechanism (Tauri invoke/event) from business logic.
  */
 export class AIChatTransport implements IChatTransport {
-    private _core: Core | null = null;
-    private readonly _unlisteners: (() => void)[] = [];
+    private _context: AITransportContext | null = null;
+    private readonly _unlisteners = new Set<() => void>();
+    private _requestCounter = 0;
+    private readonly _streamListeners = new Set<(chunk: string) => void>();
+    private readonly _thoughtListeners = new Set<(chunk: string) => void>();
 
-    public setCore(core: Core): void {
-        this._core = core;
+    public constructor(private readonly _tracer: AIChatTransportLogger) {}
+
+    public setContext(context: AITransportContext): void {
+        this._context = context;
+    }
+
+    public setCore(context: AITransportContext): void {
+        this.setContext(context);
     }
 
     public async init(): Promise<void> {
-        if (this._core?.tauriProvider.isTauri() === true) {
+        if (this._context?.tauriProvider.isTauri() === true) {
             // Setup global listener for streaming chunks if needed here,
             // or let the bridge handle the subscription via onStream.
             // For now, we follow the pattern that Transport manages the low-level listener.
-            tracer.info('[AIChatTransport] Transport initialized');
+            this._tracer.info('[AIChatTransport] Transport initialized');
         }
         await Promise.resolve();
     }
@@ -60,25 +79,40 @@ export class AIChatTransport implements IChatTransport {
      * Sends a chat request via Tauri IPC.
      */
     public async send(request: IChatRequest): Promise<IBridgeResponse> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
-        const timeoutPromise = new Promise<IBridgeResponse>((_, reject) => {
-            setTimeout(() => {
-                reject(new Error('AI request timed out'));
-            }, 90000);
-        });
+        const requestId = this._generateRequestId();
+        const requestWithId: IChatRequest = {
+            ...request,
+            request_id: requestId,
+        };
+        const chatChannel = new Channel<IStreamChunkEnvelope>();
+        chatChannel.onmessage = (payload) => {
+            this._emitListeners(this._streamListeners, payload.content);
+        };
+
+        const thoughtChannel = new Channel<IStreamChunkEnvelope>();
+        thoughtChannel.onmessage = (payload) => {
+            this._emitListeners(this._thoughtListeners, payload.content);
+        };
 
         try {
-            const invokePromise = this._core.tauriProvider
-                .invoke<IChatResponse>('send_chat_message', { request })
-                .then((response) => this._normalizeResponse(response));
-
-            return await Promise.race([invokePromise, timeoutPromise]);
+            return await this._runWithTimeout(
+                this._context.tauriProvider
+                    .invoke<IChatResponse>('send_chat_message', {
+                        request: requestWithId,
+                        chatChannel,
+                        thoughtChannel,
+                    })
+                    .then((response) => this._normalizeResponse(response)),
+                90000,
+                'AI request timed out',
+            );
         } catch (error: unknown) {
             const errorMsg = extractError(error);
-            tracer.error('[AIChatTransport] IPC error:', error);
+            this._tracer.error('[AIChatTransport] IPC error:', error);
             return { ok: false, error: errorMsg };
         }
     }
@@ -87,30 +121,26 @@ export class AIChatTransport implements IChatTransport {
      * Sends an image generation request via Tauri IPC.
      */
     public async generateImage(request: IImageGenerationRequest): Promise<IBridgeResponse> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
-        const timeoutPromise = new Promise<IBridgeResponse>((_, reject) => {
-            setTimeout(() => {
-                reject(new Error('Image generation requested timed out'));
-            }, 300000); // 5 mins timeout for images
-        });
-
         try {
-            const invokePromise = this._core.tauriProvider
-                .invoke<IImageGenerationResponse>('generate_image', { request })
-                .then((response) => {
-                    if (response.ok && response.images.length > 0) {
-                        return { ok: true, images: response.images };
-                    }
-                    return { ok: false, error: response.error ?? 'Failed to generate image' };
-                });
-
-            return await Promise.race([invokePromise, timeoutPromise]);
+            return await this._runWithTimeout(
+                this._context.tauriProvider
+                    .invoke<IImageGenerationResponse>('generate_image', { request })
+                    .then((response) => {
+                        if (response.ok && response.images.length > 0) {
+                            return { ok: true, images: response.images };
+                        }
+                        return { ok: false, error: response.error ?? 'Failed to generate image' };
+                    }),
+                300000,
+                'Image generation requested timed out',
+            );
         } catch (error: unknown) {
             const errorMsg = extractError(error);
-            tracer.error('[AIChatTransport] IPC image error:', error);
+            this._tracer.error('[AIChatTransport] IPC image error:', error);
             return { ok: false, error: errorMsg };
         }
     }
@@ -121,16 +151,16 @@ export class AIChatTransport implements IChatTransport {
     public async generateImageBackground(
         request: IImageGenerationRequest,
     ): Promise<IBridgeResponse> {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
         try {
-            await this._core.tauriProvider.invoke('generate_image_background', { request });
+            await this._context.tauriProvider.invoke('generate_image_background', { request });
             return { ok: true };
         } catch (error: unknown) {
             const errorMsg = extractError(error);
-            tracer.error('[AIChatTransport] IPC background image error:', error);
+            this._tracer.error('[AIChatTransport] IPC background image error:', error);
             return { ok: false, error: errorMsg };
         }
     }
@@ -140,54 +170,109 @@ export class AIChatTransport implements IChatTransport {
      * Returns an unlisten function.
      */
     public onStream(listener: (chunk: string) => void): () => void {
-        return this._createListener('ai:chat:chunk', listener);
+        return this._registerListener(this._streamListeners, listener);
     }
 
     public onThought(listener: (chunk: string) => void): () => void {
-        return this._createListener('ai:thought:chunk', listener);
+        return this._registerListener(this._thoughtListeners, listener);
     }
 
-    private _createListener(eventName: string, listener: (chunk: string) => void): () => void {
-        if (this._core?.tauriProvider.isTauri() !== true) {
+    private _registerListener(
+        target: Set<(chunk: string) => void>,
+        listener: (chunk: string) => void,
+    ): () => void {
+        if (this._context?.tauriProvider.isTauri() !== true) {
             return () => {};
         }
 
-        // In Tauri v2, listen returns a Promise<UnlistenFn>.
-        // Since we need to return synchronous cleanup, we manage the promise internally.
-        let unlistenFn: (() => void) | undefined;
-        let isActive = true;
-
-        void this._core.tauriProvider
-            .listen<string>(eventName, (event: unknown) => {
-                const chunk =
-                    typeof event === 'object' && event !== null && 'payload' in event
-                        ? (event as { payload: string }).payload
-                        : (event as string);
-                if (isActive) listener(chunk);
-            })
-            .then((fn) => {
-                if (isActive) {
-                    unlistenFn = fn;
-                } else {
-                    fn(); // If already cancelled, clean up immediately
-                }
-            });
-
-        return () => {
-            isActive = false;
-            if (unlistenFn) unlistenFn();
+        const cleanup = (): void => {
+            if (!this._unlisteners.has(cleanup)) {
+                return;
+            }
+            target.delete(listener);
+            this._unlisteners.delete(cleanup);
         };
+
+        target.add(listener);
+        this._unlisteners.add(cleanup);
+        return cleanup;
+    }
+
+    private async _runWithTimeout<T>(
+        operation: Promise<T>,
+        timeoutMs: number,
+        timeoutMessage: string,
+    ): Promise<T> {
+        let timeoutId!: ReturnType<typeof setTimeout>;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                reject(new Error(timeoutMessage));
+            }, timeoutMs);
+        });
+
+        try {
+            return await Promise.race([operation, timeoutPromise]);
+        } finally {
+            clearTimeout(timeoutId);
+        }
     }
 
     private _normalizeResponse(response: IChatResponse): IBridgeResponse {
         if (response.ok && response.reply) {
-            return { ok: true, text: response.reply.text };
+            const normalized: IBridgeResponse = {
+                ok: true,
+                text: response.reply.text,
+            };
+            if (response.thought_signature !== undefined) {
+                normalized.thought_signature = response.thought_signature;
+            }
+            if (response.model !== undefined) {
+                normalized.model = response.model;
+            }
+            return normalized;
         }
-        return { ok: false, error: extractError(response.error) };
+        const normalized: IBridgeResponse = {
+            ok: false,
+            error: extractError(response.error),
+        };
+        if (response.model !== undefined) {
+            normalized.model = response.model;
+        }
+        return normalized;
+    }
+
+    private _generateRequestId(): string {
+        if (typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+
+        if (typeof crypto.getRandomValues === 'function') {
+            const randomBuffer = new Uint32Array(2);
+            crypto.getRandomValues(randomBuffer);
+            const firstPart = randomBuffer[0];
+            const secondPart = randomBuffer[1];
+            if (firstPart !== undefined && secondPart !== undefined) {
+                return `req_${firstPart.toString(36)}_${secondPart.toString(36)}`;
+            }
+        }
+
+        this._requestCounter += 1;
+        return `req_${Date.now().toString(36)}_${this._requestCounter.toString(36)}`;
+    }
+
+    private _emitListeners(
+        listeners: ReadonlySet<(chunk: string) => void>,
+        payload: string,
+    ): void {
+        listeners.forEach((listener) => {
+            listener(payload);
+        });
     }
 
     public destroy(): void {
         this._unlisteners.forEach((fn) => fn());
-        this._unlisteners.length = 0;
+        this._unlisteners.clear();
+        this._streamListeners.clear();
+        this._thoughtListeners.clear();
     }
 }

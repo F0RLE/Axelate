@@ -3,9 +3,6 @@
  * @description Utility functions for chat-related operations
  */
 
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
-import { tracer } from '@/infrastructure/logging/LoggerService';
-
 /**
  * Check if a file is a text-based file.
  */
@@ -99,23 +96,23 @@ export function getFileIcon(filename: string): string {
             ext,
         )
     ) {
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>';
+        return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 2h16v2H4zm0 18h16v2H4zM2 4h2v16H2zm18 0h2v16h-2zM6 16h2v2H6zm2-2h2v2H8zm-2-2h2v2H6z"></path></svg>';
     }
     // Image
     if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+        return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3h16v2H4zM2 5h2v14H2zm18 0h2v14h-2zM4 19h16v2H4zM6 7h4v4H6zm8 4h2v2h-2zm2 2h2v2h-2zm-8 2h2v2H8zm2-2h2v2h-2zm2-2h2v2h-2z"></path></svg>';
     }
     // Text / Doc
     if (['txt', 'md', 'doc', 'docx', 'pdf', 'rtf'].includes(ext)) {
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+        return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h8v2H6zm8 2h2v2h-2zm2 2h2v16h-2zM6 20h10v2H6zM4 4h2v16H4zm4 6h6v2H8zm0 4h6v2H8z"></path></svg>';
     }
     // Archive
     if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'ace', 'iso', 'cab'].includes(ext)) {
-        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+        return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v2H4zM2 6h2v12H2zm18 0h2v12h-2zM4 18h16v2H4zm6-10h4v4h-4zm0 4h4v2h-4zm-2 2h8v4H8z"></path></svg>';
     }
 
     // Default File
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+    return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h8v2H6zm8 2h2v2h-2zm2 2h2v16h-2zM6 20h10v2H6zM4 4h2v16H4z"></path></svg>';
 }
 
 /**
@@ -153,16 +150,10 @@ export function estimateTokenCount(text: string): number {
 }
 
 /**
- * Accurately counts tokens using backend TikToken (if available) or falls back to heuristic.
+ * Estimates tokens asynchronously.
+ * Runtime-specific accurate counting lives outside this helper and should be injected.
  */
-export async function getTokenCount(text: string, model = 'gpt-4'): Promise<number> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (getGlobalWin().__TAURI__ !== undefined) {
-        try {
-            return await globalThis.__TAURI__.core.invoke('count_tokens', { text, model });
-        } catch (e) {
-            tracer.warn(`[TokenCount] Backend failed, using heuristic: ${String(e)}`);
-        }
-    }
-    return estimateTokenCount(text);
+export function getTokenCount(text: string, model = 'gpt-4'): Promise<number> {
+    void model;
+    return Promise.resolve(estimateTokenCount(text));
 }

@@ -8,20 +8,28 @@
 //! Within a slot, only one engine is loaded at a time (hot-swap).
 
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-
 use std::fs::File;
+use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 use crate::errors::AppError;
 
+use super::engine_args::{build_llamacpp_args, build_sdcpp_args, sdcpp_preview_enabled};
+use super::engine_runtime::{
+    diagnose_engine_start_failure, find_available_local_port, spawn_log_reader, wait_for_health,
+};
 use super::events::EngineEventEmitter;
 use super::types::{
     Capability, EngineConfig, EngineDefinition, EngineState, EngineStatus, SlotStatus,
 };
+
+pub use super::engine_args::resolve_sdcpp_preview_path;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Internal handle for a running engine process
 struct RunningEngine {
@@ -52,10 +60,6 @@ impl std::fmt::Debug for EngineManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EngineManager").finish()
     }
-}
-
-fn is_progress_log_line(line: &str) -> bool {
-    line.contains("it/s") || line.contains("s/it") || line.contains('%')
 }
 
 impl EngineManager {
@@ -150,6 +154,21 @@ impl EngineManager {
             .collect()
     }
 
+    /// Returns the active preview file path for the image engine when supported.
+    pub async fn active_image_preview_path(&self) -> Option<PathBuf> {
+        let slots = self.slots.lock().await;
+        let engine = slots.get(&Capability::Image)?;
+        if engine.definition.id != "sdcpp" && engine.definition.id != "stable-diffusion" {
+            return None;
+        }
+
+        if !sdcpp_preview_enabled(&engine.config.extra_args) {
+            return None;
+        }
+
+        resolve_sdcpp_preview_path(&engine.config.extra_args)
+    }
+
     /// Start an engine in its primary capability slot.
     /// If another engine occupies that slot, stops it first (hot-swap).
     /// Other slots are left untouched.
@@ -160,7 +179,6 @@ impl EngineManager {
             .first()
             .copied()
             .unwrap_or(Capability::Text);
-
         // Check if this exact engine AND model is already running in this slot
         {
             let slots = self.slots.lock().await;
@@ -210,7 +228,17 @@ impl EngineManager {
                 ))
             })?;
 
-        let endpoint = format!("http://localhost:{}", config.port);
+        let selected_port = find_available_local_port(definition.default_port, &config.engine_id)?;
+        if selected_port != definition.default_port {
+            info!(
+                engine = %config.engine_id,
+                requested_port = definition.default_port,
+                selected_port,
+                "Preferred port busy, selected next free localhost port"
+            );
+        }
+
+        let endpoint = format!("http://localhost:{selected_port}");
 
         self.emitter.emit_starting(&config.engine_id);
 
@@ -218,34 +246,43 @@ impl EngineManager {
         let mut cmd = Command::new(&binary_path);
         cmd.kill_on_drop(true);
 
+        #[cfg(windows)]
+        {
+            // Local engines are background services. Do not flash a console window for them.
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
         if config.engine_id == "llamacpp" {
-            cmd.arg("--port")
-                .arg(config.port.to_string())
-                .arg("--ctx-size")
-                .arg(config.context_size.to_string())
-                .arg("-ngl")
-                .arg(config.gpu_layers.to_string());
+            cmd.args(build_llamacpp_args(&config, selected_port));
         } else if config.engine_id == "sdcpp" {
-            cmd.arg("--listen-port").arg(config.port.to_string());
+            let sdcpp_args = build_sdcpp_args(&config, selected_port).inspect_err(|error| {
+                self.emitter
+                    .emit_error(&config.engine_id, &error.to_string());
+            })?;
+            cmd.args(sdcpp_args);
         } else {
             // Default fallback for other engines
-            cmd.arg("--port").arg(config.port.to_string());
+            cmd.arg("--port").arg(selected_port.to_string());
         }
 
-        if let Some(ref model) = config.model_path {
-            cmd.arg("--model").arg(model);
-        }
+        if config.engine_id != "sdcpp" {
+            if let Some(ref model) = config.model_path {
+                cmd.arg("--model").arg(model);
+            }
 
-        for arg in &config.extra_args {
-            cmd.arg(arg);
+            for arg in &config.extra_args {
+                cmd.arg(arg);
+            }
         }
 
         // Pipe engine stdout/stderr to files in logs directory
-        let log_dir = crate::utils::paths::LOG_DIR.join("Engines");
+        let log_dir = crate::utils::paths::LOG_DIR
+            .join("Engines")
+            .join(&config.engine_id);
         let _ = std::fs::create_dir_all(&log_dir);
 
-        let stdout_path = log_dir.join(format!("{}.stdout.log", config.engine_id));
-        let stderr_path = log_dir.join(format!("{}.stderr.log", config.engine_id));
+        let stdout_path = log_dir.join("stdout.log");
+        let stderr_path = log_dir.join("stderr.log");
 
         let stdout_file = File::create(&stdout_path).ok();
         let stderr_file = File::create(&stderr_path).ok();
@@ -256,7 +293,7 @@ impl EngineManager {
         info!(
             engine = %config.engine_id,
             binary = %binary_path.display(),
-            port = config.port,
+            port = selected_port,
             slot = ?primary_cap,
             stdout = ?stdout_path.display(),
             stderr = ?stderr_path.display(),
@@ -270,96 +307,22 @@ impl EngineManager {
         })?;
 
         // Spawn stdout/stderr readers
-        let emitter_clone = Arc::clone(&self.emitter);
-        let engine_id_clone = config.engine_id.clone();
-        if let Some(mut stdout) = process.stdout.take() {
-            let mut file = stdout_file;
-            tokio::spawn(async move {
-                use std::io::Write;
-                use tokio::io::AsyncReadExt;
-                let mut buf = [0u8; 1024];
-                let mut current_line = String::new();
-                while let Ok(n) = stdout.read(&mut buf).await {
-                    if n == 0 {
-                        break;
-                    }
-                    let Some(bytes) = buf.get(..n) else {
-                        break;
-                    };
-                    let chunk = String::from_utf8_lossy(bytes);
-                    for c in chunk.chars() {
-                        if c == '\n' || c == '\r' {
-                            if !current_line.is_empty() {
-                                if let Some(ref mut f) = file {
-                                    let mut line_nl = current_line.clone();
-                                    line_nl.push('\n');
-                                    let _ = f.write_all(line_nl.as_bytes());
-                                }
-                                let trimmed = current_line.trim();
-                                if is_progress_log_line(trimmed) {
-                                    emitter_clone.emit_log(&engine_id_clone, trimmed);
-                                }
-                                current_line.clear();
-                            }
-                        } else {
-                            current_line.push(c);
-                        }
-                    }
-                }
-
-                if !current_line.is_empty() {
-                    let trimmed = current_line.trim();
-                    if is_progress_log_line(trimmed) {
-                        emitter_clone.emit_log(&engine_id_clone, trimmed);
-                    }
-                }
-            });
+        if let Some(stdout) = process.stdout.take() {
+            spawn_log_reader(
+                stdout,
+                stdout_file,
+                Arc::clone(&self.emitter),
+                config.engine_id.clone(),
+            );
         }
 
-        let emitter_clone2 = Arc::clone(&self.emitter);
-        let engine_id_clone2 = config.engine_id.clone();
-        if let Some(mut stderr) = process.stderr.take() {
-            let mut file = stderr_file;
-            tokio::spawn(async move {
-                use std::io::Write;
-                use tokio::io::AsyncReadExt;
-                let mut buf = [0u8; 1024];
-                let mut current_line = String::new();
-                while let Ok(n) = stderr.read(&mut buf).await {
-                    if n == 0 {
-                        break;
-                    }
-                    let Some(bytes) = buf.get(..n) else {
-                        break;
-                    };
-                    let chunk = String::from_utf8_lossy(bytes);
-                    for c in chunk.chars() {
-                        if c == '\n' || c == '\r' {
-                            if !current_line.is_empty() {
-                                if let Some(ref mut f) = file {
-                                    let mut line_nl = current_line.clone();
-                                    line_nl.push('\n');
-                                    let _ = f.write_all(line_nl.as_bytes());
-                                }
-                                let trimmed = current_line.trim();
-                                if is_progress_log_line(trimmed) {
-                                    emitter_clone2.emit_log(&engine_id_clone2, trimmed);
-                                }
-                                current_line.clear();
-                            }
-                        } else {
-                            current_line.push(c);
-                        }
-                    }
-                }
-
-                if !current_line.is_empty() {
-                    let trimmed = current_line.trim();
-                    if is_progress_log_line(trimmed) {
-                        emitter_clone2.emit_log(&engine_id_clone2, trimmed);
-                    }
-                }
-            });
+        if let Some(stderr) = process.stderr.take() {
+            spawn_log_reader(
+                stderr,
+                stderr_file,
+                Arc::clone(&self.emitter),
+                config.engine_id.clone(),
+            );
         }
 
         let mut running = RunningEngine {
@@ -371,7 +334,7 @@ impl EngineManager {
         };
 
         // Wait for health check
-        match Self::wait_for_health(&endpoint).await {
+        match wait_for_health(&endpoint).await {
             Ok(()) => {
                 running.healthy = true;
                 info!(engine = %running.definition.id, "Engine is healthy");
@@ -379,11 +342,17 @@ impl EngineManager {
             }
             Err(e) => {
                 warn!(engine = %running.definition.id, error = %e, "Engine health check failed");
+                let diagnosed_message = diagnose_engine_start_failure(&stderr_path)
+                    .await
+                    .unwrap_or_else(|| e.to_string());
                 self.emitter
-                    .emit_error(&running.definition.id, &e.to_string());
+                    .emit_error(&running.definition.id, &diagnosed_message);
                 // Kill the process if health check fails
                 let _ = running.process.kill().await;
-                return Err(e);
+                return Err(AppError::External {
+                    request_id: None,
+                    message: diagnosed_message,
+                });
             }
         }
 
@@ -438,47 +407,190 @@ impl EngineManager {
             .cloned()
             .ok_or_else(|| AppError::NotFound(format!("Engine '{id}' not found in registry")))
     }
+}
 
-    /// Wait for engine to become healthy (poll /health or /v1/models endpoints)
-    async fn wait_for_health(endpoint: &str) -> Result<(), AppError> {
-        let client = reqwest::Client::new();
-        // Try multiple standard endpoints—some engines use /health, others /v1/models, or just /
-        let health_endpoints = [
-            format!("{endpoint}/health"),
-            format!("{endpoint}/v1/models"),
-            format!("{endpoint}/"),
-        ];
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::panic)]
 
-        let max_attempts = 120; // 60 seconds (120 * 500ms) - loading 13GB models takes time
-        let interval = Duration::from_millis(500);
+    use super::*;
+    use crate::domain::engine::engine_runtime::classify_engine_start_failure;
+    use crate::domain::system::ports::ENGINE_LOCAL_PORT_RANGE;
+    use std::fs;
+    use std::net::TcpListener;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-        for attempt in 1..=max_attempts {
-            for health_url in &health_endpoints {
-                match client.get(health_url).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        info!(attempt, url = %health_url, "Engine health check passed");
-                        return Ok(());
-                    }
-                    Ok(resp) => {
-                        // Some servers might return 401/403 if they don't have these endpoints,
-                        // which is fine, we just keep trying others.
-                        if attempt % 20 == 0 {
-                            warn!(attempt, url = %health_url, status = %resp.status(), "Health check polling...");
-                        }
-                    }
-                    Err(_) => {
-                        // Port not open yet or connection refused
-                    }
-                }
-            }
-            tokio::time::sleep(interval).await;
+    fn sample_config(model_path: Option<&str>) -> EngineConfig {
+        EngineConfig {
+            engine_id: "llamacpp".to_string(),
+            gpu_layers: -1,
+            context_size: 4096,
+            model_path: model_path.map(str::to_string),
+            vae_path: None,
+            llm_path: None,
+            extra_args: vec![],
         }
+    }
 
-        Err(AppError::External {
-            request_id: None,
-            message: format!(
-                "Engine health check timed out after {max_attempts} attempts (60s). Check engine logs for details."
-            ),
-        })
+    fn sample_sdcpp_config(model_path: Option<&str>) -> EngineConfig {
+        EngineConfig {
+            engine_id: "sdcpp".to_string(),
+            gpu_layers: -1,
+            context_size: 4096,
+            model_path: model_path.map(str::to_string),
+            vae_path: None,
+            llm_path: None,
+            extra_args: vec![],
+        }
+    }
+
+    #[test]
+    fn builds_single_slot_llamacpp_args_by_default() {
+        let args = build_llamacpp_args(&sample_config(None), 8081);
+        assert!(args.windows(2).any(|w| w == ["--parallel", "1"]));
+        assert!(args.windows(2).any(|w| w == ["--reasoning", "off"]));
+    }
+
+    #[test]
+    fn clamps_llamacpp_context_size_to_safe_minimum() {
+        let mut config = sample_config(None);
+        config.context_size = 1024;
+
+        let args = build_llamacpp_args(&config, 8081);
+        assert!(args.windows(2).any(|w| w == ["--ctx-size", "4096"]));
+    }
+
+    #[test]
+    fn adds_qwen_specific_llamacpp_args() {
+        let args = build_llamacpp_args(&sample_config(Some("Qwen3.5-9B-Q4_K_M.gguf")), 8081);
+        assert!(args.contains(&"--jinja".to_string()));
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--reasoning-format", "deepseek"])
+        );
+        assert!(args.contains(&"--no-context-shift".to_string()));
+        assert!(args.windows(2).any(|w| w == ["--flash-attn", "on"]));
+    }
+
+    #[test]
+    fn picks_preferred_port_when_it_is_free() {
+        let port = 8085;
+        let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
+        drop(listener);
+
+        let selected = find_available_local_port(port, "llamacpp").unwrap();
+
+        assert_eq!(selected, port);
+        assert!(ENGINE_LOCAL_PORT_RANGE.contains(&selected));
+    }
+
+    #[test]
+    fn skips_busy_port_and_uses_next_free_one() {
+        let busy_port = 8086;
+        let _listener = TcpListener::bind(("127.0.0.1", busy_port)).unwrap();
+
+        let selected = find_available_local_port(busy_port, "llamacpp").unwrap();
+
+        assert_ne!(selected, busy_port);
+        assert!(selected > busy_port);
+        assert!(ENGINE_LOCAL_PORT_RANGE.contains(&selected));
+    }
+
+    #[test]
+    fn classifies_gpu_memory_failure_from_log() {
+        let message = classify_engine_start_failure(
+            "cudaMalloc failed: out of memory\nfailed to allocate compute buffers",
+        );
+
+        assert_eq!(
+            message.as_deref(),
+            Some(
+                "Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model."
+            )
+        );
+    }
+
+    #[test]
+    fn classifies_system_memory_failure_from_log() {
+        let message = classify_engine_start_failure("std::bad_alloc\nThe paging file is too small");
+
+        assert_eq!(
+            message.as_deref(),
+            Some(
+                "Not enough system memory to start the local model. Close other apps or use a smaller model."
+            )
+        );
+    }
+
+    #[test]
+    fn builds_plain_sdcpp_model_args() {
+        let args = build_sdcpp_args(
+            &sample_sdcpp_config(Some("C:/models/sd15.safetensors")),
+            8082,
+        )
+        .unwrap();
+
+        assert!(args.windows(2).any(|w| w == ["--listen-port", "8082"]));
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--model", "C:/models/sd15.safetensors"])
+        );
+    }
+
+    #[test]
+    fn rejects_qwen_image_without_companion_files() {
+        let error = build_sdcpp_args(
+            &sample_sdcpp_config(Some("C:/models/qwen-image-Q2_K.gguf")),
+            8082,
+        )
+        .unwrap_err();
+
+        match error {
+            AppError::Validation(message) => {
+                assert!(message.contains("Qwen Image model"));
+                assert!(message.contains("--vae"));
+                assert!(message.contains("--llm"));
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auto_detects_qwen_image_companion_files_in_model_directory() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("axelate-sdcpp-qwen-{unique}"));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let diffusion = temp_dir.join("qwen-image-Q2_K.gguf");
+        let vae = temp_dir.join("qwen_image_vae.safetensors");
+        let llm = temp_dir.join("Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf");
+
+        fs::write(&diffusion, []).unwrap();
+        fs::write(&vae, []).unwrap();
+        fs::write(&llm, []).unwrap();
+
+        let args = build_sdcpp_args(
+            &sample_sdcpp_config(Some(diffusion.to_string_lossy().as_ref())),
+            8082,
+        )
+        .unwrap();
+
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--diffusion-model", diffusion.to_string_lossy().as_ref()])
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--vae", vae.to_string_lossy().as_ref()])
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--llm", llm.to_string_lossy().as_ref()])
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

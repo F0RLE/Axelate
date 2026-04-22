@@ -1,11 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-    getProviderFromCatalog,
-    getProviderData,
-    getModelsFromProvider,
-    getModelData,
     getApiModelId,
+    getModelData,
+    getModelDataFromModels,
+    getModelsFromProvider,
     getMostPowerfulModel,
+    getProviderData,
+    getProviderFromCatalog,
     getSelectedModel,
     resolveProviderModel,
 } from './catalogHelpers';
@@ -18,121 +19,73 @@ const createAppMock = (id: string, models: unknown = null) =>
     }) as unknown as IAICatalogApp;
 
 describe('catalogHelpers', () => {
-    beforeEach(() => {
-        // Mock global APP_DATA
-        (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = {
-            ai: [
-                createAppMock('gemini', [
-                    { id: 'gemini-pro', apiModels: { text: 'models/gemini-pro' } },
-                    { id: 'gemini-ultra', apiModels: { text: 'models/gemini-ultra' } },
-                ]),
-                createAppMock('gpt'),
-            ],
-        };
-    });
+    const catalog: IAICatalogApp[] = [
+        createAppMock('gemini', [
+            { id: 'gemini-pro', apiModels: { text: 'models/gemini-pro' } },
+            { id: 'gemini-ultra', apiModels: { text: 'models/gemini-ultra' } },
+        ]),
+        createAppMock('gpt'),
+    ];
 
-    afterEach(() => {
-        (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = undefined;
-    });
+    describe('provider access', () => {
+        it('returns provider app when present', () => {
+            expect(getProviderFromCatalog(catalog, 'gemini')?.id).toBe('gemini');
+        });
 
-    describe('Global Access', () => {
-        it.each([
-            ['APP_DATA', undefined],
-            ['APP_DATA.ai', {}],
-        ])('should handle undefined %s gracefully', (_, appDataVal) => {
-            (globalThis as unknown as Record<string, unknown>)['APP_DATA'] = appDataVal;
-            expect(getProviderFromCatalog('gemini')).toBeNull();
+        it('returns null for unknown provider', () => {
+            expect(getProviderFromCatalog(catalog, 'unknown')).toBeNull();
+            expect(getProviderFromCatalog([], 'gemini')).toBeNull();
+        });
+
+        it('returns provider data when present', () => {
+            expect(getProviderData(catalog, 'gemini')?.models).toHaveLength(2);
+        });
+
+        it('returns null when provider has no data', () => {
+            expect(getProviderData(catalog, 'gpt')).toBeNull();
         });
     });
 
-    describe('Provider Access', () => {
-        it('getProviderFromCatalog should return correct app', () => {
-            const app = getProviderFromCatalog('gemini');
-            expect(app?.id).toBe('gemini');
+    describe('model access', () => {
+        it('returns provider models', () => {
+            expect(getModelsFromProvider(catalog, 'gemini')).toHaveLength(2);
+            expect(getModelsFromProvider(catalog, 'gpt')).toEqual([]);
         });
 
-        it('getProviderFromCatalog should return null for deeply unknown provider', () => {
-            expect(getProviderFromCatalog('unknown')).toBeNull();
-        });
-
-        it('getProviderData should return apiProviderData', () => {
-            const data = getProviderData('gemini');
-            expect(data?.models).toHaveLength(2);
-        });
-
-        it('getProviderData should return null if provider not found or has no data', () => {
-            expect(getProviderData('unknown')).toBeNull();
-            expect(getProviderData('gpt')).toBeNull();
-        });
-    });
-
-    describe('Model Access', () => {
-        it('getModelsFromProvider should return array of models', () => {
-            expect(getModelsFromProvider('gemini')).toHaveLength(2);
-            expect(getModelsFromProvider('gpt')).toEqual([]);
-            expect(getModelsFromProvider('unknown')).toEqual([]);
-        });
-
-        it.each([
-            [
-                'getModelData should return correct model',
-                'getModelData',
-                'gemini-ultra',
+        it('returns model data from model list', () => {
+            const models = getModelsFromProvider(catalog, 'gemini');
+            expect(getModelDataFromModels(models, 'gemini-ultra')?.apiModels?.text).toBe(
                 'models/gemini-ultra',
-            ],
-            [
-                'getModelData should return null if model not found',
-                'getModelData',
-                'unknown-model',
-                null,
-            ],
-            [
-                'getApiModelId should return api identifier',
-                'getApiModelId',
-                'gemini-ultra',
-                'models/gemini-ultra',
-            ],
-        ])('%s', (_, method, modelId, expected) => {
-            if (method === 'getModelData') {
-                const model = getModelData('gemini', modelId) as {
-                    apiModels?: { text?: string };
-                } | null;
-                expect(model?.apiModels?.text ?? null).toBe(expected);
-            } else {
-                expect(getApiModelId('gemini', modelId)).toBe(expected);
-            }
+            );
+            expect(getModelDataFromModels(models, 'missing')).toBeNull();
         });
 
-        it('getApiModelId should return original string if api object missing', () => {
-            // Mock edge case where apiModels doesn't exist natively.
-            const globalAny = globalThis as unknown as Record<string, unknown>;
-            globalAny['APP_DATA'] = {
-                ai: [createAppMock('gemini', [{ id: 'broken-model' }])],
-            };
-            expect(getApiModelId('gemini', 'broken-model')).toBe('broken-model');
+        it('returns model data from catalog', () => {
+            expect(getModelData(catalog, 'gemini', 'gemini-pro')?.apiModels?.text).toBe(
+                'models/gemini-pro',
+            );
+            expect(getModelData(catalog, 'gemini', 'missing')).toBeNull();
         });
 
-        it.each([
-            ['gemini', 'gemini-pro'],
-            ['gpt', ''],
-        ])('getMostPowerfulModel(%s) should return %s', (provider, expected) => {
-            expect(getMostPowerfulModel(provider)).toBe(expected);
+        it('maps UI model key to API identifier', () => {
+            expect(getApiModelId(catalog, 'gemini', 'gemini-ultra')).toBe('models/gemini-ultra');
+            expect(getApiModelId(catalog, 'gemini', 'broken')).toBe('broken');
         });
 
-        it('getSelectedModel should use saved value first', () => {
+        it('returns first model as most powerful simple fallback', () => {
+            expect(getMostPowerfulModel(catalog, 'gemini')).toBe('gemini-pro');
+            expect(getMostPowerfulModel(catalog, 'gpt')).toBe('');
+        });
+
+        it('prefers saved model before catalog fallback', () => {
             const getter = vi.fn().mockReturnValue('saved-model');
-            expect(getSelectedModel('gemini', getter)).toBe('saved-model');
-            expect(getter).toHaveBeenCalledWith('gemini');
-        });
-
-        it('getSelectedModel should fallback to most powerful model if no saved value', () => {
-            const getter = vi.fn().mockReturnValue(undefined);
-            expect(getSelectedModel('gemini', getter)).toBe('gemini-pro');
+            expect(getSelectedModel(catalog, 'gemini', getter)).toBe('saved-model');
+            expect(getSelectedModel(catalog, 'gemini', () => undefined)).toBe('gemini-pro');
         });
     });
 
     describe('resolveProviderModel', () => {
-        const mockCatalog: IAICatalogApp[] = [
+        const advancedCatalog: IAICatalogApp[] = [
             createAppMock('advanced', {
                 'model-a': {
                     apiModels: { text: 'api-model-a' },
@@ -146,41 +99,30 @@ describe('catalogHelpers', () => {
             createAppMock('empty'),
         ];
 
-        it.each([
-            ['use modelGetter value and map to API ID', 'model-a', 'api-model-a'],
-            ['use modelGetter value even if it lacks API mapping', 'model-c', 'model-c'], // not in dict
-            ['calculate most powerful model if getter returns empty', '', 'api-model-b'], // model-b has higher combined stats
-        ])('should %s', (_, getterValue, expected) => {
-            const getter = vi.fn().mockReturnValue(getterValue);
-            expect(resolveProviderModel('advanced', mockCatalog, getter)).toBe(expected);
+        it('uses saved model key when provided', () => {
+            expect(resolveProviderModel('advanced', advancedCatalog, () => 'model-a')).toBe(
+                'api-model-a',
+            );
         });
 
-        it('should calculate most powerful model if getter is undefined', () => {
-            const result = resolveProviderModel('advanced', mockCatalog);
-            expect(result).toBe('api-model-b');
+        it('falls back to strongest model by stats', () => {
+            expect(resolveProviderModel('advanced', advancedCatalog, () => '')).toBe('api-model-b');
+            expect(resolveProviderModel('advanced', advancedCatalog)).toBe('api-model-b');
         });
 
-        it('should handle undefined provider data gracefully', () => {
-            const result = resolveProviderModel('empty', mockCatalog);
-            expect(result).toBe('');
+        it('handles missing provider data', () => {
+            expect(resolveProviderModel('empty', advancedCatalog)).toBe('');
         });
 
-        it('should handle models without stats gracefully during sorting', () => {
+        it('handles models without stats gracefully', () => {
             const noStatsCatalog: IAICatalogApp[] = [
                 createAppMock('nostats', {
-                    'model-x': { apiModels: { text: 'api-x' } }, // no stats
-                    'model-y': { apiModels: { text: 'api-y' } }, // no stats
+                    'model-x': { apiModels: { text: 'api-x' } },
+                    'model-y': { apiModels: { text: 'api-y' } },
                 }),
             ];
-            const result = resolveProviderModel('nostats', noStatsCatalog);
-            // sort is stable or depends on engine, but it shouldn't crash and should return one of them
-            expect(['api-x', 'api-y']).toContain(result);
-        });
 
-        it('should handle empty models gracefully', () => {
-            const noModelsCatalog: IAICatalogApp[] = [createAppMock('nomodels', {})];
-            const result = resolveProviderModel('nomodels', noModelsCatalog);
-            expect(result).toBe('');
+            expect(['api-x', 'api-y']).toContain(resolveProviderModel('nostats', noStatsCatalog));
         });
     });
 });

@@ -24,10 +24,10 @@
         "windows": [
             {
                 "title": "Axelate",
-                "width": 1400,
-                "height": 900,
-                "minWidth": 1000,
-                "minHeight": 600,
+                "width": 1520,
+                "height": 980,
+                "minWidth": 1180,
+                "minHeight": 720,
                 "center": true,
                 "resizable": true,
                 "fullscreen": false,
@@ -38,7 +38,15 @@
             }
         ],
         "security": {
-            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: http://asset.localhost blob:; connect-src 'self' ipc: http://ipc.localhost https://openrouter.ai https://*.openrouter.ai; base-uri 'self'",
+            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: http://asset.localhost blob:; connect-src 'self' ipc: http://ipc.localhost https://openrouter.ai https://*.openrouter.ai; frame-src 'self' asset: http://asset.localhost; base-uri 'self'",
+            "assetProtocol": {
+                "enable": true,
+                "scope": [
+                    "$APPDATA/AxelateData/System/Modules/**",
+                    "$HOME/.config/AxelateData/System/Modules/**",
+                    "$HOME/Library/Application Support/AxelateData/System/Modules/**"
+                ]
+            },
             "capabilities": [
                 "default"
             ]
@@ -48,6 +56,15 @@
         "publisher": "Axelate Team",
         "copyright": "Copyright © 2026 Axelate",
         "active": true,
+        "windows": {
+            "webviewInstallMode": {
+                "type": "downloadBootstrapper",
+                "silent": true
+            },
+            "nsis": {
+                "minimumWebview2Version": "110.0.1531.0"
+            }
+        },
         "targets": [
             "msi",
             "nsis"

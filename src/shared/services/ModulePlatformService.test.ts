@@ -2,19 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModulePlatformService } from './ModulePlatformService';
 import type { ModuleService } from './ModuleService';
 import type { IApp } from '../types/coreTypes';
-
-// Mock the aiBridge import
-vi.mock('@/features/ai/services/AIBridge', () => ({
-    aiBridge: {
-        stopProvider: vi.fn(),
-    },
-}));
+import type { AIBridge } from '@/features/ai/services/AIBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 function createMockModuleService(): ModuleService {
     return {
         downloadModule: vi.fn().mockResolvedValue(undefined),
         deleteModule: vi.fn().mockResolvedValue(true),
         control: vi.fn().mockResolvedValue(true),
+        pauseDownload: vi.fn().mockResolvedValue(true),
+        resumeDownload: vi.fn().mockResolvedValue(true),
         cancelDownload: vi.fn().mockResolvedValue(true),
     } as unknown as ModuleService;
 }
@@ -32,10 +29,17 @@ function createApp(overrides: Partial<IApp> = {}): IApp {
 describe('ModulePlatformService', () => {
     let moduleService: ModuleService;
     let service: ModulePlatformService;
+    let aiBridge: Pick<AIBridge, 'stopProvider' | 'getState'>;
+    let tracer: Pick<LoggerService, 'info'>;
 
     beforeEach(() => {
         moduleService = createMockModuleService();
-        service = new ModulePlatformService(() => moduleService);
+        aiBridge = {
+            stopProvider: vi.fn(),
+            getState: vi.fn(() => ({ activeProviderId: 'test-module', isRunning: true })),
+        };
+        tracer = { info: vi.fn() };
+        service = new ModulePlatformService(() => moduleService, aiBridge as AIBridge, tracer);
         vi.clearAllMocks();
     });
 
@@ -83,7 +87,6 @@ describe('ModulePlatformService', () => {
 
     describe('stop', () => {
         it('should stop API provider for API modules', async () => {
-            const { aiBridge } = await import('@/features/ai/services/AIBridge');
             const app = createApp({ type: 'api' });
             const result = await service.stop(app);
             expect(result).toBe(true);
@@ -91,15 +94,30 @@ describe('ModulePlatformService', () => {
         });
 
         it('should stop API provider when provider metadata is present', async () => {
-            const { aiBridge } = await import('@/features/ai/services/AIBridge');
             const app = createApp({
                 id: 'custom-provider',
                 type: 'local',
                 apiProviderData: { id: 'custom-provider' },
             });
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: 'custom-provider',
+            });
             const result = await service.stop(app);
             expect(result).toBe(true);
             expect(aiBridge.stopProvider).toHaveBeenCalled();
+        });
+
+        it('should not stop an inactive API provider', async () => {
+            const app = createApp({ id: 'gemini', type: 'api' });
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: 'gpt',
+                isRunning: true,
+            });
+
+            const result = await service.stop(app);
+
+            expect(result).toBe(false);
+            expect(aiBridge.stopProvider).not.toHaveBeenCalled();
         });
 
         it('should call moduleService.control for local modules', async () => {
@@ -115,6 +133,22 @@ describe('ModulePlatformService', () => {
             const result = await service.cancelDownload('test-module');
             expect(result).toBe(true);
             expect(moduleService.cancelDownload).toHaveBeenCalledWith('test-module');
+        });
+    });
+
+    describe('pauseDownload', () => {
+        it('should pause a download', async () => {
+            const result = await service.pauseDownload('test-module');
+            expect(result).toBe(true);
+            expect(moduleService.pauseDownload).toHaveBeenCalledWith('test-module');
+        });
+    });
+
+    describe('resumeDownload', () => {
+        it('should resume a paused download', async () => {
+            const result = await service.resumeDownload('test-module');
+            expect(result).toBe(true);
+            expect(moduleService.resumeDownload).toHaveBeenCalledWith('test-module');
         });
     });
 

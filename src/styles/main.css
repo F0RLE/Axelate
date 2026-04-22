@@ -22,8 +22,10 @@
 /* Features */
 @import './features/ai-settings.css';
 @import './features/chat.css';
-@import './features/dashboard.css';
-@import './features/debug.css';
+@import './features/home-and-modules-legacy.css';
+@import './features/modules-app-selection-modal.css';
+@import './features/modules-dashboard-cards.css';
+@import './features/console.css';
 @import './features/downloads.css';
 @import './features/monitoring.css';
 @import './features/settings.css';

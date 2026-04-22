@@ -19,10 +19,10 @@
 
 | Version | Supported | Notes |
 | :--- | :--- | :--- |
-| **0.1.x** | ✅ | Current Stable Release |
-| < 0.1.0 | ❌ | End of Life |
+| **0.1.x** | Yes | Current supported release line |
+| < 0.1.0 | No | End of life |
 
-## 🚨 Reporting a Vulnerability
+## Reporting a Vulnerability
 
 Axelate takes security seriously. If you discover a vulnerability, please report it responsibly.
 
@@ -30,9 +30,10 @@ Axelate takes security seriously. If you discover a vulnerability, please report
 > **DO NOT** create a public GitHub Issue for security vulnerabilities.
 
 ### How to Report
-Please email explicitly to: **security@axelate.com**
 
-We commit to responding within **48 hours**.
+Please email: **security@axelate.com**
+
+We aim to respond within **48 hours**.
 
 ---
 
@@ -45,7 +46,7 @@ We commit to responding within **48 hours**.
   <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
   <br>
   <br>
-  <img src="https://img.shields.io/badge/Made_with_❤️_by_Axelate_Team-31303a?style=flat-square" alt="Made with Love" />
+  <img src="https://img.shields.io/badge/Made_with_Axelate-31303a?style=flat-square" alt="Made with Axelate" />
   <br>
   <sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
 </div>

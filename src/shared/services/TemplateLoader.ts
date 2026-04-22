@@ -1,31 +1,83 @@
 /**
  * @module core/services/TemplateLoader
  * @description Centralized service for dynamic HTML template loading, caching, and secure injection.
- * Implements the Singleton pattern as defined in Axelate Standards Section 16.1.
  *
  * @example
  * ```typescript
- * import { templateLoader } from './TemplateLoader';
+ * import { TemplateLoader } from './TemplateLoader';
  *
- * await templateLoader.loadAndInject('sidebar', 'sidebar-container');
+ * const loader = new TemplateLoader();
+ * await loader.loadAndInject('sidebar', 'sidebar-container');
  * ```
  */
 
-import DOMPurify from 'dompurify';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type InsertMode = 'replace' | 'append';
+type TemplateLoaderLogger = Pick<LoggerService, 'debug' | 'error'>;
 
 /**
  * @class TemplateLoader
  * @description Manages template lifecycle and secure DOM injection.
  */
-class TemplateLoader {
+export class TemplateLoader {
     private readonly _cache = new Map<string, string>();
     private _initialized = false;
 
-    constructor() {
-        // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>)['templateLoader'] = this;
-    }
+    constructor(private readonly _tracer: TemplateLoaderLogger) {}
+
+    private static readonly _baseSanitizeConfig: DOMPurifyConfig = {
+        USE_PROFILES: { html: true, svg: true },
+        ALLOW_DATA_ATTR: true,
+        ADD_TAGS: [
+            'use',
+            'svg',
+            'path',
+            'symbol',
+            'circle',
+            'rect',
+            'title',
+            'desc',
+            'defs',
+            'linearGradient',
+            'stop',
+        ],
+        ADD_ATTR: [
+            'href',
+            'xlink:href',
+            'viewBox',
+            'd',
+            'fill',
+            'stroke',
+            'data-page',
+            'data-view',
+            'data-level',
+            'data-i18n',
+            'data-i18n-placeholder',
+            'data-i18n-params',
+            'data-i18n-title',
+            'data-title',
+            'data-lang',
+            'data-monitor-id',
+            'aria-label',
+            'aria-hidden',
+            'aria-current',
+            'aria-expanded',
+            'x1',
+            'y1',
+            'x2',
+            'y2',
+            'offset',
+            'stop-color',
+        ],
+    };
+
+    private static readonly _replaceSanitizeConfig: DOMPurifyConfig = {
+        ...TemplateLoader._baseSanitizeConfig,
+        SAFE_FOR_TEMPLATES: true,
+        KEEP_CONTENT: true,
+    };
 
     /**
      * Idempotent initialization of the service.
@@ -33,7 +85,7 @@ class TemplateLoader {
      */
     public init(): void {
         if (this._initialized) {
-            tracer.warn('[TemplateLoader] Already initialized');
+            this._tracer.debug('[TemplateLoader] Already initialized');
             return;
         }
 
@@ -62,11 +114,12 @@ class TemplateLoader {
                     `Failed to load template: ${path} (Status: ${response.status.toString()})`,
                 );
             }
+
             const html = await response.text();
             this._cache.set(path, html);
             return html;
         } catch (error) {
-            tracer.error(`[TemplateLoader] Error loading template ${path}: ${String(error)}`);
+            this._tracer.error(`[TemplateLoader] Error loading template ${path}: ${String(error)}`);
             return '';
         }
     }
@@ -80,57 +133,7 @@ class TemplateLoader {
      * @sideeffect Modifies the DOM by injecting sanitized HTML
      */
     public injectTemplate(containerId: string, html: string): boolean {
-        const container = document.getElementById(containerId);
-        if (container) {
-            // Section 4.4: Secure injection with permissive configuration for app logic
-            container.innerHTML = DOMPurify.sanitize(html, {
-                USE_PROFILES: { html: true, svg: true },
-                ADD_TAGS: [
-                    'use',
-                    'svg',
-                    'path',
-                    'symbol',
-                    'circle',
-                    'rect',
-                    'title',
-                    'desc',
-                    'defs',
-                    'linearGradient',
-                    'stop',
-                ],
-                ADD_ATTR: [
-                    'href',
-                    'xlink:href',
-                    'viewBox',
-                    'd',
-                    'fill',
-                    'stroke',
-                    'data-page',
-                    'data-i18n',
-                    'data-i18n-placeholder',
-                    'data-i18n-params',
-                    'data-i18n-title',
-                    'data-lang',
-                    'data-monitor-id',
-                    'aria-label',
-                    'aria-hidden',
-                    'aria-current',
-                    'aria-expanded',
-                    'x1',
-                    'y1',
-                    'x2',
-                    'y2',
-                    'offset',
-                    'stop-color',
-                ],
-                ALLOW_DATA_ATTR: true,
-                SAFE_FOR_TEMPLATES: true,
-                KEEP_CONTENT: true,
-            });
-            tracer.debug(`[TemplateLoader] Injected: ${containerId}`);
-            return true;
-        }
-        return false;
+        return this._writeTemplate(containerId, html, 'replace');
     }
 
     /**
@@ -154,27 +157,7 @@ class TemplateLoader {
      * @sideeffect Modifies the DOM by appending sanitized HTML
      */
     public appendTemplate(containerId: string, html: string): boolean {
-        const container = document.getElementById(containerId);
-        if (container) {
-            const sanitized = DOMPurify.sanitize(html, {
-                USE_PROFILES: { html: true, svg: true },
-                ALLOW_DATA_ATTR: true,
-                ADD_TAGS: ['use', 'svg', 'path', 'symbol'],
-                ADD_ATTR: [
-                    'href',
-                    'xlink:href',
-                    'viewBox',
-                    'd',
-                    'fill',
-                    'stroke',
-                    'data-i18n',
-                    'data-page',
-                ],
-            });
-            container.insertAdjacentHTML('beforeend', sanitized);
-            return true;
-        }
-        return false;
+        return this._writeTemplate(containerId, html, 'append');
     }
 
     /**
@@ -193,7 +176,34 @@ class TemplateLoader {
     public async preloadTemplates(paths: string[]): Promise<void> {
         await Promise.all(paths.map((path) => this.loadTemplate(path)));
     }
-}
 
-// Export singleton instance as per Section 16.1
-export const templateLoader = new TemplateLoader();
+    private _writeTemplate(containerId: string, html: string, mode: InsertMode): boolean {
+        const container = this._getContainer(containerId);
+        if (container === null) {
+            return false;
+        }
+
+        const sanitized = this._sanitizeHtml(html, mode);
+        if (mode === 'replace') {
+            container.innerHTML = sanitized;
+            this._tracer.debug(`[TemplateLoader] Injected: ${containerId}`);
+        } else {
+            container.insertAdjacentHTML('beforeend', sanitized);
+        }
+
+        return true;
+    }
+
+    private _getContainer(containerId: string): HTMLElement | null {
+        const container = document.getElementById(containerId);
+        return container instanceof HTMLElement ? container : null;
+    }
+
+    private _sanitizeHtml(html: string, mode: InsertMode): string {
+        const config =
+            mode === 'replace'
+                ? TemplateLoader._replaceSanitizeConfig
+                : TemplateLoader._baseSanitizeConfig;
+        return DOMPurify.sanitize(html, config);
+    }
+}

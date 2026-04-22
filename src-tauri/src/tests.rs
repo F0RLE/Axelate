@@ -15,7 +15,7 @@ mod app_tests {
         assert_eq!(settings.theme, "dark");
         assert_eq!(
             settings.language,
-            crate::utils::windows::detect_system_language()
+            crate::utils::locale::detect_system_language()
         );
         assert!(settings.use_gpu);
         assert!(!settings.debug_mode);
@@ -66,25 +66,21 @@ mod app_tests {
     /// Test path utilities are initialized
     #[test]
     fn test_data_roots_initialized() {
-        use crate::utils::paths::{APPDATA_ROOT, LOCALDATA_ROOT};
+        use crate::utils::paths::APPDATA_ROOT;
 
         let path_str = APPDATA_ROOT.to_string_lossy().replace('\\', "/");
         assert!(
-            path_str.ends_with("test_appdata_roaming"),
-            "APPDATA_ROOT should use the test roaming root, got {path_str}"
-        );
-
-        let local_path_str = LOCALDATA_ROOT.to_string_lossy().replace('\\', "/");
-        assert_eq!(
-            path_str, local_path_str,
-            "LOCALDATA_ROOT should alias APPDATA_ROOT, got roaming={path_str}, local={local_path_str}"
+            path_str.contains("/axelate-tests/") && path_str.ends_with("/roaming"),
+            "APPDATA_ROOT should use a temp test roaming root, got {path_str}"
         );
     }
 
     /// Test directory paths are correctly derived
     #[test]
     fn test_directory_paths() {
-        use crate::utils::paths::{CONFIG_DIR, LOG_DIR, MODELS_DIR, SYSTEM_ROOT, USER_ROOT};
+        use crate::utils::paths::{
+            CONFIG_DIR, LOG_DIR, MODELS_DIR, RUNTIME_DIR, SYSTEM_ROOT, USER_ROOT,
+        };
 
         // Verify all derived paths are rooted under the expected test directories.
         assert!(USER_ROOT.starts_with(crate::utils::paths::APPDATA_ROOT.as_path()));
@@ -101,14 +97,20 @@ mod app_tests {
         assert!(LOG_DIR.ends_with("Logs"));
         assert!(MODELS_DIR.starts_with(SYSTEM_ROOT.as_path()));
         assert!(MODELS_DIR.ends_with("Models"));
+        assert!(RUNTIME_DIR.starts_with(SYSTEM_ROOT.as_path()));
+        assert!(RUNTIME_DIR.ends_with("Runtime"));
     }
 
     /// Test file paths are correctly derived
     #[test]
     fn test_file_paths() {
-        use crate::utils::paths::{FILE_ENV, FILE_GEN_CONFIG};
+        use crate::utils::paths::{FILE_APP_SETTINGS, FILE_GEN_CONFIG};
 
-        assert!(FILE_ENV.to_string_lossy().ends_with(".env"));
+        assert!(
+            FILE_APP_SETTINGS
+                .to_string_lossy()
+                .ends_with("app_settings.json")
+        );
         assert!(
             FILE_GEN_CONFIG
                 .to_string_lossy()

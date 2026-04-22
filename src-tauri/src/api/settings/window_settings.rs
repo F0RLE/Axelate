@@ -31,6 +31,10 @@ pub fn resolve_zoom(state: &UIState, res_key: &str) -> f64 {
         } else {
             1.0
         })
+        .clamp(
+            window_settings::SCALING_MIN_ZOOM,
+            window_settings::SCALING_MAX_ZOOM,
+        )
 }
 
 #[tauri::command]
@@ -87,7 +91,7 @@ pub async fn save_zoom_level(
 }
 
 /// Set `WebView` zoom level and persist for current resolution.
-/// This is the ONLY place that saves zoom — always saves both global and per-resolution.
+/// Uses native WebView zoom so layout metrics stay consistent with the rendered size.
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned WebviewWindow
@@ -96,9 +100,14 @@ pub async fn set_webview_zoom(
     ui_service: tauri::State<'_, ui_state::UiStateService>,
     zoom: f64,
 ) -> Result<(), AppError> {
+    let zoom = zoom.clamp(
+        window_settings::SCALING_MIN_ZOOM,
+        window_settings::SCALING_MAX_ZOOM,
+    );
+
     window.set_zoom(zoom)?;
 
-    // Save to UI State: both global level and per-resolution override
+    // Save to UI State: both global level and per-resolution override.
     let mut state = ui_service.get_ui_state().await.unwrap_or_default();
     state.zoom_level = zoom;
 
@@ -133,7 +142,10 @@ pub async fn get_webview_zoom(
     ui_service: tauri::State<'_, ui_state::UiStateService>,
 ) -> Result<f64, AppError> {
     let state = ui_service.get_ui_state().await?;
-    Ok(state.zoom_level)
+    Ok(state.zoom_level.clamp(
+        window_settings::SCALING_MIN_ZOOM,
+        window_settings::SCALING_MAX_ZOOM,
+    ))
 }
 
 #[tauri::command]

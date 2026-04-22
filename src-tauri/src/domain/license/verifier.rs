@@ -3,15 +3,11 @@ use super::types::{LicenseInfo, LicenseStatus};
 use crate::errors::AppError;
 
 /// Verifies current license status
-pub const fn verify() -> LicenseStatus {
-    // TEMPORARY: Licensing disabled as per user request
-    LicenseStatus::Enterprise
-    /*
+pub fn verify() -> LicenseStatus {
     match storage::load_license() {
         Some(info) => verify_license_info(&info),
         None => LicenseStatus::Free,
     }
-    */
 }
 
 /// Verifies a license info object

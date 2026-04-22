@@ -1,29 +1,68 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { I18nService } from '@/infrastructure/i18n/I18nService';
-import { eventBus } from '@/shared/services/EventBus';
+import { EventBus } from '@/shared/services/EventBus';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // Mock TauriProvider
 const createMockTauri = (isTauri = false) => ({
     isTauri: () => isTauri,
-    invoke: vi.fn(),
+    invoke: vi.fn().mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+        if (isTauri) {
+            return {} as Record<string, unknown>;
+        }
+
+        if (cmd === 'get_ui_state' || cmd === 'save_ui_state') {
+            return {} as Record<string, unknown>;
+        }
+
+        if (cmd === 'get_system_language') {
+            const response = await fetch('/api/system/language');
+            if (!('ok' in response) || response.ok !== true) {
+                return 'unknown';
+            }
+            const data = (await response.json()) as { language?: string };
+            return data.language ?? 'unknown';
+        }
+
+        if (cmd === 'get_translations') {
+            const lang = String(args?.['lang'] ?? 'en');
+            const response = await fetch(`/api/translations?lang=${lang}`);
+            if (!('ok' in response) || response.ok !== true) {
+                throw new Error('Fetch failed');
+            }
+            return (await response.json()) as Record<string, unknown>;
+        }
+
+        return {} as Record<string, unknown>;
+    }),
 });
 
 describe('I18nService', () => {
     let i18n: I18nService;
     let mockTauri: ReturnType<typeof createMockTauri>;
+    let testEventBus: EventBus;
+    let tracer: LoggerService;
 
     beforeEach(() => {
         mockTauri = createMockTauri(false);
+        testEventBus = new EventBus();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
         i18n = new I18nService(
             mockTauri as unknown as ConstructorParameters<typeof I18nService>[0],
+            testEventBus,
+            tracer,
         );
         localStorage.clear();
-        eventBus.clear();
         vi.useFakeTimers();
     });
 
     afterEach(() => {
-        eventBus.clear();
+        testEventBus.clear();
         vi.useRealTimers();
         vi.unstubAllGlobals();
     });
@@ -118,8 +157,8 @@ describe('I18nService', () => {
                 languageChangedHandler as EventListener,
             );
             globalThis.addEventListener('lang:changed', legacyLangChangedHandler as EventListener);
-            eventBus.on('i18n:language:change', languageBusHandler);
-            eventBus.on('i18n:translations:loaded', translationsLoadedHandler);
+            testEventBus.on('i18n:language:change', languageBusHandler);
+            testEventBus.on('i18n:translations:loaded', translationsLoadedHandler);
 
             const loadPromise = i18n.loadTranslations('ru');
             await vi.runAllTimersAsync();
@@ -198,7 +237,7 @@ describe('I18nService', () => {
                 'language-changed',
                 languageChangedHandler as EventListener,
             );
-            eventBus.on('i18n:translations:loaded', translationsLoadedHandler);
+            testEventBus.on('i18n:translations:loaded', translationsLoadedHandler);
 
             const loadPromise = i18n.loadTranslations('ru');
             await vi.runAllTimersAsync();
@@ -315,6 +354,8 @@ describe('I18nService', () => {
             tauriMock.invoke.mockResolvedValue('de');
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -326,6 +367,8 @@ describe('I18nService', () => {
             tauriMock.invoke.mockResolvedValue('unknown');
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -337,6 +380,8 @@ describe('I18nService', () => {
             tauriMock.invoke.mockRejectedValue(new Error('Tauri failed'));
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -350,6 +395,8 @@ describe('I18nService', () => {
             );
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const langPromise = tauriI18n.getSystemLanguage();
             await vi.runAllTimersAsync();
@@ -366,6 +413,8 @@ describe('I18nService', () => {
             });
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
             const initPromise = tauriI18n.init();
             await vi.runAllTimersAsync();
@@ -386,6 +435,8 @@ describe('I18nService', () => {
             });
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
 
             // Trigger via loadTranslations
@@ -412,6 +463,8 @@ describe('I18nService', () => {
             });
             const tauriI18n = new I18nService(
                 tauriMock as unknown as ConstructorParameters<typeof I18nService>[0],
+                new EventBus(),
+                tracer,
             );
 
             // Trigger via loadTranslations
@@ -421,19 +474,21 @@ describe('I18nService', () => {
             // This should safely catch
         });
 
-        it('should sync language via fetch in non-Tauri', async () => {
-            const fetchMock = vi.fn().mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({}),
+        it('should sync language via bridge in non-Tauri', async () => {
+            mockTauri.invoke.mockImplementation((cmd) => {
+                if (cmd === 'get_translations') return Promise.resolve({});
+                if (cmd === 'get_ui_state') return Promise.resolve({});
+                if (cmd === 'save_ui_state') return Promise.resolve({});
+                return Promise.resolve({});
             });
-            vi.stubGlobal('fetch', fetchMock);
             const loadPromise = i18n.loadTranslations('zh');
             await vi.runAllTimersAsync();
             await loadPromise;
-            expect(fetchMock).toHaveBeenCalledWith(
-                '/api/settings',
-                expect.objectContaining({ method: 'POST' }),
-            );
+            expect(mockTauri.invoke).toHaveBeenCalledWith('save_ui_state', {
+                state: {
+                    preferred_language: 'zh',
+                },
+            });
         });
     });
 
@@ -459,10 +514,8 @@ describe('I18nService', () => {
             expect(await langPromise).toBe('en');
         });
 
-        it('should catch error when _getBackendLanguage throws (Line 40)', async () => {
-            mockTauri.isTauri = () => {
-                throw new Error('isTauri failed');
-            };
+        it('should catch error when backend invoke throws (Line 40)', async () => {
+            mockTauri.invoke.mockRejectedValue(new Error('invoke failed'));
             const langPromise = i18n.getSystemLanguage();
             await vi.runAllTimersAsync();
             expect(await langPromise).toBe('en');

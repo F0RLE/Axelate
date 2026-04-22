@@ -8,8 +8,20 @@ describe('Testing Setup', () => {
     });
 
     it('should have mocked Tauri invoke', () => {
-        const win = globalThis as unknown as Record<string, any>;
+        const win = globalThis as unknown as Record<string, unknown>;
         expect(win['__TAURI__']).toBeDefined();
-        expect(typeof win['__TAURI__']['core']['invoke']).toBe('function');
+        expect(typeof (win['__TAURI__'] as { core: { invoke: unknown } }).core.invoke).toBe(
+            'function',
+        );
+        expect(typeof (win['__TAURI_INTERNALS__'] as { invoke: unknown }).invoke).toBe('function');
+    });
+
+    it('should expose the default translator helper', () => {
+        const translate = (
+            globalThis as unknown as { t: (key: string, fallback?: string) => string }
+        ).t;
+
+        expect(translate('ui.test', 'Fallback')).toBe('Fallback');
+        expect(translate('ui.test')).toBe('ui.test');
     });
 });

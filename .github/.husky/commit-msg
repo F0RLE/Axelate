@@ -1,1 +1,2 @@
-npx --no -- commitlint --config .github/commitlint.config.js --edit "$1"
+#!/usr/bin/env sh
+"${0%/*}/_/run-hook.sh" commit-msg "$@"

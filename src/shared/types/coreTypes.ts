@@ -48,7 +48,10 @@ export interface IApp {
     repoUrl?: string;
     expectedHash?: string;
     dlType?: string;
+    comingSoon?: boolean;
+    managedExternally?: boolean;
     configSchema?: Record<string, IConfigField>;
+    settingsUi?: string | null;
     apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI
 }
 
@@ -99,7 +102,9 @@ export interface IModuleDownloadState {
         | 'pending'
         | 'connecting'
         | 'downloading'
+        | 'verifying'
         | 'extracting'
+        | 'paused'
         | 'complete'
         | 'error'
         | 'cancelled';
@@ -118,7 +123,6 @@ export interface IBootstrapData {
     uiState: IUIState;
     windowConfig: IWindowConfig;
     systemLanguage: string;
-    modules: IModule[];
     initialZoom: number;
 }
 

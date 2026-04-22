@@ -1,33 +1,47 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModalManager } from './ModalManager';
 import { ModuleCardRenderer } from './ModuleCardRenderer';
+import { ModalSelectionPolicy } from './ModalSelectionPolicy';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { IApp } from '../../types/coreTypes';
+import { CUSTOM_TEXT_PROVIDER_ID } from '../../utils/customProviderSupport';
 
 describe('ModalManager lifecycle', () => {
     let modalManager: ModalManager | null = null;
     let interactionSpy: ReturnType<typeof vi.fn>;
     let navigation: NavigationService;
+    let tracer: LoggerService;
 
     beforeEach(() => {
         document.body.innerHTML = `
-            <dialog id="app-selection-modal" class="hidden"></dialog>
+            <dialog id="app-selection-modal" class="hidden">
+                <div class="app-modal">
+                    <div class="app-modal-main">
+                        <div class="app-modal-header">
+                            <div id="app-modal-title"></div>
+                            <div id="app-modal-tab-row" class="hidden">
+                                <button id="filter-text-btn" type="button">Text</button>
+                                <button id="filter-image-btn" type="button">Image</button>
+                            </div>
+                            <button id="close-app-selection-btn" type="button">Close</button>
+                        </div>
+                        <div class="app-modal-body">
+                            <div id="app-modal-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </dialog>
             <div class="models-container"></div>
-            <div id="app-modal-title"></div>
             <div id="app-modal-sidebar">
                 <button class="category-filter-btn"><span>Text models</span></button>
                 <button class="category-filter-btn"><span>Image models wide title</span></button>
             </div>
-            <div id="app-modal-tab-row" class="hidden">
-                <button id="filter-text-btn" type="button">Text</button>
-                <button id="filter-image-btn" type="button">Image</button>
-            </div>
-            <div id="app-modal-list"></div>
             <template id="tpl-empty-state-module"><span></span></template>
             <template id="tpl-module-card">
-                <div class="app-icon-wrapper"></div>
-                <div class="app-card-title"></div>
-                <div class="app-card-desc"></div>
+                <div class="module-selection-card-icon"></div>
+                <div class="module-selection-card-title"></div>
+                <div class="module-selection-card-description"></div>
             </template>
         `;
 
@@ -36,6 +50,9 @@ describe('ModalManager lifecycle', () => {
             throw new Error('Modal root not mounted');
         }
 
+        (modal as HTMLDialogElement).show = vi.fn(() => {
+            modal.setAttribute('open', '');
+        });
         (modal as HTMLDialogElement).showModal = vi.fn(() => {
             modal.setAttribute('open', '');
         });
@@ -44,17 +61,17 @@ describe('ModalManager lifecycle', () => {
         });
 
         (
-            globalThis as unknown as {
-                t: (key: string, fallback: string) => string;
-                aiBridge: { getState: () => Record<string, never> };
-            }
-        ).t = (_key, fallback) => fallback;
-        (
             globalThis as unknown as { aiBridge: { getState: () => Record<string, never> } }
         ).aiBridge = {
             getState: () => ({}),
         };
         interactionSpy = vi.fn();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        } as unknown as LoggerService;
         navigation = {
             pushBackAction: vi.fn(),
             removeBackAction: vi.fn(),
@@ -69,9 +86,13 @@ describe('ModalManager lifecycle', () => {
 
     function createManager(onFilterChange?: (capability: 'text' | 'image') => string | null) {
         return new ModalManager(
-            new ModuleCardRenderer(),
+            new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
             interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
             onFilterChange ?? (() => null),
+            vi.fn().mockResolvedValue(undefined),
+            vi.fn().mockResolvedValue(undefined),
+            (_key, fallback) => fallback,
+            tracer,
             navigation,
         );
     }
@@ -152,7 +173,180 @@ describe('ModalManager lifecycle', () => {
         expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
 
         modalManager.refreshCurrentSelection();
-        expect(navigation.pushBackAction).toHaveBeenCalledTimes(2);
+        expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
+        expect(
+            (document.getElementById('app-selection-modal') as HTMLDialogElement).show,
+        ).toHaveBeenCalledTimes(1);
+    });
+
+    it('should refresh using newly provided app snapshots', () => {
+        modalManager = createManager();
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: false } as IApp],
+            'svc-a',
+        );
+
+        modalManager.refreshCurrentSelection(
+            [{ id: 'svc-b', name: 'Service B', installed: true } as IApp],
+            'svc-b',
+        );
+
+        expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
+        expect(
+            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
+                'appId'
+            ],
+        ).toBe('svc-b');
+        expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Убрать');
+    });
+
+    it('should rerender current selection without reopening modal shell', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: false } as IApp],
+            'svc-a',
+        );
+        modalManager.refreshCurrentSelection(
+            [{ id: 'svc-b', name: 'Service B', installed: false } as IApp],
+            'svc-b',
+        );
+
+        expect(modal.show).toHaveBeenCalledTimes(1);
+        expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
+        expect(
+            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
+                'appId'
+            ],
+        ).toBe('svc-b');
+    });
+
+    it('should keep the shared modal height for up to four visible cards', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+
+        Object.defineProperty(globalThis, 'innerWidth', {
+            configurable: true,
+            value: 1600,
+        });
+        Object.defineProperty(globalThis, 'innerHeight', {
+            configurable: true,
+            value: 1200,
+        });
+
+        modalManager.openAppSelection(
+            'services',
+            [
+                { id: 'svc-a', name: 'Service A', installed: true } as IApp,
+                { id: 'svc-b', name: 'Service B', installed: true } as IApp,
+            ],
+            'svc-a',
+        );
+
+        expect(modal.style.getPropertyValue('--app-modal-dynamic-height')).toBe('');
+    });
+
+    it('should restore default modal height when more than four cards are visible', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+
+        modalManager.openAppSelection(
+            'services',
+            [
+                { id: 'svc-a', name: 'Service A', installed: true } as IApp,
+                { id: 'svc-b', name: 'Service B', installed: true } as IApp,
+                { id: 'svc-c', name: 'Service C', installed: true } as IApp,
+                { id: 'svc-d', name: 'Service D', installed: true } as IApp,
+                { id: 'svc-e', name: 'Service E', installed: true } as IApp,
+            ],
+            'svc-a',
+        );
+
+        expect(modal.style.getPropertyValue('--app-modal-dynamic-height')).toBe('');
+    });
+
+    it('should not re-show modal or duplicate back action when reopening an already open modal', () => {
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+        const apps = [{ id: 'svc', name: 'Service', installed: true } as IApp];
+
+        modalManager.openAppSelection('services', apps, 'svc');
+        modalManager.openAppSelection('services', apps, 'svc');
+
+        expect(modal.show).toHaveBeenCalledTimes(1);
+        expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps keyboard focus inside the app selection modal', () => {
+        modalManager = createManager();
+        const outsideButton = document.createElement('button');
+        outsideButton.textContent = 'Outside';
+        document.body.appendChild(outsideButton);
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: true } as IApp],
+            'svc-a',
+        );
+
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+        const closeButton = document.getElementById('close-app-selection-btn') as HTMLButtonElement;
+        const modalAction = document.querySelector(
+            '#app-modal-list .module-selection-card-actions button',
+        ) as HTMLButtonElement;
+
+        expect(document.activeElement).toBe(closeButton);
+
+        modalAction.focus();
+        modal.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: 'Tab',
+                bubbles: true,
+            }),
+        );
+        expect(document.activeElement).toBe(closeButton);
+
+        outsideButton.focus();
+        const focusInEvent = new FocusEvent('focusin', {
+            bubbles: true,
+        });
+        Object.defineProperty(focusInEvent, 'target', {
+            configurable: true,
+            value: outsideButton,
+        });
+        document.dispatchEvent(focusInEvent);
+        expect(document.activeElement).toBe(closeButton);
+    });
+
+    it('should preserve current selection when replaying modal back action', () => {
+        modalManager = createManager();
+        const apps = [
+            { id: 'svc-a', name: 'Service A', installed: true } as IApp,
+            { id: 'svc-b', name: 'Service B', installed: true } as IApp,
+        ];
+
+        modalManager.openAppSelection('services', apps, 'svc-a');
+        modalManager.updateSelection('svc-b');
+
+        const reopen = vi.mocked(navigation.pushBackAction).mock.calls[0]?.[2] as
+            | (() => void)
+            | undefined;
+        expect(reopen).toBeTypeOf('function');
+
+        modalManager.closeAppSelection();
+        reopen?.();
+
+        expect(document.querySelector('[data-app-id="svc-b"] .modal-btn')?.textContent).toBe(
+            'Убрать',
+        );
+        expect(
+            document
+                .querySelector('[data-app-id="svc-b"] .modal-btn')
+                ?.classList.contains('modal-btn-secondary'),
+        ).toBe(true);
     });
 
     it('should disable image filter and render empty state for unsupported apps', () => {
@@ -163,11 +357,26 @@ describe('ModalManager lifecycle', () => {
             'txt-1',
         );
 
+        (modalManager as unknown as { _currentFilter: 'text' | 'image' })._currentFilter = 'image';
+        (
+            modalManager as unknown as {
+                _applyImageFilterAvailability: (
+                    apps: IApp[],
+                    t: (key: string, defaultText: string) => string,
+                ) => void;
+            }
+        )._applyImageFilterAvailability(
+            [{ id: 'txt-1', name: 'Only Text', installed: true, capability: 'text' } as IApp],
+            (_key, defaultText) => defaultText,
+        );
+
         const imageBtn = document.getElementById('filter-image-btn') as HTMLButtonElement;
+        const textBtn = document.getElementById('filter-text-btn') as HTMLButtonElement;
         expect(imageBtn.disabled).toBe(true);
         expect(imageBtn.title).toBe('Coming soon');
+        expect(textBtn.classList.contains('active')).toBe(true);
+        expect(imageBtn.classList.contains('active')).toBe(false);
 
-        (modalManager as unknown as { _currentFilter: 'text' | 'image' })._currentFilter = 'image';
         (
             modalManager as unknown as { _populateAppList: (...args: unknown[]) => void }
         )._populateAppList(
@@ -176,9 +385,46 @@ describe('ModalManager lifecycle', () => {
             'ai',
             null,
         );
-        expect(document.querySelector('#app-modal-list span')?.textContent).toContain(
-            'No applications found',
+        expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
+        expect(
+            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
+                'appId'
+            ],
+        ).toBe('txt-1');
+    });
+
+    it('should sort by stable module id priority instead of localized names', () => {
+        const policy = new ModalSelectionPolicy();
+        const sorted = policy.getVisibleApps(
+            [
+                { id: 'custom', name: 'A Localized Name', installed: true } as IApp,
+                { id: 'gemini', name: 'ZZZ localized', installed: true } as IApp,
+                { id: 'gpt', name: 'YYY localized', installed: true } as IApp,
+            ],
+            'services',
+            'text',
         );
+
+        expect(sorted.map((app) => app.id)).toEqual(['gpt', 'gemini', 'custom']);
+    });
+
+    it('should place custom providers after cloud apis but before local engines', () => {
+        const policy = new ModalSelectionPolicy();
+        const sorted = policy.getVisibleApps(
+            [
+                { id: 'llamacpp', name: 'llama.cpp', type: 'local', installed: true } as IApp,
+                { id: CUSTOM_TEXT_PROVIDER_ID, name: 'Custom', type: 'api', installed: true } as IApp,
+                { id: 'claude', name: 'Claude', type: 'api', installed: true } as IApp,
+            ],
+            'ai',
+            'text',
+        );
+
+        expect(sorted.map((app) => app.id)).toEqual([
+            'claude',
+            CUSTOM_TEXT_PROVIDER_ID,
+            'llamacpp',
+        ]);
     });
 
     it('should react to download progress events and update selection labels', () => {
@@ -186,11 +432,11 @@ describe('ModalManager lifecycle', () => {
         const list = document.getElementById('app-modal-list') as HTMLElement;
         list.innerHTML = `
             <div class="app-card selected engine-ready" data-app-id="gpt">
-                <div class="app-card-hover-actions"><button class="modal-btn">Select</button></div>
+                <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
                 <button class="download-btn"><span class="download-label">Download</span><span class="download-pct"></span></button>
             </div>
             <div class="app-card" data-app-id="gemini">
-                <div class="app-card-hover-actions"><button class="modal-btn">Select</button></div>
+                <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
             </div>
         `;
         (
@@ -207,8 +453,13 @@ describe('ModalManager lifecycle', () => {
             false,
         );
         expect(document.querySelector('[data-app-id="gemini"] .modal-btn')?.textContent).toBe(
-            'Remove',
+            'Убрать',
         );
+        expect(
+            document
+                .querySelector('[data-app-id="gemini"] .modal-btn')
+                ?.classList.contains('modal-btn-secondary'),
+        ).toBe(true);
 
         globalThis.dispatchEvent(
             new CustomEvent('download-progress-update', {
@@ -231,26 +482,19 @@ describe('ModalManager lifecycle', () => {
         ).toBe(true);
     });
 
-    it('should cancel and start downloads through the global bridge helpers', async () => {
-        modalManager = createManager();
-        (
-            globalThis as unknown as {
-                cancelDownloadModule: ReturnType<typeof vi.fn>;
-                deleteModule: ReturnType<typeof vi.fn>;
-                downloadModule: ReturnType<typeof vi.fn>;
-                t: (key: string, fallback: string) => string;
-            }
-        ).cancelDownloadModule = vi.fn().mockResolvedValue(undefined);
-        (
-            globalThis as unknown as {
-                deleteModule: ReturnType<typeof vi.fn>;
-            }
-        ).deleteModule = vi.fn().mockResolvedValue(undefined);
-        (
-            globalThis as unknown as {
-                downloadModule: ReturnType<typeof vi.fn>;
-            }
-        ).downloadModule = vi.fn().mockResolvedValue(undefined);
+    it('should cancel and start downloads through injected callbacks', async () => {
+        const onDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        const onCancelDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        modalManager = new ModalManager(
+            new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
+            interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
+            () => null,
+            onDownloadRequest,
+            onCancelDownloadRequest,
+            (_key, fallback) => fallback,
+            tracer,
+            navigation,
+        );
 
         const list = document.getElementById('app-modal-list') as HTMLElement;
         list.innerHTML = `
@@ -273,13 +517,9 @@ describe('ModalManager lifecycle', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(
-            (globalThis as unknown as { cancelDownloadModule: ReturnType<typeof vi.fn> })
-                .cancelDownloadModule,
-        ).toHaveBeenCalledWith('gpt');
-        expect(
-            (globalThis as unknown as { deleteModule: ReturnType<typeof vi.fn> }).deleteModule,
-        ).toHaveBeenCalledWith('gpt');
+        expect(onCancelDownloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'gpt' }),
+        );
         expect(document.querySelector('.download-label')?.textContent).toBe('Download');
 
         list.innerHTML = `<div class="app-card" data-app-id="svc"><button class="download-btn"></button></div>`;
@@ -291,25 +531,22 @@ describe('ModalManager lifecycle', () => {
             expectedHash: 'abc',
             dlType: 'github',
         } as IApp);
-        expect(
-            (globalThis as unknown as { downloadModule: ReturnType<typeof vi.fn> }).downloadModule,
-        ).toHaveBeenCalledWith('svc', 'https://example.com/service.zip', 'abc', 'github');
+        expect(onDownloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({
+                id: 'svc',
+                repoUrl: 'https://example.com/service.zip',
+                expectedHash: 'abc',
+                dlType: 'github',
+            }),
+        );
     });
 
-    it('should handle missing repo, missing download bridge and dynamic sidebar widths', () => {
+    it('should handle missing repo and dynamic sidebar widths', () => {
         modalManager = createManager();
         const handleDownload = (modalManager as unknown as { _handleDownload: (app: IApp) => void })
             ._handleDownload;
 
         handleDownload.call(modalManager, { id: 'empty', name: 'Empty', installed: false } as IApp);
-
-        delete (globalThis as Record<string, unknown>)['downloadModule'];
-        handleDownload.call(modalManager, {
-            id: 'svc',
-            name: 'Service',
-            installed: false,
-            repoUrl: 'https://example.com/service.zip',
-        } as IApp);
 
         const spans = document.querySelectorAll<HTMLElement>(
             '#app-modal-sidebar .category-filter-btn span',

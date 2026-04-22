@@ -5,8 +5,21 @@ import { fileURLToPath, URL } from 'node:url';
 import pkg from './package.json';
 
 const tauriPlatform = process.env['TAURI_PLATFORM'];
-const buildTarget =
-    tauriPlatform === 'windows' ? 'chrome146' : tauriPlatform === 'macos' ? 'safari26' : 'safari26';
+
+function resolveBuildTarget(platform: string | undefined): string {
+    switch (platform) {
+        case 'windows':
+            return 'chrome110';
+        case 'macos':
+            return 'safari15.4';
+        case 'linux':
+            return 'safari16';
+        default:
+            return 'es2022';
+    }
+}
+
+const buildTarget = resolveBuildTarget(tauriPlatform);
 
 const pruneFontsPlugin = {
     name: 'prune-fonts',
@@ -57,13 +70,6 @@ export default defineConfig({
             usePolling: true,
             interval: 100,
         },
-        proxy: {
-            '/api': {
-                target: 'http://127.0.0.1:3000',
-                changeOrigin: true,
-                secure: false,
-            },
-        },
     },
 
     // Explicitly allow both Vite and Tauri env vars
@@ -81,7 +87,10 @@ export default defineConfig({
     },
 
     build: {
-        // Align with current stable engine baselines used by the embedded runtimes.
+        // Match Tauri runtime baselines instead of the newest desktop browser.
+        // Windows: evergreen WebView2 with installer minimum version guard.
+        // macOS: Safari 15.4 baseline from the WebKit mapping in Tauri docs.
+        // Linux: WebKitGTK on modern distros maps roughly to Safari 16.
         target: buildTarget,
 
         minify: process.env['TAURI_DEBUG'] ? false : 'terser',
@@ -89,6 +98,12 @@ export default defineConfig({
             compress: {
                 drop_console: true,
                 drop_debugger: true,
+            },
+            mangle: {
+                toplevel: true,
+            },
+            format: {
+                comments: false,
             },
         },
         sourcemap: Boolean(process.env['TAURI_DEBUG']),

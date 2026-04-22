@@ -1,81 +1,94 @@
-# Automation & Build Scripts
+# Automation
 
-Axelate uses a robust set of **PowerShell Core** scripts to manage the development lifecycle. These scripts are cross-platform (Windows/Linux/macOS) and enforce strict environment checks to ensure consistency.
+Axelate uses one shared workflow runner. The root `package.json` is the public interface, and `.github/scripts/workflow.mjs` is the implementation.
 
-## 🚀 Quick Reference
+## Canonical commands
 
-| Command | Action | Scripts Used |
-| :--- | :--- | :--- |
-| `npm run dev` | **Start Dev Server**<br>Formats code -> Checks Environment -> Starts App | `dev.ps1` |
-| `npm run verify-all` | **Release Gate**<br>Full audit: Format + Lint + Typecheck + Test + Build Check | `verify-all.ps1` |
-| `npm run build` | **Production Build**<br>Compiles frontend + backend | `src/package.json` |
-| `npm run release` | **Release Flow**<br>Runs `verify-all` -> Builds Release Binary -> Opens Folder | `release.ps1` |
-| `npm run check-size` | **Audit Size**<br>Reports the `dist/` folder size | `check-size.js` |
-| `npm run clean` | **Deep Clean**<br>Removes `target/`, `dist/`, cache | `clear.ps1` |
+Run commands from the repository root.
 
----
+| Command                | Purpose                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `npm run doctor`       | check machine prerequisites                                    |
+| `npm run setup`        | validate prerequisites, install frontend deps, configure hooks |
+| `npm run dev`          | start the desktop app in development mode                      |
+| `npm run build`        | build the frontend bundle                                      |
+| `npm run tauri:build`  | build the desktop app                                          |
+| `npm run verify`       | run the full local verification gate                           |
+| `npm run release`      | verify first, then build release bundles                       |
+| `npm run clear`        | remove build outputs and caches                                |
+| `npm run lint`         | frontend lint                                                  |
+| `npm run format`       | format frontend files                                          |
+| `npm run format:check` | verify frontend formatting                                     |
+| `npm run test`         | frontend tests                                                 |
+| `npm run typecheck`    | frontend type checks                                           |
+| `npm run check-size`   | validate frontend bundle budgets                               |
+| `npm run update`       | update npm and cargo dependencies, then verify                 |
 
-## 🛠️ The Scripts
+## Shared workflow runner
 
-All core scripts are located in `.github/scripts/`. They are written in PowerShell 7+ syntax but run on standard Windows PowerShell 5.1 via the `pwsh` polyfills we implemented.
+Primary entrypoint:
 
-### 1. Development Loop (`dev.ps1`)
-**Usage:** `npm run dev`
-
-This is your daily driver. It does more than just start the app:
-1. **Auto-Format:** Runs `prettier` on all source files.
-2. **Environment Check:** Verifies `cargo`, `node`, and `npm` are in PATH.
-3. **Execution:** Launches `tauri dev` with safe arguments.
-
-> **Note:** If auto-formatting fails (e.g., syntax error), the script will warn you but attempt to proceed, preventing a hard crash during active debugging.
-
-### 2. The Release Gate (`verify-all.ps1`)
-**Usage:** `npm run verify-all`
-
-**MUST PASS** before any Pull Request or Release. It enforces zero-tolerance policy:
-1. **Frontend Checks:**
-   - `npm run format:check` (Prettier)
-   - `npm run lint` (ESLint)
-   - `npm run typecheck` (TSC)
-   - `npm run check-size` (Bundle budget)
-2. **Backend Checks:**
-   - `cargo fmt -- --check` (Rustfmt)
-   - `cargo clippy` (Lints)
-   - `cargo test` (Unit tests)
-
-If *any* step fails, the script exits immediately with an error code.
-
-### 3. Release Builder (`release.ps1`)
-**Usage:** `npm run release`
-
-Automates the production build:
-1. Runs `verify-all` (aborts if failed).
-2. Runs `npm run tauri:build` with production flags.
-3. Opens the output folder containing the `.exe` / `.msi`.
-
-### 4. Size Auditor (`src/scripts/check-size.js`)
-**Usage:** `npm run check-size`
-
-A Node.js script that calculates the recursive size of the `dist/` folder (frontend bundle). It ensures we don't accidentally ship massive assets.
-
----
-
-## 🔒 Security & Robustness
-
-We strictly adhere to the **Robust PowerShell Pattern**:
-
-1. **Strict Mode:** `Set-StrictMode -Version Latest` catch uninitialized variables.
-2. **Error Handling:** `$ErrorActionPreference = 'Stop'` ensures no silent failures.
-3. **Environment Isolation:** `Initialize-Environment` explicitly checks for tools (`rc.exe`, `cargo`) before running.
-4. **Path Safety:** All paths are resolved relative to `$PSScriptRoot`.
-5. **Cross-Platform:** `npm` vs `npm.cmd` is detected dynamically.
-
-## 📦 CI/CD Integration
-
-GitHub Actions workflows should use `verify-all.ps1` as the single source of truth for CI checks.
-
-```yaml
-- name: Verify Codebase
-  run: npm run verify-all
-  shell: powershell
+```text
+.github/scripts/workflow.mjs
 ```
+
+It is responsible for:
+
+- prerequisite checks
+- portable toolchain resolution
+- frontend dependency installation in `src/node_modules`
+- Specta binding sync before app/build tasks
+- cross-platform command execution
+- the full verify gate
+
+## What `verify` really does
+
+`npm run verify` runs:
+
+- `doctor`
+- Rust format check
+- Rust clippy with warnings denied
+- Rust check
+- Rust tests
+- fresh frontend install with `npm ci`
+- frontend format
+- frontend typecheck
+- frontend lint
+- frontend format check
+- frontend tests
+- frontend build
+- frontend size gate
+
+This is the repository’s real local release gate.
+
+## Git hooks
+
+Hooks live in:
+
+```text
+.github/.husky
+```
+
+Installation is handled by:
+
+```text
+src/scripts/setup-git-hooks.mjs
+```
+
+Current active hooks:
+
+- `pre-commit`
+- `commit-msg`
+
+## CI and release
+
+GitHub workflows live in `.github/workflows`.
+
+- `ci.yml` runs repository verification in CI.
+- `release.yml` builds the desktop release path and runs release hardening checks.
+
+## Notes
+
+- Frontend dependencies belong in `src/node_modules`, not at the repo root.
+- The root `package.json` is a task proxy, not a second npm workspace.
+- Old platform wrapper scripts are no longer part of the main workflow.

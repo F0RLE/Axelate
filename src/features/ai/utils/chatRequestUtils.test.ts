@@ -60,6 +60,7 @@ describe('chatRequestUtils', () => {
                 thinking_level: 'high',
                 max_tokens: undefined,
                 attachments: [],
+                web_search: undefined,
             });
         });
 
@@ -106,6 +107,62 @@ describe('chatRequestUtils', () => {
                     thought_signature: undefined,
                 },
             ]);
+        });
+
+        it('should omit thinking level when not provided', () => {
+            const config = {
+                providerId: 'llamacpp',
+                model: 'Qwen3.5-9B-Q4_K_M.gguf',
+                apiKey: null,
+                sessionId: 'session-1',
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.thinking_level).toBeUndefined();
+        });
+
+        it('should preserve explicit none reasoning effort for OpenRouter requests', () => {
+            const config = {
+                providerId: 'gpt',
+                model: 'gpt-5.4',
+                apiKey: 'sk-123',
+                sessionId: 'session-1',
+                thinkingLevel: 'none' as const,
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.thinking_level).toBe('none');
+        });
+
+        it('should keep the raw model key and leave model resolution to backend', () => {
+            const config = {
+                providerId: 'gemini',
+                model: 'gemini-2.5-pro',
+                apiKey: 'sk-123',
+                sessionId: 'session-1',
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.model).toBe('gemini-2.5-pro');
+        });
+
+        it('should include web search flag when enabled', () => {
+            const config = {
+                providerId: 'gpt',
+                model: 'gpt-5.4',
+                apiKey: 'sk-123',
+                sessionId: 'session-1',
+                webSearchEnabled: true,
+            };
+
+            const request = constructChatRequest([], mockMessage, [], config);
+
+            expect(request.web_search).toEqual({
+                enabled: true,
+            });
         });
     });
 });

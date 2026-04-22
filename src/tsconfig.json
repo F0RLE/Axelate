@@ -32,6 +32,7 @@
         "noUncheckedIndexedAccess": true,
         "noPropertyAccessFromIndexSignature": true,
         "exactOptionalPropertyTypes": true,
+        "ignoreDeprecations": "6.0",
 
         "forceConsistentCasingInFileNames": true,
         "noFallthroughCasesInSwitch": true,
@@ -39,9 +40,6 @@
         "allowUnusedLabels": false,
 
         "allowJs": false,
-
-        "declaration": true,
-        "declarationMap": true,
 
         "baseUrl": ".",
         "paths": {

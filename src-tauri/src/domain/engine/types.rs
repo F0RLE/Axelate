@@ -77,6 +77,9 @@ pub struct EngineDefinition {
     /// Whether the engine binary is currently installed (populated at runtime, not from JSON)
     #[serde(default)]
     pub installed: bool,
+    /// True when the launcher connects to a user-managed external engine instead of installing it
+    #[serde(default)]
+    pub managed_externally: bool,
 }
 
 fn default_version() -> String {
@@ -88,9 +91,6 @@ fn default_version() -> String {
 pub struct EngineConfig {
     /// Engine identifier (matches EngineDefinition.id)
     pub engine_id: String,
-    /// Port to bind (local engines)
-    #[serde(default = "default_port")]
-    pub port: u16,
     /// Number of GPU layers (-1 = all)
     #[serde(default = "default_gpu_layers")]
     pub gpu_layers: i32,
@@ -99,6 +99,12 @@ pub struct EngineConfig {
     pub context_size: u32,
     /// Path to model file
     pub model_path: Option<String>,
+    /// Optional companion VAE path for image engines
+    #[serde(default)]
+    pub vae_path: Option<String>,
+    /// Optional companion LLM path for multimodal image engines
+    #[serde(default)]
+    pub llm_path: Option<String>,
     /// Extra CLI arguments
     #[serde(default)]
     pub extra_args: Vec<String>,
@@ -158,29 +164,6 @@ pub struct SlotStatus {
     pub capability: Capability,
     /// Engine running in this slot
     pub engine: EngineStatus,
-}
-
-/// Request source for queue priority
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "lowercase")]
-pub enum RequestSource {
-    /// User chat (highest priority)
-    Chat,
-    /// Script / service call
-    Script,
-}
-
-/// Queued request
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-pub struct QueuedRequest {
-    /// Unique request ID
-    pub id: String,
-    /// Required capability
-    pub capability: Capability,
-    /// Who sent the request
-    pub source: RequestSource,
-    /// Request payload (text prompt, image params, etc.)
-    pub payload: serde_json::Value,
 }
 
 const fn default_port() -> u16 {

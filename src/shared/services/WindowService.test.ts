@@ -4,6 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WindowService, type IWindowConfig } from './WindowService';
 import type { IBridge } from '@/shared/types/IBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('WindowService', () => {
     let mockBridge: {
@@ -17,7 +18,15 @@ describe('WindowService', () => {
         getResolutionZoom: ReturnType<typeof vi.fn>;
         setResolutionZoom: ReturnType<typeof vi.fn>;
     };
+    let mockTracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
     let service: WindowService;
+    let mockRuntime: {
+        addEventListener: ReturnType<typeof vi.fn>;
+        removeEventListener: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        getScreenSize: ReturnType<typeof vi.fn>;
+        setAppZoomCss: ReturnType<typeof vi.fn>;
+    };
 
     const mockWindowConfig: IWindowConfig = {
         breakpoints: { compact: 640, medium: 1024, large: 1440 },
@@ -46,7 +55,33 @@ describe('WindowService', () => {
             setResolutionZoom: vi.fn(),
         };
 
-        service = new WindowService(mockBridge as unknown as IBridge);
+        mockTracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+        };
+
+        const nativeAddEventListener = globalThis.addEventListener.bind(globalThis);
+        const nativeRemoveEventListener = globalThis.removeEventListener.bind(globalThis);
+        mockRuntime = {
+            addEventListener: vi.fn((...args: Parameters<typeof globalThis.addEventListener>) => {
+                nativeAddEventListener(...args);
+            }),
+            removeEventListener: vi.fn(
+                (...args: Parameters<typeof globalThis.removeEventListener>) => {
+                    nativeRemoveEventListener(...args);
+                },
+            ),
+            close: vi.fn(),
+            getScreenSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
+            setAppZoomCss: vi.fn(),
+        };
+
+        service = new WindowService(
+            mockBridge as unknown as IBridge,
+            mockTracer,
+            mockRuntime as unknown as ConstructorParameters<typeof WindowService>[2],
+        );
         service.setUISettingsService(
             mockUISettings as Parameters<typeof service.setUISettingsService>[0],
         );
@@ -71,14 +106,14 @@ describe('WindowService', () => {
             await service.init();
 
             expect(mockBridge.invoke).toHaveBeenCalledWith('get_window_config');
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
         });
 
         it('should use pre-loaded config and zoom when provided', async () => {
             await service.init(mockWindowConfig, 1.5);
 
             expect(mockBridge.invoke).not.toHaveBeenCalledWith('get_window_config');
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.5 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.500');
             expect(service.getConfig()).toEqual(mockWindowConfig);
         });
 
@@ -88,11 +123,11 @@ describe('WindowService', () => {
 
             await service.init();
 
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.2 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.200');
         });
 
         it('should fallback to 1 when no UISettingsService is set (L69)', async () => {
-            const bareService = new WindowService(mockBridge as unknown as IBridge);
+            const bareService = new WindowService(mockBridge as unknown as IBridge, mockTracer);
             // No setUISettingsService called — _uiSettingsService is undefined
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'get_window_config') return Promise.resolve(mockWindowConfig);
@@ -102,7 +137,7 @@ describe('WindowService', () => {
             await bareService.init();
 
             // Fallback should be 1 (the ?? 1 branch)
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1 });
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1 });
         });
 
         it('should use fallback zoom and setup web listeners in non-Tauri environment', async () => {
@@ -112,18 +147,20 @@ describe('WindowService', () => {
             await service.init();
 
             expect(mockBridge.invoke).not.toHaveBeenCalled();
-            expect(document.documentElement.style.getPropertyValue('--app-zoom')).toBe('1.500');
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.500');
         });
 
         it('should attach Ctrl+Scroll zoom handler in web mode', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-            const addEventSpy = vi.spyOn(globalThis, 'addEventListener');
-
             await service.init();
 
-            expect(addEventSpy).toHaveBeenCalledWith('wheel', expect.any(Function), {
-                passive: false,
-            });
+            expect(mockRuntime.addEventListener).toHaveBeenCalledWith(
+                'wheel',
+                expect.any(Function),
+                {
+                    passive: false,
+                },
+            );
         });
 
         it('should call _initWindowListeners in Tauri mode', async () => {
@@ -190,12 +227,26 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('close_window');
         });
 
+        it('should run before-close hook before closing native window', async () => {
+            const calls: string[] = [];
+            service.setBeforeCloseHook(() => {
+                calls.push('save');
+                return Promise.resolve();
+            });
+            mockBridge.invoke.mockImplementation((cmd: string) => {
+                if (cmd === 'close_window') calls.push('close');
+                return Promise.resolve(undefined);
+            });
+
+            await service.close();
+
+            expect(calls).toEqual(['save', 'close']);
+        });
+
         it('should call globalThis.close in web mode', async () => {
             mockBridge.isTauri.mockReturnValue(false);
-            const closeSpy = vi.fn();
-            vi.stubGlobal('close', closeSpy);
             await service.close();
-            expect(closeSpy).toHaveBeenCalled();
+            expect(mockRuntime.close).toHaveBeenCalled();
         });
     });
 
@@ -225,21 +276,22 @@ describe('WindowService', () => {
 
     // ---------------------------------------------------------- show
     describe('show', () => {
-        it('should call show_window and set_focus', async () => {
+        it('should call show_window', async () => {
             await service.show();
 
             expect(mockBridge.invoke).toHaveBeenCalledWith('show_window');
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_focus');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_focus');
         });
 
-        it('should skip set_focus if it throws', async () => {
+        it('should not call the removed set_focus command', async () => {
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'set_focus') return Promise.reject(new Error('Command not found'));
                 return Promise.resolve(undefined);
             });
 
-            await service.show(); // should not throw
+            await service.show();
             expect(mockBridge.invoke).toHaveBeenCalledWith('show_window');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_focus');
         });
 
         it('should retry up to 3 times if show_window fails', async () => {
@@ -282,19 +334,19 @@ describe('WindowService', () => {
 
     // ---------------------------------------------------------- Zoom Management
     describe('Zoom Management', () => {
-        it('should safely bound zoom levels between min and max (0.5 to 3.0)', async () => {
+        it('should safely bound zoom levels between min and max (0.95 to 2.6)', async () => {
             await service.setZoom(0.1);
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 0.5 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('0.950');
 
             await service.setZoom(5);
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 3 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('2.600');
         });
 
         it('should change zoom relatively and persist it', async () => {
             await service.init(mockWindowConfig, 1);
             await service.changeZoom(0.2);
 
-            expect(mockBridge.invoke).toHaveBeenLastCalledWith('set_webview_zoom', { zoom: 1.2 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.200');
             expect(mockUISettings.setZoomLevel).toHaveBeenLastCalledWith(1.2);
             expect(mockUISettings.setResolutionZoom).toHaveBeenLastCalledWith('1920x1080', 1.2);
         });
@@ -306,7 +358,15 @@ describe('WindowService', () => {
         it('should apply CSS variable in web mode', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.setZoom(1.5);
-            expect(document.documentElement.style.getPropertyValue('--app-zoom')).toBe('1.500');
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.500');
+        });
+
+        it('should persist resolution zoom using injected runtime screen size', async () => {
+            mockRuntime.getScreenSize.mockReturnValue({ width: 2560, height: 1440 });
+
+            await service.setZoom(1.25);
+
+            expect(mockUISettings.setResolutionZoom).toHaveBeenCalledWith('2560x1440', 1.25);
         });
 
         it('should handle setZoom error gracefully', async () => {
@@ -320,7 +380,7 @@ describe('WindowService', () => {
         });
 
         it('should work without UISettingsService', async () => {
-            const bareService = new WindowService(mockBridge as unknown as IBridge);
+            const bareService = new WindowService(mockBridge as unknown as IBridge, mockTracer);
             const result = await bareService.setZoom(1.2);
             expect(result).toBe(1.2);
         });
@@ -344,17 +404,6 @@ describe('WindowService', () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.setMonitoringPaused(true);
             expect(mockBridge.invoke).not.toHaveBeenCalled();
-        });
-
-        it('should call toggleMonitorBtn callback if present', async () => {
-            const toggleCb = vi.fn();
-            (globalThis as unknown as Record<string, unknown>)['toggleMonitorBtn'] = toggleCb;
-
-            await service.setMonitoringPaused(false);
-
-            // Should have set windowService on globalThis
-            const win = globalThis as unknown as { windowService?: WindowService };
-            expect(win.windowService).toBe(service);
         });
     });
 
@@ -602,28 +651,6 @@ describe('WindowService', () => {
         });
     });
 
-    // ---------------------------------------------------------- _toggleMonitorPanel (via setMonitoringPaused)
-    describe('_toggleMonitorPanel', () => {
-        it('should dispatch monitor:toggle event when toggleMonitorBtn is called', async () => {
-            // Use an object property to avoid TypeScript narrowing the variable to 'never'
-            const captured: { fn: ((visible: boolean) => void) | null } = { fn: null };
-            (globalThis as unknown as Record<string, unknown>)['toggleMonitorBtn'] = (
-                fn: (visible: boolean) => void,
-            ) => {
-                captured.fn = fn;
-            };
-
-            const eventSpy = vi.spyOn(globalThis, 'dispatchEvent');
-            await service.setMonitoringPaused(false);
-
-            captured.fn?.(true);
-
-            const allCalls = eventSpy.mock.calls.map((c: [Event]) => c[0]);
-            const monitorEvent = allCalls.find((e: Event) => e.type === 'monitor:toggle');
-            expect(monitorEvent).toBeDefined();
-        });
-    });
-
     // ---------------------------------------------------------- Resolution change zoom handling
     describe('_handleResolutionChange (indirectly via checkResolutionChange)', () => {
         it('should trigger zoom update when resolution changes and getInitialZoom provides new value', async () => {
@@ -667,13 +694,16 @@ describe('WindowService', () => {
             mockUISettings.getZoomLevel.mockReturnValue(1);
 
             const captured: { handler: ((e: WheelEvent) => void) | null } = { handler: null };
-            const origAddEvent = globalThis.addEventListener.bind(globalThis);
-            vi.spyOn(globalThis, 'addEventListener').mockImplementation(
-                (type: string, listener: EventListenerOrEventListenerObject, opts?: unknown) => {
+            mockRuntime.addEventListener.mockImplementation(
+                (
+                    type: string,
+                    listener: EventListenerOrEventListenerObject,
+                    opts?: AddEventListenerOptions,
+                ) => {
                     if (type === 'wheel') {
                         captured.handler = listener as (e: WheelEvent) => void;
                     }
-                    return origAddEvent(type, listener, opts as AddEventListenerOptions);
+                    globalThis.addEventListener(type, listener, opts);
                 },
             );
 
@@ -687,19 +717,19 @@ describe('WindowService', () => {
             const upEvent = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true });
             captured.handler?.(upEvent);
 
-            expect(changeZoomSpy).toHaveBeenCalledWith(0.1);
+            expect(changeZoomSpy).toHaveBeenCalledWith(0.1, { syncNativeZoom: false });
 
             // Scroll down with ctrlKey
             const downEvent = new WheelEvent('wheel', { deltaY: 100, ctrlKey: true });
             captured.handler?.(downEvent);
 
-            expect(changeZoomSpy).toHaveBeenCalledWith(-0.1);
+            expect(changeZoomSpy).toHaveBeenCalledWith(-0.1, { syncNativeZoom: false });
         });
 
         it('should NOT call changeZoom when ctrlKey is not held', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             const captured: { handler: ((e: WheelEvent) => void) | null } = { handler: null };
-            vi.spyOn(globalThis, 'addEventListener').mockImplementation(
+            mockRuntime.addEventListener.mockImplementation(
                 (type: string, listener: EventListenerOrEventListenerObject) => {
                     if (type === 'wheel') {
                         captured.handler = listener as (e: WheelEvent) => void;
@@ -761,6 +791,24 @@ describe('WindowService', () => {
 
             expect(unlisten).toHaveBeenCalledTimes(1);
         });
+
+        it('should immediately unlisten late tauri://move listener if destroyed before registration resolves', async () => {
+            const unlisten = vi.fn();
+            let resolveListen!: (value: () => void) => void;
+            mockBridge.listen.mockImplementation(
+                () =>
+                    new Promise<() => void>((resolve) => {
+                        resolveListen = resolve;
+                    }),
+            );
+
+            await service.init(mockWindowConfig, 1);
+            service.destroy();
+            resolveListen(unlisten);
+            await Promise.resolve();
+
+            expect(unlisten).toHaveBeenCalledTimes(1);
+        });
     });
 
     // ---------------------------------------------------------- _getInitialZoomWithFallback valid zoom (lines 468-471)
@@ -769,7 +817,6 @@ describe('WindowService', () => {
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'get_window_config') return Promise.resolve(mockWindowConfig);
                 if (cmd === 'get_resolution_zoom') return Promise.resolve(1.75);
-                if (cmd === 'set_webview_zoom') return Promise.resolve(undefined);
                 return Promise.resolve(undefined);
             });
 
@@ -777,7 +824,7 @@ describe('WindowService', () => {
             await service.init(mockWindowConfig);
 
             // The zoom applied should come from the backend (1.75)
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.75 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.750');
         });
 
         it('should fallback when get_resolution_zoom returns non-number (L471)', async () => {
@@ -785,14 +832,13 @@ describe('WindowService', () => {
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'get_window_config') return Promise.resolve(mockWindowConfig);
                 if (cmd === 'get_resolution_zoom') return Promise.resolve('not-a-number');
-                if (cmd === 'set_webview_zoom') return Promise.resolve(undefined);
                 return Promise.resolve(undefined);
             });
 
             await service.init(mockWindowConfig);
 
             // Should fallback to UISettings zoom (1.3)
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.3 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.300');
         });
 
         it('should fallback when get_resolution_zoom returns 0 (L471)', async () => {
@@ -800,13 +846,12 @@ describe('WindowService', () => {
             mockBridge.invoke.mockImplementation((cmd: string) => {
                 if (cmd === 'get_window_config') return Promise.resolve(mockWindowConfig);
                 if (cmd === 'get_resolution_zoom') return Promise.resolve(0);
-                if (cmd === 'set_webview_zoom') return Promise.resolve(undefined);
                 return Promise.resolve(undefined);
             });
 
             await service.init(mockWindowConfig);
 
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.1 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.100');
         });
 
         it('should fallback when get_resolution_zoom rejects (L471)', async () => {
@@ -815,13 +860,12 @@ describe('WindowService', () => {
                 if (cmd === 'get_window_config') return Promise.resolve(mockWindowConfig);
                 if (cmd === 'get_resolution_zoom')
                     return Promise.reject(new Error('Backend zoom fail'));
-                if (cmd === 'set_webview_zoom') return Promise.resolve(undefined);
                 return Promise.resolve(undefined);
             });
 
             await service.init(mockWindowConfig);
 
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.2 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.200');
         });
     });
 });

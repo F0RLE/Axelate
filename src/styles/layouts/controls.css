@@ -1,25 +1,21 @@
 ﻿/* App Header (Glass Panel) */
 #app-header {
-    position: fixed;
-    top: 0;
-    right: 0;
-    left: var(--sidebar-width, 280px);
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: 100%;
     height: 60px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 1rem;
-    padding-right: 0;
-    z-index: 900;
-
-    /* Liquid Glass Effect */
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    padding: 0;
+    z-index: auto;
 
     /* Glossy gradient + extreme transparency */
-    background:
-        linear-gradient(180deg, rgba(18, 18, 28, 0.18) 0%, rgba(18, 18, 28, 0.1) 100%),
-        rgba(var(--background-raw), 0.08);
+    background: rgba(var(--background-raw), 0.08);
 
     /* Depth and Edges */
     box-shadow:
@@ -33,7 +29,7 @@
 }
 
 body.snapping #app-header {
-    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: none;
 }
 
 /* Top Right Controls (now inside header) */
@@ -43,12 +39,13 @@ body.snapping #app-header {
     height: 100%;
     align-self: stretch;
     -webkit-app-region: no-drag !important;
-    z-index: 10000;
+    z-index: auto;
     pointer-events: auto !important;
 
     /* Adjustable Positioning */
     position: relative;
-    transform: translate(var(--win-controls-x, 0px), var(--win-controls-y, 0px));
+    left: var(--win-controls-x, 0px);
+    top: var(--win-controls-y, 0px);
 }
 
 .window-control-btn {
@@ -62,11 +59,14 @@ body.snapping #app-header {
     justify-content: center;
     width: 48px;
     height: 100%;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        color 0.18s ease,
+        background-color 0.18s ease,
+        opacity 0.18s ease;
     color: var(--text-secondary);
     -webkit-app-region: no-drag !important;
     position: relative;
-    z-index: 10;
+    z-index: auto;
     pointer-events: auto !important;
 }
 
@@ -82,17 +82,18 @@ body.snapping #app-header {
 .window-control-btn:hover {
     background: transparent !important;
     color: var(--text-primary) !important;
-    transform: scale(1.05);
 }
 
 .window-control-btn:active {
     background: transparent !important;
-    transform: scale(0.9);
     opacity: 0.7;
 }
 
 .close-btn {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        color 0.18s ease,
+        background-color 0.18s ease,
+        opacity 0.18s ease;
     /* Removed rounding as per user request */
     border-radius: 0 !important;
     overflow: hidden;
@@ -101,13 +102,11 @@ body.snapping #app-header {
 .close-btn:hover {
     background: transparent !important;
     color: var(--danger) !important;
-    transform: rotate(90deg);
 }
 
 .close-btn:active {
     background: transparent !important;
     color: var(--danger) !important;
-    transform: rotate(90deg) scale(0.9);
     opacity: 0.8;
 }
 
@@ -120,7 +119,26 @@ body.maximized .close-btn {
 .header-left-group {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0;
+    align-self: stretch;
+    height: 100%;
+    -webkit-app-region: no-drag;
+}
+
+body {
+    --header-left-control-width: 38px;
+    --header-left-divider-top: 18%;
+    --header-left-divider-height: 64%;
+}
+
+body[data-platform='macos'] {
+    --header-left-control-width: 40px;
+    --header-left-divider-top: 16%;
+    --header-left-divider-height: 68%;
+}
+
+body[data-platform='linux'] {
+    --header-left-control-width: 38px;
 }
 
 /* Language Switcher - Slide Out Redesign (now inside header) */
@@ -130,58 +148,62 @@ body.maximized .close-btn {
     top: auto;
     left: auto;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: flex-start;
     /* Align left */
-    z-index: 1000;
+    z-index: auto;
     -webkit-app-region: no-drag;
     /* Buttons must be clickable */
+    height: 100%;
 }
 
 .sound-toggle-btn {
     background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border: none !important;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.3s var(--ease-smooth);
+    transition:
+        background-color 0.18s ease,
+        color 0.18s ease,
+        opacity 0.18s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     -webkit-app-region: no-drag;
-
-    /* Squircle Shape - matching lang-btn */
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    width: var(--header-left-control-width);
+    height: 100%;
+    border-radius: 0;
+    position: relative;
+    overflow: hidden;
 }
 
 .sound-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.035) !important;
     color: var(--text-primary);
 }
 
 .sound-toggle-btn:active {
-    transform: scale(0.96);
+    background: rgba(255, 255, 255, 0.055) !important;
+    opacity: 0.85;
 }
 
 .sound-toggle-btn svg {
-    width: 22px !important;
-    height: 22px !important;
+    width: 18px !important;
+    height: 18px !important;
     stroke: currentColor;
     fill: none;
     pointer-events: none;
+    display: block;
 }
 
 .sound-toggle-btn.muted {
-    opacity: 0.5;
+    color: var(--text-muted);
+    opacity: 1;
 }
 
 .sound-toggle-btn.muted:hover {
-    opacity: 0.8;
+    color: var(--text-secondary);
 }
 
 /* Removed specific body.snapping rule for lang-switcher as parent handles it */
@@ -190,14 +212,17 @@ body.maximized .close-btn {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 0.5rem;
-    padding-left: 0.5rem;
+    gap: 0;
+    padding-left: 0;
 
     /* Animation State: Hidden */
     opacity: 0;
     visibility: hidden;
     transform: translateX(0);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition:
+        opacity 0.2s ease,
+        visibility 0.2s ease,
+        transform 0.2s ease;
 
     /* Layout */
     position: absolute;
@@ -205,6 +230,10 @@ body.maximized .close-btn {
     top: 0;
     height: 100%;
     white-space: nowrap;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
 }
 
 .lang-menu-items.open {
@@ -216,32 +245,33 @@ body.maximized .close-btn {
 /* Common Button Styles */
 .lang-btn {
     background: transparent !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border: none !important;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.3s var(--ease-smooth);
+    transition:
+        background-color 0.18s ease,
+        color 0.18s ease,
+        opacity 0.18s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
     -webkit-app-region: no-drag;
-
-    /* Squircle Shape */
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    width: var(--header-left-control-width);
+    height: 100%;
+    border-radius: 0;
+    position: relative;
+    overflow: hidden;
 }
 
 .lang-btn:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.035) !important;
     color: var(--text-primary);
 }
 
 .lang-btn:active {
-    transform: scale(0.96);
+    background: rgba(255, 255, 255, 0.055) !important;
+    opacity: 0.85;
 }
 
 .lang-btn .flag-icon,
@@ -254,21 +284,63 @@ body.maximized .close-btn {
 /* Main Trigger Button specific styles */
 .current-lang-trigger {
     z-index: 2;
-    background: rgba(255, 255, 255, 0.04) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: transparent !important;
+    box-shadow: none;
 }
 
 .current-lang-trigger:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.035) !important;
 }
 
 .lang-btn .flag-icon {
     margin: 0;
     display: block;
-    width: 28px;
-    height: 21px;
-    border-radius: 4px;
+    width: 24px;
+    height: 18px;
+    border-radius: 3px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.header-left-group .lang-btn::after,
+.header-left-group .sound-toggle-btn::after {
+    content: '';
+    position: absolute;
+    top: var(--header-left-divider-top);
+    right: 0;
+    width: 1px;
+    height: var(--header-left-divider-height);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.lang-switcher-root > .current-lang-trigger::after,
+.lang-menu-items .lang-btn:last-child::after {
+    display: none;
+}
+
+body[data-platform='macos'] .header-left-group .sound-toggle-btn,
+body[data-platform='macos'] .header-left-group .lang-btn,
+body[data-platform='macos'] .lang-menu-items {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+body[data-platform='macos'] .header-left-group .sound-toggle-btn,
+body[data-platform='macos'] .header-left-group .lang-btn {
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.045),
+        rgba(255, 255, 255, 0.02)
+    ) !important;
+}
+
+body[data-platform='macos'] .header-left-group .sound-toggle-btn:hover,
+body[data-platform='macos'] .header-left-group .lang-btn:hover {
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.03)
+    ) !important;
 }
 
 /* Flag icons (SVG, avoids OS emoji font issues showing GB/RU as text) */

@@ -2,8 +2,17 @@
  * AIChatTransport Unit Tests
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('@tauri-apps/api/core', () => ({
+    Channel: class<T> {
+        public onmessage: ((message: T) => void) | null = null;
+    },
+    invoke: vi.fn(),
+}));
+
 import { AIChatTransport } from '@/features/ai/services/AIChatTransport';
 import type { IChatRequest } from '@/features/ai/types/aiTypes';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // ---------- helpers ----------
 function createMockCore(isTauri = true) {
@@ -29,10 +38,16 @@ function makeRequest(overrides: Partial<IChatRequest> = {}): IChatRequest {
 describe('AIChatTransport', () => {
     let transport: AIChatTransport;
     let mockCore: ReturnType<typeof createMockCore>;
+    let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
     beforeEach(() => {
         vi.useFakeTimers();
-        transport = new AIChatTransport();
+        tracer = {
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+        };
+        transport = new AIChatTransport(tracer);
         mockCore = createMockCore();
         transport.setCore(mockCore as unknown as Parameters<typeof transport.setCore>[0]);
     });
@@ -63,7 +78,7 @@ describe('AIChatTransport', () => {
         });
 
         it('should return error when core is null', async () => {
-            const t = new AIChatTransport();
+            const t = new AIChatTransport(tracer);
             const result = await t.send(makeRequest());
             expect(result).toEqual({ ok: false, error: 'IPC host unavailable' });
         });
@@ -77,7 +92,11 @@ describe('AIChatTransport', () => {
             const result = await transport.send(makeRequest());
 
             expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('send_chat_message', {
-                request: expect.any(Object) as unknown,
+                request: expect.objectContaining({
+                    request_id: expect.any(String) as unknown,
+                }) as unknown,
+                chatChannel: expect.anything(),
+                thoughtChannel: expect.anything(),
             });
             expect(result).toEqual({ ok: true, text: 'World' });
         });
@@ -229,9 +248,9 @@ describe('AIChatTransport', () => {
 
     // ---------------------------------------------------------- Stream Listeners (onStream, onThought)
     describe.each([
-        ['onStream', 'ai:chat:chunk'],
-        ['onThought', 'ai:thought:chunk'],
-    ])('%s', (methodName, eventName) => {
+        ['onStream', 'chatChannel'],
+        ['onThought', 'thoughtChannel'],
+    ])('%s', (methodName, channelName) => {
         const invokeMethod = (listener: (chunk: string) => void) => {
             const method = (
                 transport as unknown as Record<string, (cb: (c: string) => void) => () => void>
@@ -247,7 +266,7 @@ describe('AIChatTransport', () => {
         });
 
         it('should return no-op function when core is null', () => {
-            const t = new AIChatTransport();
+            const t = new AIChatTransport(tracer);
             const method = (
                 t as unknown as Record<string, (cb: (c: string) => void) => () => void>
             )[methodName];
@@ -256,98 +275,70 @@ describe('AIChatTransport', () => {
             unsub();
         });
 
-        it(`should call tauriProvider.listen with ${eventName}`, async () => {
-            invokeMethod(vi.fn());
-
-            // Flush the internal promise
-            await vi.runAllTimersAsync();
-
-            expect(mockCore.tauriProvider.listen).toHaveBeenCalledWith(
-                eventName,
-                expect.any(Function),
-            );
-        });
-
-        it('should forward payload to listener when active', async () => {
+        it('should forward payload from invoke channel to listener', async () => {
             const listener = vi.fn();
-
-            // Make listen call the callback immediately with payload
-            mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: string) => void) => {
-                    cb('chunk-data');
-                    return Promise.resolve(vi.fn());
+            invokeMethod(listener);
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (_cmd: string, args: Record<string, unknown>) => {
+                    const channel = args[channelName] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    channel.onmessage?.({
+                        request_id: 'req-active',
+                        message_id: 'msg-1',
+                        content: 'chunk-data',
+                    });
+                    return Promise.resolve({ ok: true, reply: { text: 'done' } });
                 },
             );
 
-            invokeMethod(listener);
-            await vi.runAllTimersAsync();
+            await transport.send(makeRequest());
 
             expect(listener).toHaveBeenCalledWith('chunk-data');
         });
 
-        it('should unwrap object payload event shapes', async () => {
-            const listener = vi.fn();
-            mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: { payload: string }) => void) => {
-                    cb({ payload: 'wrapped-data' });
-                    return Promise.resolve(vi.fn());
-                },
-            );
-
-            invokeMethod(listener);
-            await vi.runAllTimersAsync();
-            expect(listener).toHaveBeenCalledWith('wrapped-data');
-        });
-
         it('should NOT forward payload after unsubscribe', async () => {
             const listener = vi.fn();
-            const captured: { cb: ((payload: string) => void) | null } = { cb: null };
-
-            mockCore.tauriProvider.listen.mockImplementation(
-                (_event: string, cb: (payload: string) => void) => {
-                    captured.cb = cb;
-                    return Promise.resolve(vi.fn());
+            const unsub = invokeMethod(listener);
+            unsub();
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (_cmd: string, args: Record<string, unknown>) => {
+                    const channel = args[channelName] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    channel.onmessage?.({
+                        request_id: 'req-active',
+                        message_id: 'msg-3',
+                        content: 'after-unsub',
+                    });
+                    return Promise.resolve({ ok: true, reply: { text: 'done' } });
                 },
             );
 
-            const unsub = invokeMethod(listener);
-            await vi.runAllTimersAsync();
-
-            unsub();
-            captured.cb?.('after-unsub');
+            await transport.send(makeRequest());
 
             expect(listener).not.toHaveBeenCalled();
         });
 
-        it('should call unlisten on cleanup if already resolved', async () => {
-            const mockUnlisten = vi.fn();
-            mockCore.tauriProvider.listen.mockResolvedValue(mockUnlisten);
-
+        it('should remove listener on cleanup', () => {
             const unsub = invokeMethod(vi.fn());
-            await vi.runAllTimersAsync();
-
             unsub();
-            expect(mockUnlisten).toHaveBeenCalled();
-        });
-
-        it('should call unlisten immediately if cancelled before resolve', async () => {
-            const mockUnlisten = vi.fn();
-            const captured: { resolve: ((fn: () => void) => void) | null } = { resolve: null };
-
-            mockCore.tauriProvider.listen.mockImplementation(() => {
-                return new Promise<() => void>((resolve) => {
-                    captured.resolve = resolve;
-                });
-            });
-
-            const unsub = invokeMethod(vi.fn());
-            unsub(); // Cancel before listen resolves
-
-            // Now resolve the listen promise
-            captured.resolve?.(mockUnlisten);
-            await vi.runAllTimersAsync();
-
-            expect(mockUnlisten).toHaveBeenCalled();
+            expect(
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ((transport as any)._unlisteners as Set<() => void>).size,
+            ).toBe(0);
         });
     });
 
@@ -370,8 +361,8 @@ describe('AIChatTransport', () => {
             expect(res.error).toBe('AI request timed out');
         });
 
-        it('onStream should hit core null check (Line 68)', () => {
-            const t = new AIChatTransport();
+        it('onStream should hit core null check', () => {
+            const t = new AIChatTransport(tracer);
             const unsub = t.onStream(vi.fn());
             expect(typeof unsub).toBe('function');
             unsub();
@@ -381,11 +372,13 @@ describe('AIChatTransport', () => {
     // ---------------------------------------------------------- destroy
     describe('destroy', () => {
         it('should call all registered unlisteners', () => {
-            // Manually push mock fns to _unlisteners (white-box)
+            // Manually seed mock fns into _unlisteners (white-box)
             const fn1 = vi.fn();
             const fn2 = vi.fn();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (transport as any)._unlisteners.push(fn1, fn2);
+            (transport as any)._unlisteners.add(fn1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (transport as any)._unlisteners.add(fn2);
 
             transport.destroy();
 
@@ -393,12 +386,12 @@ describe('AIChatTransport', () => {
             expect(fn2).toHaveBeenCalledOnce();
         });
 
-        it('should clear unlisteners array after destroy', () => {
+        it('should clear unlisteners set after destroy', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (transport as any)._unlisteners.push(vi.fn());
+            (transport as any)._unlisteners.add(vi.fn());
             transport.destroy();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((transport as any)._unlisteners).toHaveLength(0);
+            expect((transport as any)._unlisteners.size).toBe(0);
         });
 
         it('should be safe to call destroy multiple times', () => {

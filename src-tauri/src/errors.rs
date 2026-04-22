@@ -11,7 +11,6 @@ use thiserror::Error;
 
 /// Application-level errors
 #[derive(Error, Debug, Clone, specta::Type)]
-#[serde(tag = "type", content = "payload")]
 pub enum AppError {
     /// Validation error (invalid input, malformed data)
     #[error("Validation error: {0}")]
@@ -104,56 +103,6 @@ impl serde::Serialize for AppError {
     {
         // Use IpcError for wire serialization to match frontend expectations
         IpcError::from(self.clone()).serialize(serializer)
-    }
-}
-
-impl axum::response::IntoResponse for AppError {
-    fn into_response(self) -> axum::response::Response {
-        let (status, code, message) = match &self {
-            Self::Validation(msg) => (
-                axum::http::StatusCode::BAD_REQUEST,
-                "VALIDATION",
-                msg.clone(),
-            ),
-            Self::NotFound(msg) => (axum::http::StatusCode::NOT_FOUND, "NOT_FOUND", msg.clone()),
-            Self::PermissionDenied(msg) => (
-                axum::http::StatusCode::FORBIDDEN,
-                "PERMISSION_DENIED",
-                msg.clone(),
-            ),
-            Self::Io(msg) => (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "IO_ERROR",
-                msg.clone(),
-            ),
-            Self::Serialization(msg) => (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "SERIALIZATION",
-                msg.clone(),
-            ),
-            Self::Config(msg) => (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "CONFIG",
-                msg.clone(),
-            ),
-            Self::External { message, .. } => (
-                axum::http::StatusCode::BAD_GATEWAY,
-                "EXTERNAL",
-                message.clone(),
-            ),
-            Self::Internal { message, .. } => (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL",
-                message.clone(),
-            ),
-        };
-
-        let body = axum::Json(serde_json::json!({
-            "code": code,
-            "message": message,
-        }));
-
-        (status, body).into_response()
     }
 }
 

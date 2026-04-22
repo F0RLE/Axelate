@@ -44,6 +44,16 @@ export interface IChatMessage {
     thought_signature?: string | undefined;
 }
 
+export interface IWebSearchOptions {
+    enabled: boolean;
+    engine?: 'auto' | 'native' | 'exa' | 'firecrawl' | 'parallel';
+    max_results?: number;
+    max_total_results?: number;
+    search_context_size?: 'low' | 'medium' | 'high';
+    allowed_domains?: string[];
+    excluded_domains?: string[];
+}
+
 // ============================================================================
 // IPC Transfer Envelopes
 // ============================================================================
@@ -56,10 +66,12 @@ export interface IChatRequest {
     model: string;
     messages: { role: string; content: ChatContent; thought_signature?: string | undefined }[];
     api_key: string | null;
-    thinking_level?: 'low' | 'medium' | 'high';
+    request_id?: string;
+    thinking_level?: 'none' | 'off' | 'low' | 'medium' | 'high';
     max_tokens?: number | undefined;
     attachments?: { name: string; type: string; data_base64: string }[];
     session_id?: string;
+    web_search?: IWebSearchOptions;
 }
 
 /**
@@ -81,6 +93,8 @@ export interface IBridgeResponse {
     text?: string;
     error?: string;
     images?: string[];
+    thought_signature?: string;
+    model?: string;
 }
 
 export interface IImageGenerationRequest {
@@ -88,6 +102,7 @@ export interface IImageGenerationRequest {
     prompt: string;
     model: string;
     session_id?: string;
+    settings_key?: string;
     original_prompt?: string;
     steps?: number | null;
     cfg_scale?: number | null;
@@ -111,6 +126,11 @@ export interface IImageGenerationResponse {
     images: string[];
     ok: boolean;
     error: string | null;
+}
+
+export interface IImageGenerationPreview {
+    data_url: string;
+    updated_at_ms: number;
 }
 
 // ============================================================================
@@ -168,6 +188,7 @@ export interface IAIModelData {
     name: string;
     desc: string;
     descKey?: string;
+    isCustom?: boolean | null;
 
     tier?: 'strong' | 'medium' | 'weak' | null;
     modelSize?: string | null;

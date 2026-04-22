@@ -1,62 +1,3 @@
-/* Critical Splash Screen Styles – covers entire viewport until app is ready */
-#splash-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    /* background-color: #111015; removed */
-    z-index: 999998;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition:
-        opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-        visibility 0.35s step-end;
-}
-
-/* Central card so logo/progress are readable over particle background */
-#splash-screen .splash-content {
-    /* background: rgba(17, 16, 21, 0.88); removed */
-    padding: 2.5rem 3rem;
-    /* border-radius: 24px; removed */
-    /* border removed */
-    /* box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5); removed */
-}
-
-/* Hide main UI until splash is dismissed (prevents content flashing behind splash) */
-#sidebar.fade-in-init:not(.visible),
-#app-header.fade-in-init:not(.visible),
-#main-area.fade-in-init:not(.visible) {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transition:
-        opacity 0.35s ease,
-        visibility 0.35s ease;
-}
-
-#sidebar.visible,
-#app-header.visible,
-#main-area.visible {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-}
-
-#splash-screen.fade-out {
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
-    transition:
-        opacity 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-        visibility 0.35s step-end;
-}
-
-#splash-screen.hidden {
-    display: none !important;
-}
-
 .splash-content {
     display: flex;
     flex-direction: column;
@@ -69,7 +10,6 @@
     position: relative;
     width: 140px;
     height: 140px;
-    will-change: transform;
     animation: splashFloat 4s ease-in-out infinite;
 }
 
@@ -131,43 +71,9 @@
     line-height: 1.2;
 }
 
-.splash-progress-container {
-    width: 200px;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    overflow: hidden;
-    opacity: 0;
-    animation: splashFadeIn 0.5s ease 0.2s forwards;
-    position: relative;
-}
-
-.splash-progress-bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #8a2be2, #c77dff);
-    border-radius: 4px;
-    animation: splashProgressFill 0.8s cubic-bezier(0.4, 0, 0.2, 1) 0.1s forwards;
-}
-
 @keyframes splashTitleReveal {
     to {
         opacity: 1;
         transform: translateY(0);
-    }
-}
-
-@keyframes splashFadeIn {
-    to {
-        opacity: 1;
-    }
-}
-
-@keyframes splashProgressFill {
-    from {
-        width: 0%;
-    }
-    to {
-        width: 100%;
     }
 }

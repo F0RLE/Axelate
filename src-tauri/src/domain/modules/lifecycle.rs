@@ -1,9 +1,16 @@
 use crate::errors::AppError;
 use crate::models::modules::ConfigField;
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Current module API version
 pub const CURRENT_API_VERSION: &str = "1";
+const PRIMARY_MANIFEST_FILE: &str = "axelate-module.toml";
+
+#[derive(Debug)]
+struct ManifestSource {
+    path: std::path::PathBuf,
+}
 
 /// Module lifecycle trait for start/stop/health management
 pub trait ModuleLifecycle {
@@ -38,7 +45,7 @@ pub enum ModuleHealth {
     Unknown,
 }
 
-/// Module manifest (module.json)
+/// Module manifest (`axelate-module.toml`)
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ModuleManifest {
     #[serde(default = "default_api_version")]
@@ -51,14 +58,35 @@ pub struct ModuleManifest {
     /// Module version
     pub version: String,
     /// Module description
+    #[serde(default)]
     pub description: String,
+    /// Module author or organization
+    #[serde(default)]
+    pub author: Option<String>,
+    /// Module category used by the launcher UI.
+    #[serde(default, alias = "type")]
+    pub category: Option<String>,
+    /// Module icon shown in the launcher UI.
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// Human-readable module documentation file.
+    #[serde(default)]
+    pub readme: Option<String>,
+    /// Legacy launcher-owned schema file path for richer forms.
+    #[serde(default, alias = "settingsSchema")]
+    pub settings_schema: Option<String>,
+    /// Module-owned custom settings UI entry point.
+    #[serde(default, alias = "settingsUi")]
+    pub settings_ui: Option<String>,
     /// Entry point script
     pub entry: Option<String>,
     /// Module dependencies
+    #[serde(default)]
     pub dependencies: Vec<String>,
     /// Lifecycle scripts
     pub lifecycle: Option<LifecycleScripts>,
     /// Configuration schema
+    #[serde(default, alias = "configSchema")]
     pub config_schema: Option<HashMap<String, ConfigField>>,
 }
 
@@ -77,6 +105,7 @@ pub enum CommandDefinition {
         /// Program to execute (e.g. "node", "python")
         program: String,
         /// List of arguments
+        #[serde(default)]
         args: Vec<String>,
     },
 }
@@ -99,14 +128,144 @@ pub struct LifecycleScripts {
 pub struct ManifestLoader;
 
 impl ManifestLoader {
-    /// Loads module manifest from module.json
+    /// Loads module manifest from `axelate-module.toml`.
     pub fn load(module_dir: &std::path::Path) -> Result<ModuleManifest, AppError> {
-        let manifest_path = module_dir.join("module.json");
-        if !manifest_path.exists() {
-            return Err(AppError::NotFound("Manifest not found".to_string()));
+        let source = Self::resolve_manifest_source(module_dir)?;
+        let manifest = Self::load_manifest_source(&source)?;
+        Ok(Self::normalize_manifest(module_dir, manifest))
+    }
+
+    fn resolve_manifest_source(module_dir: &Path) -> Result<ManifestSource, AppError> {
+        let primary_manifest_path = module_dir.join(PRIMARY_MANIFEST_FILE);
+        if primary_manifest_path.exists() {
+            return Ok(ManifestSource {
+                path: primary_manifest_path,
+            });
         }
+
+        Err(AppError::NotFound(format!(
+            "Manifest not found. Expected {PRIMARY_MANIFEST_FILE}"
+        )))
+    }
+
+    fn load_manifest_source(source: &ManifestSource) -> Result<ModuleManifest, AppError> {
+        Self::load_toml_manifest(&source.path)
+    }
+
+    fn load_toml_manifest(manifest_path: &Path) -> Result<ModuleManifest, AppError> {
         let content =
-            std::fs::read_to_string(&manifest_path).map_err(|e| AppError::Io(e.to_string()))?;
-        serde_json::from_str(&content).map_err(|e| AppError::Serialization(e.to_string()))
+            std::fs::read_to_string(manifest_path).map_err(|e| AppError::Io(e.to_string()))?;
+        toml::from_str(&content).map_err(|e| {
+            AppError::Serialization(format!(
+                "Failed to parse TOML manifest at {}: {e}",
+                manifest_path.display()
+            ))
+        })
+    }
+
+    fn normalize_manifest(module_dir: &Path, mut manifest: ModuleManifest) -> ModuleManifest {
+        // Keep older script modules runnable when `entry` is omitted but the
+        // standard `src/main.py` layout exists on disk.
+        if manifest.entry.is_none() {
+            let default_python_entry = module_dir.join("src").join("main.py");
+            if default_python_entry.exists() {
+                manifest.entry = Some("src/main.py".to_string());
+            }
+        }
+
+        manifest
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::{ManifestLoader, PRIMARY_MANIFEST_FILE};
+    use crate::errors::AppError;
+    use std::fs;
+
+    #[test]
+    fn loads_primary_toml_manifest() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let manifest_path = temp_dir.path().join(PRIMARY_MANIFEST_FILE);
+
+        fs::write(
+            &manifest_path,
+            r#"
+api_version = "2"
+id = "demo-module"
+name = "Demo Module"
+version = "1.2.3"
+description = "Example manifest"
+author = "Axelate"
+type = "service"
+icon = "🤖"
+settings_ui = "settings-ui/index.html"
+entry = "src/main.py"
+dependencies = ["python"]
+
+[lifecycle]
+start = { program = "uv", args = ["run", "src/main.py"] }
+"#,
+        )
+        .expect("write manifest");
+
+        let manifest = ManifestLoader::load(temp_dir.path()).expect("load manifest");
+
+        assert_eq!(manifest.api_version, "2");
+        assert_eq!(manifest.id, "demo-module");
+        assert_eq!(manifest.author.as_deref(), Some("Axelate"));
+        assert_eq!(manifest.category.as_deref(), Some("service"));
+        assert_eq!(manifest.icon.as_deref(), Some("🤖"));
+        assert_eq!(
+            manifest.settings_ui.as_deref(),
+            Some("settings-ui/index.html")
+        );
+        assert_eq!(manifest.entry.as_deref(), Some("src/main.py"));
+    }
+
+    #[test]
+    fn rejects_non_toml_manifest_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let manifest_path = temp_dir.path().join("module.json");
+
+        fs::write(
+            &manifest_path,
+            r#"{
+  "api_version": "1",
+  "id": "legacy-demo",
+  "name": "Legacy Demo",
+  "version": "0.1.0",
+  "description": "Legacy manifest",
+  "dependencies": []
+}"#,
+        )
+        .expect("write non-toml manifest");
+
+        let error = ManifestLoader::load(temp_dir.path()).expect_err("non-toml manifest rejected");
+
+        assert!(
+            matches!(error, AppError::NotFound(message) if message.contains(PRIMARY_MANIFEST_FILE))
+        );
+    }
+
+    #[test]
+    fn resolves_manifest_source_to_primary_toml() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        fs::write(
+            temp_dir.path().join(PRIMARY_MANIFEST_FILE),
+            r#"
+api_version = "1"
+id = "primary"
+name = "Primary"
+version = "1.0.0"
+"#,
+        )
+        .expect("write primary");
+
+        let source = ManifestLoader::resolve_manifest_source(temp_dir.path()).expect("source");
+
+        assert_eq!(source.path, temp_dir.path().join(PRIMARY_MANIFEST_FILE));
     }
 }

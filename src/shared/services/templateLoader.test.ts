@@ -1,8 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { templateLoader } from './TemplateLoader';
+import { TemplateLoader } from './TemplateLoader';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 describe('TemplateLoader', () => {
+    let templateLoader: TemplateLoader;
+    let tracer: Pick<LoggerService, 'debug' | 'error'>;
+
     beforeEach(() => {
+        tracer = {
+            debug: vi.fn(),
+            error: vi.fn(),
+        };
+        templateLoader = new TemplateLoader(tracer);
         document.body.innerHTML = '<div id="test-container"></div>';
         templateLoader.clearCache();
         (templateLoader as unknown as { _initialized: boolean })._initialized = false;
@@ -59,6 +68,26 @@ describe('TemplateLoader', () => {
             expect(document.getElementById('test-container')?.innerHTML).toContain('Test');
         });
 
+        it('should preserve console data attributes needed for bindings', () => {
+            const result = templateLoader.injectTemplate(
+                'test-container',
+                `
+                    <button class="console-tab" data-view="general">General</button>
+                    <button class="console-filter-chip" data-level="INFO" data-title="Copy Logs">Info</button>
+                `,
+            );
+
+            expect(result).toBe(true);
+
+            const container = document.getElementById('test-container');
+            const tab = container?.querySelector('.console-tab');
+            const chip = container?.querySelector('.console-filter-chip');
+
+            expect(tab?.getAttribute('data-view')).toBe('general');
+            expect(chip?.getAttribute('data-level')).toBe('INFO');
+            expect(chip?.getAttribute('data-title')).toBe('Copy Logs');
+        });
+
         it('should return false for missing container', () => {
             expect(templateLoader.injectTemplate('nonexistent', '<p>x</p>')).toBe(false);
         });
@@ -88,6 +117,17 @@ describe('TemplateLoader', () => {
             const result = templateLoader.appendTemplate('test-container', '<p>Second</p>');
             expect(result).toBe(true);
             expect(document.getElementById('test-container')?.children).toHaveLength(2);
+        });
+
+        it('should sanitize appended HTML', () => {
+            const result = templateLoader.appendTemplate(
+                'test-container',
+                '<p>Safe</p><script>globalThis.__xss = true;</script>',
+            );
+
+            expect(result).toBe(true);
+            expect(document.getElementById('test-container')?.innerHTML).toContain('Safe');
+            expect(document.getElementById('test-container')?.innerHTML).not.toContain('<script>');
         });
 
         it('should return false for missing container', () => {

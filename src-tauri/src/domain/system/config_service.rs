@@ -21,8 +21,16 @@ impl ConfigService {
         ConfigField {
             field_type: "text".to_string(),
             label: label.to_string(),
+            description: None,
+            placeholder: None,
             default: default.map(|s| serde_json::Value::String(s.to_string())),
             required,
+            min: None,
+            max: None,
+            step: None,
+            rows: None,
+            section: None,
+            order: None,
             options: None,
         }
     }
@@ -38,6 +46,11 @@ impl ConfigService {
         // 1. Process API Providers (Auto-generate virtual modules)
         for provider in &providers {
             let mut config_schema = HashMap::new();
+            let capabilities = provider
+                .capabilities
+                .clone()
+                .filter(|items| !items.is_empty())
+                .unwrap_or_else(|| vec!["text".to_string()]);
 
             // API Key is always required for cloud providers
             config_schema.insert(
@@ -72,11 +85,13 @@ impl ConfigService {
                 icon: provider.icon.clone().unwrap_or_else(|| "cloud".to_string()),
                 type_name: "api".to_string(),
                 dl_type: None,
-                capabilities: vec!["text".to_string()],
+                capabilities,
                 binary: None,
                 raw_config_schema: None,
                 repo_url: None,
                 expected_hash: None,
+                coming_soon: false,
+                managed_externally: false,
                 installed: true,
                 version: "1.0.0".to_string(),
                 config_schema: Some(config_schema),

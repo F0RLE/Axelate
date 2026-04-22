@@ -3,6 +3,7 @@ use crate::infrastructure::persistence::json_store::JsonStore;
 use crate::utils::paths::CONFIG_DIR;
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::fs;
 use std::path::PathBuf;
 
 /// Scaling constants
@@ -11,7 +12,7 @@ pub const SCALING_BASELINE_HEIGHT: f64 = 600.0;
 /// Minimum allowed zoom level.
 pub const SCALING_MIN_ZOOM: f64 = 0.5;
 /// Maximum allowed zoom level.
-pub const SCALING_MAX_ZOOM: f64 = 3.0;
+pub const SCALING_MAX_ZOOM: f64 = 2.6;
 
 /// Breakpoints and Thresholds
 /// Compact breakpoint width.
@@ -34,6 +35,14 @@ pub const THRESHOLD_SMALL_SCREEN_HEIGHT: u32 = 900;
 pub const THRESHOLD_PORTRAIT_HEIGHT: u32 = 1000;
 /// Minimum width for portrait orientation consideration.
 pub const THRESHOLD_PORTRAIT_MIN_WIDTH: u32 = 700;
+/// Default cold-start window width.
+pub const DEFAULT_WINDOW_WIDTH: u32 = 1520;
+/// Default cold-start window height.
+pub const DEFAULT_WINDOW_HEIGHT: u32 = 980;
+/// Minimum persisted window width we accept from storage.
+pub const MIN_WINDOW_WIDTH: u32 = 1180;
+/// Minimum persisted window height we accept from storage.
+pub const MIN_WINDOW_HEIGHT: u32 = 720;
 
 /// Overall window configuration combining breakpoints and thresholds.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -99,8 +108,8 @@ pub struct WindowSettings {
 impl Default for WindowSettings {
     fn default() -> Self {
         Self {
-            width: 1400,
-            height: 900,
+            width: DEFAULT_WINDOW_WIDTH,
+            height: DEFAULT_WINDOW_HEIGHT,
             x: None,
             y: None,
             maximized: false,
@@ -122,7 +131,8 @@ impl WindowSettingsService {
 
     /// Loads window settings from file
     pub async fn get_window_settings(&self) -> Result<WindowSettings, AppError> {
-        self.json_store.load_async(&settings_file()).await
+        let settings: WindowSettings = self.json_store.load_async(&settings_file()).await?;
+        Ok(normalize_window_settings(settings))
     }
 
     /// Save window settings to file
@@ -133,8 +143,8 @@ impl WindowSettingsService {
     /// Update specific window properties
     pub async fn update_window_size(&self, width: u32, height: u32) -> Result<(), AppError> {
         let mut settings = self.get_window_settings().await?;
-        settings.width = width;
-        settings.height = height;
+        settings.width = width.max(MIN_WINDOW_WIDTH);
+        settings.height = height.max(MIN_WINDOW_HEIGHT);
         self.save_window_settings(&settings).await
     }
 
@@ -207,5 +217,70 @@ pub fn calculate_adaptive_zoom(height: u32) -> f64 {
 
 /// Synchronously loads window settings from disk.
 pub fn load_window_settings() -> WindowSettings {
-    JsonStore::load_sync(&settings_file()).unwrap_or_default()
+    load_window_settings_bootstrap(&settings_file())
+}
+
+fn load_window_settings_bootstrap(path: &std::path::Path) -> WindowSettings {
+    if !path.exists() {
+        return WindowSettings::default();
+    }
+
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) => {
+            tracing::error!(
+                "Failed to read window settings at {}, resetting to defaults: {error}",
+                path.display()
+            );
+            return WindowSettings::default();
+        }
+    };
+
+    let settings = serde_json::from_str(&content).unwrap_or_else(|error| {
+        tracing::error!(
+            "Failed to parse window settings at {}, resetting to defaults: {error}",
+            path.display()
+        );
+        WindowSettings::default()
+    });
+
+    normalize_window_settings(settings)
+}
+
+fn normalize_window_settings(mut settings: WindowSettings) -> WindowSettings {
+    settings.width = settings.width.max(MIN_WINDOW_WIDTH);
+    settings.height = settings.height.max(MIN_WINDOW_HEIGHT);
+    settings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH,
+        WindowSettings, normalize_window_settings,
+    };
+
+    #[test]
+    fn normalize_window_settings_raises_legacy_small_sizes() {
+        let normalized = normalize_window_settings(WindowSettings {
+            width: 1000,
+            height: 600,
+            x: Some(10),
+            y: Some(20),
+            maximized: false,
+        });
+
+        assert_eq!(normalized.width, MIN_WINDOW_WIDTH);
+        assert_eq!(normalized.height, MIN_WINDOW_HEIGHT);
+        assert_eq!(normalized.x, Some(10));
+        assert_eq!(normalized.y, Some(20));
+    }
+
+    #[test]
+    fn default_window_settings_use_new_larger_size() {
+        let settings = WindowSettings::default();
+
+        assert_eq!(settings.width, DEFAULT_WINDOW_WIDTH);
+        assert_eq!(settings.height, DEFAULT_WINDOW_HEIGHT);
+    }
 }

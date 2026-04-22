@@ -9,20 +9,30 @@
  */
 
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+type EngineConfigLogger = Pick<LoggerService, 'error'>;
 
 /** Subset of EngineConfig that the frontend can read and write. */
 export interface EngineConfig {
     engine_id: string;
-    port: number;
     gpu_layers: number;
     context_size: number;
     model_path: string | null;
+    vae_path?: string | null;
+    llm_path?: string | null;
     extra_args: string[];
 }
 
+export interface EngineSettingsPayload {
+    config: EngineConfig;
+}
+
 export class EngineConfigService {
-    constructor(private readonly _tauri: TauriProvider) {}
+    constructor(
+        private readonly _tauri: TauriProvider,
+        private readonly _tracer: EngineConfigLogger,
+    ) {}
 
     /**
      * Fetches the persisted config for an engine, falling back to backend defaults
@@ -35,7 +45,22 @@ export class EngineConfigService {
                 engineId,
             });
         } catch (e) {
-            tracer.error('[EngineConfigService] Failed to get engine config:', e);
+            this._tracer.error('[EngineConfigService] Failed to get engine config:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Fetches the local engine modal data in a single backend round-trip.
+     */
+    public async getSettingsPayload(engineId: string): Promise<EngineSettingsPayload | null> {
+        if (!this._tauri.isTauri()) return null;
+        try {
+            return await this._tauri.invoke<EngineSettingsPayload>('get_engine_settings_payload', {
+                engineId,
+            });
+        } catch (e) {
+            this._tracer.error('[EngineConfigService] Failed to get engine settings payload:', e);
             return null;
         }
     }
@@ -49,7 +74,7 @@ export class EngineConfigService {
         try {
             await this._tauri.invoke<void>('set_engine_config', { config });
         } catch (e) {
-            tracer.error('[EngineConfigService] Failed to save engine config:', e);
+            this._tracer.error('[EngineConfigService] Failed to save engine config:', e);
         }
     }
 }

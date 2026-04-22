@@ -3,477 +3,287 @@ export const svgIcons = `
             <symbol
                 id="icon-home"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                <path d="M4 20h16v2H4zm16-10h2v10h-2zM2 10h2v10H2zm2-2h2v2H4zm2-2h2v2H6zm2-2h2v2H8zm2-2h4v2h-4zm4 2h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2zM8 14h2v6H8zm2-2h4v2h-4zm4 2h2v6h-2z"></path>
             </symbol>
             <symbol
                 id="icon-layout"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="9" y1="3" x2="9" y2="21"></line>
+                <path d="M3 3h18v2H3zm0 16h18v2H3zM1 5h2v14H1zm20 0h2v14h-2zM8 5h2v14H8zm2 6h11v2H10z"></path>
             </symbol>
             <symbol
                 id="icon-console"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <polyline points="4 17 10 11 4 5"></polyline>
-                <line x1="12" y1="19" x2="20" y2="19"></line>
+                <path d="M4 2h16v2H4zm0 18h16v2H4zM2 4h2v16H2zm18 0h2v16h-2zM6 16h2v2H6zm2-2h2v2H8zm-2-2h2v2H6z"></path>
             </symbol>
             <symbol
                 id="icon-settings"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M12.22 2h-4.44a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8.38M18 14v-4h-4M14 2h4.44a2 2 0 0 1 2 2v2M18 2l-4.5 4.5"
-                />
+                <path d="M4 14h2v6H4zm6 0h2v6h-2zm-4-2h4v2H6zm0 8h4v2H6zm-4-4h2v2H2zm20-8h-4V6h4z"></path>
+                <path d="M10 16h12v2H10zm4-8H2V6h12zm6-4v2h-2V4zm0 6V8h-2v2zm-6-8h4v2h-4zm0 10h4v-2h-4zm-2-8h2v2h-2zm0 6h2V8h-2z"></path>
             </symbol>
             <symbol
                 id="icon-chat"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"
-                ></path>
-                <path d="M8 10h8"></path>
-                <path d="M8 14h5"></path>
+                <path d="M20 2H4v2h16zm0 14H6v2h14zm2-12h-2v12h2zM4 4H2v18h2zm2 14H4v2h2z"></path>
             </symbol>
             <symbol
                 id="icon-paperclip"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M21.44 11.05l-8.49 8.49a5 5 0 0 1-7.07-7.07l8.49-8.49a3.5 3.5 0 0 1 4.95 4.95l-8.49 8.49a2 2 0 0 1-2.83-2.83l8.49-8.49"
-                ></path>
+                <path d="M14 3h4v2h-4zm-2 2h2v2h-2zm-2 2h2v2h-2zm-2 2h2v8H8zm2 8h2v2h-2zm6-10h2v8h-2zm-2 8h2v2h-2zm-2 2h2v2h-2zM6 9h2v8H6zm2 8h2v2H8z"></path>
             </symbol>
             <symbol
                 id="icon-start"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                <path d="M6 4h2v2H6zm2 2h2v2H8zm2 2h2v2h-2zm2 2h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2H8zm-2 2h2v2H6zm4-10h2v8h-2zm2 2h2v4h-2z"></path>
+            </symbol>
+            <symbol
+                id="icon-pause"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+            >
+                <path d="M6 4h4v2H6zm8 0h4v2h-4zM4 6h2v12H4zm6 0h2v12h-2zm2 12h2v2h-2zm6-12h2v12h-2zm-2 12h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-stop"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <path d="M5 4h14v2H5zm0 14h14v2H5zM3 6h2v12H3zm16 0h2v12h-2zm-10 2h6v8H9z"></path>
             </symbol>
             <symbol
                 id="icon-save"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
-                ></path>
-                <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                <polyline points="7 3 7 8 15 8"></polyline>
+                <path d="M4 2h12v2H4zm12 2h2v2h-2zm2 2h2v14h-2zM4 20h14v2H4zM2 4h2v16H2zm4 2h8v4H6zm0 8h8v6H6zm8-8h2v2h-2zm-4 10h2v4h-2z"></path>
             </symbol>
             <symbol
                 id="icon-system"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="2" y="3" width="20" height="18" rx="2"></rect>
-                <line x1="2" y1="9" x2="22" y2="9"></line>
-                <line x1="8" y1="21" x2="8" y2="9"></line>
-                <line x1="16" y1="21" x2="16" y2="9"></line>
+                <path d="M6 7h4v2H6zm0 8h4v2H6zM2 5h2v14H2zm18 0h2v14h-2zM4 19h16v2H4zM4 3h16v2H4zm0 8h16v2H4z"></path>
             </symbol>
             <symbol
                 id="icon-clipboard"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
-                ></path>
-                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                <path d="M4 6h2v14H4zm2 14h12v2H6zM18 6h2v14h-2zM6 4h2v2H6zm10 0h2v2h-2zm-6-2h4v2h-4zm0 4h4v2h-4zM8 2h2v6H8zm6 0h2v6h-2z"></path>
             </symbol>
             <symbol
                 id="icon-trash"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M3 6h18"></path>
-                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
+                <path d="M9 3h6v2h5v2h-1v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7H4V5h5V3Zm8 4H7v13h10V7Zm-6 3v7H9v-7h2Zm4 0v7h-2v-7h2Z"></path>
             </symbol>
             <symbol
                 id="icon-eye"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M16 20H8v-2h8v2Zm-8-2H4v-2h4v2Zm12 0h-4v-2h4v2ZM4 16H2v-2h2v2Zm10-6h-2v2h2v-2h2v4h-2v2h-4v-2H8v-4h2V8h4v2Zm8 6h-2v-2h2v2ZM2 14H0v-4h2v4Zm22 0h-2v-4h2v4ZM4 10H2V8h2v2Zm18 0h-2V8h2v2ZM8 8H4V6h4v2Zm12 0h-4V6h4v2Zm-4-2H8V4h8v2Z"></path>
             </symbol>
             <symbol
                 id="icon-eye-off"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"
-                ></path>
-                <path
-                    d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"
-                ></path>
-                <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"></path>
-                <path d="M1 1l22 22"></path>
+                <path d="M0 10h2v4H0zm24 0h-2v4h2zm-8 0h-2v2h2zm-6 0H8v4h2zM2 8h2v2H2zm0 8h2v-2H2zm20-8h-2v2h2zm0 8h-2v-2h2zM4 6h4v2H4zm0 12h4v-2H4zM20 6h-4v2h4zM10 4h6v2h-6zM8 20h8v-2H8zm4-12h2v2h-2zm-2 6h4v2h-4zM8 8h2v2H8zm2 2h2v4h-2zm2 2h2v2h-2z"></path>
+                <path d="M6 6h2v2H6zM4 4h2v2H4zM2 2h2v2H2zm12 12h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-folder"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-                ></path>
+                <path d="M4 4h6v2H4zm0 14h16v2H4zM20 8h2v10h-2zM2 6h2v12H2zm8 0h10v2H10z"></path>
             </symbol>
             <symbol
                 id="icon-models"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M12 2l9 4.9V17L12 22l-9-4.9V7z" />
-                <path d="M12 12l9-4.9" />
-                <path d="M12 12v9" />
-                <path d="M12 12L3 7.1" />
+                <path d="M4 4h16v2H4zm0 6h16v2H4zm0 6h16v2H4zm2-8h2v2H6zm0 6h2v2H6zm0 6h2v2H6zm10-12h2v2h-2zm-4 0h2v2h-2zm4 6h2v2h-2zm-4 0h2v2h-2zm4 6h2v2h-2zm-4 0h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-plus"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
+                fill="currentColor"
             >
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <path d="M13 11h7v2h-7v7h-2v-7H4v-2h7V4h2v7Z"></path>
             </symbol>
             <symbol
                 id="icon-close"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
+                fill="currentColor"
             >
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
+                <path d="M5 4h2v2H5zm12 0h2v2h-2zM7 6h2v2H7zm8 0h2v2h-2zM9 8h2v2H9zm4 0h2v2h-2zM11 10h2v4h-2zM9 14h2v2H9zm4 0h2v2h-2zM7 16h2v2H7zm8 0h2v2h-2zM5 18h2v2H5zm12 0h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-clock"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
+                <path d="M8 2h8v2H8zM6 4h2v2H6zm10 0h2v2h-2zM4 6h2v2H4zm12 0h2v2h-2zM18 8h2v2h-2zM2 8h2v2H2zm0 6h2v2H2zm16 0h2v2h-2zM4 16h2v2H4zm10 0h2v2h-2zm2 2h2v2h-2zM6 18h2v2H6zm2 2h8v2H8zm3-12h2v4h-2zm2 4h3v2h-3z"></path>
             </symbol>
             <symbol
                 id="icon-info"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                <path d="M6 2h12v2H6zM4 4h2v2H4zm12 0h2v2h-2zM2 6h2v12H2zm18 0h2v12h-2zM4 18h2v2H4zm12 0h2v2h-2zM6 20h12v2H6zm5-12h2v2h-2zm0 4h2v6h-2z"></path>
             </symbol>
             <symbol
                 id="icon-mic"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path
-                    d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"
-                ></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="23"></line>
-                <line x1="8" y1="23" x2="16" y2="23"></line>
+                <path d="M10 2h4v2h-4zM8 4h2v10H8zm2 10h4v2h-4zm4-10h2v10h-2zM4 10h2v6H4zm2 6h2v2H6zm2 2h8v2H8zm8-2h2v2h-2zm2-6h2v6h-2zm-7 10h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-send"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                <path d="M4 19h4v2H2v-8h2v6Zm8 0H8v-2h4v2Zm4-2h-4v-2h4v2Zm4-2h-4v-2h4v2Zm-10-2H4v-2h6v2Zm12 0h-2v-2h2v2ZM8 5H4v6H2V3h6v2Zm12 6h-4V9h4v2Zm-4-2h-4V7h4v2Zm-4-2H8V5h4v2Z"></path>
             </symbol>
             <symbol
                 id="icon-download"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
+                <path d="M21 15v4h-2v-4zm-2 4v2H5v-2zM5 15v4H3v-4zm8-12v14h-2V3z"></path>
+                <path d="M7 11v2h10v-2zm2 2v2h2v-2zm4 0v2h2v-2z"></path>
+                <path d="M15 11v2h2v-2z"></path>
             </symbol>
             <symbol
                 id="icon-check"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <polyline points="20 6 9 17 4 12"></polyline>
+                <path d="M10 18H8v-2h2v2Zm-2-2H6v-2h2v2Zm4-2v2h-2v-2h2Zm-6 0H4v-2h2v2Zm8 0h-2v-2h2v2Zm2-2h-2v-2h2v2Zm2-2h-2V8h2v2Zm2-2h-2V6h2v2Z"></path>
             </symbol>
             <symbol
                 id="icon-network"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="2" y1="12" x2="22" y2="12"></line>
-                <path
-                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-                ></path>
+                <path d="M6 2h12v2H6zm0 18h12v2H6zM4 4h2v2H4zm5 0h2v2H9zm0 14h2v2H9zm4 0h2v2h-2zM7 6h2v12H7zm8 0h2v12h-2zm-2-2h2v2h-2zm7 0h-2v2h2zM2 6h2v12H2zm20 0h-2v12h2zM4 18h2v2H4zm16 0h-2v2h2z"></path>
+                <path d="M3 11h18v2H3z"></path>
             </symbol>
             <symbol
                 id="icon-disk"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <circle cx="12" cy="12" r="10"></circle>
-                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M8 2h8v2H8zM6 4h2v2H6zm10 0h2v2h-2zM4 6h2v2H4zm12 0h2v2h-2zM2 8h2v8H2zm16 0h2v8h-2zM4 16h2v2H4zm12 0h2v2h-2zM6 18h2v2H6zm10 0h2v2h-2zM8 20h8v2H8zm2-10h4v4h-4z"></path>
             </symbol>
             <symbol
                 id="icon-cpu"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-                <rect x="9" y="9" width="6" height="6"></rect>
-                <path d="M15 2v2"></path>
-                <path d="M9 2v2"></path>
-                <path d="M15 20v2"></path>
-                <path d="M9 20v2"></path>
-                <path d="M2 15h2"></path>
-                <path d="M2 9h2"></path>
-                <path d="M20 15h2"></path>
-                <path d="M20 9h2"></path>
+                <path d="M5 3h14v2H5zm0 16h14v2H5zM3 5h2v14H3zm16 0h2v14h-2zM9 7h6v2H9zm0 8h6v2H9zM7 9h2v6H7zm8 0h2v6h-2zm-4-8h2v2h-2zm0 20h2v2h-2zM1 11h2v2H1zm20 0h2v2h-2zm0-4h2v2h-2zm0 8h2v2h-2zM1 15h2v2H1zm0-8h2v2H1zm6-6h2v2H7zm8 0h2v2h-2zm0 20h2v2h-2zm-8 0h2v2H7z"></path>
             </symbol>
             <symbol
                 id="icon-gpu"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                <line x1="8" y1="21" x2="16" y2="21"></line>
-                <line x1="12" y1="17" x2="12" y2="21"></line>
-                <line x1="7" y1="8" x2="7" y2="12"></line>
-                <line x1="17" y1="8" x2="17" y2="12"></line>
+                <path d="M1 2h2v20H1zm2 2h18v2H3zm18 2h2v10h-2zM3 16h18v2H3zm4 2h2v2H7zm2 2h6v2H9zm6-2h2v2h-2zM7 8h2v2H7zm8 0h2v2h-2zM5 10h2v2H5zm8 0h2v2h-2zm-6 2h2v2H7zm8 0h2v2h-2zm-6-2h2v2H9zm8 0h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-ram"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-                <line x1="4" y1="9" x2="20" y2="9"></line>
-                <line x1="9" y1="4" x2="9" y2="20"></line>
+                <path d="M3 4h18v2H3zM1 6h2v3H1zm0 5h2v7H1zm20 0h2v7h-2zM3 9h2v2H3zm16 0h2v2h-2zm2-3h2v3h-2zM3 18h18v2H3zm0-4h18v2H3zm2 2h2v2H5zm4 0h2v2H9zm4 0h2v2h-2zm4 0h2v2h-2zM7 8h2v4H7zm4 0h2v4h-2zm4 0h2v4h-2z"></path>
             </symbol>
             <symbol
                 id="icon-vram"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="4" y="4" width="16" height="16" rx="2" />
-                <path d="M9 10l3 4 3-4" />
+                <path d="M2 5h18v2H2zm0 10h18v2H2zM0 7h2v8H0zm20 0h2v8h-2zM4 9h10v4H4zm12 0h2v2h-2zm2 2h2v2h-2zM5 3h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zM6 17h2v2H6zm3 0h2v2H9zm3 0h2v2h-2zm3 0h2v2h-2zM14 10h2v2h-2zm-8 0h2v2H6zm3 0h2v2H9zm0 8h4v2H9z"></path>
             </symbol>
             <symbol
                 id="icon-ai"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M12 8V4H8"></path>
-                <rect width="16" height="12" x="4" y="8" rx="2"></rect>
-                <path d="M2 14h2"></path>
-                <path d="M20 14h2"></path>
-                <path d="M15 13v2"></path>
-                <path d="M9 13v2"></path>
+                <path d="M4 6h16v2H4zm0 14h16v2H4zM2 8h2v12H2zm18 0h2v12h-2z"></path>
+                <path d="M11 4h2v4h-2zm-3 6h2v2H8zm6 0h4v2h-4zm-1-8h4v2h-4zM0 12h2v2H0zm22 0h2v2h-2zm-12 4h4v2h-4zm-2-2h2v2H8zm6 0h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-services"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <rect x="2" y="2" width="9" height="9" rx="2"></rect>
-                <rect x="13" y="2" width="9" height="9" rx="2"></rect>
-                <rect x="2" y="13" width="9" height="9" rx="2"></rect>
-                <rect x="13" y="13" width="9" height="9" rx="2"></rect>
+                <path d="M4 2h16v2H4zM2 4h2v16H2zm2 7h16v2H4zm16-7h2v16h-2z"></path>
+                <path d="M11 4h2v18h-2z"></path>
+                <path d="M4 20h16v2H4z"></path>
             </symbol>
             <symbol
                 id="icon-minimize"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M20 12H4"></path>
+                <path d="M4 11h16v2H4z"></path>
             </symbol>
             <symbol
                 id="icon-maximize"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M4 8h4V4m12 4h-4V4m4 12h-4v4M4 16h4v4"></path>
+                <path d="M5 4h14v2H5zM3 6h2v12H3zM19 6h2v12h-2zM5 18h14v2H5z"></path>
             </symbol>
             <symbol
                 id="icon-restore"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                <path d="M7 4h12v2H7zM5 6h2v10H5zm10 0h4v2h-4zM17 8h2v10h-2zM7 16h10v2H7z"></path>
+                <path d="M3 8h10v2H3zm0 10h10v2H3zM3 10h2v8H3z"></path>
             </symbol>
             <symbol
                 id="icon-volume"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                <path d="M3 9h4l5-4v14l-5-4H3V9Z"></path>
+                <path d="M16.5 8.5a1 1 0 0 1 1.4 0 5 5 0 0 1 0 7 1 1 0 1 1-1.4-1.4 3 3 0 0 0 0-4.2 1 1 0 0 1 0-1.4Z"></path>
+                <path d="M19.8 5.2a1 1 0 0 1 1.4 0 9.5 9.5 0 0 1 0 13.6 1 1 0 1 1-1.4-1.4 7.5 7.5 0 0 0 0-10.8 1 1 0 0 1 0-1.4Z"></path>
             </symbol>
             <symbol
                 id="icon-volume-x"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <line x1="23" y1="9" x2="17" y2="15"></line>
-                <line x1="17" y1="9" x2="23" y2="15"></line>
+                <path d="M3 9h4l5-4v14l-5-4H3V9Z"></path>
+                <path d="M16.2 8.8a1 1 0 0 1 1.4 0L19 10.2l1.4-1.4a1 1 0 1 1 1.4 1.4L20.4 11.6l1.4 1.4a1 1 0 1 1-1.4 1.4L19 13l-1.4 1.4a1 1 0 1 1-1.4-1.4l1.4-1.4-1.4-1.4a1 1 0 0 1 0-1.4Z"></path>
             </symbol>
             <symbol
                 id="icon-marketplace"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+                fill="currentColor"
             >
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <path d="M16 10a4 4 0 0 1-8 0"></path>
+                <path d="M5 2h14v2H5zM3 4h2v2H3zm16 0h2v2h-2zM1 6h22v2H1zm2 2h2v12H3zm16 0h2v12h-2zM5 20h14v2H5zm2-8h10v8H7zm4-4h2v2h-2zm-4 0h2v2H7zm8 0h2v2h-2z"></path>
             </symbol>
         </svg>
 `;

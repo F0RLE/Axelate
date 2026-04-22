@@ -6,13 +6,10 @@
 
 use std::path::PathBuf;
 
-use crate::utils::paths::{LEGACY_MODULES_DIR, MODULES_DIR};
+use crate::utils::paths::MODULES_DIR;
 
-fn installed_engine_dirs(engine_id: &str) -> [PathBuf; 2] {
-    [
-        MODULES_DIR.join(engine_id),
-        LEGACY_MODULES_DIR.join(engine_id),
-    ]
+fn installed_engine_dir(engine_id: &str) -> PathBuf {
+    MODULES_DIR.join(engine_id)
 }
 
 /// Checks if an engine is installed either in `MODULES_DIR/{id}` or on system PATH.
@@ -24,10 +21,9 @@ pub fn is_engine_installed(engine_id: &str, binary_name: Option<&str>) -> bool {
     }
 
     // 1. Check MODULES_DIR/{engine_id}/ — downloaded via Axelate
-    for module_path in installed_engine_dirs(engine_id) {
-        if module_path.exists() && module_path.is_dir() {
-            return true;
-        }
+    let module_path = installed_engine_dir(engine_id);
+    if module_path.exists() && module_path.is_dir() {
+        return true;
     }
 
     // 2. Check PATH (user has it installed system-wide)
@@ -51,11 +47,10 @@ pub fn resolve_engine_binary(engine_id: &str, binary_name: &str) -> Option<PathB
     }
 
     // 1. Walk installed module directory
-    for module_path in installed_engine_dirs(engine_id) {
-        if module_path.is_dir() {
-            if let Some(found) = find_binary_in_dir(&module_path, binary_name) {
-                return Some(found);
-            }
+    let module_path = installed_engine_dir(engine_id);
+    if module_path.is_dir() {
+        if let Some(found) = find_binary_in_dir(&module_path, binary_name) {
+            return Some(found);
         }
     }
 

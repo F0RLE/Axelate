@@ -3,12 +3,11 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DownloadUI } from './DownloadUI';
-import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
-import type { DownloadSettingsService } from '@/shared/services/downloads/DownloadSettingsService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 function setupDOM() {
     document.body.innerHTML = `
+        <div id="page-downloads"></div>
         <div id="downloads-main-card" class="hidden"></div>
         <div id="downloads-empty-text"></div>
         <div id="downloads-progress-bar"></div>
@@ -19,70 +18,30 @@ function setupDOM() {
         <div id="downloads-item-label"></div>
         <div id="downloads-status"></div>
         <div id="downloads-eta"></div>
-        <div id="speed-limit-controls"></div>
-        <div id="speed-limit-value"></div>
         <div id="downloads-body"></div>
         <div class="downloads-header"></div>
         <div id="downloads-container"></div>
-        <div id="model-download-modal" class="show"></div>
-        <dialog id="download-settings-overlay"></dialog>
     `;
-
-    // jsdom doesn't implement showModal/close on <dialog>, so add them
-    const overlayEl = document.getElementById('download-settings-overlay');
-    if (overlayEl !== null) {
-        const overlay = overlayEl as HTMLDialogElement;
-        overlay.showModal = vi.fn();
-        overlay.close = vi.fn();
-    }
-
-    // Create proper input elements
-    const toggle = document.createElement('input');
-    toggle.id = 'download-speed-limit-toggle';
-    toggle.type = 'checkbox';
-    document.body.appendChild(toggle);
-
-    const slider = document.createElement('input');
-    slider.id = 'download-speed-slider';
-    slider.type = 'range';
-    slider.min = '1';
-    slider.max = '200';
-    slider.value = '50';
-    document.body.appendChild(slider);
 }
 
 function createMocks() {
-    const downloadSettings = {
-        getDownloadSettings: vi.fn().mockReturnValue({ limitEnabled: false, maxSpeed: 50 }),
-        setDownloadSettings: vi.fn(),
-    } as unknown as DownloadSettingsService;
-
     const i18nService = {
         t: vi.fn((_key: string, def?: string) => def ?? _key),
     } as unknown as I18nService;
 
-    const navigation = {
-        pushBackAction: vi.fn(),
-        removeBackAction: vi.fn(),
-    } as unknown as NavigationService;
-
-    return { downloadSettings, i18nService, navigation };
+    return { i18nService };
 }
 
 describe('DownloadUI', () => {
     let ui: DownloadUI;
-    let downloadSettings: DownloadSettingsService;
     let i18nService: I18nService;
-    let navigation: NavigationService;
 
     beforeEach(() => {
         vi.useFakeTimers();
         setupDOM();
         const mocks = createMocks();
-        downloadSettings = mocks.downloadSettings;
         i18nService = mocks.i18nService;
-        navigation = mocks.navigation;
-        ui = new DownloadUI(downloadSettings, i18nService, navigation);
+        ui = new DownloadUI(i18nService);
     });
 
     afterEach(() => {
@@ -92,16 +51,9 @@ describe('DownloadUI', () => {
         document.body.innerHTML = '';
     });
 
-    // ---------------------------------------------------------- constructor
-    describe('constructor', () => {
-        it('should load settings on construction', () => {
-            expect(downloadSettings.getDownloadSettings).toHaveBeenCalled();
-        });
-    });
-
     // ---------------------------------------------------------- init
     describe('init', () => {
-        it('should initialize polling and settings listeners', () => {
+        it('should initialize polling listeners', () => {
             ui.init();
             // Should register event listener for download-progress-update
             const mainCard = document.getElementById('downloads-main-card');
@@ -116,16 +68,41 @@ describe('DownloadUI', () => {
             ui.setOnCancel(cancelFn);
             // Stored internally — tested via dynamic card cancel button
         });
+
+        it('should set pause and resume callbacks', () => {
+            ui.setOnPause(vi.fn());
+            ui.setOnResume(vi.fn());
+        });
     });
 
     // ---------------------------------------------------------- destroy
     describe('destroy', () => {
         it('should remove event listener', () => {
-            ui.init(); // Sets up the listener
-            const spy = vi.spyOn(globalThis, 'removeEventListener');
+            const removeEventListener = vi.fn();
+            const setTimeoutMock = vi.fn((callback: () => void, delay?: number) =>
+                globalThis.setTimeout(callback, delay),
+            ) as unknown as typeof globalThis.setTimeout;
+            const clearTimeoutMock = vi.fn((handle?: ReturnType<typeof setTimeout>) => {
+                if (handle !== undefined) {
+                    globalThis.clearTimeout(handle);
+                }
+            }) as unknown as typeof globalThis.clearTimeout;
+            ui = new DownloadUI(i18nService, {
+                addEventListener: vi.fn(),
+                removeEventListener,
+                setTimeout: setTimeoutMock,
+                clearTimeout: clearTimeoutMock,
+            });
+            ui.init();
             ui.destroy();
-            expect(spy).toHaveBeenCalledWith('download-progress-update', expect.any(Function));
-            expect(spy).toHaveBeenCalledWith('language-changed', expect.any(Function));
+            expect(removeEventListener).toHaveBeenCalledWith(
+                'download-progress-update',
+                expect.any(Function),
+            );
+            expect(removeEventListener).toHaveBeenCalledWith(
+                'language-changed',
+                expect.any(Function),
+            );
         });
 
         it('should be safe to call without init', () => {
@@ -155,6 +132,20 @@ describe('DownloadUI', () => {
 
     // ---------------------------------------------------------- renderDownloadsProgress basics
     describe('renderDownloadsProgress', () => {
+        it('should toggle active-download on the page shell', () => {
+            ui.renderDownloadsProgress({ hasActive: true, label: 'Test Download' });
+
+            expect(
+                document.getElementById('page-downloads')?.classList.contains('active-download'),
+            ).toBe(true);
+
+            ui.renderDownloadsProgress({ hasActive: false });
+
+            expect(
+                document.getElementById('page-downloads')?.classList.contains('active-download'),
+            ).toBe(false);
+        });
+
         it('should render progress bar and text', () => {
             ui.renderDownloadsProgress({
                 percent: 50,
@@ -174,7 +165,7 @@ describe('DownloadUI', () => {
             expect(speed?.textContent).toBe('1.00 MB/s');
         });
 
-        it('should show empty state when no active download', () => {
+        it('should hide main card and show empty state when no active download', () => {
             ui.renderDownloadsProgress({ hasActive: false });
 
             const mainCard = document.getElementById('downloads-main-card');
@@ -348,110 +339,6 @@ describe('DownloadUI', () => {
         });
     });
 
-    // ---------------------------------------------------------- saveSettings
-    describe('saveSettings', () => {
-        it('should save settings with toggle and slider values', () => {
-            const toggle = document.getElementById(
-                'download-speed-limit-toggle',
-            ) as HTMLInputElement;
-            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
-
-            toggle.checked = true;
-            slider.value = '100';
-
-            ui.saveSettings();
-
-            expect(downloadSettings.setDownloadSettings).toHaveBeenCalledWith(true, 100);
-        });
-
-        it('should update controls opacity class', () => {
-            const toggle = document.getElementById(
-                'download-speed-limit-toggle',
-            ) as HTMLInputElement;
-            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
-
-            toggle.checked = true;
-            slider.value = '50';
-
-            ui.saveSettings();
-
-            const controls = document.getElementById('speed-limit-controls');
-            expect(controls?.classList.contains('opacity-100')).toBe(true);
-            expect(controls?.classList.contains('opacity-50')).toBe(false);
-            expect(controls?.style.pointerEvents).toBe('auto');
-        });
-
-        it('should dim controls when the speed limit is disabled', () => {
-            const toggle = document.getElementById(
-                'download-speed-limit-toggle',
-            ) as HTMLInputElement;
-            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
-
-            toggle.checked = false;
-            slider.value = '50';
-
-            ui.saveSettings();
-
-            const controls = document.getElementById('speed-limit-controls');
-            expect(controls?.classList.contains('opacity-50')).toBe(true);
-            expect(controls?.classList.contains('opacity-100')).toBe(false);
-            expect(controls?.style.pointerEvents).toBe('none');
-        });
-
-        it('should update toggle background style', () => {
-            const toggle = document.getElementById(
-                'download-speed-limit-toggle',
-            ) as HTMLInputElement;
-            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
-
-            toggle.checked = false;
-            slider.value = '50';
-
-            ui.saveSettings();
-
-            expect(toggle.style.background).toBe('var(--bg-light)');
-        });
-    });
-
-    // ---------------------------------------------------------- updateSpeedDisplay
-    describe('updateSpeedDisplay', () => {
-        it('should update speed display value with number', () => {
-            ui.updateSpeedDisplay(100);
-            expect(document.getElementById('speed-limit-value')?.textContent).toBe('100');
-        });
-
-        it('should update speed display value with string', () => {
-            ui.updateSpeedDisplay('75');
-            expect(document.getElementById('speed-limit-value')?.textContent).toBe('75');
-        });
-
-        it('should update slider gradient', () => {
-            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
-            ui.updateSpeedDisplay(100);
-            expect(slider.style.background).toContain('linear-gradient');
-        });
-
-        it('should be no-op when speed-limit-value display is missing (L416 false)', () => {
-            document.getElementById('speed-limit-value')?.remove();
-            ui.updateSpeedDisplay(100); // display null → skip display update
-        });
-
-        it('should be no-op when slider is missing (L418 false)', () => {
-            document.getElementById('download-speed-slider')?.remove();
-            ui.updateSpeedDisplay(100); // slider null → skip gradient update
-        });
-    });
-
-    // ---------------------------------------------------------- saveSettings null branches
-    describe('saveSettings null branches', () => {
-        it('should skip controls opacity when controls element is missing (L395 false)', () => {
-            ui.init();
-            // Remove controls before saving
-            document.getElementById('speed-limit-controls')?.remove();
-            ui.saveSettings(); // controls instanceof HTMLElement → false → skip
-        });
-    });
-
     // ---------------------------------------------------------- renderDownloadsProgress eta null
     describe('renderDownloadsProgress without etaEl', () => {
         it('should skip ETA update when eta element is missing (L288 false)', () => {
@@ -464,12 +351,12 @@ describe('DownloadUI', () => {
         });
     });
 
-    // ---------------------------------------------------------- startDownloadsPolling null element guards
-    describe('startDownloadsPolling without mainCard/emptyText', () => {
+    // ---------------------------------------------------------- bindDownloadProgressEvents null element guards
+    describe('bindDownloadProgressEvents without mainCard/emptyText', () => {
         it.each([
             ['mainCard', 'downloads-main-card'],
             ['emptyText', 'downloads-empty-text'],
-        ])('should handle missing %s in startDownloadsPolling init path', (_, id) => {
+        ])('should handle missing %s in bindDownloadProgressEvents init path', (_, id) => {
             document.getElementById(id)?.remove();
             ui.init();
         });
@@ -495,97 +382,8 @@ describe('DownloadUI', () => {
         });
     });
 
-    // ---------------------------------------------------------- openSettings / closeSettings
-    describe('openSettings / closeSettings', () => {
-        it('should open settings overlay as modal', () => {
-            const overlay = document.getElementById(
-                'download-settings-overlay',
-            ) as HTMLDialogElement;
-
-            ui.openSettings();
-
-            expect(overlay.showModal).toHaveBeenCalled();
-            expect(navigation.pushBackAction).toHaveBeenCalledWith(
-                'download-settings-overlay',
-                expect.any(Function),
-                expect.any(Function),
-            );
-        });
-
-        it('should set toggle and slider values from settings', () => {
-            (downloadSettings.getDownloadSettings as ReturnType<typeof vi.fn>).mockReturnValue({
-                limitEnabled: true,
-                maxSpeed: 150,
-            });
-
-            ui.openSettings();
-
-            const toggle = document.getElementById(
-                'download-speed-limit-toggle',
-            ) as HTMLInputElement;
-            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
-
-            expect(toggle.checked).toBe(true);
-            expect(slider.value).toBe('150');
-        });
-
-        it('should close settings overlay', () => {
-            const overlay = document.getElementById(
-                'download-settings-overlay',
-            ) as HTMLDialogElement;
-            // Simulate open state
-            Object.defineProperty(overlay, 'open', { value: true, configurable: true });
-
-            ui.closeSettings();
-
-            expect(overlay.close).toHaveBeenCalled();
-            expect(navigation.removeBackAction).toHaveBeenCalledWith('download-settings-overlay');
-        });
-
-        it('should not close if overlay is not open', () => {
-            const overlay = document.getElementById(
-                'download-settings-overlay',
-            ) as HTMLDialogElement;
-            Object.defineProperty(overlay, 'open', { value: false, configurable: true });
-            // Reset the mock to track calls
-            (overlay.close as ReturnType<typeof vi.fn>).mockClear();
-
-            ui.closeSettings();
-
-            expect(overlay.close).not.toHaveBeenCalled();
-        });
-    });
-
-    // ---------------------------------------------------------- hideModelDownloadModal
-    describe('hideModelDownloadModal', () => {
-        it('should add hidden and remove show class', () => {
-            ui.hideModelDownloadModal();
-
-            const modal = document.getElementById('model-download-modal');
-            expect(modal?.classList.contains('hidden')).toBe(true);
-            expect(modal?.classList.contains('show')).toBe(false);
-        });
-
-        it('should be no-op when modal element is missing', () => {
-            document.getElementById('model-download-modal')?.remove();
-            ui.hideModelDownloadModal(); // should not throw
-        });
-    });
-
     // ---------------------------------------------------------- null guard branches
     describe('null guard branches', () => {
-        it('should be no-op when speed-limit-controls is missing in openSettings', () => {
-            ui.init();
-            document.getElementById('speed-limit-controls')?.remove();
-            ui.openSettings(); // controls branch → null → skip
-        });
-
-        it('should be no-op when overlay is missing in openSettings', () => {
-            ui.init();
-            document.getElementById('download-settings-overlay')?.remove();
-            ui.openSettings(); // overlay branch → null → skip, no showModal call
-        });
-
         it('should handle missing emptyText in download complete cleanup', () => {
             ui.init();
             document.getElementById('downloads-empty-text')?.remove();
@@ -690,47 +488,8 @@ describe('DownloadUI', () => {
         );
     });
 
-    // ---------------------------------------------------------- _initSettingsListeners
-    describe('settings listeners', () => {
-        it('should save settings when toggle changes', () => {
-            ui.init();
-            const toggle = document.getElementById(
-                'download-speed-limit-toggle',
-            ) as HTMLInputElement;
-
-            toggle.checked = true;
-            toggle.dispatchEvent(new Event('change'));
-
-            expect(downloadSettings.setDownloadSettings).toHaveBeenCalled();
-        });
-
-        it('should update speed display and save when slider changes', () => {
-            ui.init();
-            const slider = document.getElementById('download-speed-slider') as HTMLInputElement;
-
-            slider.value = '120';
-            slider.dispatchEvent(new Event('input'));
-
-            expect(document.getElementById('speed-limit-value')?.textContent).toBe('120');
-            expect(downloadSettings.setDownloadSettings).toHaveBeenCalled();
-        });
-
-        it('should not duplicate settings listeners across repeated init calls', () => {
-            ui.init();
-            ui.init();
-            const toggle = document.getElementById(
-                'download-speed-limit-toggle',
-            ) as HTMLInputElement;
-
-            toggle.checked = true;
-            toggle.dispatchEvent(new Event('change'));
-
-            expect(downloadSettings.setDownloadSettings).toHaveBeenCalledTimes(1);
-        });
-    });
-
-    // ---------------------------------------------------------- startDownloadsPolling event handling
-    describe('startDownloadsPolling', () => {
+    // ---------------------------------------------------------- bindDownloadProgressEvents event handling
+    describe('bindDownloadProgressEvents', () => {
         it('should handle download progress events', () => {
             ui.init();
 
@@ -978,6 +737,52 @@ describe('DownloadUI', () => {
             expect(cancelFn).toHaveBeenCalledWith('mod-cancel');
         });
 
+        it('should wire pause button on downloading card', () => {
+            const pauseFn = vi.fn();
+            ui.setOnPause(pauseFn);
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-pause',
+                        progress: 0.4,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const pauseBtn = list?.querySelector('.download-pause-btn');
+            expect(pauseBtn).not.toBeNull();
+
+            if (pauseBtn !== null) (pauseBtn as HTMLElement).click();
+            expect(pauseFn).toHaveBeenCalledWith('mod-pause');
+        });
+
+        it('should wire resume button on paused card', () => {
+            const resumeFn = vi.fn();
+            ui.setOnResume(resumeFn);
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-resume',
+                        progress: 0.4,
+                        status: 'paused',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const resumeBtn = list?.querySelector('.download-resume-btn');
+            expect(resumeBtn).not.toBeNull();
+
+            if (resumeBtn !== null) (resumeBtn as HTMLElement).click();
+            expect(resumeFn).toHaveBeenCalledWith('mod-resume');
+        });
+
         it('should not add cancel button for complete status', () => {
             ui.init();
 
@@ -1072,31 +877,6 @@ describe('DownloadUI', () => {
             const list = document.getElementById('downloads-dynamic-list');
             const pill = list?.querySelector('.downloads-status-pill');
             expect(pill?.classList.contains('error')).toBe(true);
-        });
-
-        it('should invoke pushBackAction callbacks (L457-460)', () => {
-            ui.init();
-            ui.openSettings();
-
-            // navigation.pushBackAction was called with closeSettings and openSettings callbacks
-            const pushCall = (navigation.pushBackAction as ReturnType<typeof vi.fn>).mock
-                .calls[0] as [string, () => void, () => void];
-            const closeCallback = pushCall[1];
-            const openCallback = pushCall[2];
-
-            // Set overlay as open so closeSettings() calls close()
-            const overlay = document.getElementById(
-                'download-settings-overlay',
-            ) as HTMLDialogElement;
-            Object.defineProperty(overlay, 'open', { value: true, configurable: true });
-
-            // Call the close callback (L457)
-            closeCallback();
-            expect(overlay.close).toHaveBeenCalled();
-
-            // Call the open callback (L459-460)
-            openCallback();
-            expect(overlay.showModal).toHaveBeenCalledTimes(2); // once from openSettings(), once from callback
         });
 
         it('should remove stale cards (L550)', () => {
@@ -1247,6 +1027,42 @@ describe('DownloadUI', () => {
             );
         });
 
+        it('should prefer active download entry over stale terminal entry on language change', () => {
+            const tMock = i18nService.t as ReturnType<typeof vi.fn>;
+            tMock.mockImplementation((key: string, def?: string) => {
+                const map: Record<string, string> = {
+                    'ui.downloads.status.in_progress': 'Загрузка',
+                    'ui.downloads.status.completed': 'Готово',
+                };
+                return map[key] ?? def ?? key;
+            });
+
+            ui.init();
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-old',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-new',
+                        progress: 0.5,
+                        status: 'downloading',
+                        message: 'Downloading...',
+                    },
+                }),
+            );
+
+            globalThis.dispatchEvent(new Event('language-changed'));
+
+            expect(document.getElementById('downloads-status')?.textContent).toBe('Загрузка');
+        });
+
         it('should patch error status pill on existing card (L613)', () => {
             ui.init();
 
@@ -1343,21 +1159,6 @@ describe('DownloadUI', () => {
         it('should handle missing totalEl in _updateMetaStats (L221)', () => {
             document.getElementById('downloads-total')?.remove();
             ui.renderDownloadsProgress({ hasActive: true, label: 'X', total: 1000 });
-        });
-
-        it('should be no-op when toggle is missing in saveSettings (L391 false)', () => {
-            document.getElementById('download-speed-limit-toggle')?.remove();
-            ui.saveSettings(); // toggle instanceof HTMLInputElement → false → skip block
-        });
-
-        it('should handle missing toggle in openSettings (L441 false branch)', () => {
-            document.getElementById('download-speed-limit-toggle')?.remove();
-            ui.openSettings();
-        });
-
-        it('should handle missing slider in openSettings (L445 false branch)', () => {
-            document.getElementById('download-speed-slider')?.remove();
-            ui.openSettings();
         });
 
         it('should not duplicate dynamic list when already exists (L512 early return)', () => {

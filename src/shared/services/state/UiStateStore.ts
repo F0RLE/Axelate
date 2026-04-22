@@ -1,13 +1,17 @@
 /**
  * @module shared/services/state/UiStateStore
  * @description Centralized store and persistence logic for the unified UI State.
+ * Persistence is coordinated by StateManager — this class exposes saveAsync/saveImmediate
+ * for registration as a StateManager target.
  */
 
 import { type IBridge } from '@/shared/types/IBridge';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
 
-export type ThinkingLevel = 'low' | 'medium' | 'high';
+type UiStateStoreLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+
+export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
 
 export interface IUIState {
     sidebar_collapsed: boolean;
@@ -24,11 +28,14 @@ export interface IUIState {
     resolution_zoom: Record<string, number>;
     sound_enabled: boolean;
     ai_thinking_level: Record<string, ThinkingLevel>;
-    last_active_provider: string | null;
+    ai_web_search_enabled: Record<string, boolean>;
+    local_max_output_tokens: Record<string, number>;
     ai_session_id: string | null;
     preferred_language?: string | null;
     pending_chat_reveal: boolean;
 }
+
+type UiStateStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 const DEFAULT_UI_STATE: IUIState = {
     sidebar_collapsed: false,
@@ -44,52 +51,50 @@ const DEFAULT_UI_STATE: IUIState = {
     resolution_zoom: {},
     sound_enabled: true,
     ai_thinking_level: {},
-    last_active_provider: null,
+    ai_web_search_enabled: {},
+    local_max_output_tokens: {},
     ai_session_id: null,
     preferred_language: null,
     pending_chat_reveal: false,
 };
+
+const MIN_UI_ZOOM = 0.95;
+const MAX_UI_ZOOM = 2.6;
 
 export class UiStateStore {
     private _state: IUIState = { ...DEFAULT_UI_STATE };
     private _isDirty = false;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly _STORAGE_KEY = 'axelate_ui_state';
-    private readonly _boundVisibilityChange = () => {
-        if (document.hidden) {
-            void this.saveAsync();
-        }
-    };
-    private readonly _boundBeforeUnload = () => {
-        this.saveImmediate();
-    };
     private _isDestroyed = false;
 
-    constructor(private readonly _bridge: IBridge) {
-        this._initAutoSave();
-    }
+    constructor(
+        private readonly _bridge: IBridge,
+        private readonly _tracer: UiStateStoreLogger,
+        private readonly _storage: UiStateStorage | null = globalThis.localStorage,
+    ) {}
 
     public async loadState(): Promise<IUIState> {
         try {
             if (this._bridge.isTauri()) {
                 const loaded = await this._bridge.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
-                tracer.info('[UiStateStore] Loaded from backend');
+                this._tracer.info('[UiStateStore] Loaded from backend');
             } else {
-                const stored = localStorage.getItem(this._STORAGE_KEY);
+                const stored = this._storage?.getItem(this._STORAGE_KEY) ?? null;
                 if (stored !== null) {
                     this.setState(JSON.parse(stored) as Partial<IUIState>);
-                    tracer.info('[UiStateStore] Loaded from localStorage');
+                    this._tracer.info('[UiStateStore] Loaded from browser storage');
                 }
             }
         } catch (e) {
-            tracer.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
+            this._tracer.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
         }
         return this._state;
     }
 
     public setState(state: Partial<IUIState>): void {
-        this._state = { ...this._state, ...state };
+        this._state = this._normalizeState({ ...this._state, ...state });
     }
 
     public getState(): IUIState {
@@ -164,11 +169,11 @@ export class UiStateStore {
             if (this._bridge.isTauri()) {
                 await this._bridge.invoke('save_ui_state', { state: this._state });
             } else {
-                localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
             this._isDirty = false;
         } catch (e) {
-            tracer.error(`[UiStateStore] Failed to save state: ${String(e)}`);
+            this._tracer.error(`[UiStateStore] Failed to save state: ${String(e)}`);
         }
     }
 
@@ -178,17 +183,12 @@ export class UiStateStore {
             if (this._bridge.isTauri()) {
                 void this._bridge.invoke('save_ui_state', { state: this._state });
             } else {
-                localStorage.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
             }
             this._isDirty = false;
         } catch (e) {
-            tracer.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
+            this._tracer.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
         }
-    }
-
-    private _initAutoSave(): void {
-        document.addEventListener('visibilitychange', this._boundVisibilityChange);
-        globalThis.addEventListener('beforeunload', this._boundBeforeUnload);
     }
 
     public destroy(): void {
@@ -199,8 +199,26 @@ export class UiStateStore {
             globalThis.clearTimeout(this._autoSaveTimer);
             this._autoSaveTimer = null;
         }
+    }
 
-        document.removeEventListener('visibilitychange', this._boundVisibilityChange);
-        globalThis.removeEventListener('beforeunload', this._boundBeforeUnload);
+    private _normalizeState(state: IUIState): IUIState {
+        return {
+            ...state,
+            zoom_level: this._clampZoom(state.zoom_level),
+            resolution_zoom: Object.fromEntries(
+                Object.entries(state.resolution_zoom).map(([key, zoom]) => [
+                    key,
+                    this._clampZoom(zoom),
+                ]),
+            ),
+        };
+    }
+
+    private _clampZoom(zoom: number): number {
+        if (!Number.isFinite(zoom)) {
+            return DEFAULT_UI_STATE.zoom_level;
+        }
+
+        return Math.min(MAX_UI_ZOOM, Math.max(MIN_UI_ZOOM, zoom));
     }
 }

@@ -21,7 +21,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             theme: "dark".to_string(),
-            language: crate::utils::windows::detect_system_language(),
+            language: crate::utils::locale::detect_system_language(),
             use_gpu: true,
             debug_mode: false,
             extra_settings: std::collections::HashMap::new(),

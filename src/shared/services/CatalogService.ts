@@ -6,94 +6,76 @@
 import type { IBridge } from '@/shared/types/IBridge';
 import type { IApp, IModule, IConfigField, ICatalogData } from '@/shared/types/coreTypes';
 import type { AppConfig, ModuleItem, ApiProvider } from '@/shared/types/bindings';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
+import type { CatalogLoadSnapshot, EngineDefinition } from './CatalogLoadSnapshot';
 
-import { getGlobalWin } from '@/shared/utils/globalAccessor';
+type CatalogLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
 
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
 
-    constructor(private readonly _bridge: IBridge) {
-        // Architectural compliance Section 51
-        this._initGlobalExposures();
-    }
-
-    /**
-     * Initializes global access patterns only where necessary.
-     */
-    private _initGlobalExposures(): void {
-        const win = getGlobalWin();
-
-        // KISS: Use dev-only global for debugging
-        if (import.meta.env.DEV) {
-            (win as unknown as Record<string, unknown>)['__DEV_CATALOG'] = this;
-        }
-
-        // Sync with global APP_DATA for downstream components
-        win.APP_DATA = this._appData;
-
-        // Expose category resolver for AppUI type safety
-        win.getCatalogCategory = (cat: string): IApp[] => {
-            if (cat === 'ai') return this._appData.ai;
-            if (cat === 'services') return this._appData.services;
-            return [];
-        };
-    }
+    constructor(
+        private readonly _bridge: IBridge,
+        private readonly _tracer: CatalogLogger,
+    ) {}
 
     /**
      * Asynchronously loads the application catalog from the Tauri backend.
      */
     public async loadCatalog(): Promise<void> {
-        // 1. Fetch Config, Modules, and Engine Definitions in parallel
-        const [config, installedModules, engineDefs] = await Promise.all([
-            this._loadConfig(),
-            this._loadInstalledModules(),
-            this._loadEngineDefs(),
-        ]);
-
-        const validConfig = this._ensureValidConfig(config);
+        const snapshot = await this._loadSnapshot();
 
         try {
-            this._appData.stars = validConfig.catalog.stars;
+            this._appData.stars = snapshot.config.catalog.stars;
 
-            const ai = validConfig.catalog.ai;
-            const services = validConfig.catalog.services;
+            const ai = snapshot.config.catalog.ai;
+            const services = snapshot.config.catalog.services;
 
-            tracer.info(
+            this._tracer.info(
                 `[CatalogService] Mapping config - AI: ${String(ai.length)}, Services: ${String(services.length)}`,
             );
 
             this._appData.ai = this._mapModuleItems(ai, 'ai');
             this._appData.services = this._mapModuleItems(services, 'services');
 
-            tracer.info(
+            this._tracer.info(
                 `[CatalogService] After mapping - AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
             );
 
             // Hydrate with schemas, providers & engine install status
-            this._hydrateApps(validConfig, installedModules, engineDefs);
+            this._hydrateApps(snapshot.config, snapshot.installedModules, snapshot.engineDefs);
 
             // Final check for fallbacks
             this._ensureFallbacks();
 
-            this._syncToGlobal();
-
-            tracer.info(
+            this._tracer.info(
                 `[CatalogService] Catalog hydrated successfully. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
             );
 
             const event = new CustomEvent('catalog-loaded');
             globalThis.dispatchEvent(event);
 
-            this._updateLegacySettings(validConfig.apiProviders);
-
-            tracer.info(
+            this._tracer.info(
                 `[CatalogService] Catalog initialized. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
             );
         } catch (e) {
-            tracer.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
+            this._tracer.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
         }
+    }
+
+    private async _loadSnapshot(): Promise<CatalogLoadSnapshot> {
+        const [config, installedModules, engineDefs] = await Promise.all([
+            this._loadConfig(),
+            this._loadInstalledModules(),
+            this._loadEngineDefs(),
+        ]);
+
+        return {
+            config: this._ensureValidConfig(config),
+            installedModules,
+            engineDefs,
+        };
     }
 
     /**
@@ -101,14 +83,11 @@ export class CatalogService {
      */
     private async _loadConfig(): Promise<AppConfig> {
         try {
-            if (this._bridge.isTauri()) {
-                return await this._bridge.invoke<AppConfig>('get_config');
-            } else {
-                const res = await fetch('/api/config');
-                return res.ok ? ((await res.json()) as AppConfig) : FALLBACK_CONFIG;
-            }
+            return await this._bridge.invoke<AppConfig>('get_config');
         } catch (e) {
-            tracer.warn(`[CatalogService] Backend config failed, using fallback: ${String(e)}`);
+            this._tracer.warn(
+                `[CatalogService] Backend config failed, using fallback: ${String(e)}`,
+            );
             return FALLBACK_CONFIG;
         }
     }
@@ -116,15 +95,13 @@ export class CatalogService {
     /**
      * Fetches engine definitions (with real-time `installed` status) from backend.
      */
-    private async _loadEngineDefs(): Promise<Array<{ id: string; installed: boolean }>> {
+    private async _loadEngineDefs(): Promise<EngineDefinition[]> {
         try {
             if (this._bridge.isTauri()) {
-                return await this._bridge.invoke<Array<{ id: string; installed: boolean }>>(
-                    'get_engine_definitions',
-                );
+                return await this._bridge.invoke<EngineDefinition[]>('get_engine_definitions');
             }
         } catch (e) {
-            tracer.warn(`[CatalogService] Engine definitions unavailable: ${String(e)}`);
+            this._tracer.warn(`[CatalogService] Engine definitions unavailable: ${String(e)}`);
         }
         return [];
     }
@@ -134,16 +111,11 @@ export class CatalogService {
      */
     private async _loadInstalledModules(): Promise<IModule[]> {
         try {
-            if (this._bridge.isTauri()) {
-                const modules = await this._bridge.invoke<IModule[]>('get_modules');
-                tracer.info(`[CatalogService] Fetched ${String(modules.length)} modules.`);
-                return modules;
-            } else {
-                const res = await fetch('/api/modules');
-                return res.ok ? ((await res.json()) as IModule[]) : [];
-            }
+            const modules = await this._bridge.invoke<IModule[]>('get_modules');
+            this._tracer.info(`[CatalogService] Fetched ${String(modules.length)} modules.`);
+            return modules;
         } catch (e) {
-            tracer.warn(`[CatalogService] Module list failed: ${String(e)}`);
+            this._tracer.warn(`[CatalogService] Module list failed: ${String(e)}`);
             return [];
         }
     }
@@ -171,6 +143,10 @@ export class CatalogService {
                 repoUrl: item.repoUrl ?? '',
                 expectedHash: item.expectedHash ?? '',
                 dlType: item.dlType ?? undefined,
+                comingSoon: (item as ModuleItem & { comingSoon?: boolean }).comingSoon === true,
+                managedExternally:
+                    (item as ModuleItem & { managedExternally?: boolean }).managedExternally ===
+                    true,
                 version: item.version ?? '1.0.0',
                 installed: (item as ModuleItem & { installed?: boolean }).installed ?? false,
             } as IApp;
@@ -183,7 +159,7 @@ export class CatalogService {
     private _hydrateApps(
         config: AppConfig,
         installedModules: IModule[],
-        engineDefs: Array<{ id: string; installed: boolean }> = [],
+        engineDefs: EngineDefinition[] = [],
     ): void {
         const installedMap = new Map(installedModules.map((m) => [m.id.toLowerCase(), m]));
         // Build a fast lookup for engine installation status
@@ -192,12 +168,27 @@ export class CatalogService {
         const mergeAppSchema = (app: IApp) => {
             const isApi =
                 app.type === 'api' || config.apiProviders.some((p: ApiProvider) => p.id === app.id);
+            const installedModule = installedMap.get(app.id.toLowerCase());
+
+            if (app.comingSoon === true) {
+                app.installed = false;
+                return;
+            }
+
+            if (app.managedExternally === true) {
+                app.installed = true;
+            }
 
             if (isApi) {
                 app.installed = true;
             } else if (app.type === 'local' && engineInstallMap.has(app.id.toLowerCase())) {
                 // Use real-time detection from is_engine_installed()
                 app.installed = engineInstallMap.get(app.id.toLowerCase()) ?? false;
+            } else if (app.type === 'local' && installedModule) {
+                // Non-engine local modules should render as installed immediately.
+                // Otherwise the modal first paints the "download" style and only then
+                // flips after a late async install check.
+                app.installed = true;
             }
 
             const provider = config.apiProviders.find((p: ApiProvider) => p.id === app.id);
@@ -205,17 +196,20 @@ export class CatalogService {
                 app.apiProviderData = provider as unknown as Record<string, unknown>;
             }
 
-            const inst = installedMap.get(app.id.toLowerCase());
-            if (inst?.configSchema) {
-                app.configSchema = inst.configSchema as unknown as Record<string, IConfigField>;
+            if (installedModule?.configSchema) {
+                app.configSchema = installedModule.configSchema as unknown as Record<
+                    string,
+                    IConfigField
+                >;
+            }
+
+            if (installedModule?.settingsUi !== undefined) {
+                app.settingsUi = installedModule.settingsUi;
             }
         };
 
         this._appData.ai.forEach(mergeAppSchema);
         this._appData.services.forEach(mergeAppSchema);
-
-        // Final sync for legacy components that expect a global model map
-        this._updateLegacySettings(config.apiProviders);
     }
 
     /**
@@ -226,21 +220,21 @@ export class CatalogService {
         const fallbackServices = FALLBACK_CONFIG.catalog.services;
 
         if (this._appData.ai.length === 0) {
-            tracer.warn(
+            this._tracer.warn(
                 `[CatalogService] AI catalog still empty (fallback source has ${String(fallbackAi.length)} items), injecting fallbacks.`,
             );
             this._appData.ai = this._mapModuleItems(fallbackAi, 'ai');
-            tracer.info(
+            this._tracer.info(
                 `[CatalogService] AI catalog now has ${String(this._appData.ai.length)} items.`,
             );
         }
 
         if (this._appData.services.length === 0) {
-            tracer.warn(
+            this._tracer.warn(
                 `[CatalogService] Services catalog still empty (fallback source has ${String(fallbackServices.length)} items), injecting fallbacks.`,
             );
             this._appData.services = this._mapModuleItems(fallbackServices, 'services');
-            tracer.info(
+            this._tracer.info(
                 `[CatalogService] Services catalog now has ${String(this._appData.services.length)} items.`,
             );
         }
@@ -264,45 +258,26 @@ export class CatalogService {
     }
 
     /**
-     * Synchronizes internal state to global state.
-     */
-    private _syncToGlobal(): void {
-        const globalAppData = globalThis.APP_DATA;
-        globalAppData.ai = this._appData.ai;
-        globalAppData.services = this._appData.services;
-        if (this._appData.stars !== undefined) {
-            globalAppData.stars = this._appData.stars;
-        }
-    }
-
-    /**
-     * Updates legacy module settings from config.
-     */
-    private _updateLegacySettings(_apiProviders: ApiProvider[]): void {
-        tracer.info('[CatalogService] Legacy update settings deprecated.');
-    }
-
-    /**
      * Validates the configuration and returns a fallback if invalid.
      */
     private _ensureValidConfig(config: AppConfig | null): AppConfig {
         const fallback = FALLBACK_CONFIG;
 
         if (!config) {
-            tracer.warn('[CatalogService] Config is null. Using FALLBACK_CONFIG.');
+            this._tracer.warn('[CatalogService] Config is null. Using FALLBACK_CONFIG.');
             return fallback;
         }
 
         if (config.catalog.ai.length === 0 && config.catalog.services.length === 0) {
             const aiLen = config.catalog.ai.length;
             const srvLen = config.catalog.services.length;
-            tracer.warn(
+            this._tracer.warn(
                 `[CatalogService] Config invalid or empty (AI: ${String(aiLen)}, Services: ${String(srvLen)}). FORCING FALLBACK_CONFIG.`,
             );
             return fallback;
         }
 
-        tracer.info(
+        this._tracer.info(
             `[CatalogService] _ensureValidConfig passed (AI: ${String(config.catalog.ai.length)}, Services: ${String(config.catalog.services.length)})`,
         );
         return config;

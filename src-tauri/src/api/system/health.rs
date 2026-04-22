@@ -1,5 +1,4 @@
 use crate::domain::monitoring as services;
-
 use crate::errors::AppError;
 
 #[tauri::command]

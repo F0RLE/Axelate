@@ -44,7 +44,7 @@ export const APP_PAGES: IAppPage[] = [
         inSettings: false,
     },
     {
-        id: 'debug',
+        id: 'console',
         icon: '#icon-console',
         i18nKey: 'ui.launcher.web.console',
         defaultLabel: 'Console',

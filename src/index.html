@@ -4,10 +4,11 @@
         <meta charset="UTF-8" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: blob: https:; connect-src 'self' ipc: http://ipc.localhost https:; base-uri 'self';"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: blob: https:; connect-src 'self' ipc: http://ipc.localhost https:; frame-src 'self' http://127.0.0.1:* http://localhost:*; base-uri 'self';"
         />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Axelate (Beta)</title>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="stylesheet" href="styles/base/fonts.css" />
         <link rel="preload" href="assets/fonts/Monocraft.woff2" as="font" type="font/woff2" crossorigin />
 
@@ -24,9 +25,6 @@
                     <!-- Injected by logos.js -->
                 </div>
                 <div class="splash-title" data-i18n="ui.launcher.web.app_title">Axelate</div>
-                <div class="splash-progress-container">
-                    <div class="splash-progress-bar"></div>
-                </div>
             </div>
         </div>
 
@@ -34,6 +32,7 @@
         <script type="module" src="assets/icons.ts"></script>
         <script type="module" src="assets/logos.ts"></script>
 
+        <div id="app-viewport">
         <!-- Sidebar Placeholder (Loaded dynamically via TemplateLoader) -->
         <aside
             id="sidebar"
@@ -149,7 +148,7 @@
             <div id="page-modules" class="page"></div>
             <div id="page-marketplace" class="page"></div>
             <div id="page-downloads" class="page"></div>
-            <div id="page-debug" class="page"></div>
+            <div id="page-console" class="page"></div>
             <div id="page-settings" class="page"></div>
 
             <dialog id="app-selection-modal" class="modal-backdrop hidden">
@@ -166,6 +165,7 @@
                             <button
                                 id="close-app-selection-btn"
                                 class="app-close-btn"
+                                autofocus
                                 data-i18n-aria-label="ui.launcher.button.close"
                                 data-i18n-title="ui.launcher.button.close"
                                 aria-label="Close"
@@ -190,35 +190,39 @@
                 class="modal-backdrop hidden"
             >
                 <div class="app-modal">
-                    <div class="app-modal-header">
-                        <h2
-                            id="module-settings-title"
-                            class="app-modal-title"
-                            data-i18n="ui.launcher.module.settings_title"
-                        >
-                            Module Settings
-                        </h2>
-                        <button
-                            id="close-module-settings-btn"
-                            class="app-close-btn"
-                            data-i18n-aria-label="ui.launcher.button.close"
-                            data-i18n-title="ui.launcher.button.close"
-                            aria-label="Close"
-                            title="Close"
-                        >
-                            <svg class="icon">
-                                <use href="#icon-close"></use>
-                            </svg>
-                        </button>
-                    </div>
-                    <div
-                        id="module-settings-content"
-                        class="module-settings-content"
-                    >
-                        <!-- Dynamic settings will be injected here -->
-                        <div id="module-config-modal-active" class="module-config-modal-active">
-                            <div class="module-settings-empty">
-                                <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
+                    <div class="app-modal-main">
+                        <div class="app-modal-header">
+                            <h2
+                                id="module-settings-title"
+                                class="app-modal-title"
+                                data-i18n="ui.launcher.module.settings_title"
+                            >
+                                Module Settings
+                            </h2>
+                            <button
+                                id="close-module-settings-btn"
+                                class="app-close-btn"
+                                data-i18n-aria-label="ui.launcher.button.close"
+                                data-i18n-title="ui.launcher.button.close"
+                                aria-label="Close"
+                                title="Close"
+                            >
+                                <svg class="icon">
+                                    <use href="#icon-close"></use>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="app-modal-body">
+                            <div
+                                id="module-settings-content"
+                                class="module-settings-content"
+                            >
+                                <!-- Dynamic settings will be injected here -->
+                                <div id="module-config-modal-active" class="module-config-modal-active">
+                                    <div class="module-settings-empty">
+                                        <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -331,85 +335,7 @@
                 </div>
             </div>
         </dialog>
-
-        <!-- Download Settings Modal -->
-        <dialog
-            id="download-settings-overlay"
-            class="modal-overlay hidden"
-        >
-            <div
-                class="modal download-settings-modal"
-            >
-                <div
-                    class="modal-title download-settings-title"
-                >
-                    <svg
-                        class="icon download-settings-title-icon"
-                    >
-                        <use href="#icon-settings"></use>
-                    </svg>
-                    <span data-i18n="ui.launcher.settings.download_settings_title">Download Settings</span>
-                </div>
-
-                <div class="download-settings-body">
-                    <label class="download-settings-row">
-                        <span
-                            class="download-limit-label"
-                            data-i18n="ui.launcher.settings.limit_speed"
-                            >Limit Speed</span
-                        >
-                        <input
-                            type="checkbox"
-                            id="download-speed-limit-toggle"
-                            class="download-speed-toggle"
-                        />
-                    </label>
-
-                    <div
-                        id="speed-limit-controls"
-                        class="opacity-50 pointer-none"
-                    >
-                        <label
-                            for="download-speed-slider"
-                            class="download-slider-label"
-                        >
-                            <span data-i18n="ui.launcher.settings.max_speed">Max Speed:</span>
-                            <span
-                                id="speed-limit-value"
-                                class="download-slider-value"
-                                >50</span
-                            >
-                            MB/s
-                        </label>
-                        <input
-                            type="range"
-                            id="download-speed-slider"
-                            class="download-speed-slider"
-                            min="1"
-                            max="200"
-                            value="50"
-                        />
-                        <div class="download-slider-range">
-                            <span>1 MB/s</span>
-                            <span>200 MB/s</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="download-settings-footer">
-                    <button
-                        id="close-download-settings-btn"
-                        class="modal-btn modal-btn-primary w-100"
-                        data-i18n="ui.launcher.web.confirm"
-                    >
-                        Confirm
-                    </button>
-                </div>
-            </div>
-        </dialog>
-
-
-
+        </div>
 
         <script type="module" src="./app/init.ts"></script>
 
@@ -480,9 +406,9 @@
         <template id="tpl-module-card">
             <!-- Delete Badge Placeholder -->
             <!-- Type Badge Placeholder -->
-            <div class="app-icon-wrapper"></div>
-            <div class="app-card-title"></div>
-            <div class="app-card-desc"></div>
+            <div class="module-selection-card-icon"></div>
+            <div class="module-selection-card-title"></div>
+            <div class="module-selection-card-description"></div>
             <!-- Status Html Placeholder -->
             <!-- Overlay Placeholder -->
         </template>

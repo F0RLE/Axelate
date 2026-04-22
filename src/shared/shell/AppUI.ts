@@ -1,15 +1,36 @@
 import type { IApp } from '../types/coreTypes';
-import { getGlobalWin } from '../utils/globalAccessor';
-import DOMPurify from 'dompurify';
-import { eventBus } from '../services/EventBus';
-import { tracer } from '@/infrastructure/logging/LoggerService';
+import { appendCustomProviderApps } from '../utils/customProviderSupport';
+import type { EventBus } from '../services/EventBus';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
-import { ToastManager } from './ui/ToastManager';
-import { ModuleCardRenderer } from './ui/ModuleCardRenderer';
+import { AppUiSelectionState } from './ui/AppUiSelectionState';
+import { AppUiChrome } from './ui/AppUiChrome';
+import { AppUiActionFeedbackController } from './ui/AppUiActionFeedbackController';
+import { AppUiCardActionFlow } from './ui/AppUiCardActionFlow';
+import { AppUiDashboardSupport } from './ui/AppUiDashboardSupport';
+import { AppUiLifecycleBindings } from './ui/AppUiLifecycleBindings';
+import { AppUiModuleFlow } from './ui/AppUiModuleFlow';
+import { AppUiModuleLifecycle } from './ui/AppUiModuleLifecycle';
+import { AppUiSelectionFlow } from './ui/AppUiSelectionFlow';
 import { ModalManager } from './ui/ModalManager';
+import { ModuleCardRenderer } from './ui/ModuleCardRenderer';
 import { SkeletonManager } from './ui/SkeletonManager';
+import { ToastManager } from './ui/ToastManager';
 import type { ModulePlatformService } from '../services/ModulePlatformService';
 import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
+
+type AppUIStateDeps = {
+    removeSelectedModule: (category: string) => void;
+    setSelectedModule: (category: string, moduleData: Partial<IApp>) => void;
+};
+
+type AppUIDeps = {
+    tracer: LoggerService;
+    uiState: AppUIStateDeps;
+    launchApp: (category: string, app: IApp) => Promise<void>;
+    openModuleSettings: (app: IApp) => void;
+    stopAiProvider: () => void;
+};
 
 /**
  * @class AppUI
@@ -19,195 +40,162 @@ import { type NavigationService } from '@/infrastructure/navigation/NavigationSe
 // Note: Window interface extensions are defined in core.ts
 
 export class AppUI {
-    private readonly _purifyConfig = {
-        ALLOWED_TAGS: [
-            'b',
-            'i',
-            'em',
-            'strong',
-            'a',
-            'p',
-            'br',
-            'code',
-            'pre',
-            'div',
-            'span',
-            'svg',
-            'use',
-            'symbol',
-            'line',
-            'path',
-            'polyline',
-            'polygon',
-            'rect',
-            'circle',
-            'ellipse',
-        ],
-        ALLOWED_ATTR: [
-            'href',
-            'class',
-            'style',
-            'viewBox',
-            'width',
-            'height',
-            'fill',
-            'stroke',
-            'stroke-width',
-            'stroke-linecap',
-            'stroke-linejoin',
-            // Shape geometry attributes
-            'd',
-            'points',
-            'x',
-            'y',
-            'x1',
-            'y1',
-            'x2',
-            'y2',
-            'cx',
-            'cy',
-            'r',
-            'rx',
-            'ry',
-        ],
-        ALLOW_DATA_ATTR: true,
-    };
-    // Managers
+    private readonly _chrome: AppUiChrome;
     private readonly _toastManager: ToastManager;
     private readonly _modalManager: ModalManager;
     private readonly _cardRenderer: ModuleCardRenderer;
+    private readonly _dashboardSupport: AppUiDashboardSupport;
     private readonly _skeletonManager: SkeletonManager;
+    private readonly _actionFeedbackController: AppUiActionFeedbackController;
+    private readonly _cardActionFlow: AppUiCardActionFlow;
+    private readonly _lifecycleBindings: AppUiLifecycleBindings;
+    private readonly _moduleFlow: AppUiModuleFlow;
+    private readonly _moduleLifecycle: AppUiModuleLifecycle;
+    private readonly _selectionFlow: AppUiSelectionFlow;
     private readonly _platformService: ModulePlatformService;
-    private readonly _selectedApps = new Map<string, IApp>();
-    private _pendingDashboardSwitchTimer: ReturnType<typeof setTimeout> | null = null;
-    private _pendingDashboardSwitchCard: HTMLElement | null = null;
-    private _actionFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
-    private readonly _boundLanguageChanged = () => {
-        this._modalManager.refreshCurrentSelection();
-    };
-    private readonly _boundPageChange = ({ pageId }: { pageId: string }) => {
-        if (pageId !== 'modules' && pageId !== 'page-modules') {
-            this.closeAppSelection();
-        }
-    };
-    private readonly _boundDashboardContextMenu = (e: Event) => {
-        const target = e.target as HTMLElement;
-        const card = target.closest('#ai-module-card, #services-module-card');
-        if (!(card instanceof HTMLElement)) return;
-        if (!card.classList.contains('selected')) return;
-
-        const category = this._resolveCategoryFromCard(card);
-        const app = this._selectedApps.get(category);
-        if (app === undefined) return;
-
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-
-        tracer.info(`[AppUI] Right-click settings for ${category}:`, app.id);
-        const win = getGlobalWin();
-        if (typeof win.openModuleSettings === 'function') {
-            win.openModuleSettings(app);
-        }
-    };
-    private readonly _boundDashboardMouseDown = (e: Event) => {
-        const mouseEvent = e as MouseEvent;
-        const target = mouseEvent.target as HTMLElement;
-        const card = target.closest('#ai-module-card, #services-module-card');
-        if (!(card instanceof HTMLElement)) return;
-        if (!card.classList.contains('selected')) return;
-
-        if (mouseEvent.button === 1) {
-            mouseEvent.preventDefault();
-            mouseEvent.stopPropagation();
-            const category = this._resolveCategoryFromCard(card);
-            tracer.info(`[AppUI] Middle-click close for ${category}`);
-            this.clearModuleCard(category);
-            getGlobalWin().uiState.removeSelectedModule(category);
-        } else if (mouseEvent.button === 2) {
-            mouseEvent.stopPropagation();
-            mouseEvent.stopImmediatePropagation();
-        }
-    };
-    private readonly _boundDashboardWheel = (e: Event) => {
-        const wheelEvent = e as WheelEvent;
-        const target = wheelEvent.target as HTMLElement;
-        const card = target.closest<HTMLElement>('#ai-module-card');
-        if (card?.classList.contains('selected') !== true) return;
-
-        const textApp = this._selectedApps.get('ai_text');
-        const imageApp = this._selectedApps.get('ai_image');
-        if (textApp === undefined || imageApp === undefined) return;
-
-        const shownModule = card.dataset['currentModule'];
-        const nextCategory = wheelEvent.deltaY < 0 ? 'ai_text' : 'ai_image';
-        const nextApp = nextCategory === 'ai_text' ? textApp : imageApp;
-        if (shownModule === nextApp.id) return;
-
-        wheelEvent.preventDefault();
-        this._cancelPendingDashboardSwitch();
-
-        card.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(4px)';
-        this._pendingDashboardSwitchCard = card;
-
-        this._pendingDashboardSwitchTimer = setTimeout(() => {
-            this._pendingDashboardSwitchTimer = null;
-            this._pendingDashboardSwitchCard = null;
-
-            const currentNextApp = this._selectedApps.get(nextCategory);
-            if (
-                !card.isConnected ||
-                !card.classList.contains('selected') ||
-                currentNextApp?.id !== nextApp.id
-            ) {
-                this._resetDashboardSwitchStyles(card);
-                return;
-            }
-
-            this._cardRenderer.updateCardContent(card, nextApp);
-            this._cardRenderer.updateCardAttributes(card, nextApp);
-            this._updateMultiSlotBadge();
-            this._resetDashboardSwitchStyles(card);
-        }, 150);
-    };
-    private readonly _pageChangeUnsub: () => void;
+    private readonly _deps: AppUIDeps;
+    private readonly _selectionState = new AppUiSelectionState();
+    public get _selectedApps(): Map<string, IApp> {
+        return this._selectionState.asMap();
+    }
 
     constructor(
         platformService: ModulePlatformService,
         private readonly _navigation: NavigationService,
+        private readonly _eventBus: EventBus,
+        private readonly _catalogResolver: (category: string) => IApp[],
+        private readonly _translate: (key: string, fallback: string) => string,
+        deps: AppUIDeps,
     ) {
         this._platformService = platformService;
+        this._deps = deps;
+        this._chrome = new AppUiChrome(this._translate, this._deps.tracer);
         this._toastManager = new ToastManager();
-        this._cardRenderer = new ModuleCardRenderer();
+        this._cardRenderer = new ModuleCardRenderer({
+            checkInstalled: async (moduleId) =>
+                await this._platformService.checkInstalled(moduleId),
+            translate: this._translate,
+            tracer: this._deps.tracer,
+            openModuleSettings: (app) => {
+                this._deps.openModuleSettings(app);
+            },
+        });
+        this._dashboardSupport = new AppUiDashboardSupport({
+            tracer: this._deps.tracer,
+            chrome: this._chrome,
+            cardRenderer: this._cardRenderer,
+            selectionState: this._selectionState,
+            isApiModule: (app) => this._platformService.isApiModule(app),
+            openModuleSettings: (app) => {
+                this._deps.openModuleSettings(app);
+            },
+            clearModuleCard: (category) => this.clearModuleCard(category),
+            removeSelectedModule: (category) => {
+                this._deps.uiState.removeSelectedModule(category);
+            },
+            openAppSelection: (category) => this.openAppSelection(category),
+            updateMultiSlotBadge: () => this._updateMultiSlotBadge(),
+            activateAiSlot: (category, app) => {
+                this._selectionFlow.activateExistingSelection(category, app);
+            },
+        });
         this._skeletonManager = new SkeletonManager();
+        this._actionFeedbackController = new AppUiActionFeedbackController(this._chrome);
         this._modalManager = new ModalManager(
             this._cardRenderer,
-            (e, app, category) => {
-                void this._handleAppCardClick(e, app, category);
+            async (e, app, category) => await this._handleAppCardClick(e, app, category),
+            (capability) => this._selectionState.get(`ai_${capability}`)?.id ?? null,
+            async (app) => await this._platformService.download(app),
+            async (app) => {
+                await this._platformService.cancelDownload(app.id);
+                await this._platformService.delete(app);
             },
-            // When user switches tab in modal, return the previously-selected app ID for that slot
-            (capability) => this._selectedApps.get(`ai_${capability}`)?.id ?? null,
+            this._translate,
+            this._deps.tracer,
             this._navigation,
         );
-
-        globalThis.addEventListener('language-changed', this._boundLanguageChanged);
-
-        // Close modal when navigating away from modules page
-        this._pageChangeUnsub = eventBus.on('page:change', this._boundPageChange);
+        this._moduleFlow = new AppUiModuleFlow({
+            platformService: this._platformService,
+            tracer: this._deps.tracer,
+            modalManager: this._modalManager,
+            getCatalogApps: (category) => this._getCatalogApps(category),
+            getSelectedAppId: (category) => this._selectionState.get(category)?.id ?? null,
+            clearModuleCard: (category) => this.clearModuleCard(category),
+            openAppSelection: (category, apps) => this.openAppSelection(category, apps),
+            markSlotCardAsInstalled: (card, app) =>
+                this._dashboardSupport.markSlotCardAsInstalled(card, app),
+            showToast: (message, type = 'info') => this.showToast(message, type),
+            translate: this._translate,
+        });
+        this._cardActionFlow = new AppUiCardActionFlow({
+            platformService: this._platformService,
+            tracer: this._deps.tracer,
+            isComingSoonApp: (app) => this._isComingSoonApp(app),
+            showComingSoonToast: () => this._showComingSoonToast(),
+            showToast: (message, type = 'info') => this.showToast(message, type),
+            handleDeleteModule: async (app, category) =>
+                await this._handleDeleteModule(app, category),
+            handleDownloadModule: (app, category, btn) =>
+                this._moduleFlow.handleDownloadModule(app, category, btn),
+            resetDownloadButton: (btn) => this._moduleFlow.resetDownloadButton(btn),
+            restoreDownloadButtonLabel: (btn) => this._moduleFlow.restoreDownloadButtonLabel(btn),
+            performSelectionAction: (category, app) => this._performSelectionAction(category, app),
+            translate: this._translate,
+        });
+        this._moduleLifecycle = new AppUiModuleLifecycle({
+            platformService: this._platformService,
+            tracer: this._deps.tracer,
+            getSelectedApp: (category) => this._selectionState.get(category),
+            isSelectedInAnotherAiSlot: (category, appId) =>
+                this._selectionState.isSelectedInAnotherAiSlot(category, appId),
+            resolveAppById: (appId) => this._resolveAppById(appId),
+            translate: this._translate,
+            showToast: (message, type = 'info') => this.showToast(message, type),
+        });
+        this._selectionFlow = new AppUiSelectionFlow({
+            getSelectedApp: (category) => this._selectionState.get(category),
+            clearModuleCard: (category) => this.clearModuleCard(category),
+            updateModuleCard: (category, app) => this.updateModuleCard(category, app),
+            updateModalSelection: (appId) => this._modalManager.updateSelection(appId),
+            bumpLaunchSelectionVersion: (category) =>
+                this._moduleLifecycle.bumpLaunchSelectionVersion(category),
+            stopSelectedApp: (app) => this._platformService.stop(app),
+            launchSelectedApp: (category, app, launchSelectionVersion, launchApp) =>
+                this._moduleLifecycle.launchSelectedApp(
+                    category,
+                    app,
+                    launchSelectionVersion,
+                    launchApp,
+                ),
+            removeSelectedModule: (category) => {
+                this._deps.uiState.removeSelectedModule(category);
+            },
+            setSelectedModule: (category, moduleData) => {
+                this._deps.uiState.setSelectedModule(category, moduleData);
+            },
+            launchApp: (category, app) => this._deps.launchApp(category, app),
+        });
+        this._lifecycleBindings = new AppUiLifecycleBindings({
+            eventBus: this._eventBus,
+            onLanguageChanged: () => {
+                this._modalManager.refreshCurrentSelection();
+            },
+            onPageChange: ({ pageId }) => {
+                if (pageId !== 'modules' && pageId !== 'page-modules') {
+                    this.closeAppSelection();
+                }
+            },
+        });
 
         this._initDashboardCardListeners();
     }
 
     public destroy(): void {
-        this._cancelPendingDashboardSwitch();
-        this._clearActionFeedbackTimer();
-        globalThis.removeEventListener('language-changed', this._boundLanguageChanged);
-        this._pageChangeUnsub();
-        document.body.removeEventListener('contextmenu', this._boundDashboardContextMenu);
-        document.body.removeEventListener('mousedown', this._boundDashboardMouseDown);
-        document.body.removeEventListener('wheel', this._boundDashboardWheel);
+        this._dashboardSupport.cancelPendingSwitch();
+        this._actionFeedbackController.clear();
+        this._selectionState.clear();
+        this._lifecycleBindings.destroy();
+        this._removeDashboardCardListeners();
         this._modalManager.destroy();
     }
 
@@ -215,25 +203,11 @@ export class AppUI {
      * Initializes permanent listeners for dashboard cards to handle interactions safely.
      */
     private _initDashboardCardListeners(): void {
-        document.body.addEventListener('contextmenu', this._boundDashboardContextMenu);
-        document.body.addEventListener('mousedown', this._boundDashboardMouseDown);
-        document.body.addEventListener('wheel', this._boundDashboardWheel, { passive: false });
+        this._dashboardSupport.initListeners();
     }
 
-    private _resolveCategoryFromCard(card: HTMLElement): string {
-        const defaultCategory = card.id === 'ai-module-card' ? 'ai_text' : 'services';
-        const shownId = card.dataset['currentModule'];
-        if (shownId === undefined) {
-            return defaultCategory;
-        }
-
-        for (const [capability, app] of this._selectedApps.entries()) {
-            if (app.id === shownId) {
-                return capability;
-            }
-        }
-
-        return defaultCategory;
+    private _removeDashboardCardListeners(): void {
+        this._dashboardSupport.destroy();
     }
 
     // --- Toast System ---
@@ -261,32 +235,7 @@ export class AppUI {
      * @param {string} [type='success'] - The feedback type.
      */
     public showActionFeedback(type = 'success'): void {
-        let feedback = document.getElementById('action-feedback');
-        if (feedback === null) {
-            feedback = document.createElement('div');
-            feedback.className = 'action-feedback';
-            feedback.id = 'action-feedback';
-            const win = getGlobalWin();
-            feedback.innerHTML = DOMPurify.sanitize(
-                typeof win.t === 'function' ? win.t('ui.feedback', '') : '',
-                this._purifyConfig,
-            );
-            document.body.appendChild(feedback);
-        }
-
-        this._clearActionFeedbackTimer();
-        feedback.className = `action-feedback ${type}`;
-        const iconElement = feedback.querySelector('.action-feedback-icon');
-        if (iconElement !== null) {
-            iconElement.textContent = '';
-        }
-        feedback.classList.add('show');
-
-        const el = feedback;
-        this._actionFeedbackTimer = setTimeout(() => {
-            this._actionFeedbackTimer = null;
-            el.classList.remove('show');
-        }, 600);
+        this._actionFeedbackController.show(type as 'success' | 'error' | 'warning' | 'info');
     }
 
     // --- Skeletons ---
@@ -318,20 +267,9 @@ export class AppUI {
      * @param {IApp[]} [apps] - List of apps to display.
      */
     public openAppSelection(category: string, apps?: IApp[]): void {
-        const rawCategory = category.startsWith('ai') ? 'ai' : category;
-        let appsToRender = apps;
-        if (!appsToRender) {
-            const win = getGlobalWin();
-            appsToRender = (win.getCatalogCategory as (cat: string) => IApp[])(rawCategory);
-        }
-
-        // Preserve AI compound categories for the modal filter tabs.
-        // Non-AI categories must keep their own category, otherwise service modals
-        // incorrectly show the global AI Text/Image tab row.
-        const modalCategory = category === 'ai' ? 'ai_text' : category;
-        const selectedId =
-            this._selectedApps.get(modalCategory)?.id ??
-            (modalCategory.startsWith('ai') ? this._selectedApps.get('ai_text')?.id : undefined);
+        const modalCategory = this._resolveModalCategory(category);
+        const appsToRender = apps ?? this._resolveModalCatalogApps(category);
+        const selectedId = this._selectionState.getModalSelectedId(modalCategory);
 
         this._modalManager.openAppSelection(modalCategory, appsToRender, selectedId);
     }
@@ -346,29 +284,18 @@ export class AppUI {
      * @param {IApp} app - The app data.
      */
     public updateModuleCard(category: string, app: IApp): void {
-        // Both 'ai_text' and 'ai_image' map to the same dashboard card
-        const cardId = this._categoryToCardId(category);
-        const cardLike = document.getElementById(cardId);
-
-        if (cardLike instanceof HTMLElement) {
-            this._cancelPendingDashboardSwitch();
-            this._stopPreviousModule(cardLike, app);
-            this._cardRenderer.updateCardAttributes(cardLike, app);
-
-            cardLike.classList.remove('empty');
-            cardLike.classList.add('selected');
-
-            this._cardRenderer.updateCardContent(cardLike, app);
-
-            this._configureActionBtn(cardLike, app);
-            this._refreshCardActions(cardLike, app, category);
-
-            // Store under compound key (ai_text or ai_image)
-            this._selectedApps.set(category, app);
-            this._updateMultiSlotBadge();
-        } else {
-            tracer.warn(`[AppUI] Could not find module card: ${cardId}`);
+        const card = this._dashboardSupport.getDashboardCard(category);
+        if (!(card instanceof HTMLElement)) {
+            const cardId = this._dashboardSupport.getCardId(category);
+            this._deps.tracer.warn(`[AppUI] Could not find module card: ${cardId}`);
+            return;
         }
+
+        this._dashboardSupport.cancelPendingSwitch();
+        this._moduleLifecycle.stopPreviousModule(card, app, category);
+        this._dashboardSupport.applySelectedCardState(card, app, category);
+        this._selectionState.set(category, app);
+        this._updateMultiSlotBadge();
     }
 
     /**
@@ -376,81 +303,52 @@ export class AppUI {
      * @param {string} category - The module category.
      */
     public clearModuleCard(category: string): void {
-        const cardId = this._categoryToCardId(category);
-        const cardLike = document.getElementById(cardId);
-        if (!(cardLike instanceof HTMLElement)) return;
+        const card = this._dashboardSupport.getDashboardCard(category);
+        if (!(card instanceof HTMLElement)) return;
 
-        this._cancelPendingDashboardSwitch();
+        this._dashboardSupport.cancelPendingSwitch();
+        this._moduleLifecycle.bumpLaunchSelectionVersion(category);
 
-        const currentApp = this._selectedApps.get(category);
+        const currentApp = this._selectionState.get(category);
         if (currentApp) {
-            this._stopPreviousModule(cardLike, currentApp);
-            this._selectedApps.delete(category);
+            this._stopRemovedModule(category, currentApp);
+            this._selectionState.delete(category);
         }
 
-        // Only visually reset the card if the other AI slot is also empty
-        const otherSlot = category === 'ai_text' ? 'ai_image' : 'ai_text';
-        const otherApp = this._selectedApps.get(otherSlot);
-        if (otherApp) {
-            // Other slot still active — show that engine on the card
-            this._cardRenderer.updateCardContent(cardLike, otherApp);
-            // Re-inject action buttons for the now-active slot so ✕ holds correct category
-            this._refreshCardActions(cardLike, otherApp, otherSlot);
+        if (category.startsWith('ai')) {
+            const otherSlot = this._selectionState.getOtherAiSlot(category);
+            const otherApp = this._selectionState.get(otherSlot);
+            if (otherApp) {
+                this._dashboardSupport.applySelectedCardState(card, otherApp, otherSlot);
+                this._selectionFlow.activateExistingSelection(otherSlot as 'ai_text' | 'ai_image', otherApp);
+            } else {
+                this._dashboardSupport.resetCardToEmpty(card);
+            }
         } else {
-            this._resetCardToEmpty(cardLike);
+            this._dashboardSupport.resetCardToEmpty(card);
         }
 
         this._stopAiProviderIfNoSlots(category);
         this._updateMultiSlotBadge();
     }
 
-    /** Resets a card element to its empty visual state (no module selected). */
-    private _resetCardToEmpty(card: HTMLElement): void {
-        card.classList.remove('selected', 'has-download', 'has-launch');
-        card.classList.add('empty');
-        delete card.dataset['currentModule'];
-        delete card.dataset['currentModuleName'];
-        const originalHtml = card.dataset['originalHtml'];
-        if (originalHtml !== undefined && originalHtml !== '') {
-            card.innerHTML = originalHtml;
-        }
-    }
-
-    private _cancelPendingDashboardSwitch(): void {
-        if (this._pendingDashboardSwitchTimer !== null) {
-            clearTimeout(this._pendingDashboardSwitchTimer);
-            this._pendingDashboardSwitchTimer = null;
+    private _stopRemovedModule(category: string, app: IApp): void {
+        if (this._selectionState.shouldKeepRemovedAiAppRunning(category, app)) {
+            return;
         }
 
-        this._resetDashboardSwitchStyles(this._pendingDashboardSwitchCard);
-        this._pendingDashboardSwitchCard = null;
-    }
-
-    private _resetDashboardSwitchStyles(card: HTMLElement | null): void {
-        if (!(card instanceof HTMLElement)) return;
-
-        card.style.removeProperty('transition');
-        card.style.removeProperty('opacity');
-        card.style.removeProperty('transform');
-    }
-
-    private _clearActionFeedbackTimer(): void {
-        if (this._actionFeedbackTimer === null) return;
-
-        clearTimeout(this._actionFeedbackTimer);
-        this._actionFeedbackTimer = null;
+        void this._platformService.stop(app).catch((err: unknown) => {
+            this._deps.tracer.warn(
+                `[AppUI] Failed to stop removed module ${app.id}: ${String(err)}`,
+            );
+        });
     }
 
     /** Stops the AI provider when all AI capability slots are empty. */
     private _stopAiProviderIfNoSlots(category: string): void {
         if (!category.startsWith('ai')) return;
-        const hasAnyAiSlot =
-            this._selectedApps.has('ai_text') || this._selectedApps.has('ai_image');
-        if (!hasAnyAiSlot) {
-            const win = getGlobalWin();
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- aiBridge is a runtime global
-            win.aiBridge?.stopProvider();
-            win.uiState.updateState({ last_active_provider: null });
+        if (!this._selectionState.hasAnyAiSlot()) {
+            this._deps.stopAiProvider();
         }
     }
 
@@ -462,42 +360,7 @@ export class AppUI {
      *   - Purple accent to indicate "extra capability" (not a danger/action intent)
      */
     private _updateMultiSlotBadge(): void {
-        const card = document.getElementById('ai-module-card');
-        if (!(card instanceof HTMLElement)) return;
-
-        // Remove existing badge first
-        card.querySelector('.module-action-badge.stack')?.remove();
-
-        const textApp = this._selectedApps.get('ai_text');
-        const imageApp = this._selectedApps.get('ai_image');
-        if (textApp === undefined || imageApp === undefined) return;
-
-        // Determine which is secondary (not currently shown on the card)
-        const shownModule = card.dataset['currentModule'];
-        const secondaryApp = shownModule === textApp.id ? imageApp : textApp;
-
-        // Build badge using same pattern as _addSettingsBtn
-        const badge = document.createElement('div');
-        badge.className = 'module-action-badge bottom-right stack';
-
-        badge.innerHTML = DOMPurify.sanitize(
-            `<div class="badge-text">${secondaryApp.name ?? secondaryApp.id}</div>` +
-                `<div class="badge-icon">+1</div>`,
-            this._purifyConfig,
-        );
-
-        badge.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            const openCapability = shownModule === textApp.id ? 'ai_image' : 'ai_text';
-            this.openAppSelection(openCapability);
-        });
-
-        badge.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-        });
-
-        card.appendChild(badge);
+        this._dashboardSupport.updateMultiSlotBadge();
     }
 
     // --- Private Helper Methods ---
@@ -507,398 +370,100 @@ export class AppUI {
     // _createAppCard removed (delegated to ModuleCardRenderer)
 
     private async _handleAppCardClick(e: MouseEvent, app: IApp, category: string): Promise<void> {
-        if (await this._tryDeleteAction(e, app, category)) return;
-        if (await this._tryDownloadAction(e, app, category)) return;
-        this._performSelectionAction(category, app);
-    }
-
-    private async _tryDeleteAction(e: MouseEvent, app: IApp, category: string): Promise<boolean> {
-        const target = e.target as HTMLElement;
-        if (target.closest('.app-delete-badge') !== null) {
-            e.stopPropagation();
-            await this._handleDeleteModule(app, category);
-            return true;
-        }
-        return false;
-    }
-
-    private async _tryDownloadAction(e: MouseEvent, app: IApp, category: string): Promise<boolean> {
-        const isApi = this._platformService.isApiModule(app);
-
-        // Any click on an uninstalled local app should trigger download, not selection
-        if (!isApi && app.installed !== true) {
-            if (app.repoUrl === undefined || app.repoUrl === '') {
-                tracer.warn('[AppUI] Download URL is empty for module:', app.id);
-                const win = getGlobalWin();
-                this.showToast(
-                    typeof win.t === 'function'
-                        ? win.t(
-                              'ui.launcher.web.download_url_empty',
-                              'Download URL is not available',
-                          )
-                        : 'Download URL is not available',
-                    'warning',
-                );
-                return true;
-            }
-
-            e.stopPropagation();
-
-            // Find the .download-btn inside the card — use currentTarget (the .app-card)
-            // which is always correct regardless of where inside the card was clicked.
-            const card =
-                (e.currentTarget as HTMLElement | null) ??
-                (e.target as HTMLElement).closest('.app-card');
-            const btnToAnimate = card?.querySelector<HTMLElement>('.download-btn') ?? null;
-
-            // Guard: if already downloading, cancel instead of ignoring
-            if (btnToAnimate?.classList.contains('downloading') === true) {
-                tracer.info(`[AppUI] Cancelling download for: ${app.id}`);
-                void (async () => {
-                    try {
-                        await this._platformService.cancelDownload(app.id);
-                        await this._platformService.delete(app);
-                        btnToAnimate.classList.remove('downloading', 'indeterminate');
-                        btnToAnimate.style.removeProperty('--download-progress');
-                        btnToAnimate.style.pointerEvents = 'auto';
-                        const pct = btnToAnimate.querySelector<HTMLElement>('.download-pct');
-                        if (pct) pct.style.display = 'none';
-                        const label = btnToAnimate.querySelector<HTMLElement>('.download-label');
-                        const win = getGlobalWin();
-                        const defaultText =
-                            typeof win.t === 'function'
-                                ? win.t('ui.launcher.module.download', 'Download')
-                                : 'Download';
-                        if (label) {
-                            label.style.display = '';
-                            label.textContent = defaultText;
-                        }
-                    } catch (err) {
-                        tracer.error(`[AppUI] Cancel failed for ${app.id}:`, err);
-                    }
-                })();
-                return true;
-            }
-
-            await this._handleDownloadModule(app, category, btnToAnimate);
-            return true;
-        }
-        return false;
+        await this._cardActionFlow.handleAppCardClick(e, app, category);
     }
 
     private _performSelectionAction(category: string, app: IApp): void {
-        const win = getGlobalWin();
-        const alreadySelected = this._selectedApps.get(category)?.id === app.id;
-
-        if (alreadySelected) {
-            // Deselect: clear dashboard card and remove from tracked selection
-            this.clearModuleCard(category);
-            this._modalManager.updateSelection(null);
-        } else {
-            // Update dashboard card directly with compound key (skipping win.selectApp which
-            // always passes rawCategory='ai' and would overwrite the compound slot)
-            this.updateModuleCard(category, app);
-            this._modalManager.updateSelection(app.id);
-
-            // Persist to uiState with compound key ('ai_text' / 'ai_image') for session restore
-            const uiState = win.uiState;
-            if (typeof uiState.setSelectedModule === 'function') {
-                uiState.setSelectedModule(category, {
-                    id: app.id,
-                    name: app.name ?? '',
-                    nameKey: app.nameKey ?? '',
-                    icon: app.icon ?? '',
-                    type: app.type ?? 'local',
-                    descKey: app.descKey ?? '',
-                    desc: app.desc ?? '',
-                });
-            }
-
-            // Auto-launch the selected module
-            if (typeof win.launchApp === 'function') {
-                void (win.launchApp as (id: string) => Promise<void>)(app.id);
-            }
+        if (this._isComingSoonApp(app)) {
+            this._showComingSoonToast();
+            return;
         }
-    }
-
-    /**
-     * Maps a category key to the corresponding dashboard card element ID.
-     * Both 'ai_text' and 'ai_image' map to the same AI card on the dashboard.
-     */
-    private _categoryToCardId(category: string): string {
-        if (category === 'ai' || category.startsWith('ai_')) return 'ai-module-card';
-        return 'services-module-card';
+        this._selectionFlow.performSelectionAction(category, app);
     }
 
     private async _handleDeleteModule(app: IApp, category: string): Promise<void> {
-        tracer.info('[AppUI] Remove module clicked:', app.id);
-        const win = getGlobalWin();
-        try {
-            await this._platformService.delete(app);
-            app.installed = false;
-
-            // Clear from dashboard if it was the currently selected app
-            if (this._selectedApps.get(category)?.id === app.id) {
-                this.clearModuleCard(category);
-            }
-
-            // Refresh logic remains in UI for now (Phase 1 can refactor this)
-            const rawCategory = category.startsWith('ai') ? 'ai' : category;
-            const allApps = (win.getCatalogCategory as (cat: string) => IApp[])(rawCategory);
-            this.openAppSelection(category, allApps);
-        } catch (err: unknown) {
-            tracer.error('[AppUI] Delete error:', err);
-            const error = err as Error;
-            const msg = error.message.startsWith('ui.')
-                ? error.message
-                : 'ui.launcher.web.delete_model_error';
-            const fallback = msg === 'ui.launcher.web.delete_model_error' ? 'Delete error' : msg;
-
-            const g = getGlobalWin();
-            this.showToast(typeof g.t === 'function' ? g.t(msg, fallback) : fallback, 'error');
-        }
+        await this._moduleFlow.handleDeleteModule(app, category);
     }
 
-    private async _handleDownloadModule(
-        app: IApp,
-        _category: string,
-        btn: HTMLElement | null,
-    ): Promise<void> {
-        tracer.info('[AppUI] Download module clicked:', app.id);
-
-        // ModalManager handles all visual progress updates via the global
-        // 'download-progress-update' event listener. We just await the
-        // underlying download promise to update the app state.
-        if (btn !== null) {
-            btn.classList.add('downloading', 'indeterminate');
-            btn.style.setProperty('--download-progress', '0%');
-
-            const pct = btn.querySelector<HTMLElement>('.download-pct');
-            if (pct) {
-                pct.style.display = '';
-                pct.textContent = '0%';
-            }
-
-            const label = btn.querySelector<HTMLElement>('.download-label');
-            if (label) {
-                label.textContent = '';
-            }
-        }
-
-        try {
-            await this._platformService.download(app);
-            this._onModalDownloadSuccess(btn, app);
-        } catch (err: unknown) {
-            this._onModalDownloadError(btn, err);
-        }
+    public _onModalDownloadSuccess(btn: HTMLElement | null, app: IApp, category: string): void {
+        this._moduleFlow.onModalDownloadSuccess(btn, app, category);
     }
 
-    private _onModalDownloadSuccess(btn: HTMLElement | null, app: IApp): void {
-        app.installed = true;
-        if (btn !== null) {
-            btn.classList.remove('downloading', 'indeterminate');
-            btn.style.removeProperty('--download-progress');
-            btn.style.pointerEvents = 'auto';
-        }
-
-        const card =
-            btn?.closest<HTMLElement>('.model-card-premium') ??
-            btn?.closest<HTMLElement>('.app-card');
-        if (card instanceof HTMLElement) {
-            this._markCardAsInstalled(card, app);
-        }
-
-        this._modalManager.refreshCurrentSelection();
-    }
-
-    private _onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
-        tracer.error('[AppUI] Download error:', err);
-        if (btn !== null) {
-            btn.classList.remove('downloading', 'indeterminate');
-            btn.style.removeProperty('--download-progress');
-            btn.style.pointerEvents = 'auto';
-        }
-        const error = err as Error;
-        const msg = error.message.startsWith('ui.')
-            ? error.message
-            : 'ui.launcher.web.download_error';
-        const fallback = msg === 'ui.launcher.web.download_error' ? 'Download failed' : msg;
-        const win = getGlobalWin();
-        this.showToast(typeof win.t === 'function' ? win.t(msg, fallback) : fallback, 'error');
-    }
-
-    private _stopPreviousModule(card: HTMLElement, app: IApp): void {
-        const previousModuleId = card.dataset['currentModule'];
-        if (
-            previousModuleId === undefined ||
-            previousModuleId === '' ||
-            previousModuleId === app.id
-        )
-            return;
-
-        const actionBtn = card.querySelector('.model-card-action');
-        if (!(actionBtn instanceof HTMLElement)) return;
-        if (actionBtn.dataset['running'] !== 'true') return;
-
-        const prevId = previousModuleId;
-        const previousApp =
-            this._resolveAppById(prevId) ??
-            ({
-                id: prevId,
-                name: card.dataset['currentModuleName'] ?? prevId,
-            } as IApp);
-
-        void this._platformService.stop(previousApp).then(() => {
-            const prevName = previousApp.name ?? card.dataset['currentModuleName'] ?? prevId;
-            if (!this._platformService.isApiModule(previousApp)) {
-                const win = getGlobalWin();
-                if (typeof win.showToast === 'function') {
-                    win.showToast(
-                        typeof win.t === 'function'
-                            ? win.t('ui.launcher.module.stopped', `${prevName} stopped`)
-                            : `${prevName} stopped`,
-                        'info',
-                    );
-                }
-            }
-        });
-
-        tracer.info('[AppUI] Stopped previous module:', previousModuleId);
+    public _onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
+        this._moduleFlow.onModalDownloadError(btn, err);
     }
 
     private _resolveAppById(appId: string): IApp | undefined {
-        for (const selectedApp of this._selectedApps.values()) {
+        for (const selectedApp of this._selectionState.values()) {
             if (selectedApp.id === appId) {
                 return selectedApp;
             }
         }
 
-        const catalog = globalThis.APP_DATA;
-        const allApps = [...catalog.ai, ...catalog.services];
+        const allApps = [...this._getCatalogApps('ai'), ...this._getCatalogApps('services')];
         return allApps.find((catalogApp) => catalogApp.id === appId);
     }
 
-    // _updateCardAttributes removed (delegated to ModuleCardRenderer)
-
-    // _markCardAsInstalled delegated
-    private _markCardAsInstalled(card: HTMLElement, app: IApp): void {
-        this._cardRenderer.markCardAsInstalled(card, app, (c, a) => this._configureActionBtn(c, a));
+    private _resolveModalCategory(category: string): string {
+        return this._dashboardSupport.resolveModalCategory(category);
     }
 
-    private _configureActionBtn(card: HTMLElement, app: IApp): void {
-        let actionBtn = card.querySelector<HTMLElement>('.model-card-action');
+    private _resolveModalCatalogApps(category: string): IApp[] {
+        return this._getCatalogApps(this._dashboardSupport.resolveCatalogCategory(category));
+    }
 
-        if (actionBtn === null) {
-            actionBtn = document.createElement('div');
-            actionBtn.className = 'model-card-action';
-            actionBtn.id =
-                card.id === 'ai-module-card' ? 'ai-module-add-btn' : 'services-module-add-btn';
-            actionBtn.dataset['i18n'] = 'ui.launcher.button.launch';
-            card.appendChild(actionBtn);
+    public _resolveCategoryFromCard(card: HTMLElement): string {
+        const currentCapability = card.dataset['currentCapability'];
+        if (typeof currentCapability === 'string' && currentCapability !== '') {
+            return currentCapability;
         }
 
-        const isApi = this._platformService.isApiModule(app);
-        const isInstalled = app.installed !== false;
+        return card.id === 'ai-module-card' ? 'ai_text' : 'services';
+    }
 
-        // Dashboard card never shows a Download button.
-        // Downloading is done exclusively from the App Selection Modal.
-        // If the app is not installed (and not API), just hide the action button.
-        actionBtn.style.display = 'none';
-        actionBtn.classList.remove('download-module-btn', 'active-module-btn', 'has-download');
+    public getPreferredAiCategory(): 'ai_text' | 'ai_image' {
+        const card = this._dashboardSupport.getDashboardCard('ai_text');
+        if (card instanceof HTMLElement) {
+            const resolvedCategory = this._selectionState.resolveCategoryFromCard(card);
+            if (resolvedCategory === 'ai_image') {
+                return 'ai_image';
+            }
+        }
 
-        if (!isApi && !isInstalled) {
-            // Module is on the card but not installed — this shouldn't normally happen
-            // (selection is blocked in _performSelectionAction) but guard defensively.
-            return;
+        if (this._selectionState.has('ai_text')) {
+            return 'ai_text';
+        }
+
+        if (this._selectionState.has('ai_image')) {
+            return 'ai_image';
+        }
+
+        return 'ai_text';
+    }
+
+    private _getCatalogApps(category: string): IApp[] {
+        try {
+            const apps = this._catalogResolver(category);
+            return category === 'ai' ? appendCustomProviderApps(apps) : apps;
+        } catch (err: unknown) {
+            this._deps.tracer.warn(
+                `[AppUI] Failed to read catalog category ${category}: ${String(err)}`,
+            );
+            return [];
         }
     }
 
-    private _addSettingsBtn(card: HTMLElement, app: IApp): void {
-        const settingsBtn = document.createElement('div');
-        settingsBtn.className = 'module-action-badge left settings';
-        const win = getGlobalWin();
-        settingsBtn.innerHTML = DOMPurify.sanitize(
-            `
-            <div class="badge-icon"><span style="font-size: 1.1rem;">⚙️</span></div>
-            <div class="badge-text" data-i18n="ui.launcher.module.settings_short">${typeof win.t === 'function' ? win.t('ui.launcher.module.settings_short', 'Settings') : 'Settings'}</div>
-        `,
-            this._purifyConfig,
+    private _isComingSoonApp(app: IApp): boolean {
+        return app.comingSoon === true;
+    }
+
+    private _showComingSoonToast(): void {
+        this.showToast(
+            this._chrome.translate(
+                'ui.launcher.module.coming_soon_detail',
+                'This integration is planned and will arrive in a future update.',
+            ),
+            'info',
         );
-        settingsBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            tracer.info('[AppUI] Settings button clicked (event) for:', app.id);
-            const win = getGlobalWin();
-            if (typeof win.openModuleSettings === 'function') win.openModuleSettings(app);
-            else tracer.error('[AppUI] globalThis.openModuleSettings is undefined'); // Suppress loop below if needed
-        });
-        settingsBtn.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            tracer.debug('[AppUI] Settings button mousedown for:', app.id);
-        });
-        card.appendChild(settingsBtn);
-    }
-
-    private _addCloseBtn(card: HTMLElement, category: string): void {
-        const closeBtn = document.createElement('div');
-        closeBtn.className = 'module-action-badge right close';
-        const win = getGlobalWin();
-        closeBtn.innerHTML = DOMPurify.sanitize(
-            `
-            <div class="badge-icon">
-                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="display: block;">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </div>
-            <div class="badge-text" data-i18n="ui.launcher.module.remove_short">${typeof win.t === 'function' ? win.t('ui.launcher.module.remove_short', 'Close') : 'Close'}</div>
-        `,
-            this._purifyConfig,
-        );
-        closeBtn.onclick = (e): void => {
-            e.stopImmediatePropagation();
-            // clearModuleCard: if the other AI slot is active, shows it on the card
-            // instead of blanking the card entirely
-            this.clearModuleCard(category);
-            // Also remove from uiState persistence
-            const globalWin = getGlobalWin();
-            globalWin.uiState.removeSelectedModule(category);
-        };
-        card.appendChild(closeBtn);
-    }
-
-    // --- Prompt Tab Switching (for chat/settings) ---
-    public showPromptTab(tab: string, btn?: HTMLElement): void {
-        document.querySelectorAll('.prompt-tab-content').forEach((t) => {
-            (t as HTMLElement).style.display = 'none';
-        });
-
-        const targetTab = document.getElementById(`prompt-tab-${tab}`);
-        if (targetTab !== null) targetTab.style.display = 'block';
-
-        if (btn?.parentElement) {
-            btn.parentElement.querySelectorAll('button').forEach((b) => {
-                (b as HTMLElement).style.background = 'var(--surface)';
-                (b as HTMLElement).style.color = 'var(--text-secondary)';
-            });
-            btn.style.background = 'var(--primary)';
-            btn.style.color = 'white';
-        }
-    }
-    // --- New Private Helpers ---
-    // --- Private Helper Methods ---
-
-    // --- Private Helper Methods ---
-    // All previous helper methods have been moved to ModuleCardRenderer or ModalManager.
-    // This section is kept for any future AppUI-specific helpers.
-
-    private _refreshCardActions(card: HTMLElement, app: IApp, category: string): void {
-        // Remove existing actions
-        card.querySelectorAll('.module-action-badge').forEach((el) => {
-            el.remove();
-        });
-
-        this._addSettingsBtn(card, app);
-        this._addCloseBtn(card, category);
     }
 }

@@ -4,11 +4,10 @@
   <br />
 
   <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
-  <p style="font-size: 1.1em; color: #888; font-style: italic;">The Secure Environment for Next-Generation AI Agents</p>
+  <p style="font-size: 1.1em; color: #888; font-style: italic;">The Secure Environment for AI Workflows</p>
 
   <br />
 
-  <!-- Primary Call to Action -->
   <a href="https://github.com/F0RLE/Axelate/releases">
     <img src="https://img.shields.io/badge/Download_Axelate-007AFF?style=for-the-badge&logo=windows&logoColor=white" height="40" alt="Download Now" />
   </a>
@@ -16,17 +15,14 @@
   <br />
   <br />
 
-  <!-- Navigation Bar -->
   <p>
-    <a href="docs/ru/ROADMAP.md"><img src="https://img.shields.io/badge/Russian-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Russian"/></a>
+    <a href="docs/ru/VISION.md"><img src="https://img.shields.io/badge/Russian-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Russian"/></a>
     &nbsp;
     <a href="docs/zh/README_CN.md"><img src="https://img.shields.io/badge/Chinese-31303a?style=for-the-badge&logo=google-translate&logoColor=white" height="30" alt="Chinese"/></a>
     &nbsp;
     <a href="docs/en/architecture.md"><img src="https://img.shields.io/badge/Documentation-31303a?style=for-the-badge&logo=gitbook&logoColor=white" height="30" alt="Docs"/></a>
   </p>
   <p>
-    <a href="https://github.com/F0RLE/Axelate/releases"><img src="https://img.shields.io/badge/v0.1.5-31303a?style=for-the-badge&logo=semver&logoColor=white" height="30" alt="Version"/></a>
-    &nbsp;
     <img src="https://img.shields.io/badge/Status-Public_Beta-orange?style=for-the-badge" height="30" alt="Status: Beta"/>
   </p>
 
@@ -34,18 +30,18 @@
 </div>
 
 > [!IMPORTANT]
-> **Axelate is currently in Public Beta (v0.1.5 / 0.1.x).**
+> Axelate is currently in public beta.
 >
-> This is pre-release software. Features may be experimental, and APIs are subject to change without notice. No stable release is currently available.
+> This is pre-release software. Features may change, and current workflows are still being hardened.
 
 ---
 
 <div align="center">
 
-## ✨ Experience the Future
+## Experience the Future
 
-**Axelate** is a dedicated, hardware-secured workspace for your professional AI agents.
-<br>Built for those who refuse to compromise on **privacy**, **speed**, or **control**.
+**Axelate** is a desktop shell for AI workflows, local engines, and managed modules.
+<br>Built for people who want **local control**, **predictable tooling**, and **clear ownership of data**.
 
 </div>
 
@@ -53,15 +49,15 @@
 
 <div align="center">
 
-| 🛡️ Hardware-Bound Security | ⚡ Native Performance | 🧩 Isolated Modules |
-| :---: | :---: | :---: |
-| Your data is encrypted using **AES-256-GCM** keys derived from your physical motherboard serial. Theft-proof by design. | Powered by a hybrid **Rust Kernel** + **V8 Shell**. Zero latency, instant startup, and minimal resource footprint. | Run coding agents, data analysts, and creative tools in strict isolation. No cross-contamination. |
+|                         Secure Local Storage                          |                     Native Desktop Runtime                     |                               Module And Engine Orchestration                               |
+| :-------------------------------------------------------------------: | :------------------------------------------------------------: | :-----------------------------------------------------------------------------------------: |
+| Sensitive values stay on the backend side and are not frontend-owned. | Powered by **Rust**, **Tauri v2**, and **vanilla TypeScript**. | Start, stop, install, and inspect local engines and module runtimes from one desktop shell. |
 
 </div>
 
 ---
 
-<h2 align="center">🚀 Getting Started</h2>
+<h2 align="center">Getting Started</h2>
 
 <div align="center">
 
@@ -70,24 +66,81 @@
   <br>
   <b>2. Run</b> `Axelate Setup.exe`.
   <br>
-  <b>3. Initialize</b> your secure vault and start installing modules.
+  <b>3. Open</b> Settings, add your provider key, then install local engines or modules if needed.
 </p>
 
 </div>
 
 ---
 
-<h2 align="center">👩‍💻 For Developers</h2>
+<h2 align="center">For Developers</h2>
 
-Axelate is built on a "Pass-Through" architecture that gives frontend modules direct access to Rust system services.
+Axelate uses Rust for domain logic and a thin TypeScript shell for desktop UI orchestration.
 
 <div align="center">
 
-[![Developer Cookbook](https://img.shields.io/badge/📖_Developer_Cookbook-Read-31303a?style=flat-square)](docs/en/development.md)
+[![Getting Started](https://img.shields.io/badge/📖_Getting_Started-Read-31303a?style=flat-square)](docs/en/getting-started.md)
 [![Architecture Spec](https://img.shields.io/badge/🏗️_Architecture_Spec-Deep_Dive-31303a?style=flat-square)](docs/en/architecture.md)
-[![Contributing](https://img.shields.io/badge/🤝_Contribution_Guidelines-Read-31303a?style=flat-square)](CONTRIBUTING.md)
+[![Automation](https://img.shields.io/badge/⚙️_Automation-Read-31303a?style=flat-square)](docs/en/AUTOMATION.md)
+[![Coding Standards](https://img.shields.io/badge/🧭_Coding_Standards-Read-31303a?style=flat-square)](docs/en/CODING_STANDARDS.md)
 
 </div>
+
+### Current repository layout
+
+```text
+Axelate/
+├── .github/     workflows, templates, helpers, workflow runner
+├── src/         frontend app
+├── src-tauri/   Rust backend and Tauri configuration
+└── docs/        project documentation
+```
+
+`src/` is the only npm project with real dependencies. The root `package.json` is a task proxy over the shared workflow runner.
+
+### Common commands
+
+```bash
+npm run doctor
+npm run setup
+npm run dev
+npm run test
+npm run typecheck
+npm run lint
+npm run verify
+npm run build
+npm run tauri:build
+npm run release
+npm run clear
+```
+
+`npm run setup` is the first-run command. It validates prerequisites, installs `src/node_modules`, and configures Git hooks.
+`npm run doctor` checks the local machine/toolchain state without changing anything.
+`npm run dev` starts the desktop app in Tauri development mode.
+`npm run verify` is the local release gate: Rust checks, frontend checks, build, and size budget.
+`npm run clear` removes build artifacts and caches.
+
+On Windows, install WebView2 Runtime, Windows SDK, and Microsoft C++ Build Tools first.
+Portable Node/Rust toolchains are supported through `AXELATE_DEPS_DIR`, `./.deps`, or `%USERPROFILE%/Axelate-deps`.
+Release packaging uses the same Windows prerequisites and will only pass after `npm run verify` is green.
+
+### Current product scope
+
+Today Axelate is:
+
+- a desktop AI shell with backend-owned state
+- a launcher for local engines and module runtimes
+- a frontend for chat, downloads, settings, monitoring, and console flows
+
+The `Marketplace` page already exists in the shell, but managed distribution, purchases, and entitlements are still roadmap work.
+
+### More docs
+
+- [Getting Started](docs/en/getting-started.md)
+- [Architecture](docs/en/architecture.md)
+- [Roadmap](docs/en/ROADMAP.md)
+- [Automation](docs/en/AUTOMATION.md)
+- [Security Hardening](docs/en/SECURITY_HARDENING.md)
 
 ---
 
@@ -95,16 +148,16 @@ Axelate is built on a "Pass-Through" architecture that gives frontend modules di
 
 <br>
 
-  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
-  &nbsp;
-  <a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
-  &nbsp;
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
+<a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Report_Bug-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Report Bug" /></a>
+&nbsp;
+<a href="https://github.com/F0RLE/Axelate/issues"><img src="https://img.shields.io/badge/Request_Feature-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Request Feature" /></a>
+&nbsp;
+<a href=".github/SECURITY.md"><img src="https://img.shields.io/badge/Security_Policy-31303a?style=for-the-badge&logo=github&logoColor=white" height="30" alt="Security Policy" /></a>
 
 <br>
 <br>
 
-<img src="https://img.shields.io/badge/Made_with_❤️_by_Axelate_Team-31303a?style=flat-square" alt="Made with Love" />
+<img src="https://img.shields.io/badge/Made_with_Axelate-31303a?style=flat-square" alt="Made with Axelate" />
 
 <sub>Copyright © 2026 Axelate. All Rights Reserved.</sub>
 

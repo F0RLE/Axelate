@@ -38,46 +38,59 @@
                                 multiple
                                 class="hidden"
                             />
-                            <button
-                                id="chat-attach-btn"
-                                class="chat-action-btn"
-                                title="Attach"
-                            >
-                                <svg
-                                    class="icon icon-chat"
+                            <div class="chat-input-edge chat-input-edge--left">
+                                <button
+                                    id="chat-attach-btn"
+                                    class="chat-action-btn chat-action-btn--edge"
+                                    title="Attach"
                                 >
-                                    <use href="#icon-plus"></use>
-                                </svg>
-                            </button>
-                            <textarea
-                                id="chat-input"
-                                class="chat-textarea mono"
-                                placeholder="Ask something..."
-                                rows="1"
-                                data-i18n-placeholder="ui.launcher.web.chat_placeholder_ask"
-                            ></textarea>
-                            <button
-                                id="chat-voice-btn"
-                                class="chat-action-btn"
-                                title="Voice"
-                            >
-                                <svg
-                                    class="icon icon-chat"
+                                    <svg
+                                        class="icon icon-chat"
+                                    >
+                                        <use href="#icon-plus"></use>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="chat-input-field">
+                                <textarea
+                                    id="chat-input"
+                                    class="chat-textarea mono"
+                                    placeholder="Ask something..."
+                                    rows="1"
+                                    data-i18n-placeholder="ui.launcher.web.chat_placeholder_ask"
+                                ></textarea>
+                                <div
+                                    id="chat-input-placeholder"
+                                    class="chat-input-placeholder mono"
+                                    data-i18n="ui.launcher.web.chat_placeholder_ask"
                                 >
-                                    <use href="#icon-mic"></use>
-                                </svg>
-                            </button>
-                            <button
-                                id="chat-send-btn"
-                                class="chat-action-btn primary"
-                                title="Send"
-                            >
-                                <svg
-                                    class="icon icon-chat"
+                                    Ask something...
+                                </div>
+                            </div>
+                            <div class="chat-input-edge chat-input-edge--right">
+                                <button
+                                    id="chat-voice-btn"
+                                    class="chat-action-btn chat-action-btn--edge"
+                                    title="Voice"
                                 >
-                                    <use href="#icon-send"></use>
-                                </svg>
-                            </button>
+                                    <svg
+                                        class="icon icon-chat"
+                                    >
+                                        <use href="#icon-mic"></use>
+                                    </svg>
+                                </button>
+                                <button
+                                    id="chat-send-btn"
+                                    class="chat-action-btn chat-action-btn--edge primary"
+                                    title="Send"
+                                >
+                                    <svg
+                                        class="icon icon-chat"
+                                    >
+                                        <use href="#icon-send"></use>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

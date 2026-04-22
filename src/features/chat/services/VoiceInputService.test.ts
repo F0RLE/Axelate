@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { VoiceInputService } from '@/features/chat/services/VoiceInputService';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 interface MockSpeechRecognitionInstance {
     lang: string;
@@ -39,9 +40,14 @@ function makeMockSpeech(): MockSpeechRecognitionInstance {
 
 describe('VoiceInputService', () => {
     let service: VoiceInputService;
+    let tracer: Pick<LoggerService, 'info' | 'error'>;
 
     beforeEach(() => {
-        service = new VoiceInputService();
+        tracer = {
+            info: vi.fn(),
+            error: vi.fn(),
+        };
+        service = new VoiceInputService(tracer);
     });
 
     describe('isSupported', () => {
@@ -61,7 +67,7 @@ describe('VoiceInputService', () => {
                     /* mock stop */
                 }
             };
-            const newService = new VoiceInputService();
+            const newService = new VoiceInputService(tracer);
             expect(newService.isSupported()).toBe(true);
             delete win['webkitSpeechRecognition'];
         });
@@ -95,7 +101,7 @@ describe('VoiceInputService', () => {
         beforeEach(() => {
             (globalThis as unknown as Record<string, unknown>)['webkitSpeechRecognition'] =
                 vi.fn(makeMockSpeech);
-            service = new VoiceInputService();
+            service = new VoiceInputService(tracer);
         });
 
         afterEach(() => {
@@ -108,7 +114,7 @@ describe('VoiceInputService', () => {
             (service as unknown as { _recognition: MockSpeechRecognitionInstance })._recognition;
 
         it('should start recording successfully', () => {
-            const result = service.start(vi.fn(), vi.fn());
+            const result = service.start(vi.fn(), { onStateChange: vi.fn() });
             expect(result).toBe(true);
             expect(service.isActive()).toBe(true);
             expect(recog().start).toHaveBeenCalled();
@@ -122,9 +128,16 @@ describe('VoiceInputService', () => {
 
         it('should fire onstart handler', () => {
             const onState = vi.fn();
-            service.start(vi.fn(), onState);
+            service.start(vi.fn(), { onStateChange: onState });
             recog().onstart?.();
-            expect(onState).toHaveBeenCalledWith(true);
+            expect(onState).toHaveBeenNthCalledWith(1, {
+                state: 'starting',
+                isRecording: true,
+            });
+            expect(onState).toHaveBeenNthCalledWith(2, {
+                state: 'listening',
+                isRecording: true,
+            });
         });
 
         it('should fire onresult handler with final text', () => {
@@ -160,30 +173,44 @@ describe('VoiceInputService', () => {
         });
 
         it('should fire onend handler and stop', () => {
-            service.start(vi.fn());
+            const onState = vi.fn();
+            service.start(vi.fn(), { onStateChange: onState });
             recog().onend?.();
             expect(service.isActive()).toBe(false);
+            expect(onState).toHaveBeenLastCalledWith({
+                state: 'idle',
+                isRecording: false,
+                reason: 'ended',
+            });
         });
 
         it('should fire onerror handler and stop', () => {
-            service.start(vi.fn());
+            const onState = vi.fn();
+            const onError = vi.fn();
+            service.start(vi.fn(), { onStateChange: onState, onError });
             recog().onerror?.({ error: 'network' });
-            expect(service.isActive()).toBe(false);
-        });
-
-        it('should not call stop in onend when already stopped (L94)', () => {
-            service.start(vi.fn());
-            // Manually set _isRecording to false to simulate already-stopped state
-            (service as unknown as { _isRecording: boolean })._isRecording = false;
             recog().onend?.();
-            // Should not throw or change state
+            expect(service.isActive()).toBe(false);
+            expect(onError).toHaveBeenCalledWith({ code: 'network', message: undefined });
+            expect(onState).toHaveBeenLastCalledWith({
+                state: 'idle',
+                isRecording: false,
+                reason: 'error',
+            });
+        });
+
+        it('should handle onend safely after state is already idle', () => {
+            service.start(vi.fn());
+            (service as unknown as { _state: 'idle' })._state = 'idle';
+            recog().onend?.();
             expect(service.isActive()).toBe(false);
         });
 
-        it('should not call stop in onerror when already stopped (L101)', () => {
+        it('should handle onerror safely after state is already idle', () => {
             service.start(vi.fn());
-            (service as unknown as { _isRecording: boolean })._isRecording = false;
+            (service as unknown as { _state: 'idle' })._state = 'idle';
             recog().onerror?.({ error: 'aborted' });
+            recog().onend?.();
             expect(service.isActive()).toBe(false);
         });
 
@@ -199,30 +226,67 @@ describe('VoiceInputService', () => {
                     stop: vi.fn(),
                 }),
             );
-            service = new VoiceInputService();
+            service = new VoiceInputService(tracer);
             const result = service.start(vi.fn());
             expect(result).toBe(false);
         });
 
+        it('should emit startup failure through structured callbacks', () => {
+            const onState = vi.fn();
+            const onError = vi.fn();
+
+            (globalThis as unknown as Record<string, unknown>)['webkitSpeechRecognition'] = class {
+                public lang = '';
+                public continuous = false;
+                public interimResults = false;
+                public onstart = null;
+                public onresult = null;
+                public onend = null;
+                public onerror = null;
+                public start() {
+                    throw new Error('Start fail');
+                }
+                public stop() {
+                    /* no-op */
+                }
+            } as unknown as new () => MockSpeechRecognitionInstance;
+            service = new VoiceInputService(tracer);
+
+            const result = service.start(vi.fn(), { onStateChange: onState, onError });
+
+            expect(result).toBe(false);
+            expect(onState).toHaveBeenNthCalledWith(1, {
+                state: 'starting',
+                isRecording: true,
+            });
+            expect(onState).toHaveBeenNthCalledWith(2, {
+                state: 'idle',
+                isRecording: false,
+                reason: 'startup_failed',
+            });
+            expect(onError).toHaveBeenCalledWith({
+                code: 'startup_failed',
+                message: 'Error: Start fail',
+            });
+        });
+
         it('should set language from currentLang', () => {
-            (globalThis as unknown as Record<string, unknown>)['currentLang'] = 'ru';
+            document.documentElement.lang = 'ru';
             service.start(vi.fn());
             expect(recog().lang).toBe('ru-RU');
-            delete (globalThis as unknown as Record<string, unknown>)['currentLang'];
         });
 
         it('should fallback to raw lang for unknown language (L67)', () => {
-            (globalThis as unknown as Record<string, unknown>)['currentLang'] = 'fr';
+            document.documentElement.lang = 'fr';
             service.start(vi.fn());
             expect(recog().lang).toBe('fr');
-            delete (globalThis as unknown as Record<string, unknown>)['currentLang'];
         });
 
         it('should use SpeechRecognition when webkitSpeechRecognition is absent (L55)', () => {
             delete (globalThis as unknown as Record<string, unknown>)['webkitSpeechRecognition'];
             (globalThis as unknown as Record<string, unknown>)['SpeechRecognition'] =
                 vi.fn(makeMockSpeech);
-            service = new VoiceInputService();
+            service = new VoiceInputService(tracer);
 
             const result = service.start(vi.fn());
             expect(result).toBe(true);
@@ -249,11 +313,22 @@ describe('VoiceInputService', () => {
         });
 
         it('should stop active recognition gracefully', () => {
-            service.start(vi.fn());
+            const onState = vi.fn();
+            service.start(vi.fn(), { onStateChange: onState });
             const r = recog();
             service.stop();
+            r.onend?.();
             expect(r.stop).toHaveBeenCalled();
             expect(service.isActive()).toBe(false);
+            expect(onState).toHaveBeenNthCalledWith(2, {
+                state: 'stopping',
+                isRecording: true,
+            });
+            expect(onState).toHaveBeenLastCalledWith({
+                state: 'idle',
+                isRecording: false,
+                reason: 'user',
+            });
         });
 
         it('should handle recognition.stop() throwing', () => {

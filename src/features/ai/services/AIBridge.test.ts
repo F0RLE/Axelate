@@ -3,6 +3,13 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('@tauri-apps/api/core', () => ({
+    Channel: class<T> {
+        public onmessage: ((message: T) => void) | null = null;
+    },
+    invoke: vi.fn(),
+}));
+
 // Deep mock of Tauri API
 const mockInvoke = vi.fn().mockResolvedValue(null);
 const mockListen = vi.fn().mockResolvedValue(() => {
@@ -24,9 +31,13 @@ const mockCore = {
         invoke: mockInvoke,
         listen: mockListen,
         isTauri: vi.fn().mockReturnValue(true),
-        getSecureKey: vi.fn(async (key: string) => {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-            return await mockInvoke('get_secure_key', { service: key });
+        hasSecureKey: vi.fn(async (key: string): Promise<boolean> => {
+            const value: unknown = await mockInvoke('has_secure_key', { service: key });
+            return value === true;
+        }),
+        getSecureKey: vi.fn(async (key: string): Promise<string | null> => {
+            const value: unknown = await mockInvoke('get_secure_key', { service: key });
+            return typeof value === 'string' ? value : null;
         }),
         saveSecureKey: vi.fn(async (key: string, val: string) => {
             await mockInvoke('save_secure_key', { service: key, key: val });
@@ -35,13 +46,28 @@ const mockCore = {
     aiSettings: {
         setAiSessionId: vi.fn(),
         setSelectedAIModel: vi.fn(),
-        setLastActiveProvider: vi.fn(),
         getSelectedAIModel: vi.fn(),
-        getLastActiveProvider: vi.fn(),
         getThinkingLevel: vi.fn().mockReturnValue('high'),
+        getInternetAccessEnabled: vi.fn().mockReturnValue(true),
+        getLocalMaxOutputTokens: vi.fn().mockReturnValue(384),
     },
     chatController: {
         randomizeGreeting: vi.fn(),
+    },
+    i18n: {
+        t: vi.fn((_: string, fallback: string = ''): string => fallback),
+    },
+    appUI: {
+        showToast: vi.fn(),
+    },
+    windowService: {
+        close: vi.fn().mockResolvedValue(undefined),
+    },
+    settingsService: {
+        getSettings: vi.fn().mockReturnValue({}),
+    },
+    stateStore: {
+        getSelectedModule: vi.fn().mockReturnValue(undefined),
     },
     state: {
         get: vi.fn((key: string) => {
@@ -52,8 +78,6 @@ const mockCore = {
     },
 };
 
-// Mock showToast
-vi.stubGlobal('showToast', vi.fn());
 vi.stubGlobal('tracer', {
     info: vi.fn(),
     warn: vi.fn(),
@@ -63,14 +87,64 @@ vi.stubGlobal('tracer', {
 
 import { AIBridge } from '@/features/ai/services/AIBridge';
 
+const mockTracer = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+};
+
+function mockStoredApiKey(value: string = 'sk-test-key'): void {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+        await Promise.resolve();
+        if (cmd === 'has_secure_key') return true;
+        if (cmd === 'get_secure_key') return value;
+        return null;
+    });
+}
+
+function mockBackendChatResponse(result: unknown): void {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+        await Promise.resolve();
+        if (cmd === 'has_secure_key') return true;
+        if (cmd === 'get_secure_key') return 'sk-test-key';
+        if (cmd === 'send_chat_message') return result;
+        return null;
+    });
+}
+
 describe('AIBridge', () => {
     let aiBridge: AIBridge;
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        mockInvoke.mockReset();
+        mockInvoke.mockResolvedValue(null);
+        mockListen.mockReset();
+        mockListen.mockResolvedValue(() => {
+            /* no-op */
+        });
+        mockEmit.mockReset();
+        mockCore.tauriProvider.isTauri.mockReset();
+        mockCore.tauriProvider.isTauri.mockReturnValue(true);
+        mockCore.aiSettings.getSelectedAIModel.mockReset();
+        mockCore.aiSettings.getSelectedAIModel.mockReturnValue(undefined);
+        mockCore.aiSettings.getThinkingLevel.mockReset();
+        mockCore.aiSettings.getThinkingLevel.mockReturnValue('high');
+        mockCore.aiSettings.getInternetAccessEnabled.mockReset();
+        mockCore.aiSettings.getInternetAccessEnabled.mockReturnValue(true);
+        mockCore.aiSettings.getLocalMaxOutputTokens.mockReset();
+        mockCore.aiSettings.getLocalMaxOutputTokens.mockReturnValue(384);
+        mockCore.i18n.t.mockClear();
+        mockCore.appUI.showToast.mockClear();
+        mockCore.windowService.close.mockClear();
+        mockCore.settingsService.getSettings.mockClear();
+        mockCore.settingsService.getSettings.mockReturnValue({});
+        mockCore.stateStore.getSelectedModule.mockClear();
+        mockCore.stateStore.getSelectedModule.mockReturnValue(undefined);
         (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
         localStorage.clear();
-        aiBridge = new AIBridge();
+        aiBridge = new AIBridge(mockTracer);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
         aiBridge.setCore(mockCore as any);
 
@@ -85,11 +159,6 @@ describe('AIBridge', () => {
 
     // ---------------------------------------------------------- constructor
     describe('constructor', () => {
-        it('should register itself on globalThis', () => {
-            const win = globalThis as unknown as Record<string, unknown>;
-            expect(win['aiBridge']).toBeDefined();
-        });
-
         it('should start with no active provider', () => {
             expect(aiBridge.isActive()).toBe(false);
         });
@@ -101,13 +170,38 @@ describe('AIBridge', () => {
 
     // ---------------------------------------------------------- init
     describe('init', () => {
+        it('should abort initialization when core dependency is missing', async () => {
+            const bridge2 = new AIBridge(mockTracer);
+
+            await bridge2.init();
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((bridge2 as any)._initialized).toBe(false);
+        });
+
         it('should be callable without errors', async () => {
             // Already initialized in beforeEach, second call should be no-op
             await expect(aiBridge.init()).resolves.not.toThrow();
         });
 
+        it('should clean up transport state when initialization fails', async () => {
+            const bridge2 = new AIBridge(mockTracer);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            bridge2.setCore(mockCore as any);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const transportDestroySpy = vi.spyOn((bridge2 as any)._transport, 'destroy');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            vi.spyOn((bridge2 as any)._transport, 'init').mockRejectedValue(new Error('boom'));
+
+            await bridge2.init();
+
+            expect(transportDestroySpy).toHaveBeenCalled();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((bridge2 as any)._initialized).toBe(false);
+        });
+
         it('should broadcast chunks and thoughts via transport callbacks', async () => {
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
@@ -157,8 +251,8 @@ describe('AIBridge', () => {
         it('should activate provider with valid API key', async () => {
             mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
                 await Promise.resolve();
-                if (cmd === 'get_secure_key' && args?.['service'] === 'openrouter_api_key')
-                    return 'sk-test-key-12345';
+                if (cmd === 'has_secure_key' && args?.['service'] === 'openrouter_api_key')
+                    return true;
                 return null;
             });
 
@@ -179,7 +273,7 @@ describe('AIBridge', () => {
         });
 
         it('should stop previous provider when starting new one', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
 
             await aiBridge.startProvider('gemini');
             await aiBridge.startProvider('gpt');
@@ -202,14 +296,14 @@ describe('AIBridge', () => {
 
             await aiBridge.startProvider('gemini');
 
-            expect(globalThis.showToast).toHaveBeenCalled();
+            expect(mockCore.appUI.showToast).toHaveBeenCalled();
         });
     });
 
     // ---------------------------------------------------------- stopProvider
     describe('stopProvider', () => {
         it('should deactivate the provider', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             aiBridge.stopProvider();
@@ -219,7 +313,7 @@ describe('AIBridge', () => {
         });
 
         it('should clear state on stop', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             aiBridge.stopProvider();
@@ -228,17 +322,37 @@ describe('AIBridge', () => {
             expect(state.activeProviderId).toBeNull();
         });
 
-        it('should clear all listeners on stop', async () => {
+        it('should preserve UI listeners on stop so a later provider restart can reuse them', async () => {
             const handler = vi.fn();
             aiBridge.onMessage('test', handler);
             aiBridge.onChunk('test', handler);
             aiBridge.onThought('test', handler);
 
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
             aiBridge.stopProvider();
 
-            // Listeners should be cleared — no way to assert directly but no errors
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastResponse('after-stop', 'chat');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastChunk('after-stop-chunk');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._broadcastThought('after-stop-thought');
+
+            expect(handler).toHaveBeenCalledWith('after-stop', 'chat');
+            expect(handler).toHaveBeenCalledWith('after-stop-chunk');
+            expect(handler).toHaveBeenCalledWith('after-stop-thought');
+        });
+    });
+
+    describe('destroy', () => {
+        it('should destroy transport regardless of concrete implementation checks', () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const transportDestroySpy = vi.spyOn((aiBridge as any)._transport, 'destroy');
+
+            aiBridge.destroy();
+
+            expect(transportDestroySpy).toHaveBeenCalled();
         });
     });
 
@@ -253,6 +367,7 @@ describe('AIBridge', () => {
         it('should invoke backend when provider is active', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message')
                     return { ok: true, reply: { text: 'Hello back!' } };
@@ -262,13 +377,14 @@ describe('AIBridge', () => {
             await aiBridge.startProvider('gemini');
             await aiBridge.sendMessage('Hello');
 
-            expect(mockInvoke).toHaveBeenCalledWith(
-                'send_chat_message',
-                expect.objectContaining({
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                    request: expect.any(Object),
-                }),
+            const sendChatCall = mockInvoke.mock.calls.find(
+                ([command]) => command === 'send_chat_message',
             );
+            const payload = sendChatCall?.[1] as
+                | { request?: { web_search?: { enabled?: boolean } } }
+                | undefined;
+
+            expect(payload?.request?.web_search).toEqual({ enabled: true });
         });
 
         it('should return error for missing API key after refresh', async () => {
@@ -276,9 +392,9 @@ describe('AIBridge', () => {
             // First call (startProvider) returns a key; subsequent calls (sendMessage refresh) return null
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
-                if (cmd === 'get_secure_key') {
+                if (cmd === 'has_secure_key') {
                     callCount++;
-                    return callCount === 1 ? 'sk-test-key' : null;
+                    return callCount === 1;
                 }
                 return null;
             });
@@ -292,6 +408,7 @@ describe('AIBridge', () => {
         it('should handle transport error', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') throw new Error('Transport broke');
                 return null;
@@ -310,6 +427,7 @@ describe('AIBridge', () => {
 
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message')
                     return { ok: true, reply: { text: 'result text' } };
@@ -323,12 +441,7 @@ describe('AIBridge', () => {
         });
 
         it('should handle backend error response without broadcasting', async () => {
-            mockInvoke.mockImplementation(async (cmd: string) => {
-                await Promise.resolve();
-                if (cmd === 'get_secure_key') return 'sk-test-key';
-                if (cmd === 'send_chat_message') return { ok: false, error: 'Rate limited' };
-                return null;
-            });
+            mockBackendChatResponse({ ok: false, error: 'Rate limited' });
 
             await aiBridge.startProvider('gemini');
             const result = await aiBridge.sendMessage('Hello');
@@ -340,6 +453,7 @@ describe('AIBridge', () => {
         it('should send with custom source parameter', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') return { ok: true, reply: { text: 'result' } };
                 return null;
@@ -354,6 +468,7 @@ describe('AIBridge', () => {
         it('should handle non-Error throw from pipeline', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'sk-test-key';
                 if (cmd === 'send_chat_message') {
                     throw new Error('string-error'); // non-Error throw path: Error wraps the string
@@ -536,7 +651,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- getState
     describe('getState', () => {
         it('should return current bridge state', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             const state = aiBridge.getState();
@@ -558,7 +673,7 @@ describe('AIBridge', () => {
         });
 
         it('should return true when provider is active', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             expect(aiBridge.isActive()).toBe(true);
@@ -568,7 +683,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- getActiveProvider
     describe('getActiveProvider', () => {
         it('should return provider details when active', async () => {
-            mockInvoke.mockResolvedValue('sk-test-key');
+            mockStoredApiKey();
             await aiBridge.startProvider('gemini');
 
             const provider = aiBridge.getActiveProvider();
@@ -610,38 +725,34 @@ describe('AIBridge', () => {
 
     // ---------------------------------------------------------- _showToast
     describe('_showToast / _showErrorToast / _showInfoToast', () => {
-        it('should call globalThis.showToast if available', () => {
+        it('should call appUI.showToast', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (aiBridge as any)._showToast('Test message', 'info');
-            expect(globalThis.showToast).toHaveBeenCalledWith('Test message', 'info');
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith('Test message', 'info');
         });
 
-        it('should handle missing showToast gracefully', () => {
-            const original = globalThis.showToast;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (globalThis as any).showToast = undefined;
-
+        it('should handle missing core gracefully', () => {
+            const bridge2 = new AIBridge(mockTracer);
             const callToast = (): void => {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (
-                    aiBridge as unknown as { _showToast: (msg: string, type: string) => void }
+                    bridge2 as unknown as { _showToast: (msg: string, type: string) => void }
                 )._showToast('msg', 'error');
             };
             expect(callToast).not.toThrow();
-
-            globalThis.showToast = original;
         });
 
         it('should call _showErrorToast with translated message', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (aiBridge as any)._showErrorToast('key', 'fallback');
-            expect(globalThis.showToast).toHaveBeenCalledWith(expect.any(String), 'error');
+            expect(mockCore.i18n.t).toHaveBeenCalledWith('key', 'fallback');
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith(expect.any(String), 'error');
         });
 
         it('should call _showInfoToast with translated message', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (aiBridge as any)._showInfoToast('key', 'fallback');
-            expect(globalThis.showToast).toHaveBeenCalledWith(expect.any(String), 'info');
+            expect(mockCore.i18n.t).toHaveBeenCalledWith('key', 'fallback');
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith(expect.any(String), 'info');
         });
     });
 
@@ -650,7 +761,7 @@ describe('AIBridge', () => {
         it('should log web mode active when not in Tauri', async () => {
             mockCore.tauriProvider.isTauri.mockReturnValue(false);
 
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
@@ -662,7 +773,7 @@ describe('AIBridge', () => {
 
         it('should handle IPC initialization failure gracefully (line 86)', async () => {
             // Make onStream throw to trigger the catch block
-            const bridge2 = new AIBridge();
+            const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -681,6 +792,7 @@ describe('AIBridge', () => {
             // Simulate: manager.apiKey is NOT null but startProvider returned false
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
                 if (cmd === 'get_secure_key') return 'existing-key';
                 return false; // startProvider will call this + manager will throw
             });
@@ -693,7 +805,7 @@ describe('AIBridge', () => {
 
             await aiBridge.startProvider('gemini');
 
-            expect(globalThis.showToast).toHaveBeenCalledWith(
+            expect(mockCore.appUI.showToast).toHaveBeenCalledWith(
                 'Provider activation failed',
                 'error',
             );
@@ -733,7 +845,7 @@ describe('AIBridge', () => {
     describe('sendMessage missing API key path', () => {
         it('should return missing-key error when apiKey is null and provider is non-local', async () => {
             // Activate a provider so activeProviderId !== null
-            mockInvoke.mockResolvedValue('sk-key');
+            mockStoredApiKey('sk-key');
             await aiBridge.startProvider('gemini');
 
             type ManagerWithApiKey = {
@@ -758,7 +870,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- sendMessage catch block (lines 189-191)
     describe('sendMessage pipeline catch block', () => {
         it('should return ok:false error when transport.send throws', async () => {
-            mockInvoke.mockResolvedValue('sk-key');
+            mockStoredApiKey('sk-key');
             await aiBridge.startProvider('gemini');
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -773,7 +885,7 @@ describe('AIBridge', () => {
         });
 
         it('should return generic error message for non-Error throws', async () => {
-            mockInvoke.mockResolvedValue('sk-key');
+            mockStoredApiKey('sk-key');
             await aiBridge.startProvider('gemini');
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -789,7 +901,7 @@ describe('AIBridge', () => {
     // ---------------------------------------------------------- additional branch coverage
     describe('Additional branch coverage', () => {
         it('should handle setCore when _transport is not AIChatTransport (Line 39)', () => {
-            const tempBridge = new AIBridge();
+            const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (tempBridge as any)._transport = { setCore: vi.fn() };
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
@@ -802,7 +914,7 @@ describe('AIBridge', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (import.meta.env as any).DEV = false;
 
-            const tempBridge = new AIBridge();
+            const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             tempBridge.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session');
@@ -818,7 +930,7 @@ describe('AIBridge', () => {
         });
 
         it('should handle sendMessage when _core is null (Line 175)', async () => {
-            const tempBridge = new AIBridge();
+            const tempBridge = new AIBridge(mockTracer);
             // Do NOT call setCore here to leave _core as null
 
             // Bypass API key checks logic just to test the core check
@@ -830,10 +942,6 @@ describe('AIBridge', () => {
             Object.defineProperty((tempBridge as any)._manager, 'apiKey', {
                 get: () => 'test-key',
             });
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            vi.spyOn((tempBridge as any)._manager, 'resolveActiveApiKey').mockResolvedValue(
-                'test-key',
-            );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((tempBridge as any)._manager, 'isActive').mockReturnValue(true);
 
@@ -848,18 +956,19 @@ describe('AIBridge', () => {
         });
 
         it('should handle an empty error string in backend mismatch logic (Line 218)', async () => {
-            mockInvoke.mockImplementation(async (cmd: string) => {
-                await Promise.resolve();
-                if (cmd === 'get_secure_key') return 'sk-test-key';
-                if (cmd === 'send_chat_message') return { ok: false, error: '' }; // Empty error
-                return null;
-            });
+            mockBackendChatResponse({ ok: false, error: '' });
 
             await aiBridge.startProvider('gemini');
             const result = await aiBridge.sendMessage('Hello');
 
             expect(result.ok).toBe(false);
-            expect(globalThis.tracer.error).not.toHaveBeenCalledWith(expect.anything(), '');
+            expect(
+                (
+                    globalThis as unknown as {
+                        tracer: { error: ReturnType<typeof vi.fn> };
+                    }
+                ).tracer.error,
+            ).not.toHaveBeenCalledWith(expect.anything(), '');
         });
 
         it('should handle repeating listener registrations (Lines 237-248)', () => {
@@ -874,6 +983,43 @@ describe('AIBridge', () => {
             expect((aiBridge as any)._chunkListeners.get('repeat')?.length).toBe(2);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             expect((aiBridge as any)._thoughtListeners.get('repeat')?.length).toBe(2);
+        });
+
+        it('should forward full local history and let backend handle context compaction', async () => {
+            const history: Array<{ role: 'user' | 'assistant'; content: string }> = [
+                { role: 'user', content: 'minus one' },
+                { role: 'assistant', content: 'reply minus one' },
+                { role: 'user', content: 'zero' },
+                { role: 'assistant', content: 'reply zero' },
+                { role: 'user', content: 'one' },
+                { role: 'assistant', content: 'reply one' },
+                { role: 'user', content: 'two' },
+                { role: 'assistant', content: 'reply two' },
+            ];
+            mockInvoke.mockImplementation(async (cmd: string) => {
+                await Promise.resolve();
+                if (cmd === 'start_engine') {
+                    return { id: 'llamacpp', endpoint: 'http://127.0.0.1:8081' };
+                }
+                if (cmd === 'send_chat_message') {
+                    return { ok: true, reply: { text: 'ok' } };
+                }
+                return null;
+            });
+
+            await aiBridge.startProvider('llamacpp');
+            await aiBridge.sendMessage('latest question', 'chat', [], history);
+
+            const requestMatcher = expect.objectContaining({
+                messages: [...history, { role: 'user', content: 'latest question' }],
+            }) as unknown;
+
+            expect(mockInvoke).toHaveBeenCalledWith(
+                'send_chat_message',
+                expect.objectContaining({
+                    request: requestMatcher,
+                }),
+            );
         });
     });
 });

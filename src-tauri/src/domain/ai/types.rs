@@ -34,6 +34,32 @@ pub struct TokenUsage {
     pub total_tokens: u32,
 }
 
+/// Optional web search configuration for provider-backed chat requests.
+#[derive(Debug, Serialize, Deserialize, Clone, Type, Default)]
+pub struct WebSearchOptions {
+    /// Enables provider-side web search.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Search engine preference (`auto`, `native`, `exa`, ...).
+    #[serde(default)]
+    pub engine: Option<String>,
+    /// Maximum results per search call.
+    #[serde(default)]
+    pub max_results: Option<u32>,
+    /// Maximum results across all search calls in one request.
+    #[serde(default)]
+    pub max_total_results: Option<u32>,
+    /// Search context size (`low`, `medium`, `high`).
+    #[serde(default)]
+    pub search_context_size: Option<String>,
+    /// Optional allow-list of domains.
+    #[serde(default)]
+    pub allowed_domains: Vec<String>,
+    /// Optional deny-list of domains.
+    #[serde(default)]
+    pub excluded_domains: Vec<String>,
+}
+
 /// AI chat request parameters
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
 pub struct ChatRequest {
@@ -49,8 +75,13 @@ pub struct ChatRequest {
     pub thinking_level: Option<String>,
     /// Optional max output tokens
     pub max_tokens: Option<u32>,
+    /// Client-generated request identifier for stream isolation
+    pub request_id: Option<String>,
     /// Session identifier for history tracking
     pub session_id: Option<String>,
+    /// Optional web search controls for cloud/API providers
+    #[serde(default)]
+    pub web_search: Option<WebSearchOptions>,
 }
 
 /// AI chat response
@@ -87,6 +118,12 @@ pub struct ChatReply {
 pub struct ChatSession {
     /// Message history
     pub history: Vec<ChatMessage>,
+    /// Persisted recap of older turns used to keep long chats within local context limits
+    #[serde(default)]
+    pub summary: Option<String>,
+    /// Number of leading messages already folded into the persisted recap
+    #[serde(default)]
+    pub summary_message_count: u32,
     /// Last modification time (Unix timestamp)
     pub last_updated: f64,
 }
@@ -102,6 +139,8 @@ pub struct ImageGenerationRequest {
     pub original_prompt: Option<String>,
     /// Model identifier
     pub model: String,
+    /// Optional settings namespace key when UI-selected module differs from provider id
+    pub settings_key: Option<String>,
     /// Session identifier for history tracking
     pub session_id: Option<String>,
     /// Number of inference steps

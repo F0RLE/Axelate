@@ -52,6 +52,12 @@ export interface IEventBusEvents {
     // System
     /** Emitted with system monitor updates (polling). */
     'system:stats:update': unknown;
+    /** Emitted when launcher internet connectivity changes. */
+    'connectivity:change': {
+        internetReachable: boolean;
+        checkedAt: number;
+        source: 'init' | 'poll' | 'online-event' | 'offline-event';
+    };
 
     // App Selection
     /** Emitted when the app selection modal is opened for a category. */
@@ -189,8 +195,3 @@ export class EventBus {
         );
     }
 }
-
-/**
- * Global singleton instance of the EventBus.
- */
-export const eventBus = new EventBus();

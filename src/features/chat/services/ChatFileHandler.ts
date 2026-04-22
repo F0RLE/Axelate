@@ -4,26 +4,28 @@
  *
  * @example
  * ```typescript
- * import { chatFileHandler } from './ChatFileHandler';
+ * import { ChatFileHandler } from './ChatFileHandler';
  *
- * chatFileHandler.addFiles(fileList);
- * const { attachments, combinedText } = await chatFileHandler.processForSend('Base prompt');
+ * const fileHandler = new ChatFileHandler();
+ * fileHandler.addFiles(fileList);
+ * const { attachments, combinedText } = await fileHandler.processForSend('Base prompt');
  * ```
  */
 
 import type { IChatAttachment } from '../types/chatTypes';
 import type { IBridge } from '@/shared/types/IBridge';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import {
     estimateTokenCount,
-    getTokenCount,
     isTextFile,
     readFileAsBase64,
     readFileAsText,
 } from '../utils/chatUtils';
-import { tracer } from '@/infrastructure/logging/LoggerService';
 // ============================================================================
 // Types
 // ============================================================================
+
+type ChatFileHandlerLogger = Pick<LoggerService, 'warn' | 'error'>;
 
 interface IFileProcessResult {
     content?: string;
@@ -46,14 +48,19 @@ export class ChatFileHandler {
     private _onUpdate: AttachmentUpdateCallback | null = null;
     private _initialized = false;
     private _bridge: IBridge | null = null;
+    private _estimateTokens: (text: string, model?: string) => Promise<number> = (text) =>
+        Promise.resolve(estimateTokenCount(text));
 
-    constructor() {
-        // Registration on globalThis for access from HTML/legacy code (Section 16.3)
-        (globalThis as unknown as Record<string, unknown>)['chatFileHandler'] = this;
-    }
+    constructor(private readonly _tracer: ChatFileHandlerLogger) {}
 
     public setBridge(bridge: IBridge): void {
         this._bridge = bridge;
+    }
+
+    public setTokenEstimator(
+        estimateTokens: (text: string, model?: string) => Promise<number>,
+    ): void {
+        this._estimateTokens = estimateTokens;
     }
 
     /**
@@ -62,7 +69,7 @@ export class ChatFileHandler {
      */
     public init(): void {
         if (this._initialized) {
-            tracer.warn('[ChatFileHandler] Already initialized');
+            this._tracer.warn('[ChatFileHandler] Already initialized');
             return;
         }
 
@@ -76,6 +83,10 @@ export class ChatFileHandler {
         this._onUpdate = callback;
     }
 
+    public clearUpdateCallback(): void {
+        this._onUpdate = null;
+    }
+
     /**
      * Add files to the attachment list
      *
@@ -83,8 +94,20 @@ export class ChatFileHandler {
      * @sideeffect Updates internal state and triggers UI updates if listeners are present
      */
     public addFiles(newFiles: FileList | File[]): void {
-        const filesArray = Array.from(newFiles);
-        this._files.push(...filesArray);
+        const filesArray = Array.from(newFiles).filter((file) => file.name !== '');
+        if (filesArray.length === 0) return;
+
+        const existingKeys = new Set(this._files.map((file) => this._getFileKey(file)));
+        const uniqueFiles = filesArray.filter((file) => {
+            const key = this._getFileKey(file);
+            if (existingKeys.has(key)) return false;
+            existingKeys.add(key);
+            return true;
+        });
+
+        if (uniqueFiles.length === 0) return;
+
+        this._files.push(...uniqueFiles);
         this._notifyUpdate();
     }
 
@@ -180,6 +203,7 @@ export class ChatFileHandler {
                 content: string;
                 is_archive: boolean;
                 error?: string;
+                token_estimate?: number;
             }>('process_file_content', {
                 name: file.name,
                 data: bytes,
@@ -197,7 +221,7 @@ export class ChatFileHandler {
                         type: file.type || (result.is_archive ? 'application/zip' : 'text/plain'),
                         size: file.size,
                         data_base64: '',
-                        tokens: 0,
+                        tokens: result.token_estimate ?? 0,
                     },
                 };
             }
@@ -218,7 +242,7 @@ export class ChatFileHandler {
 
             return { content: '' };
         } catch (e) {
-            tracer.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
+            this._tracer.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
             return { error: `\n[Error processing ${file.name}]` };
         }
     }
@@ -261,11 +285,9 @@ export class ChatFileHandler {
     // Removed private ZIP methods (_processZipFile, _extractZipEntries, _validateZipEntry, etc.)
 
     public async getTotalTokenEstimate(baseText: string): Promise<number> {
-        // Simple approximation logic
-        let total = await getTokenCount(baseText);
+        let total = await this._estimateTokens(baseText);
         for (const file of this._files) {
-            if (file.type.startsWith('image/')) total += 258;
-            // For text files, we rely on backend processing usually.
+            total += await this.getFileTokenEstimate(file);
         }
         return total;
     }
@@ -287,10 +309,26 @@ export class ChatFileHandler {
 
     public async getFileTokenEstimate(file: File): Promise<number> {
         if (file.type.startsWith('image/')) return 258;
+        if (this._bridge?.isTauri() === true) {
+            try {
+                const buffer = await file.arrayBuffer();
+                const bytes = Array.from(new Uint8Array(buffer));
+                const result = await this._bridge.invoke<{ token_estimate?: number }>(
+                    'process_file_content',
+                    {
+                        name: file.name,
+                        data: bytes,
+                    },
+                );
+                return result.token_estimate ?? 0;
+            } catch {
+                return 0;
+            }
+        }
         if (isTextFile(file)) {
             try {
                 const t = await readFileAsText(file);
-                return await getTokenCount(t);
+                return await this._estimateTokens(t);
             } catch {
                 return 0;
             }
@@ -306,7 +344,8 @@ export class ChatFileHandler {
             this._onUpdate(this._files, this.removeFile.bind(this));
         }
     }
-}
 
-// Export singleton
-export const chatFileHandler = new ChatFileHandler();
+    private _getFileKey(file: File): string {
+        return `${file.name}:${file.size}:${file.type}:${file.lastModified}`;
+    }
+}
