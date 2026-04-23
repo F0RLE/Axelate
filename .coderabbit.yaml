@@ -4,4 +4,4 @@ reviews:
     enabled: true
     drafts: true
     base_branches:
-      - "alpha"
+      - "nightly"
