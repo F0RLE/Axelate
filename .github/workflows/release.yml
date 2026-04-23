@@ -25,6 +25,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          toolchain: 1.94.1
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
@@ -61,22 +63,10 @@ jobs:
           prerelease: false
 
       - name: Generate release checksums
-        shell: powershell
-        run: |
-          . .\.github\scripts\common.ps1
-          $bundleDir = Join-Path $TAURI_DIR "target\release\bundle"
-          $checksumPath = Write-ReleaseChecksums -BundleDir $bundleDir
-          if (-not $checksumPath) {
-            throw "No release artifacts found for checksum generation."
-          }
-
-          Write-Host "Checksums saved: $checksumPath"
+        run: node .github/scripts/workflow.mjs release:checksums
 
       - name: Verify release hardening
-        shell: powershell
-        run: |
-          . .\.github\scripts\common.ps1
-          Invoke-ReleaseSecurityVerification
+        run: node .github/scripts/workflow.mjs release:verify-hardening
 
       - name: Upload release checksums
         uses: actions/upload-artifact@v4

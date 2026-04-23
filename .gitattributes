@@ -1,27 +1,9 @@
-# Axelate - .gitattributes
-
-# Force LF for all text files (KISS + consistent builds)
 * text=auto eol=lf
 
-# Explicit text files
-*.ts    text eol=lf
-*.rs    text eol=lf
-*.toml  text eol=lf
-*.json  text eol=lf
-*.css   text eol=lf
-*.html  text eol=lf
-*.md    text eol=lf
-*.js    text eol=lf
-*.ps1   text eol=lf
-*.svg   text eol=lf
-
-# Binary files
 *.png   binary
 *.ico   binary
 *.woff2 binary
 *.exe   binary
 *.dll   binary
 
-# Linguist (GitHub) classification
 docs/**       linguist-documentation
-src/assets/** linguist-vendored

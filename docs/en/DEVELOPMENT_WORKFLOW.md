@@ -17,6 +17,12 @@ The repository currently splits responsibilities this way:
 - `src-tauri/`: Rust backend, domain logic, secure state, and build pipeline
 - `docs/en/`: current docs plus separate planning docs
 
+Rust toolchain policy:
+
+- use `rustup`
+- follow the version pinned in `rust-toolchain.toml`
+- keep `Cargo.toml`, `rust-toolchain.toml`, and CI on the same tested Rust version
+
 ## First-Day Setup
 
 From the repository root:

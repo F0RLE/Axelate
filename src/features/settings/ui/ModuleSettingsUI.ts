@@ -69,12 +69,10 @@ export class ModuleSettingsUI {
     };
     private _isInitialized = false;
     private _isDestroyed = false;
-    private _activeOpenRequest:
-        | {
-              appId: string;
-              promise: Promise<void>;
-          }
-        | null = null;
+    private _activeOpenRequest: {
+        appId: string;
+        promise: Promise<void>;
+    } | null = null;
 
     constructor(
         private readonly _service: SettingsService,

@@ -36,7 +36,6 @@ jobs:
       - name: Check Formatting
         run: |
           cd src
-          npm run format
           npm run format:check
 
       - name: Type Check & Build
@@ -70,6 +69,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
+          toolchain: 1.94.1
           components: clippy, llvm-tools-preview
 
       - name: Rust Cache
@@ -86,20 +86,18 @@ jobs:
       - name: Clippy (Strict Linting)
         run: |
           cd src-tauri
-          cargo clippy -- -D warnings
+          cargo clippy --all-targets --all-features -- -D warnings
         # Fails if there are any warnings
 
-      - name: Check App Binary
+      - name: Check Backend Targets
         run: |
           cd src-tauri
-          cargo check --bins --verbose
+          cargo check --all-targets --all-features --verbose
 
-      - name: Compile Library Tests
+      - name: Run Backend Tests
         run: |
           cd src-tauri
-          cargo test --lib --verbose --no-run
-        # Compile library tests only. Tauri app/bin test harnesses pull in extra
-        # Windows runtime pieces and are noisy on hosted runners.
+          cargo test --all-targets --all-features --verbose
 
       - name: Security Audit (Rust)
         run: |
@@ -114,7 +112,7 @@ jobs:
       - name: Generate Rust Coverage Report
         run: |
           cd src-tauri
-          cargo llvm-cov --workspace --lcov --output-path lcov.info
+          cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 
       - name: Upload Rust Coverage Artifact
         uses: actions/upload-artifact@v4
