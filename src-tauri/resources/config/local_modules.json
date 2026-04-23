@@ -1,0 +1,98 @@
+[
+  {
+    "id": "llamacpp",
+    "nameKey": "ui.launcher.engine.llamacpp.name",
+    "descKey": "ui.launcher.engine.llamacpp.desc",
+    "name": "llama.cpp",
+    "desc": "Universal LLM engine. CUDA, Vulkan, CPU.",
+    "icon": "🦙",
+    "type": "local",
+    "dlType": "release",
+    "capabilities": ["text"],
+    "binary": "llama-server",
+    "repoUrl": "https://github.com/ggml-org/llama.cpp",
+    "version": "1.0.0",
+    "configSchema": {
+      "port": {
+        "type": "number",
+        "label": "Port",
+        "default": 8081
+      },
+      "gpuLayers": {
+        "type": "number",
+        "label": "GPU Layers (-1 = all)",
+        "default": -1
+      },
+      "contextSize": {
+        "type": "number",
+        "label": "Context Window",
+        "default": 4096
+      }
+    }
+  },
+  {
+    "id": "sdcpp",
+    "nameKey": "ui.launcher.engine.sdcpp.name",
+    "descKey": "ui.launcher.engine.sdcpp.desc",
+    "name": "Stable Diffusion.cpp",
+    "desc": "Lightweight image generation engine.",
+    "icon": "🎨",
+    "type": "local",
+    "dlType": "release",
+    "capabilities": ["image"],
+    "binary": "sd-server",
+    "repoUrl": "https://github.com/leejet/stable-diffusion.cpp",
+    "version": "1.0.0",
+    "configSchema": {
+      "port": {
+        "type": "number",
+        "label": "Port",
+        "default": 8082
+      },
+      "positivePrompt": {
+        "type": "text",
+        "label": "Base Positive Prompt",
+        "default": "masterpiece, best quality, highly detailed"
+      },
+      "negativePrompt": {
+        "type": "text",
+        "label": "Negative Prompt",
+        "default": "(worst quality:1.2), (low quality:1.2), lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry"
+      }
+    }
+  },
+  {
+    "id": "axelate-telegram-bot",
+    "nameKey": "ui.launcher.app.axelate_telegram.name",
+    "descKey": "ui.launcher.app.axelate_telegram.desc",
+    "name": "Telegram Bot",
+    "desc": "LLM rewriting, image gen, channel posting.",
+    "icon": "🤖",
+    "type": "script",
+    "dlType": "git",
+    "repoUrl": "https://github.com/F0RLE/Axelate-tg-bot-module",
+    "expectedHash": "",
+    "version": "1.0.0"
+  },
+  {
+    "id": "comfyui",
+    "nameKey": "ui.launcher.engine.comfyui.name",
+    "descKey": "ui.launcher.engine.comfyui.desc",
+    "name": "ComfyUI",
+    "desc": "Node-based image workflow engine for maximum quality and control.",
+    "icon": "🧩",
+    "type": "local",
+    "dlType": "release",
+    "comingSoon": true,
+    "capabilities": ["image"],
+    "repoUrl": "https://github.com/Comfy-Org/ComfyUI",
+    "configSchema": {
+      "port": {
+        "type": "number",
+        "label": "Port",
+        "default": 8188
+      }
+    },
+    "version": "1.0.0"
+  }
+]

@@ -1,0 +1,765 @@
+﻿#sidebar {
+    width: var(--sidebar-width, 280px);
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* Managed by auto-margins for better control */
+    background: rgba(var(--background-raw), 0.065);
+    font-family: var(--app-font-family); /* Global brand font restorated */
+    /* Improved border rendering to avoid subpixel gaps */
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
+    border-right: none;
+    padding: 1rem 0.9rem 0.4rem 0.9rem;
+    flex-shrink: 0;
+    min-width: 80px;
+    max-width: 500px;
+    user-select: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-app-region: no-drag;
+    z-index: auto;
+    box-sizing: border-box;
+}
+
+/* ... */
+
+.logo-area {
+    display: grid;
+    place-items: center;
+    margin-top: 0; /* Resetting negative margin */
+    margin-bottom: 0.05rem;
+    text-align: center;
+    -webkit-app-region: no-drag;
+    cursor: pointer;
+    border-radius: 12px;
+    position: relative;
+    background: transparent;
+    border: none;
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+    transition:
+        background 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.logo-icon-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+    width: 100%;
+    cursor: pointer;
+    grid-area: 1 / 1; /* Overlay */
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+        opacity 0.2s ease,
+        visibility 0.2s;
+}
+
+.status-under-icon {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-top: 0.35rem;
+    margin-left: 0;
+    -webkit-app-region: no-drag;
+}
+
+.status-under-icon .status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: var(--success);
+    box-shadow: 0 0 4px rgba(96, 215, 120, 0.24);
+    animation: pulse 2.8s infinite;
+}
+
+@keyframes pulse {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+}
+
+.launcher-status-badge {
+    background: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.launcher-status-badge .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: pulse 2s infinite;
+}
+
+#app-viewport > #sidebar {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    height: 100%;
+}
+
+.launcher-status-badge.offline .status-dot {
+    background: var(--text-muted);
+    box-shadow: none;
+    animation: none;
+}
+
+/* Launcher Icon (Hidden by default, shown when collapsed) */
+.sidebar-logo-icon {
+    /* grid-area handled by wrapper */
+    display: block;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto;
+    cursor: pointer;
+    transition: opacity 0.3s var(--ease-smooth);
+}
+
+@keyframes logoTextFloat {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+#sidebar:not(.collapsed) .logo-icon-wrapper {
+    display: none !important;
+}
+
+.sidebar-logo-icon svg {
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    pointer-events: none;
+}
+
+.sidebar-logo-icon:active svg {
+    opacity: 0.82;
+    transition: opacity 0.1s ease;
+}
+
+@keyframes logoPopIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.5) rotate(-15deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0);
+    }
+}
+
+/* Sidebar Title Wrapper (Visible by default) */
+.sidebar-title-wrapper {
+    grid-area: 1 / 1; /* Overlay */
+    width: 100%;
+    overflow: visible; /* Changed from hidden to allow floating animation range */
+    transition:
+        opacity 0.3s var(--ease-smooth),
+        transform 0.3s var(--ease-smooth),
+        visibility 0.3s;
+    text-align: center;
+    cursor: pointer;
+    opacity: 1;
+    max-height: 80px; /* Increased from 60px to accommodate larger font + float */
+    visibility: visible;
+    z-index: 10;
+}
+
+.app-title {
+    font-weight: 400; /* Standard weight for Monocraft compatibility */
+    font-size: 2.35rem;
+    background: linear-gradient(
+        90deg,
+        var(--primary),
+        var(--primary-light),
+        #c77dff,
+        var(--primary-light),
+        var(--primary)
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-top: 0; /* Align perfectly */
+    cursor: pointer;
+    pointer-events: none;
+    white-space: nowrap;
+    line-height: normal;
+    font-family: var(--app-font-family) !important; /* Force brand font */
+    display: inline-block; /* Required for transform animations */
+    animation: textGradientShift 12s linear infinite;
+}
+
+@keyframes textGradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+    100% {
+        background-position: 200% 50%;
+    }
+}
+
+/* Collapsed Sidebar State */
+/* --- VERTICAL DISTRIBUTION LOGIC --- */
+
+/* Expanded Mode: Top-aligned Navigation */
+#sidebar:not(.collapsed) {
+    justify-content: flex-start !important;
+}
+
+#sidebar:not(.collapsed):not(.monitor-hidden) .main-menu {
+    margin-top: 1rem !important;
+    margin-bottom: 1rem !important;
+}
+
+#sidebar:not(.collapsed).monitor-hidden {
+    overflow-y: hidden;
+}
+
+#sidebar:not(.collapsed).monitor-hidden .main-menu {
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
+}
+
+#sidebar:not(.collapsed).monitor-hidden .bottom-menu {
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+#sidebar:not(.collapsed).monitor-hidden .nav-section {
+    width: 100%;
+}
+
+#sidebar:not(.collapsed):not(.monitor-hidden) #system-monitor:not(.adaptive-hidden) {
+    margin-top: auto !important;
+}
+
+/* Compact Mode: Perfect 3-Item Centering (Logo, Menu, Bottom) */
+#sidebar.collapsed {
+    width: 80px !important;
+    padding: 1.5rem 0.5rem 0.4rem 0.5rem;
+    justify-content: space-between !important;
+}
+
+#sidebar.collapsed .logo-area,
+#sidebar.collapsed .main-menu,
+#sidebar.collapsed .bottom-menu {
+    margin: 0 !important;
+    flex-grow: 0;
+}
+
+/* Strict layout removal for hidden components in compact mode */
+#sidebar.collapsed .status-under-icon,
+#sidebar.collapsed .nav-section-title,
+#sidebar.collapsed .sysmon-label-text,
+#sidebar.collapsed .sysmon-value,
+#sidebar.collapsed .sysmon-track,
+#sidebar.collapsed .sidebar-lang-switcher .lang-menu-items,
+#sidebar.collapsed #system-monitor,
+#sidebar.collapsed .sysmon-spacer,
+#sidebar.collapsed #sidebar-footer {
+    display: none !important;
+}
+
+#sidebar.collapsed .bottom-menu {
+    border-top: none;
+    padding-bottom: 0 !important;
+}
+
+#sidebar.collapsed .nav-btn span {
+    opacity: 0;
+    width: 0;
+    visibility: hidden;
+    overflow: hidden;
+    white-space: nowrap;
+    margin: 0;
+    transition:
+        width 0.3s var(--ease-smooth),
+        opacity 0.2s ease;
+}
+
+#sidebar.collapsed .sidebar-title-wrapper {
+    display: none !important;
+}
+
+#sidebar.collapsed .app-title {
+    opacity: 0;
+}
+
+#sidebar.collapsed .logo-icon-wrapper {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto;
+    justify-content: center;
+    align-items: center;
+    height: 60px; /* Explicit height for compact button area */
+}
+
+/* Hover highlight removed as per request */
+
+#sidebar.collapsed .sidebar-logo-icon {
+    display: block;
+}
+
+#sidebar.collapsed .nav-btn {
+    justify-content: center;
+    gap: 0;
+    padding: 0.75rem 0;
+    margin-bottom: 0.5rem;
+    height: 44px;
+    max-height: 44px;
+}
+
+#sidebar.collapsed .nav-btn svg {
+    margin-right: 0;
+    width: 32px;
+    height: 32px;
+}
+
+#sidebar.auto-compact .nav-btn {
+    gap: 0;
+}
+
+#sidebar.collapsed .nav-btn:hover {
+    transform: none;
+    background: rgba(138, 43, 226, 0.2); /* Optional: keep the background change but no movement */
+}
+
+#sidebar.collapsed .sidebar-lang-switcher {
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+.sidebar-bottom .nav-btn:last-child {
+    margin-bottom: 0;
+}
+
+/* Language Switcher in Sidebar */
+.sidebar-lang-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 1rem;
+    padding: 0 0.5rem;
+}
+
+/* Sidebar Lang Menu (Popup) */
+#sidebar-lang-menu {
+    position: absolute;
+    left: 100%;
+    top: 0;
+    margin-left: 10px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    border-radius: 12px;
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-10px);
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+}
+
+#sidebar-lang-menu.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.app-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Bottom Menu Handling */
+.nav-section.bottom-menu {
+    border-top: none;
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
+    padding-top: 0.5rem !important; /* Matches the gap: 0.5rem inside nav-sections */
+    padding-bottom: 0 !important;
+}
+
+.nav-section.bottom-menu .nav-btn:last-child {
+    margin-bottom: 0 !important;
+}
+
+#system-monitor {
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important; /* Ensure the section wrapper doesn't add space */
+}
+
+.sysmon-spacer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex-grow: 1;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.nav-section {
+    display: flex;
+    flex-direction: column;
+    /* gap: 0.5rem; Removed to prevent jumping during collapse */
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-app-region: no-drag;
+}
+
+/* Redundant blocks removed */
+
+.nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Centered labels as requested */
+    gap: 0.72rem;
+    width: 100%;
+    padding: 0.72rem 1rem;
+    background: rgba(255, 255, 255, 0.007);
+    border: none; /* Fixed: Flat design requested */
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 14px;
+    margin-bottom: 0.45rem;
+    font-family: var(--app-font-family);
+    -webkit-app-region: no-drag;
+    position: relative;
+    overflow: hidden;
+    transition:
+        height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        background 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        color 0.2s ease;
+    height: 44px;
+    max-height: 44px;
+    outline: none;
+}
+
+.nav-btn.nav-item-hiding,
+.nav-btn.hidden {
+    display: flex !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none;
+    pointer-events: none;
+    transform: scale(0.95);
+    overflow: hidden;
+}
+
+.nav-btn::before {
+    display: none;
+    /* Remove swipe effect */
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.018);
+    color: #ffffff;
+    border: none !important;
+}
+
+.nav-btn:active {
+    transition:
+        background 0.1s ease,
+        color 0.1s ease;
+}
+
+.nav-btn.active {
+    background: rgba(255, 255, 255, 0.007);
+    color: var(--text-primary);
+    font-weight: 600;
+    border: none;
+    box-shadow: none;
+}
+
+.nav-btn.active:hover {
+    background: rgba(255, 255, 255, 0.007);
+    color: var(--text-primary);
+}
+
+.nav-btn.active::after {
+    content: '';
+    position: absolute;
+    left: 0.35rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 44%;
+    background: linear-gradient(180deg, var(--primary), var(--primary-light));
+    border-radius: 999px;
+    opacity: 1;
+}
+
+@keyframes navIndicatorPulse {
+    0%,
+    100% {
+        box-shadow: 0 0 8px rgba(138, 43, 226, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 0 16px rgba(138, 43, 226, 0.8);
+    }
+}
+
+.nav-btn .icon {
+    position: static;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.nav-btn svg,
+.nav-btn span,
+.nav-btn .icon {
+    cursor: pointer;
+    pointer-events: none; /* Let clicks pass through to the button */
+    white-space: nowrap;
+}
+
+.nav-btn span {
+    opacity: 1;
+    display: inline-block;
+    vertical-align: middle;
+    width: auto;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+body.snapping #sidebar {
+    transition: width 0.3s var(--ease-smooth);
+}
+
+body.snapping .nav-btn span,
+body.snapping #sidebar.collapsed .nav-btn span {
+    transition:
+        opacity 0.3s var(--ease-smooth),
+        width 0.3s var(--ease-smooth),
+        visibility 0.3s;
+}
+
+#sidebar:not(.collapsed).monitor-hidden .nav-btn {
+    justify-content: center;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+#sidebar:not(.collapsed).monitor-hidden .nav-btn span {
+    text-align: center;
+    flex: 0 1 auto;
+}
+
+#sidebar:not(.collapsed).monitor-hidden .bottom-menu .nav-btn:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* Dragging visibility overrides removed */
+
+.modules-title-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 8px 24px rgba(138, 43, 226, 0.3);
+    animation: none;
+    /* Removed pulse animation */
+}
+
+/* --- SERVICE & SYSTEM CARDS --- */
+.card {
+    background: var(--bg-med);
+    border: none;
+    border-radius: 16px;
+    padding: 12px;
+    font-family: var(--app-font-family);
+    box-shadow: none;
+}
+
+/* Duplicates removed and merged above */
+
+.service-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem; /* Increased from 11px */
+    transition: background 0.2s;
+    border-radius: 8px;
+    margin-bottom: 0.25rem;
+    font-family: var(--app-font-family);
+    -webkit-app-region: no-drag;
+}
+
+.service-row:hover {
+    background: rgba(138, 43, 226, 0.1);
+}
+
+.service-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.status-dot.running {
+    background: var(--success);
+    box-shadow: 0 0 8px #28a74580;
+}
+
+.status-dot.starting {
+    background: var(--warning);
+    animation: pulse 1.5s infinite;
+}
+
+.status-dot.stopping {
+    background: var(--warning);
+    opacity: 0.8;
+}
+
+.status-dot.error {
+    background: var(--danger);
+    box-shadow: 0 0 10px rgba(220, 53, 69, 0.55);
+    animation: pulse 1.2s infinite;
+}
+
+.service-name {
+    font-weight: 500;
+    flex: 1;
+    color: #e0e0e0 !important; /* Higher contrast light gray */
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-toggle-service {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        opacity 0.2s ease,
+        box-shadow 0.2s ease;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+}
+
+.btn-toggle-service:hover {
+    background: var(--primary);
+    color: white;
+    border: none;
+}
+
+.btn-toggle-service:active {
+    opacity: 0.85;
+}
+
+.btn-toggle-service.stop:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+}
+
+.btn-toggle-service.restart {
+    background: rgba(255, 165, 0, 0.2);
+    border-color: rgba(255, 165, 0, 0.3);
+    opacity: 0.8;
+}
+
+.btn-toggle-service.restart:hover {
+    background: var(--warning);
+    border-color: var(--warning);
+    opacity: 1;
+}
+
+.btn-toggle-service .icon {
+    width: 14px;
+    height: 14px;
+}
+
+#sidebar-footer {
+    margin-top: auto;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: center;
+}

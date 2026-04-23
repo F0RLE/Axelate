@@ -1,0 +1,1505 @@
+/* Home Page Styles */
+
+#page-home {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+/* Home Entry Animation */
+#page-home .home-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    opacity: 1;
+    animation: none;
+    text-align: center;
+}
+
+.page.active .home-content {
+    animation: pageContentRise 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#page-home .home-title {
+    color: var(--text-primary);
+    font-family: var(--app-font-family);
+    font-size: clamp(1.8rem, 4.5vw, 3.6rem);
+    font-weight: 700;
+    line-height: 1;
+}
+
+@keyframes homeEntry {
+    0% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+/* Modules Page Styles */
+
+#module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding-bottom: 2rem;
+}
+
+.module-card {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+        rgba(18, 17, 24, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    padding: 1.75rem;
+    transition:
+        transform 0.22s ease,
+        background 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+        0 18px 48px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.module-card:hover {
+    transform: translateY(-4px);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.03)),
+        rgba(22, 20, 30, 0.84);
+    border-color: rgba(var(--primary-raw), 0.22);
+    box-shadow:
+        0 24px 56px rgba(0, 0, 0, 0.26),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+body[data-platform='macos'] .module-card {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
+        rgba(19, 18, 26, 0.62);
+    border-color: rgba(255, 255, 255, 0.11);
+    box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+body[data-platform='macos'] .module-card:hover {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.045)),
+        rgba(24, 22, 32, 0.66);
+}
+
+.module-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.module-icon {
+    width: 52px;
+    height: 52px;
+    background: rgba(var(--primary-raw), 0.1);
+    border: 1px solid rgba(var(--primary-raw), 0.15);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    cursor: pointer;
+    transition:
+        background-color 0.3s ease,
+        border-color 0.3s ease,
+        color 0.3s ease,
+        opacity 0.3s ease;
+}
+
+.module-card:hover .module-icon {
+    background: rgba(var(--primary-raw), 0.2);
+    border-color: rgba(var(--primary-raw), 0.4);
+}
+
+.module-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.module-status {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+}
+
+.module-status.active {
+    background: #ffffff !important; /* Pure White */
+    color: #000000 !important; /* Pure Black */
+    font-weight: 800;
+}
+
+.badge-status.active {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-weight: 800;
+}
+
+.module-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.module-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+}
+
+.module-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+}
+
+.module-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.btn-module {
+    flex: 1;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease,
+        box-shadow 0.2s ease,
+        opacity 0.2s ease;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.btn-module:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.btn-module.primary {
+    background: var(--module-button-bg);
+    border-color: var(--module-button-border-hover);
+    color: var(--module-button-text);
+    border-radius: var(--module-button-radius);
+}
+
+.btn-module.primary:hover {
+    background: var(--module-button-bg-hover);
+    box-shadow: none;
+}
+
+/* --- MERGED MODELS STYLES --- */
+#page-modules {
+    /* Use flex by default instead of grid for the main container loop */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+}
+
+.models-container {
+    width: 100%;
+    max-width: 1480px;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+    transition:
+        opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: none;
+}
+
+#page-modules.active .models-container {
+    animation: pageContentRise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* State when model selection or settings is open */
+.models-container.content-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+@keyframes modelsPageFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Width Warning Overlay */
+.width-warning {
+    /* Reset native dialog border/padding */
+    padding: 0;
+    margin: 0;
+    border: none;
+
+    /* Force full screen overlay coverage */
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: hidden;
+
+    /* Semi-transparent blur to keep text readable while showcasing the background animation */
+    background: rgba(8, 8, 10, 0.35) !important;
+    backdrop-filter: blur(8px) saturate(120%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(120%) !important;
+
+    /* Hide by default, native dialog logic */
+    display: none !important;
+    align-items: center;
+    justify-content: center;
+
+    /* Ensure no interaction underneath just in case, though modal does this */
+    z-index: 999999 !important;
+    animation: fadeInOverlay 0.4s ease;
+}
+
+.width-warning[open] {
+    display: flex !important;
+}
+
+.width-warning::backdrop {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.width-warning.closing {
+    animation: fadeOutOverlay 0.5s ease forwards;
+}
+
+/* Hide main UI layers when width warning is active, allowing background animation to shine */
+body.ui-hidden #sidebar,
+body.ui-hidden #app-header,
+body.ui-hidden #main-area,
+body.ui-hidden .modal-backdrop {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+    transition:
+        opacity 0.3s ease,
+        visibility 0.3s step-end !important;
+}
+
+.width-warning-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.width-warning-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 25px;
+    text-align: center;
+    padding: 40px 50px;
+    background: rgba(255, 180, 0, 0.08);
+    border: 1px solid rgba(255, 180, 0, 0.25);
+    border-radius: 16px;
+
+    /* Strictly fixed pixels to prevent shape-shifting */
+    width: 620px;
+    height: 400px;
+    box-sizing: border-box;
+
+    justify-content: center;
+    pointer-events: auto;
+    box-shadow: 0 0 100px rgba(0, 0, 0, 0.5);
+    transition:
+        background 0.3s ease,
+        border-color 0.3s ease;
+}
+
+.width-warning-inner .warning-icon {
+    font-size: 64px;
+    filter: drop-shadow(0 0 20px rgba(255, 180, 0, 0.3));
+}
+
+.width-warning-inner .warn.tip-text {
+    font-size: 16px;
+    color: #aaa;
+    font-style: italic;
+}
+.width-warning-inner .warning-text {
+    font-size: 24px;
+    color: #ffb400;
+    font-weight: 600;
+    line-height: 1.4;
+    max-width: 520px;
+    font-family: 'Monocraft', monospace !important; /* Apply requested retro font */
+}
+
+/* Zoom Hint Styling */
+.zoom-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 0.5rem;
+    opacity: 0.8;
+}
+.module-stats-item {
+    font-size: 0.85rem;
+    color: #eee;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.zoom-icons {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+}
+
+.ctrl-key {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    animation: ctrlPulse 2s ease-in-out infinite;
+    font-family: 'Monocraft', monospace !important;
+}
+
+.mouse-icon {
+    width: 24px;
+    height: 38px;
+    border: 2px solid #fff;
+    border-radius: 12px;
+    position: relative;
+}
+
+.mouse-icon .wheel {
+    width: 4px;
+    height: 8px;
+    background: #ffb400;
+    border-radius: 2px;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: wheelScroll 1.5s ease-in-out infinite;
+}
+
+.zoom-text-hint {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 400;
+}
+
+@keyframes wheelScroll {
+    0% {
+        top: 6px;
+        opacity: 0.3;
+    }
+    50% {
+        top: 14px;
+        opacity: 1;
+    }
+    100% {
+        top: 6px;
+        opacity: 0.3;
+    }
+}
+
+@keyframes ctrlPulse {
+    0%,
+    100% {
+        transform: scale(1);
+        border-color: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+    }
+    50% {
+        transform: scale(1.05);
+        border-color: rgba(255, 180, 0, 0.5);
+        box-shadow: 0 4px 10px rgba(255, 180, 0, 0.2);
+    }
+}
+
+.width-warning.closing .width-warning-inner {
+    animation: successPulse 0.5s ease forwards;
+}
+
+@keyframes fadeInOverlay {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOutOverlay {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes successPulse {
+    0% {
+        transform: scale(1);
+        border-color: rgba(255, 180, 0, 0.25);
+    }
+    50% {
+        transform: scale(1.05);
+        border-color: rgba(46, 204, 113, 0.6);
+        background: rgba(46, 204, 113, 0.15);
+    }
+    100% {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+}
+
+.models-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.models-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0;
+    background: linear-gradient(135deg, #fff 0%, #a5a5a5 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1rem;
+}
+
+/* Hide header on small heights to prioritize cards */
+@media (max-height: 500px) {
+    .models-header {
+        display: none !important;
+    }
+}
+
+.models-subtitle {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.models-grid {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.models-grid > * {
+    flex: 1 1 320px;
+    max-width: 360px;
+}
+
+/* --- Card Corner Actions (Settings and Reset) --- */
+.card-action-corner {
+    position: absolute;
+    top: 6px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md); /* Pill shape standard */
+    display: flex;
+    align-items: center;
+    gap: 0;
+    max-width: 28px; /* Collapsed */
+    overflow: hidden;
+    cursor: pointer;
+    z-index: 10;
+    opacity: 0;
+    white-space: nowrap;
+    color: var(--text-muted); /* Add base color so icons aren't invisible */
+    transition:
+        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.2s ease,
+        gap 0.3s ease,
+        background 0.3s ease,
+        border-color 0.3s ease,
+        padding 0.3s ease,
+        color 0.3s ease;
+}
+
+.module-slot-card.selected:hover .card-action-corner {
+    opacity: 1;
+}
+
+/* LEFT CORNER: Settings (Matches app-delete-badge geometry) */
+.card-action-corner.left {
+    left: 6px;
+    /* Exactly matching .app-delete-badge */
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 28px;
+    border-radius: var(--radius-md) !important; /* Pill shape, NOT circle */
+    padding: 0 8px; /* Padding for icon */
+    max-width: 28px;
+    overflow: hidden;
+
+    color: #ffffff !important;
+    background: #444 !important; /* Solid dark grey */
+    border: 1px solid #777 !important;
+    z-index: 25;
+}
+
+.card-action-corner.left:hover {
+    max-width: 120px;
+    gap: 8px;
+    background: #ffffff !important;
+    border-color: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none;
+}
+
+/* RIGHT CORNER: Close (Matches app-type-badge geometry) */
+.card-action-corner.right {
+    right: 6px;
+    /* Exactly matching .app-type-badge */
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 28px;
+    border-radius: var(--radius-md);
+    padding: 0 8px;
+    max-width: 28px;
+    overflow: hidden;
+
+    color: #ffffff !important;
+    background: #444 !important;
+    border: 1px solid #777 !important;
+    z-index: 25;
+}
+
+.card-action-corner.right:hover {
+    max-width: 120px;
+    gap: 8px;
+    /* Close specific colors (Red) - matches "Remove" intent */
+    background: #b71c1c !important;
+    border-color: #b71c1c !important;
+    color: #ffffff !important;
+    box-shadow: none;
+}
+
+.card-action-corner .action-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    min-width: 12px;
+    filter: brightness(0) invert(1); /* Keep white override for Left, Right will inherit color */
+}
+
+.model-label {
+    font-size: 0.8rem;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.card-action-corner.right .action-icon {
+    filter: none; /* Right/Close uses text color */
+}
+
+/* MATCHING BADGE TEXT HIDDEN STATE */
+.card-action-corner .action-text {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+
+    opacity: 0;
+    max-width: 0;
+    overflow: hidden;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease;
+    transition-delay: 0.1s;
+    white-space: nowrap;
+}
+
+.card-action-corner:hover .action-text {
+    opacity: 1;
+    max-width: 96px;
+}
+
+.module-slot-card:not(.selected) .card-action-corner {
+    display: none;
+}
+
+/* Action buttons moved to corners */
+
+/* App Type Badge */
+.app-type-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+
+    /* Flex Layout */
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* Anchor icon to the right to stop jumping */
+    gap: 0;
+
+    /* Sizing & Shape */
+    height: 32px;
+    border-radius: var(--radius-md); /* Circle pill */
+    padding: 0; /* Remove padding, let badge-icon define the shape */
+    max-width: 32px; /* Collapsed */
+    overflow: hidden;
+
+    /* Typography */
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+
+    /* Visuals */
+    background: rgba(30, 30, 35, 0.88);
+    color: var(--text-muted);
+    /* border: 1px solid rgba(255, 255, 255, 0.1); REMOVED as requested */
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+    opacity: 0; /* Hidden by default */
+
+    /* Animation */
+    transition:
+        max-width 0.18s ease,
+        opacity 0.18s ease,
+        background-color 0.18s ease,
+        padding 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+/* Ensure all elements in the card show pointer */
+.app-card * {
+    cursor: pointer;
+    pointer-events: none; /* Let events pass through to card */
+}
+
+.app-card .app-card-overlay,
+.app-card .app-delete-badge,
+.app-card .app-type-badge,
+.app-card .card-action-corner {
+    pointer-events: auto !important; /* Re-enable for interactive elements */
+}
+
+.app-type-badge:hover {
+    max-width: 250px; /* Expand enough to avoid clipping */
+    padding-left: 14px; /* Space for text on the left */
+    padding-right: 0; /* 0 to guarantee the icon does NOT shift/jump */
+    background: rgba(30, 30, 35, 0.95);
+    box-shadow: none;
+    opacity: 1;
+    /* Do not override justify-content, keep flex-end */
+}
+
+.app-card:hover .app-type-badge {
+    opacity: 1;
+}
+
+.badge-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    line-height: 1;
+
+    /* Enforce fixed square size for perfect centering */
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+}
+
+.badge-text {
+    opacity: 0;
+    max-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-right: 0;
+    transition:
+        opacity 0.3s,
+        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition-delay: 0.05s;
+}
+
+.app-type-badge:hover .badge-text {
+    opacity: 1;
+    max-width: 200px;
+    margin-right: 6px; /* Add spacing between text and icon */
+}
+
+.app-type-badge.core {
+    color: #9b59b6;
+    border-color: rgba(155, 89, 182, 0.3);
+}
+.app-type-badge.core:hover {
+    background: rgba(155, 89, 182, 0.2); /* Updated opacity */
+}
+
+/* Status Badges */
+/* .installed class is added when module is installed, but we want Type color to persist */
+/* So we only use .installed for generic styling if needed, or ensure Type overrides it */
+
+.app-type-badge.installed {
+    /* Default installed color (Green) - only if no type is specific? */
+    /* Actually, user wants API to be Blue even if installed. */
+    /* So we don't force color here if it is API. */
+    color: #27ae60;
+}
+
+/* Force API color even when installed */
+/* Force API color always */
+.app-type-badge.api {
+    color: #3498db !important;
+}
+
+/* Local color - Green when installed, Grey when not */
+.app-type-badge.local {
+    color: #27ae60;
+}
+.app-type-badge.local.not-installed {
+    color: #27ae60 !important; /* Make it visible and distinct */
+    background: rgba(30, 30, 35, 0.6); /* Standard dark background, like CLOUD */
+}
+
+/* Hover states */
+.app-type-badge.api:hover {
+    background: rgba(52, 152, 219, 0.15); /* Slightly more subtle */
+    color: var(--text-primary) !important; /* Fast contrast fix */
+}
+
+.app-type-badge.local:hover {
+    background: rgba(46, 204, 113, 0.15);
+    color: var(--text-primary) !important; /* Fast contrast fix */
+}
+.app-type-badge.local.not-installed:hover {
+    /* Inherit default .local:hover styles (green background, white text) */
+    background: rgba(46, 204, 113, 0.15);
+    color: var(--text-primary) !important;
+}
+
+/* Status Badges */
+
+/* Hide badge completely if not installed — except LOCAL engines always show badge */
+.app-type-badge.not-installed:not(.local) {
+    display: none !important;
+}
+
+/* --- Module Card State Transition Animation --- */
+@keyframes cardResetPulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(0.95);
+        opacity: 0.7;
+        border-color: transparent;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.module-slot-card.resetting {
+    animation: cardResetPulse 0.4s ease-out;
+}
+
+/* --- Selected Module Card Style (has a module chosen) --- */
+.module-slot-card.selected:hover {
+    background: rgba(var(--background-raw), 0.065) !important;
+    border-color: rgba(255, 255, 255, 0.04) !important;
+    transform: none !important;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
+    cursor: pointer !important;
+}
+
+/* --- Empty Module Card Style (no module chosen yet) --- */
+.module-slot-card.empty {
+    background: rgba(var(--background-raw), 0.065);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018);
+    transition: box-shadow 0.24s ease;
+}
+
+.module-slot-card.empty .module-slot-card-icon {
+    background: transparent;
+    border: none;
+    filter: saturate(0.92);
+    opacity: 0.9;
+}
+
+.module-slot-card.empty .module-slot-card-title {
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.module-slot-card.empty .module-slot-card-description {
+    color: rgba(255, 255, 255, 0.58);
+}
+
+.module-slot-card.empty:hover {
+    background: rgba(var(--background-raw), 0.075);
+    cursor: pointer;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.022);
+}
+
+.module-slot-card.empty:hover .module-slot-card-icon {
+    filter: none;
+    opacity: 1;
+    background: transparent;
+}
+
+.module-slot-card.empty .module-slot-card-action {
+    background: var(--module-button-bg-soft);
+    border: 1px solid var(--module-button-border);
+    color: var(--module-button-text);
+
+    /* Hidden by default, behaves like standard cards */
+    opacity: 0;
+    pointer-events: none;
+
+    border-radius: var(--module-button-radius);
+    padding: 0.8rem 1.5rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition:
+        opacity 0.3s ease,
+        background-color 0.3s ease,
+        border-color 0.3s ease,
+        color 0.3s ease;
+    position: relative;
+    z-index: 10;
+    margin-top: auto;
+}
+
+.module-slot-card.empty:hover .module-slot-card-action {
+    background: var(--module-button-bg-hover);
+    border-color: var(--module-button-border-hover);
+    color: white;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Hide native password toggle in Edge/IE */
+input[type='password']::-ms-reveal,
+input[type='password']::-ms-clear {
+    display: none;
+}
+/* Hide native password toggle in Chrome/Edge (blink) */
+input[type='password']::-webkit-credentials-auto-fill-button {
+    display: none !important;
+}
+/* Download Button in App Cards */
+.app-download-btn {
+    width: 100%;
+    padding: 10px 16px;
+    margin-top: 12px;
+    background: var(--module-button-bg);
+    border: none;
+    border-radius: var(--module-button-radius);
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition:
+        background-color 0.18s ease,
+        box-shadow 0.18s ease,
+        opacity 0.18s ease;
+}
+
+.app-download-btn:hover:not(:disabled) {
+    background: var(--module-button-bg-hover);
+    box-shadow: none;
+}
+
+.app-download-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.app-download-btn .download-progress {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.5);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.app-download-btn .download-text {
+    position: relative;
+    z-index: 1;
+}
+
+.download-status {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 6px;
+    text-align: center;
+    min-height: 16px;
+}
+
+/* Delete Button in App Cards - Badge Style */
+.app-delete-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 20;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+
+    background: rgba(30, 30, 35, 0.88);
+    border-radius: var(--radius-md);
+    color: #f06c5f;
+
+    cursor: pointer;
+    pointer-events: auto;
+    overflow: hidden;
+    transition:
+        opacity 0.18s ease,
+        background-color 0.18s ease,
+        box-shadow 0.18s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+    opacity: 0;
+}
+
+.app-card:hover .app-delete-badge,
+#app-modal-list .app-card:hover .app-delete-badge {
+    opacity: 1;
+}
+
+.app-delete-badge:hover {
+    background: rgba(178, 56, 44, 0.26);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+}
+
+.app-delete-badge .badge-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.app-delete-badge .badge-icon svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+    fill: currentColor;
+    stroke: none;
+}
+
+.app-delete-badge .badge-text {
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    color: #f06c5f;
+
+    opacity: 0;
+    max-width: 0;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease,
+        padding-right 0.3s ease;
+}
+
+.app-delete-badge:hover .badge-text {
+    opacity: 1;
+    max-width: 100px;
+    padding-right: 10px;
+}
+
+/* --- Type Badge Overrides (API/Local) --- */
+.type-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: auto !important;
+    max-width: 32px !important; /* Start collapsed as circle */
+    height: 32px;
+    padding: 0 !important; /* No padding initially for center alignment */
+    border-radius: var(--radius-md) !important;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center emoji */
+    gap: 0;
+    opacity: 1 !important;
+    z-index: 20;
+    overflow: hidden;
+    transition:
+        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        gap 0.3s ease,
+        background 0.3s ease,
+        border-color 0.3s ease,
+        padding 0.3s ease,
+        justify-content 0.3s ease;
+}
+
+.type-badge:hover {
+    max-width: 120px !important;
+    gap: 8px;
+    padding: 0 12px !important; /* Add padding when expanded */
+    justify-content: center; /* Keep centered content */
+}
+
+.type-badge .action-text {
+    opacity: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden;
+    font-size: 0.8rem !important;
+    margin-left: 0 !important;
+    display: inline-block;
+    font-weight: 800; /* Bolder for contrast */
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: #fff !important; /* Maximum contrast */
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease;
+}
+
+.type-badge:hover .action-text {
+    opacity: 1 !important;
+    max-width: 100px !important;
+}
+
+/* Specific Colors & Hovers (FIX RED HOVER ISSUE) */
+.type-badge.type-local {
+    color: #13d36e !important;
+}
+
+.type-badge.type-local:hover {
+    background: #00e676 !important;
+    border-color: #00e676 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+}
+
+.type-badge.type-api {
+    color: #3498db !important;
+}
+
+.type-badge.type-api:hover {
+    background: #4aa3ff !important;
+    border-color: #4aa3ff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+}
+
+.type-badge span {
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem; /* Ensure emoji size */
+}
+
+/* App Status Button Overrides */
+
+/* Consolidated App Status Button Overrides removed from here to reduce duplication */
+
+.app-status.stop-btn {
+    background: linear-gradient(135deg, #e74c3c, #c0392b) !important;
+}
+
+.app-status.stop-btn:hover {
+    background: linear-gradient(135deg, #c0392b, #a93226) !important;
+    box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+}
+
+/* --- NEW MODULE TYPE BADGES (Emoji Style) --- */
+.module-type-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 20;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+
+    background: rgba(30, 30, 35, 0.88);
+    border-radius: var(--radius-md);
+
+    cursor: default;
+    overflow: hidden;
+    transition:
+        opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+    opacity: 0;
+}
+
+.app-card:hover .module-type-badge {
+    opacity: 1;
+}
+
+.module-type-badge .badge-icon {
+    font-size: 1.2rem;
+    line-height: 1;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    order: 1; /* Move icon to right */
+}
+
+.module-type-badge .badge-text {
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+
+    opacity: 0;
+    max-width: 0;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease,
+        padding-left 0.3s ease;
+}
+
+.module-type-badge:hover .badge-text {
+    opacity: 1;
+    max-width: 100px;
+    padding-left: 10px;
+}
+
+/* Variants */
+.module-type-badge.local .badge-text {
+    color: #27ae60;
+}
+
+.module-type-badge.local:hover {
+    background: rgba(46, 204, 113, 0.2);
+}
+
+.module-type-badge.api .badge-text {
+    color: #3498db;
+}
+
+.module-type-badge.api:hover {
+    background: rgba(52, 152, 219, 0.2);
+}
+
+/* --- MODULE ACTION BUTTONS (Settings / Close) --- */
+.module-action-badge {
+    position: absolute;
+    top: 10px;
+    z-index: 20;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+
+    background: rgba(30, 30, 35, 0.88);
+    border-radius: var(--radius-md);
+
+    cursor: pointer;
+    pointer-events: auto;
+    overflow: hidden;
+    transition:
+        opacity 0.18s ease,
+        background-color 0.18s ease,
+        box-shadow 0.18s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+    opacity: 0;
+}
+
+/* Show on card hover */
+.app-card:hover .module-action-badge,
+.app-card.selected:hover .module-action-badge,
+.module-slot-card:hover .module-action-badge,
+.module-slot-card.selected:hover .module-action-badge {
+    opacity: 1;
+}
+
+/* Icon styles - same as app-delete-badge */
+.module-action-badge .badge-icon {
+    font-size: 1.2rem;
+    line-height: 1;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Text styles - same as app-delete-badge */
+.module-action-badge .badge-text {
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+
+    opacity: 0;
+    max-width: 0;
+    transition:
+        opacity 0.3s ease,
+        max-width 0.3s ease,
+        padding-left 0.3s ease,
+        padding-right 0.3s ease;
+}
+
+.module-action-badge:hover .badge-text {
+    opacity: 1;
+    max-width: 100px;
+    padding-right: 10px;
+}
+
+/* Positions */
+.module-action-badge.left {
+    left: 10px;
+}
+
+.module-action-badge.right {
+    right: 10px;
+}
+
+/* Right badges: icon on right, text expands left */
+.module-action-badge.right .badge-icon {
+    order: 1;
+}
+
+.module-action-badge.right:hover .badge-text {
+    padding-left: 10px;
+    padding-right: 0;
+}
+
+/* Settings variant */
+.module-action-badge.settings .badge-text {
+    color: #e0e0e0;
+}
+
+.module-action-badge.settings:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Close variant - like app-delete-badge */
+.module-action-badge.close .badge-text {
+    color: #e74c3c;
+}
+
+.module-action-badge.close .badge-icon {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.module-action-badge.close:hover {
+    background: rgba(231, 76, 60, 0.2);
+}
+
+.module-action-badge.close:hover .badge-icon {
+    color: #e74c3c;
+}
+
+.module-action-badge.close .badge-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    transition: stroke 0.3s ease;
+}
+
+/* Pointer events */
+.module-action-badge > *,
+.module-action-badge svg {
+    pointer-events: none;
+}
+
+/* --- MODULE SETTINGS MODAL --- */
+/* Note: Now uses modal-backdrop and app-modal classes from modals.css */
+
+.module-settings-content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 1.25rem 1.5rem 1.5rem;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    scroll-padding-bottom: 1.5rem;
+}
+
+@media (max-width: 900px) {
+    .module-settings-content {
+        padding: 1rem;
+    }
+}
+
+.module-settings-empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.zoom-plus-icon {
+    font-size: 1.2rem;
+    color: #ffb400;
+    font-weight: bold;
+    margin: 0 4px;
+}
+/* ─── Multi-Slot Stack Badge (bottom-right corner) ──────────────────── */
+
+/* Bottom-right position override */
+.module-action-badge.bottom-right {
+    top: auto;
+    bottom: 10px;
+    right: 10px;
+    left: auto;
+}
+
+/* Stack variant: same glass look as ⚙️/✕ — no accent border */
+.module-action-badge.stack {
+    background: rgba(30, 30, 35, 0.6);
+}
+
+/* "+1" icon: white */
+.module-action-badge.stack .badge-icon {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.85);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    min-width: 32px;
+}
+
+/* Secondary engine name: white, no uppercase */
+.module-action-badge.stack .badge-text {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.73rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    white-space: nowrap;
+    max-width: 0;
+    overflow: hidden;
+}
+
+/* Icon comes after text (badge grows to the left) */
+.module-action-badge.bottom-right .badge-icon {
+    order: 1;
+}
+
+/* On hover: reveal text, grow left */
+.module-action-badge.bottom-right:hover .badge-text {
+    max-width: 200px; /* wide enough for any engine name */
+    padding-left: 6px;
+    padding-right: 0;
+}
+
+.module-action-badge.stack:hover {
+    background: rgba(50, 50, 58, 0.75);
+}
+
+/* Final normalization for main Modules page cards.
+   Mirror the selectable modal cards, not the modal shell itself. */
+.models-grid .module-slot-card,
+.models-grid .module-slot-card,
+.models-grid .module-slot-card.empty,
+.models-grid .module-slot-card.selected,
+.models-grid .module-slot-card.selected {
+    background: rgba(255, 255, 255, 0.007) !important;
+    border: none !important;
+    border-radius: 18px !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
+}
+
+.models-grid .module-slot-card:hover,
+.models-grid .module-slot-card:hover,
+.models-grid .module-slot-card.empty:hover,
+.models-grid .module-slot-card.selected:hover {
+    background: rgba(255, 255, 255, 0.018) !important;
+    border: none !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.045) !important;
+}

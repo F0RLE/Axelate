@@ -1,0 +1,35 @@
+import type { ISettingField } from './ISettingField';
+
+export class TextField implements ISettingField<string> {
+    private readonly input: HTMLInputElement;
+
+    constructor(
+        initialValue: string,
+        options?: {
+            type?: string;
+            placeholder?: string;
+        },
+    ) {
+        this.input = document.createElement('input');
+        this.input.type = options?.type ?? 'text';
+        this.input.className = 'form-input';
+        this.input.value = initialValue;
+        if (options?.placeholder !== undefined && options.placeholder !== '') {
+            this.input.placeholder = options.placeholder;
+        }
+    }
+
+    render(): HTMLElement {
+        return this.input;
+    }
+
+    getValue(): string {
+        return this.input.value;
+    }
+
+    onChange(cb: (val: string) => void): void {
+        this.input.onchange = () => {
+            cb(this.input.value);
+        };
+    }
+}

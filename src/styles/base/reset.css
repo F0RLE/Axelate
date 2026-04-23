@@ -1,0 +1,84 @@
+﻿/* Base Reset & Body Styles */
+* {
+    box-sizing: border-box;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    cursor: default; /* Visual feedback */
+}
+
+/* Globally disable text selection on everything */
+
+html {
+    scroll-behavior: smooth;
+    overflow: hidden;
+    height: 100%;
+    font-size: 16px;
+    --app-zoom: 1;
+    background: var(--bg-dark); /* Moved from body */
+}
+
+body {
+    font-family: var(--app-font-family);
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    font-size: 14px;
+    box-sizing: border-box;
+    opacity: 1;
+    /* Changed for splash screen handling */
+    transition: opacity 0.5s ease-in;
+    position: relative;
+}
+
+#app-viewport {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr);
+    grid-template-rows: var(--header-height, 60px) minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+    transform-origin: top left;
+    will-change: transform;
+}
+
+.particles-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--bg-dark);
+    pointer-events: none;
+    z-index: -2;
+}
+
+/* Globals moved to top */
+
+/* Re-enable for inputs and text areas */
+input,
+textarea,
+[contenteditable] {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    cursor: text;
+}
+
+/* Global Utilities */
+.hidden {
+    display: none !important;
+}
+
+.visible {
+    opacity: 1 !important;
+    visibility: visible !important;
+}

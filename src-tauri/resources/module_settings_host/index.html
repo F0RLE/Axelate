@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Axelate Module Settings</title>
+        <link rel="stylesheet" href="./host.css" />
+    </head>
+    <body>
+        <main class="host-shell">
+            <div class="host-shell__stage">
+                <iframe
+                    id="module-frame"
+                    class="host-shell__frame"
+                    title="Module settings"
+                    sandbox="allow-scripts allow-forms allow-downloads"
+                    referrerpolicy="no-referrer"
+                ></iframe>
+
+                <div
+                    id="overlay"
+                    class="host-shell__overlay"
+                    data-state="loading"
+                >
+                    <div class="host-shell__spinner" aria-hidden="true"></div>
+                    <p
+                        id="overlay-message"
+                        class="host-shell__overlay-message"
+                    ></p>
+                </div>
+            </div>
+        </main>
+
+        <script type="module" src="./host.js"></script>
+    </body>
+</html>

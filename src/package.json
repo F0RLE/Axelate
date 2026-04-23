@@ -1,0 +1,62 @@
+{
+    "name": "axelate-frontend",
+    "version": "0.1.5",
+    "description": "Axelate Frontend",
+    "type": "module",
+    "scripts": {
+        "dev": "vite --host localhost --logLevel warn",
+        "bindings:sync": "cargo run --quiet --manifest-path ../src-tauri/Cargo.toml --bin exporter",
+        "bindings:check": "cargo run --quiet --manifest-path ../src-tauri/Cargo.toml --bin exporter -- --check",
+        "build": "npm run typecheck && npm run build:bundle",
+        "build:bundle": "vite build",
+        "preview": "vite preview",
+        "clean": "node --input-type=module -e \"import { rmSync } from 'fs'; rmSync('dist', { recursive: true, force: true });\" && echo Cleaned",
+        "check-size": "node scripts/check-size.js",
+        "test": "vitest run",
+        "test:coverage": "vitest run --coverage",
+        "test:watch": "vitest",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+        "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+        "typecheck": "npm run bindings:check && tsc --noEmit",
+        "prepare": "node scripts/setup-git-hooks.mjs"
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^20.5.0",
+        "@commitlint/config-conventional": "^20.5.0",
+        "@eslint/js": "^10.0.1",
+        "@tauri-apps/cli": "~2.10.1",
+        "@types/node": "^25.6.0",
+        "@typescript-eslint/eslint-plugin": "^8.58.2",
+        "@typescript-eslint/parser": "^8.58.2",
+        "@typescript-eslint/utils": "^8.58.2",
+        "@vitest/coverage-v8": "^4.1.4",
+        "@vitest/ui": "^4.1.4",
+        "eslint": "^10.2.1",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^17.5.0",
+        "jsdom": "^29.0.2",
+        "prettier": "^3.8.3",
+        "terser": "^5.46.1",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.58.2",
+        "vite": "^8.0.9",
+        "vitest": "^4.1.4"
+    },
+    "dependencies": {
+        "@tauri-apps/api": "~2.10.1",
+        "@tauri-apps/plugin-dialog": "~2.7.0",
+        "@tauri-apps/plugin-fs": "~2.5.0",
+        "axelate-frontend": "file:",
+        "axelate-root": "file:..",
+        "dompurify": "^3.4.0",
+        "marked": "^18.0.2",
+        "marked-alert": "^2.1.2",
+        "marked-footnote": "^1.4.0",
+        "wawoff2": "^2.0.1"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    }
+}

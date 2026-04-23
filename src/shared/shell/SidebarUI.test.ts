@@ -1,0 +1,261 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SidebarUI } from './SidebarUI';
+import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+
+vi.mock('@/assets/logos', () => ({
+    mountLogos: vi.fn(),
+}));
+
+class ResizeObserverMock {
+    public static instances: ResizeObserverMock[] = [];
+    public readonly observe = vi.fn();
+    public readonly disconnect = vi.fn();
+    public readonly callback: ResizeObserverCallback;
+
+    constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+        ResizeObserverMock.instances.push(this);
+    }
+}
+
+describe('SidebarUI', () => {
+    const uiSettings = {
+        getSidebarCollapsed: vi.fn(() => false),
+        getZoomLevel: vi.fn(() => 1),
+        getHiddenNavItems: vi.fn<() => string[]>(() => []),
+        setSidebarWidth: vi.fn(),
+        setSidebarCollapsed: vi.fn(),
+    };
+
+    const soundService = {
+        playExpand: vi.fn(),
+    };
+
+    const windowService = {
+        getConfig: vi.fn(() => null),
+        getZoom: vi.fn(() => 1),
+    };
+    const tracer = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+    } as unknown as LoggerService;
+
+    function setupDom(): void {
+        document.body.innerHTML = `
+            <div id="sidebar">
+                <div class="logo-area"></div>
+                <div class="main-menu"></div>
+                <div id="system-monitor"></div>
+                <div class="bottom-menu"></div>
+            </div>
+        `;
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        const logo = sidebar.querySelector('.logo-area') as HTMLElement;
+        const menu = sidebar.querySelector('.main-menu') as HTMLElement;
+        const bottom = sidebar.querySelector('.bottom-menu') as HTMLElement;
+        const monitor = document.getElementById('system-monitor') as HTMLElement;
+
+        Object.defineProperty(logo, 'offsetHeight', { configurable: true, value: 60 });
+        Object.defineProperty(menu, 'offsetHeight', { configurable: true, value: 240 });
+        Object.defineProperty(bottom, 'offsetHeight', { configurable: true, value: 80 });
+        Object.defineProperty(monitor, 'offsetHeight', { configurable: true, value: 200 });
+        Object.defineProperty(sidebar, 'clientHeight', { configurable: true, value: 900 });
+        Object.defineProperty(sidebar, 'scrollHeight', { configurable: true, value: 900 });
+    }
+
+    beforeEach(() => {
+        vi.stubGlobal('ResizeObserver', ResizeObserverMock as never);
+        vi.stubGlobal('requestAnimationFrame', ((callback: FrameRequestCallback) => {
+            callback(performance.now());
+            return 1;
+        }) as typeof globalThis.requestAnimationFrame);
+        vi.stubGlobal('cancelAnimationFrame', vi.fn());
+        setupDom();
+        uiSettings.getSidebarCollapsed.mockReturnValue(false);
+        uiSettings.getZoomLevel.mockReturnValue(1);
+        uiSettings.getHiddenNavItems.mockReturnValue([]);
+        windowService.getConfig.mockReturnValue(null);
+        windowService.getZoom.mockReturnValue(1);
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = '';
+        ResizeObserverMock.instances = [];
+        vi.unstubAllGlobals();
+    });
+
+    it('renders navigation buttons into main and bottom menus', async () => {
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        expect(document.querySelectorAll('.main-menu .nav-btn')).toHaveLength(6);
+        expect(document.querySelectorAll('.bottom-menu .nav-btn')).toHaveLength(1);
+        expect(document.querySelector('.console-trigger')?.getAttribute('data-page')).toBe(
+            'console',
+        );
+    });
+
+    it('restores hidden nav items from persisted ui settings on init', async () => {
+        uiSettings.getHiddenNavItems.mockReturnValue(['chat', 'downloads']);
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        expect(
+            document.querySelector('.nav-btn[data-page="chat"]')?.classList.contains('hidden'),
+        ).toBe(true);
+        expect(
+            document.querySelector('.nav-btn[data-page="downloads"]')?.classList.contains('hidden'),
+        ).toBe(true);
+        expect(document.querySelector('.nav-btn[data-page="chat"]')?.getAttribute('tabindex')).toBe(
+            '-1',
+        );
+    });
+
+    it('toggles collapsed state from logo interaction and persists width', async () => {
+        vi.useFakeTimers();
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const logoArea = document.querySelector('.logo-area') as HTMLElement;
+        logoArea.click();
+
+        expect(uiSettings.setSidebarWidth).toHaveBeenCalledWith(80);
+        expect(uiSettings.setSidebarCollapsed).toHaveBeenCalledWith(true);
+        expect(soundService.playExpand).toHaveBeenCalledWith(false);
+        expect(document.body.classList.contains('snapping')).toBe(true);
+
+        vi.advanceTimersByTime(300);
+        expect(document.body.classList.contains('snapping')).toBe(false);
+        vi.useRealTimers();
+    });
+
+    it('hides monitor when available space is too small', async () => {
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        Object.defineProperty(sidebar, 'clientHeight', { configurable: true, value: 200 });
+        Object.defineProperty(sidebar, 'scrollHeight', { configurable: true, value: 500 });
+
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        expect(
+            document.getElementById('system-monitor')?.classList.contains('adaptive-hidden'),
+        ).toBe(true);
+        expect(sidebar.classList.contains('monitor-hidden')).toBe(true);
+    });
+
+    it('enables auto compact when zoom threshold is reached', async () => {
+        uiSettings.getZoomLevel.mockReturnValue(3);
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+    });
+
+    it('updates auto compact when zoom changes after init', async () => {
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(false);
+
+        uiSettings.getZoomLevel.mockReturnValue(3);
+        globalThis.dispatchEvent(new CustomEvent('axelate:zoom-changed', { detail: { zoom: 3 } }));
+
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+    });
+
+    it('does not double-apply zoom when config thresholds are available', async () => {
+        windowService.getConfig.mockReturnValue({
+            thresholds: {
+                warningWidth: 800,
+                warningHeight: 600,
+                smallScreenWidth: 1024,
+                smallScreenHeight: 768,
+            },
+        } as never);
+        uiSettings.getZoomLevel.mockReturnValue(2);
+        Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 960 });
+        Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 720 });
+        windowService.getZoom.mockReturnValue(2);
+
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+    });
+
+    it('keeps manual logo toggle as priority while auto compact is active', async () => {
+        uiSettings.getZoomLevel.mockReturnValue(3);
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        const logoArea = document.querySelector('.logo-area') as HTMLElement;
+
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+
+        logoArea.click();
+
+        expect(sidebar.classList.contains('auto-compact')).toBe(false);
+        expect(sidebar.style.width).toBe('280px');
+        expect(uiSettings.setSidebarCollapsed).toHaveBeenCalledWith(false);
+    });
+});

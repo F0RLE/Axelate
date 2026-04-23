@@ -1,0 +1,8 @@
+/* Feature Style Template */
+.feature-template-root {
+    padding: var(--spacing-lg);
+}
+
+.feature-template-container {
+    animation: fadeIn var(--transition-normal) ease-out;
+}

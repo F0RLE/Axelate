@@ -1,0 +1,138 @@
+@font-face {
+    font-family: 'Monocraft';
+    src: url('../../assets/fonts/Monocraft.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: block;
+    unicode-range:
+        U+0000-052F, U+2000-206F, U+2070-209F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+2200-22FF,
+        U+FB00-FB4F;
+}
+
+@font-face {
+    font-family: 'Cubic11';
+    src: url('../../assets/fonts/Cubic_11.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: block;
+}
+
+:root {
+    /* Color Components (for rgba usage) */
+    --background-raw: 17, 16, 21;
+    --primary-raw: 138, 43, 226;
+    --success-raw: 33, 136, 56;
+    --danger-raw: 194, 33, 49;
+    --warning-raw: 255, 193, 7;
+    --primary-alt-raw: 168, 85, 247;
+    --accent-raw: 93, 220, 255;
+
+    /* Base Colors */
+    --bg-dark: #111015;
+    --bg-med: #1a1920;
+    --bg-light: #26252d;
+    --surface: #31303a;
+    --border-color: #31303a;
+    --primary: #8a2be2;
+    --primary-light: #9d4edd;
+    --primary-dark: #7b2cbf;
+    --success: #218838;
+    --success-dark: #1e7e34;
+    --danger: #c22131;
+    --danger-dark: #bd2130;
+    --warning: #ffc107;
+    --warning-dark: #e0a800;
+
+    /* Unified module/console action theme
+       Change only this line to recolor all module and console buttons. */
+    --module-button-accent: #8a2be2;
+    --module-button-bg: color-mix(in srgb, var(--module-button-accent) 78%, #111015 22%);
+    --module-button-bg-soft: color-mix(in srgb, var(--module-button-accent) 58%, #111015 42%);
+    --module-button-bg-hover: color-mix(in srgb, var(--module-button-accent) 88%, #111015 12%);
+    --module-button-text: #f4ecff;
+    --module-button-border: color-mix(in srgb, var(--module-button-accent) 28%, transparent);
+    --module-button-border-hover: color-mix(
+        in srgb,
+        var(--module-button-accent) 42%,
+        rgba(255, 255, 255, 0.12)
+    );
+    --module-button-radius: 12px;
+    --premium-purple-bg: linear-gradient(
+        135deg,
+        rgba(145, 53, 255, 0.92) 0%,
+        rgba(191, 92, 255, 0.88) 100%
+    );
+    --premium-purple-bg-hover: linear-gradient(
+        135deg,
+        rgba(154, 67, 255, 0.95) 0%,
+        rgba(199, 108, 255, 0.9) 100%
+    );
+    --premium-purple-border: rgba(235, 204, 255, 0.16);
+    --premium-purple-border-strong: rgba(245, 224, 255, 0.26);
+    --premium-purple-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    --premium-purple-chip-bg: rgba(0, 0, 0, 0.15);
+    --premium-purple-chip-border: rgba(0, 0, 0, 0.05);
+    --premium-purple-text: #ffffff;
+
+    /* Semantic Slugs */
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --text-muted: #6c757d;
+
+    /* Glassmorphism & Alpha Tokens */
+    --glass-surface: rgba(255, 255, 255, 0.03);
+    --glass-surface-hover: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-light: rgba(255, 255, 255, 0.15);
+
+    /* Common UI Tokens */
+    --card-bg: rgba(255, 255, 255, 0.03);
+    --card-bg-hover: rgba(255, 255, 255, 0.06);
+    --premium-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    --sidebar-bg: #0d1117;
+    --sidebar-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 0.08);
+
+    /* Radii */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+
+    /* Fonts */
+    --app-font-family: 'Monocraft', 'Cubic11', 'Inter', sans-serif;
+
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+
+    /* Layout Dimensions */
+    --sidebar-width: 280px;
+    --sidebar-collapsed-width: 80px;
+    --header-height: 60px;
+    --content-padding-top: 1.5rem;
+
+    /* Window Controls Positioning */
+    --win-controls-x: -2px;
+    --win-controls-y: 2px;
+
+    /* Animations */
+    --transition-fast: 150ms;
+    --transition-normal: 300ms;
+    --transition-slow: 500ms;
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+:root[lang='zh'] {
+    --app-font-family: 'Cubic11', 'Monocraft', 'Inter', sans-serif;
+}
+
+/* Utility to force brand font (Monocraft) regardless of language */
+.font-brand {
+    font-family: 'Monocraft', monospace !important;
+}

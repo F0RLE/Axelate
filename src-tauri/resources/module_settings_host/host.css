@@ -1,0 +1,116 @@
+:root {
+    color-scheme: dark;
+    --host-bg: #080b12;
+    --host-text: #eef2ff;
+    --host-muted: rgba(238, 242, 255, 0.72);
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+    --host-bg: #eef3fb;
+    --host-text: #0f172a;
+    --host-muted: rgba(15, 23, 42, 0.72);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+        radial-gradient(
+            circle at top,
+            rgba(84, 116, 255, 0.12),
+            transparent 40%
+        ),
+        var(--host-bg);
+    color: var(--host-text);
+    font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+}
+
+body {
+    min-height: 100vh;
+}
+
+.host-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.host-shell__stage {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+}
+
+.host-shell__frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: transparent;
+}
+
+.host-shell__overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    padding: 2rem;
+    background: linear-gradient(
+        180deg,
+        rgba(9, 13, 22, 0.96),
+        rgba(6, 9, 16, 0.92)
+    );
+    text-align: center;
+    z-index: 2;
+}
+
+:root[data-theme="light"] .host-shell__overlay {
+    background: linear-gradient(
+        180deg,
+        rgba(238, 243, 251, 0.94),
+        rgba(232, 238, 247, 0.92)
+    );
+}
+
+.host-shell__overlay[hidden] {
+    display: none;
+}
+
+.host-shell__spinner {
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 2px solid rgba(255, 255, 255, 0.16);
+    border-top-color: rgba(255, 255, 255, 0.86);
+    border-radius: 50%;
+    animation: host-spin 0.9s linear infinite;
+}
+
+:root[data-theme="light"] .host-shell__spinner {
+    border-color: rgba(15, 23, 42, 0.12);
+    border-top-color: rgba(15, 23, 42, 0.72);
+}
+
+.host-shell__overlay-message {
+    margin: 0;
+    max-width: 34rem;
+    color: var(--host-muted);
+    font-size: 0.96rem;
+    line-height: 1.5;
+}
+
+@keyframes host-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

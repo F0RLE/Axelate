@@ -1,0 +1,37 @@
+/* Base */
+@import './base/variables.css';
+@import './base/reset.css';
+@import './base/scrollbar.css';
+@import './base/animations.css';
+
+/* Components */
+@import './components/buttons.css';
+@import './components/cards.css';
+@import './components/forms.css';
+@import './components/icons.css';
+@import './components/status.css';
+
+/* Layouts */
+@import './layouts/controls.css';
+@import './layouts/main-area.css';
+@import './layouts/modals.css';
+@import './layouts/sidebar.css';
+@import './layouts/splash.css';
+@import './layouts/toasts.css';
+
+/* Features */
+@import './features/ai-settings.css';
+@import './features/chat.css';
+@import './features/home-and-modules-legacy.css';
+@import './features/modules-app-selection-modal.css';
+@import './features/modules-dashboard-cards.css';
+@import './features/console.css';
+@import './features/downloads.css';
+@import './features/monitoring.css';
+@import './features/settings.css';
+
+/* Global Disabled State Fix — must be AFTER all @imports */
+button:disabled *,
+button.disabled * {
+    pointer-events: none;
+}

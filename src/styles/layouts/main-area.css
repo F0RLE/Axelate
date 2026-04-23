@@ -1,0 +1,50 @@
+﻿/* --- MAIN AREA --- */
+#main-area {
+    grid-column: 2;
+    grid-row: 2;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+    position: relative;
+    z-index: auto;
+    overflow: hidden;
+    height: 100%;
+    max-height: 100%;
+    min-width: 0;
+    min-height: 0;
+}
+
+.page {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none !important;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    padding-top: var(--content-padding-top);
+    box-sizing: border-box;
+    /* Include padding in height/width */
+    z-index: 1;
+    opacity: 0;
+    pointer-events: none;
+    transition: none;
+    background: transparent;
+}
+
+.page.active {
+    display: flex !important;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 10;
+    animation: none;
+}
+
+.page.leaving {
+    display: none !important;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 5;
+}

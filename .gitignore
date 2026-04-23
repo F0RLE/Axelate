@@ -1,0 +1,56 @@
+# Axelate
+
+# Frontend dependencies and outputs
+/node_modules/
+/src/node_modules/
+/src/dist/
+/src/coverage/
+/src/.vite/
+/src/*.tsbuildinfo
+/src/vite*.log
+/src/preview*.log
+
+# Rust / Tauri outputs
+/src-tauri/target/
+/src-tauri/gen/
+/src-tauri/check_output.txt
+
+# Local caches and temp outputs
+/.cache/
+/.history/
+/.playwright-cli/
+/build/
+/output/
+
+# Local app/runtime data
+/AxelateData/
+/data/
+
+# Environment files
+.env
+.env.*
+!.env.example
+!**/.env.example
+.envrc
+.direnv/
+
+# Editor / IDE
+.idea/
+.vs/
+*.swp
+*.swo
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Logs
+*.log
+.eslintcache
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db

@@ -1,0 +1,143 @@
+# Axelate Trust Model
+
+> Practical trust model for the current workstation core and the next permission layers.
+> The current-state sections are repository-grounded; the future-state sections are design targets, not shipped guarantees.
+
+## Core Position
+
+Axelate wants to become a trusted desktop control plane.
+
+That only works if the launcher is explicit about:
+
+- what lives in the backend
+- what the frontend is allowed to do
+- what local modules are allowed to do
+- what future MCP and package permissions should look like
+
+## What Is Protected Today
+
+Current repository-grounded trust decisions:
+
+- sensitive values are backend-owned
+- Rust owns domain logic and persisted state
+- frontend bindings are generated from Rust types
+- process and module lifecycle are controlled from the backend side
+- secure storage infrastructure exists for provider secrets
+
+This means the UI is not the source of truth for secrets or runtime control.
+
+## Current Security Boundaries
+
+### Backend
+
+The Rust backend currently owns:
+
+- secret storage
+- persisted chat state
+- runtime and module lifecycle
+- download and extraction flows
+- process inspection and cleanup
+- generated frontend contracts
+
+### Frontend
+
+The TypeScript frontend currently owns:
+
+- shell composition
+- UI rendering
+- user interaction flow
+- presentation of settings, logs, downloads, and monitoring
+
+The frontend should remain a thin orchestration and UX layer.
+
+### Modules And Local Runtimes
+
+Local runtimes and modules are useful, but they are not automatically trusted.
+
+Current practical rule:
+
+- local modules are product capabilities, not arbitrary unrestricted execution promises
+
+Future package and module UX should make this much more visible.
+
+## What Users Should Be Able To Trust
+
+Current repository direction already supports these expectations:
+
+- provider secrets are not frontend-owned
+- runtime start and stop actions are backend-mediated
+- logs and repair tools should explain what happened when something fails
+
+The launcher should eventually make the remaining guarantees obvious:
+
+- package and module permissions are visible before install or execution
+- local, remote, and hybrid execution modes are clearly labeled
+
+## Not Shipped Yet
+
+The repository is not done with these trust surfaces yet. Treat them as the intended next layer, not as promises that the desktop fully enforces today.
+
+## What Still Needs To Be Made Explicit
+
+The current codebase is stronger than the current public trust explanation.
+
+What still needs clearer product-level documentation and UX:
+
+- secret storage model
+- package permission model
+- module capability boundaries
+- MCP server and tool permission prompts
+- package verification and signing flow
+- difference between local, managed, and hybrid execution
+
+## Future Permission Model
+
+The launcher should move toward explicit permission surfaces for:
+
+- file system access
+- network access
+- local process execution
+- model/provider usage
+- MCP server connection
+- MCP tool invocation
+- package install and update trust
+
+The important rule is simple:
+
+- no silent trust escalation
+
+## MCP Direction
+
+MCP support should be opt-in and permissioned.
+
+Good future behavior:
+
+- users see which server is connected
+- users see which tools a server exposes
+- users approve access intentionally
+- failures degrade safely
+- unsafe execution is never hidden behind vague wording
+
+## Package Direction
+
+Future creator packages should not be presented as magic trusted blobs.
+
+The launcher should eventually show:
+
+- who published the package
+- what mode it runs in: local, managed, or hybrid
+- what permissions it needs
+- whether it is signed or verified
+- how updates and rollback work
+
+## Final Rule
+
+Axelate does not earn trust by saying it is secure.
+
+It earns trust by making boundaries visible:
+
+- backend vs frontend
+- trusted vs untrusted
+- local vs remote
+- installed vs verified
+- allowed vs denied
