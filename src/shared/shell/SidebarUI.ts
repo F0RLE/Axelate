@@ -129,8 +129,15 @@ export class SidebarUI extends BaseComponent {
      * Restores the sidebar collapsed state from UI state.
      */
     private _restoreState(): void {
-        this._isCollapsed = this._state.getSidebarCollapsed();
+        const persistedWidth = this._state.getSidebarWidth();
+        const hasPersistedWidth = Number.isFinite(persistedWidth) && persistedWidth > 0;
+
+        this._isCollapsed = hasPersistedWidth
+            ? persistedWidth < 100
+            : this._state.getSidebarCollapsed();
         this._updateAutoCompactState();
+        this._hasManualSidebarOverride =
+            this._isAutoCompact && this._state.getSidebarManualOverride();
         this._applySidebarWidth();
     }
 
@@ -161,8 +168,7 @@ export class SidebarUI extends BaseComponent {
             this._startSnappingAnimation();
             this._updateAutoCompactState();
             this._applySidebarWidth();
-            this._persistSidebarState();
-            logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
+            this._persistSidebarPreferenceState();
             this._soundService?.playExpand(!this._isCollapsed);
         };
 
@@ -194,11 +200,14 @@ export class SidebarUI extends BaseComponent {
             this._isCollapsed,
             isEffectiveAutoCompact,
         );
+        const isEffectivelyCollapsed = width < 100;
 
-        this._sidebar.classList.toggle('collapsed', width < 100);
+        this._sidebar.classList.toggle('collapsed', isEffectivelyCollapsed);
         this._sidebar.classList.toggle('auto-compact', isEffectiveAutoCompact);
         document.documentElement.style.setProperty('--sidebar-width', `${String(width)}px`);
         this._sidebar.style.width = `${String(width)}px`;
+        this._syncAccessibilityState(isEffectivelyCollapsed);
+        this._persistEffectiveSidebarState(width, isEffectivelyCollapsed);
     }
 
     private _updateAutoCompactState(): void {
@@ -252,7 +261,6 @@ export class SidebarUI extends BaseComponent {
 
         this._layoutUpdateFrame = globalThis.requestAnimationFrame(() => {
             this._layoutUpdateFrame = null;
-            this._resetManualSidebarOverride();
             this._updateAutoCompactState();
             this._applySidebarWidth();
             if (checkMonitorVisibility) {
@@ -343,16 +351,43 @@ export class SidebarUI extends BaseComponent {
         }, 300);
     }
 
-    private _persistSidebarState(): void {
-        const targetWidth = this._isCollapsed
-            ? SidebarUI._COLLAPSED_WIDTH
-            : SidebarUI._EXPANDED_WIDTH;
-        this._state.setSidebarWidth(targetWidth);
-        this._state.setSidebarCollapsed(this._isCollapsed);
+    private _persistEffectiveSidebarState(width: number, collapsed: boolean): void {
+        if (
+            this._state.getSidebarWidth() === width &&
+            this._state.getSidebarCollapsed() === collapsed
+        ) {
+            return;
+        }
+
+        this._state.setSidebarState(collapsed, width);
     }
 
-    private _resetManualSidebarOverride(): void {
-        this._hasManualSidebarOverride = false;
+    private _persistSidebarPreferenceState(): void {
+        const width = this._autoCompactPolicy.getPersistedWidth(this._isCollapsed);
+        const manualOverride = this._isAutoCompact && this._hasManualSidebarOverride;
+
+        if (
+            this._state.getSidebarWidth() === width &&
+            this._state.getSidebarCollapsed() === this._isCollapsed &&
+            this._state.getSidebarManualOverride() === manualOverride
+        ) {
+            return;
+        }
+
+        this._state.setSidebarState(this._isCollapsed, width, manualOverride);
+    }
+
+    private _syncAccessibilityState(collapsed: boolean): void {
+        if (this._sidebar === null) {
+            return;
+        }
+
+        const logoArea = this._sidebar.querySelector('.logo-area');
+        if (!(logoArea instanceof HTMLElement)) {
+            return;
+        }
+
+        logoArea.setAttribute('aria-expanded', (!collapsed).toString());
     }
 
     private _getMonitoringElements(): IMonitoringElements | null {

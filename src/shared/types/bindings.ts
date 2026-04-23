@@ -1127,6 +1127,8 @@ export type TokenUsage = {
 export type UIState = {
 	// Sidebar collapsed state
 	sidebar_collapsed: boolean,
+	// User manually overrode responsive sidebar compaction
+	sidebar_manual_override?: boolean,
 	// Sidebar width in pixels
 	sidebar_width: number,
 	// Hidden navigation items (page IDs)

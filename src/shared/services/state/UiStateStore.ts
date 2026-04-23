@@ -15,6 +15,7 @@ export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
 
 export interface IUIState {
     sidebar_collapsed: boolean;
+    sidebar_manual_override?: boolean;
     sidebar_width: number;
     hidden_nav_items: string[];
     hidden_monitors: string[];
@@ -39,6 +40,7 @@ type UiStateStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 const DEFAULT_UI_STATE: IUIState = {
     sidebar_collapsed: false,
+    sidebar_manual_override: false,
     sidebar_width: 280,
     hidden_nav_items: ['marketplace'],
     hidden_monitors: [],

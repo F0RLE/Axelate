@@ -25,6 +25,19 @@ describe('UISettingsService', () => {
         expect(service.getSidebarWidth()).toBe(200);
     });
 
+    it('should get sidebar manual override', () => {
+        expect(service.getSidebarManualOverride()).toBe(false);
+    });
+
+    it('should set sidebar state in one update', () => {
+        service.setSidebarState(true, 80, true);
+        expect(store.updateState).toHaveBeenCalledWith({
+            sidebar_collapsed: true,
+            sidebar_manual_override: true,
+            sidebar_width: 80,
+        });
+    });
+
     it('should get/set hidden nav items', () => {
         expect(service.getHiddenNavItems()).toEqual([]);
         service.setHiddenNavItems(['dashboard', 'chat']);
