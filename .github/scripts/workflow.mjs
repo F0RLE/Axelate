@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {
@@ -114,6 +115,14 @@ function ensureInsideRepo(targetPath) {
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
         fail(`Refusing to remove path outside repo: ${targetPath}`);
     }
+}
+
+function assertCondition(condition, message) {
+    if (!condition) {
+        fail(message);
+    }
+
+    log(`ok: ${message}`);
 }
 
 function run(command, args = [], options = {}) {
@@ -381,6 +390,151 @@ function syncFrontendBindings() {
     );
 }
 
+function removeTomlInlineComment(line) {
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    let escaped = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+        const char = line[index];
+
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+
+        if (char === '\\' && inDoubleQuote) {
+            escaped = true;
+            continue;
+        }
+
+        if (char === "'" && !inDoubleQuote) {
+            inSingleQuote = !inSingleQuote;
+            continue;
+        }
+
+        if (char === '"' && !inSingleQuote) {
+            inDoubleQuote = !inDoubleQuote;
+            continue;
+        }
+
+        if (char === '#' && !inSingleQuote && !inDoubleQuote) {
+            return line.slice(0, index);
+        }
+    }
+
+    return line;
+}
+
+function readCargoReleaseProfile() {
+    const cargoTomlPath = path.join(tauriDir, 'Cargo.toml');
+    const cargoToml = readFileSync(cargoTomlPath, 'utf8');
+    const profile = new Map();
+    let inReleaseProfile = false;
+
+    for (const rawLine of cargoToml.split(/\r?\n/u)) {
+        const trimmedLine = rawLine.trim();
+        const sectionMatch = trimmedLine.match(/^\[(.+)\]$/u);
+        if (sectionMatch) {
+            inReleaseProfile = sectionMatch[1] === 'profile.release';
+            continue;
+        }
+
+        if (!inReleaseProfile || trimmedLine.length === 0 || trimmedLine.startsWith('#')) {
+            continue;
+        }
+
+        const settingLine = removeTomlInlineComment(rawLine).trim();
+        const settingMatch = settingLine.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/u);
+        if (settingMatch) {
+            profile.set(settingMatch[1], settingMatch[2].trim());
+        }
+    }
+
+    return profile;
+}
+
+function verifyReleaseHardening() {
+    const tauriConfigPath = path.join(tauriDir, 'tauri.conf.json');
+    const releaseProfile = readCargoReleaseProfile();
+    const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8'));
+    const targets = Array.isArray(tauriConfig.bundle?.targets) ? tauriConfig.bundle.targets : [];
+
+    assertCondition(releaseProfile.get('lto') === 'true', 'Cargo release profile enables LTO');
+    assertCondition(releaseProfile.get('panic') === '"abort"', 'Cargo release profile aborts on panic');
+    assertCondition(releaseProfile.get('strip') === 'true', 'Cargo release profile strips symbols');
+    assertCondition(
+        releaseProfile.get('overflow-checks') === 'true',
+        'Cargo release profile keeps overflow checks',
+    );
+    assertCondition(tauriConfig.bundle?.active === true, 'Tauri bundling is enabled');
+    assertCondition(
+        targets.includes('msi') && targets.includes('nsis'),
+        'Windows release targets include MSI and NSIS',
+    );
+    assertCondition(
+        typeof tauriConfig.app?.security?.csp === 'string' &&
+            tauriConfig.app.security.csp.trim().length > 0,
+        'Application CSP is configured',
+    );
+    assertCondition(
+        typeof tauriConfig.bundle?.windows?.webviewInstallMode?.type === 'string' &&
+            tauriConfig.bundle.windows.webviewInstallMode.type.trim().length > 0,
+        'WebView2 install mode is configured',
+    );
+    assertCondition(
+        typeof tauriConfig.bundle?.windows?.nsis?.minimumWebview2Version === 'string' &&
+            tauriConfig.bundle.windows.nsis.minimumWebview2Version.trim().length > 0,
+        'NSIS minimum WebView2 version is configured',
+    );
+}
+
+function listFilesRecursive(rootDir) {
+    const files = [];
+    const entries = readdirSync(rootDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+        const entryPath = path.join(rootDir, entry.name);
+        if (entry.isDirectory()) {
+            files.push(...listFilesRecursive(entryPath));
+            continue;
+        }
+
+        if (entry.isFile()) {
+            files.push(entryPath);
+        }
+    }
+
+    return files;
+}
+
+function writeReleaseChecksums() {
+    const bundleDir = path.join(tauriDir, 'target', 'release', 'bundle');
+    if (!existsSync(bundleDir) || !statSync(bundleDir).isDirectory()) {
+        fail(`Release bundle directory not found: ${bundleDir}`);
+    }
+
+    const checksumFileName = 'SHA256SUMS.txt';
+    const checksumPath = path.join(bundleDir, checksumFileName);
+    const bundleFiles = listFilesRecursive(bundleDir)
+        .filter((filePath) => path.basename(filePath) !== checksumFileName)
+        .sort((left, right) => left.localeCompare(right));
+
+    if (bundleFiles.length === 0) {
+        fail('No release artifacts found for checksum generation.');
+    }
+
+    const lines = bundleFiles.map((filePath) => {
+        const hash = createHash('sha256').update(readFileSync(filePath)).digest('hex');
+        const relativePath = path.relative(bundleDir, filePath).replace(/\\/gu, '/');
+
+        return `${hash} *${relativePath}`;
+    });
+
+    writeFileSync(checksumPath, `${lines.join('\n')}\n`, 'ascii');
+    log(`Checksums saved: ${checksumPath}`);
+}
+
 function stopRunningApp() {
     if (!isWindows) {
         return;
@@ -507,6 +661,8 @@ Tasks:
   tauri:dev      Alias for desktop app development mode
   tauri:build    Build the desktop app
   release        Run verify and build a release app bundle
+  release:checksums  Generate SHA256 checksums for release bundles
+  release:verify-hardening  Validate release hardening settings
   run            Launch the built app artifact
   lint           Run frontend lint checks
   format         Format frontend files
@@ -583,6 +739,12 @@ Tasks:
         if (openArtifacts) {
             openPath(path.join(tauriDir, 'target', 'release', 'bundle'));
         }
+    },
+    'release:checksums'() {
+        writeReleaseChecksums();
+    },
+    'release:verify-hardening'() {
+        verifyReleaseHardening();
     },
     run() {
         runReleaseBinary();

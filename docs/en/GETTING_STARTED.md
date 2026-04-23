@@ -10,11 +10,12 @@ For day-to-day contributor work after setup, continue with [Development Workflow
 
 - Node.js 20+
 - npm 10+
-- Rust stable
+- Rust via `rustup` (`rust-toolchain.toml` pins the tested version)
 - Windows: Visual Studio Build Tools, Windows SDK, and WebView2 Runtime
 
 Tauri on Windows depends on machine-level native tooling.
 Portable Node and Rust are supported, but MSVC, SDK tools, and WebView2 still need to exist on the machine.
+The repository pins the tested Rust toolchain in `rust-toolchain.toml`; let `rustup` install that exact version.
 
 ## Windows Prerequisites
 

@@ -50,7 +50,7 @@ Install on Windows first:
 
 - Node.js 20+
 - npm 10+
-- Rust stable
+- Rust via `rustup` (`rust-toolchain.toml` pins the tested version)
 - WebView2 Runtime
 - Windows SDK
 - Microsoft C++ Build Tools with the `Desktop development with C++` workload

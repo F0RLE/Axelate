@@ -130,7 +130,7 @@ pub fn compute_progress(snapshot: ProgressSnapshot) -> f32 {
     }
 }
 
-pub fn combine_progress_phases(base: f32, span: f32, progress: f32) -> f32 {
+pub const fn combine_progress_phases(base: f32, span: f32, progress: f32) -> f32 {
     if progress.is_sign_negative() {
         return -1.0;
     }

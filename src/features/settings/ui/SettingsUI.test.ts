@@ -27,6 +27,7 @@ type ModuleSettingsUIPrivate = {
         app: Record<string, unknown>,
     ) => Promise<void>;
     _openModuleSettingsHelper: (app: Record<string, unknown>) => Promise<void>;
+    openModuleSettings: (app: Record<string, unknown>) => Promise<void>;
     _resetDynamicModuleState: () => void;
     destroy: () => void;
 };
@@ -252,7 +253,7 @@ describe('ModuleSettingsUI lifecycle', () => {
 
     it('should reuse the in-flight open request for the same module', async () => {
         const ui = createSettingsUI();
-        const app = { id: 'module-a' };
+        const app: Record<string, unknown> = { id: 'module-a' };
         let resolveOpen!: () => void;
         const pendingOpen = new Promise<void>((resolve) => {
             resolveOpen = resolve;
@@ -261,16 +262,16 @@ describe('ModuleSettingsUI lifecycle', () => {
 
         ui._openModuleSettingsHelper = openHelper as typeof ui._openModuleSettingsHelper;
 
-        const firstOpen = settingsUI!.openModuleSettings(app as never);
+        const firstOpen = ui.openModuleSettings(app);
         await Promise.resolve();
-        const secondOpen = settingsUI!.openModuleSettings(app as never);
+        const secondOpen = ui.openModuleSettings(app);
 
         expect(openHelper).toHaveBeenCalledTimes(1);
 
         resolveOpen();
         await Promise.all([firstOpen, secondOpen]);
 
-        await settingsUI!.openModuleSettings(app as never);
+        await ui.openModuleSettings(app);
         expect(openHelper).toHaveBeenCalledTimes(2);
     });
 });
