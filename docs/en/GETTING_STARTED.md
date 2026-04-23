@@ -107,6 +107,9 @@ npm run release
 - `tauri:build` builds the desktop app.
 - `release` runs verification first, then produces release bundles.
 
+Local release builds do not publish anything to GitHub. GitHub releases are created by the tag workflow.
+See [Releases](RELEASES.md) for the tag rules and checklist.
+
 ## First App Launch
 
 Current happy path:
@@ -151,6 +154,7 @@ This repository should use `src/node_modules`. A second root `node_modules` tree
 ## Related Docs
 
 - [Development Workflow](DEVELOPMENT_WORKFLOW.md)
+- [Releases](RELEASES.md)
 - [Current State](CURRENT_STATE.md)
 - [Trust Model](TRUST_MODEL.md)
 - [Vision](VISION.md)

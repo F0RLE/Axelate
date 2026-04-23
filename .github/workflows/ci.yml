@@ -1,10 +1,18 @@
 name: Strict CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: ["beta", "alpha"]
+    branches: ["main", "nightly"]
   pull_request:
-    branches: ["beta", "alpha"]
+    branches: ["main", "nightly"]
+
+concurrency:
+  group: strict-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,6 +21,7 @@ jobs:
   check-frontend:
     name: Frontend Strict Check
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +72,7 @@ jobs:
   check-backend:
     name: Backend Strict Check
     runs-on: windows-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -76,12 +86,6 @@ jobs:
         uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
         with:
           workspaces: "src-tauri -> target"
-
-      - name: Install Backend Dependencies
-        run: |
-          # Tauri CLI needed for some build scripts?
-          # Usually cargo handles crate dependencies automatically.
-          echo "Ready to build"
 
       - name: Clippy (Strict Linting)
         run: |
@@ -101,7 +105,7 @@ jobs:
 
       - name: Security Audit (Rust)
         run: |
-          cargo install cargo-audit --quiet
+          cargo install cargo-audit --locked --quiet
           cd src-tauri
           cargo audit
         continue-on-error: true  # Don't fail CI, but report issues

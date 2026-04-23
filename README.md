@@ -76,12 +76,30 @@ npm run lint
 npm run verify
 ```
 
+## Branches, CI, And Releases
+
+- `nightly` is the active development branch.
+- `main` is the release-ready branch.
+- Strict CI runs on pushes and pull requests targeting `main` or `nightly`.
+- Dependabot targets `nightly`.
+- GitHub releases are created by pushing a version tag that starts with `v`.
+
+Release tags must match the versions in `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`:
+
+```bash
+git tag v0.1.5
+git push origin v0.1.5
+```
+
+For the full release checklist, see [Releases](docs/en/RELEASES.md).
+
 ## Docs
 
 Start here:
 
 - [Getting Started](docs/en/GETTING_STARTED.md)
 - [Development Workflow](docs/en/DEVELOPMENT_WORKFLOW.md)
+- [Releases](docs/en/RELEASES.md)
 - [Current State](docs/en/CURRENT_STATE.md)
 - [Contributing](CONTRIBUTING.md)
 

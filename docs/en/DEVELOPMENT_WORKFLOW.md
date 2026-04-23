@@ -10,6 +10,13 @@
 - keep frontend dependencies in `src/node_modules`
 - treat Rust types as the source of truth for frontend-visible bindings
 
+Branch model:
+
+- `nightly` is the active development branch
+- `main` is the release-ready branch
+- dependency update pull requests target `nightly`
+- merge to `main` only after CI is green and the change is ready to release
+
 The repository currently splits responsibilities this way:
 
 - `.github/scripts/workflow.mjs`: root task runner for setup, dev, build, release, and verification
@@ -79,6 +86,18 @@ npm run release
 - `tauri:build`: desktop app build
 - `release`: full verification plus release bundle build
 
+## CI And Releases
+
+GitHub Actions currently has two repository workflows:
+
+- `Strict CI`: runs on pushes and pull requests for `main` and `nightly`, plus manual dispatch
+- `Release Build`: runs on pushed `v*` tags, plus manual dispatch for an existing tag
+
+The release workflow builds the Windows Tauri bundles, verifies release hardening, writes `SHA256SUMS.txt`, and attaches checksums to the GitHub release.
+The release tag must match the versions in `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`.
+
+See [Releases](RELEASES.md) for the release checklist.
+
 Cleanup command:
 
 ```bash
@@ -125,6 +144,7 @@ The current doctor flow checks WebView2 through the Windows registry and resolve
 Use these as current truth:
 
 - [Getting Started](GETTING_STARTED.md)
+- [Releases](RELEASES.md)
 - [Current State](CURRENT_STATE.md)
 - [Trust Model](TRUST_MODEL.md)
 
