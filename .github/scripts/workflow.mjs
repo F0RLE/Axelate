@@ -280,6 +280,37 @@ function workspaceAxelateExecutablePaths() {
     );
 }
 
+function getWindowsProcesses(env = toolEnv()) {
+    const command = [
+        '$ErrorActionPreference = "Stop"',
+        '$processes = @(Get-CimInstance Win32_Process | Select-Object Name, ProcessId, ParentProcessId, ExecutablePath, CommandLine)',
+        '$processes | ConvertTo-Json -Compress',
+    ].join('; ');
+    const invocation = buildCommandInvocation(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command],
+        env,
+    );
+    const result = spawnSync(invocation.command, invocation.args, {
+        cwd: repoRoot,
+        env,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false,
+    });
+
+    if (result.error || result.status !== 0 || !result.stdout.trim()) {
+        return [];
+    }
+
+    try {
+        const parsed = JSON.parse(result.stdout);
+        return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+        return [];
+    }
+}
+
 function getRunningWindowsProcesses(imageName, env = toolEnv()) {
     const command = [
         '$ErrorActionPreference = "Stop"',
@@ -309,6 +340,57 @@ function getRunningWindowsProcesses(imageName, env = toolEnv()) {
     } catch {
         return [];
     }
+}
+
+function isProtectedWorkflowProcess(processInfo) {
+    const processId = Number(processInfo?.ProcessId ?? 0);
+    return processId === process.pid || processId === process.ppid;
+}
+
+function commandLineContainsPath(commandLine, targetPath) {
+    return normalizeWindowsPath(commandLine).includes(normalizeWindowsPath(targetPath));
+}
+
+function isWorkspaceDevSupervisor(processInfo) {
+    if (!processInfo?.CommandLine || isProtectedWorkflowProcess(processInfo)) {
+        return false;
+    }
+
+    const processName = String(processInfo.Name ?? '').toLowerCase();
+    const commandLine = normalizeWindowsPath(processInfo.CommandLine);
+    const isWorkspaceProcess =
+        commandLineContainsPath(processInfo.CommandLine, repoRoot) ||
+        commandLineContainsPath(processInfo.CommandLine, srcDir) ||
+        commandLineContainsPath(processInfo.CommandLine, tauriDir);
+
+    if (!isWorkspaceProcess) {
+        return false;
+    }
+
+    const isTauriDevCommand =
+        commandLine.includes('tauri') &&
+        commandLine.includes('dev') &&
+        !commandLine.includes('workflow.mjs');
+    const isCargoDevRunner =
+        processName === 'cargo.exe' &&
+        commandLine.includes('run') &&
+        commandLine.includes('no-default-features');
+
+    return (
+        ((processName === 'node.exe' || processName === 'cmd.exe') && isTauriDevCommand) ||
+        isCargoDevRunner
+    );
+}
+
+function stopWindowsProcessTree(processInfo, label) {
+    if (!processInfo?.ProcessId) {
+        return;
+    }
+
+    log(`stop ${label} pid=${String(processInfo.ProcessId)}`);
+    run('taskkill', ['/F', '/PID', String(processInfo.ProcessId), '/T'], {
+        allowFailure: true,
+    });
 }
 
 function printDoctorResult(result) {
@@ -541,6 +623,11 @@ function stopRunningApp() {
     }
 
     const env = toolEnv();
+    const devSupervisors = getWindowsProcesses(env).filter(isWorkspaceDevSupervisor);
+    for (const processInfo of devSupervisors) {
+        stopWindowsProcessTree(processInfo, String(processInfo.Name ?? 'dev process'));
+    }
+
     const workspaceExecutables = new Set(
         workspaceAxelateExecutablePaths().map((candidate) => normalizeWindowsPath(candidate)),
     );
@@ -553,10 +640,7 @@ function stopRunningApp() {
     });
 
     for (const processInfo of runningProcesses) {
-        log(`stop Axelate.exe pid=${String(processInfo.ProcessId)}`);
-        run('taskkill', ['/F', '/PID', String(processInfo.ProcessId), '/T'], {
-            allowFailure: true,
-        });
+        stopWindowsProcessTree(processInfo, 'Axelate.exe');
     }
 }
 

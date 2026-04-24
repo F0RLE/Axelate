@@ -188,7 +188,7 @@ The backend currently handles real runtime concerns:
 - process start and stop
 - status inspection
 - PID handling
-- runtime log paths
+- runtime log paths split by owner: engines under `System/Logs/Engines`, modules under `System/Logs/Modules`
 - duplicate process cleanup
 
 This is the strongest evidence that Axelate is already a launcher/workstation base and not just a model picker UI.

@@ -6,6 +6,7 @@
 /src/dist/
 /src/coverage/
 /src/.vite/
+/src/.axelate/
 /src/*.tsbuildinfo
 /src/vite*.log
 /src/preview*.log

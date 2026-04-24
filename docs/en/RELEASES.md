@@ -9,6 +9,7 @@
 - `main` is the release-ready branch.
 - Dependabot targets `nightly`.
 - Release tags should be created from the commit that is meant to ship.
+- Release tags must point to a commit that is already reachable from `main`.
 
 ## CI
 
@@ -69,6 +70,7 @@ The release workflow:
 
 - checks the tag format
 - checks manifest versions
+- checks that the tagged commit is reachable from `main`
 - installs frontend dependencies
 - runs frontend and Rust audits
 - builds Windows Tauri bundles

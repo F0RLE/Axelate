@@ -83,6 +83,7 @@ npm run verify
 - Strict CI runs on pushes and pull requests targeting `main` or `nightly`.
 - Dependabot targets `nightly`.
 - GitHub releases are created by pushing a version tag that starts with `v`.
+- Release tags must point to a commit that is already reachable from `main`.
 
 Release tags must match the versions in `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`:
 
