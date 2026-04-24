@@ -127,7 +127,6 @@
     "ui.gemini.stats.speed": "Speed",
     "ui.gemini.status.retry": "Rate limited. Retrying in {seconds}s...",
     "ui.gpt.key_check_btn": "Check",
-    "ui.gpt.model.gpt54.desc": "Best intelligence at scale for agentic, coding, and professional workflows",
     "ui.gpt.model.gpt54mini.desc": "Our strongest mini model yet for coding, computer use, and subagents",
     "ui.gpt.model.gpt54nano.desc": "Our cheapest GPT-5.4-class model for simple high-volume tasks",
     "ui.gpt.image.gpt5_image.desc": "OpenAI GPT-5 Image with stronger reasoning, premium image generation, and detailed editing",
@@ -225,7 +224,6 @@
     "ui.launcher.web.downloads_subtitle": "Manage model and module downloads",
     "ui.launcher.web.eta_label": "ETA",
     "ui.launcher.web.edit_last": "Edit last message",
-    "ui.launcher.web.expand_window": "Expand window to see normal interface display",
     "ui.launcher.web.home": "Home",
     "ui.launcher.web.home_title": "Main Menu",
     "ui.launcher.web.information": "Information",
@@ -469,5 +467,7 @@
     "ui.launcher.engine.sdcpp.name": "Stable Diffusion.cpp",
     "ui.launcher.engine.sdcpp.desc": "Lightweight image generation engine.",
     "ui.launcher.engine.comfyui.name": "ComfyUI",
-    "ui.launcher.engine.comfyui.desc": "Node-based image workflow engine for maximum quality and control."
+    "ui.launcher.engine.comfyui.desc": "Node-based image workflow engine for maximum quality and control.",
+    "ui.gpt.model.gpt55.desc": "Frontier model for complex professional workloads with stronger reasoning, higher reliability, and improved token efficiency",
+    "ui.gpt.model.gpt55pro.desc": "High-capability model optimized for deep reasoning and accuracy on complex, high-stakes workloads"
 }

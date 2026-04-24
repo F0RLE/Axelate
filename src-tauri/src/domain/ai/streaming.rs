@@ -908,7 +908,7 @@ mod tests {
     fn sample_request() -> ChatRequest {
         ChatRequest {
             provider: "gpt".to_string(),
-            model: "openai/gpt-5.4".to_string(),
+            model: "openai/gpt-5.5".to_string(),
             messages: vec![ChatMessage {
                 id: "m1".to_string(),
                 role: "user".to_string(),

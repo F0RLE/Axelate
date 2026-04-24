@@ -43,7 +43,7 @@ describe('chatRequestUtils', () => {
         it('should construct a valid request object', () => {
             const config = {
                 providerId: 'gpt',
-                model: 'gpt-5.4',
+                model: 'gpt-5.5',
                 apiKey: 'sk-123',
                 sessionId: 'session-1',
                 thinkingLevel: 'high' as const,
@@ -53,7 +53,7 @@ describe('chatRequestUtils', () => {
 
             expect(request).toEqual({
                 provider: 'gpt',
-                model: 'gpt-5.4',
+                model: 'gpt-5.5',
                 messages: [{ role: 'user', content: 'Hello', thought_signature: undefined }],
                 session_id: 'session-1',
                 api_key: 'sk-123',
@@ -82,7 +82,7 @@ describe('chatRequestUtils', () => {
         it('should prepend existing history before the current message', () => {
             const config = {
                 providerId: 'gpt',
-                model: 'gpt-5.4',
+                model: 'gpt-5.5',
                 apiKey: 'sk-123',
                 sessionId: 'session-1',
                 thinkingLevel: 'high' as const,
@@ -125,7 +125,7 @@ describe('chatRequestUtils', () => {
         it('should preserve explicit none reasoning effort for OpenRouter requests', () => {
             const config = {
                 providerId: 'gpt',
-                model: 'gpt-5.4',
+                model: 'gpt-5.5',
                 apiKey: 'sk-123',
                 sessionId: 'session-1',
                 thinkingLevel: 'none' as const,
@@ -152,7 +152,7 @@ describe('chatRequestUtils', () => {
         it('should include web search flag when enabled', () => {
             const config = {
                 providerId: 'gpt',
-                model: 'gpt-5.4',
+                model: 'gpt-5.5',
                 apiKey: 'sk-123',
                 sessionId: 'session-1',
                 webSearchEnabled: true,

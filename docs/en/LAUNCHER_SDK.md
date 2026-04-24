@@ -155,7 +155,7 @@ launcher chat.
   "prompt": "Summarize this message",
   "sessionId": "telegram-bot",
   "provider": "openai",
-  "model": "gpt-5.4",
+  "model": "gpt-5.5",
   "messages": [{ "role": "user", "content": "Optional chat history" }],
   "thinkingLevel": "medium",
   "maxTokens": 1024,
