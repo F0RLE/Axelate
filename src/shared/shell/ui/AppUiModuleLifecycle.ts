@@ -1,6 +1,7 @@
 import type { IApp } from '../../types/coreTypes';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import { isAiCategory } from '../../utils/moduleCategoryPolicy';
 
 type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 
@@ -47,7 +48,7 @@ export class AppUiModuleLifecycle {
             return;
         }
 
-        if (category.startsWith('ai') && this._deps.isSelectedInAnotherAiSlot(category, app.id)) {
+        if (isAiCategory(category) && this._deps.isSelectedInAnotherAiSlot(category, app.id)) {
             return;
         }
 
@@ -69,7 +70,7 @@ export class AppUiModuleLifecycle {
         }
 
         if (
-            category.startsWith('ai') &&
+            isAiCategory(category) &&
             this._deps.isSelectedInAnotherAiSlot(category, previousModuleId)
         ) {
             return;

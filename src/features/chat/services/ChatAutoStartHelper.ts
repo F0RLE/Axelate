@@ -1,17 +1,19 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '@/shared/types/coreTypes';
+import { CategoryKey } from '@/shared/types/categoryKeys';
+import { getOtherAiSlot, type AiSlotCategory } from '@/shared/utils/moduleCategoryPolicy';
 
 type ChatAutoStartLogger = Pick<LoggerService, 'info'>;
 
 type ChatAutoStartHelperDeps = {
     aiBridge: Pick<AIBridge, 'startProvider'>;
-    getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
-    getPreferredAiCategory: () => 'ai_text' | 'ai_image';
+    getSelectedModule: (category: AiSlotCategory) => Partial<IApp> | undefined;
+    getPreferredAiCategory: () => AiSlotCategory;
     tracer: ChatAutoStartLogger;
 };
 
-type AiChatCategory = 'ai_text' | 'ai_image';
+type AiChatCategory = AiSlotCategory;
 
 export class ChatAutoStartHelper {
     public constructor(private readonly _deps: ChatAutoStartHelperDeps) {}
@@ -23,7 +25,7 @@ export class ChatAutoStartHelper {
             return preferredModuleId;
         }
 
-        const fallbackCategory = preferredCategory === 'ai_text' ? 'ai_image' : 'ai_text';
+        const fallbackCategory = getOtherAiSlot(preferredCategory);
         return this._getModuleId(fallbackCategory);
     }
 
@@ -44,7 +46,7 @@ export class ChatAutoStartHelper {
         }
     }
 
-    private _getModuleId(category: 'ai_text' | 'ai_image'): string | null {
+    private _getModuleId(category: AiSlotCategory): string | null {
         const module = this._deps.getSelectedModule(category);
         return module?.id !== undefined && module.id !== '' ? module.id : null;
     }
@@ -55,11 +57,11 @@ export class ChatAutoStartHelper {
         }
 
         if (this._isImageGenerationPrompt(prompt)) {
-            return 'ai_image';
+            return CategoryKey.AI_IMAGE;
         }
 
-        if (this._getModuleId('ai_text') !== null) {
-            return 'ai_text';
+        if (this._getModuleId(CategoryKey.AI_TEXT) !== null) {
+            return CategoryKey.AI_TEXT;
         }
 
         return this._deps.getPreferredAiCategory();

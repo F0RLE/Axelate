@@ -1,4 +1,5 @@
 import type { IApp } from '../../types/coreTypes';
+import { resolveCatalogCategory } from '../../utils/moduleCategoryPolicy';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
@@ -158,6 +159,6 @@ export class AppUiModuleFlow {
     }
 
     private _toRawCategory(category: string): string {
-        return category.startsWith('ai') ? 'ai' : category;
+        return resolveCatalogCategory(category);
     }
 }

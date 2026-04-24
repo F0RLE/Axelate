@@ -1,16 +1,18 @@
 import type { IApp } from '../../types/coreTypes';
+import { CategoryKey } from '../../types/categoryKeys';
 import { isCustomProviderId } from '../../utils/customProviderSupport';
+import { isAiCategory } from '../../utils/moduleCategoryPolicy';
 
 export class ModalSelectionPolicy {
     public getModalTitleInfo(category: string): { key: string; defaultText: string } {
-        if (category === 'ai' || category === 'ai_text') {
+        if (category === CategoryKey.AI || category === CategoryKey.AI_TEXT) {
             return {
                 key: 'ui.launcher.modules.modal.ai_title',
                 defaultText: 'Select AI Module',
             };
         }
 
-        if (category === 'ai_image') {
+        if (category === CategoryKey.AI_IMAGE) {
             return {
                 key: 'ui.launcher.modules.modal.ai_image_title',
                 defaultText: 'Select Image AI',
@@ -24,8 +26,7 @@ export class ModalSelectionPolicy {
     }
 
     public getVisibleApps(apps: IApp[], category: string, currentFilter: 'text' | 'image'): IApp[] {
-        const isAi = category === 'ai' || category.startsWith('ai_');
-        const filteredApps = isAi
+        const filteredApps = isAiCategory(category)
             ? apps.filter((app) => (app.capability ?? 'text') === currentFilter)
             : apps;
 
@@ -68,7 +69,7 @@ export class ModalSelectionPolicy {
     }
 
     public shouldShowFilterTabs(rawCategory: string): boolean {
-        return rawCategory === 'ai';
+        return rawCategory === CategoryKey.AI;
     }
 
     public hasImageApps(apps: IApp[]): boolean {

@@ -1,4 +1,5 @@
 import type { IApp } from '../../types/coreTypes';
+import { CategoryKey } from '../../types/categoryKeys';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { ModuleCardRenderer } from './ModuleCardRenderer';
@@ -17,6 +18,7 @@ import {
 } from './ModuleCardDownloadProgress';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { ModalFocusTrapHelper } from './ModalFocusTrapHelper';
+import { resolveModalSidebarCategory } from '../../utils/moduleCategoryPolicy';
 
 /**
  * @class ModalManager
@@ -129,9 +131,9 @@ export class ModalManager {
 
         // Derive filter from compound category — do NOT blindly reset to 'text'
         // so that reopening after removing an image-slot app stays on the image tab.
-        if (category === 'ai_image') {
+        if (category === CategoryKey.AI_IMAGE) {
             this._currentFilter = 'image';
-        } else if (category === 'ai_text' || category === 'ai') {
+        } else if (category === CategoryKey.AI_TEXT || category === CategoryKey.AI) {
             this._currentFilter = 'text';
         }
         // Otherwise keep whatever was previously selected (e.g. when refreshing)
@@ -292,7 +294,7 @@ export class ModalManager {
         if (!(listEl instanceof HTMLElement)) return;
 
         this._updateAppModalTitle(category);
-        this._updateSidebar(category.startsWith('ai') ? 'ai' : category, category, apps);
+        this._updateSidebar(resolveModalSidebarCategory(category), category, apps);
         this._populateAppList(listEl, apps, category, selectedAppId);
         this._updateDynamicSidebarWidth();
     }

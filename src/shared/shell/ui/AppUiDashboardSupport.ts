@@ -1,5 +1,11 @@
 import type { IApp } from '../../types/coreTypes';
+import { CategoryKey } from '../../types/categoryKeys';
 import { supportsModuleSettings } from '../../utils/moduleSettingsSupport';
+import {
+    isAiCategory,
+    resolveCatalogCategory as resolveCatalogCategoryKey,
+    resolveModalCategory as resolveModalCategoryKey,
+} from '../../utils/moduleCategoryPolicy';
 
 import type { AppUiSelectionState } from './AppUiSelectionState';
 import type { ModuleCardRenderer } from './ModuleCardRenderer';
@@ -78,7 +84,7 @@ export class AppUiDashboardSupport {
     }
 
     public getCardId(category: string): string {
-        if (category === 'ai' || category.startsWith('ai_')) {
+        if (isAiCategory(category)) {
             return 'ai-module-card';
         }
 
@@ -86,11 +92,11 @@ export class AppUiDashboardSupport {
     }
 
     public resolveCatalogCategory(category: string): string {
-        return category.startsWith('ai') ? 'ai' : category;
+        return resolveCatalogCategoryKey(category);
     }
 
     public resolveModalCategory(category: string): string {
-        return category === 'ai' ? 'ai_text' : category;
+        return resolveModalCategoryKey(category);
     }
 
     public getDashboardCard(category: string): HTMLElement | null {
@@ -207,15 +213,15 @@ export class AppUiDashboardSupport {
             return;
         }
 
-        const textApp = this._deps.selectionState.get('ai_text');
-        const imageApp = this._deps.selectionState.get('ai_image');
+        const textApp = this._deps.selectionState.get(CategoryKey.AI_TEXT);
+        const imageApp = this._deps.selectionState.get(CategoryKey.AI_IMAGE);
         if (textApp === undefined || imageApp === undefined) {
             return;
         }
 
         const shownModule = card.dataset['currentModule'];
-        const nextCategory = wheelEvent.deltaY < 0 ? 'ai_text' : 'ai_image';
-        const nextApp = nextCategory === 'ai_text' ? textApp : imageApp;
+        const nextCategory = wheelEvent.deltaY < 0 ? CategoryKey.AI_TEXT : CategoryKey.AI_IMAGE;
+        const nextApp = nextCategory === CategoryKey.AI_TEXT ? textApp : imageApp;
         if (shownModule === nextApp.id) {
             return;
         }
