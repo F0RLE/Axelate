@@ -24,6 +24,7 @@ import type { StateManager } from '@/shared/services/StateManager';
 import type { EventHandler } from './events';
 import type { GlobalBridge } from './bridge';
 import type { ErrorHandler } from '@/shared/services/ErrorHandler';
+import type { IApp } from '@/shared/types/coreTypes';
 import {
     applyPlatformTheme,
     createBootstrapSafetyRevealTimer,
@@ -44,6 +45,12 @@ import type {
 
 type CoreLifecycleState = {
     isDestroyed: () => boolean;
+};
+
+type SelectedModuleChangedPayload = {
+    category: string;
+    module: IApp;
+    source?: string;
 };
 
 type CoreLifecycleDeps = {
@@ -83,6 +90,7 @@ type CoreLifecycleDeps = {
 
 export class CoreLifecycleController {
     private _deferredChatInitTimer: ReturnType<typeof setTimeout> | null = null;
+    private _selectedModuleChangedUnlisten: (() => void) | null = null;
 
     constructor(private readonly _deps: CoreLifecycleDeps) {}
 
@@ -166,12 +174,15 @@ export class CoreLifecycleController {
                 });
             },
         });
+        await this._listenForBackendSelectedModuleChanges();
 
         this._deps.tracer.info('[Core] Ready.');
     }
 
     public destroy(globalShortcutKeydown: (e: KeyboardEvent) => void): void {
         globalThis.removeEventListener('keydown', globalShortcutKeydown);
+        this._selectedModuleChangedUnlisten?.();
+        this._selectedModuleChangedUnlisten = null;
         destroyCoreResources({
             deferredChatInitTimer: this._deferredChatInitTimer,
             stateManager: this._deps.stateManager,
@@ -220,5 +231,33 @@ export class CoreLifecycleController {
 
             this._deps.chatController.init();
         }, 0);
+    }
+
+    private async _listenForBackendSelectedModuleChanges(): Promise<void> {
+        if (!this._deps.tauriProvider.isTauri() || this._selectedModuleChangedUnlisten !== null) {
+            return;
+        }
+
+        this._selectedModuleChangedUnlisten =
+            await this._deps.tauriProvider.listen<SelectedModuleChangedPayload>(
+                'ui-state:selected-module-changed',
+                (payload) => {
+                    this._applyBackendSelectedModuleChange(payload);
+                },
+            );
+    }
+
+    private _applyBackendSelectedModuleChange(payload: SelectedModuleChangedPayload): void {
+        if (payload.category.trim() === '' || payload.module.id.trim() === '') {
+            return;
+        }
+
+        this._deps.stateStore.updateNestedState(
+            'selected_modules',
+            payload.category,
+            payload.module,
+            false,
+        );
+        this._deps.appUI.updateModuleCard(payload.category, payload.module);
     }
 }

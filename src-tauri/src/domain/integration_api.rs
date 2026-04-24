@@ -16,7 +16,7 @@ use crate::domain::system::ports::{LAUNCHER_LOCAL_PORT_RANGE, LocalPortPurpose};
 use crate::errors::AppError;
 use crate::infrastructure::config::settings::SettingsService;
 use crate::infrastructure::config::ui_state::UiStateService;
-use crate::models::{AiModel, ApiProvider, ModelTier};
+use crate::models::{AiModel, ApiProvider, ModelTier, ModuleItem, ProviderType, SelectedModule};
 use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -25,7 +25,7 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 const DEFAULT_API_BASE_URL: &str = "http://127.0.0.1:3000";
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
@@ -225,6 +225,14 @@ struct ImageApiResponse {
     provider: String,
     model: String,
     response: ImageGenerationResponse,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SelectedModuleChangedEvent {
+    category: String,
+    module: SelectedModule,
+    source: &'static str,
 }
 
 fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiContext) {
@@ -438,6 +446,7 @@ async fn handle_text_request(
             .await
             .ok_or_else(|| AppError::Validation("No selected text AI provider".to_string()))?,
     };
+    select_provider_for_category(&context, "ai_text", &provider).await?;
     let model = resolve_model_id(
         &context.config_service,
         &context.ui_state_service,
@@ -510,6 +519,7 @@ async fn handle_image_request(
             .await
             .ok_or_else(|| AppError::Validation("No selected image AI provider".to_string()))?,
     };
+    select_provider_for_category(&context, "ai_image", &provider).await?;
     let model = resolve_model_id(
         &context.config_service,
         &context.ui_state_service,
@@ -563,6 +573,98 @@ async fn handle_image_request(
 fn parse_json_body<T: for<'de> Deserialize<'de>>(request: &HttpRequest) -> Result<T, AppError> {
     serde_json::from_slice(&request.body)
         .map_err(|error| AppError::Validation(format!("Invalid JSON request body: {error}")))
+}
+
+async fn select_provider_for_category(
+    context: &LauncherHttpApiContext,
+    category: &str,
+    provider_id: &str,
+) -> Result<(), AppError> {
+    let selected_module = resolve_selected_provider_module(&context.config_service, provider_id)?;
+    let mut state = context
+        .ui_state_service
+        .get_ui_state()
+        .await
+        .unwrap_or_default();
+    let previous_id = state
+        .selected_modules
+        .get(category)
+        .map(|module| module.id.as_str());
+
+    if previous_id == Some(selected_module.id.as_str()) {
+        return Ok(());
+    }
+
+    state
+        .selected_modules
+        .insert(category.to_string(), selected_module.clone());
+    context.ui_state_service.save_ui_state(&state).await?;
+
+    let payload = SelectedModuleChangedEvent {
+        category: category.to_string(),
+        module: selected_module,
+        source: "integration-api",
+    };
+    if let Err(error) = context
+        .app
+        .emit("ui-state:selected-module-changed", payload)
+    {
+        tracing::warn!("Failed to emit selected module change: {error}");
+    }
+
+    Ok(())
+}
+
+fn resolve_selected_provider_module(
+    config_service: &ConfigService,
+    provider_id: &str,
+) -> Result<SelectedModule, AppError> {
+    let config = config_service.load_full_config()?;
+    if let Some(module) = config
+        .catalog
+        .ai
+        .iter()
+        .chain(config.catalog.services.iter())
+        .find(|module| module.id == provider_id)
+    {
+        return Ok(selected_module_from_catalog_item(module));
+    }
+
+    config
+        .api_providers
+        .iter()
+        .find(|provider| provider.id == provider_id)
+        .map(selected_module_from_api_provider)
+        .ok_or_else(|| AppError::Validation(format!("Unknown AI provider: {provider_id}")))
+}
+
+fn selected_module_from_catalog_item(module: &ModuleItem) -> SelectedModule {
+    SelectedModule {
+        id: module.id.clone(),
+        name: module.name.clone(),
+        name_key: Some(module.name_key.clone()).filter(|value| !value.trim().is_empty()),
+        icon: module.icon.clone(),
+        type_: module.type_name.clone(),
+        desc_key: Some(module.desc_key.clone()).filter(|value| !value.trim().is_empty()),
+        desc: module.desc.clone(),
+    }
+}
+
+fn selected_module_from_api_provider(provider: &ApiProvider) -> SelectedModule {
+    let type_ = match provider.provider_type {
+        Some(ProviderType::Local) => "local",
+        _ => "api",
+    };
+
+    SelectedModule {
+        id: provider.id.clone(),
+        name: provider.name.clone(),
+        name_key: None,
+        icon: provider.icon.clone().unwrap_or_else(|| "AI".to_string()),
+        type_: type_.to_string(),
+        desc_key: provider.desc_key.clone(),
+        desc: provider.description.clone().unwrap_or_default(),
+    }
 }
 
 async fn selected_module_id(ui_state_service: &UiStateService, category: &str) -> Option<String> {
