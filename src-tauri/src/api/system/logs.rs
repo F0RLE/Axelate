@@ -1,7 +1,9 @@
 use crate::errors::AppError;
 use crate::infrastructure::logging::logger;
 use crate::infrastructure::logging::{self as logs, LogEntry};
+use crate::models::{SelectedModule, UIState};
 use std::collections::{BTreeMap, BTreeSet};
+use std::process::Command;
 use std::sync::Arc;
 use tauri::State;
 
@@ -73,13 +75,32 @@ pub fn clear_logs() -> Result<(), AppError> {
 
 #[tauri::command]
 #[specta::specta]
+/// Returns the root folder where launcher logs are stored.
+pub fn get_log_dir() -> Result<String, AppError> {
+    std::fs::create_dir_all(crate::utils::paths::LOG_DIR.as_path())?;
+    Ok(crate::utils::paths::LOG_DIR.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Opens the root folder where launcher logs are stored.
+pub fn open_log_dir() -> Result<(), AppError> {
+    std::fs::create_dir_all(crate::utils::paths::LOG_DIR.as_path())?;
+    open_folder(crate::utils::paths::LOG_DIR.as_path())?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 /// Returns aggregated console metadata for views and runtime statuses.
 pub async fn get_console_overview(
     engine_manager: State<'_, Arc<crate::domain::engine::manager::EngineManager>>,
+    ui_state_service: State<'_, crate::infrastructure::config::ui_state::UiStateService>,
 ) -> Result<ConsoleOverview, AppError> {
     let engine_state = engine_manager.state().await;
+    let ui_state = ui_state_service.get_ui_state().await.unwrap_or_default();
     let logs = logger::get_frontend_logs_since(0.0);
-    Ok(ConsoleOverviewBuilder::build(&engine_state, &logs).await)
+    Ok(ConsoleOverviewBuilder::build(&engine_state, &ui_state, &logs).await)
 }
 
 #[tauri::command]
@@ -120,13 +141,16 @@ const fn describe_status(status: ConsoleRuntimeStatus) -> &'static str {
 impl ConsoleOverviewBuilder {
     async fn build(
         engine_state: &crate::domain::engine::types::EngineState,
+        ui_state: &UIState,
         logs: &[LogEntry],
     ) -> ConsoleOverview {
-        let module_ids = Self::collect_logged_module_ids(logs);
+        let module_labels = Self::collect_module_labels(&ui_state.selected_modules);
+        let module_ids = Self::collect_module_ids(logs, &module_labels);
         let engine_labels = Self::collect_engine_labels(engine_state);
-        let views = Self::build_views(&engine_labels, &module_ids);
+        let views = Self::build_views(&engine_labels, &module_labels, &module_ids);
         let status_items =
-            Self::build_status_items(engine_state, &engine_labels, &module_ids).await;
+            Self::build_status_items(engine_state, &engine_labels, &module_labels, &module_ids)
+                .await;
 
         ConsoleOverview {
             views,
@@ -134,10 +158,27 @@ impl ConsoleOverviewBuilder {
         }
     }
 
-    fn collect_logged_module_ids(logs: &[LogEntry]) -> BTreeSet<String> {
-        logs.iter()
-            .filter_map(|entry| entry.module_id.clone())
+    fn collect_module_labels(
+        modules: &std::collections::HashMap<String, SelectedModule>,
+    ) -> BTreeMap<String, String> {
+        modules
+            .values()
+            .map(|module| (module.id.clone(), module.name.clone()))
             .collect()
+    }
+
+    fn collect_module_ids(
+        logs: &[LogEntry],
+        module_labels: &BTreeMap<String, String>,
+    ) -> BTreeSet<String> {
+        let mut module_ids: BTreeSet<String> = module_labels.keys().cloned().collect();
+        module_ids.extend(
+            logs.iter()
+                .filter_map(|entry| entry.module_id.as_ref())
+                .filter(|module_id| module_labels.contains_key(*module_id))
+                .cloned(),
+        );
+        module_ids
     }
 
     fn collect_engine_labels(
@@ -154,36 +195,41 @@ impl ConsoleOverviewBuilder {
 
     fn build_views(
         engine_labels: &BTreeMap<String, String>,
+        module_labels: &BTreeMap<String, String>,
         module_ids: &BTreeSet<String>,
     ) -> Vec<ConsoleLogView> {
-        let mut view_labels = engine_labels.clone();
-        for module_id in module_ids {
-            view_labels
-                .entry(module_id.clone())
-                .or_insert_with(|| ConsoleLabelFormatter::format_module_label(module_id));
-        }
-
-        let mut views = Vec::with_capacity(view_labels.len() + 1);
+        let mut views = Vec::with_capacity(engine_labels.len() + module_ids.len() + 1);
         views.push(ConsoleLogView {
             id: "general".to_string(),
             label: "General".to_string(),
         });
-        views.extend(
-            view_labels
-                .into_iter()
-                .map(|(id, label)| ConsoleLogView { id, label }),
-        );
+        views.extend(engine_labels.iter().map(|(id, label)| ConsoleLogView {
+            id: format!("engine:{id}"),
+            label: label.clone(),
+        }));
+        views.extend(module_ids.iter().map(|module_id| {
+            ConsoleLogView {
+                id: format!("module:{module_id}"),
+                label: module_labels
+                    .get(module_id)
+                    .cloned()
+                    .unwrap_or_else(|| ConsoleLabelFormatter::format_module_label(module_id)),
+            }
+        }));
         views
     }
 
     async fn build_status_items(
         engine_state: &crate::domain::engine::types::EngineState,
         engine_labels: &BTreeMap<String, String>,
+        module_labels: &BTreeMap<String, String>,
         module_ids: &BTreeSet<String>,
     ) -> Vec<ConsoleStatusItem> {
         let mut status_items = Self::build_engine_status_items(engine_state);
         for module_id in module_ids {
-            status_items.push(Self::build_module_status_item(module_id, engine_labels).await);
+            status_items.push(
+                Self::build_module_status_item(module_id, engine_labels, module_labels).await,
+            );
         }
         status_items
     }
@@ -191,6 +237,7 @@ impl ConsoleOverviewBuilder {
     async fn build_module_status_item(
         module_id: &str,
         engine_labels: &BTreeMap<String, String>,
+        module_labels: &BTreeMap<String, String>,
     ) -> ConsoleStatusItem {
         let status_text = crate::domain::modules::controller::get_module_status(module_id).await;
         let status = if status_text == "running" {
@@ -201,9 +248,10 @@ impl ConsoleOverviewBuilder {
 
         ConsoleStatusItem {
             id: format!("module:{module_id}"),
-            label: engine_labels
+            label: module_labels
                 .get(module_id)
                 .cloned()
+                .or_else(|| engine_labels.get(module_id).cloned())
                 .unwrap_or_else(|| ConsoleLabelFormatter::format_module_label(module_id)),
             kind: "module".to_string(),
             status,
@@ -256,6 +304,23 @@ impl ConsoleOverviewBuilder {
                 })
                 .collect(),
         }
+    }
+}
+
+fn open_folder(path: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer").arg(path).spawn().map(|_| ())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(path).spawn().map(|_| ())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open").arg(path).spawn().map(|_| ())
     }
 }
 

@@ -13,6 +13,8 @@ mod github_release_selection;
 pub mod github_releases;
 /// Module lifecycle management
 pub mod lifecycle;
+/// Module-scoped filesystem paths
+pub mod paths;
 /// Custom module settings UI path resolution
 pub mod settings_ui;
 /// Custom module settings UI protocol host

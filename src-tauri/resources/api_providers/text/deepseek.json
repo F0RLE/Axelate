@@ -1,0 +1,67 @@
+{
+  "id": "deepseek",
+  "name": "DeepSeek",
+  "description": "Specialized for coding and mathematics.",
+  "descKey": "ui.launcher.app.deepseek.desc",
+  "icon": "🧠",
+  "type": "api",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "models": [
+    {
+      "name": "DeepSeek V4 Pro",
+      "desc": "Large-scale Mixture-of-Experts model for advanced reasoning, coding, and long-horizon agent workflows.",
+      "descKey": "ui.deepseek.model.v4_pro.desc",
+      "tier": "strong",
+      "releaseDate": "2026-04-24",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "input_per_1m": 1.74,
+        "output_per_1m": 3.48,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 7,
+        "logic": 10,
+        "creative": 6
+      },
+      "capabilities": {
+        "reasoning": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "deepseek/deepseek-v4-pro"
+      },
+      "id": "deepseek-v4-pro"
+    },
+    {
+      "name": "DeepSeek V4 Flash",
+      "desc": "Efficiency-optimized Mixture-of-Experts model for fast inference, high throughput, reasoning, and coding.",
+      "descKey": "ui.deepseek.model.v4_flash.desc",
+      "tier": "medium",
+      "releaseDate": "2026-04-24",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "input_per_1m": 0.14,
+        "output_per_1m": 0.28,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 10,
+        "logic": 9,
+        "creative": 5
+      },
+      "capabilities": {
+        "reasoning": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "deepseek/deepseek-v4-flash"
+      },
+      "id": "deepseek-v4-flash"
+    }
+  ]
+}

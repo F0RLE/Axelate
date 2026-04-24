@@ -4,7 +4,7 @@ use super::downloader_progress::{
     AggregateDownloadContext, DownloadInterruption, ProgressEvent, ProgressSnapshot,
     compute_progress, emit_progress,
 };
-use super::downloader_service::resolve_existing_module_path;
+use super::downloader_service::{DownloadRequest, resolve_existing_module_path};
 use super::downloader_support::remove_partial_metadata;
 use super::downloader_transfer::{
     DownloadTask, ReleaseDownloadAsset, build_client, clone_repository_into, download_file,
@@ -82,8 +82,16 @@ pub async fn download_module(
     repo_url: String,
     expected_hash: Option<String>,
     dl_type: Option<String>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     validate_module_id(&module_id)?;
+    downloader.remember_request(
+        &module_id,
+        DownloadRequest {
+            repo_url: repo_url.clone(),
+            expected_hash: expected_hash.clone(),
+            dl_type: dl_type.clone(),
+        },
+    );
 
     let control = downloader.request_control(&module_id);
     let mut temp_archives: Vec<PathBuf> = Vec::new();
@@ -179,6 +187,7 @@ pub async fn download_module(
                 completed_downloaded_bytes =
                     completed_downloaded_bytes.saturating_add(download_result.asset_downloaded);
                 latest_progress_snapshot = download_result.snapshot;
+                final_progress_snapshot = latest_progress_snapshot;
 
                 if let Some(interruption) = download_result.interruption {
                     return Err(match interruption {
@@ -191,6 +200,7 @@ pub async fn download_module(
                     });
                 }
 
+                ensure_not_cancelled(&control)?;
                 FileVerifier::verify(
                     &app,
                     &archive_path,
@@ -199,6 +209,8 @@ pub async fn download_module(
                     Some(latest_progress_snapshot),
                 )
                 .await?;
+
+                ensure_not_cancelled(&control)?;
                 ArchiveExtractor::extract_into(
                     &app,
                     &archive_path,
@@ -207,11 +219,14 @@ pub async fn download_module(
                     Some(latest_progress_snapshot),
                 )
                 .await?;
+
+                ensure_not_cancelled(&control)?;
             }
         }
 
         final_progress_snapshot = latest_progress_snapshot;
 
+        ensure_not_cancelled(&control)?;
         ArchiveExtractor::finalize(
             &module_id,
             &extraction_path,
@@ -268,6 +283,13 @@ pub async fn download_module(
             total: final_progress_snapshot.total,
             speed: 0,
         });
+        if status == "paused" || status == "cancelled" {
+            if status == "cancelled" {
+                downloader.remove_request(&module_id);
+            }
+            return Ok(status.to_string());
+        }
+        downloader.remove_request(&module_id);
         return Err(e);
     }
 
@@ -291,6 +313,22 @@ pub async fn download_module(
         "Downloader",
         "info",
     );
+    downloader.remove_request(&module_id);
+
+    Ok("completed".to_string())
+}
+
+fn ensure_not_cancelled(
+    control: &super::downloader_service::DownloadControl,
+) -> Result<(), AppError> {
+    if control.is_cancel_requested() {
+        return Err(AppError::External {
+            request_id: None,
+            message: DownloadInterruption::Cancelled
+                .as_error_message()
+                .to_string(),
+        });
+    }
 
     Ok(())
 }

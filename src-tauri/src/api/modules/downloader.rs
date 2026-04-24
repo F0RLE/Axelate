@@ -12,7 +12,7 @@ pub async fn download_module(
     repo_url: String,
     expected_hash: Option<String>,
     dl_type: Option<String>,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
     downloader::download_module(
         app,
         &downloader,
@@ -20,6 +20,29 @@ pub async fn download_module(
         repo_url,
         expected_hash,
         dl_type,
+    )
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Resumes a paused module download using backend-owned request metadata.
+pub async fn resume_download(
+    app: AppHandle,
+    downloader: tauri::State<'_, downloader::DownloaderService>,
+    module_id: String,
+) -> Result<String, AppError> {
+    let request = downloader.get_request(&module_id).ok_or_else(|| {
+        AppError::NotFound(format!("No paused download metadata for {module_id}"))
+    })?;
+
+    downloader::download_module(
+        app,
+        &downloader,
+        module_id,
+        request.repo_url,
+        request.expected_hash,
+        request.dl_type,
     )
     .await
 }

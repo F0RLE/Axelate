@@ -361,8 +361,8 @@ fn build_request_payload(
     }
 
     if !is_local
+        && should_attach_web_search(req)
         && let Some(web_search) = req.web_search.as_ref()
-        && web_search.enabled
     {
         payload.insert(
             "tools".to_string(),
@@ -375,6 +375,65 @@ fn build_request_payload(
     }
 
     payload
+}
+
+fn should_attach_web_search(req: &ChatRequest) -> bool {
+    if !req
+        .web_search
+        .as_ref()
+        .is_some_and(|web_search| web_search.enabled)
+    {
+        return false;
+    }
+
+    let Some(last_user_message) = req
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message.role == "user")
+    else {
+        return false;
+    };
+    let text = extract_message_text(&last_user_message.content).to_lowercase();
+    let text = text.trim();
+    if text.is_empty() {
+        return false;
+    }
+
+    const WEB_SEARCH_TRIGGERS: &[&str] = &[
+        "актуаль",
+        "интернет",
+        "найди",
+        "новост",
+        "погугли",
+        "поиск",
+        "посмотри в сети",
+        "свеж",
+        "сейчас",
+        "сегодня",
+        "ссылка",
+        "site:",
+        "today",
+        "latest",
+        "current",
+        "recent",
+        "news",
+        "search",
+        "browse",
+        "web",
+        "internet",
+        "look up",
+        "price",
+        "weather",
+    ];
+
+    text.starts_with("http://")
+        || text.starts_with("https://")
+        || text.contains(" http://")
+        || text.contains(" https://")
+        || WEB_SEARCH_TRIGGERS
+            .iter()
+            .any(|trigger| text.contains(trigger))
 }
 
 fn extract_message_text(content: &serde_json::Value) -> String {
@@ -926,8 +985,23 @@ mod tests {
     }
 
     #[test]
-    fn build_request_payload_exposes_web_search_as_optional_tool() {
+    fn build_request_payload_skips_web_search_for_generic_prompts() {
         let mut request = sample_request();
+        request.web_search = Some(WebSearchOptions {
+            enabled: true,
+            ..Default::default()
+        });
+
+        let payload = build_request_payload(&request, true, false);
+
+        assert!(payload.get("tool_choice").is_none());
+        assert!(payload.get("tools").is_none());
+    }
+
+    #[test]
+    fn build_request_payload_exposes_web_search_for_current_prompts() {
+        let mut request = sample_request();
+        request.messages[0].content = json!("What is the latest OpenAI news today?");
         request.web_search = Some(WebSearchOptions {
             enabled: true,
             ..Default::default()

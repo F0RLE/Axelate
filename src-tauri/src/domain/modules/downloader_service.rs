@@ -33,6 +33,14 @@ impl DownloadControl {
 pub struct DownloaderService {
     settings: Arc<Mutex<DownloaderSettings>>,
     controls: Arc<Mutex<HashMap<String, Arc<DownloadControl>>>>,
+    requests: Arc<Mutex<HashMap<String, DownloadRequest>>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DownloadRequest {
+    pub repo_url: String,
+    pub expected_hash: Option<String>,
+    pub dl_type: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -56,6 +64,7 @@ impl DownloaderService {
         Self {
             settings: Arc::new(Mutex::new(DownloaderSettings::default())),
             controls: Arc::new(Mutex::new(HashMap::new())),
+            requests: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -88,12 +97,36 @@ impl DownloaderService {
         control
     }
 
+    /// Stores the last download request so a paused download can be resumed by the backend.
+    pub fn remember_request(&self, module_id: &str, request: DownloadRequest) {
+        if let Ok(mut requests) = self.requests.lock() {
+            requests.insert(module_id.to_string(), request);
+        }
+    }
+
+    /// Returns a previously stored download request for resume.
+    pub fn get_request(&self, module_id: &str) -> Option<DownloadRequest> {
+        self.requests
+            .lock()
+            .ok()
+            .and_then(|requests| requests.get(module_id).cloned())
+    }
+
+    /// Removes stored download request metadata.
+    pub fn remove_request(&self, module_id: &str) {
+        if let Ok(mut requests) = self.requests.lock() {
+            requests.remove(module_id);
+        }
+    }
+
     /// Signals cancellation for a specific module download
     pub fn cancel(&self, module_id: &str) -> bool {
         if let Ok(controls) = self.controls.lock()
             && let Some(control) = controls.get(module_id)
         {
             control.request_cancel();
+            drop(controls);
+            self.remove_request(module_id);
             tracing::info!("Cancellation requested for module: {module_id}");
             return true;
         }
@@ -154,5 +187,27 @@ mod tests {
 
         assert!(!service.pause("missing"));
         assert!(!service.cancel("missing"));
+    }
+
+    #[test]
+    fn remembers_and_removes_download_requests() -> Result<(), String> {
+        let service = DownloaderService::new();
+        service.remember_request(
+            "demo",
+            super::DownloadRequest {
+                repo_url: "https://example.com/file.zip".to_string(),
+                expected_hash: Some("hash".to_string()),
+                dl_type: Some("release".to_string()),
+            },
+        );
+
+        let request = service
+            .get_request("demo")
+            .ok_or_else(|| "request".to_string())?;
+        assert_eq!(request.repo_url, "https://example.com/file.zip");
+
+        service.remove_request("demo");
+        assert!(service.get_request("demo").is_none());
+        Ok(())
     }
 }

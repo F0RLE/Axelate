@@ -302,7 +302,7 @@ pub struct AppMeta {
 pub struct AppConfig {
     /// Configuration version
     pub version: String,
-    /// Available AI providers (loaded from api_providers.json)
+    /// Available AI providers (loaded from resources/api_providers)
     pub api_providers: Vec<ApiProvider>,
     /// Catalog of available apps/services (local + cloud virtual modules)
     pub catalog: ConfigCatalog,

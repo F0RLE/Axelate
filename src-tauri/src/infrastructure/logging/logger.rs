@@ -53,6 +53,12 @@ struct RuntimeLogCollector;
 
 struct ConsoleLogParser;
 
+#[derive(Debug, Clone, Copy)]
+enum RuntimeLogNamespace {
+    Engine,
+    Module,
+}
+
 static LOG_STORE: LazyLock<Mutex<LogStore>> = LazyLock::new(|| {
     Mutex::new(LogStore {
         entries: VecDeque::with_capacity(500),
@@ -191,8 +197,8 @@ pub fn get_frontend_logs_since(since: f64) -> Vec<LogEntry> {
 }
 
 fn parse_runtime_log_line(
+    namespace: RuntimeLogNamespace,
     runtime_id: &str,
-    path: &Path,
     line: &str,
     since: f64,
 ) -> Option<LogEntry> {
@@ -210,7 +216,7 @@ fn parse_runtime_log_line(
         timestamp,
         ..build_log_entry(
             timestamp,
-            &infer_runtime_log_source(runtime_id, path),
+            &infer_runtime_log_source(namespace, runtime_id),
             &parse_log_level(line),
             line.to_string(),
         )
@@ -553,16 +559,11 @@ fn sanitize_module_id(raw: &str) -> Option<String> {
     Some(module_id.to_string())
 }
 
-fn infer_runtime_log_source(runtime_id: &str, path: &Path) -> String {
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    if file_name.eq_ignore_ascii_case("runtime.log") {
-        return format!("module:{runtime_id}");
+fn infer_runtime_log_source(namespace: RuntimeLogNamespace, runtime_id: &str) -> String {
+    match namespace {
+        RuntimeLogNamespace::Engine => runtime_id.to_string(),
+        RuntimeLogNamespace::Module => format!("module:{runtime_id}"),
     }
-
-    runtime_id.to_string()
 }
 
 fn parse_log_timestamp(line: &str) -> Option<f64> {
@@ -647,31 +648,18 @@ pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuar
 }
 
 impl RuntimeLogCollector {
-    fn runtime_root() -> std::path::PathBuf {
-        crate::utils::paths::LOG_DIR.join("Engines")
-    }
-
     fn collect_since(since: f64) -> Vec<LogEntry> {
-        let Ok(runtime_dirs) = fs::read_dir(Self::runtime_root()) else {
-            return Vec::new();
-        };
-
         let mut entries = Vec::new();
-        for runtime_dir in runtime_dirs.filter_map(Result::ok) {
-            let Ok(file_type) = runtime_dir.file_type() else {
-                continue;
-            };
-            if !file_type.is_dir() {
-                continue;
-            }
-
-            let runtime_id = runtime_dir.file_name().to_string_lossy().to_string();
-            entries.extend(Self::collect_runtime_entries(
-                &runtime_id,
-                &runtime_dir.path(),
-                since,
-            ));
-        }
+        entries.extend(Self::collect_root(
+            RuntimeLogNamespace::Engine,
+            &crate::utils::paths::ENGINE_LOGS_DIR,
+            since,
+        ));
+        entries.extend(Self::collect_root(
+            RuntimeLogNamespace::Module,
+            &crate::utils::paths::MODULE_LOGS_DIR,
+            since,
+        ));
 
         entries.sort_by(|left, right| {
             left.timestamp
@@ -686,7 +674,38 @@ impl RuntimeLogCollector {
         }
     }
 
-    fn collect_runtime_entries(runtime_id: &str, log_dir: &Path, since: f64) -> Vec<LogEntry> {
+    fn collect_root(namespace: RuntimeLogNamespace, root: &Path, since: f64) -> Vec<LogEntry> {
+        let Ok(runtime_dirs) = fs::read_dir(root) else {
+            return Vec::new();
+        };
+
+        let mut entries = Vec::new();
+        for runtime_dir in runtime_dirs.filter_map(Result::ok) {
+            let Ok(file_type) = runtime_dir.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+
+            let runtime_id = runtime_dir.file_name().to_string_lossy().to_string();
+            entries.extend(Self::collect_runtime_entries(
+                namespace,
+                &runtime_id,
+                &runtime_dir.path(),
+                since,
+            ));
+        }
+
+        entries
+    }
+
+    fn collect_runtime_entries(
+        namespace: RuntimeLogNamespace,
+        runtime_id: &str,
+        log_dir: &Path,
+        since: f64,
+    ) -> Vec<LogEntry> {
         let Ok(log_files) = fs::read_dir(log_dir) else {
             return Vec::new();
         };
@@ -705,7 +724,7 @@ impl RuntimeLogCollector {
             entries.extend(
                 content
                     .lines()
-                    .filter_map(|line| parse_runtime_log_line(runtime_id, &path, line, since)),
+                    .filter_map(|line| parse_runtime_log_line(namespace, runtime_id, line, since)),
             );
         }
 
@@ -713,7 +732,12 @@ impl RuntimeLogCollector {
     }
 
     fn clear_runtime_logs() {
-        let Ok(runtime_dirs) = fs::read_dir(Self::runtime_root()) else {
+        Self::clear_runtime_logs_in_root(&crate::utils::paths::ENGINE_LOGS_DIR);
+        Self::clear_runtime_logs_in_root(&crate::utils::paths::MODULE_LOGS_DIR);
+    }
+
+    fn clear_runtime_logs_in_root(root: &Path) {
+        let Ok(runtime_dirs) = fs::read_dir(root) else {
             return;
         };
 
@@ -765,5 +789,42 @@ impl ConsoleLogParser {
             scope: None,
             message: raw_message.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RuntimeLogNamespace, parse_runtime_log_line};
+
+    #[test]
+    fn module_runtime_log_line_uses_module_source_namespace() -> Result<(), String> {
+        let entry = parse_runtime_log_line(
+            RuntimeLogNamespace::Module,
+            "axelate-telegram-bot",
+            "2026-04-24 07:00:00 [INFO] Bot started",
+            0.0,
+        )
+        .ok_or_else(|| "module runtime log entry".to_string())?;
+
+        assert_eq!(entry.source, "module:axelate-telegram-bot");
+        assert_eq!(entry.module_id.as_deref(), Some("axelate-telegram-bot"));
+        assert_eq!(entry.source_label.as_deref(), Some("Telegram Bot"));
+        Ok(())
+    }
+
+    #[test]
+    fn engine_runtime_log_line_keeps_engine_source_namespace() -> Result<(), String> {
+        let entry = parse_runtime_log_line(
+            RuntimeLogNamespace::Engine,
+            "llamacpp",
+            "2026-04-24 07:00:00 [INFO] model loaded",
+            0.0,
+        )
+        .ok_or_else(|| "engine runtime log entry".to_string())?;
+
+        assert_eq!(entry.source, "llamacpp");
+        assert_eq!(entry.module_id, None);
+        assert_eq!(entry.source_label.as_deref(), Some("Llamacpp"));
+        Ok(())
     }
 }

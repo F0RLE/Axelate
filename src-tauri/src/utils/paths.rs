@@ -1,5 +1,6 @@
 use crate::errors::AppError;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -161,6 +162,12 @@ pub static SYSTEM_ROOT: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("
 /// Log files directory (`AxelateData/System/Logs`)
 pub static LOG_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Logs"));
 
+/// Engine runtime log files directory (`AxelateData/System/Logs/Engines`)
+pub static ENGINE_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| LOG_DIR.join("Engines"));
+
+/// Module runtime log files directory (`AxelateData/System/Logs/Modules`)
+pub static MODULE_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| LOG_DIR.join("Modules"));
+
 /// Temporary files directory (`AxelateData/System/Temp`)
 pub static TEMP_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Temp"));
 
@@ -214,13 +221,15 @@ pub static FILE_CHAT_HISTORY: LazyLock<PathBuf> = LazyLock::new(|| CHAT_DIR.join
 /// Maximum number of log files to keep
 const MAX_LOG_FILES: usize = 5;
 
-fn managed_directories() -> [&'static PathBuf; 11] {
+fn managed_directories() -> [&'static PathBuf; 13] {
     [
         &*APPDATA_ROOT,
         &*CONFIG_DIR,
         &*UI_DIR,
         &*SYSTEM_ROOT,
         &*LOG_DIR,
+        &*ENGINE_LOGS_DIR,
+        &*MODULE_LOGS_DIR,
         &*TEMP_DIR,
         &*MODULES_DIR,
         &*RUNTIME_DIR,
@@ -241,6 +250,8 @@ pub fn init_filesystem() -> Result<(), AppError> {
     for dir in managed_directories() {
         fs::create_dir_all(dir)?;
     }
+
+    migrate_legacy_module_runtime_logs()?;
 
     // Cleanup old log files (keep only last MAX_LOG_FILES)
     cleanup_old_logs()?;
@@ -267,6 +278,53 @@ fn move_file(source_path: &Path, target_path: &Path) -> Result<(), AppError> {
     if fs::rename(source_path, target_path).is_err() {
         fs::copy(source_path, target_path)?;
         fs::remove_file(source_path)?;
+    }
+
+    Ok(())
+}
+
+fn append_file(source_path: &Path, target_path: &Path) -> Result<(), AppError> {
+    ensure_parent_dir(target_path)?;
+
+    let content = fs::read(source_path)?;
+    let mut target = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(target_path)?;
+    if target_path
+        .metadata()
+        .is_ok_and(|metadata| metadata.len() > 0)
+    {
+        target.write_all(b"\n")?;
+    }
+    target.write_all(&content)?;
+    fs::remove_file(source_path)?;
+    Ok(())
+}
+
+fn migrate_legacy_module_runtime_logs() -> Result<(), AppError> {
+    if !ENGINE_LOGS_DIR.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(&*ENGINE_LOGS_DIR)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let legacy_runtime_log = entry.path().join("runtime.log");
+        if !legacy_runtime_log.exists() {
+            continue;
+        }
+
+        let target_runtime_log = MODULE_LOGS_DIR.join(entry.file_name()).join("runtime.log");
+
+        if target_runtime_log.exists() {
+            append_file(&legacy_runtime_log, &target_runtime_log)?;
+        } else {
+            move_file(&legacy_runtime_log, &target_runtime_log)?;
+        }
     }
 
     Ok(())

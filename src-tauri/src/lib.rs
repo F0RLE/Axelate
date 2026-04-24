@@ -101,9 +101,12 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         logs::get_logs,
         logs::get_console_overview,
         logs::clear_logs,
+        logs::get_log_dir,
+        logs::open_log_dir,
         logs::add_log,
         logs::log_batch,
         downloader::download_module,
+        downloader::resume_download,
         downloader::check_module_installed,
         downloader::get_module_path,
         downloader::delete_module,
@@ -117,6 +120,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         modules::get_modules,
         modules::control_module,
         modules::get_module_status,
+        modules::create_module_settings_session,
         window::minimize_window,
         window::maximize_window,
         window::close_window,
@@ -240,6 +244,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     app.manage(window_settings_service);
     app.manage(config_service);
     app.manage(crate::domain::modules::downloader::DownloaderService::new());
+    app.manage(crate::domain::modules::settings_ui_protocol::ModuleSettingsSessionStore::default());
     let sessions = std::sync::Arc::new(ChatSessionManager::new());
     sessions.start_saver();
     app.manage(sessions);

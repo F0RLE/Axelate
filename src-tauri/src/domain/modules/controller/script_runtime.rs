@@ -1,6 +1,7 @@
 use crate::domain::modules::lifecycle::ModuleManifest;
+use crate::domain::modules::paths as module_paths;
 use crate::errors::AppError;
-use crate::utils::paths::{CONFIG_DIR, LOG_DIR, RUNTIME_DIR};
+use crate::utils::paths::{CONFIG_DIR, RUNTIME_DIR};
 use sha2::{Digest, Sha256};
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
@@ -20,17 +21,67 @@ pub fn supports_manifest(manifest: &ModuleManifest) -> bool {
     })
 }
 
-/// Ensures the shared runtime exists and spawns the Python script module process.
-pub async fn spawn_process(
+/// Resolves and validates the Python script entry path inside the module root.
+pub fn resolve_entry_path(
     module_path: &Path,
     manifest: &ModuleManifest,
-) -> Result<Child, AppError> {
+) -> Result<Option<PathBuf>, AppError> {
+    if !supports_manifest(manifest) {
+        return Ok(None);
+    }
+
     let entry = manifest
         .entry
         .as_ref()
-        .map(|value| value.trim().to_string())
+        .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::Config("Python script module entry is missing".to_string()))?;
+
+    if Path::new(entry).is_absolute() {
+        return Err(AppError::Validation(
+            "Python script module entry must be relative to the module root".to_string(),
+        ));
+    }
+
+    let entry_path = module_path.join(entry);
+    if !entry_path.exists() {
+        return Err(AppError::NotFound(format!(
+            "Python module entry not found at {}",
+            entry_path.display()
+        )));
+    }
+
+    let module_root = fs::canonicalize(module_path).map_err(|e| {
+        AppError::Io(format!(
+            "Failed to resolve module root {}: {e}",
+            module_path.display()
+        ))
+    })?;
+    let entry_path = fs::canonicalize(&entry_path).map_err(|e| {
+        AppError::Io(format!(
+            "Failed to resolve Python module entry {}: {e}",
+            entry_path.display()
+        ))
+    })?;
+
+    if !entry_path.starts_with(&module_root) {
+        return Err(AppError::Validation(
+            "Python script module entry cannot point outside the module root".to_string(),
+        ));
+    }
+
+    Ok(Some(entry_path))
+}
+
+/// Ensures the shared runtime exists and spawns the Python script module process.
+pub async fn spawn_process(
+    module_id: &str,
+    module_path: &Path,
+    manifest: &ModuleManifest,
+) -> Result<Child, AppError> {
+    let entry_path = resolve_entry_path(module_path, manifest)?.ok_or_else(|| {
+        AppError::Config("Python script module entry is missing or unsupported".to_string())
+    })?;
 
     let runtime_root = python_runtime_root();
     tokio::fs::create_dir_all(&runtime_root)
@@ -50,16 +101,8 @@ pub async fn spawn_process(
         )));
     }
 
-    let entry_path = module_path.join(&entry);
-    if !entry_path.exists() {
-        return Err(AppError::NotFound(format!(
-            "Python module entry not found at {}",
-            entry_path.display()
-        )));
-    }
-
-    let module_runtime_root = module_runtime_root(&manifest.id);
-    let module_log_dir = module_log_dir(&manifest.id);
+    let module_runtime_root = module_paths::runtime_root(module_id);
+    let module_log_dir = module_paths::log_dir(module_id);
     tokio::fs::create_dir_all(&module_log_dir)
         .await
         .map_err(|e| AppError::Io(format!("Failed to create module log directory: {e}")))?;
@@ -83,7 +126,7 @@ pub async fn spawn_process(
             "AXELATE_MODULE_RUNTIME_DIR",
             module_runtime_root.as_os_str(),
         )
-        .env("AXELATE_MODULE_ID", &manifest.id)
+        .env("AXELATE_MODULE_ID", module_id)
         .env("AXELATE_HTTP_API_BASE", "http://127.0.0.1:3000")
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONUTF8", "1")
@@ -100,14 +143,6 @@ pub async fn spawn_process(
 
 fn python_runtime_root() -> PathBuf {
     RUNTIME_DIR.join("Python")
-}
-
-fn module_runtime_root(module_id: &str) -> PathBuf {
-    RUNTIME_DIR.join("Modules").join(module_id)
-}
-
-fn module_log_dir(module_id: &str) -> PathBuf {
-    LOG_DIR.join("Engines").join(module_id)
 }
 
 fn uv_install_dir(runtime_root: &Path) -> PathBuf {
@@ -403,6 +438,38 @@ mod tests {
         assert!(supports_manifest(&manifest_with_entry(Some("src/main.py"))));
         assert!(!supports_manifest(&manifest_with_entry(Some("main.ts"))));
         assert!(!supports_manifest(&manifest_with_entry(None)));
+    }
+
+    #[test]
+    fn resolve_entry_path_rejects_entries_outside_module_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let outside_entry = temp_dir.path().join("outside.py");
+        fs::write(&outside_entry, "print('outside')").expect("write outside entry");
+        let module_dir = temp_dir.path().join("module");
+        fs::create_dir_all(&module_dir).expect("module dir");
+
+        let result = resolve_entry_path(&module_dir, &manifest_with_entry(Some("../outside.py")));
+
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[test]
+    fn resolve_entry_path_accepts_entries_inside_module_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&src_dir).expect("src dir");
+        let entry_path = src_dir.join("main.py");
+        fs::write(&entry_path, "print('ok')").expect("write entry");
+
+        let resolved =
+            resolve_entry_path(temp_dir.path(), &manifest_with_entry(Some("src/main.py")))
+                .expect("resolved entry")
+                .expect("entry path");
+
+        assert_eq!(
+            resolved,
+            fs::canonicalize(entry_path).expect("canonical entry")
+        );
     }
 
     #[test]
