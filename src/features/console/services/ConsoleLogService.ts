@@ -71,6 +71,7 @@ export class ConsoleLogService {
     private lastTimestamp = 0;
     private readonly _engineUnlisteners: Array<() => void> = [];
     private readonly _modulePathCache = new Map<string, string | null>();
+    private readonly _knownEngineIds = new Set<string>();
     private readonly _knownModuleIds = new Set<string>();
     private readonly _normalizer = new ConsoleLogNormalizer();
     private _initialized = false;
@@ -134,6 +135,7 @@ export class ConsoleLogService {
         try {
             const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
+                this._hydrateKnownRuntimeIds(result.data.views);
                 return result.data.views;
             }
         } catch (error) {
@@ -167,7 +169,7 @@ export class ConsoleLogService {
         return [...moduleLabels.entries()].map(([moduleId, label]) => {
             this._knownModuleIds.add(moduleId);
             return {
-                id: moduleId,
+                id: `module:${moduleId}`,
                 label,
             };
         });
@@ -187,7 +189,23 @@ export class ConsoleLogService {
 
     public getLogsForView(viewId: string): ILogEntry[] {
         if (viewId === 'general') {
-            return this.logs.filter((entry) => this._getModuleId(entry) === null);
+            return this.logs.filter(
+                (entry) => this._getModuleId(entry) === null && !this._isKnownEngineLog(entry),
+            );
+        }
+
+        const moduleView = viewId.match(/^module:(.+)$/);
+        if (moduleView !== null) {
+            const moduleId = moduleView[1] ?? '';
+            return this.logs.filter((entry) => this._getModuleId(entry) === moduleId);
+        }
+
+        const engineView = viewId.match(/^engine:(.+)$/);
+        if (engineView !== null) {
+            const engineId = engineView[1] ?? '';
+            return this.logs.filter(
+                (entry) => this._getModuleId(entry) === null && entry.source.trim() === engineId,
+            );
         }
 
         return this.logs.filter((entry) => this._getModuleId(entry) === viewId);
@@ -253,6 +271,20 @@ export class ConsoleLogService {
         }
     }
 
+    public async openLogsFolder(): Promise<boolean> {
+        if (!this.bridge.isTauri()) {
+            return false;
+        }
+
+        try {
+            await this.bridge.invoke('open_log_dir');
+            return true;
+        } catch (error) {
+            this._tracer.error(`[ConsoleLogService] Failed to open logs folder: ${String(error)}`);
+            return false;
+        }
+    }
+
     private async _registerEngineListeners(): Promise<void> {
         await this._listenToEngineEvent('ai:engine:log', (payload) => {
             this._pushLog(payload.line, payload.engine_id, 'info');
@@ -310,12 +342,12 @@ export class ConsoleLogService {
     }
 
     private _pushLog(message: string, source: string, level: string): void {
+        this._knownEngineIds.add(source);
         const entry: ILogEntry = {
             timestamp: Date.now() / 1000,
             source,
             level,
             message,
-            module_id: source,
         };
 
         if (this._isNoise(entry)) {
@@ -342,6 +374,24 @@ export class ConsoleLogService {
         }));
     }
 
+    private _hydrateKnownRuntimeIds(views: readonly IConsoleLogView[]): void {
+        for (const view of views) {
+            const engineId = view.id.match(/^engine:(.+)$/)?.[1]?.trim();
+            if (engineId !== undefined && engineId !== '') {
+                this._knownEngineIds.add(engineId);
+            }
+
+            const moduleId = view.id.match(/^module:(.+)$/)?.[1]?.trim();
+            if (moduleId !== undefined && moduleId !== '') {
+                this._knownModuleIds.add(moduleId);
+            }
+        }
+    }
+
+    private _isKnownEngineLog(entry: ILogEntry): boolean {
+        return this._knownEngineIds.has(entry.source.trim());
+    }
+
     private _getModuleId(entry: ILogEntry): string | null {
         const moduleId = entry.module_id?.trim();
         if (moduleId !== undefined && moduleId !== '') {
@@ -350,6 +400,10 @@ export class ConsoleLogService {
         }
 
         const source = entry.source.trim();
+        if (this._knownEngineIds.has(source)) {
+            return null;
+        }
+
         if (source !== '' && this._knownModuleIds.has(source)) {
             return source;
         }

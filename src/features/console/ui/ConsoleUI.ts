@@ -1,4 +1,4 @@
-import { type ConsoleLogService } from '../services/ConsoleLogService';
+import { type ConsoleLogService, type IConsoleStatusItem } from '../services/ConsoleLogService';
 import type { EventBus } from '@/shared/services/EventBus';
 import { ConsoleClipboardHelper } from './ConsoleClipboardHelper';
 import { ConsoleFilterControlHelper } from './ConsoleFilterControlHelper';
@@ -8,6 +8,7 @@ import { ConsoleLogRenderHelper } from './ConsoleLogRenderHelper';
 import { ConsoleViewHelper } from './ConsoleViewHelper';
 import { ConsolePollingController } from './ConsolePollingController';
 import { ConsoleRefreshCoordinator } from './ConsoleRefreshCoordinator';
+import { ConsoleRuntimeCardRenderer } from './ConsoleRuntimeCardRenderer';
 import { ConsoleViewStateController } from './ConsoleViewStateController';
 
 type ConsoleFilterLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
@@ -54,11 +55,14 @@ export class ConsoleUI {
     private readonly _pollingController: ConsolePollingController;
     private readonly _refreshCoordinator: ConsoleRefreshCoordinator;
     private readonly _renderHelper: ConsoleLogRenderHelper;
+    private readonly _runtimeCardRenderer = new ConsoleRuntimeCardRenderer();
     private readonly _translateFn: ConsoleTranslate;
     private readonly _showToast: ConsoleShowToast;
     private readonly _eventBus: EventBus;
+    private _runtimeStatusItems: IConsoleStatusItem[] = [];
     private _activeTabButton: HTMLElement | null = null;
     private _activePane: HTMLElement | null = null;
+    private _syncTabScrollControls: (() => void) | null = null;
 
     constructor(
         private readonly service: ConsoleLogService,
@@ -88,6 +92,7 @@ export class ConsoleUI {
         });
         this._filterControlHelper = new ConsoleFilterControlHelper({
             activeLevels: this._viewState.activeLevels,
+            allLevels: ConsoleUI._FILTER_LEVELS,
             registerCleanup: (cleanup) => {
                 this.unsubscribers.push(cleanup);
             },
@@ -96,6 +101,9 @@ export class ConsoleUI {
             },
             onCopyLogs: () => {
                 void this.copyLogs();
+            },
+            onOpenLogsFolder: () => {
+                void this.openLogsFolder();
             },
             onFiltersChanged: () => {
                 this._applyFiltersToActivePane();
@@ -138,6 +146,8 @@ export class ConsoleUI {
         this._interactionHelper.bindDraggable();
         this._interactionHelper.bindDropzone();
         this.bindTabs();
+        this._bindTabScrollControls();
+        this._bindRuntimeCards();
         this._filterControlHelper.bindControls();
         this._syncPollingForActivePage();
         void this.refreshLogViews();
@@ -183,6 +193,61 @@ export class ConsoleUI {
         });
     }
 
+    private _bindTabScrollControls(): void {
+        const toolbar = document.querySelector('.console-toolbar-left');
+        const previousButton = document.querySelector('.console-tab-scroll-left');
+        const nextButton = document.querySelector('.console-tab-scroll-right');
+        if (
+            !(toolbar instanceof HTMLElement) ||
+            !(previousButton instanceof HTMLButtonElement) ||
+            !(nextButton instanceof HTMLButtonElement)
+        ) {
+            return;
+        }
+
+        const syncControls = () => {
+            const hasOverflow = toolbar.scrollWidth > toolbar.clientWidth + 1;
+            previousButton.hidden = !hasOverflow;
+            nextButton.hidden = !hasOverflow;
+            previousButton.disabled = !hasOverflow || toolbar.scrollLeft <= 1;
+            nextButton.disabled =
+                !hasOverflow || toolbar.scrollLeft + toolbar.clientWidth >= toolbar.scrollWidth - 1;
+        };
+        const scrollTabs = (direction: -1 | 1) => {
+            const amount = Math.max(140, Math.floor(toolbar.clientWidth * 0.75));
+            const left = direction * amount;
+            if (typeof toolbar.scrollBy === 'function') {
+                toolbar.scrollBy({ left, behavior: 'smooth' });
+            } else {
+                toolbar.scrollLeft += left;
+            }
+            window.setTimeout(syncControls, 80);
+        };
+        const handlePrevious = () => {
+            scrollTabs(-1);
+        };
+        const handleNext = () => {
+            scrollTabs(1);
+        };
+
+        previousButton.addEventListener('click', handlePrevious);
+        nextButton.addEventListener('click', handleNext);
+        toolbar.addEventListener('scroll', syncControls);
+        window.addEventListener('resize', syncControls);
+        this._syncTabScrollControls = syncControls;
+        syncControls();
+
+        this.unsubscribers.push(() => {
+            previousButton.removeEventListener('click', handlePrevious);
+            nextButton.removeEventListener('click', handleNext);
+            toolbar.removeEventListener('scroll', syncControls);
+            window.removeEventListener('resize', syncControls);
+            if (this._syncTabScrollControls === syncControls) {
+                this._syncTabScrollControls = null;
+            }
+        });
+    }
+
     public setTab(tabId: string, btn?: HTMLElement): void {
         this._activateTab('.debug-tab', '.debug-tab-content', `debug-${tabId}-tab`, btn);
     }
@@ -191,12 +256,24 @@ export class ConsoleUI {
         this._viewState.activeViewId = view;
         this._activateTab('.console-tab', '.logs-pane', `logs-${view}`, btn);
         this.renderLogs(true);
+        this._syncRuntimeCardSelection();
     }
 
     public async clearLogs(): Promise<void> {
         await this.service.clearLogs();
         this.renderLogs(true);
         this._clipboardHelper.showLogsCleared();
+    }
+
+    public async openLogsFolder(): Promise<void> {
+        const opened = await this.service.openLogsFolder();
+        if (!opened) {
+            this._showToast(
+                this._translate('ui.debug.logs_open_folder_failed', 'Failed to open logs folder'),
+                'error',
+                1800,
+            );
+        }
     }
 
     public async copyLogs(): Promise<void> {
@@ -251,11 +328,17 @@ export class ConsoleUI {
             return false;
         }
 
-        const views = await this.service.getAvailableViews();
+        const [views, statusItems] = await Promise.all([
+            this.service.getAvailableViews(),
+            this.service.getStatusItems(),
+        ]);
+        this._runtimeStatusItems = statusItems;
         this._viewState.ensureKnownActiveView(new Set(views.map((view) => view.id)));
+        this._renderRuntimeCards(views);
 
         if (!this._viewHelper.shouldRebuildViews(toolbar, views)) {
             this._syncActivePane(`logs-${this._viewState.activeViewId}`);
+            this._syncTabScrollControls?.();
             return false;
         }
 
@@ -272,7 +355,86 @@ export class ConsoleUI {
         this._activeTabButton = toolbar.querySelector<HTMLElement>('.console-tab.active');
         this._activePane = null;
         this._syncActivePane(`logs-${this._viewState.activeViewId}`);
+        this._syncTabScrollControls?.();
         return true;
+    }
+
+    private _bindRuntimeCards(): void {
+        const cardsRoot = document.getElementById('console-runtime-cards');
+        if (!(cardsRoot instanceof HTMLElement)) {
+            return;
+        }
+
+        const handleClick = (event: Event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+
+            const card = target.closest('.console-runtime-card');
+            if (!(card instanceof HTMLElement)) {
+                return;
+            }
+
+            const view = card.dataset['view'];
+            if (view === undefined || view === '') {
+                return;
+            }
+
+            const button = Array.from(document.querySelectorAll<HTMLElement>('.console-tab')).find(
+                (tab) => tab.dataset['view'] === view,
+            );
+            if (button instanceof HTMLElement) {
+                this.setLogView(view, button);
+            }
+        };
+
+        cardsRoot.addEventListener('click', handleClick);
+        this.unsubscribers.push(() => {
+            cardsRoot.removeEventListener('click', handleClick);
+        });
+    }
+
+    private _renderRuntimeCards(views: readonly { id: string }[]): void {
+        const cardsRoot = document.getElementById('console-runtime-cards');
+        if (!(cardsRoot instanceof HTMLElement)) {
+            return;
+        }
+
+        const viewIds = new Set(views.map((view) => view.id));
+        const visibleItems = this._runtimeStatusItems.filter((item) =>
+            this._shouldRenderRuntimeCard(item, viewIds),
+        );
+
+        if (visibleItems.length === 0) {
+            cardsRoot.replaceChildren();
+            cardsRoot.hidden = true;
+            return;
+        }
+
+        cardsRoot.hidden = false;
+        cardsRoot.replaceChildren(
+            ...this._runtimeCardRenderer.createCards(visibleItems, this._viewState.activeViewId),
+        );
+    }
+
+    private _shouldRenderRuntimeCard(
+        item: IConsoleStatusItem,
+        visibleViewIds: ReadonlySet<string>,
+    ): boolean {
+        if (item.id === 'engine:idle') {
+            return false;
+        }
+
+        return !visibleViewIds.has(this._runtimeCardRenderer.getViewId(item));
+    }
+
+    private _syncRuntimeCardSelection(): void {
+        document.querySelectorAll<HTMLElement>('.console-runtime-card').forEach((card) => {
+            const isActive = card.dataset['view'] === this._viewState.activeViewId;
+            card.classList.toggle('active', isActive);
+            card.setAttribute('aria-pressed', String(isActive));
+        });
     }
 
     private renderLogs(clear = false): void {

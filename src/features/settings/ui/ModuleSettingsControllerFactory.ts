@@ -57,6 +57,7 @@ export class ModuleSettingsControllerFactory {
     public createCustomUiController(): ModuleSettingsCustomUiController {
         return new ModuleSettingsCustomUiController({
             service: this._deps.service,
+            tauri: this._deps.tauri,
             translate: (key, defaultValue) => this._deps.getContext().t(key, defaultValue),
             registerCleanup: (cleanup) => {
                 this._deps.registerCleanup(cleanup);

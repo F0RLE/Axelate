@@ -181,7 +181,7 @@ describe('ConsoleLogService', () => {
         expect(logs).toHaveLength(1);
     });
 
-    it('should subscribe to engine events and append module logs in Tauri mode', async () => {
+    it('should subscribe to engine events and append engine logs in Tauri mode', async () => {
         const unlisten = vi.fn();
         const listeners = new Map<string, (payload: unknown) => void>();
 
@@ -205,7 +205,7 @@ describe('ConsoleLogService', () => {
             message: 'boom',
         });
 
-        expect(service.getLogsForView('llamacpp')).toEqual([
+        expect(service.getLogsForView('engine:llamacpp')).toEqual([
             expect.objectContaining({
                 source: 'llamacpp',
                 level: 'info',
@@ -244,7 +244,7 @@ describe('ConsoleLogService', () => {
             line: '[AIBridge] Stream chunk received',
         });
 
-        expect(service.getLogsForView('llamacpp')).toEqual([]);
+        expect(service.getLogsForView('engine:llamacpp')).toEqual([]);
     });
 
     it('should expose General plus ready engine tabs', async () => {
@@ -254,7 +254,7 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'General' },
-                    { id: 'llamacpp', label: 'LLaMA.cpp' },
+                    { id: 'engine:llamacpp', label: 'LLaMA.cpp' },
                 ],
                 status_items: [],
             },
@@ -265,7 +265,7 @@ describe('ConsoleLogService', () => {
         expect(invokeSafeSpy).toHaveBeenCalledWith('get_console_overview');
         expect(views).toEqual([
             { id: 'general', label: 'General' },
-            { id: 'llamacpp', label: 'LLaMA.cpp' },
+            { id: 'engine:llamacpp', label: 'LLaMA.cpp' },
         ]);
     });
 
@@ -276,7 +276,7 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'General' },
-                    { id: 'axelate-telegram-bot', label: 'Telegram Bot' },
+                    { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
                 ],
                 status_items: [],
             },
@@ -301,7 +301,7 @@ describe('ConsoleLogService', () => {
 
         expect(views).toEqual([
             { id: 'general', label: 'General' },
-            { id: 'axelate-telegram-bot', label: 'Telegram Bot' },
+            { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
         ]);
     });
 
@@ -312,7 +312,8 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'General' },
-                    { id: 'llamacpp', label: 'LLaMA.cpp' },
+                    { id: 'engine:llamacpp', label: 'LLaMA.cpp' },
+                    { id: 'module:llamacpp', label: 'Llamacpp' },
                 ],
                 status_items: [],
             },
@@ -338,7 +339,6 @@ describe('ConsoleLogService', () => {
                         source: 'llamacpp',
                         level: 'INFO',
                         message: 'ready line',
-                        module_id: 'llamacpp',
                     },
                 ]);
             }
@@ -354,11 +354,13 @@ describe('ConsoleLogService', () => {
                 message: 'Navigating to: console',
             }),
         ]);
-        expect(service.getLogsForView('llamacpp')).toEqual([
+        expect(service.getLogsForView('module:llamacpp')).toEqual([
             expect.objectContaining({
                 source: 'frontend',
                 message: 'Starting provider: llamacpp',
             }),
+        ]);
+        expect(service.getLogsForView('engine:llamacpp')).toEqual([
             expect.objectContaining({
                 source: 'llamacpp',
                 message: 'ready line',
@@ -373,7 +375,8 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'General' },
-                    { id: 'llamacpp', label: 'LLaMA.cpp' },
+                    { id: 'engine:llamacpp', label: 'LLaMA.cpp' },
+                    { id: 'module:llamacpp', label: 'Llamacpp' },
                 ],
                 status_items: [
                     {
@@ -440,5 +443,20 @@ describe('ConsoleLogService', () => {
                 .mocked(bridge.invoke)
                 .mock.calls.filter(([command]) => command === 'get_module_path'),
         ).toHaveLength(1);
+    });
+
+    it('should open the launcher logs folder', async () => {
+        setupTauri(bridge, true);
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
+            if (command === 'open_log_dir') {
+                return Promise.resolve(undefined);
+            }
+            return Promise.resolve(undefined);
+        });
+
+        const opened = await service.openLogsFolder();
+
+        expect(opened).toBe(true);
+        expect(bridge.invoke).toHaveBeenCalledWith('open_log_dir');
     });
 });

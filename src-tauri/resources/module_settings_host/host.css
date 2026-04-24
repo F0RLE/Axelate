@@ -22,13 +22,7 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background:
-        radial-gradient(
-            circle at top,
-            rgba(84, 116, 255, 0.12),
-            transparent 40%
-        ),
-        var(--host-bg);
+    background: var(--host-bg);
     color: var(--host-text);
     font-family: "Segoe UI", "Helvetica Neue", sans-serif;
 }
@@ -46,7 +40,7 @@ body {
 .host-shell__stage {
     position: absolute;
     inset: 0;
-    background: transparent;
+    background: var(--host-bg);
 }
 
 .host-shell__frame {
@@ -54,7 +48,7 @@ body {
     width: 100%;
     height: 100%;
     border: 0;
-    background: transparent;
+    background: var(--host-bg);
 }
 
 .host-shell__overlay {
