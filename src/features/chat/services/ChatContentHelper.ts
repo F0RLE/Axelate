@@ -191,6 +191,16 @@ export class ChatContentHelper {
         }
     }
 
+    public async estimateContentTokens(content: ChatContent): Promise<number> {
+        const text = this.extractText(content);
+        const textTokens = text.trim() === '' ? 0 : await this.estimateReplyTokens(text);
+        const imageTokens = Array.isArray(content)
+            ? content.filter((part) => this._extractImagePart(part) !== null).length * 258
+            : 0;
+
+        return textTokens + imageTokens;
+    }
+
     private _extractFromObject(obj: Record<string, unknown>): string {
         if ('message' in obj && typeof obj['message'] === 'string') return obj['message'];
         if ('error' in obj && typeof obj['error'] === 'string') return obj['error'];

@@ -88,6 +88,8 @@ export class ChatController {
     private readonly _generationController: ChatGenerationController;
     private readonly _sendController: ChatSendController;
     private readonly _state = new ChatControllerState();
+    private _contextTokenTotal = 0;
+    private _contextTokenVersion = 0;
     private readonly _boundFileInputChange = (e: Event) => this._filePicker.handleFileSelect(e);
     private readonly _boundChatInputKeydown = (e: KeyboardEvent) => {
         const isEnterKey =
@@ -217,6 +219,7 @@ export class ChatController {
             this._ui,
             (text, model) => deps.estimateTokens(text, model),
             () => deps.isTauriRuntime(),
+            () => this._aiBridge.getContextWindow(),
             this._fileHandler,
             this._tracer,
         );
@@ -228,6 +231,7 @@ export class ChatController {
             getHistory: () => this._state.history,
             setHistory: (history) => {
                 this._state.history = history;
+                void this._syncContextTokensFromHistory(history);
             },
             revealLatestMessage: () => {
                 this._ui.revealLatestMessage();
@@ -270,6 +274,9 @@ export class ChatController {
             buildGeneratedImageContent: (images, text) =>
                 this._buildGeneratedImageContent(images, text),
             estimateReplyTokens: async (text) => await this._estimateReplyTokens(text),
+            addContextTokens: (tokens) => {
+                this._addContextTokens(tokens);
+            },
             getFriendlyErrorMessage: (errorMsg, model) =>
                 this._getFriendlyErrorMessage(errorMsg, model),
             handleError: (errorMsg, model) => {
@@ -321,8 +328,8 @@ export class ChatController {
             clearInput: () => {
                 this._inputCoordinator.clear();
             },
-            updateTokenCount: (count) => {
-                this._ui.updateTokenCount(count);
+            addContextTokens: (count) => {
+                this._addContextTokens(count);
             },
             appendUserMessage: (text, attachments, tokens) => {
                 this._ui.appendMessage('user', text, { attachments, tokens });
@@ -367,8 +374,8 @@ export class ChatController {
         return new ChatActivationCoordinator({
             aiBridge,
             uiStateHelper: this._uiStateHelper,
-            getSelectedProviderId: () => this._sendController.resolveSelectedModuleId(),
-            tryAutoStartAi: async () => await this._sendController.tryAutoStartAi(),
+            getSelectedProviderId: (prompt) => this._sendController.resolveSelectedModuleId(prompt),
+            tryAutoStartAi: async (prompt) => await this._sendController.tryAutoStartAi(prompt),
             tracer: this._tracer,
         });
     }
@@ -425,9 +432,12 @@ export class ChatController {
         this._activationCoordinator.clearInactiveAiErrorTimeout();
         this._generationController.stopImagePreviewPolling();
         this._state.clearHistory();
+        this._contextTokenTotal = 0;
+        this._contextTokenVersion += 1;
         this._fileHandler.clear();
         this._ui.clear();
-        this._ui.updateTokenCount(0);
+        this._ui.updateTokenCount(0, this._aiBridge.getContextWindow());
+        this._ui.updateContextTokenCount(0, this._aiBridge.getContextWindow());
         this._scheduleAutoResizeInput();
         try {
             await this._aiBridge.clearHistory();
@@ -495,8 +505,8 @@ export class ChatController {
         this._activationCoordinator.clearInactiveAiErrorTimeout();
     }
 
-    public async _tryAutoStartAI(): Promise<boolean> {
-        return await this._sendController.tryAutoStartAi();
+    public async _tryAutoStartAI(prompt?: string): Promise<boolean> {
+        return await this._sendController.tryAutoStartAi(prompt);
     }
 
     public async _handleChatResponse(
@@ -547,6 +557,38 @@ export class ChatController {
         return this._contentHelper.estimateReplyTokens(text);
     }
 
+    private _addContextTokens(tokens: number): void {
+        if (!Number.isFinite(tokens) || tokens <= 0) {
+            return;
+        }
+
+        this._contextTokenVersion += 1;
+        this._contextTokenTotal += Math.trunc(tokens);
+        this._ui.updateContextTokenCount(
+            this._contextTokenTotal,
+            this._aiBridge.getContextWindow(),
+        );
+    }
+
+    private async _syncContextTokensFromHistory(history: IChatMessage[]): Promise<void> {
+        const version = ++this._contextTokenVersion;
+        let total = 0;
+
+        for (const message of history) {
+            total += await this._contentHelper.estimateContentTokens(message.content);
+            if (version !== this._contextTokenVersion) {
+                return;
+            }
+        }
+
+        if (version !== this._contextTokenVersion) {
+            return;
+        }
+
+        this._contextTokenTotal = total;
+        this._ui.updateContextTokenCount(total, this._aiBridge.getContextWindow());
+    }
+
     private _lockUI(input: HTMLTextAreaElement | null) {
         return this._uiStateHelper.lockUi(input);
     }
@@ -556,6 +598,7 @@ export class ChatController {
         sendBtn: HTMLButtonElement | null;
         voiceBtn: HTMLButtonElement | null;
         attachBtn: HTMLButtonElement | null;
+        contextBtn: HTMLButtonElement | null;
     }) {
         this._uiStateHelper.unlockUi(els);
     }
@@ -574,5 +617,6 @@ export class ChatController {
 
     public set _chatHistory(history: IChatMessage[]) {
         this._state.history = history;
+        void this._syncContextTokensFromHistory(history);
     }
 }

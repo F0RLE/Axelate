@@ -61,20 +61,20 @@ export class EngineStatusService {
             this._listen<EngineSwappingPayload>('ai:engine:swapping', (payload) => {
                 this._tracer.info(`[EngineStatus] Swapping from ${payload.from} to ${payload.to}`);
                 this._activeSlots.delete(payload.from);
-                this._setCardState(payload.from, 'idle');
-                this._setCardState(payload.to, 'swapping');
+                this.setEngineState(payload.from, 'idle');
+                this.setEngineState(payload.to, 'swapping');
                 this._updateBadge();
             }),
             this._listen<EngineStartingPayload>('ai:engine:starting', (payload) => {
                 this._tracer.info(`[EngineStatus] Starting ${payload.engine_id}`);
-                this._setCardState(payload.engine_id, 'starting');
+                this.setEngineState(payload.engine_id, 'starting');
             }),
             this._listen<EngineReadyPayload>('ai:engine:ready', (payload) => {
                 this._tracer.info(
                     `[EngineStatus] Ready: ${payload.engine_id} @ ${payload.endpoint}`,
                 );
                 this._activeSlots.set(payload.engine_id, payload.endpoint);
-                this._setCardState(payload.engine_id, 'ready');
+                this.setEngineState(payload.engine_id, 'ready');
                 this._updateBadge();
             }),
             this._listen<EngineErrorPayload>('ai:engine:error', (payload) => {
@@ -82,7 +82,7 @@ export class EngineStatusService {
                     `[EngineStatus] Error on ${payload.engine_id}: ${payload.message}`,
                 );
                 this._activeSlots.delete(payload.engine_id);
-                this._setCardState(payload.engine_id, 'error');
+                this.setEngineState(payload.engine_id, 'error');
                 this._updateBadge();
             }),
         );
@@ -118,6 +118,15 @@ export class EngineStatusService {
         return this._activeSlots.size > 0;
     }
 
+    public setEngineState(engineId: string, state: EngineState): void {
+        if (state !== 'ready') {
+            this._activeSlots.delete(engineId);
+        }
+
+        this._setCardState(engineId, state);
+        this._setDashboardCardState(engineId, state);
+    }
+
     /**
      * Called by AppUI._updateMultiSlotBadge() which now owns the badge DOM.
      * This method is intentionally a no-op here — the badge is fully managed by AppUI.
@@ -129,9 +138,8 @@ export class EngineStatusService {
 
     /** Updates all cards matching `engineId` with the given state class. */
     private _setCardState(engineId: string, state: EngineState): void {
-        const cards = document.querySelectorAll<HTMLElement>(
-            `[data-app-id="${CSS.escape(engineId)}"]`,
-        );
+        const escapedEngineId = this._escapeSelectorValue(engineId);
+        const cards = document.querySelectorAll<HTMLElement>(`[data-app-id="${escapedEngineId}"]`);
 
         cards.forEach((card) => {
             this._resetCardClasses(card);
@@ -141,6 +149,29 @@ export class EngineStatusService {
                 this._updateCardButton(card, state);
             }
         });
+    }
+
+    private _setDashboardCardState(engineId: string, state: EngineState): void {
+        const escapedEngineId = this._escapeSelectorValue(engineId);
+        const cards = document.querySelectorAll<HTMLElement>(
+            `[data-current-module="${escapedEngineId}"]`,
+        );
+
+        cards.forEach((card) => {
+            const isRunning = state === 'ready';
+            card.dataset['runtimeStatus'] = isRunning ? 'running' : state;
+            card.classList.toggle('module-running', isRunning);
+            card.classList.toggle('module-stopped', !isRunning);
+        });
+    }
+
+    private _escapeSelectorValue(value: string): string {
+        const cssApi = (globalThis as { CSS?: { escape?: (selector: string) => string } }).CSS;
+        if (typeof cssApi?.escape === 'function') {
+            return cssApi.escape(value);
+        }
+
+        return value.replace(/["\\]/gu, '\\$&');
     }
 
     private _resetCardClasses(card: HTMLElement): void {

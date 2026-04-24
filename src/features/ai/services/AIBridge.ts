@@ -30,6 +30,7 @@ type AIBridgeLogger = Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
 export class AIBridge implements IAIBridge {
     private _context: AIBridgeContext | null = null;
     private readonly _unlisteners: (() => void)[] = [];
+    private readonly _localContextWindows = new Map<string, number>();
     private _initialized = false;
     private readonly INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
     private readonly _events = new AIBridgeEvents();
@@ -143,6 +144,11 @@ export class AIBridge implements IAIBridge {
                 providerId,
                 providerPolicy: this._providerPolicy,
             });
+            await this._refreshLocalContextWindow(providerId);
+        }
+
+        if (started) {
+            this._engineStatus.setEngineState(providerId, 'ready');
         }
 
         if (!started) {
@@ -165,8 +171,12 @@ export class AIBridge implements IAIBridge {
      */
     public stopProvider(): void {
         this._tracer.info('[AIBridge] Explicitly stopping provider and clearing inactivity timers');
+        const providerId = this._manager.activeProviderId;
         this._manager.stopProvider();
         this._inactivityController.clear();
+        if (providerId !== null) {
+            this._engineStatus.setEngineState(providerId, 'idle');
+        }
 
         // Also shut down the backend slots if we're explicitly stopped
         this._runtime.stopProviderEngine(this._context);
@@ -303,6 +313,15 @@ export class AIBridge implements IAIBridge {
         return this._manager.sessionId;
     }
 
+    public getContextWindow(): number | undefined {
+        return (
+            this._manager.contextWindow ??
+            (this._manager.activeProviderId !== null
+                ? this._localContextWindows.get(this._manager.activeProviderId)
+                : undefined)
+        );
+    }
+
     public destroy(): void {
         this._manager.stopProvider();
         this._cleanupTransportState();
@@ -312,6 +331,30 @@ export class AIBridge implements IAIBridge {
 
     private _showToast(msg: string, type: 'success' | 'error' | 'info' | 'warning'): void {
         this._context?.appUI.showToast(msg, type);
+    }
+
+    private async _refreshLocalContextWindow(providerId: string): Promise<void> {
+        if (this._providerPolicy.isCloudProvider(providerId)) {
+            return;
+        }
+
+        const context = this._context;
+        if (context?.tauriProvider.isTauri() !== true) {
+            return;
+        }
+
+        try {
+            const config = await context.tauriProvider.invoke<{ context_size?: number }>(
+                'get_engine_config',
+                { engineId: providerId },
+            );
+            if (typeof config.context_size === 'number' && Number.isFinite(config.context_size)) {
+                this._localContextWindows.set(providerId, Math.max(4096, config.context_size));
+            }
+        } catch (error) {
+            this._tracer.debug('[AIBridge] Local context window unavailable:', error);
+            this._localContextWindows.set(providerId, 4096);
+        }
     }
 
     public get _listeners(): ReadonlyMap<string, MessageHandler[]> {

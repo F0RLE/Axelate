@@ -6,6 +6,7 @@ type ChatTranslationTargets = {
     voiceBtn: HTMLElement | null;
     sendBtn: HTMLElement | null;
     tokenCount: HTMLElement | null;
+    contextBtn: HTMLElement | null;
 };
 
 export class ChatUiDom {
@@ -30,6 +31,7 @@ export class ChatUiDom {
             voiceBtn: document.getElementById('chat-voice-btn'),
             sendBtn: document.getElementById('chat-send-btn'),
             tokenCount: document.getElementById('chat-token-count'),
+            contextBtn: document.getElementById('chat-context-btn'),
         };
     }
 }

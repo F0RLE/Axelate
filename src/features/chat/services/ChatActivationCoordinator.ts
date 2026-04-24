@@ -5,8 +5,8 @@ import type { ChatUiStateHelper } from './ChatUiStateHelper';
 type ChatActivationCoordinatorDeps = {
     aiBridge: AIBridge;
     uiStateHelper: ChatUiStateHelper;
-    getSelectedProviderId: () => string | null;
-    tryAutoStartAi: () => Promise<boolean>;
+    getSelectedProviderId: (prompt?: string) => string | null;
+    tryAutoStartAi: (prompt?: string) => Promise<boolean>;
     tracer: Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
 };
 
@@ -18,7 +18,8 @@ export class ChatActivationCoordinator {
     }
 
     public async ensureActive(input: HTMLTextAreaElement | null): Promise<boolean> {
-        const selectedProviderId = this._deps.getSelectedProviderId();
+        const prompt = input?.value.trim() ?? '';
+        const selectedProviderId = this._deps.getSelectedProviderId(prompt);
         const { activeProviderId } = this._deps.aiBridge.getState();
 
         if (selectedProviderId === null) {
@@ -45,7 +46,7 @@ export class ChatActivationCoordinator {
             this._deps.aiBridge.stopProvider();
         }
 
-        const started = await this._deps.tryAutoStartAi();
+        const started = await this._deps.tryAutoStartAi(prompt);
         if (started) {
             this.clearInactiveAiErrorTimeout();
             return true;

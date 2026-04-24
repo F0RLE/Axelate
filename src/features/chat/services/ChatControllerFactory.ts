@@ -78,6 +78,7 @@ type ChatGenerationFactoryDeps = {
         text: string,
     ) => ChatContent;
     estimateReplyTokens: (text: string) => Promise<number>;
+    addContextTokens: (tokens: number) => void;
     getFriendlyErrorMessage: (errorMsg: unknown, model?: string) => string;
     handleError: (errorMsg: unknown, model?: string) => void;
     isDestroyed: () => boolean;
@@ -118,7 +119,7 @@ type ChatSendFactoryDeps = {
         streamingHandleRef: () => ReturnType<ChatSendFactoryDeps['createStreamingHandle']> | null,
     ) => void;
     clearInput: () => void;
-    updateTokenCount: (count: number) => void;
+    addContextTokens: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     getPreferredAiCategory: () => 'ai_text' | 'ai_image';
@@ -139,12 +140,14 @@ type ChatSendFactoryDeps = {
         sendBtn: HTMLButtonElement | null;
         voiceBtn: HTMLButtonElement | null;
         attachBtn: HTMLButtonElement | null;
+        contextBtn: HTMLButtonElement | null;
     };
     unlockUi: (els: {
         input: HTMLTextAreaElement | null;
         sendBtn: HTMLButtonElement | null;
         voiceBtn: HTMLButtonElement | null;
         attachBtn: HTMLButtonElement | null;
+        contextBtn: HTMLButtonElement | null;
     }) => void;
     handleError: (error: unknown) => void;
     isSending: () => boolean;
@@ -238,6 +241,9 @@ export class ChatControllerFactory {
             buildGeneratedImageContent: (images, text) =>
                 deps.buildGeneratedImageContent(images, text),
             estimateReplyTokens: async (text) => await deps.estimateReplyTokens(text),
+            addContextTokens: (tokens) => {
+                deps.addContextTokens(tokens);
+            },
             getFriendlyErrorMessage: (errorMsg, model) =>
                 deps.getFriendlyErrorMessage(errorMsg, model),
             handleError: (errorMsg, model) => {
@@ -269,8 +275,8 @@ export class ChatControllerFactory {
             clearInput: () => {
                 deps.clearInput();
             },
-            updateTokenCount: (count) => {
-                deps.updateTokenCount(count);
+            addContextTokens: (count) => {
+                deps.addContextTokens(count);
             },
             appendUserMessage: (text, attachments, tokens) => {
                 deps.appendUserMessage(text, attachments, tokens);

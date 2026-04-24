@@ -72,4 +72,39 @@ describe('ChatActivationCoordinator', () => {
         expect(tryAutoStartAi).toHaveBeenCalledTimes(1);
         expect(clearInactiveAiErrorTimeout).toHaveBeenCalledTimes(1);
     });
+
+    it('should resolve the selected provider from the current prompt', async () => {
+        const getSelectedProviderId = vi.fn().mockReturnValue('gpt-image');
+        const tryAutoStartAi = vi.fn().mockResolvedValue(true);
+        const input = document.createElement('textarea');
+        input.value = 'сгенерируй картинку дома';
+
+        const coordinator = new ChatActivationCoordinator({
+            aiBridge: {
+                isActive: () => false,
+                getState: () => ({
+                    activeProviderId: null,
+                    isRunning: false,
+                }),
+                stopProvider: vi.fn(),
+            } as never,
+            uiStateHelper: {
+                clearInactiveAiErrorTimeout: vi.fn(),
+                scheduleInactiveAiError: vi.fn(),
+            } as never,
+            getSelectedProviderId,
+            tryAutoStartAi,
+            tracer: {
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
+            },
+        });
+
+        await coordinator.ensureActive(input);
+
+        expect(getSelectedProviderId).toHaveBeenCalledWith('сгенерируй картинку дома');
+        expect(tryAutoStartAi).toHaveBeenCalledWith('сгенерируй картинку дома');
+    });
 });

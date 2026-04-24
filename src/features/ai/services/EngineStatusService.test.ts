@@ -65,6 +65,7 @@ describe('EngineStatusService', () => {
             <div class="app-card" data-app-id="sdcpp">
                 <div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>
             </div>
+            <div id="ai-module-card" class="module-slot-card selected" data-current-module="llamacpp"></div>
         `;
 
         service.init();
@@ -86,6 +87,9 @@ describe('EngineStatusService', () => {
         expect(service.hasActiveEngines).toBe(true);
         expect(llama.classList.contains('engine-ready')).toBe(true);
         expect(llama.querySelector('button')?.textContent).toBe('Убрать');
+        const dashboardCard = document.getElementById('ai-module-card');
+        expect(dashboardCard?.classList.contains('module-running')).toBe(true);
+        expect((dashboardCard as HTMLElement | null)?.dataset['runtimeStatus']).toBe('running');
 
         listeners['ai:engine:swapping']?.({ from: 'llamacpp', to: 'sdcpp' });
         const sdcpp = document.querySelector<HTMLElement>('[data-app-id="sdcpp"]');
@@ -93,11 +97,29 @@ describe('EngineStatusService', () => {
             throw new Error('sdcpp card not found');
         }
         expect(llama.classList.contains('engine-idle')).toBe(true);
+        expect(dashboardCard?.classList.contains('module-running')).toBe(false);
+        expect((dashboardCard as HTMLElement | null)?.dataset['runtimeStatus']).toBe('idle');
         expect(sdcpp.classList.contains('engine-swapping')).toBe(true);
         expect(service.getEndpointForEngine('llamacpp')).toBeUndefined();
 
         listeners['ai:engine:error']?.({ engine_id: 'sdcpp', message: 'boom' });
         expect(sdcpp.classList.contains('engine-error')).toBe(true);
+    });
+
+    it('allows explicit bridge state updates for dashboard cards', () => {
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="module-slot-card selected" data-current-module="gemini"></div>
+        `;
+
+        service.setEngineState('gemini', 'ready');
+        const card = document.getElementById('ai-module-card');
+        expect(card?.classList.contains('module-running')).toBe(true);
+        expect((card as HTMLElement | null)?.dataset['runtimeStatus']).toBe('running');
+
+        service.setEngineState('gemini', 'idle');
+        expect(card?.classList.contains('module-running')).toBe(false);
+        expect(card?.classList.contains('module-stopped')).toBe(true);
+        expect((card as HTMLElement | null)?.dataset['runtimeStatus']).toBe('idle');
     });
 
     it('falls back to untranslated labels and handles cards without modal buttons', () => {

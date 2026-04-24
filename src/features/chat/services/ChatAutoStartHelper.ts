@@ -11,11 +11,13 @@ type ChatAutoStartHelperDeps = {
     tracer: ChatAutoStartLogger;
 };
 
+type AiChatCategory = 'ai_text' | 'ai_image';
+
 export class ChatAutoStartHelper {
     public constructor(private readonly _deps: ChatAutoStartHelperDeps) {}
 
-    public resolveSelectedModuleId(): string | null {
-        const preferredCategory = this._deps.getPreferredAiCategory();
+    public resolveSelectedModuleId(prompt?: string): string | null {
+        const preferredCategory = this._resolvePreferredCategory(prompt);
         const preferredModuleId = this._getModuleId(preferredCategory);
         if (preferredModuleId !== null) {
             return preferredModuleId;
@@ -25,8 +27,8 @@ export class ChatAutoStartHelper {
         return this._getModuleId(fallbackCategory);
     }
 
-    public async startSelectedModule(): Promise<boolean> {
-        const moduleId = this.resolveSelectedModuleId();
+    public async startSelectedModule(prompt?: string): Promise<boolean> {
+        const moduleId = this.resolveSelectedModuleId(prompt);
         if (moduleId === null) {
             return false;
         }
@@ -45,6 +47,42 @@ export class ChatAutoStartHelper {
     private _getModuleId(category: 'ai_text' | 'ai_image'): string | null {
         const module = this._deps.getSelectedModule(category);
         return module?.id !== undefined && module.id !== '' ? module.id : null;
+    }
+
+    private _resolvePreferredCategory(prompt?: string): AiChatCategory {
+        if (prompt === undefined) {
+            return this._deps.getPreferredAiCategory();
+        }
+
+        if (this._isImageGenerationPrompt(prompt)) {
+            return 'ai_image';
+        }
+
+        if (this._getModuleId('ai_text') !== null) {
+            return 'ai_text';
+        }
+
+        return this._deps.getPreferredAiCategory();
+    }
+
+    private _isImageGenerationPrompt(prompt?: string): boolean {
+        const normalizedPrompt = prompt?.trim().toLowerCase() ?? '';
+        if (normalizedPrompt === '') {
+            return false;
+        }
+
+        const hasImageNoun =
+            /(image|picture|photo|art|illustration|картин|изображ|фото|арт|рисунок|иллюстрац)/u.test(
+                normalizedPrompt,
+            );
+        const hasGenerationVerb =
+            /(generate|create|draw|paint|render|make|сгенерир|созда|нарис|сделай|сделать|изобраз)/u.test(
+                normalizedPrompt,
+            );
+        const directDrawRequest =
+            /(^|\s)(draw|paint|render|нарисуй|нарисовать|изобрази)(\s|$)/u.test(normalizedPrompt);
+
+        return directDrawRequest || (hasImageNoun && hasGenerationVerb);
     }
 
     private _setButtonLoading(button: HTMLElement | null, loading: boolean): void {

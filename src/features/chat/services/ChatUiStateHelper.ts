@@ -15,6 +15,7 @@ type LockedUiElements = {
     sendBtn: HTMLButtonElement | null;
     voiceBtn: HTMLButtonElement | null;
     attachBtn: HTMLButtonElement | null;
+    contextBtn: HTMLButtonElement | null;
 };
 
 export class ChatUiStateHelper {
@@ -51,6 +52,7 @@ export class ChatUiStateHelper {
         const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement | null;
         const voiceBtn = document.getElementById('chat-voice-btn') as HTMLButtonElement | null;
         const attachBtn = document.getElementById('chat-attach-btn') as HTMLButtonElement | null;
+        const contextBtn = document.getElementById('chat-context-btn') as HTMLButtonElement | null;
 
         if (input) {
             input.disabled = true;
@@ -58,8 +60,9 @@ export class ChatUiStateHelper {
         if (sendBtn) sendBtn.disabled = true;
         if (voiceBtn) voiceBtn.disabled = true;
         if (attachBtn) attachBtn.disabled = true;
+        if (contextBtn) contextBtn.disabled = true;
 
-        return { input, sendBtn, voiceBtn, attachBtn };
+        return { input, sendBtn, voiceBtn, attachBtn, contextBtn };
     }
 
     public unlockUi(els: LockedUiElements): void {
@@ -70,6 +73,7 @@ export class ChatUiStateHelper {
         if (els.sendBtn) els.sendBtn.disabled = false;
         if (els.voiceBtn) els.voiceBtn.disabled = false;
         if (els.attachBtn) els.attachBtn.disabled = false;
+        if (els.contextBtn) els.contextBtn.disabled = false;
     }
 
     public scheduleAutoResizeInput(): void {

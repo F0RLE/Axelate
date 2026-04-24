@@ -218,6 +218,7 @@ describe('ChatUI lifecycle', () => {
 
     it('should refresh token count from internal state instead of parsing rendered text', () => {
         document.body.innerHTML = `
+            <div id="chat-container" class="has-messages"></div>
             <div id="chat-messages"></div>
             <div id="chat-token-count" class="visible">broken localized token text</div>
             <textarea id="chat-input" data-i18n-placeholder="ui.launcher.web.chat_placeholder"></textarea>
@@ -225,17 +226,56 @@ describe('ChatUI lifecycle', () => {
             <button id="chat-attach-btn"></button>
             <button id="chat-voice-btn"></button>
             <button id="chat-send-btn"></button>
+            <button id="chat-context-btn"></button>
         `;
 
         ui = createChatUI();
-        ui.updateTokenCount(12);
+        ui.updateTokenCount(12, 100);
+        ui.updateContextTokenCount(12, 100);
 
         const tokenEl = document.getElementById('chat-token-count') as HTMLElement;
+        const contextBtn = document.getElementById('chat-context-btn') as HTMLElement;
         tokenEl.textContent = 'непарсимое значение';
 
         ui.refreshTranslations();
 
         expect(tokenEl.textContent).toBe('12 t:ui.launcher.web.tokens:tokens');
+        expect(contextBtn.style.getPropertyValue('--chat-context-fill')).toBe('12%');
+        expect(contextBtn.title).toContain('12 / 100');
+    });
+
+    it('should render context usage on the chat context button', () => {
+        document.body.innerHTML = `
+            <div id="chat-messages"></div>
+            <div id="chat-token-count"></div>
+            <button id="chat-context-btn"></button>
+        `;
+
+        ui = createChatUI();
+        ui.updateContextTokenCount(512, 1024);
+
+        const contextBtn = document.getElementById('chat-context-btn') as HTMLElement;
+
+        expect(contextBtn.style.getPropertyValue('--chat-context-fill')).toBe('50%');
+        expect(contextBtn.classList.contains('visible')).toBe(true);
+        expect(contextBtn.dataset['tooltip']).toContain('512 / 1024');
+    });
+
+    it('should keep context usage visible after the input becomes empty', () => {
+        document.body.innerHTML = `
+            <div id="chat-container" class="has-messages"></div>
+            <div id="chat-token-count"></div>
+            <button id="chat-context-btn"></button>
+        `;
+
+        ui = createChatUI();
+        ui.updateContextTokenCount(99, 258000);
+        ui.updateTokenCount(0, 258000);
+
+        const contextBtn = document.getElementById('chat-context-btn') as HTMLElement;
+
+        expect(contextBtn.classList.contains('visible')).toBe(true);
+        expect(contextBtn.dataset['tooltip']).toContain('99 / 258000');
     });
 
     it('should remove orphan streaming message when finalized without answer text', () => {
