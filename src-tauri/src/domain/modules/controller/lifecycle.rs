@@ -134,6 +134,7 @@ impl<'a> LifecycleExecutor<'a> {
                         .map_err(|e| AppError::Io(e.to_string()))?,
                 ))
                 .stderr(Stdio::from(log_file));
+            crate::domain::integration_api::apply_process_env(&mut builder);
 
             builder.spawn().map_err(|e| AppError::Internal {
                 request_id: None,
