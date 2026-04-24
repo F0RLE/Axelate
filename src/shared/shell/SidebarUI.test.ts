@@ -75,6 +75,8 @@ describe('SidebarUI', () => {
         }) as typeof globalThis.requestAnimationFrame);
         vi.stubGlobal('cancelAnimationFrame', vi.fn());
         setupDom();
+        Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1280 });
+        Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 900 });
         uiSettings.getSidebarCollapsed.mockReturnValue(false);
         uiSettings.getSidebarManualOverride.mockReturnValue(false);
         uiSettings.getSidebarWidth.mockReturnValue(280);
@@ -86,6 +88,7 @@ describe('SidebarUI', () => {
     });
 
     afterEach(() => {
+        document.documentElement.style.removeProperty('--app-zoom');
         document.body.innerHTML = '';
         ResizeObserverMock.instances = [];
         vi.unstubAllGlobals();
@@ -174,7 +177,7 @@ describe('SidebarUI', () => {
     });
 
     it('enables auto compact when zoom threshold is reached', async () => {
-        uiSettings.getZoomLevel.mockReturnValue(3);
+        windowService.getZoom.mockReturnValue(1.6);
         const sidebarUi = new SidebarUI(
             uiSettings as never,
             tracer,
@@ -202,14 +205,16 @@ describe('SidebarUI', () => {
         const sidebar = document.getElementById('sidebar') as HTMLElement;
         expect(sidebar.classList.contains('auto-compact')).toBe(false);
 
-        uiSettings.getZoomLevel.mockReturnValue(3);
-        globalThis.dispatchEvent(new CustomEvent('axelate:zoom-changed', { detail: { zoom: 3 } }));
+        windowService.getZoom.mockReturnValue(1.6);
+        globalThis.dispatchEvent(
+            new CustomEvent('axelate:zoom-changed', { detail: { zoom: 1.6 } }),
+        );
 
         expect(sidebar.classList.contains('auto-compact')).toBe(true);
         expect(sidebar.style.width).toBe('80px');
     });
 
-    it('does not double-apply zoom when config thresholds are available', async () => {
+    it('does not treat native zoom as a smaller viewport when config thresholds are available', async () => {
         windowService.getConfig.mockReturnValue({
             thresholds: {
                 warningWidth: 800,
@@ -218,10 +223,36 @@ describe('SidebarUI', () => {
                 smallScreenHeight: 768,
             },
         } as never);
-        uiSettings.getZoomLevel.mockReturnValue(2);
         Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 960 });
         Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 720 });
         windowService.getZoom.mockReturnValue(2);
+
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(false);
+        expect(sidebar.style.width).toBe('280px');
+    });
+
+    it('uses CSS zoom as the effective viewport scale for auto compact', async () => {
+        windowService.getConfig.mockReturnValue({
+            thresholds: {
+                warningWidth: 800,
+                warningHeight: 600,
+                smallScreenWidth: 1024,
+                smallScreenHeight: 768,
+            },
+        } as never);
+        Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 960 });
+        Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 720 });
+        document.documentElement.style.setProperty('--app-zoom', '2.000');
 
         const sidebarUi = new SidebarUI(
             uiSettings as never,
@@ -238,7 +269,7 @@ describe('SidebarUI', () => {
     });
 
     it('keeps manual logo toggle as priority while auto compact is active', async () => {
-        uiSettings.getZoomLevel.mockReturnValue(3);
+        windowService.getZoom.mockReturnValue(1.6);
         const sidebarUi = new SidebarUI(
             uiSettings as never,
             tracer,
@@ -261,8 +292,33 @@ describe('SidebarUI', () => {
         expect(uiSettings.setSidebarState).toHaveBeenCalledWith(false, 280, true);
     });
 
+    it('releases manual expansion back to auto compact on the next logo toggle', async () => {
+        windowService.getZoom.mockReturnValue(1.6);
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        const logoArea = document.querySelector('.logo-area') as HTMLElement;
+
+        logoArea.click();
+        expect(sidebar.classList.contains('auto-compact')).toBe(false);
+        expect(sidebar.style.width).toBe('280px');
+
+        logoArea.click();
+
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+        expect(uiSettings.setSidebarState).toHaveBeenLastCalledWith(true, 80, false);
+    });
+
     it('restores manual expanded state while auto compact is active', async () => {
-        uiSettings.getZoomLevel.mockReturnValue(3);
+        windowService.getZoom.mockReturnValue(1.6);
         uiSettings.getSidebarCollapsed.mockReturnValue(false);
         uiSettings.getSidebarManualOverride.mockReturnValue(true);
 

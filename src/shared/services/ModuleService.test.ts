@@ -12,9 +12,11 @@ const mocks = vi.hoisted(() => {
         invokeSafe: vi.fn(),
         commands: {
             checkModuleInstalled: vi.fn(),
+            getModuleStatus: vi.fn(),
             downloadModule: vi.fn(),
             deleteModule: vi.fn(),
             pauseDownload: vi.fn().mockResolvedValue(true),
+            resumeDownload: vi.fn(),
             cancelDownload: vi.fn().mockResolvedValue(true),
         },
         tauriProvider: {
@@ -61,6 +63,7 @@ describe('ModuleService', () => {
         // Reset default behaviors
         mocks.tauriProvider.isTauri.mockReturnValue(true);
         mocks.commands.checkModuleInstalled.mockResolvedValue({ status: 'ok', data: true });
+        mocks.commands.getModuleStatus.mockResolvedValue({ status: 'ok', data: 'running' });
         mocks.commands.downloadModule.mockResolvedValue({ status: 'ok', data: null });
         mocks.commands.deleteModule.mockResolvedValue({ status: 'ok', data: null });
 
@@ -132,6 +135,27 @@ describe('ModuleService', () => {
         });
     });
 
+    describe('getStatus', () => {
+        it('should return backend runtime status', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'running' });
+
+            const result = await moduleService.getStatus('telegram-bot');
+
+            expect(result).toBe('running');
+            expect(mocks.commands.getModuleStatus).toHaveBeenCalledWith('telegram-bot');
+            expect(mocks.invokeSafe).toHaveBeenCalled();
+        });
+
+        it('should return stopped when not in Tauri', async () => {
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
+
+            const result = await moduleService.getStatus('telegram-bot');
+
+            expect(result).toBe('stopped');
+            expect(mocks.commands.getModuleStatus).not.toHaveBeenCalled();
+        });
+    });
+
     describe('downloadModule', () => {
         it('should invoke download_module command', async () => {
             mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
@@ -165,6 +189,29 @@ describe('ModuleService', () => {
 
             const state = moduleService.getDownloadState('test-module');
             expect(state?.status).toBe('error');
+        });
+
+        it('should return paused outcome without marking it as error', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'paused' });
+
+            const result = await moduleService.downloadModule('test-module', 'url');
+
+            expect(result).toBe('paused');
+            expect(mocks.tracer.error).not.toHaveBeenCalled();
+            expect(moduleService.getDownloadState('test-module')?.status).not.toBe('error');
+        });
+
+        it('should treat legacy paused errors as interrupted downloads', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'Download paused' },
+            });
+
+            const result = await moduleService.downloadModule('test-module', 'url');
+
+            expect(result).toBe('paused');
+            expect(mocks.tracer.error).not.toHaveBeenCalled();
+            expect(moduleService.getDownloadState('test-module')?.status).not.toBe('error');
         });
     });
 
@@ -351,28 +398,21 @@ describe('ModuleService', () => {
     });
 
     describe('resumeDownload', () => {
-        it('should resume a paused download using cached request metadata', async () => {
-            mocks.invokeSafe.mockResolvedValue({ status: 'ok' });
-
-            await moduleService.downloadModule(
-                'resume-module',
-                'https://repo.com/archive.zip',
-                'hash-1',
-                'release',
-            );
+        it('should resume a paused download through backend metadata', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'completed' });
 
             const result = await moduleService.resumeDownload('resume-module');
 
             expect(result).toBe(true);
-            expect(mocks.commands.downloadModule).toHaveBeenLastCalledWith(
-                'resume-module',
-                'https://repo.com/archive.zip',
-                'hash-1',
-                'release',
-            );
+            expect(mocks.commands.resumeDownload).toHaveBeenCalledWith('resume-module');
         });
 
-        it('should return false when no request metadata is cached', async () => {
+        it('should return false when backend has no request metadata', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'No paused download metadata for missing-module' },
+            });
+
             const result = await moduleService.resumeDownload('missing-module');
             expect(result).toBe(false);
         });

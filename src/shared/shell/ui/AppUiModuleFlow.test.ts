@@ -85,6 +85,26 @@ describe('AppUiModuleFlow', () => {
         expect(modalManager.refreshCurrentSelection).toHaveBeenCalledWith([app], 'svc');
     });
 
+    it('keeps paused download button state for resume', async () => {
+        const app = { id: 'svc', name: 'Service', installed: false } as IApp;
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading indeterminate';
+        btn.dataset['downloadStatus'] = 'paused';
+        btn.innerHTML = `
+            <span class="download-pct"></span>
+            <span class="download-label" style="display:none"></span>
+        `;
+        platformService.download.mockResolvedValue('paused');
+
+        await flow.handleDownloadModule(app, 'services', btn);
+
+        expect(app.installed).toBe(false);
+        expect(btn.classList.contains('downloading')).toBe(true);
+        expect(btn.dataset['downloadStatus']).toBe('paused');
+        expect(markSlotCardAsInstalled).not.toHaveBeenCalled();
+        expect(showToast).not.toHaveBeenCalled();
+    });
+
     it('restores download button label after cancel cleanup', () => {
         const btn = document.createElement('button');
         btn.className = 'download-btn downloading indeterminate';

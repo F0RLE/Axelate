@@ -93,6 +93,18 @@
     animation: selectedCardMarkerIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.module-slot-card.module-running::before,
+.module-slot-card.selected.module-running::before {
+    transform: translateX(-50%) scaleX(1);
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--success) 88%, #ffffff 12%),
+        var(--success)
+    );
+    box-shadow: 0 0 12px rgba(var(--success-raw), 0.24);
+    animation: selectedCardMarkerIn 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .module-slot-card.engine-error::before,
 .module-slot-card.engine-error::before,
 .module-slot-card.selected.engine-error::before,
@@ -421,6 +433,51 @@
     justify-content: center;
     gap: 8px;
     width: 100%;
+}
+
+.download-btn .download-hover-action {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50%;
+    color: #ffffff;
+    font-family: var(--app-font-family);
+    font-size: 0.72rem;
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+    transition:
+        opacity 0.14s ease,
+        visibility 0.14s ease,
+        background 0.14s ease;
+}
+
+.download-btn .download-hover-action-pause {
+    left: 0;
+    background: rgba(var(--primary-raw), 0.58);
+}
+
+.download-btn .download-hover-action-cancel {
+    right: 0;
+    background: rgba(var(--danger-raw), 0.58);
+}
+
+.download-btn.downloading:hover .btn-content {
+    opacity: 0;
+}
+
+.download-btn.downloading:hover .download-hover-action {
+    opacity: 1;
+    visibility: visible;
+}
+
+.download-btn.downloading:hover .download-hover-action-pause {
+    border-right: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .download-pct {

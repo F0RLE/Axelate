@@ -1,6 +1,11 @@
 import type { IApp } from '../../types/coreTypes';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import {
+    markModuleCardDownloadPaused,
+    markModuleCardDownloadResuming,
+} from './ModuleCardDownloadProgress';
+import { resolveDownloadButtonAction } from './ModuleCardActions';
 
 type AppUiCardActionFlowDeps = {
     platformService: ModulePlatformService;
@@ -10,6 +15,9 @@ type AppUiCardActionFlowDeps = {
     showToast: (message: string, type?: string) => void;
     handleDeleteModule: (app: IApp, category: string) => Promise<void>;
     handleDownloadModule: (app: IApp, category: string, btn: HTMLElement | null) => Promise<void>;
+    pauseDownload: (moduleId: string) => Promise<boolean>;
+    resumeDownload: (moduleId: string) => Promise<boolean>;
+    cancelDownload: (moduleId: string) => Promise<boolean>;
     resetDownloadButton: (btn: HTMLElement | null) => void;
     restoreDownloadButtonLabel: (btn: HTMLElement | null) => void;
     performSelectionAction: (category: string, app: IApp) => void;
@@ -69,7 +77,7 @@ export class AppUiCardActionFlow {
         event.stopPropagation();
         const btn = this._resolveDownloadButton(event);
         if (btn?.classList.contains('downloading') === true) {
-            this._cancelDownload(app, btn);
+            this._handleActiveDownloadAction(event, app, btn);
             return true;
         }
 
@@ -83,12 +91,30 @@ export class AppUiCardActionFlow {
         return card?.querySelector<HTMLElement>('.download-btn') ?? null;
     }
 
+    private _handleActiveDownloadAction(event: MouseEvent, app: IApp, btn: HTMLElement): void {
+        const action = resolveDownloadButtonAction(btn as HTMLButtonElement, event);
+        if (action === 'pause') {
+            this._deps.tracer.info(`[AppUI] Pausing download for: ${app.id}`);
+            markModuleCardDownloadPaused(btn);
+            void this._deps.pauseDownload(app.id);
+            return;
+        }
+
+        if (action === 'resume') {
+            this._deps.tracer.info(`[AppUI] Resuming download for: ${app.id}`);
+            markModuleCardDownloadResuming(btn);
+            void this._deps.resumeDownload(app.id);
+            return;
+        }
+
+        this._cancelDownload(app, btn);
+    }
+
     private _cancelDownload(app: IApp, btn: HTMLElement | null): void {
         this._deps.tracer.info(`[AppUI] Cancelling download for: ${app.id}`);
         void (async () => {
             try {
-                await this._deps.platformService.cancelDownload(app.id);
-                await this._deps.platformService.delete(app);
+                await this._deps.cancelDownload(app.id);
                 this._deps.resetDownloadButton(btn);
                 this._deps.restoreDownloadButtonLabel(btn);
             } catch (err) {

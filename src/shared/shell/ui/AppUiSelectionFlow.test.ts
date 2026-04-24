@@ -32,7 +32,7 @@ describe('AppUiSelectionFlow', () => {
         });
     });
 
-    it('selects module, persists it and launches it', () => {
+    it('selects integration module, persists it and launches it', () => {
         const app = { id: 'svc', name: 'Service', type: 'local', icon: 'S', desc: 'Desc' } as IApp;
         getSelectedApp.mockReturnValue(undefined);
 
@@ -42,6 +42,27 @@ describe('AppUiSelectionFlow', () => {
         expect(updateModalSelection).toHaveBeenCalledWith('svc');
         expect(setSelectedModule).toHaveBeenCalled();
         expect(launchSelectedApp).toHaveBeenCalled();
+    });
+
+    it('selects AI module without launching it immediately', () => {
+        const app = { id: 'text-model', name: 'Text Model', type: 'api', icon: 'T' } as IApp;
+        getSelectedApp.mockReturnValue(undefined);
+
+        flow.performSelectionAction('ai_text', app);
+
+        expect(updateModuleCard).toHaveBeenCalledWith('ai_text', app);
+        expect(updateModalSelection).toHaveBeenCalledWith('text-model');
+        expect(setSelectedModule).toHaveBeenCalled();
+        expect(launchSelectedApp).not.toHaveBeenCalled();
+        expect(launchApp).not.toHaveBeenCalled();
+    });
+
+    it('does not launch AI when switching the visible shared AI slot', () => {
+        const app = { id: 'image-model', name: 'Image Model', type: 'local' } as IApp;
+
+        flow.activateExistingSelection('ai_image', app);
+
+        expect(launchApp).not.toHaveBeenCalled();
     });
 
     it('deselects current module and clears persisted selection', () => {

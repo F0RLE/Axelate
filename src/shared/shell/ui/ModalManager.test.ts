@@ -546,6 +546,61 @@ describe('ModalManager lifecycle', () => {
         );
     });
 
+    it('should pause and resume active modal downloads through injected callbacks', () => {
+        const onPauseDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        const onResumeDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        modalManager = new ModalManager(
+            new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
+            interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
+            () => null,
+            vi.fn().mockResolvedValue(undefined),
+            vi.fn().mockResolvedValue(undefined),
+            (_key, fallback) => fallback,
+            tracer,
+            navigation,
+            onPauseDownloadRequest,
+            onResumeDownloadRequest,
+        );
+
+        const list = document.getElementById('app-modal-list') as HTMLElement;
+        list.innerHTML = `
+            <div class="app-card" data-app-id="gpt">
+                <button class="download-btn downloading" data-resume-label="Resume" data-pause-label="Pause">
+                    <span class="download-hover-action-pause">Pause</span>
+                </button>
+            </div>
+        `;
+
+        const handleDownload = (
+            modalManager as unknown as {
+                _handleDownload: (app: IApp, action: 'pause' | 'resume') => void;
+            }
+        )._handleDownload;
+        const app = {
+            id: 'gpt',
+            name: 'GPT',
+            installed: false,
+            repoUrl: 'https://example.com/repo.zip',
+        } as IApp;
+
+        handleDownload.call(modalManager, app, 'pause');
+        const pauseAction = document.querySelector('.download-hover-action-pause');
+        expect(onPauseDownloadRequest).toHaveBeenCalledWith(expect.objectContaining({ id: 'gpt' }));
+        expect(
+            document.querySelector<HTMLElement>('.download-btn')?.dataset['downloadStatus'],
+        ).toBe('paused');
+        expect(pauseAction?.textContent).toBe('Resume');
+
+        handleDownload.call(modalManager, app, 'resume');
+        expect(onResumeDownloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'gpt' }),
+        );
+        expect(
+            document.querySelector<HTMLElement>('.download-btn')?.dataset['downloadStatus'],
+        ).toBe('downloading');
+        expect(pauseAction?.textContent).toBe('Pause');
+    });
+
     it('should handle missing repo and dynamic sidebar widths', () => {
         modalManager = createManager();
         const handleDownload = (modalManager as unknown as { _handleDownload: (app: IApp) => void })

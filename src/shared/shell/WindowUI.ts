@@ -13,6 +13,7 @@ import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import { WindowUiInteractionController } from './WindowUiInteractionController';
 import { WindowUiShellController } from './WindowUiShellController';
 import { WindowUiTimingController } from './WindowUiTimingController';
+import { readCssViewportZoom } from './ViewportZoom';
 
 type WindowUIRuntime = {
     addWindowListener: typeof globalThis.addEventListener;
@@ -281,8 +282,7 @@ export class WindowUI {
         const config = this._service.getConfig();
         const minWidth = config?.thresholds.warningWidth ?? 0;
         const minHeight = config?.thresholds.warningHeight ?? 0;
-        const zoom = this._service.getZoom();
-        const effectiveZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+        const effectiveZoom = readCssViewportZoom();
 
         this._shellController.updateWidthWarning({
             width: viewport.width / effectiveZoom,

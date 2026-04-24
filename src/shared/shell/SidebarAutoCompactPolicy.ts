@@ -4,8 +4,6 @@ type SidebarAutoCompactPolicyConfig = {
     collapsedWidth: number;
     expandedWidth: number;
     autoCompactZoomThreshold: number;
-    autoCompactWarningLeadSteps: number;
-    autoCompactZoomStep: number;
     autoCompactThresholdFactor: number;
 };
 

@@ -79,6 +79,7 @@ export class AppUI {
             openModuleSettings: (app) => {
                 this._deps.openModuleSettings(app);
             },
+            getDownloadState: (moduleId) => this._platformService.getDownloadState(moduleId),
         });
         this._dashboardSupport = new AppUiDashboardSupport({
             tracer: this._deps.tracer,
@@ -108,11 +109,16 @@ export class AppUI {
             async (app) => await this._platformService.download(app),
             async (app) => {
                 await this._platformService.cancelDownload(app.id);
-                await this._platformService.delete(app);
             },
             this._translate,
             this._deps.tracer,
             this._navigation,
+            async (app) => {
+                await this._platformService.pauseDownload(app.id);
+            },
+            async (app) => {
+                await this._platformService.resumeDownload(app.id);
+            },
         );
         this._moduleFlow = new AppUiModuleFlow({
             platformService: this._platformService,
@@ -137,6 +143,9 @@ export class AppUI {
                 await this._handleDeleteModule(app, category),
             handleDownloadModule: (app, category, btn) =>
                 this._moduleFlow.handleDownloadModule(app, category, btn),
+            pauseDownload: (moduleId) => this._platformService.pauseDownload(moduleId),
+            resumeDownload: (moduleId) => this._platformService.resumeDownload(moduleId),
+            cancelDownload: (moduleId) => this._platformService.cancelDownload(moduleId),
             resetDownloadButton: (btn) => this._moduleFlow.resetDownloadButton(btn),
             restoreDownloadButtonLabel: (btn) => this._moduleFlow.restoreDownloadButtonLabel(btn),
             performSelectionAction: (category, app) => this._performSelectionAction(category, app),
@@ -149,6 +158,9 @@ export class AppUI {
             isSelectedInAnotherAiSlot: (category, appId) =>
                 this._selectionState.isSelectedInAnotherAiSlot(category, appId),
             resolveAppById: (appId) => this._resolveAppById(appId),
+            updateRuntimeStatus: (category, app, status) => {
+                this._dashboardSupport.updateRuntimeStatus(category, app, status);
+            },
             translate: this._translate,
             showToast: (message, type = 'info') => this.showToast(message, type),
         });

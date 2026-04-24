@@ -1,10 +1,11 @@
-import type { IApp } from '../types/coreTypes';
-import type { ModuleService } from './ModuleService';
+import type { IApp, IModuleDownloadState } from '../types/coreTypes';
+import type { DownloadModuleOutcome, ModuleService } from './ModuleService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { isApiApp } from '@/shared/utils/moduleTypeUtils';
 
 type ModulePlatformLogger = Pick<LoggerService, 'info'>;
+export type ModuleRuntimeStatus = 'running' | 'stopped' | string;
 
 /**
  * @class ModulePlatformService
@@ -26,7 +27,7 @@ export class ModulePlatformService {
      * Downloads a module.
      * @param app The module to download.
      */
-    public async download(app: IApp): Promise<void> {
+    public async download(app: IApp): Promise<DownloadModuleOutcome> {
         this._tracer.info(`[ModulePlatformService] Downloading: ${app.id}`);
 
         if (app.repoUrl === undefined || app.repoUrl === '') {
@@ -34,7 +35,7 @@ export class ModulePlatformService {
         }
 
         const url: string = app.repoUrl;
-        await this._moduleService.downloadModule(app.id, url, app.expectedHash, app.dlType);
+        return await this._moduleService.downloadModule(app.id, url, app.expectedHash, app.dlType);
     }
 
     /**
@@ -67,35 +68,17 @@ export class ModulePlatformService {
             }
             this._aiBridge.stopProvider();
             return true;
-        } else {
-            if (app.managedExternally === true) {
-                this._tracer.info(
-                    `[ModulePlatformService] Skip local stop for externally managed module: ${app.id}`,
-                );
-                return true;
-            }
-
-            // Stop Local Process
-            // Currently ModuleService.control handles this, or backend kills process?
-            // Existing AppUI logic just showed a toast for local modules saying "Stopped"
-            // but didn't actually call a stop command for local/binary modules explicitly here?
-            // Wait, previous code:
-            // if (isApi) { win.aiBridge.stopProvider(); }
-            // else { win.showToast(... "stopped"); logger.info(...); }
-            // So for local modules, it seems it was just a UI state update or the backend handles it via other means?
-            // Actually ModuleService has `control(name, 'stop')`.
-
-            // Let's try to actually stop it if possible, or just log it as before.
-            // If it's a "service" module (managed by backend), we should call control or stop.
-            // But AppUI's `_stopPreviousModule` seemed to only effectively stop AIProviders.
-            // For now, we replicate existing behavior but clearer.
-
-            this._tracer.info(
-                `[ModulePlatformService] Requesting stop for local module: ${app.id}`,
-            );
-            // If we have a control method, use it:
-            return await this._moduleService.control(app.id, 'stop');
         }
+
+        if (app.managedExternally === true) {
+            this._tracer.info(
+                `[ModulePlatformService] Skip local stop for externally managed module: ${app.id}`,
+            );
+            return true;
+        }
+
+        this._tracer.info(`[ModulePlatformService] Requesting stop for local module: ${app.id}`);
+        return await this._moduleService.control(app.id, 'stop');
     }
 
     /**
@@ -130,6 +113,29 @@ export class ModulePlatformService {
      */
     public async checkInstalled(moduleId: string): Promise<boolean> {
         return await this._moduleService.checkInstalled(moduleId);
+    }
+
+    /**
+     * Returns the real runtime status for an API provider or a local module.
+     */
+    public async getStatus(app: IApp): Promise<ModuleRuntimeStatus> {
+        if (this._isApiModule(app)) {
+            const state = this._aiBridge.getState();
+            return state.isRunning && state.activeProviderId === app.id ? 'running' : 'stopped';
+        }
+
+        if (app.managedExternally === true) {
+            return app.status === 'running' ? 'running' : 'stopped';
+        }
+
+        return await this._moduleService.getStatus(app.id);
+    }
+
+    /**
+     * Returns the latest backend download state mirrored by ModuleService.
+     */
+    public getDownloadState(moduleId: string): IModuleDownloadState | undefined {
+        return this._moduleService.getDownloadState(moduleId);
     }
 
     /**

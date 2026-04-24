@@ -1,4 +1,4 @@
-import type { IApp } from '../../types/coreTypes';
+import type { IApp, IModuleDownloadState } from '../../types/coreTypes';
 import type { LoggerService } from '../../../infrastructure/logging/LoggerService';
 import { isApiApp } from '../../utils/moduleTypeUtils';
 import { supportsModuleSettings } from '../../utils/moduleSettingsSupport';
@@ -6,6 +6,7 @@ import {
     buildModuleCardActionButton,
     buildModuleCardComingSoonButton,
     buildModuleCardDownloadButton,
+    type ModuleCardDownloadAction,
 } from './ModuleCardActions';
 import {
     clearModuleCardDownloadProgress,
@@ -17,6 +18,7 @@ type ModuleCardRendererDeps = {
     checkInstalled?: (moduleId: string) => Promise<boolean>;
     translate?: (key: string, fallback: string) => string;
     openModuleSettings?: (app: IApp) => void;
+    getDownloadState?: (moduleId: string) => IModuleDownloadState | undefined;
     tracer?: LoggerService;
 };
 
@@ -87,7 +89,7 @@ export class ModuleCardRenderer {
         _category: string,
         isSelected: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
-        onDownload?: (app: IApp) => void,
+        onDownload?: (app: IApp, action: ModuleCardDownloadAction) => void,
     ): HTMLElement {
         const card = document.createElement('div');
         card.className = 'app-card module-selection-card';
@@ -112,6 +114,7 @@ export class ModuleCardRenderer {
         this._injectStatusAndActions(clone, app, state, isSelected, onClick, onDownload);
 
         card.appendChild(clone);
+        this._applyExistingDownloadState(card, app);
 
         this._attachEventHandlers(card, app, state.isApi, onClick);
         this._startAsyncInstallCheck(card, app, state, onClick);
@@ -173,7 +176,7 @@ export class ModuleCardRenderer {
         state: CardState,
         isSelected: boolean,
         onClick: (e: MouseEvent, app: IApp) => void,
-        onDownload?: (app: IApp) => void,
+        onDownload?: (app: IApp, action: ModuleCardDownloadAction) => void,
     ): void {
         const status = this._createHtmlFragmentElement(
             this._getAppStatusHtml(state.isApi, state.isInstalled),
@@ -224,6 +227,28 @@ export class ModuleCardRenderer {
      */
     public static clearDownloadProgress(card: HTMLElement): void {
         clearModuleCardDownloadProgress(card);
+    }
+
+    private _applyExistingDownloadState(card: HTMLElement, app: IApp): void {
+        const downloadState = this._deps.getDownloadState?.(app.id);
+        if (downloadState === undefined) {
+            return;
+        }
+
+        const activeStatuses = new Set([
+            'pending',
+            'connecting',
+            'downloading',
+            'verifying',
+            'extracting',
+            'paused',
+        ]);
+        if (!activeStatuses.has(downloadState.status)) {
+            return;
+        }
+
+        const percent = Math.round(downloadState.progress * 100);
+        ModuleCardRenderer.setDownloadProgress(card, percent, downloadState.status);
     }
 
     private _attachEventHandlers(
@@ -354,6 +379,13 @@ export class ModuleCardRenderer {
         this._updateCardIcon(card, app);
         this._updateCardTitle(card, app);
         this._updateCardDesc(card, app);
+    }
+
+    public updateSlotCardRuntimeStatus(card: HTMLElement, status: string | null | undefined): void {
+        const normalizedStatus = status === 'running' ? 'running' : 'stopped';
+        card.dataset['runtimeStatus'] = normalizedStatus;
+        card.classList.toggle('module-running', normalizedStatus === 'running');
+        card.classList.toggle('module-stopped', normalizedStatus !== 'running');
     }
 
     private _updateCardIcon(card: HTMLElement, app: IApp): void {

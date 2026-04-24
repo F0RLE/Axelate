@@ -7,6 +7,7 @@ import { mountLogos } from '@/assets/logos';
 import { SidebarAutoCompactPolicy } from './SidebarAutoCompactPolicy';
 import { SidebarMonitorVisibilityController } from './SidebarMonitorVisibilityController';
 import { SidebarNavigationRenderer } from './SidebarNavigationRenderer';
+import { readCssViewportZoom } from './ViewportZoom';
 
 interface IMonitoringElements {
     sidebar: HTMLElement;
@@ -19,9 +20,7 @@ interface IMonitoringElements {
 export class SidebarUI extends BaseComponent {
     private static readonly _COLLAPSED_WIDTH = 80;
     private static readonly _EXPANDED_WIDTH = 280;
-    private static readonly _AUTO_COMPACT_ZOOM_THRESHOLD = 3;
-    private static readonly _AUTO_COMPACT_WARNING_LEAD_STEPS = 0;
-    private static readonly _AUTO_COMPACT_ZOOM_STEP = 0.1;
+    private static readonly _AUTO_COMPACT_ZOOM_THRESHOLD = 1.6;
     private static readonly _AUTO_COMPACT_THRESHOLD_FACTOR = 1.1;
 
     private _sidebar: HTMLElement | null = null;
@@ -37,8 +36,6 @@ export class SidebarUI extends BaseComponent {
         collapsedWidth: SidebarUI._COLLAPSED_WIDTH,
         expandedWidth: SidebarUI._EXPANDED_WIDTH,
         autoCompactZoomThreshold: SidebarUI._AUTO_COMPACT_ZOOM_THRESHOLD,
-        autoCompactWarningLeadSteps: SidebarUI._AUTO_COMPACT_WARNING_LEAD_STEPS,
-        autoCompactZoomStep: SidebarUI._AUTO_COMPACT_ZOOM_STEP,
         autoCompactThresholdFactor: SidebarUI._AUTO_COMPACT_THRESHOLD_FACTOR,
     });
     private readonly _monitorVisibilityController: SidebarMonitorVisibilityController;
@@ -163,8 +160,16 @@ export class SidebarUI extends BaseComponent {
             if (this._sidebar === null) return;
 
             const isEffectiveAutoCompact = this._isAutoCompact && !this._hasManualSidebarOverride;
-            this._isCollapsed = isEffectiveAutoCompact ? false : !this._isCollapsed;
-            this._hasManualSidebarOverride = true;
+            if (isEffectiveAutoCompact) {
+                this._isCollapsed = false;
+                this._hasManualSidebarOverride = true;
+            } else if (this._isAutoCompact && this._hasManualSidebarOverride) {
+                this._isCollapsed = true;
+                this._hasManualSidebarOverride = false;
+            } else {
+                this._isCollapsed = !this._isCollapsed;
+                this._hasManualSidebarOverride = false;
+            }
             this._startSnappingAnimation();
             this._updateAutoCompactState();
             this._applySidebarWidth();
@@ -207,23 +212,36 @@ export class SidebarUI extends BaseComponent {
         document.documentElement.style.setProperty('--sidebar-width', `${String(width)}px`);
         this._sidebar.style.width = `${String(width)}px`;
         this._syncAccessibilityState(isEffectivelyCollapsed);
-        this._persistEffectiveSidebarState(width, isEffectivelyCollapsed);
+        if (!isEffectiveAutoCompact) {
+            this._persistEffectiveSidebarState(
+                width,
+                isEffectivelyCollapsed,
+                this._isAutoCompact && this._hasManualSidebarOverride,
+            );
+        }
     }
 
     private _updateAutoCompactState(): void {
-        const zoom = this._state.getZoomLevel();
-        const effectiveZoom =
-            this._windowService !== undefined ? this._windowService.getZoom() : zoom;
+        const stateZoom = this._state.getZoomLevel();
+        const serviceZoom = this._windowService?.getZoom();
+        const effectiveZoom = serviceZoom ?? stateZoom;
         const normalizedZoom =
             Number.isFinite(effectiveZoom) && effectiveZoom > 0 ? effectiveZoom : 1;
+        const viewportZoom = readCssViewportZoom();
+        const wasAutoCompact = this._isAutoCompact;
+
         this._isAutoCompact = this._autoCompactPolicy.isAutoCompact(
-            zoom,
+            normalizedZoom,
             this._windowService?.getConfig(),
             {
-                width: globalThis.innerWidth / normalizedZoom,
-                height: globalThis.innerHeight / normalizedZoom,
+                width: globalThis.innerWidth / viewportZoom,
+                height: globalThis.innerHeight / viewportZoom,
             },
         );
+
+        if (wasAutoCompact && !this._isAutoCompact) {
+            this._hasManualSidebarOverride = false;
+        }
     }
 
     /**
@@ -351,15 +369,20 @@ export class SidebarUI extends BaseComponent {
         }, 300);
     }
 
-    private _persistEffectiveSidebarState(width: number, collapsed: boolean): void {
+    private _persistEffectiveSidebarState(
+        width: number,
+        collapsed: boolean,
+        manualOverride = false,
+    ): void {
         if (
             this._state.getSidebarWidth() === width &&
-            this._state.getSidebarCollapsed() === collapsed
+            this._state.getSidebarCollapsed() === collapsed &&
+            this._state.getSidebarManualOverride() === manualOverride
         ) {
             return;
         }
 
-        this._state.setSidebarState(collapsed, width);
+        this._state.setSidebarState(collapsed, width, manualOverride);
     }
 
     private _persistSidebarPreferenceState(): void {

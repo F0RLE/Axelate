@@ -143,7 +143,7 @@ describe('WindowService', () => {
             bareService.destroy();
         });
 
-        it('should use fallback zoom and setup web listeners in non-Tauri environment', async () => {
+        it('should use fallback zoom without attaching service wheel listener in non-Tauri environment', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             mockUISettings.getZoomLevel.mockReturnValue(1.5);
 
@@ -151,18 +151,10 @@ describe('WindowService', () => {
 
             expect(mockBridge.invoke).not.toHaveBeenCalled();
             expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.500');
-        });
-
-        it('should attach Ctrl+Scroll zoom handler in web mode', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-            await service.init();
-
-            expect(mockRuntime.addEventListener).toHaveBeenCalledWith(
+            expect(mockRuntime.addEventListener).not.toHaveBeenCalledWith(
                 'wheel',
                 expect.any(Function),
-                {
-                    passive: false,
-                },
+                expect.anything(),
             );
         });
 
@@ -339,17 +331,20 @@ describe('WindowService', () => {
     describe('Zoom Management', () => {
         it('should safely bound zoom levels between min and max (0.95 to 2.6)', async () => {
             await service.setZoom(0.1);
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('0.950');
+            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 0.95 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
 
             await service.setZoom(5);
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('2.600');
+            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 2.6 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.000');
         });
 
         it('should change zoom relatively and persist it', async () => {
             await service.init(mockWindowConfig, 1);
             await service.changeZoom(0.2);
 
-            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.200');
+            expect(mockBridge.invoke).toHaveBeenLastCalledWith('set_webview_zoom', { zoom: 1.2 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.000');
             expect(mockUISettings.setZoomLevel).toHaveBeenLastCalledWith(1.2);
             expect(mockUISettings.setResolutionZoom).toHaveBeenLastCalledWith('1920x1080', 1.2);
         });
@@ -687,78 +682,6 @@ describe('WindowService', () => {
 
             service.checkResolutionChange();
             await vi.runAllTimersAsync(); // should not throw
-        });
-    });
-
-    // ---------------------------------------------------------- Wheel handler body (lines 103-107)
-    describe('Ctrl+Scroll wheel handler (web mode)', () => {
-        it('should call changeZoom with +0.1 when scrolling up with ctrlKey', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-            mockUISettings.getZoomLevel.mockReturnValue(1);
-
-            const captured: { handler: ((e: WheelEvent) => void) | null } = { handler: null };
-            mockRuntime.addEventListener.mockImplementation(
-                (
-                    type: string,
-                    listener: EventListenerOrEventListenerObject,
-                    opts?: AddEventListenerOptions,
-                ) => {
-                    if (type === 'wheel') {
-                        captured.handler = listener as (e: WheelEvent) => void;
-                    }
-                    globalThis.addEventListener(type, listener, opts);
-                },
-            );
-
-            await service.init();
-
-            expect(captured.handler).not.toBeNull();
-
-            const changeZoomSpy = vi.spyOn(service, 'changeZoom').mockResolvedValue(1);
-
-            // Scroll up (negative deltaY) with ctrlKey
-            const upEvent = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true });
-            captured.handler?.(upEvent);
-
-            expect(changeZoomSpy).toHaveBeenCalledWith(0.1, { syncNativeZoom: false });
-
-            // Scroll down with ctrlKey
-            const downEvent = new WheelEvent('wheel', { deltaY: 100, ctrlKey: true });
-            captured.handler?.(downEvent);
-
-            expect(changeZoomSpy).toHaveBeenCalledWith(-0.1, { syncNativeZoom: false });
-        });
-
-        it('should NOT call changeZoom when ctrlKey is not held', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-            const captured: { handler: ((e: WheelEvent) => void) | null } = { handler: null };
-            mockRuntime.addEventListener.mockImplementation(
-                (type: string, listener: EventListenerOrEventListenerObject) => {
-                    if (type === 'wheel') {
-                        captured.handler = listener as (e: WheelEvent) => void;
-                    }
-                },
-            );
-
-            await service.init();
-            const changeZoomSpy = vi.spyOn(service, 'changeZoom').mockResolvedValue(1);
-
-            const ev = new WheelEvent('wheel', { deltaY: -100, ctrlKey: false });
-            captured.handler?.(ev);
-
-            expect(changeZoomSpy).not.toHaveBeenCalled();
-        });
-
-        it('should remove wheel listener on destroy', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-
-            await service.init();
-            const changeZoomSpy = vi.spyOn(service, 'changeZoom').mockResolvedValue(1);
-
-            service.destroy();
-            globalThis.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true }));
-
-            expect(changeZoomSpy).not.toHaveBeenCalled();
         });
     });
 

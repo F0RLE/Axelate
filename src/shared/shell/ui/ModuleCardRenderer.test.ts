@@ -77,10 +77,12 @@ describe('ModuleCardRenderer', () => {
         );
 
         (card.querySelector('.download-btn') as HTMLButtonElement).click();
-        expect(onDownload).toHaveBeenCalled();
+        expect(onDownload).toHaveBeenCalledWith(expect.any(Object), 'start');
 
         ModuleCardRenderer.setDownloadProgress(card, 47.4, 'downloading');
         expect((card.querySelector('.download-pct') as HTMLElement).textContent).toBe('47%');
+        expect(card.querySelector('.download-btn')?.textContent).toContain('Pause');
+        expect(card.querySelector('.download-btn')?.textContent).toContain('Cancel');
 
         ModuleCardRenderer.setDownloadProgress(card, 73, 'extracting');
         expect((card.querySelector('.download-label') as HTMLElement).textContent).toContain(
@@ -91,8 +93,47 @@ describe('ModuleCardRenderer', () => {
             false,
         );
 
+        ModuleCardRenderer.setDownloadProgress(card, 47.4, 'paused');
+        expect(
+            (card.querySelector('.download-hover-action-pause') as HTMLElement).textContent,
+        ).toContain('Resume');
+
         ModuleCardRenderer.clearDownloadProgress(card);
         expect(card.querySelector('.download-btn')?.classList.contains('downloading')).toBe(false);
+    });
+
+    it('restores active download state when a card is recreated', () => {
+        renderer = new ModuleCardRenderer({
+            checkInstalled,
+            translate: (key, fallback) => `${key}:${fallback}`,
+            tracer,
+            getDownloadState: (moduleId) =>
+                moduleId === 'local-app'
+                    ? ({
+                          status: 'paused',
+                          progress: 0.13,
+                      } as never)
+                    : undefined,
+        });
+
+        const card = renderer.createSelectionCard(
+            {
+                id: 'local-app',
+                name: 'Local App',
+                desc: 'Desc',
+                installed: false,
+            } as never,
+            'services',
+            false,
+            vi.fn(),
+            vi.fn(),
+        );
+        const btn = card.querySelector<HTMLElement>('.download-btn');
+
+        expect(btn?.classList.contains('downloading')).toBe(true);
+        expect(btn?.dataset['downloadStatus']).toBe('paused');
+        expect(card.querySelector('.download-pct')?.textContent).toBe('13%');
+        expect(card.querySelector('.download-hover-action-pause')?.textContent).toContain('Resume');
     });
 
     it('creates action buttons for selected and Убрать modules', () => {

@@ -8,16 +8,21 @@ type ModuleCardActionButtonDeps = {
     getExtractingLabel: () => string;
 };
 
+export type ModuleCardDownloadAction = 'start' | 'pause' | 'resume' | 'cancel';
+
 export function buildModuleCardDownloadButton(
     app: IApp,
     deps: ModuleCardActionButtonDeps,
-    onDownload?: (app: IApp) => void,
+    onDownload?: (app: IApp, action: ModuleCardDownloadAction) => void,
 ): HTMLButtonElement {
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'modal-btn modal-btn-primary download-btn';
     downloadBtn.style.overflow = 'hidden';
     downloadBtn.style.position = 'relative';
     downloadBtn.dataset['translateExtracting'] = deps.getExtractingLabel();
+    downloadBtn.dataset['pauseLabel'] = deps.translate('ui.launcher.button.pause', 'Pause');
+    downloadBtn.dataset['resumeLabel'] = deps.translate('ui.launcher.button.resume', 'Resume');
+    downloadBtn.dataset['cancelLabel'] = deps.translate('ui.launcher.button.cancel', 'Cancel');
 
     const content = document.createElement('span');
     content.className = 'btn-content';
@@ -32,16 +37,44 @@ export function buildModuleCardDownloadButton(
     pct.className = 'download-pct';
     pct.style.display = 'none';
 
+    const pauseAction = document.createElement('span');
+    pauseAction.className = 'download-hover-action download-hover-action-pause';
+    pauseAction.textContent = downloadBtn.dataset['pauseLabel'];
+
+    const cancelAction = document.createElement('span');
+    cancelAction.className = 'download-hover-action download-hover-action-cancel';
+    cancelAction.textContent = downloadBtn.dataset['cancelLabel'];
+
     content.appendChild(label);
     content.appendChild(pct);
     downloadBtn.appendChild(content);
+    downloadBtn.appendChild(pauseAction);
+    downloadBtn.appendChild(cancelAction);
 
     downloadBtn.addEventListener('click', (event) => {
         event.stopPropagation();
-        onDownload?.(app);
+        onDownload?.(app, resolveDownloadButtonAction(downloadBtn, event));
     });
 
     return downloadBtn;
+}
+
+export function resolveDownloadButtonAction(
+    button: HTMLButtonElement,
+    event: MouseEvent,
+): ModuleCardDownloadAction {
+    if (!button.classList.contains('downloading')) {
+        return 'start';
+    }
+
+    const rect = button.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const isLeftHalf = clickX <= rect.width / 2;
+    if (!isLeftHalf) {
+        return 'cancel';
+    }
+
+    return button.dataset['downloadStatus'] === 'paused' ? 'resume' : 'pause';
 }
 
 export function buildModuleCardComingSoonButton(translate: ModuleCardTranslate): HTMLButtonElement {
