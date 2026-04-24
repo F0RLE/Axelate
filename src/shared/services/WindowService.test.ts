@@ -25,6 +25,7 @@ describe('WindowService', () => {
         removeEventListener: ReturnType<typeof vi.fn>;
         close: ReturnType<typeof vi.fn>;
         getScreenSize: ReturnType<typeof vi.fn>;
+        getInnerSize: ReturnType<typeof vi.fn>;
         setAppZoomCss: ReturnType<typeof vi.fn>;
     };
 
@@ -74,6 +75,7 @@ describe('WindowService', () => {
             ),
             close: vi.fn(),
             getScreenSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
+            getInnerSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
             setAppZoomCss: vi.fn(),
         };
 
@@ -113,8 +115,8 @@ describe('WindowService', () => {
             await service.init(mockWindowConfig, 1.5);
 
             expect(mockBridge.invoke).not.toHaveBeenCalledWith('get_window_config');
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.5 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.5 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.500');
             expect(service.getConfig()).toEqual(mockWindowConfig);
         });
 
@@ -124,8 +126,8 @@ describe('WindowService', () => {
 
             await service.init();
 
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.2 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.2 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.200');
         });
 
         it('should fallback to 1 when no UISettingsService is set (L69)', async () => {
@@ -139,7 +141,7 @@ describe('WindowService', () => {
             await bareService.init();
 
             // Fallback should be 1 (the ?? 1 branch)
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1 });
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1 });
             bareService.destroy();
         });
 
@@ -329,24 +331,83 @@ describe('WindowService', () => {
 
     // ---------------------------------------------------------- Zoom Management
     describe('Zoom Management', () => {
-        it('should safely bound zoom levels between min and max (0.95 to 2.6)', async () => {
+        it('should safely bound zoom levels by min only', async () => {
             await service.setZoom(0.1);
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 0.95 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 0.95 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('0.950');
 
             await service.setZoom(5);
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 2.6 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 5 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('5.000');
         });
 
         it('should change zoom relatively and persist it', async () => {
             await service.init(mockWindowConfig, 1);
             await service.changeZoom(0.2);
 
-            expect(mockBridge.invoke).toHaveBeenLastCalledWith('set_webview_zoom', { zoom: 1.2 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenLastCalledWith('set_webview_zoom', {
+                zoom: 1.2,
+            });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.200');
             expect(mockUISettings.setZoomLevel).toHaveBeenLastCalledWith(1.2);
             expect(mockUISettings.setResolutionZoom).toHaveBeenLastCalledWith('1920x1080', 1.2);
+        });
+
+        it('should still support explicit native zoom sync', async () => {
+            await service.setZoom(1.3, { syncNativeZoom: true });
+
+            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.3 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+        });
+
+        it('should persist current CSS zoom without applying native zoom', async () => {
+            await service.setZoom(1.4);
+            mockBridge.invoke.mockClear();
+
+            await service.persistZoom();
+
+            expect(mockBridge.invoke).toHaveBeenCalledWith('save_current_resolution_zoom', {
+                zoom: 1.4,
+            });
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.4 });
+            expect(mockUISettings.setZoomLevel).toHaveBeenLastCalledWith(1.4);
+            expect(mockUISettings.setResolutionZoom).toHaveBeenLastCalledWith('1920x1080', 1.4);
+        });
+
+        it('should cap applied CSS zoom to keep warning viewport usable', async () => {
+            mockRuntime.getInnerSize.mockReturnValue({ width: 900, height: 700 });
+            await service.init(mockWindowConfig, 5);
+
+            expect(service.getZoom()).toBeCloseTo(1.125);
+            expect(service.getAppliedZoom()).toBeCloseTo(1.125);
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.125');
+        });
+
+        it('should recalculate safe zoom for active page profiles', async () => {
+            mockRuntime.getInnerSize.mockReturnValue({ width: 1200, height: 800 });
+            await service.init(mockWindowConfig, 5);
+            expect(service.getAppliedZoom()).toBeCloseTo(1.333, 3);
+
+            await service.setActivePage('console');
+
+            expect(service.getAppliedZoom()).toBeCloseTo(1.111, 3);
+            expect(service.getZoom()).toBeCloseTo(1.111, 3);
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.111');
+        });
+
+        it('should not accumulate hidden zoom beyond safe applied zoom', async () => {
+            mockRuntime.getInnerSize.mockReturnValue({ width: 900, height: 700 });
+            await service.init(mockWindowConfig, 1.1);
+
+            await service.changeZoom(1);
+            expect(service.getZoom()).toBeCloseTo(1.125);
+
+            await service.changeZoom(1);
+            expect(service.getZoom()).toBeCloseTo(1.125);
+
+            await service.changeZoom(-0.02);
+            expect(service.getZoom()).toBeCloseTo(1.105);
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.105');
         });
 
         it('should return current zoom via getZoom()', () => {
@@ -750,8 +811,8 @@ describe('WindowService', () => {
             await service.init(mockWindowConfig);
 
             // The zoom applied should come from the backend (1.75)
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.75 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.75 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.750');
         });
 
         it('should fallback when get_resolution_zoom returns non-number (L471)', async () => {
@@ -765,8 +826,8 @@ describe('WindowService', () => {
             await service.init(mockWindowConfig);
 
             // Should fallback to UISettings zoom (1.3)
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.3 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.3 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.300');
         });
 
         it('should fallback when get_resolution_zoom returns 0 (L471)', async () => {
@@ -779,8 +840,8 @@ describe('WindowService', () => {
 
             await service.init(mockWindowConfig);
 
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.1 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.1 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.100');
         });
 
         it('should fallback when get_resolution_zoom rejects (L471)', async () => {
@@ -794,8 +855,8 @@ describe('WindowService', () => {
 
             await service.init(mockWindowConfig);
 
-            expect(mockBridge.invoke).toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.2 });
-            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.000');
+            expect(mockBridge.invoke).not.toHaveBeenCalledWith('set_webview_zoom', { zoom: 1.2 });
+            expect(mockRuntime.setAppZoomCss).toHaveBeenCalledWith('1.200');
         });
     });
 });

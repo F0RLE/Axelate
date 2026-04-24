@@ -86,8 +86,38 @@ pub async fn save_zoom_level(
     zoom: f64,
 ) -> Result<(), AppError> {
     let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    if (state.zoom_level - zoom).abs() < f64::EPSILON {
+        return Ok(());
+    }
     state.zoom_level = zoom;
     ui_service.save_ui_state(&state).await
+}
+
+async fn persist_zoom_for_window(
+    window: &tauri::WebviewWindow,
+    ui_service: &ui_state::UiStateService,
+    zoom: f64,
+) -> Result<(), AppError> {
+    let zoom = zoom.clamp(
+        window_settings::SCALING_MIN_ZOOM,
+        window_settings::SCALING_MAX_ZOOM,
+    );
+    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let previous_zoom = state.zoom_level;
+    state.zoom_level = zoom;
+
+    let mut changed = (previous_zoom - zoom).abs() >= f64::EPSILON;
+    if let Some(res_key) = res_key_from_window(window) {
+        let previous_resolution_zoom = state.resolution_zoom.insert(res_key, zoom);
+        changed |=
+            previous_resolution_zoom.is_none_or(|value| (value - zoom).abs() >= f64::EPSILON);
+    }
+
+    if changed {
+        ui_service.save_ui_state(&state).await?;
+    }
+
+    Ok(())
 }
 
 /// Set `WebView` zoom level and persist for current resolution.
@@ -107,16 +137,19 @@ pub async fn set_webview_zoom(
 
     window.set_zoom(zoom)?;
 
-    // Save to UI State: both global level and per-resolution override.
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
-    state.zoom_level = zoom;
+    persist_zoom_for_window(&window, &ui_service, zoom).await
+}
 
-    if let Some(res_key) = res_key_from_window(&window) {
-        state.resolution_zoom.insert(res_key, zoom);
-    }
-
-    ui_service.save_ui_state(&state).await?;
-    Ok(())
+/// Persist zoom for the active monitor resolution without touching the WebView.
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value)] // Tauri commands require owned WebviewWindow
+pub async fn save_current_resolution_zoom(
+    window: tauri::WebviewWindow,
+    ui_service: tauri::State<'_, ui_state::UiStateService>,
+    zoom: f64,
+) -> Result<(), AppError> {
+    persist_zoom_for_window(&window, &ui_service, zoom).await
 }
 
 /// Get the effective zoom for the current monitor resolution.

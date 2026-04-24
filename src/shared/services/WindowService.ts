@@ -40,11 +40,27 @@ export interface IWindowPolicy {
     showWarning: boolean;
 }
 
+type PageZoomProfile = {
+    minWidth: number;
+    minHeight: number;
+};
+
+const PAGE_ZOOM_PROFILES: Record<string, PageZoomProfile> = {
+    home: { minWidth: 800, minHeight: 600 },
+    chat: { minWidth: 920, minHeight: 640 },
+    modules: { minWidth: 1024, minHeight: 650 },
+    marketplace: { minWidth: 1024, minHeight: 650 },
+    downloads: { minWidth: 900, minHeight: 600 },
+    console: { minWidth: 1080, minHeight: 650 },
+    settings: { minWidth: 980, minHeight: 680 },
+};
+
 type WindowRuntime = {
     addEventListener: typeof globalThis.addEventListener;
     removeEventListener: typeof globalThis.removeEventListener;
     close: () => void;
     getScreenSize: () => { width: number; height: number };
+    getInnerSize: () => { width: number; height: number };
     setAppZoomCss: (zoom: string) => void;
 };
 
@@ -58,6 +74,10 @@ function createDefaultWindowRuntime(): WindowRuntime {
         getScreenSize: () => ({
             width: globalThis.screen.width,
             height: globalThis.screen.height,
+        }),
+        getInnerSize: () => ({
+            width: globalThis.innerWidth,
+            height: globalThis.innerHeight,
         }),
         setAppZoomCss: (zoom: string) => {
             const viewport = document.getElementById('app-viewport');
@@ -82,8 +102,9 @@ function createDefaultWindowRuntime(): WindowRuntime {
 
 export class WindowService {
     private _currentZoom = 1;
+    private _appliedZoom = 1;
     private readonly _MIN_ZOOM = 0.95;
-    private readonly _MAX_ZOOM = 2.6;
+    private readonly _MAX_ZOOM = Number.POSITIVE_INFINITY;
     private _config: IWindowConfig | null = null;
     private _isDestroyed = false;
     private _beforeClose: (() => Promise<void>) | null = null;
@@ -93,6 +114,7 @@ export class WindowService {
     private readonly _persistence: WindowServicePersistence;
     private readonly _policyService: WindowServicePolicy;
     private readonly _zoomService: WindowServiceZoom;
+    private _activePageId = 'home';
     private readonly _boundWindowResize = () => {
         this._persistence.scheduleSave();
     };
@@ -161,12 +183,12 @@ export class WindowService {
                 const zoom =
                     initialZoom ??
                     (await this._zoomService.getInitialZoomWithFallback(fallbackZoom));
-                await this.setZoom(zoom, { syncNativeZoom: true });
+                await this.setZoom(zoom);
             } catch (e) {
                 this._tracer.warn(
                     `[WindowService] Failed to get initial window data, using fallback: ${String(e)}`,
                 );
-                await this.setZoom(fallbackZoom, { syncNativeZoom: true });
+                await this.setZoom(fallbackZoom);
             }
 
             // Initialize persistence listeners
@@ -233,17 +255,30 @@ export class WindowService {
      * Sets the webview zoom level.
      */
     public async setZoom(zoom: number, options: WindowZoomApplyOptions = {}): Promise<number> {
-        const syncNativeZoom = options.syncNativeZoom ?? this._bridge.isTauri();
-        this._currentZoom = await this._zoomService.setZoom(zoom, {
+        const syncNativeZoom = options.syncNativeZoom ?? false;
+        const requestedZoom = Math.max(this._MIN_ZOOM, zoom);
+        const appliedZoom = this._resolveAppliedZoom(requestedZoom);
+        this._currentZoom = await this._zoomService.setZoom(appliedZoom, {
             ...options,
+            effectiveZoom: appliedZoom,
             syncNativeZoom,
         });
+        this._appliedZoom = appliedZoom;
         globalThis.dispatchEvent(
             new CustomEvent('axelate:zoom-changed', {
-                detail: { zoom: this._currentZoom },
+                detail: { zoom: this._currentZoom, appliedZoom: this._appliedZoom },
             }),
         );
         return this._currentZoom;
+    }
+
+    public async persistZoom(): Promise<void> {
+        await this._zoomService.persistZoom(this._currentZoom);
+    }
+
+    public async setActivePage(pageId: string): Promise<void> {
+        this._activePageId = pageId.replace(/^page-/, '');
+        await this.setZoom(this._currentZoom);
     }
 
     /**
@@ -253,11 +288,32 @@ export class WindowService {
         return this._currentZoom;
     }
 
+    public getAppliedZoom(): number {
+        return this._appliedZoom;
+    }
+
     /**
      * Increments/decrements the current zoom level.
      */
     public changeZoom(delta: number, options: WindowZoomApplyOptions = {}): Promise<number> {
         return this.setZoom(this._currentZoom + delta, options);
+    }
+
+    private _resolveAppliedZoom(requestedZoom: number): number {
+        const config = this._config;
+        if (config === null) {
+            return requestedZoom;
+        }
+
+        const viewport = this._runtime.getInnerSize();
+        const pageProfile = PAGE_ZOOM_PROFILES[this._activePageId];
+        const minWidth = Math.max(config.thresholds.warningWidth, pageProfile?.minWidth ?? 0);
+        const minHeight = Math.max(config.thresholds.warningHeight, pageProfile?.minHeight ?? 0);
+        const maxByWidth = minWidth > 0 ? viewport.width / minWidth : Number.POSITIVE_INFINITY;
+        const maxByHeight = minHeight > 0 ? viewport.height / minHeight : Number.POSITIVE_INFINITY;
+        const maxSafeZoom = Math.max(this._MIN_ZOOM, Math.min(maxByWidth, maxByHeight));
+
+        return Math.min(requestedZoom, maxSafeZoom);
     }
 
     // --- Monitoring State ---

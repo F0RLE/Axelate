@@ -2,6 +2,7 @@ const DEVTOOLS_SHORTCUT_KEYS = ['I', 'J', 'C'] as const;
 const RELOAD_SHORTCUT_KEYS = ['r', 'R', 'к', 'К'] as const;
 const BLOCKED_CTRL_KEYS = ['u', 'p', 's', 'f', 'g'] as const;
 const ZOOM_FRAME_DELAY_MS = 16;
+const ZOOM_PERSIST_INTERVAL_MS = 10_000;
 const MIN_WHEEL_ZOOM_STEP = 0.02;
 const MAX_WHEEL_ZOOM_STEP = 0.08;
 const BASE_WHEEL_DELTA = 120;
@@ -15,6 +16,7 @@ type WindowUiInteractionDeps = {
     runtime: WindowUiInteractionRuntime;
     toggleMaximize: () => Promise<void>;
     changeZoom: (delta: number) => Promise<void>;
+    persistZoom: () => Promise<void>;
     setMonitoringPaused: (paused: boolean) => Promise<void>;
     hasOpenDialog: () => boolean;
     isInGracePeriod: () => boolean;
@@ -25,6 +27,8 @@ type WindowUiInteractionDeps = {
 export class WindowUiInteractionController {
     private _pendingZoomDelta = 0;
     private _zoomTimer: ReturnType<typeof setTimeout> | null = null;
+    private _zoomPersistTimer: ReturnType<typeof setTimeout> | null = null;
+    private _hasPendingZoomPersist = false;
 
     constructor(private readonly _deps: WindowUiInteractionDeps) {}
 
@@ -36,6 +40,11 @@ export class WindowUiInteractionController {
                     clearTimeout(this._zoomTimer);
                     this._zoomTimer = null;
                 }
+                if (this._zoomPersistTimer !== null) {
+                    clearTimeout(this._zoomPersistTimer);
+                    this._zoomPersistTimer = null;
+                }
+                this._hasPendingZoomPersist = false;
                 this._pendingZoomDelta = 0;
             },
             { once: true },
@@ -108,11 +117,30 @@ export class WindowUiInteractionController {
                 .changeZoom(pendingZoomDelta)
                 .then(() => {
                     this._deps.onZoomChanged();
+                    this._scheduleZoomPersist();
                 })
                 .catch(() => {
                     /* ignore */
                 });
         }, ZOOM_FRAME_DELAY_MS);
+    }
+
+    private _scheduleZoomPersist(): void {
+        this._hasPendingZoomPersist = true;
+        if (this._zoomPersistTimer !== null) {
+            return;
+        }
+
+        this._zoomPersistTimer = setTimeout(() => {
+            this._zoomPersistTimer = null;
+            if (!this._hasPendingZoomPersist) {
+                return;
+            }
+            this._hasPendingZoomPersist = false;
+            this._deps.persistZoom().catch(() => {
+                /* ignore */
+            });
+        }, ZOOM_PERSIST_INTERVAL_MS);
     }
 
     private _getWheelZoomDelta(deltaY: number): number {
