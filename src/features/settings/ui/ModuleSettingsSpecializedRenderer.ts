@@ -53,7 +53,7 @@ export class ModuleSettingsSpecializedRenderer {
         panel.className = 'ai-content-panel';
 
         const title = document.createElement('h3');
-        title.textContent = t('ui.settings.telegram_stub_title', 'Telegram Bot');
+        title.textContent = t('ui.settings.telegram_stub_title', 'Parser');
 
         const description = document.createElement('p');
         description.className = 'stats-note';

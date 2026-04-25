@@ -562,6 +562,13 @@ body.snapping .modal-backdrop {
     flex-shrink: 0;
 }
 
+.module-card-preview-image {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    display: block;
+}
+
 .module-selection-card-title {
     font-size: 1.18rem;
     font-weight: 600;

@@ -327,7 +327,7 @@ fn open_folder(path: &std::path::Path) -> std::io::Result<()> {
 impl ConsoleLabelFormatter {
     fn format_module_label(module_id: &str) -> String {
         if module_id == "axelate-telegram-bot" {
-            return "Telegram Bot".to_string();
+            return "Parser".to_string();
         }
 
         module_id

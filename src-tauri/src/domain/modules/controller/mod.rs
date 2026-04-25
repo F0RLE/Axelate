@@ -1,6 +1,8 @@
 use crate::domain::modules::{downloader, lifecycle as module_lifecycle};
 use crate::errors::AppError;
+use crate::models::modules::ModulePreview;
 use crate::models::{ControlResponse, Module};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use dashmap::DashMap;
 use std::path::Path;
 use std::str::FromStr;
@@ -20,6 +22,7 @@ pub use self::lifecycle::LifecycleExecutor;
 /// In-memory registry for active child processes.
 static PROCESS_REGISTRY: std::sync::LazyLock<DashMap<String, Child>> =
     std::sync::LazyLock::new(DashMap::new);
+const MODULE_PREVIEW_IMAGE_MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 /// High-level API for module control
 #[derive(Debug)]
@@ -134,19 +137,24 @@ pub async fn get_all_modules() -> Vec<Module> {
                     author,
                     category,
                     icon,
+                    preview,
                     config_schema,
                     settings_ui,
                 ) = match module_lifecycle::ManifestLoader::load(&path) {
-                    Ok(m) => (
-                        m.name,
-                        m.description,
-                        m.version,
-                        m.author.unwrap_or_default(),
-                        m.category.unwrap_or_else(|| "service".to_string()),
-                        m.icon.unwrap_or_default(),
-                        m.config_schema,
-                        m.settings_ui,
-                    ),
+                    Ok(m) => {
+                        let preview = resolve_module_preview(&path, m.preview.clone()).await;
+                        (
+                            m.name,
+                            m.description,
+                            m.version,
+                            m.author.unwrap_or_default(),
+                            m.category.unwrap_or_else(|| "service".to_string()),
+                            m.icon.unwrap_or_default(),
+                            preview,
+                            m.config_schema,
+                            m.settings_ui,
+                        )
+                    }
                     Err(_) => (
                         id.clone(),
                         String::new(),
@@ -154,6 +162,7 @@ pub async fn get_all_modules() -> Vec<Module> {
                         String::new(),
                         "service".to_string(),
                         String::new(),
+                        None,
                         None,
                         None,
                     ),
@@ -173,6 +182,7 @@ pub async fn get_all_modules() -> Vec<Module> {
                     author,
                     category,
                     icon,
+                    preview,
                     path: path.to_string_lossy().to_string(),
                     installed: true,
                     local: true,
@@ -201,6 +211,79 @@ pub async fn get_module_status(module_id: &str) -> String {
         "running".to_string()
     } else {
         "stopped".to_string()
+    }
+}
+
+async fn resolve_module_preview(
+    module_path: &Path,
+    preview: Option<ModulePreview>,
+) -> Option<ModulePreview> {
+    let mut preview = preview?;
+    let Some(image) = preview.image.as_deref().map(str::trim) else {
+        return Some(preview);
+    };
+    if image.is_empty() || image.starts_with("data:") || image.starts_with("https://") {
+        return Some(preview);
+    }
+
+    match read_module_preview_image(module_path, image).await {
+        Ok(data_url) => {
+            preview.image = Some(data_url);
+        }
+        Err(error) => {
+            tracing::warn!(
+                module_path = %module_path.display(),
+                image,
+                "Failed to load module preview image: {error}"
+            );
+            preview.image = None;
+        }
+    }
+
+    Some(preview)
+}
+
+async fn read_module_preview_image(module_path: &Path, image: &str) -> Result<String, AppError> {
+    let relative_path = Path::new(image);
+    if relative_path.is_absolute() || image.contains("..") {
+        return Err(AppError::Validation(
+            "Preview image must be a relative module path".to_string(),
+        ));
+    }
+
+    let image_path = module_path.join(relative_path);
+    let metadata = fs::metadata(&image_path)
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
+    if !metadata.is_file() || metadata.len() > MODULE_PREVIEW_IMAGE_MAX_BYTES {
+        return Err(AppError::Validation(
+            "Preview image is missing or too large".to_string(),
+        ));
+    }
+
+    let mime = preview_image_mime(&image_path)?;
+    let bytes = fs::read(&image_path)
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
+    Ok(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
+}
+
+fn preview_image_mime(path: &Path) -> Result<&'static str, AppError> {
+    match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => Ok("image/png"),
+        "jpg" | "jpeg" => Ok("image/jpeg"),
+        "webp" => Ok("image/webp"),
+        "gif" => Ok("image/gif"),
+        "svg" => Ok("image/svg+xml"),
+        _ => Err(AppError::Validation(
+            "Unsupported preview image format".to_string(),
+        )),
     }
 }
 

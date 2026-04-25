@@ -41,6 +41,12 @@ export interface IApp {
     desc?: string;
     descKey?: string;
     icon?: string;
+    preview?: {
+        title?: string | null;
+        description?: string | null;
+        sticker?: string | null;
+        image?: string | null;
+    } | null;
     category?: string;
     type?: 'api' | 'local';
     capability?: 'text' | 'image'; // AI output capability; used for modal filter tabs

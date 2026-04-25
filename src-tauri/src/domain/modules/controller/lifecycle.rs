@@ -403,6 +403,7 @@ mod tests {
             author: None,
             category: None,
             icon: None,
+            preview: None,
             readme: None,
             settings_schema: None,
             settings_ui: None,

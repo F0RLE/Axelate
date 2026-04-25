@@ -1,4 +1,4 @@
-use crate::models::modules::ConfigField;
+use crate::models::modules::{ConfigField, ModulePreview};
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -181,6 +181,9 @@ pub struct ModuleItem {
     pub desc: String,
     /// Icon/emoji
     pub icon: String,
+    /// Optional module-owned card preview metadata.
+    #[serde(default)]
+    pub preview: Option<ModulePreview>,
     /// Module type ("api" or "service")
     #[serde(rename = "type")]
     pub type_name: String,

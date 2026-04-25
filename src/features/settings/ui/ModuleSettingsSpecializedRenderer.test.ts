@@ -47,7 +47,7 @@ describe('ModuleSettingsSpecializedRenderer', () => {
 
         renderer.renderTelegramBotSettings(container);
 
-        expect(container.textContent).toContain('t:ui.settings.telegram_stub_title:Telegram Bot');
+        expect(container.textContent).toContain('t:ui.settings.telegram_stub_title:Parser');
         const topics = container.querySelectorAll('textarea')[0] as HTMLTextAreaElement;
         expect(topics.value).toBe('News: @one\nUpdates: @two');
 

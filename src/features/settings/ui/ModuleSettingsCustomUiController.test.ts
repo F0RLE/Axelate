@@ -80,7 +80,7 @@ describe('ModuleSettingsCustomUiController', () => {
 
         await harness.controller.render(harness.container, {
             id: 'telegram-bot',
-            name: 'Telegram Bot',
+            name: 'Parser',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -112,7 +112,7 @@ describe('ModuleSettingsCustomUiController', () => {
 
         await harness.controller.render(harness.container, {
             id: 'telegram-bot',
-            name: 'Telegram Bot',
+            name: 'Parser',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -128,7 +128,7 @@ describe('ModuleSettingsCustomUiController', () => {
 
         await harness.controller.render(harness.container, {
             id: 'telegram-bot',
-            name: 'Telegram Bot',
+            name: 'Parser',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -146,7 +146,7 @@ describe('ModuleSettingsCustomUiController', () => {
 
         await harness.controller.render(harness.container, {
             id: 'telegram-bot',
-            name: 'Telegram Bot',
+            name: 'Parser',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -165,7 +165,7 @@ describe('ModuleSettingsCustomUiController', () => {
 
         await harness.controller.render(harness.container, {
             id: 'telegram-bot',
-            name: 'Telegram Bot',
+            name: 'Parser',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -188,7 +188,7 @@ describe('ModuleSettingsCustomUiController', () => {
 
         await harness.controller.render(harness.container, {
             id: 'telegram-bot',
-            name: 'Telegram Bot',
+            name: 'Parser',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',

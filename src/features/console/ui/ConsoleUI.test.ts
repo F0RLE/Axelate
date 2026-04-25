@@ -509,12 +509,12 @@ describe('ConsoleUI lifecycle', () => {
             ),
             getAvailableViews: vi.fn().mockResolvedValue([
                 { id: 'general', label: 'General' },
-                { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
+                { id: 'module:axelate-telegram-bot', label: 'Parser' },
             ]),
             getStatusItems: vi.fn().mockResolvedValue([
                 {
                     id: 'module:axelate-telegram-bot',
-                    label: 'Telegram Bot',
+                    label: 'Parser',
                     kind: 'module',
                     status: 'running',
                     detail: 'Running',

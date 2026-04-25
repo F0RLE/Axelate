@@ -276,7 +276,7 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'General' },
-                    { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
+                    { id: 'module:axelate-telegram-bot', label: 'Parser' },
                 ],
                 status_items: [],
             },
@@ -301,7 +301,7 @@ describe('ConsoleLogService', () => {
 
         expect(views).toEqual([
             { id: 'general', label: 'General' },
-            { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
+            { id: 'module:axelate-telegram-bot', label: 'Parser' },
         ]);
     });
 

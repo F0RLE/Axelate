@@ -869,6 +869,8 @@ export type Module = {
 	category: string,
 	// Icon/emoji for UI display
 	icon: string,
+	// Module-owned card preview metadata.
+	preview?: ModulePreview | null,
 	// Absolute filesystem path to module directory
 	path: string,
 	// Whether module files are present locally
@@ -906,6 +908,8 @@ export type ModuleItem_Deserialize = {
 	desc: string,
 	// Icon/emoji
 	icon: string,
+	// Optional module-owned card preview metadata.
+	preview?: ModulePreview | null,
 	// Module type ("api" or "service")
 	type: string,
 	// Download type ("source" or "release")
@@ -942,6 +946,8 @@ export type ModuleItem_Serialize = {
 	desc: string,
 	// Icon/emoji
 	icon: string,
+	// Optional module-owned card preview metadata.
+	preview: ModulePreview | null,
 	// Module type ("api" or "service")
 	type: string,
 	// Download type ("source" or "release")
@@ -966,6 +972,18 @@ export type ModuleItem_Serialize = {
 	configSchema: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } | null,
 	// Configuration schema definition (runtime only, built from raw_config_schema)
 	configSchema: { [key in string]: ConfigField } | null,
+};
+
+// Module-owned card preview metadata.
+export type ModulePreview = {
+	// Optional card title override.
+	title?: string | null,
+	// Optional card description override.
+	description?: string | null,
+	// Optional emoji/text sticker shown when no image is provided.
+	sticker?: string | null,
+	// Optional image URL or data URL for the card preview.
+	image?: string | null,
 };
 
 // Network I/O statistics

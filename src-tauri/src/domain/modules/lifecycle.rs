@@ -1,5 +1,5 @@
 use crate::errors::AppError;
-use crate::models::modules::ConfigField;
+use crate::models::modules::{ConfigField, ModulePreview};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -69,6 +69,9 @@ pub struct ModuleManifest {
     /// Module icon shown in the launcher UI.
     #[serde(default)]
     pub icon: Option<String>,
+    /// Module-owned card preview metadata.
+    #[serde(default)]
+    pub preview: Option<ModulePreview>,
     /// Human-readable module documentation file.
     #[serde(default)]
     pub readme: Option<String>,

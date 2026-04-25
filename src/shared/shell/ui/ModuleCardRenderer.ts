@@ -50,6 +50,7 @@ export class ModuleCardRenderer {
             'use',
             'line',
             'path',
+            'img',
         ],
         ALLOWED_ATTR: [
             'href',
@@ -69,6 +70,8 @@ export class ModuleCardRenderer {
             'y2',
             'd',
             'aria-hidden',
+            'src',
+            'alt',
         ],
         ALLOW_DATA_ATTR: true,
     };

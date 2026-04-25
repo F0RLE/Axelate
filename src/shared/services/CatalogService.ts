@@ -137,6 +137,7 @@ export class CatalogService {
                 name: item.name,
                 desc: item.desc,
                 icon: item.icon,
+                preview: item.preview ?? null,
                 category: category,
                 type: category === 'ai' && item.type !== 'local' ? 'api' : 'local',
                 capability,
@@ -205,6 +206,10 @@ export class CatalogService {
 
             if (installedModule?.settingsUi !== undefined) {
                 app.settingsUi = installedModule.settingsUi;
+            }
+
+            if (installedModule?.preview !== undefined) {
+                app.preview = installedModule.preview;
             }
         };
 

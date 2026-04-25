@@ -19,7 +19,7 @@ export class ModuleSettingsSchemaRenderer {
             const form = document.createElement('div');
             form.className = 'module-settings-form';
 
-            form.appendChild(this.createLegacySettingsNotice());
+            form.appendChild(this.createStandardSettingsNotice());
 
             const header = document.createElement('h3');
             header.style.marginBottom = '1.5rem';
@@ -130,12 +130,12 @@ export class ModuleSettingsSchemaRenderer {
         });
     }
 
-    private createLegacySettingsNotice(): HTMLElement {
+    private createStandardSettingsNotice(): HTMLElement {
         const note = document.createElement('div');
-        note.className = 'module-settings-legacy-note';
+        note.className = 'module-settings-standard-note';
         note.textContent = this._deps.translate(
-            'ui.settings.legacy_mode_notice',
-            'Legacy launcher settings mode',
+            'ui.settings.standard_mode_notice',
+            'Standard launcher settings',
         );
         return note;
     }

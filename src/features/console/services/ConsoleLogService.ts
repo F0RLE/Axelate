@@ -60,7 +60,7 @@ export class ConsoleLogService {
     private static readonly _MAX_LOG_COUNT = 1000;
     private static readonly _TRIM_THRESHOLD = 2000;
     private static readonly _MODULE_LABELS: Readonly<Record<string, string>> = {
-        'axelate-telegram-bot': 'Telegram Bot',
+        'axelate-telegram-bot': 'Parser',
     };
     private static readonly _NOISE_PATTERNS = [
         /\[AIBridge\] Stream chunk received/i,

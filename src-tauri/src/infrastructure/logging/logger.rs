@@ -808,7 +808,7 @@ mod tests {
 
         assert_eq!(entry.source, "module:axelate-telegram-bot");
         assert_eq!(entry.module_id.as_deref(), Some("axelate-telegram-bot"));
-        assert_eq!(entry.source_label.as_deref(), Some("Telegram Bot"));
+        assert_eq!(entry.source_label.as_deref(), Some("Parser"));
         Ok(())
     }
 
