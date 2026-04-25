@@ -1,7 +1,7 @@
 use crate::errors::AppError;
 use crate::models::modules::{ConfigField, ModulePreview};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Current module API version
 pub const CURRENT_API_VERSION: &str = "1";
@@ -81,16 +81,45 @@ pub struct ModuleManifest {
     /// Module-owned custom settings UI entry point.
     #[serde(default, alias = "settingsUi")]
     pub settings_ui: Option<String>,
-    /// Entry point script
-    pub entry: Option<String>,
-    /// Module dependencies
-    #[serde(default)]
-    pub dependencies: Vec<String>,
+    /// Launcher-managed module runtime.
+    pub runtime: ModuleRuntime,
     /// Lifecycle scripts
     pub lifecycle: Option<LifecycleScripts>,
     /// Configuration schema
     #[serde(default, alias = "configSchema")]
     pub config_schema: Option<HashMap<String, ConfigField>>,
+}
+
+/// Launcher-managed runtime declaration for module code.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ModuleRuntime {
+    /// Runtime kind (`python`, `node`, `bun`, or `binary`).
+    pub kind: ModuleRuntimeKind,
+    /// Runtime version requested by the module.
+    #[serde(default)]
+    pub version: Option<String>,
+    /// Entry point relative to the module root.
+    pub entry: String,
+    /// Dependency manifest relative to the module root.
+    #[serde(default)]
+    pub dependencies: Option<String>,
+    /// Package manager for JavaScript runtimes (`npm` or `bun`).
+    #[serde(default)]
+    pub package_manager: Option<String>,
+}
+
+/// Supported launcher-managed module runtime kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModuleRuntimeKind {
+    /// Python script runtime, managed with uv.
+    Python,
+    /// Node.js script runtime, dependencies managed outside the module tree.
+    Node,
+    /// Bun script runtime, dependencies managed outside the module tree.
+    Bun,
+    /// External executable lifecycle managed by explicit lifecycle commands.
+    Binary,
 }
 
 fn default_api_version() -> String {
@@ -135,7 +164,7 @@ impl ManifestLoader {
     pub fn load(module_dir: &std::path::Path) -> Result<ModuleManifest, AppError> {
         let source = Self::resolve_manifest_source(module_dir)?;
         let manifest = Self::load_manifest_source(&source)?;
-        Ok(Self::normalize_manifest(module_dir, manifest))
+        Self::validate_manifest(module_dir, manifest)
     }
 
     fn resolve_manifest_source(module_dir: &Path) -> Result<ManifestSource, AppError> {
@@ -166,17 +195,48 @@ impl ManifestLoader {
         })
     }
 
-    fn normalize_manifest(module_dir: &Path, mut manifest: ModuleManifest) -> ModuleManifest {
-        // Keep older script modules runnable when `entry` is omitted but the
-        // standard `src/main.py` layout exists on disk.
-        if manifest.entry.is_none() {
-            let default_python_entry = module_dir.join("src").join("main.py");
-            if default_python_entry.exists() {
-                manifest.entry = Some("src/main.py".to_string());
-            }
+    fn validate_manifest(
+        module_dir: &Path,
+        manifest: ModuleManifest,
+    ) -> Result<ModuleManifest, AppError> {
+        Self::validate_relative_existing_file(
+            module_dir,
+            &manifest.runtime.entry,
+            "runtime.entry",
+        )?;
+
+        if let Some(dependencies) = manifest.runtime.dependencies.as_deref() {
+            Self::validate_relative_existing_file(
+                module_dir,
+                dependencies,
+                "runtime.dependencies",
+            )?;
         }
 
-        manifest
+        Ok(manifest)
+    }
+
+    fn validate_relative_existing_file(
+        module_dir: &Path,
+        value: &str,
+        field_name: &str,
+    ) -> Result<PathBuf, AppError> {
+        let path = Path::new(value.trim());
+        if value.trim().is_empty() || path.is_absolute() || value.contains("..") {
+            return Err(AppError::Validation(format!(
+                "{field_name} must be a relative module file path"
+            )));
+        }
+
+        let full_path = module_dir.join(path);
+        if !full_path.is_file() {
+            return Err(AppError::NotFound(format!(
+                "{field_name} not found at {}",
+                full_path.display()
+            )));
+        }
+
+        Ok(full_path)
     }
 }
 
@@ -184,7 +244,7 @@ impl ManifestLoader {
 mod tests {
     #![allow(clippy::expect_used)]
 
-    use super::{ManifestLoader, PRIMARY_MANIFEST_FILE};
+    use super::{ManifestLoader, ModuleRuntimeKind, PRIMARY_MANIFEST_FILE};
     use crate::errors::AppError;
     use std::fs;
 
@@ -205,14 +265,21 @@ author = "Axelate"
 type = "service"
 icon = "🤖"
 settings_ui = "settings-ui/index.html"
+
+[runtime]
+kind = "python"
+version = "3.11"
 entry = "src/main.py"
-dependencies = ["python"]
+dependencies = "requirements.txt"
 
 [lifecycle]
 start = { program = "uv", args = ["run", "src/main.py"] }
 "#,
         )
         .expect("write manifest");
+        fs::create_dir_all(temp_dir.path().join("src")).expect("src dir");
+        fs::write(temp_dir.path().join("src/main.py"), "print('ok')").expect("entry");
+        fs::write(temp_dir.path().join("requirements.txt"), "requests").expect("deps");
 
         let manifest = ManifestLoader::load(temp_dir.path()).expect("load manifest");
 
@@ -225,7 +292,13 @@ start = { program = "uv", args = ["run", "src/main.py"] }
             manifest.settings_ui.as_deref(),
             Some("settings-ui/index.html")
         );
-        assert_eq!(manifest.entry.as_deref(), Some("src/main.py"));
+        assert_eq!(manifest.runtime.kind, ModuleRuntimeKind::Python);
+        assert_eq!(manifest.runtime.version.as_deref(), Some("3.11"));
+        assert_eq!(manifest.runtime.entry, "src/main.py");
+        assert_eq!(
+            manifest.runtime.dependencies.as_deref(),
+            Some("requirements.txt")
+        );
     }
 
     #[test]
@@ -263,12 +336,39 @@ api_version = "1"
 id = "primary"
 name = "Primary"
 version = "1.0.0"
+
+[runtime]
+kind = "python"
+entry = "src/main.py"
 "#,
         )
         .expect("write primary");
+        fs::create_dir_all(temp_dir.path().join("src")).expect("src dir");
+        fs::write(temp_dir.path().join("src/main.py"), "print('ok')").expect("entry");
 
         let source = ManifestLoader::resolve_manifest_source(temp_dir.path()).expect("source");
 
         assert_eq!(source.path, temp_dir.path().join(PRIMARY_MANIFEST_FILE));
+    }
+
+    #[test]
+    fn rejects_manifest_without_runtime_block() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        fs::write(
+            temp_dir.path().join(PRIMARY_MANIFEST_FILE),
+            r#"
+api_version = "1"
+id = "legacy"
+name = "Legacy"
+version = "1.0.0"
+entry = "src/main.py"
+dependencies = ["python"]
+"#,
+        )
+        .expect("write manifest");
+
+        let error = ManifestLoader::load(temp_dir.path()).expect_err("runtime block required");
+
+        assert!(matches!(error, AppError::Serialization(_)));
     }
 }

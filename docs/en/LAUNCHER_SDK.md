@@ -21,13 +21,23 @@ Launcher-managed module processes receive these environment variables:
 External tools that are not launched by Axelate need the same two values from
 the user or from their own launcher integration flow.
 
-Python script modules can declare dependencies in `requirements.txt`. The
-launcher installs them into its managed runtime under
-`AxelateData/System/Runtime/Python/envs/<python-version>/<module-id>`. The
-Python version comes from `.python-version` when present, otherwise the launcher
-uses its default supported Python version. Modules must not ship or write
-`.venv`, `node_modules`, caches, logs, or downloaded runtime dependencies inside
-the module directory.
+Script modules declare their runtime in `axelate-module.toml`. Legacy top-level
+`entry` and `dependencies` fields are not supported.
+
+```toml
+[runtime]
+kind = "python" # python | node | bun | binary
+version = "3.11"
+entry = "src/main.py"
+dependencies = "requirements.txt"
+```
+
+The launcher installs dependencies into its managed runtime under
+`AxelateData/System/Runtime/<Runtime>/envs/<runtime-version>/<module-id>`.
+Python uses `uv` and `requirements.txt`. Node and Bun use the declared package
+manager and a package manifest outside the module directory. Modules must not
+ship or write `.venv`, `node_modules`, caches, logs, or downloaded runtime
+dependencies inside the module directory.
 
 ## Authentication
 

@@ -296,9 +296,7 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     fn resolve_script_entry_path(&self, manifest: &ModuleManifest) -> Option<std::path::PathBuf> {
-        script_runtime::resolve_entry_path(self.module_path, manifest)
-            .ok()
-            .flatten()
+        script_runtime::resolve_entry_path(self.module_path, manifest).ok()
     }
 
     async fn reconcile_existing_script_processes(&self, entry_path: &Path) -> Option<usize> {
@@ -374,7 +372,9 @@ mod tests {
 
     use super::LifecycleExecutor;
     use crate::domain::modules::controller::Controller;
-    use crate::domain::modules::lifecycle::{CommandDefinition, LifecycleScripts, ModuleManifest};
+    use crate::domain::modules::lifecycle::{
+        CommandDefinition, LifecycleScripts, ModuleManifest, ModuleRuntime, ModuleRuntimeKind,
+    };
     use std::time::Duration;
 
     fn test_start_command() -> CommandDefinition {
@@ -407,8 +407,13 @@ mod tests {
             readme: None,
             settings_schema: None,
             settings_ui: None,
-            entry: None,
-            dependencies: Vec::new(),
+            runtime: ModuleRuntime {
+                kind: ModuleRuntimeKind::Binary,
+                version: None,
+                entry: "external".to_string(),
+                dependencies: None,
+                package_manager: None,
+            },
             lifecycle: Some(LifecycleScripts {
                 init: None,
                 start: Some(test_start_command()),

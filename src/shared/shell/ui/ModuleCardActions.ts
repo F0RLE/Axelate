@@ -100,7 +100,7 @@ export function buildModuleCardActionButton(
         actionBtn.className = 'modal-btn modal-btn-secondary';
         const i18nKey = 'ui.launcher.modules.modal.btn_remove';
         actionBtn.dataset['i18n'] = i18nKey;
-        actionBtn.textContent = translate(i18nKey, 'Убрать');
+        actionBtn.textContent = translate(i18nKey, 'Remove');
     } else {
         actionBtn.className = 'modal-btn modal-btn-primary';
         const i18nKey = 'ui.launcher.modules.modal.btn_select';

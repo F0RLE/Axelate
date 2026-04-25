@@ -198,7 +198,7 @@ describe('ModalManager lifecycle', () => {
                 'appId'
             ],
         ).toBe('svc-b');
-        expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Убрать');
+        expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Remove');
     });
 
     it('should rerender current selection without reopening modal shell', () => {
@@ -340,7 +340,7 @@ describe('ModalManager lifecycle', () => {
         reopen?.();
 
         expect(document.querySelector('[data-app-id="svc-b"] .modal-btn')?.textContent).toBe(
-            'Убрать',
+            'Remove',
         );
         expect(
             document
@@ -458,7 +458,7 @@ describe('ModalManager lifecycle', () => {
             false,
         );
         expect(document.querySelector('[data-app-id="gemini"] .modal-btn')?.textContent).toBe(
-            'Убрать',
+            'Remove',
         );
         expect(
             document

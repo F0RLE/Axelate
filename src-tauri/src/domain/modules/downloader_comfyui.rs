@@ -46,7 +46,10 @@ id = "comfyui"
 name = "ComfyUI"
 version = "{version}"
 description = "Node-based image workflow engine for maximum quality and control."
-dependencies = []
+
+[runtime]
+kind = "binary"
+entry = "scripts/start.ps1"
 
 [lifecycle.start]
 program = "powershell"
