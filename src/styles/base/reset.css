@@ -63,6 +63,24 @@ body::before {
     z-index: -2;
 }
 
+button:focus,
+[role='button']:focus,
+a[href]:focus,
+summary:focus,
+[tabindex]:not([tabindex='-1']):focus {
+    outline: none;
+}
+
+button:focus-visible,
+[role='button']:focus-visible,
+a[href]:focus-visible,
+summary:focus-visible,
+[tabindex]:not([tabindex='-1']):focus-visible {
+    outline: 1px solid rgba(var(--primary-raw), 0.58);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 3px rgba(var(--primary-raw), 0.14);
+}
+
 /* Globals moved to top */
 
 /* Re-enable for inputs and text areas */
