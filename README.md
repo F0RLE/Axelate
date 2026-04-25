@@ -1,6 +1,6 @@
 <div align="center">
   <br />
-  <img src="src-tauri/icons/icon.png" alt="Axelate Logo" width="160" height="160" />
+  <img src="src-tauri/icons/icon.png?v=20260425" alt="Axelate Logo" width="160" height="160" />
   <br />
 
   <h1 style="border-bottom: none; margin-bottom: 0;">Axelate</h1>
