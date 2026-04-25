@@ -360,7 +360,9 @@
 
 #sidebar.collapsed .nav-btn:hover {
     transform: none;
-    background: rgba(138, 43, 226, 0.2); /* Optional: keep the background change but no movement */
+    background: rgba(255, 255, 255, 0.018);
+    color: #ffffff;
+    border: none !important;
 }
 
 #sidebar.collapsed .sidebar-lang-switcher {
