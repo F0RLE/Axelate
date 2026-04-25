@@ -653,8 +653,8 @@ describe('AppUI lifecycle', () => {
             _performSelectionAction: (category: string, app: IApp) => void;
         };
         const serviceApp = {
-            id: 'telegram-bot',
-            name: 'Parser',
+            id: 'sample-integration',
+            name: 'Sample Integration',
             type: 'local',
             installed: true,
         } as IApp;

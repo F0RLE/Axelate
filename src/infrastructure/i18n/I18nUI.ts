@@ -27,6 +27,10 @@ export class I18nUI {
                 const menu = document.getElementById('lang-menu-items');
                 if (menu && menu.classList.contains('open') && root && !root.contains(target)) {
                     menu.classList.remove('open');
+                    document
+                        .getElementById('current-lang-trigger')
+                        ?.setAttribute('aria-expanded', 'false');
+                    this._syncTopbarMenuAccessibility();
                 }
             },
             { signal: this._cleanupAbort.signal },
@@ -209,10 +213,16 @@ export class I18nUI {
      */
     private _updateMenuOptions(lang: string): void {
         document.querySelectorAll('.lang-menu-items .lang-btn').forEach((btn) => {
-            const element = btn as HTMLElement;
+            const element = btn as HTMLButtonElement;
             const btnLang = element.dataset['lang'];
-            element.style.display = btnLang === lang ? 'none' : 'flex';
+            const isCurrentLanguage = btnLang === lang;
+            element.style.display = isCurrentLanguage ? 'none' : 'flex';
+            element.disabled = isCurrentLanguage;
+            if (isCurrentLanguage) {
+                element.setAttribute('tabindex', '-1');
+            }
         });
+        this._syncTopbarMenuAccessibility();
     }
 
     /**
@@ -224,7 +234,22 @@ export class I18nUI {
         if (menu) {
             const isOpen = menu.classList.toggle('open');
             trigger?.setAttribute('aria-expanded', isOpen.toString());
+            this._syncTopbarMenuAccessibility();
         }
+    }
+
+    private _syncTopbarMenuAccessibility(): void {
+        const menu = document.getElementById('lang-menu-items');
+        if (menu === null) {
+            return;
+        }
+
+        const isOpen = menu.classList.contains('open');
+        menu.setAttribute('aria-hidden', (!isOpen).toString());
+        menu.querySelectorAll<HTMLButtonElement>('.lang-btn[data-lang]').forEach((button) => {
+            const isVisibleOption = button.style.display !== 'none';
+            button.tabIndex = isOpen && isVisibleOption ? 0 : -1;
+        });
     }
 
     /**
@@ -245,15 +270,23 @@ export class I18nUI {
     public async setLanguage(lang: string): Promise<void> {
         // Close menus
         const menu = document.getElementById('lang-menu-items');
-        if (menu) menu.classList.remove('open');
+        if (menu) {
+            menu.classList.remove('open');
+            menu.setAttribute('aria-hidden', 'true');
+        }
+        document.getElementById('current-lang-trigger')?.setAttribute('aria-expanded', 'false');
 
         const sidebarMenu = document.getElementById('sidebar-lang-menu');
-        if (sidebarMenu) sidebarMenu.classList.remove('open');
+        if (sidebarMenu) {
+            sidebarMenu.classList.remove('open');
+        }
+        document.getElementById('sidebar-lang-trigger')?.setAttribute('aria-expanded', 'false');
 
         // Load translations and apply
         await this._service.loadTranslations(lang);
         document.documentElement.lang = lang; // Set explicit lang for font switching
         this.applyTranslations();
+        this._syncTopbarMenuAccessibility();
     }
 
     /**

@@ -33,7 +33,7 @@ body.snapping .modal-backdrop {
 }
 
 .modal-backdrop.hidden {
-    display: flex !important;
+    display: none !important;
     opacity: 0 !important;
     pointer-events: none !important;
     transition: none;

@@ -48,7 +48,7 @@ describe('SidebarUI', () => {
     function setupDom(): void {
         document.body.innerHTML = `
             <div id="sidebar">
-                <div class="logo-area"></div>
+                <button class="logo-area" type="button"></button>
                 <div class="main-menu"></div>
                 <div id="system-monitor"></div>
                 <div class="bottom-menu"></div>
@@ -149,9 +149,14 @@ describe('SidebarUI', () => {
         await sidebarUi.init();
 
         const logoArea = document.querySelector('.logo-area') as HTMLElement;
+        expect(logoArea.getAttribute('role')).toBeNull();
+        expect(logoArea.getAttribute('tabindex')).toBeNull();
+        expect(logoArea.getAttribute('aria-expanded')).toBe('true');
+
         logoArea.click();
 
         expect(uiSettings.setSidebarState).toHaveBeenCalledWith(true, 80, false);
+        expect(logoArea.getAttribute('aria-expanded')).toBe('false');
         expect(soundService.playExpand).toHaveBeenCalledWith(false);
         expect(document.body.classList.contains('snapping')).toBe(true);
 

@@ -26,6 +26,15 @@ describe('SidebarNavigationRenderer', () => {
         expect(document.querySelector('.console-trigger')?.getAttribute('data-page')).toBe(
             'console',
         );
+
+        const homeButton = document.querySelector<HTMLButtonElement>('.nav-btn[data-page="home"]');
+        const homeIcon = homeButton?.querySelector('svg');
+        expect(homeButton?.title).toBe('Home');
+        expect(homeButton?.getAttribute('aria-label')).toBe('Home');
+        expect(homeButton?.dataset['i18nTitle']).toBe('ui.launcher.web.home');
+        expect(homeButton?.dataset['i18nAriaLabel']).toBe('ui.launcher.web.home');
+        expect(homeIcon?.getAttribute('viewBox')).toBe('0 0 24 24');
+        expect(homeIcon?.getAttribute('aria-hidden')).toBe('true');
     });
 
     it('marks hidden items as inaccessible', () => {
@@ -43,5 +52,6 @@ describe('SidebarNavigationRenderer', () => {
         expect(downloadsButton?.classList.contains('hidden')).toBe(true);
         expect(chatButton?.getAttribute('aria-hidden')).toBe('true');
         expect(chatButton?.getAttribute('tabindex')).toBe('-1');
+        expect((chatButton as HTMLButtonElement | null)?.disabled).toBe(true);
     });
 });

@@ -48,6 +48,7 @@ export class WindowUiShellController {
         }
 
         soundToggle.classList.toggle('muted', !enabled);
+        soundToggle.setAttribute('aria-pressed', (!enabled).toString());
     }
 
     public updateWidthWarning(): void {

@@ -151,6 +151,7 @@ describe('GeneralSettingsRenderer', () => {
         expect(homeNav.classList.contains('hidden')).toBe(true);
         expect(homeNav.getAttribute('tabindex')).toBe('-1');
         expect(homeNav.getAttribute('aria-hidden')).toBe('true');
+        expect((homeNav as HTMLButtonElement).disabled).toBe(true);
 
         uiSettings.getHiddenNavItems.mockReturnValue(['chat', 'home']);
         renderer.toggleNavItem('home', true);
@@ -158,6 +159,7 @@ describe('GeneralSettingsRenderer', () => {
         expect(homeNav.classList.contains('hidden')).toBe(false);
         expect(homeNav.hasAttribute('tabindex')).toBe(false);
         expect(homeNav.hasAttribute('aria-hidden')).toBe(false);
+        expect((homeNav as HTMLButtonElement).disabled).toBe(false);
 
         renderer.toggleMonitorItem('cpu', false);
         expect(uiSettings.setHiddenMonitors).toHaveBeenCalledWith(['gpu', 'cpu']);
