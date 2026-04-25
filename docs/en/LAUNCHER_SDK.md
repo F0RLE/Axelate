@@ -10,34 +10,34 @@ but the HTTP API is the source of truth.
 Axelate starts a local API server on `127.0.0.1` when the launcher starts. The
 server is available only on the local machine and requires a per-process token.
 
-Launcher-managed module processes receive these environment variables:
+Launcher-managed integration processes receive these environment variables:
 
 - `AXELATE_HTTP_API_BASE`: local base URL, for example `http://127.0.0.1:3000`
 - `AXELATE_HTTP_API_TOKEN`: bearer token for the current launcher process
 - `AXELATE_RUNTIME_DIR`: shared launcher runtime directory
-- `AXELATE_MODULE_RUNTIME_DIR`: writable runtime directory reserved for the module
-- `AXELATE_MODULE_ID`: current module id
+- `AXELATE_MODULE_RUNTIME_DIR`: writable runtime directory reserved for the integration
+- `AXELATE_MODULE_ID`: current integration id
 
 External tools that are not launched by Axelate need the same two values from
 the user or from their own launcher integration flow.
 
-Script modules declare their runtime in `axelate-module.toml`. Legacy top-level
+Script integrations declare their runtime in `axelate-module.toml`. Legacy top-level
 `entry` and `dependencies` fields are not supported.
 
 ```toml
 [runtime]
 kind = "python" # python | node | bun | binary
-version = "3.11"
+version = "3.14"
 entry = "src/main.py"
 dependencies = "requirements.txt"
 ```
 
 The launcher installs dependencies into its managed runtime under
-`AxelateData/System/Runtime/<Runtime>/envs/<runtime-version>/<module-id>`.
+`AxelateData/System/Runtime/<Runtime>/envs/<runtime-version>/<integration-id>`.
 Python uses `uv` and `requirements.txt`. Node and Bun use the declared package
-manager and a package manifest outside the module directory. Modules must not
+manager and a package manifest outside the integration directory. Integrations must not
 ship or write `.venv`, `node_modules`, caches, logs, or downloaded runtime
-dependencies inside the module directory.
+dependencies inside the integration directory.
 
 ## Authentication
 
@@ -140,16 +140,16 @@ result = response.json()
 
 Does not require authentication. Returns whether the local API server is alive.
 
-### Modules
+### Integrations
 
 `GET /v1/modules`
 
-Returns known modules with launcher status, selected state, category, install
+Returns known integrations with launcher status, selected state, category, install
 state, and metadata.
 
 `GET /v1/modules/{moduleId}/status`
 
-Returns one module status.
+Returns one integration status.
 
 `POST /v1/modules/{moduleId}/stage`
 
@@ -159,7 +159,7 @@ emits `module-stage-changed` for UI surfaces and writes the stage to logs.
 ```json
 {
   "stage": "parser.fetch",
-  "label": "Fetching public Telegram feeds",
+  "label": "Fetching external data",
   "details": { "topics": 3 },
   "progress": 0.35
 }
@@ -191,7 +191,7 @@ launcher chat.
 ```json
 {
   "prompt": "Summarize this message",
-  "sessionId": "telegram-bot",
+  "sessionId": "sample-integration",
   "provider": "openai",
   "model": "gpt-5.5",
   "messages": [{ "role": "user", "content": "Optional chat history" }],

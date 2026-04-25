@@ -5,13 +5,12 @@ use super::downloader_progress::{
     compute_progress, emit_progress,
 };
 use super::downloader_service::{DownloadRequest, resolve_existing_module_path};
-use super::downloader_support::remove_partial_metadata;
+use super::downloader_support::{package_install_dir, remove_partial_metadata};
 use super::downloader_transfer::{
     DownloadTask, ReleaseDownloadAsset, build_client, clone_repository_into, download_file,
     resolve_download_url,
 };
 use crate::errors::AppError;
-use crate::utils::paths::MODULES_DIR;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
@@ -43,7 +42,7 @@ pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
 /// Returns the filesystem path to a module's directory
 pub fn get_module_path(module_id: &str) -> PathBuf {
     // Note: Callers should validate module_id before using this path for sensitive operations
-    resolve_existing_module_path(module_id).unwrap_or_else(|| MODULES_DIR.join(module_id))
+    resolve_existing_module_path(module_id).unwrap_or_else(|| package_install_dir(module_id))
 }
 
 /// Checks if a module is installed locally

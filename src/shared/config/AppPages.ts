@@ -26,7 +26,7 @@ export const APP_PAGES: IAppPage[] = [
         id: 'modules',
         icon: '#icon-folder',
         i18nKey: 'ui.launcher.web.modules',
-        defaultLabel: 'Modules',
+        defaultLabel: 'Integrations',
         inSettings: true,
     },
     {

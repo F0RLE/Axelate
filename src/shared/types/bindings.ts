@@ -184,7 +184,7 @@ export const commands = {
 	stopEngineSlot: (capability: Capability) => typedError<null, AppError>(__TAURI_INVOKE("stop_engine_slot", { capability })),
 	// Gets the current engine state (idle, starting, ready, error).
 	getEngineState: () => typedError<EngineState, AppError>(__TAURI_INVOKE("get_engine_state")),
-	// Checks if an engine binary is present (in MODULES_DIR or system PATH).
+	// Checks if an engine binary is present (in ENGINES_DIR or system PATH).
 	checkEngineInstalled: (engineId: string, binaryName: string | null) => __TAURI_INVOKE<boolean>("check_engine_installed", { engineId, binaryName }),
 	// Returns all registered engine definitions with real-time installation status.
 	getEngineDefinitions: () => typedError<EngineDefinition[], AppError>(__TAURI_INVOKE("get_engine_definitions")),
@@ -435,7 +435,7 @@ export type ConfigCatalog = ConfigCatalog_Serialize | ConfigCatalog_Deserialize;
 export type ConfigCatalog_Deserialize = {
 	// AI generation modules (text, images, `LocalAI`)
 	ai: ModuleItem_Deserialize[],
-	// Service integrations (Telegram, Discord)
+	// Service integrations and external automation
 	services: ModuleItem_Deserialize[],
 	// Starred/Favorite module IDs
 	stars: string[],
@@ -445,7 +445,7 @@ export type ConfigCatalog_Deserialize = {
 export type ConfigCatalog_Serialize = {
 	// AI generation modules (text, images, `LocalAI`)
 	ai: ModuleItem_Serialize[],
-	// Service integrations (Telegram, Discord)
+	// Service integrations and external automation
 	services: ModuleItem_Serialize[],
 	// Starred/Favorite module IDs
 	stars: string[],
@@ -984,6 +984,8 @@ export type ModulePreview = {
 	sticker?: string | null,
 	// Optional image URL or data URL for the card preview.
 	image?: string | null,
+	// Optional directory with localized preview JSON files.
+	i18n?: string | null,
 };
 
 // Network I/O statistics

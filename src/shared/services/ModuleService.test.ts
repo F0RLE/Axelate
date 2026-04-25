@@ -139,17 +139,17 @@ describe('ModuleService', () => {
         it('should return backend runtime status', async () => {
             mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'running' });
 
-            const result = await moduleService.getStatus('telegram-bot');
+            const result = await moduleService.getStatus('sample-integration');
 
             expect(result).toBe('running');
-            expect(mocks.commands.getModuleStatus).toHaveBeenCalledWith('telegram-bot');
+            expect(mocks.commands.getModuleStatus).toHaveBeenCalledWith('sample-integration');
             expect(mocks.invokeSafe).toHaveBeenCalled();
         });
 
         it('should return stopped when not in Tauri', async () => {
             mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
 
-            const result = await moduleService.getStatus('telegram-bot');
+            const result = await moduleService.getStatus('sample-integration');
 
             expect(result).toBe('stopped');
             expect(mocks.commands.getModuleStatus).not.toHaveBeenCalled();

@@ -14,7 +14,7 @@ const PYTHON_REQUIREMENTS_STAMP_FILE: &str = ".axelate_requirements.sha256";
 const JS_DEPENDENCIES_STAMP_FILE: &str = ".axelate_dependencies.sha256";
 
 /// Returns true when the module can use a launcher-managed script runtime.
-pub fn supports_manifest(manifest: &ModuleManifest) -> bool {
+pub const fn supports_manifest(manifest: &ModuleManifest) -> bool {
     matches!(
         manifest.runtime.kind,
         ModuleRuntimeKind::Python | ModuleRuntimeKind::Node | ModuleRuntimeKind::Bun
@@ -156,16 +156,16 @@ async fn spawn_node_process(
     let node_executable = find_node_executable().await?;
     let npm_executable = find_program("npm").await?;
     let env_dir = js_env_dir(&runtime_root, module_id, &version);
-    ensure_js_dependencies_installed(
-        &npm_executable,
-        &runtime_root,
-        &env_dir,
+    ensure_js_dependencies_installed(JsDependencyInstall {
+        package_manager: &npm_executable,
+        runtime_root: &runtime_root,
+        env_dir: &env_dir,
         module_path,
         manifest,
         module_id,
-        &version,
-        "npm",
-    )
+        version: &version,
+        default_package_manager: "npm",
+    })
     .await?;
 
     let mut command = Command::new(node_executable);
@@ -192,16 +192,16 @@ async fn spawn_bun_process(
 
     let bun_executable = find_program("bun").await?;
     let env_dir = js_env_dir(&runtime_root, module_id, &version);
-    ensure_js_dependencies_installed(
-        &bun_executable,
-        &runtime_root,
-        &env_dir,
+    ensure_js_dependencies_installed(JsDependencyInstall {
+        package_manager: &bun_executable,
+        runtime_root: &runtime_root,
+        env_dir: &env_dir,
         module_path,
         manifest,
         module_id,
-        &version,
-        "bun",
-    )
+        version: &version,
+        default_package_manager: "bun",
+    })
     .await?;
 
     let mut command = Command::new(bun_executable);
@@ -574,16 +574,29 @@ async fn ensure_requirements_installed(
     Ok(())
 }
 
-async fn ensure_js_dependencies_installed(
-    package_manager: &OsString,
-    runtime_root: &Path,
-    env_dir: &Path,
-    module_path: &Path,
-    manifest: &ModuleManifest,
-    module_id: &str,
-    version: &str,
-    default_package_manager: &str,
-) -> Result<(), AppError> {
+struct JsDependencyInstall<'a> {
+    package_manager: &'a OsString,
+    runtime_root: &'a Path,
+    env_dir: &'a Path,
+    module_path: &'a Path,
+    manifest: &'a ModuleManifest,
+    module_id: &'a str,
+    version: &'a str,
+    default_package_manager: &'a str,
+}
+
+async fn ensure_js_dependencies_installed(args: JsDependencyInstall<'_>) -> Result<(), AppError> {
+    let JsDependencyInstall {
+        package_manager,
+        runtime_root,
+        env_dir,
+        module_path,
+        manifest,
+        module_id,
+        version,
+        default_package_manager,
+    } = args;
+
     let Some(dependencies_path) = manifest.runtime.dependencies.as_deref() else {
         return Ok(());
     };
@@ -801,9 +814,9 @@ mod tests {
     fn venv_dir_uses_launcher_runtime_not_module_root() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let runtime_root = temp_dir.path().join("Runtime").join("Python");
-        let module_root = temp_dir.path().join("Modules").join("telegram-parser");
+        let module_root = temp_dir.path().join("Modules").join("sample-integration");
 
-        let venv = venv_dir(&runtime_root, "Axelate-telegram-parser", "3.11");
+        let venv = venv_dir(&runtime_root, "Axelate-sample-integration", "3.11");
 
         assert!(venv.starts_with(&runtime_root));
         assert!(!venv.starts_with(&module_root));
@@ -812,7 +825,7 @@ mod tests {
             runtime_root
                 .join("envs")
                 .join("3.11")
-                .join(module_env_name("Axelate-telegram-parser"))
+                .join(module_env_name("Axelate-sample-integration"))
         );
     }
 
@@ -828,14 +841,14 @@ mod tests {
     #[test]
     fn requirements_stamp_lives_in_runtime_venv() {
         let runtime_root = Path::new("C:/AxelateData/System/Runtime/Python");
-        let stamp_path = requirements_stamp_path(runtime_root, "telegram-parser", "3.12");
+        let stamp_path = requirements_stamp_path(runtime_root, "sample-integration", "3.12");
 
         assert_eq!(
             stamp_path,
             runtime_root
                 .join("envs")
                 .join("3.12")
-                .join("telegram-parser")
+                .join("sample-integration")
                 .join(PYTHON_REQUIREMENTS_STAMP_FILE)
         );
     }
@@ -845,8 +858,8 @@ mod tests {
         let runtime_root = Path::new("C:/AxelateData/System/Runtime/Python");
 
         assert_ne!(
-            venv_dir(runtime_root, "telegram-parser", "3.11"),
-            venv_dir(runtime_root, "telegram-parser", "3.12")
+            venv_dir(runtime_root, "sample-integration", "3.11"),
+            venv_dir(runtime_root, "sample-integration", "3.12")
         );
     }
 }

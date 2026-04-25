@@ -229,7 +229,7 @@ pub type ConfigModels = HashMap<String, HashMap<String, AiModel>>;
 pub struct ConfigCatalog {
     /// AI generation modules (text, images, `LocalAI`)
     pub ai: Vec<ModuleItem>,
-    /// Service integrations (Telegram, Discord)
+    /// Service integrations and external automation
     pub services: Vec<ModuleItem>,
     /// Starred/Favorite module IDs
     pub stars: Vec<String>,

@@ -227,12 +227,12 @@ mod tests {
 
     #[test]
     fn command_targets_entry_accepts_absolute_and_relative_script_paths() {
-        let module_path = Path::new("C:/Axelate/Modules/bot");
+        let module_path = Path::new("C:/Axelate/Modules/sample-integration");
         let entry_path = module_path.join("src/main.py");
 
         let absolute = vec![
             OsString::from("python.exe"),
-            OsString::from("C:/Axelate/Modules/bot/src/main.py"),
+            OsString::from("C:/Axelate/Modules/sample-integration/src/main.py"),
         ];
         assert!(command_targets_entry(&absolute, module_path, &entry_path));
 
@@ -242,18 +242,18 @@ mod tests {
 
     #[test]
     fn same_path_normalizes_windows_separators_and_case() {
-        let left = Path::new("C:/Axelate/Modules/Bot");
-        let right = Path::new("c:\\axelate\\modules\\bot");
+        let left = Path::new("C:/Axelate/Modules/SampleIntegration");
+        let right = Path::new("c:\\axelate\\modules\\sampleintegration");
 
         assert!(same_path(left, right));
     }
 
     #[test]
     fn command_mentions_module_path_accepts_absolute_module_path_in_args() {
-        let module_path = Path::new("C:/Axelate/Modules/Bot");
+        let module_path = Path::new("C:/Axelate/Modules/SampleIntegration");
         let cmd = vec![
             OsString::from("python.exe"),
-            OsString::from("C:/Axelate/Modules/Bot/src/main.py"),
+            OsString::from("C:/Axelate/Modules/SampleIntegration/src/main.py"),
         ];
 
         assert!(command_mentions_module_path(&cmd, module_path));

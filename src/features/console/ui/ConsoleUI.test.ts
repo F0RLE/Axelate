@@ -464,8 +464,8 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getAvailableViews: vi.fn().mockResolvedValue([
                 { id: 'general', label: 'General' },
-                { id: 'module:telegram', label: 'Telegram' },
-                { id: 'module:parser', label: 'Parser' },
+                { id: 'module:sample', label: 'Sample' },
+                { id: 'module:parser', label: 'Sample Integration' },
                 { id: 'engine:llamacpp', label: 'llamacpp' },
                 { id: 'engine:sdcpp', label: 'sdcpp' },
             ]),
@@ -494,13 +494,13 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogsForView: vi.fn((view: string) =>
                 normalizeLogs(
-                    view === 'module:axelate-telegram-bot'
+                    view === 'module:sample-integration'
                         ? [
                               {
                                   level: 'INFO',
-                                  message: 'telegram runtime line',
-                                  source: 'module:axelate-telegram-bot',
-                                  module_id: 'axelate-telegram-bot',
+                                  message: 'integration runtime line',
+                                  source: 'module:sample-integration',
+                                  module_id: 'sample-integration',
                                   timestamp: 1,
                               },
                           ]
@@ -509,12 +509,12 @@ describe('ConsoleUI lifecycle', () => {
             ),
             getAvailableViews: vi.fn().mockResolvedValue([
                 { id: 'general', label: 'General' },
-                { id: 'module:axelate-telegram-bot', label: 'Parser' },
+                { id: 'module:sample-integration', label: 'Sample Integration' },
             ]),
             getStatusItems: vi.fn().mockResolvedValue([
                 {
-                    id: 'module:axelate-telegram-bot',
-                    label: 'Parser',
+                    id: 'module:sample-integration',
+                    label: 'Sample Integration',
                     kind: 'module',
                     status: 'running',
                     detail: 'Running',
@@ -539,7 +539,7 @@ describe('ConsoleUI lifecycle', () => {
             getStatusItems: vi.fn().mockResolvedValue([
                 {
                     id: 'engine:idle',
-                    label: 'Engines',
+                    label: 'AI Engines',
                     kind: 'engine',
                     status: 'stopped',
                     detail: 'No active engines',

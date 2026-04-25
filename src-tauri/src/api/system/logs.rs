@@ -267,7 +267,7 @@ impl ConsoleOverviewBuilder {
         match state {
             EngineState::Idle => vec![ConsoleStatusItem {
                 id: "engine:idle".to_string(),
-                label: "Engines".to_string(),
+                label: "AI Engines".to_string(),
                 kind: "engine".to_string(),
                 status: ConsoleRuntimeStatus::Stopped,
                 detail: "No active engines".to_string(),
@@ -326,10 +326,6 @@ fn open_folder(path: &std::path::Path) -> std::io::Result<()> {
 
 impl ConsoleLabelFormatter {
     fn format_module_label(module_id: &str) -> String {
-        if module_id == "axelate-telegram-bot" {
-            return "Parser".to_string();
-        }
-
         module_id
             .trim_start_matches("axelate-")
             .split('-')

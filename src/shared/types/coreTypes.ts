@@ -56,6 +56,7 @@ export interface IApp {
     dlType?: string;
     comingSoon?: boolean;
     managedExternally?: boolean;
+    version?: string;
     configSchema?: Record<string, IConfigField>;
     settingsUi?: string | null;
     apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI

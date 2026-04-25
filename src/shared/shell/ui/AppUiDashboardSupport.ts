@@ -321,14 +321,14 @@ export class AppUiDashboardSupport {
             this._createEmptyText(
                 'module-slot-card-title',
                 isAiCard ? 'ui.launcher.models.ai' : 'ui.launcher.models.services',
-                isAiCard ? 'AI' : 'Scripts',
+                isAiCard ? 'Engines' : 'Integrations',
             ),
             this._createEmptyText(
                 'module-slot-card-description',
                 isAiCard ? 'ui.launcher.models.ai_desc' : 'ui.launcher.models.services_desc',
                 isAiCard
-                    ? 'Unified platform for high-quality text, image, and code generation.'
-                    : 'Manage scripts, bots, and background automation.',
+                    ? 'AI runtimes and providers for text, image, and code generation.'
+                    : 'Local tools, automation flows, and external project integrations.',
             ),
             this._createEmptyAction(isAiCard),
         );

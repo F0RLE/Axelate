@@ -431,7 +431,7 @@ async fn route_authorized_request(
             ))
         }
         ("POST", ["v1", "modules", module_id, "stage"]) => {
-            handle_module_stage_request(request, context, module_id).await
+            handle_module_stage_request(request, &context, module_id)
         }
         ("POST", ["v1", "modules", module_id, action]) => {
             let action = parse_module_action(action)?;
@@ -447,9 +447,9 @@ async fn route_authorized_request(
     }
 }
 
-async fn handle_module_stage_request(
+fn handle_module_stage_request(
     request: &HttpRequest,
-    context: LauncherHttpApiContext,
+    context: &LauncherHttpApiContext,
     module_id: &str,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationModuleStageRequest = parse_json_body(request)?;

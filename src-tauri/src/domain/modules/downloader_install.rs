@@ -6,10 +6,10 @@ use super::downloader_progress::{
 use super::downloader_support::{
     TarEntryAction, archive_file_count_limit, archive_total_uncompressed_size_limit,
     classify_tar_entry_type, format_archive_extraction_error, normalize_archive_relative_path,
-    shared_archive_root, strip_archive_root,
+    package_install_dir, shared_archive_root, strip_archive_root,
 };
 use crate::errors::AppError;
-use crate::utils::paths::{MODULES_DIR, TEMP_DIR};
+use crate::utils::paths::TEMP_DIR;
 use sevenz_rust2::{ArchiveReader, Password};
 use std::collections::HashSet;
 use std::fs;
@@ -683,7 +683,7 @@ impl ArchiveExtractor {
         expected_hash: Option<&String>,
         release_tag: Option<&str>,
     ) -> Result<(), AppError> {
-        let final_path = MODULES_DIR.join(module_id);
+        let final_path = package_install_dir(module_id);
 
         if module_id == "comfyui" {
             prepare_comfyui_module_files(extraction_path, release_tag)?;

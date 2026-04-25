@@ -17,6 +17,9 @@ pub struct ModulePreview {
     /// Optional image URL or data URL for the card preview.
     #[serde(default)]
     pub image: Option<String>,
+    /// Optional directory with localized preview JSON files.
+    #[serde(default)]
+    pub i18n: Option<String>,
 }
 
 /// Module control request from frontend

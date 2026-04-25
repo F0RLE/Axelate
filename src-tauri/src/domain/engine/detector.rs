@@ -1,18 +1,18 @@
 //! Engine binary detection
 //!
 //! Determines if a local engine is installed by checking:
-//! 1. `MODULES_DIR/{engine_id}/` directory (downloaded via Axelate)
+//! 1. `ENGINES_DIR/{engine_id}/` directory (downloaded via Axelate)
 //! 2. System PATH (pre-installed by user)
 
 use std::path::PathBuf;
 
-use crate::utils::paths::MODULES_DIR;
+use crate::utils::paths::ENGINES_DIR;
 
 fn installed_engine_dir(engine_id: &str) -> PathBuf {
-    MODULES_DIR.join(engine_id)
+    ENGINES_DIR.join(engine_id)
 }
 
-/// Checks if an engine is installed either in `MODULES_DIR/{id}` or on system PATH.
+/// Checks if an engine is installed either in `ENGINES_DIR/{id}` or on system PATH.
 ///
 /// Returns `false` for invalid engine IDs (prevents directory traversal).
 pub fn is_engine_installed(engine_id: &str, binary_name: Option<&str>) -> bool {
@@ -20,9 +20,9 @@ pub fn is_engine_installed(engine_id: &str, binary_name: Option<&str>) -> bool {
         return false;
     }
 
-    // 1. Check MODULES_DIR/{engine_id}/ — downloaded via Axelate
-    let module_path = installed_engine_dir(engine_id);
-    if module_path.exists() && module_path.is_dir() {
+    // 1. Check ENGINES_DIR/{engine_id}/ — downloaded via Axelate
+    let engine_path = installed_engine_dir(engine_id);
+    if engine_path.exists() && engine_path.is_dir() {
         return true;
     }
 
@@ -39,17 +39,17 @@ pub fn is_engine_installed(engine_id: &str, binary_name: Option<&str>) -> bool {
 /// Returns the absolute path to an engine binary if found.
 ///
 /// Search order:
-/// 1. Walk `MODULES_DIR/{engine_id}/` looking for a file matching `binary_name`
+/// 1. Walk `ENGINES_DIR/{engine_id}/` looking for a file matching `binary_name`
 /// 2. Fall back to system PATH
 pub fn resolve_engine_binary(engine_id: &str, binary_name: &str) -> Option<PathBuf> {
     if !is_safe_id(engine_id) {
         return None;
     }
 
-    // 1. Walk installed module directory
-    let module_path = installed_engine_dir(engine_id);
-    if module_path.is_dir() {
-        if let Some(found) = find_binary_in_dir(&module_path, binary_name) {
+    // 1. Walk installed engine directory
+    let engine_path = installed_engine_dir(engine_id);
+    if engine_path.is_dir() {
+        if let Some(found) = find_binary_in_dir(&engine_path, binary_name) {
             return Some(found);
         }
     }

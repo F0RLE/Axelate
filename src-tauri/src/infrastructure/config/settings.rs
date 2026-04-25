@@ -84,7 +84,19 @@ impl SettingsService {
     ) -> Result<HashMap<String, Value>, AppError> {
         let mut store: ModuleSettingsStore =
             self.json_store.load_async(&FILE_MODULE_SETTINGS).await?;
-        Ok(store.remove(module_id).unwrap_or_default())
+        if let Some(settings) = store.remove(module_id) {
+            return Ok(settings);
+        }
+
+        let normalized_id = module_id.trim().to_lowercase();
+        let matching_key = store
+            .keys()
+            .find(|key| key.trim().to_lowercase() == normalized_id)
+            .cloned();
+
+        Ok(matching_key
+            .and_then(|key| store.remove(&key))
+            .unwrap_or_default())
     }
 
     /// Saves JSON-backed settings for a specific module.
@@ -96,6 +108,8 @@ impl SettingsService {
         let _lock = self.file_lock.lock().await;
         let mut store: ModuleSettingsStore =
             self.json_store.load_async(&FILE_MODULE_SETTINGS).await?;
+        let normalized_id = module_id.trim().to_lowercase();
+        store.retain(|key, _| key.trim().to_lowercase() != normalized_id);
         store.insert(module_id.to_string(), settings.clone());
         self.json_store
             .save_async(&FILE_MODULE_SETTINGS, &store)

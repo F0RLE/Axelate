@@ -62,7 +62,7 @@ pub async fn get_engine_state(
 
 #[tauri::command]
 #[specta::specta]
-/// Checks if an engine binary is present (in MODULES_DIR or system PATH).
+/// Checks if an engine binary is present (in ENGINES_DIR or system PATH).
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned params
 pub fn check_engine_installed(engine_id: String, binary_name: Option<String>) -> bool {
     crate::domain::engine::detector::is_engine_installed(&engine_id, binary_name.as_deref())
