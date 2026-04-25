@@ -55,6 +55,50 @@
 
 /* Note: module-settings-modal now uses modal-backdrop and app-modal classes */
 
+#app-selection-modal,
+#module-settings-modal {
+    position: fixed !important;
+    --module-settings-zoom: var(--app-zoom, 1);
+    --module-settings-sidebar-width: calc(
+        var(--sidebar-width, 280px) * var(--module-settings-zoom)
+    );
+    --module-settings-header-height: calc(var(--header-height, 60px) * var(--module-settings-zoom));
+    left: var(--module-settings-sidebar-width) !important;
+    top: var(--module-settings-header-height) !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: calc(100vw - var(--module-settings-sidebar-width)) !important;
+    height: calc(100vh - var(--module-settings-header-height)) !important;
+    z-index: 1800;
+    --app-modal-width: calc(100% - 32px);
+    --app-modal-max-width: calc(100% - 32px);
+    --app-modal-height: calc(100% - 32px);
+    --app-modal-max-height: var(--app-modal-height);
+}
+
+#app-selection-modal .app-modal,
+#module-settings-modal:not(.module-settings-modal-custom-ui) .app-modal {
+    width: calc((100% - 32px) / var(--module-settings-zoom));
+    max-width: calc((100% - 32px) / var(--module-settings-zoom));
+    height: calc((100% - 32px) / var(--module-settings-zoom));
+    max-height: calc((100% - 32px) / var(--module-settings-zoom));
+    transform: scale(var(--module-settings-zoom));
+    transform-origin: center center;
+    animation: none;
+    transition: none;
+    backface-visibility: visible;
+}
+
+#app-selection-modal .app-modal-main,
+#module-settings-modal:not(.module-settings-modal-custom-ui) .app-modal-main {
+    animation: none;
+    transition: none;
+}
+
+#module-settings-modal:not(.module-settings-modal-custom-ui) .module-settings-content {
+    max-height: none;
+}
+
 .modal {
     background: var(--bg-med);
     border: 1px solid var(--border-color);
@@ -107,6 +151,7 @@
     flex: 1;
     min-height: 0;
     height: 100%;
+    background: #080b12;
 }
 
 .module-settings-webui-frame-shell {
@@ -154,7 +199,7 @@
 }
 
 #module-settings-modal.module-settings-modal-custom-ui .app-modal {
-    background: rgb(var(--background-raw));
+    background: #080b12;
     border-color: rgba(255, 255, 255, 0.05);
     box-shadow:
         inset -1px 0 0 rgba(255, 255, 255, 0.02),
@@ -171,7 +216,7 @@
 #module-settings-modal.module-settings-modal-custom-ui .app-modal-body,
 #module-settings-modal.module-settings-modal-custom-ui .app-modal-main,
 #module-settings-modal.module-settings-modal-custom-ui .module-settings-content {
-    background: rgb(var(--background-raw));
+    background: #080b12;
 }
 
 #module-settings-modal.module-settings-modal-custom-ui .app-modal-main {
