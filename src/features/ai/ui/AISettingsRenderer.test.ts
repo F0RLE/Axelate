@@ -223,6 +223,7 @@ describe('AISettingsRenderer', () => {
         expect(document.getElementById('gpt-model-stats')?.textContent).toContain(
             'Stats unavailable',
         );
+        expect(document.getElementById('gpt-model-stats')?.textContent).toContain('Model Stats');
     });
 
     it('shows an error toast when stored key reveal fails', async () => {
