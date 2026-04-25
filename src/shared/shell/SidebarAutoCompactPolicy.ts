@@ -20,6 +20,10 @@ export class SidebarAutoCompactPolicy {
         windowConfig: IWindowConfig | null | undefined,
         viewport: SidebarViewport,
     ): boolean {
+        if (zoom >= this._config.autoCompactZoomThreshold) {
+            return true;
+        }
+
         if (windowConfig !== null && windowConfig !== undefined) {
             const compactWarningWidth =
                 windowConfig.thresholds.warningWidth * this._config.autoCompactThresholdFactor;
@@ -29,7 +33,7 @@ export class SidebarAutoCompactPolicy {
             return viewport.width < compactWarningWidth || viewport.height < compactWarningHeight;
         }
 
-        return zoom >= this._config.autoCompactZoomThreshold;
+        return false;
     }
 
     public getSidebarWidth(collapsed: boolean, autoCompact: boolean): number {

@@ -214,7 +214,7 @@ describe('SidebarUI', () => {
         expect(sidebar.style.width).toBe('80px');
     });
 
-    it('does not treat native zoom as a smaller viewport when config thresholds are available', async () => {
+    it('enables auto compact at the zoom threshold even with config thresholds', async () => {
         windowService.getConfig.mockReturnValue({
             thresholds: {
                 warningWidth: 800,
@@ -225,7 +225,7 @@ describe('SidebarUI', () => {
         } as never);
         Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 960 });
         Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 720 });
-        windowService.getZoom.mockReturnValue(2);
+        windowService.getZoom.mockReturnValue(1.6);
 
         const sidebarUi = new SidebarUI(
             uiSettings as never,
@@ -237,8 +237,8 @@ describe('SidebarUI', () => {
         await sidebarUi.init();
 
         const sidebar = document.getElementById('sidebar') as HTMLElement;
-        expect(sidebar.classList.contains('auto-compact')).toBe(false);
-        expect(sidebar.style.width).toBe('280px');
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
     });
 
     it('uses CSS zoom as the effective viewport scale for auto compact', async () => {
@@ -253,6 +253,34 @@ describe('SidebarUI', () => {
         Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 960 });
         Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 720 });
         document.documentElement.style.setProperty('--app-zoom', '2.000');
+
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(true);
+        expect(sidebar.style.width).toBe('80px');
+    });
+
+    it('auto compacts near safe max zoom even below the fixed zoom threshold', async () => {
+        windowService.getConfig.mockReturnValue({
+            thresholds: {
+                warningWidth: 920,
+                warningHeight: 640,
+                smallScreenWidth: 1024,
+                smallScreenHeight: 768,
+            },
+        } as never);
+        Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1200 });
+        Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 800 });
+        windowService.getZoom.mockReturnValue(1.25);
+        document.documentElement.style.setProperty('--app-zoom', '1.250');
 
         const sidebarUi = new SidebarUI(
             uiSettings as never,
