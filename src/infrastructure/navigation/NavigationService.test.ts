@@ -51,6 +51,18 @@ describe('NavigationService', () => {
             navService.goForward();
             expect(navService.getCurrentPage()).toBe('monitoring');
         });
+
+        it('should cap navigation history to prevent unbounded growth', () => {
+            for (let index = 0; index < 105; index += 1) {
+                navService.navigate(`page-${String(index)}`);
+            }
+
+            for (let index = 0; index < 104; index += 1) {
+                navService.goBack();
+            }
+
+            expect(navService.getCurrentPage()).toBe('page-5');
+        });
     });
 
     describe('setCurrentPage', () => {

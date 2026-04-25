@@ -16,6 +16,8 @@ type ParticlesRuntime = {
     matchMedia: typeof globalThis.matchMedia;
     requestAnimationFrame: typeof globalThis.requestAnimationFrame;
     cancelAnimationFrame: typeof globalThis.cancelAnimationFrame;
+    setTimeout: typeof globalThis.setTimeout;
+    clearTimeout: typeof globalThis.clearTimeout;
 };
 
 function createDefaultParticlesRuntime(): ParticlesRuntime {
@@ -30,6 +32,8 @@ function createDefaultParticlesRuntime(): ParticlesRuntime {
         matchMedia: globalThis.matchMedia.bind(globalThis),
         requestAnimationFrame: globalThis.requestAnimationFrame.bind(globalThis),
         cancelAnimationFrame: globalThis.cancelAnimationFrame.bind(globalThis),
+        setTimeout: globalThis.setTimeout.bind(globalThis),
+        clearTimeout: globalThis.clearTimeout.bind(globalThis),
     };
 }
 
@@ -74,6 +78,8 @@ export class Particles {
 
     private _isRunning = false;
     private _lastFrameTime = 0;
+    private _animationFrameId: number | null = null;
+    private _animationTimerId: ReturnType<typeof setTimeout> | null = null;
     private _resizeFrameId: number | null = null;
     private readonly _cleanupAbort: AbortController = new AbortController();
 
@@ -185,10 +191,7 @@ export class Particles {
     public destroy(): void {
         this.stop();
         this._cleanupAbort.abort();
-        if (this._resizeFrameId !== null) {
-            this._runtime.cancelAnimationFrame(this._resizeFrameId);
-            this._resizeFrameId = null;
-        }
+        this._cancelResizeFrame();
         this._canvas.remove();
         this._particles = [];
         this._particlesByColor = {};
@@ -275,9 +278,7 @@ export class Particles {
     }
 
     private _scheduleResize(): void {
-        if (this._resizeFrameId !== null) {
-            this._runtime.cancelAnimationFrame(this._resizeFrameId);
-        }
+        this._cancelResizeFrame();
 
         this._resizeFrameId = this._runtime.requestAnimationFrame(() => {
             this._resizeFrameId = null;
@@ -299,12 +300,14 @@ export class Particles {
 
             this._isRunning = true;
             this._lastFrameTime = performance.now();
-            this._animate();
+            this._scheduleAnimationFrame();
         }
     }
 
     public stop(): void {
         this._isRunning = false;
+        this._cancelAnimationFrame();
+        this._cancelAnimationTimer();
     }
 
     /**
@@ -312,6 +315,7 @@ export class Particles {
      */
     private _animate(): void {
         if (!this._isRunning) return;
+        this._animationFrameId = null;
 
         const now = performance.now();
         const elapsed = now - this._lastFrameTime;
@@ -349,9 +353,47 @@ export class Particles {
             }
         }
 
-        this._runtime.requestAnimationFrame(() => {
+        this._scheduleNextAnimationFrame();
+    }
+
+    private _scheduleAnimationFrame(): void {
+        if (this._animationFrameId !== null) return;
+
+        this._animationFrameId = this._runtime.requestAnimationFrame(() => {
             this._animate();
         });
+    }
+
+    private _scheduleNextAnimationFrame(): void {
+        if (this._animationTimerId !== null || this._animationFrameId !== null) return;
+
+        this._animationTimerId = this._runtime.setTimeout(() => {
+            this._animationTimerId = null;
+            if (this._isRunning) {
+                this._scheduleAnimationFrame();
+            }
+        }, Particles._FRAME_INTERVAL_MS);
+    }
+
+    private _cancelAnimationFrame(): void {
+        if (this._animationFrameId === null) return;
+
+        this._runtime.cancelAnimationFrame(this._animationFrameId);
+        this._animationFrameId = null;
+    }
+
+    private _cancelAnimationTimer(): void {
+        if (this._animationTimerId === null) return;
+
+        this._runtime.clearTimeout(this._animationTimerId);
+        this._animationTimerId = null;
+    }
+
+    private _cancelResizeFrame(): void {
+        if (this._resizeFrameId === null) return;
+
+        this._runtime.cancelAnimationFrame(this._resizeFrameId);
+        this._resizeFrameId = null;
     }
 
     private _createParticle(): {

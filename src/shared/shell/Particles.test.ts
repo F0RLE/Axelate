@@ -4,6 +4,7 @@ import { Particles } from './Particles';
 describe('Particles', () => {
     const originalGetContext = HTMLCanvasElement.prototype.getContext;
     const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
     const originalMatchMedia = globalThis.matchMedia;
 
     beforeEach(() => {
@@ -28,7 +29,13 @@ describe('Particles', () => {
             }),
         });
 
-        globalThis.requestAnimationFrame = vi.fn(() => 1);
+        (globalThis as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+        let frameId = 0;
+        globalThis.requestAnimationFrame = vi.fn(() => {
+            frameId += 1;
+            return frameId;
+        });
+        globalThis.cancelAnimationFrame = vi.fn();
         globalThis.matchMedia = vi.fn().mockImplementation(() => ({
             matches: false,
             addEventListener: vi.fn(),
@@ -42,7 +49,9 @@ describe('Particles', () => {
             value: originalGetContext,
         });
         globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+        globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
         globalThis.matchMedia = originalMatchMedia;
+        delete (globalThis as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
         document.body.innerHTML = '';
         vi.restoreAllMocks();
     });
@@ -124,5 +133,22 @@ describe('Particles', () => {
 
         particles.destroy();
         (globalThis as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+    });
+
+    it('cancels the pending animation frame when stopped before the next frame', () => {
+        const particles = new Particles();
+
+        expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+        particles.stop();
+        expect(globalThis.cancelAnimationFrame).toHaveBeenCalledWith(1);
+
+        particles.start();
+        expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(2);
+
+        particles.stop();
+        expect(globalThis.cancelAnimationFrame).toHaveBeenCalledWith(2);
+
+        particles.destroy();
     });
 });

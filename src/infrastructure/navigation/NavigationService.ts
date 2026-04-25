@@ -7,6 +7,8 @@ import { type UISettingsService } from '@/shared/services/ui/UISettingsService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 export class NavigationService {
+    private static readonly _MAX_HISTORY_ENTRIES = 100;
+
     private readonly _historyStack: string[] = [];
     private readonly _actionStack: {
         id: string;
@@ -35,6 +37,7 @@ export class NavigationService {
         if (typeof lastPage === 'string' && lastPage !== '') {
             this._historyStack.push(lastPage);
             this._currentIndex = this._historyStack.length - 1;
+            this._trimHistoryStack();
             this._tracer.info(`[NavigationService] Restored last page: ${lastPage}`);
         }
     }
@@ -66,6 +69,7 @@ export class NavigationService {
         }
         this._historyStack.push(pageId);
         this._currentIndex = this._historyStack.length - 1;
+        this._trimHistoryStack();
 
         if (this._uiSettingsService !== null) {
             this._uiSettingsService.setLastPage(pageId);
@@ -188,5 +192,15 @@ export class NavigationService {
             this._forwardActionStack.length = 0;
             this._tracer.debug('[NavigationService] Cleared forward actions stack');
         }
+    }
+
+    private _trimHistoryStack(): void {
+        const excess = this._historyStack.length - NavigationService._MAX_HISTORY_ENTRIES;
+        if (excess <= 0) {
+            return;
+        }
+
+        this._historyStack.splice(0, excess);
+        this._currentIndex = Math.max(0, this._currentIndex - excess);
     }
 }

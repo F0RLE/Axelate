@@ -12,6 +12,8 @@ let activeCoreInstance: CoreRuntime | null = null;
 let coreInitializationInFlight = false;
 let coreBootBound = false;
 let coreBeforeUnloadBound = false;
+let bootHandler: (() => void) | null = null;
+let beforeUnloadHandler: (() => void) | null = null;
 
 function clearBootState(): void {
     activeCoreInstance = null;
@@ -59,13 +61,11 @@ export function bindCoreEntry(createCore: CoreFactory, tracer: EntryLogger): voi
     if (document.readyState === 'loading') {
         if (!coreBootBound) {
             coreBootBound = true;
-            document.addEventListener(
-                'DOMContentLoaded',
-                () => {
-                    bootCoreOnce(createCore, tracer);
-                },
-                { once: true },
-            );
+            bootHandler = () => {
+                bootHandler = null;
+                bootCoreOnce(createCore, tracer);
+            };
+            document.addEventListener('DOMContentLoaded', bootHandler, { once: true });
         }
     } else {
         bootCoreOnce(createCore, tracer);
@@ -73,15 +73,25 @@ export function bindCoreEntry(createCore: CoreFactory, tracer: EntryLogger): voi
 
     if (!coreBeforeUnloadBound) {
         coreBeforeUnloadBound = true;
-        globalThis.addEventListener('beforeunload', () => {
+        beforeUnloadHandler = () => {
             destroyActiveCoreInstance();
-        });
+        };
+        globalThis.addEventListener('beforeunload', beforeUnloadHandler);
     }
 
     if (import.meta.hot) {
         import.meta.hot.dispose(() => {
             destroyActiveCoreInstance();
+            if (bootHandler !== null) {
+                document.removeEventListener('DOMContentLoaded', bootHandler);
+                bootHandler = null;
+            }
+            if (beforeUnloadHandler !== null) {
+                globalThis.removeEventListener('beforeunload', beforeUnloadHandler);
+                beforeUnloadHandler = null;
+            }
             coreBootBound = false;
+            coreBeforeUnloadBound = false;
         });
     }
 }
