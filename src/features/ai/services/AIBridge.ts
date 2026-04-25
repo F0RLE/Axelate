@@ -139,11 +139,13 @@ export class AIBridge implements IAIBridge {
 
         if (started && this._context?.tauriProvider.isTauri() === true) {
             this._inactivityController.reset();
-            await this._runtime.stopCrossSlotEngines({
-                context: this._context,
-                providerId,
-                providerPolicy: this._providerPolicy,
-            });
+            if (!this._providerPolicy.isCloudProvider(providerId)) {
+                await this._runtime.stopCrossSlotEngines({
+                    context: this._context,
+                    providerId,
+                    providerPolicy: this._providerPolicy,
+                });
+            }
             await this._refreshLocalContextWindow(providerId);
         }
 
@@ -178,8 +180,9 @@ export class AIBridge implements IAIBridge {
             this._engineStatus.setEngineState(providerId, 'idle');
         }
 
-        // Also shut down the backend slots if we're explicitly stopped
-        this._runtime.stopProviderEngine(this._context);
+        if (providerId !== null && !this._providerPolicy.isCloudProvider(providerId)) {
+            this._runtime.stopProviderEngine(this._context);
+        }
     }
 
     public isActive(): boolean {
