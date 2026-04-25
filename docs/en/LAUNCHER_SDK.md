@@ -23,9 +23,11 @@ the user or from their own launcher integration flow.
 
 Python script modules can declare dependencies in `requirements.txt`. The
 launcher installs them into its managed runtime under
-`AxelateData/System/Runtime/Python/envs/<module-id>`. Modules must not ship or
-write `.venv`, `node_modules`, caches, logs, or downloaded runtime dependencies
-inside the module directory.
+`AxelateData/System/Runtime/Python/envs/<python-version>/<module-id>`. The
+Python version comes from `.python-version` when present, otherwise the launcher
+uses its default supported Python version. Modules must not ship or write
+`.venv`, `node_modules`, caches, logs, or downloaded runtime dependencies inside
+the module directory.
 
 ## Authentication
 

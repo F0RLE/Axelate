@@ -98,9 +98,16 @@ pub async fn spawn_process(
         &python_version,
     )
     .await?;
-    ensure_requirements_installed(&uv_executable, &runtime_root, module_id, module_path).await?;
+    ensure_requirements_installed(
+        &uv_executable,
+        &runtime_root,
+        module_id,
+        module_path,
+        &python_version,
+    )
+    .await?;
 
-    let python_path = venv_python_path(&runtime_root, module_id);
+    let python_path = venv_python_path(&runtime_root, module_id, &python_version);
     if !python_path.exists() {
         return Err(AppError::NotFound(format!(
             "Python virtualenv interpreter not found at {}",
@@ -181,8 +188,16 @@ fn uv_binary_path(runtime_root: &Path) -> PathBuf {
 }
 
 fn module_env_name(module_id: &str) -> String {
-    let mut normalized = String::with_capacity(module_id.len());
-    for character in module_id.chars() {
+    stable_path_segment(module_id, "module")
+}
+
+fn python_env_name(python_version: &str) -> String {
+    stable_path_segment(python_version, "python")
+}
+
+fn stable_path_segment(value: &str, fallback_prefix: &str) -> String {
+    let mut normalized = String::with_capacity(value.len());
+    for character in value.chars() {
         if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
             normalized.push(character);
         } else {
@@ -192,32 +207,36 @@ fn module_env_name(module_id: &str) -> String {
 
     let normalized = normalized.trim_matches(|character| matches!(character, '.' | '_' | '-'));
     if normalized.is_empty() {
-        let hash = Sha256::digest(module_id.as_bytes());
-        format!("module-{}", &hex::encode(hash)[..12])
-    } else if normalized == module_id {
+        let hash = Sha256::digest(value.as_bytes());
+        format!("{}-{}", fallback_prefix, &hex::encode(hash)[..12])
+    } else if normalized == value {
         normalized.to_string()
     } else {
-        let hash = Sha256::digest(module_id.as_bytes());
+        let hash = Sha256::digest(value.as_bytes());
         format!("{}-{}", normalized, &hex::encode(hash)[..12])
     }
 }
 
-fn venv_dir(runtime_root: &Path, module_id: &str) -> PathBuf {
-    module_envs_dir(runtime_root).join(module_env_name(module_id))
+fn venv_dir(runtime_root: &Path, module_id: &str, python_version: &str) -> PathBuf {
+    module_envs_dir(runtime_root)
+        .join(python_env_name(python_version))
+        .join(module_env_name(module_id))
 }
 
-fn venv_python_path(runtime_root: &Path, module_id: &str) -> PathBuf {
+fn venv_python_path(runtime_root: &Path, module_id: &str, python_version: &str) -> PathBuf {
     if cfg!(target_os = "windows") {
-        venv_dir(runtime_root, module_id)
+        venv_dir(runtime_root, module_id, python_version)
             .join("Scripts")
             .join("python.exe")
     } else {
-        venv_dir(runtime_root, module_id).join("bin").join("python")
+        venv_dir(runtime_root, module_id, python_version)
+            .join("bin")
+            .join("python")
     }
 }
 
-fn requirements_stamp_path(runtime_root: &Path, module_id: &str) -> PathBuf {
-    venv_dir(runtime_root, module_id).join(REQUIREMENTS_STAMP_FILE)
+fn requirements_stamp_path(runtime_root: &Path, module_id: &str, python_version: &str) -> PathBuf {
+    venv_dir(runtime_root, module_id, python_version).join(REQUIREMENTS_STAMP_FILE)
 }
 
 fn cap_large_log_file(log_path: &Path) {
@@ -331,14 +350,14 @@ async fn ensure_virtualenv(
     module_path: &Path,
     python_version: &str,
 ) -> Result<(), AppError> {
-    if venv_python_path(runtime_root, module_id).exists() {
+    if venv_python_path(runtime_root, module_id, python_version).exists() {
         return Ok(());
     }
 
     let mut command = Command::new(uv_executable);
     command
         .arg("venv")
-        .arg(venv_dir(runtime_root, module_id))
+        .arg(venv_dir(runtime_root, module_id, python_version))
         .arg("--python")
         .arg(python_version)
         .env("UV_CACHE_DIR", uv_cache_dir(runtime_root).as_os_str())
@@ -357,6 +376,7 @@ async fn ensure_requirements_installed(
     runtime_root: &Path,
     module_id: &str,
     module_path: &Path,
+    python_version: &str,
 ) -> Result<(), AppError> {
     let requirements_path = module_path.join("requirements.txt");
     if !requirements_path.exists() {
@@ -364,7 +384,7 @@ async fn ensure_requirements_installed(
     }
 
     let requirements_hash = compute_sha256(&requirements_path)?;
-    let stamp_path = requirements_stamp_path(runtime_root, module_id);
+    let stamp_path = requirements_stamp_path(runtime_root, module_id, python_version);
     if stamp_path.exists()
         && fs::read_to_string(&stamp_path)
             .map(|value| value.trim().to_string())
@@ -379,7 +399,7 @@ async fn ensure_requirements_installed(
         .arg("pip")
         .arg("install")
         .arg("--python")
-        .arg(venv_python_path(runtime_root, module_id))
+        .arg(venv_python_path(runtime_root, module_id, python_version))
         .arg("-r")
         .arg(&requirements_path)
         .env("UV_CACHE_DIR", uv_cache_dir(runtime_root).as_os_str())
@@ -526,7 +546,7 @@ mod tests {
         let runtime_root = temp_dir.path().join("Runtime").join("Python");
         let module_root = temp_dir.path().join("Modules").join("telegram-parser");
 
-        let venv = venv_dir(&runtime_root, "Axelate-telegram-parser");
+        let venv = venv_dir(&runtime_root, "Axelate-telegram-parser", "3.11");
 
         assert!(venv.starts_with(&runtime_root));
         assert!(!venv.starts_with(&module_root));
@@ -534,6 +554,7 @@ mod tests {
             venv,
             runtime_root
                 .join("envs")
+                .join("3.11")
                 .join(module_env_name("Axelate-telegram-parser"))
         );
     }
@@ -550,14 +571,25 @@ mod tests {
     #[test]
     fn requirements_stamp_lives_in_runtime_venv() {
         let runtime_root = Path::new("C:/AxelateData/System/Runtime/Python");
-        let stamp_path = requirements_stamp_path(runtime_root, "telegram-parser");
+        let stamp_path = requirements_stamp_path(runtime_root, "telegram-parser", "3.12");
 
         assert_eq!(
             stamp_path,
             runtime_root
                 .join("envs")
+                .join("3.12")
                 .join("telegram-parser")
                 .join(REQUIREMENTS_STAMP_FILE)
+        );
+    }
+
+    #[test]
+    fn python_version_is_part_of_venv_path() {
+        let runtime_root = Path::new("C:/AxelateData/System/Runtime/Python");
+
+        assert_ne!(
+            venv_dir(runtime_root, "telegram-parser", "3.11"),
+            venv_dir(runtime_root, "telegram-parser", "3.12")
         );
     }
 }
