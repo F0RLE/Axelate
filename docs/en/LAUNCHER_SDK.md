@@ -14,9 +14,18 @@ Launcher-managed module processes receive these environment variables:
 
 - `AXELATE_HTTP_API_BASE`: local base URL, for example `http://127.0.0.1:3000`
 - `AXELATE_HTTP_API_TOKEN`: bearer token for the current launcher process
+- `AXELATE_RUNTIME_DIR`: shared launcher runtime directory
+- `AXELATE_MODULE_RUNTIME_DIR`: writable runtime directory reserved for the module
+- `AXELATE_MODULE_ID`: current module id
 
 External tools that are not launched by Axelate need the same two values from
 the user or from their own launcher integration flow.
+
+Python script modules can declare dependencies in `requirements.txt`. The
+launcher installs them into its managed runtime under
+`AxelateData/System/Runtime/Python/envs/<module-id>`. Modules must not ship or
+write `.venv`, `node_modules`, caches, logs, or downloaded runtime dependencies
+inside the module directory.
 
 ## Authentication
 

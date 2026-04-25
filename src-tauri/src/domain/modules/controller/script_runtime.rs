@@ -90,10 +90,17 @@ pub async fn spawn_process(
 
     let uv_executable = ensure_uv_available(&runtime_root).await?;
     let python_version = resolve_python_version(module_path)?;
-    ensure_virtualenv(&uv_executable, &runtime_root, module_path, &python_version).await?;
-    ensure_requirements_installed(&uv_executable, &runtime_root, module_path).await?;
+    ensure_virtualenv(
+        &uv_executable,
+        &runtime_root,
+        module_id,
+        module_path,
+        &python_version,
+    )
+    .await?;
+    ensure_requirements_installed(&uv_executable, &runtime_root, module_id, module_path).await?;
 
-    let python_path = venv_python_path(module_path);
+    let python_path = venv_python_path(&runtime_root, module_id);
     if !python_path.exists() {
         return Err(AppError::NotFound(format!(
             "Python virtualenv interpreter not found at {}",
@@ -103,6 +110,9 @@ pub async fn spawn_process(
 
     let module_runtime_root = module_paths::runtime_root(module_id);
     let module_log_dir = module_paths::log_dir(module_id);
+    tokio::fs::create_dir_all(&module_runtime_root)
+        .await
+        .map_err(|e| AppError::Io(format!("Failed to create module runtime directory: {e}")))?;
     tokio::fs::create_dir_all(&module_log_dir)
         .await
         .map_err(|e| AppError::Io(format!("Failed to create module log directory: {e}")))?;
@@ -157,6 +167,10 @@ fn managed_python_dir(runtime_root: &Path) -> PathBuf {
     runtime_root.join("managed")
 }
 
+fn module_envs_dir(runtime_root: &Path) -> PathBuf {
+    runtime_root.join("envs")
+}
+
 fn uv_binary_path(runtime_root: &Path) -> PathBuf {
     let file_name = if cfg!(target_os = "windows") {
         "uv.exe"
@@ -166,20 +180,44 @@ fn uv_binary_path(runtime_root: &Path) -> PathBuf {
     uv_install_dir(runtime_root).join(file_name)
 }
 
-fn venv_dir(module_path: &Path) -> PathBuf {
-    module_path.join(".venv")
-}
+fn module_env_name(module_id: &str) -> String {
+    let mut normalized = String::with_capacity(module_id.len());
+    for character in module_id.chars() {
+        if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
+            normalized.push(character);
+        } else {
+            normalized.push('_');
+        }
+    }
 
-fn venv_python_path(module_path: &Path) -> PathBuf {
-    if cfg!(target_os = "windows") {
-        venv_dir(module_path).join("Scripts").join("python.exe")
+    let normalized = normalized.trim_matches(|character| matches!(character, '.' | '_' | '-'));
+    if normalized.is_empty() {
+        let hash = Sha256::digest(module_id.as_bytes());
+        format!("module-{}", &hex::encode(hash)[..12])
+    } else if normalized == module_id {
+        normalized.to_string()
     } else {
-        venv_dir(module_path).join("bin").join("python")
+        let hash = Sha256::digest(module_id.as_bytes());
+        format!("{}-{}", normalized, &hex::encode(hash)[..12])
     }
 }
 
-fn requirements_stamp_path(module_path: &Path) -> PathBuf {
-    venv_dir(module_path).join(REQUIREMENTS_STAMP_FILE)
+fn venv_dir(runtime_root: &Path, module_id: &str) -> PathBuf {
+    module_envs_dir(runtime_root).join(module_env_name(module_id))
+}
+
+fn venv_python_path(runtime_root: &Path, module_id: &str) -> PathBuf {
+    if cfg!(target_os = "windows") {
+        venv_dir(runtime_root, module_id)
+            .join("Scripts")
+            .join("python.exe")
+    } else {
+        venv_dir(runtime_root, module_id).join("bin").join("python")
+    }
+}
+
+fn requirements_stamp_path(runtime_root: &Path, module_id: &str) -> PathBuf {
+    venv_dir(runtime_root, module_id).join(REQUIREMENTS_STAMP_FILE)
 }
 
 fn cap_large_log_file(log_path: &Path) {
@@ -289,17 +327,18 @@ async fn install_uv(runtime_root: &Path) -> Result<(), AppError> {
 async fn ensure_virtualenv(
     uv_executable: &OsString,
     runtime_root: &Path,
+    module_id: &str,
     module_path: &Path,
     python_version: &str,
 ) -> Result<(), AppError> {
-    if venv_python_path(module_path).exists() {
+    if venv_python_path(runtime_root, module_id).exists() {
         return Ok(());
     }
 
     let mut command = Command::new(uv_executable);
     command
         .arg("venv")
-        .arg(venv_dir(module_path))
+        .arg(venv_dir(runtime_root, module_id))
         .arg("--python")
         .arg(python_version)
         .env("UV_CACHE_DIR", uv_cache_dir(runtime_root).as_os_str())
@@ -316,6 +355,7 @@ async fn ensure_virtualenv(
 async fn ensure_requirements_installed(
     uv_executable: &OsString,
     runtime_root: &Path,
+    module_id: &str,
     module_path: &Path,
 ) -> Result<(), AppError> {
     let requirements_path = module_path.join("requirements.txt");
@@ -324,7 +364,7 @@ async fn ensure_requirements_installed(
     }
 
     let requirements_hash = compute_sha256(&requirements_path)?;
-    let stamp_path = requirements_stamp_path(module_path);
+    let stamp_path = requirements_stamp_path(runtime_root, module_id);
     if stamp_path.exists()
         && fs::read_to_string(&stamp_path)
             .map(|value| value.trim().to_string())
@@ -339,7 +379,7 @@ async fn ensure_requirements_installed(
         .arg("pip")
         .arg("install")
         .arg("--python")
-        .arg(venv_python_path(module_path))
+        .arg(venv_python_path(runtime_root, module_id))
         .arg("-r")
         .arg(&requirements_path)
         .env("UV_CACHE_DIR", uv_cache_dir(runtime_root).as_os_str())
@@ -478,5 +518,46 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let version = resolve_python_version(temp_dir.path()).expect("python version");
         assert_eq!(version, DEFAULT_PYTHON_VERSION);
+    }
+
+    #[test]
+    fn venv_dir_uses_launcher_runtime_not_module_root() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let runtime_root = temp_dir.path().join("Runtime").join("Python");
+        let module_root = temp_dir.path().join("Modules").join("telegram-parser");
+
+        let venv = venv_dir(&runtime_root, "Axelate-telegram-parser");
+
+        assert!(venv.starts_with(&runtime_root));
+        assert!(!venv.starts_with(&module_root));
+        assert_eq!(
+            venv,
+            runtime_root
+                .join("envs")
+                .join(module_env_name("Axelate-telegram-parser"))
+        );
+    }
+
+    #[test]
+    fn module_env_name_rejects_path_separators() {
+        let name = module_env_name("../bad\\module");
+
+        assert!(!name.contains('/'));
+        assert!(!name.contains('\\'));
+        assert!(!name.starts_with('.'));
+    }
+
+    #[test]
+    fn requirements_stamp_lives_in_runtime_venv() {
+        let runtime_root = Path::new("C:/AxelateData/System/Runtime/Python");
+        let stamp_path = requirements_stamp_path(runtime_root, "telegram-parser");
+
+        assert_eq!(
+            stamp_path,
+            runtime_root
+                .join("envs")
+                .join("telegram-parser")
+                .join(REQUIREMENTS_STAMP_FILE)
+        );
     }
 }

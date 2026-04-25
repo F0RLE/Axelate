@@ -180,20 +180,7 @@ fn process_matches_module(
         return true;
     }
 
-    if process
-        .exe()
-        .is_some_and(|exe| executable_belongs_to_module(exe, module_path))
-    {
-        return true;
-    }
-
     command_mentions_module_path(cmd, module_path)
-}
-
-fn executable_belongs_to_module(executable_path: &Path, module_path: &Path) -> bool {
-    let normalized_executable = normalize_path(executable_path);
-    let normalized_venv_root = normalize_path(&module_path.join(".venv"));
-    normalized_executable.starts_with(&normalized_venv_root)
 }
 
 fn command_mentions_module_path(cmd: &[OsString], module_path: &Path) -> bool {
