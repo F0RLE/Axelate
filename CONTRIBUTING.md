@@ -14,6 +14,7 @@ Use these documents first:
 - The root `package.json` is a task runner, not a place for a root `node_modules` tree.
 - Frontend dependencies belong in `src/node_modules`.
 - Rust types are the source of truth for generated frontend bindings.
+- Keep generated output out of Git: `src-tauri/gen`, `src-tauri/target`, `src/dist`, `src/coverage`, and `src/.axelate` are disposable.
 
 ## Branches
 

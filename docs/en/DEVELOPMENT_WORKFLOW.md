@@ -108,6 +108,13 @@ npm run clear -- --deep
 - `clear`: removes generated build output and caches
 - `clear -- --deep`: also removes `src/node_modules`
 
+Repository hygiene:
+
+- do not commit `src/node_modules`, `src/dist`, `src/coverage`, `src/.axelate`, `src-tauri/target`, or `src-tauri/gen`
+- do not add the frontend package as a `file:` dependency of itself
+- keep generated Rust-to-TypeScript bindings tracked only where the exporter writes source contracts under `src/`
+- keep Tauri schema output under `src-tauri/gen` ignored and disposable
+
 ## Generated Bindings
 
 Frontend bindings are generated from Rust. The intended workflow is:

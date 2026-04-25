@@ -68,6 +68,7 @@ Important:
 - run project commands from the repository root
 - frontend dependencies belong in `src/node_modules`
 - a second root-level `node_modules` tree is not part of the intended workflow
+- use `npm run setup` for normal setup; if you need a raw npm install, run it from `src`
 
 ## Daily Development
 
@@ -150,6 +151,16 @@ Install the Windows SDK through Visual Studio Build Tools.
 ### Wrong Dependency Layout
 
 This repository should use `src/node_modules`. A second root `node_modules` tree is not part of the intended workflow.
+The frontend package should not depend on itself through a `file:` dependency.
+
+### Generated Files In Git Status
+
+`src-tauri/gen`, `src-tauri/target`, `src/dist`, `src/coverage`, and `src/.axelate` are disposable local outputs.
+They are ignored on purpose and can be removed with:
+
+```bash
+npm run clear
+```
 
 ## Related Docs
 
