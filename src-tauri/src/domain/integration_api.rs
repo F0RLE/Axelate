@@ -209,6 +209,15 @@ struct IntegrationImageRequest {
     scheduler: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IntegrationModuleStageRequest {
+    stage: String,
+    label: String,
+    details: Option<serde_json::Value>,
+    progress: Option<f32>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TextApiResponse {
@@ -232,6 +241,17 @@ struct ImageApiResponse {
 struct SelectedModuleChangedEvent {
     category: String,
     module: SelectedModule,
+    source: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModuleStageChangedEvent {
+    module_id: String,
+    stage: String,
+    label: String,
+    details: Option<serde_json::Value>,
+    progress: Option<f32>,
     source: &'static str,
 }
 
@@ -410,6 +430,9 @@ async fn route_authorized_request(
                 json!({ "ok": true, "moduleId": module_id, "status": status }),
             ))
         }
+        ("POST", ["v1", "modules", module_id, "stage"]) => {
+            handle_module_stage_request(request, context, module_id).await
+        }
         ("POST", ["v1", "modules", module_id, action]) => {
             let action = parse_module_action(action)?;
             let response = module_controller::control(context.app, module_id, action).await?;
@@ -422,6 +445,45 @@ async fn route_authorized_request(
         ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context).await,
         _ => Ok(json_error(404, "Unknown launcher API route")),
     }
+}
+
+async fn handle_module_stage_request(
+    request: &HttpRequest,
+    context: LauncherHttpApiContext,
+    module_id: &str,
+) -> Result<HttpResponse, AppError> {
+    let payload: IntegrationModuleStageRequest = parse_json_body(request)?;
+    let stage = payload.stage.trim();
+    let label = payload.label.trim();
+    if stage.is_empty() || label.is_empty() {
+        return Ok(json_error(400, "Module stage and label are required"));
+    }
+
+    let progress = payload.progress.map(|value| value.clamp(0.0, 1.0));
+    let event = ModuleStageChangedEvent {
+        module_id: module_id.to_string(),
+        stage: stage.to_string(),
+        label: label.to_string(),
+        details: payload.details,
+        progress,
+        source: "integration-api",
+    };
+
+    tracing::info!(
+        module_id = %event.module_id,
+        stage = %event.stage,
+        label = %event.label,
+        "Module integration stage changed"
+    );
+
+    if let Err(error) = context.app.emit("module-stage-changed", event.clone()) {
+        tracing::warn!("Failed to emit module stage change: {error}");
+    }
+
+    Ok(json_response(
+        200,
+        json!({ "ok": true, "moduleId": module_id, "stage": event.stage }),
+    ))
 }
 
 fn parse_module_action(action: &str) -> Result<ModuleAction, AppError> {

@@ -130,6 +130,23 @@ state, and metadata.
 
 Returns one module status.
 
+`POST /v1/modules/{moduleId}/stage`
+
+Reports the current user-visible stage of a running integration. The launcher
+emits `module-stage-changed` for UI surfaces and writes the stage to logs.
+
+```json
+{
+  "stage": "parser.fetch",
+  "label": "Fetching public Telegram feeds",
+  "details": { "topics": 3 },
+  "progress": 0.35
+}
+```
+
+`stage` is a stable machine-readable stage id. `label` is the human-readable
+current action. `details` and `progress` are optional.
+
 `POST /v1/modules/{moduleId}/start`
 
 Starts an integration or long-running module script through the launcher module
