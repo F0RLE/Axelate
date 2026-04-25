@@ -33,7 +33,6 @@ type CreateChatImageGenerationMessageDeps = {
     scheduleBubbleImageActions: (bubble: HTMLElement, actionBar: HTMLElement) => void;
     opts: {
         onCancel: () => void | Promise<void>;
-        onRegenerate: () => void | Promise<void>;
     };
 };
 
@@ -66,7 +65,7 @@ export function createChatImageGenerationMessage(
     progress.appendChild(progressFill);
 
     const caption = document.createElement('div');
-    caption.className = 'chat-generated-caption hidden';
+    caption.className = 'chat-generated-caption markdown-body hidden';
 
     const controls = document.createElement('div');
     controls.className = 'chat-generated-controls';
@@ -75,11 +74,6 @@ export function createChatImageGenerationMessage(
     cancelBtn.type = 'button';
     cancelBtn.className = 'chat-generated-control is-cancel';
     cancelBtn.textContent = deps.translate('ui.chat.image_cancel', 'Cancel');
-
-    const regenerateBtn = document.createElement('button');
-    regenerateBtn.type = 'button';
-    regenerateBtn.className = 'chat-generated-control is-regenerate hidden';
-    regenerateBtn.textContent = deps.translate('ui.chat.image_regenerate', 'Regenerate');
 
     const invokeControl = (button: HTMLButtonElement, action: () => void | Promise<void>): void => {
         button.disabled = true;
@@ -95,13 +89,10 @@ export function createChatImageGenerationMessage(
     };
 
     cancelBtn.addEventListener('click', () => {
+        handle.cancel();
         invokeControl(cancelBtn, deps.opts.onCancel);
     });
-    regenerateBtn.addEventListener('click', () => {
-        invokeControl(regenerateBtn, deps.opts.onRegenerate);
-    });
-
-    controls.append(cancelBtn, regenerateBtn);
+    controls.append(cancelBtn);
     bubble.append(media, status, progress, caption, controls);
     row.appendChild(bubble);
     deps.appendRow(row);
@@ -113,6 +104,7 @@ export function createChatImageGenerationMessage(
         editBtn: HTMLElement | null;
     } | null = null;
     let finalImage: ChatImagePayload | null = null;
+    let isCancelled = false;
 
     const setProgressFromStatus = (text: string): void => {
         const dividerIndex = text.indexOf('/');
@@ -144,9 +136,14 @@ export function createChatImageGenerationMessage(
         deps.scrollToBottom(true);
     };
 
-    const showRegenerateOnly = (): void => {
-        cancelBtn.classList.add('hidden');
-        regenerateBtn.classList.remove('hidden');
+    const hideControls = (): void => {
+        controls.classList.add('hidden');
+    };
+
+    const hideProgress = (): void => {
+        progress.classList.add('hidden');
+        progress.classList.remove('is-complete');
+        progressFill.style.width = '';
     };
 
     const ensureImageActions = (content: string): void => {
@@ -160,15 +157,18 @@ export function createChatImageGenerationMessage(
         }
     };
 
-    return {
+    const handle: ImageGenerationMessageHandle = {
         setStatus: (text: string) => {
+            if (isCancelled) return;
             status.textContent = text;
             setProgressFromStatus(text);
         },
         setPreview: (dataUrl: string) => {
+            if (isCancelled) return;
             showPreview(dataUrl);
         },
         finalize: (result: { text: string; images: ChatImagePayload[] }) => {
+            if (isCancelled) return;
             finalImage = result.images[0] ?? null;
             if (finalImage !== null) {
                 showPreview(`data:${finalImage.mime};base64,${finalImage.data_base64}`);
@@ -181,31 +181,38 @@ export function createChatImageGenerationMessage(
             caption.textContent = result.text;
             caption.classList.toggle('hidden', result.text.trim() === '');
 
-            showRegenerateOnly();
+            bubble.classList.add('is-complete');
+            hideControls();
             ensureImageActions(result.text);
             deps.scrollToBottom();
         },
         fail: (message: string) => {
+            if (isCancelled) {
+                return;
+            }
             bubble.classList.add('chat-error');
             status.textContent = message;
-            progress.classList.remove('is-complete');
-            progressFill.style.width = '';
+            hideProgress();
             caption.classList.add('hidden');
-            showRegenerateOnly();
+            hideControls();
             deps.scrollToBottom();
         },
         cancel: (
             message = deps.translate('ui.chat.image_cancelled', 'Image generation cancelled'),
         ) => {
+            isCancelled = true;
+            bubble.classList.remove('chat-error');
+            bubble.classList.add('is-cancelled');
             status.textContent = message;
-            progress.classList.remove('is-complete');
-            progressFill.style.width = '';
+            hideProgress();
             caption.classList.add('hidden');
-            showRegenerateOnly();
+            hideControls();
             deps.scrollToBottom();
         },
         discard: () => {
             row.remove();
         },
     };
+
+    return handle;
 }

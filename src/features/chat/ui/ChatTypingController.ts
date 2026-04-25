@@ -22,11 +22,7 @@ export class ChatTypingController {
         const typingDiv = document.createElement('div');
         typingDiv.id = id;
         typingDiv.className = 'chat-message assistant typing';
-        typingDiv.innerHTML = `
-                <div class="typing-dots">
-                    <span></span><span></span><span></span>
-                </div>
-            `;
+        typingDiv.textContent = this._translate('ui.chat.streaming_text', 'Model is typing...');
         container.appendChild(typingDiv);
         container.scrollTop = container.scrollHeight;
 
@@ -56,7 +52,7 @@ export class ChatTypingController {
     }
 
     public renderTypingStatus(message: string): void {
-        const typing = document.querySelector('.chat-message.assistant.typing .typing-dots');
+        const typing = document.querySelector('.chat-message.assistant.typing');
         if (!(typing instanceof HTMLElement)) {
             return;
         }
@@ -68,8 +64,8 @@ export class ChatTypingController {
         label.style.opacity = '0.8';
         label.style.marginTop = '4px';
 
-        typing.parentElement?.querySelector('.typing-status')?.remove();
-        typing.parentElement?.appendChild(label);
+        typing.querySelector('.typing-status')?.remove();
+        typing.appendChild(label);
     }
 
     public clearAll(): void {

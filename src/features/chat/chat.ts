@@ -240,7 +240,13 @@ export class ChatController {
                 this._inputCoordinator.restore(text);
             },
             renderHistory: (history) => {
-                this._ui.renderHistory(history);
+                this._ui.renderHistory(
+                    history.map((message) => ({
+                        role: message.role,
+                        content: this._contentHelper.extractRenderableText(message.content),
+                        opts: this._contentHelper.buildHistoryRenderOptions(message.content),
+                    })),
+                );
             },
             showEditError: () => {
                 this._ui.showToast(
@@ -304,13 +310,12 @@ export class ChatController {
                 this._ui.removeTyping(typingId);
                 return this._ui.createStreamingMessage('assistant');
             },
-            createImageHandle: (_text, onRegenerate) =>
+            createImageHandle: () =>
                 this._ui.createImageGenerationMessage({
                     onCancel: async () => {
                         this._generationController.stopImagePreviewPolling();
                         await this._aiBridge.cancelImageGeneration();
                     },
-                    onRegenerate,
                 }),
             showTyping: (typingId) => {
                 this._ui.showTyping(typingId);
@@ -350,9 +355,6 @@ export class ChatController {
             },
             startImagePreviewPolling: (handle) => {
                 this._generationController.startImagePreviewPolling(handle);
-            },
-            restoreInputText: (text) => {
-                this._inputCoordinator.restore(text);
             },
             isImageProvider: (providerId) => this._generationController.isImageProvider(providerId),
             lockUi: (input) => this._lockUI(input),

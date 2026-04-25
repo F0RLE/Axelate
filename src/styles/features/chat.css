@@ -331,12 +331,17 @@
 
 .chat-generated-media.hidden,
 .chat-generated-caption.hidden,
-.chat-generated-control.hidden {
+.chat-generated-control.hidden,
+.chat-generated-controls.hidden {
     display: none !important;
 }
 
 .chat-image-generation {
     padding: 0.7rem;
+}
+
+.chat-image-generation.is-complete {
+    gap: 0.62rem;
 }
 
 .chat-generated-media {
@@ -356,8 +361,14 @@
 
 .chat-generated-caption {
     color: var(--text-secondary);
-    font-size: 0.8rem;
-    line-height: 1.45;
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.chat-image-generation.is-complete .chat-generated-status,
+.chat-image-generation.is-complete .chat-generated-progress,
+.chat-image-generation.is-complete .chat-generated-controls {
+    display: none !important;
 }
 
 .chat-generated-progress {

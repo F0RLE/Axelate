@@ -98,10 +98,7 @@ type ChatSendFactoryDeps = {
         finalize: (text: string, stats?: Record<string, unknown>) => void;
         discard: () => void;
     };
-    createImageHandle: (
-        text: string,
-        onRegenerate: () => Promise<void>,
-    ) => {
+    createImageHandle: () => {
         setStatus: (chunk: string) => void;
         setPreview: (dataUrl: string) => void;
         finalize: (result: {
@@ -133,7 +130,6 @@ type ChatSendFactoryDeps = {
     startImagePreviewPolling: (
         handle: ReturnType<ChatSendFactoryDeps['createImageHandle']>,
     ) => void;
-    restoreInputText: (text: string) => void;
     isImageProvider: (providerId: string | null) => boolean;
     lockUi: (input: HTMLTextAreaElement | null) => {
         input: HTMLTextAreaElement | null;
@@ -265,7 +261,7 @@ export class ChatControllerFactory {
                 deps.pushUserMessage(content);
             },
             createStreamingHandle: (typingId) => deps.createStreamingHandle(typingId),
-            createImageHandle: (text, onRegenerate) => deps.createImageHandle(text, onRegenerate),
+            createImageHandle: () => deps.createImageHandle(),
             showTyping: (typingId) => {
                 deps.showTyping(typingId);
             },
@@ -293,9 +289,6 @@ export class ChatControllerFactory {
             },
             startImagePreviewPolling: (handle) => {
                 deps.startImagePreviewPolling(handle);
-            },
-            restoreInputText: (text) => {
-                deps.restoreInputText(text);
             },
             isImageProvider: (providerId) => deps.isImageProvider(providerId),
             lockUi: (input) => deps.lockUi(input),

@@ -34,17 +34,18 @@ export function refreshChatTranslations(
     if (elements.clearBtn) {
         const clearTitleKey =
             elements.clearBtn.dataset['i18nTitle'] ?? 'ui.launcher.web.chat_clear_title';
-        elements.clearBtn.title = translate(clearTitleKey, 'Clear Chat');
+        const clearTitle = translate(clearTitleKey, 'Clear Chat');
+        elements.clearBtn.title = clearTitle;
+        elements.clearBtn.setAttribute('aria-label', clearTitle);
         const clearText = elements.clearBtn.querySelector('.chat-clear-text');
         if (clearText) {
             clearText.textContent = translate('ui.launcher.web.chat_clear', 'Clear Chat');
         }
     }
 
-    if (elements.attachBtn)
-        elements.attachBtn.title = translate('ui.launcher.web.attach', 'Attach');
-    if (elements.voiceBtn) elements.voiceBtn.title = translate('ui.launcher.web.voice', 'Voice');
-    if (elements.sendBtn) elements.sendBtn.title = translate('ui.launcher.web.send', 'Send');
+    syncButtonLabel(elements.attachBtn, translate, 'ui.launcher.web.attach', 'Attach');
+    syncButtonLabel(elements.voiceBtn, translate, 'ui.launcher.web.voice', 'Voice');
+    syncButtonLabel(elements.sendBtn, translate, 'ui.launcher.web.send', 'Send');
 
     refreshMessageActions(translate);
 
@@ -59,12 +60,6 @@ export function refreshChatTranslations(
     document.querySelectorAll<HTMLElement>('.chat-generated-control.is-cancel').forEach((btn) => {
         btn.textContent = translate('ui.chat.image_cancel', 'Cancel');
     });
-
-    document
-        .querySelectorAll<HTMLElement>('.chat-generated-control.is-regenerate')
-        .forEach((btn) => {
-            btn.textContent = translate('ui.chat.image_regenerate', 'Regenerate');
-        });
 
     const viewerClose = document.querySelector<HTMLElement>('.chat-image-viewer-close');
     if (viewerClose) {
@@ -82,4 +77,23 @@ export function refreshChatTranslations(
     if (elements.tokenCount?.classList.contains('visible') === true) {
         updateTokenCount();
     }
+}
+
+function syncButtonLabel(
+    button: HTMLElement | null,
+    translate: ChatTranslate,
+    key: string,
+    fallback: string,
+): void {
+    if (button === null) {
+        return;
+    }
+
+    const titleKey = button.dataset['i18nTitle'] ?? key;
+    const ariaKey = button.dataset['i18nAriaLabel'] ?? titleKey;
+    const title = translate(titleKey, fallback);
+    const ariaLabel = translate(ariaKey, fallback);
+
+    button.title = title;
+    button.setAttribute('aria-label', ariaLabel);
 }

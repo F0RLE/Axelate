@@ -177,15 +177,14 @@ export class ChatGenerationController {
         generatedImages: { mime: string; data_base64: string }[],
         imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
-        const caption = replyText || this._options.i18n.t('ui.chat.image_ready', 'Generated image');
         const captionTokens =
             replyText.trim() === '' ? 0 : await this._options.estimateReplyTokens(replyText);
         this._options.addContextTokens(captionTokens + generatedImages.length * 258);
 
         if (imageHandle !== null && imageHandle !== undefined) {
-            imageHandle.finalize({ text: caption, images: generatedImages });
+            imageHandle.finalize({ text: replyText, images: generatedImages });
         } else {
-            this._options.appendAssistantMessage(caption, { images: generatedImages });
+            this._options.appendAssistantMessage(replyText, { images: generatedImages });
         }
 
         this._options.pushAssistantMessage(

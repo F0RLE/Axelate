@@ -288,18 +288,73 @@ describe('ChatUI lifecycle', () => {
         expect(document.querySelector('.chat-row')).toBeNull();
     });
 
-    it('should show streaming dots until first text chunk arrives', () => {
+    it('should show streaming status until first text chunk arrives', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = createChatUI();
         const handle = ui.createStreamingMessage('assistant');
 
-        expect(document.querySelector('.chat-streaming-status .typing-dots')).not.toBeNull();
+        expect(document.querySelector('.chat-streaming-status')?.textContent).toBe(
+            't:ui.chat.streaming_text:Model is typing...',
+        );
 
         handle.update('hello');
 
         expect(document.querySelector('.chat-streaming-status')).toBeNull();
         expect(document.querySelector('.markdown-body')?.textContent).toBe('hello');
+    });
+
+    it('should finalize generated images without regenerate controls', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage({
+            onCancel: vi.fn(),
+        });
+
+        handle.finalize({
+            text: 'caption',
+            images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+        });
+
+        expect(document.querySelector('.chat-generated-control.is-regenerate')).toBeNull();
+        expect(
+            document.querySelector('.chat-generated-controls')?.classList.contains('hidden'),
+        ).toBe(true);
+        expect(document.querySelector('.chat-generated-caption')?.textContent).toBe('caption');
+        expect((document.querySelector('.chat-generated-image') as HTMLImageElement).src).toContain(
+            'data:image/png;base64,ZmFrZQ==',
+        );
+    });
+
+    it('should keep cancelled image generation from becoming a transport error', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage({
+            onCancel: vi.fn(),
+        });
+
+        const cancelBtn = document.querySelector('.chat-generated-control.is-cancel');
+        if (!(cancelBtn instanceof HTMLButtonElement)) {
+            throw new Error('cancel button not found');
+        }
+
+        cancelBtn.click();
+        handle.fail('error sending request for url (http://localhost:8082/sdapi/v1/txt2img)');
+
+        expect(
+            document.querySelector('.chat-image-generation')?.classList.contains('chat-error'),
+        ).toBe(false);
+        expect(
+            document.querySelector('.chat-image-generation')?.classList.contains('is-cancelled'),
+        ).toBe(true);
+        expect(document.querySelector('.chat-generated-status')?.textContent).toBe(
+            't:ui.chat.image_cancelled:Image generation cancelled',
+        );
+        expect(
+            document.querySelector('.chat-generated-progress')?.classList.contains('hidden'),
+        ).toBe(true);
     });
 
     it('should scroll chat history to the bottom after restore', () => {

@@ -22,6 +22,7 @@ describe('ChatSendController', () => {
             getState: vi.fn(() => ({ activeProviderId: 'gpt', isRunning: true })),
             onChunk: vi.fn(),
         };
+        const sendMessage = vi.fn().mockResolvedValue({ ok: true, message: 'done' });
         const options = {
             aiBridge: aiBridge as never,
             fileHandler: {
@@ -35,7 +36,7 @@ describe('ChatSendController', () => {
                 ),
             } as never,
             service: {
-                sendMessage: vi.fn().mockResolvedValue({ ok: true, message: 'done' }),
+                sendMessage,
             } as never,
             getHistory: vi.fn(() => []),
             pushUserMessage: vi.fn(),
@@ -52,7 +53,6 @@ describe('ChatSendController', () => {
             cleanupStreamingState: vi.fn(),
             stopImagePreviewPolling: vi.fn(),
             startImagePreviewPolling: vi.fn(),
-            restoreInputText: vi.fn(),
             isImageProvider: vi.fn(() => false),
             lockUi: vi.fn(() => ({
                 input: null,
@@ -73,6 +73,7 @@ describe('ChatSendController', () => {
             options,
             aiBridge,
             streamingHandle,
+            sendMessage,
         };
     };
 
@@ -99,5 +100,39 @@ describe('ChatSendController', () => {
         onChunkHandler?.('hi');
 
         expect(streamingHandle.update).toHaveBeenCalledWith('hi');
+    });
+
+    it('cleans active stream listeners when destroyed during a send', async () => {
+        let resolveSend: (value: { ok: true; message: string }) => void = () => {
+            throw new Error('sendMessage promise was not started');
+        };
+        const { controller, options, sendMessage } = createController();
+        sendMessage.mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    resolveSend = resolve;
+                }),
+        );
+        const input = document.createElement('textarea');
+        input.value = 'hello';
+
+        const sendPromise = controller.sendChat(input);
+        for (let index = 0; index < 10 && sendMessage.mock.calls.length === 0; index += 1) {
+            await Promise.resolve();
+        }
+
+        expect(sendMessage).toHaveBeenCalledOnce();
+
+        controller.destroy();
+
+        expect(options.cleanupStreamingState).toHaveBeenCalledTimes(1);
+        expect(options.stopImagePreviewPolling).toHaveBeenCalledTimes(1);
+        expect(options.setSending).toHaveBeenLastCalledWith(false);
+
+        resolveSend({ ok: true, message: 'done' });
+        await sendPromise;
+
+        expect(options.cleanupStreamingState).toHaveBeenCalledTimes(1);
+        expect(options.handleResponse).not.toHaveBeenCalled();
     });
 });
