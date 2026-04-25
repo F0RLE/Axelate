@@ -383,16 +383,27 @@ describe('WindowService', () => {
             expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.125');
         });
 
-        it('should recalculate safe zoom for active page profiles', async () => {
+        it('should not change visible zoom when active page changes', async () => {
             mockRuntime.getInnerSize.mockReturnValue({ width: 1200, height: 800 });
             await service.init(mockWindowConfig, 5);
             expect(service.getAppliedZoom()).toBeCloseTo(1.333, 3);
 
             await service.setActivePage('console');
 
-            expect(service.getAppliedZoom()).toBeCloseTo(1.111, 3);
-            expect(service.getZoom()).toBeCloseTo(1.111, 3);
-            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.111');
+            expect(service.getAppliedZoom()).toBeCloseTo(1.333, 3);
+            expect(service.getZoom()).toBeCloseTo(1.333, 3);
+            expect(mockRuntime.setAppZoomCss).toHaveBeenLastCalledWith('1.333');
+        });
+
+        it('should update max safe zoom context when active page changes', async () => {
+            mockRuntime.getInnerSize.mockReturnValue({ width: 1200, height: 800 });
+            await service.init(mockWindowConfig, 1);
+
+            expect(service.getMaxSafeZoom()).toBeCloseTo(1.333, 3);
+
+            await service.setActivePage('console');
+
+            expect(service.getMaxSafeZoom()).toBeCloseTo(1.111, 3);
         });
 
         it('should not accumulate hidden zoom beyond safe applied zoom', async () => {

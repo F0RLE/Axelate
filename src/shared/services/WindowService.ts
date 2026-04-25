@@ -276,9 +276,14 @@ export class WindowService {
         await this._zoomService.persistZoom(this._currentZoom);
     }
 
-    public async setActivePage(pageId: string): Promise<void> {
+    public setActivePage(pageId: string): Promise<void> {
         this._activePageId = pageId.replace(/^page-/, '');
-        await this.setZoom(this._currentZoom);
+        globalThis.dispatchEvent(
+            new CustomEvent('axelate:zoom-context-changed', {
+                detail: { zoom: this._currentZoom, appliedZoom: this._appliedZoom },
+            }),
+        );
+        return Promise.resolve();
     }
 
     /**
@@ -292,6 +297,10 @@ export class WindowService {
         return this._appliedZoom;
     }
 
+    public getMaxSafeZoom(): number {
+        return this._resolveMaxSafeZoom();
+    }
+
     /**
      * Increments/decrements the current zoom level.
      */
@@ -300,9 +309,15 @@ export class WindowService {
     }
 
     private _resolveAppliedZoom(requestedZoom: number): number {
+        const maxSafeZoom = this._resolveMaxSafeZoom();
+
+        return Math.min(requestedZoom, maxSafeZoom);
+    }
+
+    private _resolveMaxSafeZoom(): number {
         const config = this._config;
         if (config === null) {
-            return requestedZoom;
+            return Number.POSITIVE_INFINITY;
         }
 
         const viewport = this._runtime.getInnerSize();
@@ -311,9 +326,8 @@ export class WindowService {
         const minHeight = Math.max(config.thresholds.warningHeight, pageProfile?.minHeight ?? 0);
         const maxByWidth = minWidth > 0 ? viewport.width / minWidth : Number.POSITIVE_INFINITY;
         const maxByHeight = minHeight > 0 ? viewport.height / minHeight : Number.POSITIVE_INFINITY;
-        const maxSafeZoom = Math.max(this._MIN_ZOOM, Math.min(maxByWidth, maxByHeight));
 
-        return Math.min(requestedZoom, maxSafeZoom);
+        return Math.max(this._MIN_ZOOM, Math.min(maxByWidth, maxByHeight));
     }
 
     // --- Monitoring State ---

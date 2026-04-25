@@ -44,6 +44,7 @@ body {
     height: 100%;
     transform-origin: top left;
     will-change: transform;
+    transition: grid-template-columns 0.3s var(--ease-smooth);
 }
 
 .particles-layer {

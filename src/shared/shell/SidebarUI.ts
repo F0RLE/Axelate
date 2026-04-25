@@ -7,7 +7,6 @@ import { mountLogos } from '@/assets/logos';
 import { SidebarAutoCompactPolicy } from './SidebarAutoCompactPolicy';
 import { SidebarMonitorVisibilityController } from './SidebarMonitorVisibilityController';
 import { SidebarNavigationRenderer } from './SidebarNavigationRenderer';
-import { readCssViewportZoom } from './ViewportZoom';
 
 interface IMonitoringElements {
     sidebar: HTMLElement;
@@ -21,7 +20,7 @@ export class SidebarUI extends BaseComponent {
     private static readonly _COLLAPSED_WIDTH = 80;
     private static readonly _EXPANDED_WIDTH = 280;
     private static readonly _AUTO_COMPACT_ZOOM_THRESHOLD = 1.6;
-    private static readonly _AUTO_COMPACT_THRESHOLD_FACTOR = 1.1;
+    private static readonly _AUTO_COMPACT_MAX_ZOOM_EPSILON = 0.01;
 
     private _sidebar: HTMLElement | null = null;
     private _isCollapsed = false;
@@ -32,11 +31,12 @@ export class SidebarUI extends BaseComponent {
     private _monitorCheckFrame: number | null = null;
     private _layoutUpdateFrame: number | null = null;
     private _monitoringElements: IMonitoringElements | null = null;
+    private _lastAppliedWidth: number | null = null;
     private readonly _autoCompactPolicy = new SidebarAutoCompactPolicy({
         collapsedWidth: SidebarUI._COLLAPSED_WIDTH,
         expandedWidth: SidebarUI._EXPANDED_WIDTH,
         autoCompactZoomThreshold: SidebarUI._AUTO_COMPACT_ZOOM_THRESHOLD,
-        autoCompactThresholdFactor: SidebarUI._AUTO_COMPACT_THRESHOLD_FACTOR,
+        autoCompactMaxZoomEpsilon: SidebarUI._AUTO_COMPACT_MAX_ZOOM_EPSILON,
     });
     private readonly _monitorVisibilityController: SidebarMonitorVisibilityController;
     private readonly _navigationRenderer: SidebarNavigationRenderer;
@@ -81,6 +81,13 @@ export class SidebarUI extends BaseComponent {
             );
             globalThis.addEventListener(
                 'axelate:zoom-changed',
+                () => {
+                    this._scheduleLayoutUpdate(true);
+                },
+                { signal },
+            );
+            globalThis.addEventListener(
+                'axelate:zoom-context-changed',
                 () => {
                     this._scheduleLayoutUpdate(true);
                 },
@@ -206,11 +213,17 @@ export class SidebarUI extends BaseComponent {
             isEffectiveAutoCompact,
         );
         const isEffectivelyCollapsed = width < 100;
+        const shouldAnimateWidth =
+            this._lastAppliedWidth !== null && this._lastAppliedWidth !== width;
 
+        if (shouldAnimateWidth) {
+            this._startSnappingAnimation();
+        }
         this._sidebar.classList.toggle('collapsed', isEffectivelyCollapsed);
         this._sidebar.classList.toggle('auto-compact', isEffectiveAutoCompact);
         document.documentElement.style.setProperty('--sidebar-width', `${String(width)}px`);
         this._sidebar.style.width = `${String(width)}px`;
+        this._lastAppliedWidth = width;
         this._syncAccessibilityState(isEffectivelyCollapsed);
         if (!isEffectiveAutoCompact) {
             this._persistEffectiveSidebarState(
@@ -227,16 +240,12 @@ export class SidebarUI extends BaseComponent {
         const effectiveZoom = serviceZoom ?? stateZoom;
         const normalizedZoom =
             Number.isFinite(effectiveZoom) && effectiveZoom > 0 ? effectiveZoom : 1;
-        const viewportZoom = readCssViewportZoom();
         const wasAutoCompact = this._isAutoCompact;
 
         this._isAutoCompact = this._autoCompactPolicy.isAutoCompact(
             normalizedZoom,
             this._windowService?.getConfig(),
-            {
-                width: globalThis.innerWidth / viewportZoom,
-                height: globalThis.innerHeight / viewportZoom,
-            },
+            this._windowService?.getMaxSafeZoom(),
         );
 
         if (wasAutoCompact && !this._isAutoCompact) {
@@ -303,7 +312,8 @@ export class SidebarUI extends BaseComponent {
         if (elements === null) {
             return;
         }
-        this._monitorVisibilityController.update(elements);
+        const isMonitorVisible = this._monitorVisibilityController.update(elements);
+        void this._windowService?.setMonitoringPaused(!isMonitorVisible);
     }
 
     private async _findSidebar(): Promise<HTMLElement | null> {
