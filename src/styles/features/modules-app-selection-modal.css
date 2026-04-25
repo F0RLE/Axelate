@@ -251,6 +251,18 @@ body.snapping .modal-backdrop {
     cursor: not-allowed;
 }
 
+.app-modal-tab:focus,
+.app-close-btn:focus {
+    outline: none;
+}
+
+.app-modal-tab:focus-visible,
+.app-close-btn:focus-visible {
+    outline: 1px solid rgba(var(--primary-raw), 0.58);
+    outline-offset: -3px;
+    box-shadow: 0 0 0 3px rgba(var(--primary-raw), 0.14);
+}
+
 .app-close-btn {
     position: absolute;
     top: 6px;
@@ -262,6 +274,7 @@ body.snapping .modal-backdrop {
     width: 60px;
     height: 60px;
     padding: 0;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
