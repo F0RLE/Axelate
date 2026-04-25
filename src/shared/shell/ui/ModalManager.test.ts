@@ -24,7 +24,7 @@ describe('ModalManager lifecycle', () => {
                                 <button id="filter-text-btn" type="button">Text</button>
                                 <button id="filter-image-btn" type="button">Image</button>
                             </div>
-                            <button id="close-app-selection-btn" type="button">Close</button>
+                            <button id="close-app-selection-btn" class="app-close-btn" type="button">Close</button>
                         </div>
                         <div class="app-modal-body">
                             <div id="app-modal-list"></div>
@@ -298,7 +298,7 @@ describe('ModalManager lifecycle', () => {
             '#app-modal-list .module-selection-card-actions button',
         ) as HTMLButtonElement;
 
-        expect(document.activeElement).toBe(closeButton);
+        expect(document.activeElement).toBe(modalAction);
 
         modalAction.focus();
         modal.dispatchEvent(
@@ -318,7 +318,7 @@ describe('ModalManager lifecycle', () => {
             value: outsideButton,
         });
         document.dispatchEvent(focusInEvent);
-        expect(document.activeElement).toBe(closeButton);
+        expect(document.activeElement).toBe(modalAction);
     });
 
     it('should preserve current selection when replaying modal back action', () => {
