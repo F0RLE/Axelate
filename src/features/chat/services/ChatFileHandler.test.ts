@@ -288,19 +288,27 @@ describe('ChatFileHandler', () => {
             expect(result.attachments[0]?.tokens).toBe(12);
         });
 
-        it('should handle image file sent to backend with no content', async () => {
-            mockBridge.invoke.mockResolvedValue({
-                name: 'photo.png',
-                content: '',
-                is_archive: false,
-                token_estimate: 0,
-            });
+        it('should process image file before backend text extraction', async () => {
             (readFileAsBase64 as unknown as Mock).mockResolvedValue('imgBase64');
 
             handler.addFiles([createBackendFile('photo.png', 'pixels', 'image/png')]);
             const result = await handler.processForSend('Base');
 
+            expect(mockBridge.invoke).not.toHaveBeenCalled();
             expect(result.attachments).toHaveLength(1);
+            expect(result.attachments[0]?.type).toBe('image/png');
+            expect(result.attachments[0]?.data_base64).toBe('imgBase64');
+        });
+
+        it('should process image file by extension when mime type is missing', async () => {
+            (readFileAsBase64 as unknown as Mock).mockResolvedValue('imgBase64');
+
+            handler.addFiles([createBackendFile('logo.png', 'pixels', '')]);
+            const result = await handler.processForSend('Base');
+
+            expect(mockBridge.invoke).not.toHaveBeenCalled();
+            expect(result.attachments).toHaveLength(1);
+            expect(result.attachments[0]?.type).toBe('image/png');
             expect(result.attachments[0]?.data_base64).toBe('imgBase64');
         });
 

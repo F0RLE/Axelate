@@ -131,7 +131,7 @@ export class ChatAttachmentRenderer {
         renderVersion: number,
     ): Promise<void> {
         const card = document.createElement('div');
-        const isImage = file.type.startsWith('image/');
+        const isImage = this.isImageFile(file);
         card.className = `chat-media-card${isImage ? ' is-image' : ' is-file'}`;
 
         const fileTokens = await this._deps.fileHandler.getFileTokenEstimate(file);
@@ -209,6 +209,12 @@ export class ChatAttachmentRenderer {
     private safeBase64Data(data: string): string {
         const normalized = data.replaceAll(/\s+/gu, '');
         return /^[A-Za-z0-9+/]+={0,2}$/u.test(normalized) ? normalized : '';
+    }
+
+    private isImageFile(file: File): boolean {
+        if (file.type.startsWith('image/')) return true;
+        const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+        return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(extension);
     }
 
     private shortenFileName(name: string): string {
