@@ -7,16 +7,9 @@ import {
     isAiCategory,
     resolveCatalogCategory,
     resolveModalCategory,
-    shouldLaunchOnSelection,
 } from './moduleCategoryPolicy';
 
 describe('moduleCategoryPolicy', () => {
-    it('keeps AI slots selectable without immediate launch', () => {
-        expect(shouldLaunchOnSelection(CategoryKey.AI_TEXT)).toBe(false);
-        expect(shouldLaunchOnSelection(CategoryKey.AI_IMAGE)).toBe(false);
-        expect(shouldLaunchOnSelection(CategoryKey.SERVICES)).toBe(true);
-    });
-
     it('normalizes AI categories for catalog and modal routing', () => {
         expect(isAiCategory(CategoryKey.AI_IMAGE)).toBe(true);
         expect(resolveCatalogCategory(CategoryKey.AI_IMAGE)).toBe(CategoryKey.AI);

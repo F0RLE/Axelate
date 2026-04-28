@@ -32,7 +32,7 @@ describe('AppUiSelectionFlow', () => {
         });
     });
 
-    it('selects integration module, persists it and launches it', () => {
+    it('selects integration module and persists it without launching', () => {
         const app = { id: 'svc', name: 'Service', type: 'local', icon: 'S', desc: 'Desc' } as IApp;
         getSelectedApp.mockReturnValue(undefined);
 
@@ -41,7 +41,8 @@ describe('AppUiSelectionFlow', () => {
         expect(updateModuleCard).toHaveBeenCalledWith('services', app);
         expect(updateModalSelection).toHaveBeenCalledWith('svc');
         expect(setSelectedModule).toHaveBeenCalled();
-        expect(launchSelectedApp).toHaveBeenCalled();
+        expect(launchSelectedApp).not.toHaveBeenCalled();
+        expect(launchApp).not.toHaveBeenCalled();
     });
 
     it('selects AI module without launching it immediately', () => {
@@ -57,10 +58,10 @@ describe('AppUiSelectionFlow', () => {
         expect(launchApp).not.toHaveBeenCalled();
     });
 
-    it('does not launch AI when switching the visible shared AI slot', () => {
-        const app = { id: 'image-model', name: 'Image Model', type: 'local' } as IApp;
+    it('does not launch an existing selection when switching visible state', () => {
+        const app = { id: 'svc', name: 'Service', type: 'local' } as IApp;
 
-        flow.activateExistingSelection('ai_image', app);
+        flow.activateExistingSelection('services', app);
 
         expect(launchApp).not.toHaveBeenCalled();
     });

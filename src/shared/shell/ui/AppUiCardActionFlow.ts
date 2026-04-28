@@ -58,6 +58,14 @@ export class AppUiCardActionFlow {
             return true;
         }
 
+        const btn = this._resolveDownloadButton(event);
+        const clickedDownloadButton = (event.target as HTMLElement | null)?.closest(
+            '.download-btn',
+        );
+        if (clickedDownloadButton === null) {
+            return false;
+        }
+
         if (this._deps.platformService.isApiModule(app) || app.installed === true) {
             return false;
         }
@@ -75,7 +83,6 @@ export class AppUiCardActionFlow {
         }
 
         event.stopPropagation();
-        const btn = this._resolveDownloadButton(event);
         if (btn?.classList.contains('downloading') === true) {
             this._handleActiveDownloadAction(event, app, btn);
             return true;

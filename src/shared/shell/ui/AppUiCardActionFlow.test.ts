@@ -78,7 +78,7 @@ describe('AppUiCardActionFlow', () => {
         const event = {
             stopPropagation: vi.fn(),
             currentTarget: card,
-            target: card,
+            target: btn,
             clientX: 20,
         } as unknown as MouseEvent;
         const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
@@ -114,7 +114,7 @@ describe('AppUiCardActionFlow', () => {
         const event = {
             stopPropagation: vi.fn(),
             currentTarget: card,
-            target: card,
+            target: btn,
             clientX: 20,
         } as unknown as MouseEvent;
         const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
@@ -145,7 +145,7 @@ describe('AppUiCardActionFlow', () => {
         const event = {
             stopPropagation: vi.fn(),
             currentTarget: card,
-            target: card,
+            target: btn,
             clientX: 75,
         } as unknown as MouseEvent;
         const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
@@ -157,5 +157,26 @@ describe('AppUiCardActionFlow', () => {
         expect(platformService.delete).not.toHaveBeenCalled();
         expect(deps.resetDownloadButton).toHaveBeenCalledWith(btn);
         expect(deps.restoreDownloadButtonLabel).toHaveBeenCalledWith(btn);
+    });
+
+    it('does not start a download from a plain card click', async () => {
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const btn = document.createElement('button');
+        btn.className = 'download-btn';
+        card.appendChild(btn);
+
+        const event = {
+            stopPropagation: vi.fn(),
+            currentTarget: card,
+            target: card,
+            clientX: 20,
+        } as unknown as MouseEvent;
+        const app = { id: 'llamacpp', installed: false, repoUrl: 'https://repo' } as IApp;
+
+        await flow.handleAppCardClick(event, app, 'ai_text');
+
+        expect(deps.handleDownloadModule).not.toHaveBeenCalled();
+        expect(deps.performSelectionAction).toHaveBeenCalledWith('ai_text', app);
     });
 });

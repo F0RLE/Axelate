@@ -192,6 +192,29 @@ describe('ModuleCardRenderer', () => {
         expect(card.querySelector('.download-btn')).toBeNull();
     });
 
+    it('renders AI engine cards as selectable even before install checks', () => {
+        const onClick = vi.fn();
+        const onDownload = vi.fn();
+
+        const card = renderer.createSelectionCard(
+            {
+                id: 'llamacpp',
+                name: 'llama.cpp',
+                desc: 'Local engine',
+                installed: false,
+                type: 'local',
+                capability: 'text',
+            } as never,
+            'ai_text',
+            false,
+            onClick,
+            onDownload,
+        );
+
+        expect(card.querySelector('.download-btn')).toBeNull();
+        expect(card.querySelector('.modal-btn-primary')?.textContent).toContain('Select');
+    });
+
     it('renders delete badge emoji for installed local modules', () => {
         const onClick = vi.fn();
         const card = renderer.createSelectionCard(
@@ -205,7 +228,7 @@ describe('ModuleCardRenderer', () => {
         expect(deleteIcon?.textContent).toContain('🗑');
     });
 
-    it('opens module settings on right click for installed cards and ignores uninstalled ones', async () => {
+    it('opens module settings on right click for installed cards and ignores uninstalled ones', () => {
         const onClick = vi.fn();
 
         const installedCard = renderer.createSelectionCard(
@@ -219,21 +242,6 @@ describe('ModuleCardRenderer', () => {
         );
         expect(openModuleSettingsSpy).toHaveBeenCalled();
 
-        (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
-        const asyncCard = renderer.createSelectionCard(
-            { id: 'late-install', name: 'Later', desc: 'Desc', installed: false } as never,
-            'services',
-            false,
-            onClick,
-        );
-        document.body.appendChild(asyncCard);
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect(asyncCard.classList.contains('is-installed')).toBe(true);
-        asyncCard.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-        expect(openModuleSettingsSpy).toHaveBeenCalledTimes(2);
-
         const uninstalledCard = renderer.createSelectionCard(
             { id: 'not-installed', name: 'Missing', desc: 'Desc', installed: false } as never,
             'services',
@@ -243,7 +251,7 @@ describe('ModuleCardRenderer', () => {
         uninstalledCard.dispatchEvent(
             new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
         );
-        expect(openModuleSettingsSpy).toHaveBeenCalledTimes(2);
+        expect(openModuleSettingsSpy).toHaveBeenCalledTimes(1);
     });
 
     it('should not open settings for modules with settings disabled', () => {
@@ -262,22 +270,21 @@ describe('ModuleCardRenderer', () => {
         expect(openModuleSettingsSpy).not.toHaveBeenCalled();
     });
 
-    it('should ignore late async install resolution for detached cards', async () => {
+    it('does not run per-card install checks while rendering the modal', async () => {
         const onClick = vi.fn();
         (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
-        const card = renderer.createSelectionCard(
-            { id: 'late-install-detached', name: 'Later', desc: 'Desc', installed: false } as never,
+        renderer.createSelectionCard(
+            { id: 'late-install', name: 'Later', desc: 'Desc', installed: false } as never,
             'services',
             false,
             onClick,
         );
 
-        card.remove();
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(card.classList.contains('is-installed')).toBe(false);
+        expect(checkInstalled).not.toHaveBeenCalled();
     });
 
     it('updates dashboard card content and marks cards as installed', () => {

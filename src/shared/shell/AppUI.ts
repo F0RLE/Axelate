@@ -308,7 +308,6 @@ export class AppUI {
         }
 
         this._dashboardSupport.cancelPendingSwitch();
-        this._moduleLifecycle.stopPreviousModule(card, app, category);
         this._dashboardSupport.applySelectedCardState(card, app, category);
         this._selectionState.set(category, app);
         this._updateMultiSlotBadge();
@@ -404,14 +403,6 @@ export class AppUI {
         await this._moduleFlow.handleDeleteModule(app, category);
     }
 
-    public _onModalDownloadSuccess(btn: HTMLElement | null, app: IApp, category: string): void {
-        this._moduleFlow.onModalDownloadSuccess(btn, app, category);
-    }
-
-    public _onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
-        this._moduleFlow.onModalDownloadError(btn, err);
-    }
-
     private _resolveAppById(appId: string): IApp | undefined {
         for (const selectedApp of this._selectionState.values()) {
             if (selectedApp.id === appId) {
@@ -429,15 +420,6 @@ export class AppUI {
 
     private _resolveModalCatalogApps(category: string): IApp[] {
         return this._getCatalogApps(this._dashboardSupport.resolveCatalogCategory(category));
-    }
-
-    public _resolveCategoryFromCard(card: HTMLElement): string {
-        const currentCapability = card.dataset['currentCapability'];
-        if (typeof currentCapability === 'string' && currentCapability !== '') {
-            return currentCapability;
-        }
-
-        return card.id === 'ai-module-card' ? CategoryKey.AI_TEXT : CategoryKey.SERVICES;
     }
 
     public getPreferredAiCategory(): 'ai_text' | 'ai_image' {
