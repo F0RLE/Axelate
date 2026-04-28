@@ -1,12 +1,11 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import { ChatController } from '@/features/chat/chat';
+import type { ChatController } from '@/features/chat/chat';
 import { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
 import { AppUI } from '@/shared/shell/AppUI';
 import type { EventBus } from '@/shared/services/EventBus';
 import type { ModulePlatformService } from '@/shared/services/ModulePlatformService';
-import { StateManager } from '@/shared/services/StateManager';
 import type { IApp } from '@/shared/types/coreTypes';
 import type { CatalogService } from '@/shared/services/CatalogService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
@@ -21,7 +20,6 @@ import type { WindowService } from '@/shared/services/WindowService';
 import { Particles } from '@/shared/shell/Particles';
 import { SidebarUI } from '@/shared/shell/SidebarUI';
 import { WindowUI } from '@/shared/shell/WindowUI';
-import { estimateTokenCount } from '@/features/chat/utils/chatUtils';
 import type { MonitoringService } from '@/features/monitoring/services/MonitoringService';
 import type { SoundService } from '@/shared/services/SoundService';
 import type { ConsoleLogService } from '@/features/console/services/ConsoleLogService';
@@ -30,12 +28,10 @@ import type {
     DeferredUiController,
     ModuleSettingsUiController,
 } from './CoreUiContracts';
-import {
-    LazyConsoleUiAdapter,
-    LazyModuleSettingsUiAdapter,
-    LazyMonitoringUiAdapter,
-    LazySettingsUiAdapter,
-} from './LazyUiAdapters';
+import { LazyMonitoringUiAdapter } from './LazyUiAdapters';
+import { createModuleSettingsGateway } from './CoreUiBridgeHelpers';
+import { createConsoleUI, createModuleSettingsUI, createSettingsUI } from './CoreDeferredUiFactory';
+import { createChatController } from './CoreChatFactory';
 
 export type CoreUiBundle = {
     appUI: AppUI;
@@ -69,51 +65,6 @@ type CreateAppUIDeps = {
     aiBridge: AIBridge;
 };
 
-type CreateSettingsUIDeps = {
-    settingsService: SettingsService;
-    uiSettings: UISettingsService;
-    aiSettings: AISettingsService;
-    i18n: I18nService;
-    i18nUI: I18nUI;
-    tauriProvider: TauriProvider;
-    navigation: NavigationService;
-    tracer: LoggerService;
-    appUI: AppUI;
-};
-
-type CreateModuleSettingsUIDeps = CreateSettingsUIDeps & {
-    eventBus: EventBus;
-    moduleSettingsUIRef: {
-        openModuleSettings: (app: IApp) => Promise<void>;
-    };
-};
-
-type CreateConsoleUIDeps = {
-    consoleLogService: ConsoleLogService;
-    eventBus: EventBus;
-    i18n: I18nService;
-    tauriProvider: TauriProvider;
-    tracer: LoggerService;
-    appUI: AppUI;
-};
-
-type CreateChatControllerDeps = {
-    aiBridge: AIBridge;
-    i18n: I18nService;
-    soundService: ConstructorParameters<typeof ChatController>[2];
-    tauriProvider: TauriProvider;
-    tracer: LoggerService;
-    appUI: AppUI;
-    eventBus: EventBus;
-    stateStore: UiStateStore;
-};
-
-type CreateStateManagerDeps = {
-    tracer: LoggerService;
-    stateStore: UiStateStore;
-    windowService: WindowService;
-};
-
 type CreateCoreUiBundleDeps = {
     modulePlatformService: ModulePlatformService;
     navigation: NavigationService;
@@ -136,10 +87,6 @@ type CreateCoreUiBundleDeps = {
     consoleLogService: ConsoleLogService;
 };
 
-type ModuleSettingsGateway = {
-    openModuleSettings: (app: IApp) => Promise<void>;
-};
-
 function createCatalogReader(catalog: CatalogService): (category: string) => IApp[] {
     return (category: string): IApp[] => {
         const currentCatalog = catalog.getCatalog();
@@ -150,63 +97,6 @@ function createCatalogReader(catalog: CatalogService): (category: string) => IAp
             return currentCatalog.services;
         }
         return [];
-    };
-}
-
-function createToastBridge(
-    appUI: AppUI,
-): (message: string, type?: string, duration?: number) => void {
-    return (message, type, duration) => {
-        appUI.showToast(message, type, duration);
-    };
-}
-
-function createModuleSettingsGateway(
-    getModuleSettingsUI: () => ModuleSettingsUiController | null,
-): ModuleSettingsGateway {
-    return {
-        openModuleSettings: async (app) => {
-            await getModuleSettingsUI()?.openModuleSettings(app);
-        },
-    };
-}
-
-function createClipboardWriter(tauriProvider: TauriProvider): (text: string) => Promise<void> {
-    const isTauriRuntime = (): boolean => tauriProvider.isTauri();
-
-    return async (text: string) => {
-        if (isTauriRuntime()) {
-            try {
-                await tauriProvider.invoke('plugin:clipboard-manager|write_text', {
-                    text,
-                });
-                return;
-            } catch {
-                /* fall through to browser clipboard */
-            }
-        }
-
-        await navigator.clipboard.writeText(text);
-    };
-}
-
-function createExternalUrlOpener(
-    tauriProvider: TauriProvider,
-    tracer: LoggerService,
-): (url: string) => Promise<void> {
-    const isTauriRuntime = (): boolean => tauriProvider.isTauri();
-
-    return async (url) => {
-        if (isTauriRuntime()) {
-            try {
-                await tauriProvider.invoke('plugin:shell|open', { path: url });
-                return;
-            } catch (error) {
-                tracer.error('[ChatUI] Failed to open link via shell:', error);
-            }
-        }
-
-        await tauriProvider.openUrl(url);
     };
 }
 
@@ -255,110 +145,6 @@ export function createDownloadUI(
         void modulePlatformService.cancelDownload(moduleId);
     });
     return downloadUI;
-}
-
-export function createSettingsUI(deps: CreateSettingsUIDeps): ClosableDeferredUiController {
-    return new LazySettingsUiAdapter({
-        settingsService: deps.settingsService,
-        uiSettings: deps.uiSettings,
-        aiSettings: deps.aiSettings,
-        i18n: deps.i18n,
-        i18nUI: deps.i18nUI,
-        tauriProvider: deps.tauriProvider,
-        navigation: deps.navigation,
-        tracer: deps.tracer,
-        showToast: createToastBridge(deps.appUI),
-    });
-}
-
-export function createModuleSettingsUI(
-    deps: CreateModuleSettingsUIDeps,
-): ModuleSettingsUiController {
-    return new LazyModuleSettingsUiAdapter({
-        settingsService: deps.settingsService,
-        uiSettings: deps.uiSettings,
-        aiSettings: deps.aiSettings,
-        i18n: deps.i18n,
-        i18nUI: deps.i18nUI,
-        tauriProvider: deps.tauriProvider,
-        navigation: deps.navigation,
-        eventBus: deps.eventBus,
-        tracer: deps.tracer,
-        showToast: createToastBridge(deps.appUI),
-        reopenModuleSettings: (app) => {
-            void deps.moduleSettingsUIRef.openModuleSettings(app);
-        },
-        closeAppSelection: () => {
-            deps.appUI.closeAppSelection();
-        },
-    });
-}
-
-export function createConsoleUI(deps: CreateConsoleUIDeps): DeferredUiController {
-    return new LazyConsoleUiAdapter({
-        consoleLogService: deps.consoleLogService,
-        eventBus: deps.eventBus,
-        translate: deps.i18n.t.bind(deps.i18n),
-        showToast: createToastBridge(deps.appUI),
-        copyText: createClipboardWriter(deps.tauriProvider),
-    });
-}
-
-export function createChatController(deps: CreateChatControllerDeps): ChatController {
-    const isTauriRuntime = (): boolean => deps.tauriProvider.isTauri();
-    const showToast = createToastBridge(deps.appUI);
-    const copyText = createClipboardWriter(deps.tauriProvider);
-    const openExternalUrl = createExternalUrlOpener(deps.tauriProvider, deps.tracer);
-
-    return new ChatController(deps.aiBridge, deps.i18n, deps.soundService, {
-        showToast: (message, type = 'success', duration = 2000) =>
-            showToast(message, type, duration),
-        isTauriRuntime,
-        openExternalUrl,
-        copyText,
-        getPendingChatRevealStore: () => ({
-            getState: () => deps.stateStore.getState(),
-            updateState: (updates) => deps.stateStore.updateState(updates),
-        }),
-        estimateTokens: async (text, model = 'gpt-4') => {
-            if (isTauriRuntime()) {
-                try {
-                    return await deps.tauriProvider.invoke<number>('count_tokens', {
-                        text,
-                        model,
-                    });
-                } catch (error) {
-                    deps.tracer.warn(
-                        `[TokenCount] Backend failed, using heuristic: ${String(error)}`,
-                    );
-                }
-            }
-
-            return estimateTokenCount(text);
-        },
-        hostBridge: deps.tauriProvider,
-        eventBus: deps.eventBus,
-        getSelectedModule: (category) => deps.stateStore.getSelectedModule(category),
-        getPreferredAiCategory: () => deps.appUI.getPreferredAiCategory(),
-        tracer: deps.tracer,
-    });
-}
-
-export function createStateManager(deps: CreateStateManagerDeps): StateManager {
-    const stateManager = new StateManager(deps.tracer);
-    stateManager.register({
-        name: 'ui-state',
-        saveAsync: () => deps.stateStore.saveAsync(),
-        saveImmediate: () => deps.stateStore.saveImmediate(),
-    });
-    stateManager.register({
-        name: 'window-state',
-        saveAsync: () => deps.windowService.saveAsync(),
-        saveImmediate: () => deps.windowService.saveImmediate(),
-    });
-    stateManager.init();
-    deps.windowService.setBeforeCloseHook(() => stateManager.saveAllAsync());
-    return stateManager;
 }
 
 export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
@@ -424,6 +210,8 @@ export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
         appUI,
         eventBus: deps.eventBus,
         moduleSettingsUIRef: moduleSettingsGateway,
+        aiBridge: deps.aiBridge,
+        modulePlatformService: deps.modulePlatformService,
     });
     const monitoringUI = new LazyMonitoringUiAdapter(deps.monitoringService);
     const consoleUI = createConsoleUI({
@@ -431,7 +219,6 @@ export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
         eventBus: deps.eventBus,
         i18n: deps.i18n,
         tauriProvider: deps.tauriProvider,
-        tracer: deps.tracer,
         appUI,
     });
     const chatController = createChatController({

@@ -1,4 +1,3 @@
-import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { CatalogService } from '@/shared/services/CatalogService';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
@@ -13,12 +12,6 @@ type RestoreSelectedModulesArgs = {
     moduleSettings: ModuleSettingsService;
     catalog: CatalogService;
     appUI: AppUI;
-};
-
-type RestoreSelectedAiProviderArgs = {
-    tracer: RestoreLogger;
-    aiBridge: AIBridge;
-    restoredSelections: RestoredSelections;
 };
 
 export type RestoredSelections = {
@@ -76,23 +69,6 @@ export function restoreSelectedModules(args: RestoreSelectedModulesArgs): Restor
     }
 
     return restoredSelections;
-}
-
-export function restoreSelectedAiProvider(args: RestoreSelectedAiProviderArgs): void {
-    const providerToStart = resolveProviderToStart(args.restoredSelections);
-    if (providerToStart === null) {
-        return;
-    }
-
-    void args.aiBridge.startProvider(providerToStart).catch(() => {
-        args.tracer.warn(
-            `[CoreStateRestore] Failed to restore selected AI provider: ${providerToStart}`,
-        );
-    });
-}
-
-function resolveProviderToStart(restoredSelections: RestoredSelections): string | null {
-    return restoredSelections.aiText?.id ?? restoredSelections.aiImage?.id ?? null;
 }
 
 function resolveRestoredApp(

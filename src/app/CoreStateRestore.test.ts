@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-    restoreSelectedAiProvider,
-    restoreSelectedModules,
-    type RestoredSelections,
-} from './CoreStateRestore';
+import { restoreSelectedModules, type RestoredSelections } from './CoreStateRestore';
 import { CUSTOM_TEXT_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
 
 describe('CoreStateRestore', () => {
@@ -47,26 +43,6 @@ describe('CoreStateRestore', () => {
         expect(updateModuleCard).toHaveBeenNthCalledWith(2, 'ai_text', textApp);
         expect(updateModuleCard).toHaveBeenNthCalledWith(3, 'ai_image', imageApp);
         expect(updateModuleCard).toHaveBeenNthCalledWith(4, 'ai_text', textApp);
-    });
-
-    it('should restore the text provider first when both AI slots are selected', () => {
-        const startProvider = vi.fn().mockResolvedValue(true);
-
-        restoreSelectedAiProvider({
-            tracer: {
-                warn: vi.fn(),
-            },
-            aiBridge: {
-                startProvider,
-            } as never,
-            restoredSelections: {
-                aiText: { id: 'gpt' } as never,
-                aiImage: { id: 'comfyui' } as never,
-                services: [],
-            },
-        });
-
-        expect(startProvider).toHaveBeenCalledWith('gpt');
     });
 
     it('should restore custom AI providers that only exist in the frontend catalog augmentation', () => {
