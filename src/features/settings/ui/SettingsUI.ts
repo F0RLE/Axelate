@@ -76,7 +76,6 @@ export class SettingsUI {
             return;
         }
 
-        this._deps.tracer.info('[SettingsUI] Settings container found. Initializing renderers.');
         this._generalRenderer.init(this._context);
     }
 

@@ -32,7 +32,11 @@ type RendererPrivate = {
         config: Record<string, unknown> | null,
     ) => string;
     _appendExtraArgs: (appId: string, groups: string[]) => number;
-    _toggleEngineInfoPopover: (anchor: HTMLButtonElement, appId: string) => void;
+    _toggleEngineInfoPopover: (
+        anchor: HTMLButtonElement,
+        appId: string,
+        config?: Record<string, unknown> | null,
+    ) => void;
     _closeEngineInfoPopover: () => void;
     _createTextAreaField: (options: { placeholder?: string }) => HTMLTextAreaElement;
     _createTextInputField: (options: {
@@ -263,7 +267,37 @@ describe('ModuleSettingsEngineRenderer', () => {
         expect(showToast).toHaveBeenCalled();
 
         renderer._toggleEngineInfoPopover(anchor, 'llamacpp');
+        expect(document.querySelector('.local-engine-args-popover.closing')).toBeInstanceOf(
+            HTMLElement,
+        );
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 300));
         expect(document.querySelector('.local-engine-args-popover')).toBeNull();
+    });
+
+    it('should add recommended sd.cpp image arguments for large GPU generations', () => {
+        const { renderer } = createRendererHarness({
+            settings: {
+                sdcpp_width: 896,
+                sdcpp_height: 1152,
+            },
+        });
+        const control = renderer._createExtraArgsField();
+        document.body.appendChild(control.root);
+        renderer._extraArgsControls.set('sdcpp', control);
+
+        const anchor = document.createElement('button');
+        document.body.appendChild(anchor);
+
+        renderer._toggleEngineInfoPopover(anchor, 'sdcpp', {
+            engine_id: 'sdcpp',
+            gpu_layers: -1,
+            extra_args: [],
+        });
+
+        const popover = document.querySelector('.local-engine-args-popover') as HTMLElement;
+        (popover.querySelector('.local-engine-args-recommended') as HTMLButtonElement).click();
+
+        expect(control.getGroups()).toEqual(['--diffusion-fa', '--fa', '--mmap', '--vae-tiling']);
     });
 
     it('should create text fields and parse values correctly', () => {

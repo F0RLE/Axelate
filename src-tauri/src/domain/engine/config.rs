@@ -47,6 +47,11 @@ pub fn normalize_engine_config(mut config: EngineConfig) -> EngineConfig {
         config.context_size = MIN_LLAMACPP_CONTEXT_SIZE;
     }
 
+    if config.engine_id == "sdcpp" || config.engine_id == "stable-diffusion" {
+        config.vae_path = None;
+        config.llm_path = None;
+    }
+
     config
 }
 
@@ -74,10 +79,10 @@ mod tests {
     }
 
     #[test]
-    fn merge_user_engine_config_ignores_saved_port() {
+    fn merge_user_engine_config_clears_sdcpp_companion_paths() {
         let def = sample_definition();
         let saved = EngineConfig {
-            engine_id: "llamacpp".to_string(),
+            engine_id: "sdcpp".to_string(),
             gpu_layers: 12,
             context_size: 8192,
             model_path: Some("C:/models/test.gguf".to_string()),
@@ -91,10 +96,7 @@ mod tests {
         assert_eq!(merged.gpu_layers, 12);
         assert_eq!(merged.context_size, 8192);
         assert_eq!(merged.model_path.as_deref(), Some("C:/models/test.gguf"));
-        assert_eq!(
-            merged.vae_path.as_deref(),
-            Some("C:/models/test.vae.safetensors")
-        );
-        assert_eq!(merged.llm_path.as_deref(), Some("C:/models/test-mm.gguf"));
+        assert_eq!(merged.vae_path, None);
+        assert_eq!(merged.llm_path, None);
     }
 }

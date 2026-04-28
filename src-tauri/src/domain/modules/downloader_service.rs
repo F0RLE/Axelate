@@ -1,4 +1,4 @@
-use super::downloader_support::package_install_dir;
+use super::downloader_support::{is_engine_package, package_install_dir};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -163,12 +163,54 @@ impl Default for DownloaderService {
 
 pub(super) fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
     let path = package_install_dir(module_id);
-    (path.exists() && path.is_dir()).then_some(path)
+    if path.exists() && path.is_dir() {
+        return Some(path.canonicalize().unwrap_or(path));
+    }
+
+    resolve_existing_module_path_case_insensitive(module_id)
+}
+
+fn resolve_existing_module_path_case_insensitive(module_id: &str) -> Option<PathBuf> {
+    let root = if is_engine_package(module_id) {
+        &*crate::utils::paths::ENGINES_DIR
+    } else {
+        &*crate::utils::paths::INTEGRATIONS_DIR
+    };
+    let requested = module_id.to_ascii_lowercase();
+
+    std::fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .find_map(|entry| {
+            let file_type = entry.file_type().ok()?;
+            if !file_type.is_dir() {
+                return None;
+            }
+
+            let folder_name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+            if folder_name == requested {
+                return Some(entry.path());
+            }
+
+            let manifest_path = entry.path().join("axelate-module.toml");
+            let manifest_id = std::fs::read_to_string(manifest_path)
+                .ok()
+                .and_then(|content| toml::from_str::<toml::Value>(&content).ok())
+                .and_then(|manifest| {
+                    manifest
+                        .get("id")
+                        .and_then(toml::Value::as_str)
+                        .map(str::to_ascii_lowercase)
+                })?;
+
+            (manifest_id == requested).then_some(entry.path())
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::DownloaderService;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn pause_and_cancel_toggle_active_control_flags() {
@@ -208,6 +250,45 @@ mod tests {
 
         service.remove_request("demo");
         assert!(service.get_request("demo").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn resolves_existing_integration_path_by_manifest_id_when_folder_case_differs()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("time: {error}"))?
+            .as_nanos();
+        let folder_name = format!("Demo-Integration-{unique}");
+        let manifest_id = format!("demo-integration-{unique}");
+        let module_dir = crate::utils::paths::INTEGRATIONS_DIR.join(&folder_name);
+        std::fs::create_dir_all(&module_dir)?;
+        std::fs::write(
+            module_dir.join("axelate-module.toml"),
+            format!("id = \"{manifest_id}\"\n"),
+        )?;
+
+        let resolved = super::resolve_existing_module_path(&manifest_id)
+            .ok_or_else(|| "resolve by manifest id".to_string())?;
+        assert_eq!(resolved, module_dir.canonicalize()?);
+        Ok(())
+    }
+
+    #[test]
+    fn resolves_existing_integration_path_case_insensitively()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("time: {error}"))?
+            .as_nanos();
+        let folder_name = format!("Case-Integration-{unique}");
+        let module_dir = crate::utils::paths::INTEGRATIONS_DIR.join(&folder_name);
+        std::fs::create_dir_all(&module_dir)?;
+
+        let resolved = super::resolve_existing_module_path(&folder_name.to_ascii_lowercase())
+            .ok_or_else(|| "resolve by folder name".to_string())?;
+        assert_eq!(resolved, module_dir.canonicalize()?);
         Ok(())
     }
 }

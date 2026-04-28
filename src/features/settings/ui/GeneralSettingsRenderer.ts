@@ -69,7 +69,6 @@ export class GeneralSettingsRenderer {
      * Initializes the general settings renderer.
      */
     public init(context: IAppSettingsUIContext): void {
-        this._tracer.info('[GeneralSettingsRenderer] Initializing...');
         this._initTaskbarToggles(context);
         this._initMonitorToggles(context);
     }
@@ -114,7 +113,6 @@ export class GeneralSettingsRenderer {
         }
 
         container.dataset['initialized'] = 'true';
-        this._tracer.info('[GeneralSettingsRenderer] Initializing taskbar toggles');
 
         const hiddenItems = this._uiSettings.getHiddenNavItems();
         const navItems = APP_PAGES.filter((page) => page.inSettings === true).map((page) => ({
@@ -192,7 +190,6 @@ export class GeneralSettingsRenderer {
         }
 
         container.dataset['initialized'] = 'true';
-        this._tracer.info('[GeneralSettingsRenderer] Initializing monitor toggles');
 
         const hiddenMonitors = this._uiSettings.getHiddenMonitors();
 

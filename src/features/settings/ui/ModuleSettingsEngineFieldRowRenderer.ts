@@ -46,7 +46,11 @@ type EngineFieldRowRendererDeps = {
         isImage: boolean,
     ) => void;
     getExtraArgsInfoText: () => string;
-    toggleInfoPopover: (anchor: HTMLButtonElement, appId: string) => void;
+    toggleInfoPopover: (
+        anchor: HTMLButtonElement,
+        appId: string,
+        config: EngineConfig | null,
+    ) => void;
 };
 
 export class ModuleSettingsEngineFieldRowRenderer {
@@ -131,7 +135,7 @@ export class ModuleSettingsEngineFieldRowRenderer {
         infoButton.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
-            this._deps.toggleInfoPopover(infoButton, options.appId);
+            this._deps.toggleInfoPopover(infoButton, options.appId, options.config);
         });
         inputWrapper.appendChild(infoButton);
 
@@ -145,7 +149,7 @@ export class ModuleSettingsEngineFieldRowRenderer {
                 ) {
                     event.preventDefault();
                     event.stopPropagation();
-                    this._deps.toggleInfoPopover(infoButton, options.appId);
+                    this._deps.toggleInfoPopover(infoButton, options.appId, options.config);
                 }
             });
         }

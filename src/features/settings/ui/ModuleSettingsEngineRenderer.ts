@@ -193,8 +193,8 @@ export class ModuleSettingsEngineRenderer {
             },
             getExtraArgsInfoText: () =>
                 this._translate('ui.settings.engine.extra_args.info', 'Extra arguments info'),
-            toggleInfoPopover: (anchor, appId) => {
-                this._toggleEngineInfoPopover(anchor, appId);
+            toggleInfoPopover: (anchor, appId, config) => {
+                this._toggleEngineInfoPopover(anchor, appId, config);
             },
         };
     }
@@ -404,7 +404,11 @@ export class ModuleSettingsEngineRenderer {
         return added;
     }
 
-    private _toggleEngineInfoPopover(anchor: HTMLButtonElement, appId: string): void {
+    private _toggleEngineInfoPopover(
+        anchor: HTMLButtonElement,
+        appId: string,
+        config: EngineConfig | null = null,
+    ): void {
         if (this._activeEngineInfoPopover !== null) {
             if (this._activeEngineInfoPopover.popover.dataset['appId'] === appId) {
                 this._closeEngineInfoPopover();
@@ -413,16 +417,26 @@ export class ModuleSettingsEngineRenderer {
             this._closeEngineInfoPopover();
         }
 
-        this._openEngineInfoPopover(anchor, appId);
+        this._openEngineInfoPopover(anchor, appId, config);
     }
 
-    private _openEngineInfoPopover(anchor: HTMLButtonElement, appId: string): void {
+    private _openEngineInfoPopover(
+        anchor: HTMLButtonElement,
+        appId: string,
+        config: EngineConfig | null,
+    ): void {
         this._activeEngineInfoPopover = createEngineInfoPopover({
             anchor,
             appId,
             runtime: this._runtime,
             translate: (key, fallback) => this._translate(key, fallback),
             appendExtraArgs: (targetAppId, groups) => this._appendExtraArgs(targetAppId, groups),
+            getCurrentExtraArgs: (targetAppId) =>
+                this._extraArgsControls.get(targetAppId)?.getGroups() ?? [],
+            getRecommendationContext: () => ({
+                config,
+                settings: this._deps.service.getSettings() as Record<string, unknown>,
+            }),
             showToast: (message, type) => this._context.showToast(message, type),
             onClose: () => {
                 if (this._activeEngineInfoPopover?.popover.dataset['appId'] === appId) {

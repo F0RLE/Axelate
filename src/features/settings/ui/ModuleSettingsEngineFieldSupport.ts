@@ -54,6 +54,15 @@ export type EngineExtraArgDocs = {
     items: EngineExtraArgDoc[];
 };
 
+export type EngineRecommendedExtraArgsContext = {
+    config?: {
+        gpu_layers?: number;
+        extra_args?: string[];
+    } | null;
+    currentGroups?: string[];
+    settings?: Record<string, unknown>;
+};
+
 export class ModuleSettingsEngineInputFactory {
     public constructor(private readonly _deps: ModuleSettingsEngineInputFactoryDeps) {}
 
@@ -331,17 +340,9 @@ export function getEngineExtraArgDocs(appId: string): EngineExtraArgDocs {
         return {
             title: 'Manual sd.cpp flags',
             subtitle:
-                'These go into Extra Arguments as startup flags. Use the dedicated VAE Path and LLM Path fields for Qwen Image companion files.',
+                'These go into Extra Arguments as startup flags. Qwen Image companion files are auto-detected beside the selected model.',
             items: [
                 { flag: '--fa', description: 'Enable flash attention globally.' },
-                {
-                    flag: '--vae C:\\Models\\qwen_image_vae.safetensors',
-                    description: 'Required companion VAE for Qwen Image GGUF models.',
-                },
-                {
-                    flag: '--llm C:\\Models\\Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf',
-                    description: 'Required companion LLM for Qwen Image GGUF models.',
-                },
                 {
                     flag: '--vae-tiling',
                     description: 'Use tiled VAE decoding to reduce VRAM usage.',
@@ -360,14 +361,6 @@ export function getEngineExtraArgDocs(appId: string): EngineExtraArgDocs {
                 {
                     flag: '--control-net-cpu',
                     description: 'Run ControlNet on CPU when ControlNet is used.',
-                },
-                {
-                    flag: '--vae-tile-size 64x64',
-                    description: 'Increase tile size when using VAE tiling.',
-                },
-                {
-                    flag: '--vae-relative-tile-size 0.5x0.5',
-                    description: 'Tile VAE relative to image size.',
                 },
                 { flag: '--rng cuda', description: 'Prefer CUDA RNG on NVIDIA systems.' },
                 {
@@ -390,6 +383,52 @@ export function getEngineExtraArgDocs(appId: string): EngineExtraArgDocs {
             { flag: '--no-mmap', description: 'Disable mmap if storage causes issues.' },
         ],
     };
+}
+
+export function getEngineRecommendedExtraArgs(
+    appId: string,
+    context: EngineRecommendedExtraArgsContext = {},
+): string[] {
+    if (appId !== 'sdcpp' && appId !== 'stable-diffusion') {
+        return ['--flash-attn'];
+    }
+
+    const existing = new Set([
+        ...(context.config?.extra_args ?? []),
+        ...(context.currentGroups ?? []),
+    ]);
+    const cpuPreferenceFlags = ['--offload-to-cpu', '--clip-on-cpu', '--vae-on-cpu'];
+    const prefersCpuOrLowVram =
+        context.config?.gpu_layers === 0 || cpuPreferenceFlags.some((flag) => existing.has(flag));
+
+    if (prefersCpuOrLowVram) {
+        return ['--mmap', '--vae-tiling', '--offload-to-cpu', '--clip-on-cpu', '--vae-on-cpu'];
+    }
+
+    const recommended = ['--diffusion-fa', '--fa', '--mmap'];
+    if (isHighResolutionImageGeneration(appId, context.settings)) {
+        recommended.push('--vae-tiling');
+    }
+    return recommended;
+}
+
+function isHighResolutionImageGeneration(
+    appId: string,
+    settings: Record<string, unknown> | undefined,
+): boolean {
+    const width = readPositiveNumber(settings?.[`${appId}_width`]);
+    const height = readPositiveNumber(settings?.[`${appId}_height`]);
+    if (width === null || height === null) {
+        return false;
+    }
+
+    return width * height >= 1024 * 1024 || Math.max(width, height) >= 1024;
+}
+
+function readPositiveNumber(value: unknown): number | null {
+    const parsed =
+        typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 export function setupInitialEngineFieldValue(

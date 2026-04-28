@@ -32,16 +32,8 @@ export class CatalogService {
             const ai = snapshot.config.catalog.ai;
             const services = snapshot.config.catalog.services;
 
-            this._tracer.info(
-                `[CatalogService] Mapping config - AI: ${String(ai.length)}, Services: ${String(services.length)}`,
-            );
-
             this._appData.ai = this._mapModuleItems(ai, 'ai');
             this._appData.services = this._mapModuleItems(services, 'services');
-
-            this._tracer.info(
-                `[CatalogService] After mapping - AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
-            );
 
             // Hydrate with schemas, providers & engine install status
             this._hydrateApps(snapshot.config, snapshot.installedModules, snapshot.engineDefs);
@@ -49,16 +41,8 @@ export class CatalogService {
             // Final check for fallbacks
             this._ensureFallbacks();
 
-            this._tracer.info(
-                `[CatalogService] Catalog hydrated successfully. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
-            );
-
             const event = new CustomEvent('catalog-loaded');
             globalThis.dispatchEvent(event);
-
-            this._tracer.info(
-                `[CatalogService] Catalog initialized. AI: ${String(this._appData.ai.length)}, Services: ${String(this._appData.services.length)}`,
-            );
         } catch (e) {
             this._tracer.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
         }
@@ -112,7 +96,6 @@ export class CatalogService {
     private async _loadInstalledModules(): Promise<IModule[]> {
         try {
             const modules = await this._bridge.invoke<IModule[]>('get_modules');
-            this._tracer.info(`[CatalogService] Fetched ${String(modules.length)} modules.`);
             return modules;
         } catch (e) {
             this._tracer.warn(`[CatalogService] Module list failed: ${String(e)}`);
@@ -321,10 +304,6 @@ export class CatalogService {
             );
             return fallback;
         }
-
-        this._tracer.info(
-            `[CatalogService] _ensureValidConfig passed (AI: ${String(config.catalog.ai.length)}, Services: ${String(config.catalog.services.length)})`,
-        );
         return config;
     }
 }
