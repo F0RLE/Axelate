@@ -173,6 +173,10 @@ export class ChatInputContextMenu {
             menu.appendChild(this._createButton(input, item, state));
         });
 
+        if (this._openToken !== openToken || this._input !== input) {
+            return;
+        }
+
         document.body.appendChild(menu);
         this._menu = menu;
         this._positionMenu(menu, clientX, clientY);

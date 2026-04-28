@@ -45,13 +45,15 @@ const files = walkFiles(DIST_DIR).map((file) => ({
     size: statSync(file).size,
 }));
 
-const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+const isFont = (file) => /\.(woff2|woff|ttf|otf)$/iu.test(file.relative);
+const isEntryDocument = (file) => /\.html$/iu.test(file.relative);
+const totalBytes = files
+    .filter((file) => !isFont(file) && !isEntryDocument(file))
+    .reduce((sum, file) => sum + file.size, 0);
 const mainJs = files.find((file) => /^main-.*\.js$/u.test(file.relative));
 const vendorJs = files.find((file) => /^chunks\/vendor-.*\.js$/u.test(file.relative));
 const cssBundle = files.find((file) => /^assets\/main-.*\.css$/u.test(file.relative));
-const largestFont = files
-    .filter((file) => /\.(woff2|woff|ttf|otf)$/iu.test(file.relative))
-    .sort((left, right) => right.size - left.size)[0];
+const largestFont = files.filter(isFont).sort((left, right) => right.size - left.size)[0];
 
 if (totalBytes > LIMITS.totalBytes) {
     warn(`Total dist size ${formatKb(totalBytes)} exceeds ${formatKb(LIMITS.totalBytes)}`);

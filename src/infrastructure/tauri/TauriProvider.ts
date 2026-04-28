@@ -65,6 +65,18 @@ export class TauriProvider implements IBridge {
         return this._runtime.hasTauriGlobals();
     }
 
+    public hasCapability(capability: string): boolean {
+        if (!this.isTauri()) {
+            return false;
+        }
+
+        if (capability === 'speechRecognition') {
+            return /\bWindows\b/i.test(globalThis.navigator.userAgent);
+        }
+
+        return false;
+    }
+
     public async invoke<T, A extends Record<string, unknown> = Record<string, unknown>>(
         cmd: string,
         args: A = {} as A,

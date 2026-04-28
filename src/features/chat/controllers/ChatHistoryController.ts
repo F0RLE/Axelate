@@ -95,6 +95,13 @@ export class ChatHistoryController {
         }
     }
 
+    public canRegenerateLastTurnFromText(): boolean {
+        const lastUserMessage = [...this._options.getHistory()]
+            .reverse()
+            .find((message) => message.role === 'user');
+        return typeof lastUserMessage?.content === 'string';
+    }
+
     public rewindLocalHistory(): void {
         const history = [...this._options.getHistory()];
 

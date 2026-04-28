@@ -120,13 +120,23 @@ export default defineConfig({
             },
             output: {
                 manualChunks(id) {
+                    const normalizedId = id.replaceAll('\\', '/');
                     if (
-                        id.includes('marked') ||
-                        id.includes('dompurify') ||
-                        id.includes('marked-alert') ||
-                        id.includes('marked-footnote')
+                        normalizedId.includes('marked') ||
+                        normalizedId.includes('dompurify') ||
+                        normalizedId.includes('marked-alert') ||
+                        normalizedId.includes('marked-footnote')
                     ) {
                         return 'vendor-markdown';
+                    }
+                    if (normalizedId.includes('/src/features/chat/')) {
+                        return 'feature-chat';
+                    }
+                    if (normalizedId.includes('/src/features/ai/')) {
+                        return 'feature-ai';
+                    }
+                    if (normalizedId.includes('/src/shared/shell/')) {
+                        return 'app-shell';
                     }
                     return undefined;
                 },
