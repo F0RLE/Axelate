@@ -497,6 +497,17 @@ export class ChatController {
             return;
         }
 
+        if (!this._historyController.canRegenerateLastTurnFromText()) {
+            this._ui.showToast(
+                this._i18n.t(
+                    'ui.chat.regenerate_structured_unsupported',
+                    'Regeneration is available only for text-only messages',
+                ),
+                'error',
+            );
+            return;
+        }
+
         const text = await this._historyController.regenerateLastTurn(false);
         if (text === null || text.trim() === '') {
             this._ui.showToast(

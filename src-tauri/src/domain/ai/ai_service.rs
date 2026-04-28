@@ -257,7 +257,7 @@ async fn prepare_request_execution(
         .request_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let message_id = uuid::Uuid::new_v4().to_string();
+    let message_id = request_id.clone();
     tracing::info!(
         "[AI] Starting request {} (msg {}) for model {}",
         request_id,

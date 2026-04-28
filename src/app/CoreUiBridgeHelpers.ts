@@ -64,8 +64,15 @@ export function createExternalUrlOpener(
 export function createTokenEstimator(
     deps: TokenEstimatorDeps,
 ): (text: string, model?: string) => Promise<number> {
+    let backendCountInFlight = false;
+
     return async (text, model = 'gpt-4') => {
         if (deps.tauriProvider.isTauri()) {
+            if (backendCountInFlight) {
+                return estimateTokenCount(text);
+            }
+
+            backendCountInFlight = true;
             try {
                 return await withTimeout(
                     deps.tauriProvider.invoke<number>('count_tokens', {
@@ -76,6 +83,8 @@ export function createTokenEstimator(
                 );
             } catch (error) {
                 deps.tracer.warn(`[TokenCount] Backend failed, using heuristic: ${String(error)}`);
+            } finally {
+                backendCountInFlight = false;
             }
         }
 

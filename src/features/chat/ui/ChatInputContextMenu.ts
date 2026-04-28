@@ -57,6 +57,7 @@ export class ChatInputContextMenu {
     private _boundDocumentPointerDown: (event: PointerEvent) => void;
     private _boundKeyDown: (event: KeyboardEvent) => void;
     private _boundClose: () => void;
+    private _openToken = 0;
 
     public constructor(private readonly _deps: ChatInputContextMenuDeps) {
         this._boundContextMenu = (event) => {
@@ -98,6 +99,7 @@ export class ChatInputContextMenu {
     }
 
     public close(): void {
+        this._openToken += 1;
         this._menu?.remove();
         this._menu = null;
         this._clipboardText = null;
@@ -137,15 +139,22 @@ export class ChatInputContextMenu {
 
     private _open(input: HTMLTextAreaElement, clientX: number, clientY: number): void {
         this.close();
-        void this._openWithClipboardState(input, clientX, clientY);
+        const openToken = this._openToken;
+        void this._openWithClipboardState(input, clientX, clientY, openToken);
     }
 
     private async _openWithClipboardState(
         input: HTMLTextAreaElement,
         clientX: number,
         clientY: number,
+        openToken: number,
     ): Promise<void> {
-        this._clipboardText = await this._readClipboardForMenu();
+        const clipboardText = await this._readClipboardForMenu();
+        if (this._openToken !== openToken || this._input !== input) {
+            return;
+        }
+
+        this._clipboardText = clipboardText;
 
         const menu = document.createElement('div');
         menu.className = 'chat-input-context-menu';
@@ -163,6 +172,10 @@ export class ChatInputContextMenu {
 
             menu.appendChild(this._createButton(input, item, state));
         });
+
+        if (this._openToken !== openToken || this._input !== input) {
+            return;
+        }
 
         document.body.appendChild(menu);
         this._menu = menu;

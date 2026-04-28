@@ -188,9 +188,17 @@ export class AIChatTransport implements IChatTransport {
         }
 
         try {
-            return await this._context.tauriProvider.invoke<boolean>('cancel_chat_generation', {
-                requestId,
-            });
+            const cancelled = await this._runWithTimeout(
+                this._context.tauriProvider.invoke<boolean>('cancel_chat_generation', {
+                    requestId,
+                }),
+                STALE_REQUEST_CANCEL_TIMEOUT_MS,
+                'AI request cancel timed out',
+            );
+            if (cancelled && this._activeChatRequestId === requestId) {
+                this._activeChatRequestId = null;
+            }
+            return cancelled;
         } catch (error: unknown) {
             this._tracer.error('[AIChatTransport] IPC cancel error:', error);
             return false;
@@ -279,7 +287,7 @@ export class AIChatTransport implements IChatTransport {
         timeoutMs: number,
         timeoutMessage: string,
     ): Promise<T> {
-        let timeoutId!: ReturnType<typeof setTimeout>;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => {
                 reject(new Error(timeoutMessage));
@@ -289,12 +297,14 @@ export class AIChatTransport implements IChatTransport {
         try {
             return await Promise.race([operation, timeoutPromise]);
         } finally {
-            clearTimeout(timeoutId);
+            if (timeoutId !== undefined) {
+                clearTimeout(timeoutId);
+            }
         }
     }
 
     private async _waitForStreamFinalization(streamDone: Promise<void>): Promise<void> {
-        let timeoutId!: ReturnType<typeof setTimeout>;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<'timeout'>((resolve) => {
             timeoutId = setTimeout(() => {
                 resolve('timeout');
@@ -307,7 +317,9 @@ export class AIChatTransport implements IChatTransport {
                 this._tracer.warn('[AIChatTransport] Stream finalization marker was not received');
             }
         } finally {
-            clearTimeout(timeoutId);
+            if (timeoutId !== undefined) {
+                clearTimeout(timeoutId);
+            }
         }
     }
 
