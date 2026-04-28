@@ -47,7 +47,7 @@ type ModuleSettingsEngineRenderOptions = {
         modelPlaceholder: string,
         isImage: boolean,
     ) => EngineFieldDefinition;
-    getImageCompanionFields: (translate: TranslateFn, appId: string) => EngineFieldDefinition[];
+    getComputeModeField: (translate: TranslateFn) => EngineFieldDefinition;
     getImageExtraArgsField: (translate: TranslateFn) => EngineFieldDefinition;
 };
 
@@ -76,7 +76,7 @@ export class ModuleSettingsEngineRenderFlow {
             modelPlaceholder,
             translate: options.translate,
             getCoreModelField: options.getCoreModelField,
-            getImageCompanionFields: options.getImageCompanionFields,
+            getComputeModeField: options.getComputeModeField,
             getImageExtraArgsField: options.getImageExtraArgsField,
         });
 
@@ -108,7 +108,7 @@ export class ModuleSettingsEngineRenderFlow {
         modelPlaceholder: string;
         translate: TranslateFn;
         getCoreModelField: ModuleSettingsEngineRenderOptions['getCoreModelField'];
-        getImageCompanionFields: ModuleSettingsEngineRenderOptions['getImageCompanionFields'];
+        getComputeModeField: ModuleSettingsEngineRenderOptions['getComputeModeField'];
         getImageExtraArgsField: ModuleSettingsEngineRenderOptions['getImageExtraArgsField'];
     }): void {
         const coreField = options.getCoreModelField(
@@ -118,31 +118,23 @@ export class ModuleSettingsEngineRenderFlow {
         );
 
         if (options.isImage) {
-            const splitRow = document.createElement('div');
-            splitRow.className = 'local-engine-split-row';
-
-            this._deps.renderFieldRow(splitRow, {
+            this._deps.renderFieldRow(options.container, {
                 ...coreField,
                 isFile: true,
                 isImage: true,
                 appId: options.appId,
                 config: options.config,
             });
-            this._deps.renderPerformanceModeFieldRow(splitRow, options.appId);
-            options.container.appendChild(splitRow);
 
-            const companionFields = options.getImageCompanionFields(
-                options.translate,
-                options.appId,
-            );
-            companionFields.forEach((field) => {
-                this._deps.renderFieldRow(options.container, {
-                    ...field,
-                    isImage: field.fileKind === 'vae',
-                    appId: options.appId,
-                    config: options.config,
-                });
+            const coreControls = document.createElement('div');
+            coreControls.className = 'local-engine-core-controls';
+            this._deps.renderFieldRow(coreControls, {
+                ...options.getComputeModeField(options.translate),
+                appId: options.appId,
+                config: options.config,
             });
+            this._deps.renderPerformanceModeFieldRow(coreControls, options.appId);
+            options.container.appendChild(coreControls);
 
             this._deps.renderFieldRow(options.container, {
                 ...options.getImageExtraArgsField(options.translate),

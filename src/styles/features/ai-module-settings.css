@@ -748,9 +748,9 @@
 }
 
 .local-engine-section-header h3 {
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     line-height: 1.15;
-    letter-spacing: 0.02em;
+    letter-spacing: 0;
     width: 100%;
     text-align: center;
 }
@@ -785,10 +785,10 @@
 .local-engine-panel-card {
     background: var(--glass-surface);
     border: 1px solid var(--glass-border);
-    border-radius: 16px;
+    border-radius: 12px;
     padding: 0.9rem 1rem;
     box-sizing: border-box;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    box-shadow: none;
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
@@ -1013,18 +1013,15 @@
     z-index: 5200;
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
-    padding: 1rem;
-    border-radius: var(--modal-shell-radius);
-    border: 1px solid rgba(255, 255, 255, 0.03);
-    background: rgba(var(--background-raw), 0.065);
-    box-shadow:
-        inset -1px 0 0 rgba(255, 255, 255, 0.018),
-        0 18px 48px rgba(0, 0, 0, 0.2);
-    width: calc(var(--app-modal-popover-width, 344px) / var(--module-settings-zoom, 1));
-    height: calc((100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom, 1));
+    gap: 0.72rem;
+    padding: 0.85rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.075);
+    background: rgba(18, 18, 26, 0.96);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+    width: calc(var(--app-modal-popover-width, 328px) / var(--module-settings-zoom, 1));
     max-height: calc(
-        (100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom, 1)
+        min(460px, 100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom, 1)
     );
     box-sizing: border-box;
     overflow: hidden;
@@ -1033,7 +1030,6 @@
     animation: engineArgsPanelIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
     transition:
         width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-        height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
         max-height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
         right 0.3s cubic-bezier(0.22, 1, 0.36, 1),
         top 0.3s cubic-bezier(0.22, 1, 0.36, 1),
@@ -1060,7 +1056,7 @@
 }
 
 .local-engine-args-popover-title {
-    font-size: 1rem;
+    font-size: 0.95rem;
     line-height: 1.15;
     color: var(--text-primary);
     font-weight: 700;
@@ -1070,8 +1066,8 @@
 .local-engine-args-popover-subtitle {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 0.82rem;
-    line-height: 1.42;
+    font-size: 0.78rem;
+    line-height: 1.32;
 }
 
 .local-engine-args-popover-actions {
@@ -1098,8 +1094,8 @@
 
 .local-engine-args-recommended {
     padding: 0.48rem 0.76rem;
-    border-color: rgba(179, 112, 255, 0.28);
-    background: rgba(139, 71, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .local-engine-args-copy-all {
@@ -1126,9 +1122,9 @@
 .local-engine-args-item {
     display: block;
     align-items: start;
-    padding: 0.7rem 0.75rem;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.025);
+    padding: 0.62rem 0.68rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.045);
     cursor: pointer;
     transition:
@@ -1278,8 +1274,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.8rem;
-    min-height: 52px;
-    padding: 0.78rem 0.95rem;
+    min-height: 50px;
+    padding: 0.68rem 0.8rem;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(255, 255, 255, 0.03);
@@ -1299,9 +1295,10 @@
     transform: translateY(-1px);
 }
 
+.local-engine-performance-toggle.is-enabled,
 .local-engine-performance-toggle.active {
-    background: linear-gradient(180deg, rgba(154, 83, 243, 0.24), rgba(109, 56, 184, 0.2));
-    border-color: rgba(179, 112, 255, 0.34);
+    background: rgba(255, 255, 255, 0.065);
+    border-color: rgba(255, 255, 255, 0.14);
 }
 
 .local-engine-performance-toggle-status {
@@ -1317,6 +1314,7 @@
     font-weight: 700;
 }
 
+.local-engine-performance-toggle.is-enabled .local-engine-performance-toggle-status,
 .local-engine-performance-toggle.active .local-engine-performance-toggle-status {
     background: rgba(0, 0, 0, 0.18);
     color: #ffffff;
@@ -1400,6 +1398,17 @@
     align-items: start;
 }
 
+.local-engine-core-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.local-engine-core-controls .local-engine-field-row {
+    gap: 0.42rem;
+}
+
 .local-engine-input--readonly {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1459,6 +1468,14 @@
 
 .local-engine-api-control .local-engine-input-row,
 .local-engine-input-row:has(.local-engine-segmented-control) {
+    padding: 0;
+    gap: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+.local-engine-input-row:has(.local-engine-select) {
     padding: 0;
     gap: 0;
     background: transparent;
@@ -1541,13 +1558,9 @@
 
 .local-engine-select-trigger:hover,
 .local-engine-select.open .local-engine-select-trigger {
-    border-color: rgba(179, 112, 255, 0.38);
-    background:
-        linear-gradient(180deg, rgba(154, 83, 243, 0.18), rgba(109, 56, 184, 0.14)),
-        rgba(255, 255, 255, 0.045);
-    box-shadow:
-        0 0 0 3px rgba(166, 100, 247, 0.12),
-        0 10px 24px rgba(76, 28, 148, 0.2);
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.055);
+    box-shadow: none;
 }
 
 .local-engine-select-text {
@@ -1576,14 +1589,9 @@
     overflow-y: auto;
     padding: 0.35rem;
     border-radius: 14px;
-    border: 1px solid rgba(176, 110, 255, 0.22);
-    background:
-        linear-gradient(180deg, rgba(31, 27, 49, 0.98), rgba(18, 16, 29, 0.98)),
-        rgba(20, 19, 29, 0.98);
-    box-shadow:
-        0 22px 50px rgba(0, 0, 0, 0.48),
-        0 0 0 1px rgba(173, 107, 255, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(18, 18, 26, 0.98);
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
     animation: localSelectFade 0.14s ease;
 }
 
@@ -1621,7 +1629,7 @@
 }
 
 .local-engine-select-option.selected {
-    background: rgba(166, 100, 247, 0.16);
+    background: rgba(255, 255, 255, 0.08);
     color: var(--text-primary);
 }
 
@@ -1657,6 +1665,10 @@
 }
 
 @media (max-width: 720px) {
+    .local-engine-core-controls {
+        grid-template-columns: 1fr;
+    }
+
     .local-engine-field-grid {
         grid-template-columns: 1fr;
     }

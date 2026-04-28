@@ -107,12 +107,6 @@ pub struct EngineConfig {
     pub context_size: u32,
     /// Path to model file
     pub model_path: Option<String>,
-    /// Optional companion VAE path for image engines
-    #[serde(default)]
-    pub vae_path: Option<String>,
-    /// Optional companion LLM path for multimodal image engines
-    #[serde(default)]
-    pub llm_path: Option<String>,
     /// Extra CLI arguments
     #[serde(default)]
     pub extra_args: Vec<String>,

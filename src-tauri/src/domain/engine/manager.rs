@@ -272,11 +272,7 @@ impl EngineManager {
         if config.engine_id == "llamacpp" {
             cmd.args(build_llamacpp_args(&config, selected_port));
         } else if config.engine_id == "sdcpp" {
-            let sdcpp_args = build_sdcpp_args(&config, selected_port).inspect_err(|error| {
-                self.emitter
-                    .emit_error(&config.engine_id, &error.to_string());
-            })?;
-            cmd.args(sdcpp_args);
+            cmd.args(build_sdcpp_args(&config, selected_port));
         } else {
             // Default fallback for other engines
             cmd.arg("--port").arg(selected_port.to_string());
@@ -442,9 +438,7 @@ mod tests {
     use crate::domain::engine::engine_runtime::classify_engine_start_failure;
     use crate::domain::engine::types::EngineComputeMode;
     use crate::domain::system::ports::ENGINE_LOCAL_PORT_RANGE;
-    use std::fs;
     use std::net::TcpListener;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn sample_config(model_path: Option<&str>) -> EngineConfig {
         EngineConfig {
@@ -452,8 +446,6 @@ mod tests {
             compute_mode: EngineComputeMode::Gpu,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
-            vae_path: None,
-            llm_path: None,
             extra_args: vec![],
         }
     }
@@ -464,8 +456,6 @@ mod tests {
             compute_mode: EngineComputeMode::Gpu,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
-            vae_path: None,
-            llm_path: None,
             extra_args: vec![],
         }
     }
@@ -565,8 +555,7 @@ mod tests {
         let args = build_sdcpp_args(
             &sample_sdcpp_config(Some("C:/models/sd15.safetensors")),
             8082,
-        )
-        .unwrap();
+        );
 
         assert!(args.windows(2).any(|w| w == ["--listen-port", "8082"]));
         assert!(
@@ -576,59 +565,13 @@ mod tests {
     }
 
     #[test]
-    fn rejects_qwen_image_without_companion_files() {
-        let error = build_sdcpp_args(
-            &sample_sdcpp_config(Some("C:/models/qwen-image-Q2_K.gguf")),
-            8082,
-        )
-        .unwrap_err();
+    fn builds_sdcpp_cpu_mode_args() {
+        let mut config = sample_sdcpp_config(Some("C:/models/sd15.safetensors"));
+        config.compute_mode = EngineComputeMode::Cpu;
+        let args = build_sdcpp_args(&config, 8082);
 
-        match error {
-            AppError::Validation(message) => {
-                assert!(message.contains("Qwen Image model"));
-                assert!(message.contains("--vae"));
-                assert!(message.contains("--llm"));
-            }
-            other => panic!("expected validation error, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn auto_detects_qwen_image_companion_files_in_model_directory() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let temp_dir = std::env::temp_dir().join(format!("axelate-sdcpp-qwen-{unique}"));
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        let diffusion = temp_dir.join("qwen-image-Q2_K.gguf");
-        let vae = temp_dir.join("qwen_image_vae.safetensors");
-        let llm = temp_dir.join("Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf");
-
-        fs::write(&diffusion, []).unwrap();
-        fs::write(&vae, []).unwrap();
-        fs::write(&llm, []).unwrap();
-
-        let args = build_sdcpp_args(
-            &sample_sdcpp_config(Some(diffusion.to_string_lossy().as_ref())),
-            8082,
-        )
-        .unwrap();
-
-        assert!(
-            args.windows(2)
-                .any(|w| w == ["--diffusion-model", diffusion.to_string_lossy().as_ref()])
-        );
-        assert!(
-            args.windows(2)
-                .any(|w| w == ["--vae", vae.to_string_lossy().as_ref()])
-        );
-        assert!(
-            args.windows(2)
-                .any(|w| w == ["--llm", llm.to_string_lossy().as_ref()])
-        );
-
-        let _ = fs::remove_dir_all(&temp_dir);
+        assert!(args.contains(&"--offload-to-cpu".to_string()));
+        assert!(args.contains(&"--clip-on-cpu".to_string()));
+        assert!(args.contains(&"--vae-on-cpu".to_string()));
     }
 }

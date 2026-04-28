@@ -20,7 +20,7 @@ type ModuleSettingsEngineFieldControllerDeps = {
     translate: (key: string, fallback: string) => string;
     getModelFileName: (modelPath: string) => string;
     getModelFileFilters: (
-        fileKind: 'model' | 'vae' | 'llm',
+        fileKind: 'model',
         isImage: boolean,
     ) => Array<{ name: string; extensions: string[] }>;
     tracer: Pick<LoggerService, 'error'>;
@@ -100,7 +100,7 @@ export class ModuleSettingsEngineFieldController {
         container: HTMLElement,
         input: HTMLInputElement,
         isImage: boolean,
-        fileKind: 'model' | 'vae' | 'llm',
+        fileKind: 'model',
     ): void {
         const browseBtn = document.createElement('button');
         browseBtn.className = 'btn btn-secondary local-engine-browse-btn';

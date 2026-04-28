@@ -16,7 +16,7 @@ type EngineFieldRowOptions = {
     max?: number;
     isFile?: boolean;
     isImage?: boolean;
-    fileKind?: 'model' | 'vae' | 'llm';
+    fileKind?: 'model';
     description?: string;
     fullWidth?: boolean;
     showInfoButton?: boolean;
@@ -45,7 +45,7 @@ type EngineFieldRowRendererDeps = {
         container: HTMLElement,
         input: HTMLInputElement,
         isImage: boolean,
-        fileKind: 'model' | 'vae' | 'llm',
+        fileKind: 'model',
     ) => void;
     getExtraArgsInfoText: () => string;
     toggleInfoPopover: (
