@@ -5,6 +5,29 @@
 
 use tokio::sync::Mutex;
 
+fn provider_matches(active: &str, candidate: &str) -> bool {
+    active == candidate
+        || matches!(
+            (active, candidate),
+            ("sdcpp", "stable-diffusion") | ("stable-diffusion", "sdcpp")
+        )
+}
+
+/// Latest progress parsed from a local image engine log line.
+#[derive(Debug, Clone, Default)]
+pub struct ImageGenerationProgressSnapshot {
+    /// Current progress normalized to `0.0..=1.0`.
+    pub progress: Option<f32>,
+    /// Current sampling step.
+    pub step: Option<u32>,
+    /// Total sampling steps.
+    pub total: Option<u32>,
+    /// Latest reported generation speed, for example `1.07s/it`.
+    pub speed: Option<String>,
+    /// Wall-clock update timestamp in Unix milliseconds.
+    pub updated_at_ms: f64,
+}
+
 /// Active in-flight image-generation job metadata.
 #[derive(Debug, Clone, Default)]
 pub struct ActiveImageJob {
@@ -16,6 +39,8 @@ pub struct ActiveImageJob {
     pub prompt_id: Option<String>,
     /// Whether cancellation was requested for this job.
     pub cancelled: bool,
+    /// Latest parsed progress from engine logs.
+    pub progress: Option<ImageGenerationProgressSnapshot>,
 }
 
 /// Concurrency-safe holder for the active image job.
@@ -39,7 +64,31 @@ impl ImageGenerationState {
             base_url: base_url.to_string(),
             prompt_id,
             cancelled: false,
+            progress: None,
         });
+    }
+
+    /// Stores the latest progress snapshot for the active provider job.
+    pub async fn update_progress(&self, provider: &str, progress: ImageGenerationProgressSnapshot) {
+        let mut guard = self.inner.lock().await;
+        let Some(job) = guard.as_mut() else {
+            return;
+        };
+
+        if provider_matches(&job.provider, provider) {
+            job.progress = Some(progress);
+        }
+    }
+
+    /// Returns the latest progress snapshot for an active provider job.
+    pub async fn latest_progress(&self, provider: &str) -> Option<ImageGenerationProgressSnapshot> {
+        let guard = self.inner.lock().await;
+        let job = guard.as_ref()?;
+        if provider_matches(&job.provider, provider) {
+            return job.progress.clone();
+        }
+
+        None
     }
 
     /// Updates the prompt identifier for the current active job.
@@ -49,7 +98,7 @@ impl ImageGenerationState {
             return;
         };
 
-        if job.provider == provider {
+        if provider_matches(&job.provider, provider) {
             job.prompt_id = Some(prompt_id);
         }
     }
@@ -58,7 +107,7 @@ impl ImageGenerationState {
     pub async fn cancel(&self, provider: &str) -> Option<ActiveImageJob> {
         let mut guard = self.inner.lock().await;
         let job = guard.as_mut()?;
-        if job.provider != provider {
+        if !provider_matches(&job.provider, provider) {
             return None;
         }
 
@@ -73,7 +122,7 @@ impl ImageGenerationState {
             return false;
         };
 
-        if job.provider != provider || !job.cancelled {
+        if !provider_matches(&job.provider, provider) || !job.cancelled {
             return false;
         }
 
@@ -90,7 +139,7 @@ impl ImageGenerationState {
             return;
         };
 
-        if job.provider != provider {
+        if !provider_matches(&job.provider, provider) {
             return;
         }
 

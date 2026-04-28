@@ -58,7 +58,10 @@ export function refreshChatTranslations(
     });
 
     document.querySelectorAll<HTMLElement>('.chat-generated-control.is-cancel').forEach((btn) => {
-        btn.textContent = translate('ui.chat.image_cancel', 'Cancel');
+        const label = translate('ui.chat.image_cancel', 'Cancel');
+        btn.textContent = label;
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
     });
 
     const viewerClose = document.querySelector<HTMLElement>('.chat-image-viewer-close');

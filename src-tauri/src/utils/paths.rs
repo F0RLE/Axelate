@@ -174,8 +174,8 @@ pub static ENGINES_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("E
 /// Log files directory (`AxelateData/System/Logs`)
 pub static LOG_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Logs"));
 
-/// Engine runtime log files directory (`AxelateData/System/Runtime/Engines/Logs`)
-pub static ENGINE_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| ENGINE_RUNTIME_DIR.join("Logs"));
+/// Engine runtime log files directory (`AxelateData/System/Logs/Engines`)
+pub static ENGINE_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| LOG_DIR.join("Engines"));
 
 /// Integration runtime log files directory (`AxelateData/System/Logs/Integrations`)
 pub static INTEGRATION_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| LOG_DIR.join("Integrations"));
@@ -319,9 +319,16 @@ fn migrate_legacy_module_runtime_logs() -> Result<(), AppError> {
     }
 
     let legacy_engine_logs_dir = LOG_DIR.join("Engines");
-    if legacy_engine_logs_dir.exists() {
+    if legacy_engine_logs_dir.exists() && legacy_engine_logs_dir != *ENGINE_LOGS_DIR {
         merge_directories(&legacy_engine_logs_dir, &ENGINE_LOGS_DIR)?;
         remove_empty_dirs(&legacy_engine_logs_dir)?;
+    }
+
+    let legacy_runtime_engine_logs_dir = ENGINE_RUNTIME_DIR.join("Logs");
+    if legacy_runtime_engine_logs_dir.exists() && legacy_runtime_engine_logs_dir != *ENGINE_LOGS_DIR
+    {
+        merge_directories(&legacy_runtime_engine_logs_dir, &ENGINE_LOGS_DIR)?;
+        remove_empty_dirs(&legacy_runtime_engine_logs_dir)?;
     }
 
     if !ENGINE_LOGS_DIR.exists() {

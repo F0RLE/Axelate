@@ -126,18 +126,14 @@ export class AIChatTransport implements IChatTransport {
         }
 
         try {
-            return await this._runWithTimeout(
-                this._context.tauriProvider
-                    .invoke<IImageGenerationResponse>('generate_image', { request })
-                    .then((response) => {
-                        if (response.ok && response.images.length > 0) {
-                            return { ok: true, images: response.images };
-                        }
-                        return { ok: false, error: response.error ?? 'Failed to generate image' };
-                    }),
-                300000,
-                'Image generation requested timed out',
-            );
+            return await this._context.tauriProvider
+                .invoke<IImageGenerationResponse>('generate_image', { request })
+                .then((response) => {
+                    if (response.ok && response.images.length > 0) {
+                        return { ok: true, images: response.images };
+                    }
+                    return { ok: false, error: response.error ?? 'Failed to generate image' };
+                });
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] IPC image error:', error);

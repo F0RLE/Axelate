@@ -108,6 +108,9 @@ export class ChatController {
         this._scheduleAutoResizeInput();
         void this._filePicker.updateTokenCount();
     };
+    private readonly _boundViewportResize = () => {
+        this._scheduleAutoResizeInput();
+    };
 
     constructor(
         private readonly _aiBridge: AIBridge,
@@ -180,6 +183,7 @@ export class ChatController {
             onFileInputChange: this._boundFileInputChange,
             onChatInputKeydown: this._boundChatInputKeydown,
             onChatInputInput: this._boundChatInputInput,
+            onViewportResize: this._boundViewportResize,
         });
     }
 

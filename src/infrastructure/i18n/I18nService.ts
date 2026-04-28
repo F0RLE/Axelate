@@ -69,7 +69,6 @@ export class I18nService {
      * Loads translation files for the specified language.
      */
     public async loadTranslations(lang: string): Promise<void> {
-        this._tracer.info(`[I18n] Loading ${lang}...`);
         const previousLang = this._currentLang;
 
         try {
@@ -176,6 +175,5 @@ export class I18nService {
         globalThis.dispatchEvent(new CustomEvent('lang:changed', { detail: lang }));
         this._eventBus.emit('i18n:language:change', { lang, previousLang });
         this._eventBus.emit('i18n:translations:loaded', { lang });
-        this._tracer.info(`[I18n] Language changed to ${lang}, notifications dispatched`);
     }
 }

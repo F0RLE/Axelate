@@ -92,6 +92,12 @@ export class ChatUiStateHelper {
             return;
         }
 
+        if (input.value === '') {
+            input.style.height = `${String(this._deps.baseInputHeightPx)}px`;
+            input.style.overflowY = 'hidden';
+            return;
+        }
+
         input.style.height = 'auto';
         const targetHeight = Math.max(input.scrollHeight, this._deps.baseInputHeightPx);
         const isOverflowing = targetHeight > this._deps.maxInputHeightPx;

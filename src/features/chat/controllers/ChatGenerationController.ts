@@ -47,9 +47,13 @@ type ChatGenerationControllerOptions = {
 
 export class ChatGenerationController {
     private static readonly _IMAGE_PREVIEW_POLL_INTERVAL_MS = 850;
+    private static readonly _IMAGE_PROGRESS_HEARTBEAT_INTERVAL_MS = 1000;
     private _imagePreviewPollTimer: ReturnType<typeof setTimeout> | null = null;
+    private _imageProgressHeartbeatTimer: ReturnType<typeof setTimeout> | null = null;
     private _imagePreviewPollInFlight = false;
     private _lastImagePreviewUpdatedAtMs = 0;
+    private _imageGenerationStartedAtMs = 0;
+    private _lastConcreteImageProgressAtMs = 0;
     private readonly _providerPolicy = new AIBridgeProviderPolicy();
 
     constructor(private readonly _options: ChatGenerationControllerOptions) {}
@@ -68,6 +72,9 @@ export class ChatGenerationController {
     public startImagePreviewPolling(handle: ImageGenerationHandle): void {
         this.stopImagePreviewPolling();
         this._lastImagePreviewUpdatedAtMs = 0;
+        this._imageGenerationStartedAtMs = Date.now();
+        this._lastConcreteImageProgressAtMs = 0;
+        this._scheduleNextImageProgressHeartbeat(handle, 0);
         this._scheduleNextImagePreviewPoll(handle, 0);
     }
 
@@ -76,8 +83,14 @@ export class ChatGenerationController {
             globalThis.clearTimeout(this._imagePreviewPollTimer);
             this._imagePreviewPollTimer = null;
         }
+        if (this._imageProgressHeartbeatTimer !== null) {
+            globalThis.clearTimeout(this._imageProgressHeartbeatTimer);
+            this._imageProgressHeartbeatTimer = null;
+        }
         this._imagePreviewPollInFlight = false;
         this._lastImagePreviewUpdatedAtMs = 0;
+        this._imageGenerationStartedAtMs = 0;
+        this._lastConcreteImageProgressAtMs = 0;
     }
 
     public async pollImagePreview(handle: ImageGenerationHandle): Promise<void> {
@@ -93,8 +106,36 @@ export class ChatGenerationController {
 
         try {
             const preview = await this._options.aiBridge.getImageGenerationPreview();
+            if (preview === null) {
+                return;
+            }
+
+            if (typeof preview.progress === 'number' && Number.isFinite(preview.progress)) {
+                const percent = Math.max(0, Math.min(100, Math.round(preview.progress * 100)));
+                const step =
+                    typeof preview.step === 'number' &&
+                    Number.isFinite(preview.step) &&
+                    typeof preview.total === 'number' &&
+                    Number.isFinite(preview.total) &&
+                    preview.total > 0
+                        ? ` step=${String(Math.max(0, Math.round(preview.step)))} total=${String(Math.max(1, Math.round(preview.total)))}`
+                        : '';
+                const speed =
+                    typeof preview.speed === 'string' && preview.speed.trim() !== ''
+                        ? ` speed=${preview.speed.trim()}`
+                        : '';
+                const eta =
+                    typeof preview.eta_relative === 'number' &&
+                    Number.isFinite(preview.eta_relative)
+                        ? ` eta=${String(Math.max(0, Math.round(preview.eta_relative)))}s`
+                        : '';
+                this._lastConcreteImageProgressAtMs = Date.now();
+                handle.setStatus(
+                    `image status=running percent=${String(percent)}${step}${speed}${eta}`,
+                );
+            }
+
             if (
-                preview === null ||
                 preview.data_url.trim() === '' ||
                 preview.updated_at_ms <= this._lastImagePreviewUpdatedAtMs
             ) {
@@ -129,6 +170,49 @@ export class ChatGenerationController {
             this._imagePreviewPollTimer = null;
             void this.pollImagePreview(handle);
         }, delayMs);
+    }
+
+    private _scheduleNextImageProgressHeartbeat(
+        handle: ImageGenerationHandle,
+        delayMs: number,
+    ): void {
+        if (this._options.isDestroyed() || !this._options.isSending()) {
+            return;
+        }
+
+        if (this._imageProgressHeartbeatTimer !== null) {
+            globalThis.clearTimeout(this._imageProgressHeartbeatTimer);
+        }
+
+        this._imageProgressHeartbeatTimer = globalThis.setTimeout(() => {
+            this._imageProgressHeartbeatTimer = null;
+            this._emitImageProgressHeartbeat(handle);
+        }, delayMs);
+    }
+
+    private _emitImageProgressHeartbeat(handle: ImageGenerationHandle): void {
+        if (this._options.isDestroyed() || !this._options.isSending()) {
+            return;
+        }
+
+        const now = Date.now();
+        const elapsedSeconds =
+            this._imageGenerationStartedAtMs === 0
+                ? 0
+                : Math.max(0, Math.round((now - this._imageGenerationStartedAtMs) / 1000));
+        const hasFreshConcreteProgress =
+            this._lastConcreteImageProgressAtMs !== 0 &&
+            now - this._lastConcreteImageProgressAtMs <
+                ChatGenerationController._IMAGE_PROGRESS_HEARTBEAT_INTERVAL_MS * 2;
+
+        if (!hasFreshConcreteProgress) {
+            handle.setStatus(`image status=running elapsed=${String(elapsedSeconds)}s`);
+        }
+
+        this._scheduleNextImageProgressHeartbeat(
+            handle,
+            ChatGenerationController._IMAGE_PROGRESS_HEARTBEAT_INTERVAL_MS,
+        );
     }
 
     public async handleChatResponse(

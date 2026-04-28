@@ -1,5 +1,7 @@
 import type {
     IBridgeResponse,
+    ChatContent,
+    ChatContentPart,
     IChatMessage,
     IImageGenerationRequest,
     MessageSource,
@@ -25,6 +27,8 @@ type AIBridgeMessageControllerDeps = {
     translate: (key: string, fallback: string) => string;
     showToast: (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
     onActivity: () => void;
+    onLongActivityStart: () => void;
+    onLongActivityEnd: () => void;
     onSuccessfulResponse: () => void;
 };
 
@@ -94,12 +98,15 @@ export class AIBridgeMessageController {
             session_id: this._deps.manager.sessionId,
         };
 
-        this._deps.events.broadcastReplaceChunk('🎨 Generating image...\n');
+        this._deps.events.broadcastReplaceChunk('image status=starting\n');
 
         if (performanceMode) {
             const backgroundResponse = await this._deps.transport.generateImageBackground(request);
             if (!backgroundResponse.ok) {
-                return this._handleTransportResponse(backgroundResponse, source);
+                return this._handleTransportResponse(
+                    this._withModelContext(backgroundResponse, providerId, request.model),
+                    source,
+                );
             }
 
             this._deps.showToast(
@@ -110,7 +117,10 @@ export class AIBridgeMessageController {
             return { ok: true, text: '' };
         }
 
-        const imageResponse = await this._deps.transport.generateImage(request);
+        this._deps.onLongActivityStart();
+        const imageResponse = await this._deps.transport.generateImage(request).finally(() => {
+            this._deps.onLongActivityEnd();
+        });
         if (imageResponse.ok && imageResponse.images && imageResponse.images.length > 0) {
             this._deps.onSuccessfulResponse();
             return {
@@ -120,7 +130,10 @@ export class AIBridgeMessageController {
             };
         }
 
-        return this._handleTransportResponse(imageResponse, source);
+        return this._handleTransportResponse(
+            this._withModelContext(imageResponse, providerId, request.model),
+            source,
+        );
     }
 
     private async _sendTextMessage(
@@ -131,9 +144,21 @@ export class AIBridgeMessageController {
         source: MessageSource,
     ): Promise<IBridgeResponse> {
         const context = this._deps.getContext();
+        const isLocalTextProvider = this._deps.providerPolicy.isLocalTextProvider(providerId);
+        if (isLocalTextProvider && this._hasImageAttachments(attachments)) {
+            return {
+                ok: false,
+                error: this._deps.translate(
+                    'ui.chat.error.local_model_image_input',
+                    'The selected local text model does not support image input. Remove the image or use a multimodal model with mmproj.',
+                ),
+                model: providerId,
+            };
+        }
+
         const newMessage: IChatMessage = {
             role: 'user',
-            content: createMultimodalContent(text, attachments),
+            content: isLocalTextProvider ? text : createMultimodalContent(text, attachments),
         };
 
         if (this._deps.manager.isActive() === false) {
@@ -141,21 +166,89 @@ export class AIBridgeMessageController {
         }
 
         const backendProviderId = resolveCustomProviderBackendId(providerId);
-        const request = constructChatRequest(history, newMessage, attachments, {
+        const requestHistory = isLocalTextProvider ? this._toTextOnlyMessages(history) : history;
+        const requestAttachments = isLocalTextProvider ? [] : attachments;
+        const requestOptions = this._deps.providerPolicy.buildRequestOptions({
+            hasApiKey: this._deps.manager.apiKey !== null,
+            maxOutputTokens: this._deps.manager.maxOutputTokens,
+            thinkingLevel: context?.aiSettings.getThinkingLevel(providerId),
+            webSearchEnabled: context?.aiSettings.getInternetAccessEnabled(providerId),
+        });
+        const request = constructChatRequest(requestHistory, newMessage, requestAttachments, {
             providerId: backendProviderId,
             model: this._deps.manager.model || 'default',
             apiKey: null,
             sessionId: this._deps.manager.sessionId,
-            ...this._deps.providerPolicy.buildRequestOptions({
-                hasApiKey: this._deps.manager.apiKey !== null,
-                maxOutputTokens: this._deps.manager.maxOutputTokens,
-                thinkingLevel: context?.aiSettings.getThinkingLevel(providerId),
-                webSearchEnabled: context?.aiSettings.getInternetAccessEnabled(providerId),
-            }),
+            ...requestOptions,
         });
 
         const response = await this._deps.transport.send(request);
-        return this._handleTransportResponse(response, source);
+        return this._handleTransportResponse(
+            this._withModelContext(response, providerId, request.model),
+            source,
+        );
+    }
+
+    private _hasImageAttachments(
+        attachments: { name: string; type: string; data_base64: string }[],
+    ): boolean {
+        return attachments.some((attachment) => attachment.type.startsWith('image/'));
+    }
+
+    private _toTextOnlyMessages(messages: IChatMessage[]): IChatMessage[] {
+        return messages.map((message) => {
+            const textContent = this._toTextOnlyContent(message.content);
+            const normalized: IChatMessage = {
+                role: message.role,
+                content: textContent,
+            };
+            if (message.thought_signature !== undefined) {
+                normalized.thought_signature = message.thought_signature;
+            }
+            return normalized;
+        });
+    }
+
+    private _toTextOnlyContent(content: ChatContent): string {
+        if (typeof content === 'string') {
+            return content;
+        }
+
+        const parts = content
+            .map((part) => this._toTextOnlyPart(part))
+            .filter((part): part is string => part.trim() !== '');
+        return parts.join('\n').trim();
+    }
+
+    private _toTextOnlyPart(part: ChatContentPart): string {
+        if (part.type === 'text') {
+            return part.text;
+        }
+        if (part.type === 'image_url') {
+            return '[Image omitted: the selected local text model does not support image input.]';
+        }
+        return part.name !== undefined ? `[File attached: ${part.name}]` : '[File attached]';
+    }
+
+    private _withModelContext(
+        response: IBridgeResponse,
+        providerId: string,
+        requestModel: string,
+    ): IBridgeResponse {
+        if (response.ok) {
+            return response;
+        }
+
+        const isCloudProvider = this._deps.providerPolicy.isCloudProvider(providerId);
+        if (isCloudProvider && response.model !== undefined) {
+            return response;
+        }
+
+        const fallbackModel = isCloudProvider ? requestModel : providerId;
+        return {
+            ...response,
+            model: fallbackModel,
+        };
     }
 
     private _handleMissingApiKey(source: MessageSource): IBridgeResponse {

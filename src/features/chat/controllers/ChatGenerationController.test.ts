@@ -78,6 +78,92 @@ describe('ChatGenerationController', () => {
         vi.useRealTimers();
     });
 
+    it('should keep image generation visibly active when preview progress is unavailable', async () => {
+        vi.useFakeTimers();
+        aiBridge.getImageGenerationPreview.mockResolvedValue(null);
+        const controller = new ChatGenerationController(baseOptions as never);
+        const handle = {
+            setStatus: vi.fn(),
+            setPreview: vi.fn(),
+            finalize: vi.fn(),
+            fail: vi.fn(),
+            cancel: vi.fn(),
+            discard: vi.fn(),
+        };
+
+        controller.startImagePreviewPolling(handle);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(handle.setStatus).toHaveBeenCalledWith('image status=running elapsed=0s');
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(handle.setStatus).toHaveBeenLastCalledWith('image status=running elapsed=1s');
+
+        controller.stopImagePreviewPolling();
+        vi.useRealTimers();
+    });
+
+    it('should prefer concrete preview progress over heartbeat ticks', async () => {
+        vi.useFakeTimers();
+        aiBridge.getImageGenerationPreview.mockResolvedValue({
+            data_url: '',
+            updated_at_ms: 0,
+            progress: 0.5,
+        });
+        const controller = new ChatGenerationController(baseOptions as never);
+        const handle = {
+            setStatus: vi.fn(),
+            setPreview: vi.fn(),
+            finalize: vi.fn(),
+            fail: vi.fn(),
+            cancel: vi.fn(),
+            discard: vi.fn(),
+        };
+
+        controller.startImagePreviewPolling(handle);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(handle.setStatus).toHaveBeenCalledWith('image status=running percent=50');
+        handle.setStatus.mockClear();
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(handle.setStatus).not.toHaveBeenCalledWith(expect.stringContaining('elapsed='));
+
+        controller.stopImagePreviewPolling();
+        vi.useRealTimers();
+    });
+
+    it('should include log-derived sdcpp steps and speed from preview polling', async () => {
+        vi.useFakeTimers();
+        aiBridge.getImageGenerationPreview.mockResolvedValue({
+            data_url: '',
+            updated_at_ms: 0,
+            progress: 0.2,
+            step: 6,
+            total: 30,
+            speed: '140.70s/it',
+        });
+        const controller = new ChatGenerationController(baseOptions as never);
+        const handle = {
+            setStatus: vi.fn(),
+            setPreview: vi.fn(),
+            finalize: vi.fn(),
+            fail: vi.fn(),
+            cancel: vi.fn(),
+            discard: vi.fn(),
+        };
+
+        controller.startImagePreviewPolling(handle);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(handle.setStatus).toHaveBeenCalledWith(
+            'image status=running percent=20 step=6 total=30 speed=140.70s/it',
+        );
+
+        controller.stopImagePreviewPolling();
+        vi.useRealTimers();
+    });
+
     it('treats cloud and custom image providers as image flows', () => {
         const controller = new ChatGenerationController(baseOptions as never);
 

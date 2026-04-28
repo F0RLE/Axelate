@@ -21,6 +21,9 @@ describe('AIBridgeProviderPolicy', () => {
         expect(policy.isImageProvider(CUSTOM_TEXT_PROVIDER_ID)).toBe(false);
         expect(policy.isManagedLocalImageEngine('sdcpp')).toBe(true);
         expect(policy.isManagedLocalImageEngine('comfyui')).toBe(false);
+        expect(policy.isLocalTextProvider('llamacpp')).toBe(true);
+        expect(policy.isLocalTextProvider('sdcpp')).toBe(false);
+        expect(policy.isLocalTextProvider(CUSTOM_TEXT_PROVIDER_ID)).toBe(false);
     });
 
     it('should map off thinking level to explicit OpenRouter none effort', () => {

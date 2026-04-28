@@ -59,6 +59,30 @@ describe('ChatService', () => {
         expect(result.error).toBe('Some error');
     });
 
+    it('should preserve model context when AIBridge sends an error', async () => {
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockResolvedValue({
+            ok: false,
+            error: 'API Error 503: Service unavailable',
+            model: 'llamacpp',
+        });
+
+        const result = await chatService.sendMessage('Hello', [], []);
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe('API Error 503: Service unavailable');
+        expect(result.model).toBe('llamacpp');
+    });
+
+    it('should preserve model context with fallback bridge errors', async () => {
+        (mockAIBridge.isActive as any).mockReturnValue(true);
+        (mockAIBridge.sendMessage as any).mockResolvedValue({ ok: false, model: 'llamacpp' });
+
+        const result = await chatService.sendMessage('Hello', [], []);
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe('Unknown bridge error');
+        expect(result.model).toBe('llamacpp');
+    });
+
     it('should return success response on valid send', async () => {
         (mockAIBridge.isActive as any).mockReturnValue(true);
         (mockAIBridge.sendMessage as any).mockResolvedValue({ ok: true, text: 'Hello there' });

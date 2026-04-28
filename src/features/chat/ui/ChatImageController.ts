@@ -67,8 +67,7 @@ export class ChatImageController {
     }
 
     public destroy(): void {
-        document.removeEventListener('keydown', this._boundImageViewerKeydown);
-        document.body.classList.remove('chat-image-viewer-open');
+        this.closeImageViewer();
         this._imageViewerOverlay?.remove();
         this._imageViewerOverlay = null;
         this._imageViewerImage = null;
@@ -78,12 +77,29 @@ export class ChatImageController {
         const target = event.target;
         if (!(target instanceof HTMLElement)) return false;
 
-        const image = target.closest('.chat-img');
+        let image = target.closest('.chat-img, .chat-attachment-img');
+        if (!(image instanceof HTMLImageElement)) {
+            image =
+                target
+                    .closest('.chat-media-card.is-image')
+                    ?.querySelector('img.chat-attachment-img') ?? null;
+        }
         if (!(image instanceof HTMLImageElement)) return false;
+
+        const currentSrc = image.currentSrc.trim();
+        const attributeSrc = image.getAttribute('src');
+        const fallbackSrc = image.src.trim();
+        const src =
+            currentSrc.length > 0
+                ? image.currentSrc
+                : attributeSrc !== null && attributeSrc.trim().length > 0
+                  ? attributeSrc
+                  : fallbackSrc;
+        if (src.trim().length === 0) return false;
 
         event.preventDefault();
         event.stopPropagation();
-        this.openImageViewer(image.currentSrc || image.src);
+        this.openImageViewer(src);
         return true;
     }
 
@@ -193,15 +209,18 @@ export class ChatImageController {
         const overlay = document.createElement('div');
         overlay.className = 'chat-image-viewer hidden';
         overlay.innerHTML = DOMPurify.sanitize(`
-            <button type="button" class="chat-image-viewer-close window-control-btn close-btn" aria-label="Close image preview">
+            <button type="button" class="chat-image-viewer-close window-control-btn close-btn">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                     <path d="M5 4h2v2H5zm12 0h2v2h-2zM7 6h2v2H7zm8 0h2v2h-2zM9 8h2v2H9zm4 0h2v2h-2zM11 10h2v4h-2zM9 14h2v2H9zm4 0h2v2h-2zM7 16h2v2H7zm8 0h2v2h-2zM5 18h2v2H5zm12 0h2v2h-2z"></path>
                 </svg>
             </button>
             <div class="chat-image-viewer-stage">
-                <img class="chat-image-viewer-img" alt="Image preview">
+                <img class="chat-image-viewer-img">
             </div>
         `);
+        const closeButton = overlay.querySelector<HTMLButtonElement>('.chat-image-viewer-close');
+        const label = this._deps.translate('ui.chat.close_image_preview', 'Close image preview');
+        closeButton?.setAttribute('aria-label', label);
 
         overlay.addEventListener('click', (event) => {
             const eventTarget = event.target;
@@ -217,9 +236,15 @@ export class ChatImageController {
         this._resolveImageViewerHost().appendChild(overlay);
         this._imageViewerOverlay = overlay;
         this._imageViewerImage = overlay.querySelector('.chat-image-viewer-img');
+        this._imageViewerImage?.setAttribute(
+            'alt',
+            this._deps.translate('ui.chat.image_preview', 'Image preview'),
+        );
     }
 
     private openImageViewer(src: string): void {
+        if (src.trim().length === 0) return;
+
         this._ensureImageViewer();
         if (
             !(this._imageViewerOverlay instanceof HTMLElement) ||
@@ -238,6 +263,7 @@ export class ChatImageController {
         if (!(this._imageViewerOverlay instanceof HTMLElement)) return;
 
         this._imageViewerOverlay.classList.add('hidden');
+        this._imageViewerImage?.removeAttribute('src');
         document.body.classList.remove('chat-image-viewer-open');
         document.removeEventListener('keydown', this._boundImageViewerKeydown);
     }

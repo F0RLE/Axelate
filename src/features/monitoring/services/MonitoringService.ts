@@ -40,8 +40,6 @@ export class MonitoringService {
                 }
 
                 this.unlistenFn = unlistenFn;
-                this._tracer.info('[MonitoringService] Started listening to system_stats');
-
                 // Fetch cached stats immediately so UI doesn't flash empty
                 // (the Rust loop sleeps 1s before the first emit)
                 try {
@@ -60,7 +58,7 @@ export class MonitoringService {
                 this.startFallback();
             }
         } else {
-            this._tracer.info('[MonitoringService] Event transport unavailable, starting polling');
+            this._tracer.warn('[MonitoringService] Event transport unavailable, starting polling');
             this.startFallback();
         }
     }

@@ -21,6 +21,7 @@ describe('ChatViewHelper', () => {
             onFileInputChange: vi.fn(),
             onChatInputKeydown: vi.fn(),
             onChatInputInput: vi.fn(),
+            onViewportResize: vi.fn(),
         });
     }
 

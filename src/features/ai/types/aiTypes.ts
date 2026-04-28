@@ -131,6 +131,11 @@ export interface IImageGenerationResponse {
 export interface IImageGenerationPreview {
     data_url: string;
     updated_at_ms: number;
+    progress?: number | null;
+    step?: number | null;
+    total?: number | null;
+    speed?: string | null;
+    eta_relative?: number | null;
 }
 
 // ============================================================================

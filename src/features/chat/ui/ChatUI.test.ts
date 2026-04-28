@@ -327,6 +327,45 @@ describe('ChatUI lifecycle', () => {
         );
     });
 
+    it('should render image progress percent and speed separately from status text', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage({
+            onCancel: vi.fn(),
+        });
+
+        handle.setStatus('image status=running percent=40 step=8 total=20 speed=1.25it/s');
+
+        expect(document.querySelector('.chat-generated-status')?.textContent).toBe(
+            't:ui.chat.image_generating:Rendering image',
+        );
+        expect(
+            document.querySelector<HTMLElement>('.chat-generated-progress-fill')?.style.width,
+        ).toBe('40%');
+        expect(document.querySelector('.chat-generated-progress-summary')?.textContent).toBe(
+            '40% · 8/20 steps · 1.25 it/s',
+        );
+    });
+
+    it('should render image generation heartbeat when concrete progress is unavailable', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage({
+            onCancel: vi.fn(),
+        });
+
+        handle.setStatus('image status=running elapsed=12s');
+
+        expect(document.querySelector('.chat-generated-status')?.textContent).toBe(
+            't:ui.chat.image_generating:Rendering image',
+        );
+        expect(document.querySelector('.chat-generated-progress-summary')?.textContent).toBe(
+            '0% · 12s',
+        );
+    });
+
     it('should keep cancelled image generation from becoming a transport error', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
@@ -519,6 +558,59 @@ describe('ChatUI lifecycle', () => {
         await flushPromises();
 
         expect(overlay.classList.contains('hidden')).toBe(true);
+        expect(preview.getAttribute('src')).toBeNull();
+    });
+
+    it('should not open image preview for thumbnails without a usable source', async () => {
+        renderImageChatBody();
+        document
+            .getElementById('chat-messages')
+            ?.insertAdjacentHTML('beforeend', '<img class="chat-img" alt="empty">');
+
+        ui = createChatUI();
+        await ui.init();
+
+        const image = requireChatImage();
+        image.click();
+        await flushPromises();
+
+        expect(document.querySelector('.chat-image-viewer')).toBeNull();
+        expect(document.body.classList.contains('chat-image-viewer-open')).toBe(false);
+    });
+
+    it('should open attached chat images in the same preview viewer', async () => {
+        renderImageChatBody();
+        ui = createChatUI();
+        await ui.init();
+
+        ui.appendMessage('user', 'uploaded', {
+            attachments: [
+                {
+                    name: 'photo.png',
+                    type: 'image/png',
+                    size: 4,
+                    data_base64: 'cGhvdG8=',
+                    tokens: 7,
+                },
+            ],
+            skipAnimation: true,
+        });
+
+        const attachmentImage = document.querySelector('.chat-attachment-img');
+        if (!(attachmentImage instanceof HTMLImageElement)) {
+            throw new TypeError('attachment image not found');
+        }
+        const badge = document.querySelector('.media-badge');
+        if (!(badge instanceof HTMLElement)) {
+            throw new TypeError('attachment badge not found');
+        }
+
+        badge.click();
+        await flushPromises();
+
+        const { overlay, preview } = requireImageViewer();
+        expect(overlay.classList.contains('hidden')).toBe(false);
+        expect(preview.src.startsWith('data:image/png;base64,cGhvdG8=')).toBe(true);
     });
 
     it('should remove image viewer body state on destroy', async () => {
@@ -535,5 +627,6 @@ describe('ChatUI lifecycle', () => {
         ui = null;
 
         expect(document.body.classList.contains('chat-image-viewer-open')).toBe(false);
+        expect(document.querySelector('.chat-image-viewer')).toBeNull();
     });
 });

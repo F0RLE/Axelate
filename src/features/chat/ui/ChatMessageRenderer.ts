@@ -103,6 +103,9 @@ export class ChatMessageRenderer {
                 image.className = 'chat-img';
                 image.src = imageDataUrl;
                 image.alt = 'Generated image';
+                image.width = 512;
+                image.height = 512;
+                image.decoding = 'async';
                 image.addEventListener(
                     'load',
                     () => {

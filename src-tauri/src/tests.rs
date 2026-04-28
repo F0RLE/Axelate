@@ -98,8 +98,8 @@ mod app_tests {
         assert!(LOG_DIR.ends_with("Logs"));
         assert!(ENGINE_RUNTIME_DIR.starts_with(RUNTIME_DIR.as_path()));
         assert!(ENGINE_RUNTIME_DIR.ends_with("Engines"));
-        assert!(ENGINE_LOGS_DIR.starts_with(ENGINE_RUNTIME_DIR.as_path()));
-        assert!(ENGINE_LOGS_DIR.ends_with("Logs"));
+        assert!(ENGINE_LOGS_DIR.starts_with(LOG_DIR.as_path()));
+        assert!(ENGINE_LOGS_DIR.ends_with("Engines"));
         assert!(INTEGRATION_LOGS_DIR.starts_with(LOG_DIR.as_path()));
         assert!(INTEGRATION_LOGS_DIR.ends_with("Integrations"));
         assert!(ENGINES_DIR.starts_with(SYSTEM_ROOT.as_path()));

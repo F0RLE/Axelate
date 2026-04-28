@@ -15,7 +15,9 @@ use crate::infrastructure::crypto::secure_storage::SecureStorage;
 use crate::models::AppSettings;
 
 struct PreparedImageDispatch {
+    base_url: String,
     request_url: String,
+    api: LocalImageApi,
     response_format: ImageResponseFormat,
     preview_path: Option<std::path::PathBuf>,
 }
@@ -39,6 +41,12 @@ struct ComfyUiRequestContext {
     negative_prompt: String,
     prompt_id: String,
     client_id: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LocalImageApi {
+    SdcppNative,
+    OpenAiCompatible,
 }
 
 #[derive(Clone, Copy)]
@@ -106,7 +114,12 @@ async fn process_image_request_with_local_engine_access(
     } else {
         let dispatch =
             prepare_local_image_dispatch(&request, engine_manager, local_engine_access).await?;
-        execute_local_image_request(&request, dispatch).await?
+        image_generation_state
+            .begin(&request.provider, &dispatch.base_url, None)
+            .await;
+        let result = execute_local_image_request(&request, dispatch, image_generation_state).await;
+        image_generation_state.clear(&request.provider, None).await;
+        result?
     };
 
     if let Some(session_id) = request.session_id.as_deref()
@@ -168,11 +181,14 @@ async fn prepare_local_image_dispatch(
     let (base_url, preview_path) =
         resolve_local_image_endpoint(request, engine_manager, local_engine_access, &definition)
             .await?;
-    let response_format = image_response_format(&request.provider);
-    let request_url = build_image_generation_url(&base_url, response_format);
+    let api = local_image_api(&request.provider);
+    let response_format = image_response_format(api);
+    let request_url = build_image_generation_url(&base_url, api);
 
     Ok(PreparedImageDispatch {
+        base_url,
         request_url,
+        api,
         response_format,
         preview_path,
     })
@@ -180,6 +196,14 @@ async fn prepare_local_image_dispatch(
 
 fn is_cloud_image_provider(provider: &str) -> bool {
     matches!(provider, "gemini-image" | "gpt-image" | "seedream-image")
+}
+
+fn local_image_api(provider: &str) -> LocalImageApi {
+    if matches!(provider, "sdcpp" | "stable-diffusion") {
+        LocalImageApi::SdcppNative
+    } else {
+        LocalImageApi::OpenAiCompatible
+    }
 }
 
 async fn resolve_local_image_endpoint(
@@ -216,24 +240,24 @@ async fn resolve_local_image_endpoint(
     }
 }
 
-fn image_response_format(provider: &str) -> ImageResponseFormat {
-    if matches!(provider, "sdcpp" | "stable-diffusion") {
-        ImageResponseFormat::SdApi
-    } else {
-        ImageResponseFormat::OpenAiCompatible
+const fn image_response_format(api: LocalImageApi) -> ImageResponseFormat {
+    match api {
+        LocalImageApi::SdcppNative => ImageResponseFormat::SdApi,
+        LocalImageApi::OpenAiCompatible => ImageResponseFormat::OpenAiCompatible,
     }
 }
 
-fn build_image_generation_url(base_url: &str, response_format: ImageResponseFormat) -> String {
-    match response_format {
-        ImageResponseFormat::SdApi => format!("{base_url}/sdapi/v1/txt2img"),
-        ImageResponseFormat::OpenAiCompatible => format!("{base_url}/v1/images/generations"),
+fn build_image_generation_url(base_url: &str, api: LocalImageApi) -> String {
+    match api {
+        LocalImageApi::SdcppNative => format!("{base_url}/sdcpp/v1/img_gen"),
+        LocalImageApi::OpenAiCompatible => format!("{base_url}/v1/images/generations"),
     }
 }
 
 async fn execute_local_image_request(
     request: &ImageGenerationRequest,
     dispatch: PreparedImageDispatch,
+    image_generation_state: &ImageGenerationState,
 ) -> Result<Vec<String>, AppError> {
     let client = build_image_client(Duration::from_secs(999_999))?;
 
@@ -241,7 +265,17 @@ async fn execute_local_image_request(
         clear_preview_file(preview_path).await;
     }
 
-    let payload = build_local_image_payload(request, dispatch.response_format);
+    if dispatch.api == LocalImageApi::SdcppNative {
+        return execute_sdcpp_native_image_request(
+            request,
+            &dispatch,
+            image_generation_state,
+            &client,
+        )
+        .await;
+    }
+
+    let payload = build_local_image_payload(request);
     tracing::info!(
         "Sending image generation request to {}",
         dispatch.request_url
@@ -253,28 +287,192 @@ async fn execute_local_image_request(
         .await
         .map_err(|error| AppError::External {
             request_id: None,
-            message: error.to_string(),
+            message: format!(
+                "Local image engine request failed at {}: {error}. The engine may have stopped, closed the connection, or run out of memory while generating.",
+                dispatch.request_url
+            ),
         })?;
 
     let body = parse_image_response_body(response).await?;
-    Ok(parse_generated_images(&body, dispatch.response_format))
+    let images = parse_generated_images(&body, dispatch.response_format);
+    if images.is_empty() {
+        return Err(AppError::External {
+            request_id: None,
+            message: format!(
+                "Local image engine returned no images. Response shape was: {}",
+                summarize_image_response_shape(&body)
+            ),
+        });
+    }
+
+    Ok(images)
 }
 
-fn build_local_image_payload(
+async fn execute_sdcpp_native_image_request(
     request: &ImageGenerationRequest,
-    response_format: ImageResponseFormat,
-) -> serde_json::Value {
-    let sampler_name = match response_format {
-        ImageResponseFormat::SdApi => normalize_sdcpp_sampler(request.sampler.as_deref()),
-        ImageResponseFormat::OpenAiCompatible => request
-            .sampler
-            .clone()
-            .unwrap_or_else(|| "euler_a".to_string()),
-    };
-    let scheduler = match response_format {
-        ImageResponseFormat::SdApi => normalize_sdcpp_scheduler(request.scheduler.as_deref()),
-        ImageResponseFormat::OpenAiCompatible => request.scheduler.clone().unwrap_or_default(),
-    };
+    dispatch: &PreparedImageDispatch,
+    image_generation_state: &ImageGenerationState,
+    client: &reqwest::Client,
+) -> Result<Vec<String>, AppError> {
+    let payload = build_sdcpp_native_image_payload(request);
+    tracing::info!(
+        "Submitting stable-diffusion.cpp native image job to {}",
+        dispatch.request_url
+    );
+    let response = client
+        .post(&dispatch.request_url)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!(
+                "Local image engine request failed at {}: {error}. The engine may have stopped, closed the connection, or run out of memory while generating.",
+                dispatch.request_url
+            ),
+        })?;
+
+    let body = parse_image_response_body(response).await?;
+    let job_id = extract_sdcpp_job_id(&body).ok_or_else(|| AppError::External {
+        request_id: None,
+        message: format!(
+            "stable-diffusion.cpp did not return a native job id. Response shape was: {}",
+            summarize_image_response_shape(&body)
+        ),
+    })?;
+    image_generation_state
+        .update_prompt_id(&request.provider, job_id.clone())
+        .await;
+
+    wait_for_sdcpp_native_images(
+        client,
+        &dispatch.base_url,
+        &request.provider,
+        &job_id,
+        image_generation_state,
+    )
+    .await
+}
+
+fn extract_sdcpp_job_id(body: &serde_json::Value) -> Option<String> {
+    body.get("id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+async fn wait_for_sdcpp_native_images(
+    client: &reqwest::Client,
+    base_url: &str,
+    provider: &str,
+    job_id: &str,
+    image_generation_state: &ImageGenerationState,
+) -> Result<Vec<String>, AppError> {
+    let deadline = Instant::now() + Duration::from_secs(999_999);
+    let job_url = format!("{}/sdcpp/v1/jobs/{job_id}", base_url.trim_end_matches('/'));
+
+    loop {
+        if image_generation_state
+            .is_cancelled(provider, Some(job_id))
+            .await
+        {
+            return Err(AppError::External {
+                request_id: None,
+                message: "Image generation cancelled".to_string(),
+            });
+        }
+
+        let response = client
+            .get(&job_url)
+            .send()
+            .await
+            .map_err(|error| AppError::External {
+                request_id: None,
+                message: format!("Failed to poll stable-diffusion.cpp job: {error}"),
+            })?;
+        let body = parse_image_response_body(response).await?;
+        let status = body
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+
+        match status {
+            "completed" => {
+                let images = parse_sdcpp_generated_images(&body);
+                if !images.is_empty() {
+                    return Ok(images);
+                }
+                return Err(AppError::External {
+                    request_id: None,
+                    message: format!(
+                        "stable-diffusion.cpp completed without images. Response shape was: {}",
+                        summarize_image_response_shape(&body)
+                    ),
+                });
+            }
+            "failed" | "cancelled" => {
+                return Err(AppError::External {
+                    request_id: None,
+                    message: extract_sdcpp_job_error(&body)
+                        .unwrap_or_else(|| format!("stable-diffusion.cpp job {status}")),
+                });
+            }
+            "queued" | "generating" => {}
+            _ => {
+                return Err(AppError::External {
+                    request_id: None,
+                    message: format!("stable-diffusion.cpp returned unknown job status: {status}"),
+                });
+            }
+        }
+
+        if Instant::now() >= deadline {
+            return Err(AppError::External {
+                request_id: None,
+                message: "stable-diffusion.cpp image generation timed out".to_string(),
+            });
+        }
+
+        tokio::time::sleep(Duration::from_millis(700)).await;
+    }
+}
+
+fn extract_sdcpp_job_error(body: &serde_json::Value) -> Option<String> {
+    body.get("error")
+        .and_then(|error| error.get("message"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn build_sdcpp_native_image_payload(request: &ImageGenerationRequest) -> serde_json::Value {
+    serde_json::json!({
+        "prompt": request.prompt,
+        "negative_prompt": request.negative_prompt.clone().unwrap_or_default(),
+        "clip_skip": request.clip_skip.unwrap_or(-1),
+        "width": request.width.unwrap_or(512),
+        "height": request.height.unwrap_or(512),
+        "seed": request.seed.unwrap_or(-1),
+        "batch_count": request.batch_size.unwrap_or(1),
+        "sample_params": {
+            "scheduler": normalize_sdcpp_scheduler(request.scheduler.as_deref()),
+            "sample_method": normalize_sdcpp_sampler(request.sampler.as_deref()),
+            "sample_steps": request.steps.unwrap_or(20),
+            "guidance": {
+                "txt_cfg": request.cfg_scale.unwrap_or(7.0)
+            }
+        },
+        "output_format": "png",
+        "output_compression": 100
+    })
+}
+
+fn build_local_image_payload(request: &ImageGenerationRequest) -> serde_json::Value {
+    let sampler_name = request
+        .sampler
+        .clone()
+        .unwrap_or_else(|| "euler_a".to_string());
+    let scheduler = request.scheduler.clone().unwrap_or_default();
 
     serde_json::json!({
         "prompt": request.prompt,
@@ -435,14 +633,7 @@ fn parse_generated_images(
     response_format: ImageResponseFormat,
 ) -> Vec<String> {
     match response_format {
-        ImageResponseFormat::SdApi => body
-            .get("images")
-            .and_then(|value| value.as_array())
-            .into_iter()
-            .flat_map(|items| items.iter())
-            .filter_map(|item| item.as_str())
-            .map(|b64| format!("data:image/png;base64,{b64}"))
-            .collect(),
+        ImageResponseFormat::SdApi => parse_sdcpp_generated_images(body),
         ImageResponseFormat::OpenAiCompatible => body
             .get("data")
             .and_then(|value| value.as_array())
@@ -460,6 +651,94 @@ fn parse_generated_images(
             })
             .collect(),
     }
+}
+
+fn parse_sdcpp_generated_images(body: &serde_json::Value) -> Vec<String> {
+    let output_format = body
+        .get("result")
+        .and_then(|value| value.get("output_format"))
+        .or_else(|| body.get("output_format"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("png");
+
+    parse_image_items(body.get("images"), output_format)
+        .into_iter()
+        .chain(parse_image_items(
+            body.get("result").and_then(|value| value.get("images")),
+            output_format,
+        ))
+        .chain(
+            body.get("result")
+                .and_then(|value| value.get("b64_json"))
+                .and_then(serde_json::Value::as_str)
+                .map(|b64| data_url_from_b64(output_format, b64)),
+        )
+        .collect()
+}
+
+fn parse_image_items(value: Option<&serde_json::Value>, output_format: &str) -> Vec<String> {
+    value
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flat_map(|items| items.iter())
+        .filter_map(|item| {
+            item.as_str()
+                .map(|b64| data_url_from_b64(output_format, b64))
+                .or_else(|| {
+                    item.get("b64_json")
+                        .and_then(serde_json::Value::as_str)
+                        .map(|b64| data_url_from_b64(output_format, b64))
+                })
+                .or_else(|| {
+                    item.get("url")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                })
+        })
+        .collect()
+}
+
+fn data_url_from_b64(output_format: &str, b64: &str) -> String {
+    let format = output_format
+        .trim()
+        .trim_start_matches('.')
+        .to_ascii_lowercase();
+    let mime = match format.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        _ => "image/png",
+    };
+    format!("data:{mime};base64,{b64}")
+}
+
+fn summarize_image_response_shape(body: &serde_json::Value) -> String {
+    let Some(object) = body.as_object() else {
+        return body
+            .as_str()
+            .map_or_else(|| body.to_string(), std::string::ToString::to_string);
+    };
+
+    object
+        .iter()
+        .map(|(key, value)| {
+            let kind = if value.is_array() {
+                "array"
+            } else if value.is_object() {
+                "object"
+            } else if value.is_string() {
+                "string"
+            } else if value.is_number() {
+                "number"
+            } else if value.is_boolean() {
+                "boolean"
+            } else {
+                "null"
+            };
+            format!("{key}:{kind}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn parse_openrouter_generated_images(body: &serde_json::Value) -> Vec<String> {
@@ -1279,7 +1558,10 @@ fn normalize_sdcpp_scheduler(value: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::build_cloud_image_payload;
+    use super::{
+        ImageResponseFormat, build_cloud_image_payload, build_sdcpp_native_image_payload,
+        parse_generated_images,
+    };
     use crate::domain::ai::ImageGenerationRequest;
     use serde_json::json;
 
@@ -1354,5 +1636,78 @@ mod tests {
             payload.get("model"),
             Some(&json!("bytedance-seed/seedream-4.5"))
         );
+    }
+
+    #[test]
+    fn parses_stable_diffusion_webui_style_images() {
+        let images = parse_generated_images(
+            &json!({
+                "images": ["ZmFrZQ=="],
+                "parameters": {},
+                "info": "{}"
+            }),
+            ImageResponseFormat::SdApi,
+        );
+
+        assert_eq!(images, vec!["data:image/png;base64,ZmFrZQ=="]);
+    }
+
+    #[test]
+    fn builds_native_sdcpp_image_payload() {
+        let payload = build_sdcpp_native_image_payload(&ImageGenerationRequest {
+            provider: "sdcpp".to_string(),
+            prompt: "draw a cat".to_string(),
+            original_prompt: None,
+            model: "default".to_string(),
+            settings_key: None,
+            session_id: None,
+            steps: Some(30),
+            cfg_scale: Some(8.5),
+            width: Some(896),
+            height: Some(1152),
+            sampler: Some("Euler A".to_string()),
+            seed: Some(42),
+            clip_skip: Some(2),
+            negative_prompt: Some("blurry".to_string()),
+            batch_size: Some(1),
+            scheduler: Some("Karras".to_string()),
+        });
+
+        assert_eq!(payload.get("prompt"), Some(&json!("draw a cat")));
+        assert_eq!(payload.get("width"), Some(&json!(896)));
+        assert_eq!(
+            payload.pointer("/sample_params/sample_steps"),
+            Some(&json!(30))
+        );
+        assert_eq!(
+            payload.pointer("/sample_params/sample_method"),
+            Some(&json!("euler_a"))
+        );
+        assert_eq!(
+            payload.pointer("/sample_params/scheduler"),
+            Some(&json!("karras"))
+        );
+        assert_eq!(
+            payload.pointer("/sample_params/guidance/txt_cfg"),
+            Some(&json!(8.5))
+        );
+    }
+
+    #[test]
+    fn parses_sdcpp_webui_result_images() {
+        let images = parse_generated_images(
+            &json!({
+                "kind": "img_gen",
+                "result": {
+                    "output_format": "webp",
+                    "images": [
+                        { "b64_json": "ZmFrZQ==" }
+                    ]
+                }
+            }),
+            ImageResponseFormat::SdApi,
+        );
+
+        assert_eq!(images, vec!["data:image/webp;base64,ZmFrZQ=="]);
     }
 }
