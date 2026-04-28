@@ -3,6 +3,8 @@ use crate::infrastructure::logging::logger;
 use crate::infrastructure::logging::{self as logs, LogEntry};
 use crate::models::{SelectedModule, UIState};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 use tauri::State;
@@ -75,6 +77,17 @@ pub fn clear_logs() -> Result<(), AppError> {
 
 #[tauri::command]
 #[specta::specta]
+/// Clears log entries and files for a single console view.
+#[allow(clippy::needless_pass_by_value)]
+pub fn clear_console_logs(view_id: String) -> Result<(), AppError> {
+    let target = resolve_console_log_target(&view_id);
+    logs::clear_logs_for_view(&view_id);
+    clear_console_log_target(&view_id, &target)?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 /// Returns the root folder where launcher logs are stored.
 pub fn get_log_dir() -> Result<String, AppError> {
     std::fs::create_dir_all(crate::utils::paths::LOG_DIR.as_path())?;
@@ -87,6 +100,17 @@ pub fn get_log_dir() -> Result<String, AppError> {
 pub fn open_log_dir() -> Result<(), AppError> {
     std::fs::create_dir_all(crate::utils::paths::LOG_DIR.as_path())?;
     open_folder(crate::utils::paths::LOG_DIR.as_path())?;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Opens the log folder for a single console view.
+#[allow(clippy::needless_pass_by_value)]
+pub fn open_console_log_target(view_id: String) -> Result<(), AppError> {
+    let target = resolve_console_log_target(&view_id);
+    fs::create_dir_all(&target)?;
+    open_folder(&target)?;
     Ok(())
 }
 
@@ -138,6 +162,60 @@ const fn describe_status(status: ConsoleRuntimeStatus) -> &'static str {
     }
 }
 
+fn canonical_engine_id(engine_id: &str) -> &str {
+    match engine_id {
+        "stable-diffusion" => "sdcpp",
+        value => value,
+    }
+}
+
+fn resolve_console_log_target(view_id: &str) -> PathBuf {
+    if let Some(engine_id) = view_id.strip_prefix("engine:") {
+        return crate::utils::paths::ENGINE_LOGS_DIR.join(canonical_engine_id(engine_id));
+    }
+
+    if let Some(module_id) = view_id.strip_prefix("module:") {
+        return crate::utils::paths::INTEGRATION_LOGS_DIR.join(module_id);
+    }
+
+    crate::utils::paths::LOG_DIR.clone()
+}
+
+fn clear_console_log_target(view_id: &str, target: &Path) -> Result<(), AppError> {
+    if view_id == "general" {
+        clear_log_file(&target.join("axelate.log"))?;
+        return Ok(());
+    }
+
+    if !target.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(target)? {
+        let path = entry?.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("log"))
+        {
+            clear_log_file(&path)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn clear_log_file(path: &Path) -> Result<(), AppError> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(path)?;
+    Ok(())
+}
+
 impl ConsoleOverviewBuilder {
     async fn build(
         engine_state: &crate::domain::engine::types::EngineState,
@@ -187,7 +265,12 @@ impl ConsoleOverviewBuilder {
         match state {
             crate::domain::engine::types::EngineState::Ready { slots } => slots
                 .iter()
-                .map(|slot| (slot.engine.id.clone(), slot.engine.name.clone()))
+                .map(|slot| {
+                    (
+                        canonical_engine_id(&slot.engine.id).to_string(),
+                        slot.engine.name.clone(),
+                    )
+                })
                 .collect(),
             _ => BTreeMap::new(),
         }
@@ -199,24 +282,64 @@ impl ConsoleOverviewBuilder {
         module_ids: &BTreeSet<String>,
     ) -> Vec<ConsoleLogView> {
         let mut views = Vec::with_capacity(engine_labels.len() + module_ids.len() + 1);
+        let mut view_ids = BTreeSet::new();
+        let mut view_labels = BTreeSet::new();
         views.push(ConsoleLogView {
             id: "general".to_string(),
             label: "General".to_string(),
         });
-        views.extend(engine_labels.iter().map(|(id, label)| ConsoleLogView {
-            id: format!("engine:{id}"),
-            label: label.clone(),
-        }));
-        views.extend(module_ids.iter().map(|module_id| {
-            ConsoleLogView {
-                id: format!("module:{module_id}"),
-                label: module_labels
-                    .get(module_id)
-                    .cloned()
-                    .unwrap_or_else(|| ConsoleLabelFormatter::format_module_label(module_id)),
-            }
-        }));
+        view_ids.insert("general".to_string());
+        view_labels.insert(Self::normalize_view_label("General"));
+
+        for (id, label) in engine_labels {
+            Self::push_unique_view(
+                &mut views,
+                &mut view_ids,
+                &mut view_labels,
+                ConsoleLogView {
+                    id: format!("engine:{id}"),
+                    label: label.clone(),
+                },
+            );
+        }
+
+        for module_id in module_ids {
+            Self::push_unique_view(
+                &mut views,
+                &mut view_ids,
+                &mut view_labels,
+                ConsoleLogView {
+                    id: format!("module:{module_id}"),
+                    label: module_labels
+                        .get(module_id)
+                        .cloned()
+                        .unwrap_or_else(|| ConsoleLabelFormatter::format_module_label(module_id)),
+                },
+            );
+        }
+
         views
+    }
+
+    fn push_unique_view(
+        views: &mut Vec<ConsoleLogView>,
+        view_ids: &mut BTreeSet<String>,
+        view_labels: &mut BTreeSet<String>,
+        view: ConsoleLogView,
+    ) {
+        let normalized_label = Self::normalize_view_label(&view.label);
+        if view_ids.insert(view.id.clone()) && view_labels.insert(normalized_label) {
+            views.push(view);
+        }
+    }
+
+    fn normalize_view_label(label: &str) -> String {
+        label
+            .trim()
+            .to_ascii_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 
     async fn build_status_items(
@@ -273,36 +396,54 @@ impl ConsoleOverviewBuilder {
                 detail: "No active engines".to_string(),
             }],
             EngineState::Starting { engine_id } => vec![ConsoleStatusItem {
-                id: format!("engine:{engine_id}"),
+                id: format!("engine:{}", canonical_engine_id(engine_id)),
                 label: ConsoleLabelFormatter::format_module_label(engine_id),
                 kind: "engine".to_string(),
                 status: ConsoleRuntimeStatus::Starting,
                 detail: "Starting…".to_string(),
             }],
             EngineState::Swapping { from, to } => vec![ConsoleStatusItem {
-                id: format!("engine:{to}"),
+                id: format!("engine:{}", canonical_engine_id(to)),
                 label: ConsoleLabelFormatter::format_module_label(to),
                 kind: "engine".to_string(),
                 status: ConsoleRuntimeStatus::Starting,
                 detail: format!("Switching from {from}"),
             }],
             EngineState::Error { engine_id, message } => vec![ConsoleStatusItem {
-                id: format!("engine:{engine_id}"),
+                id: format!("engine:{}", canonical_engine_id(engine_id)),
                 label: ConsoleLabelFormatter::format_module_label(engine_id),
                 kind: "engine".to_string(),
                 status: ConsoleRuntimeStatus::Failed,
                 detail: message.clone(),
             }],
-            EngineState::Ready { slots } => slots
-                .iter()
-                .map(|slot| ConsoleStatusItem {
-                    id: format!("engine:{}", slot.engine.id),
-                    label: slot.engine.name.clone(),
-                    kind: "engine".to_string(),
-                    status: ConsoleRuntimeStatus::Running,
-                    detail: ConsoleLabelFormatter::format_capability(slot.capability),
-                })
-                .collect(),
+            EngineState::Ready { slots } => {
+                let mut items: BTreeMap<String, ConsoleStatusItem> = BTreeMap::new();
+                let mut label_to_id: BTreeMap<String, String> = BTreeMap::new();
+                for slot in slots {
+                    let label_key = Self::normalize_view_label(&slot.engine.name);
+                    let id = label_to_id
+                        .entry(label_key)
+                        .or_insert_with(|| canonical_engine_id(&slot.engine.id).to_string())
+                        .clone();
+                    let detail = ConsoleLabelFormatter::format_capability(slot.capability);
+                    items
+                        .entry(id.clone())
+                        .and_modify(|item| {
+                            if !item.detail.split(", ").any(|part| part == detail) {
+                                item.detail.push_str(", ");
+                                item.detail.push_str(&detail);
+                            }
+                        })
+                        .or_insert_with(|| ConsoleStatusItem {
+                            id: format!("engine:{id}"),
+                            label: slot.engine.name.clone(),
+                            kind: "engine".to_string(),
+                            status: ConsoleRuntimeStatus::Running,
+                            detail,
+                        });
+                }
+                items.into_values().collect()
+            }
         }
     }
 }

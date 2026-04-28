@@ -55,7 +55,7 @@ describe('ConsoleLogService', () => {
 
         await service.clearLogs();
 
-        expect(bridge.invoke).toHaveBeenCalledWith('clear_logs');
+        expect(bridge.invoke).toHaveBeenCalledWith('clear_console_logs', { viewId: 'general' });
         expect(service.getLogs()).toHaveLength(0);
     });
 
@@ -92,7 +92,42 @@ describe('ConsoleLogService', () => {
         vi.mocked(bridge.invoke).mockResolvedValue(null);
         const result = await service.clearLogs();
         expect(result).toBe(true);
-        expect(bridge.invoke).toHaveBeenCalledWith('clear_logs');
+        expect(bridge.invoke).toHaveBeenCalledWith('clear_console_logs', { viewId: 'general' });
+    });
+
+    it('should clear only the selected engine view', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'engine:sdcpp', label: 'Stable Diffusion.cpp' },
+                ],
+                status_items: [],
+            },
+        });
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
+            if (command === 'get_logs') {
+                return Promise.resolve([
+                    { timestamp: 1, source: 'frontend', level: 'ERROR', message: 'launcher' },
+                    { timestamp: 2, source: 'sdcpp', level: 'INFO', message: 'engine' },
+                ]);
+            }
+            return Promise.resolve(undefined);
+        });
+
+        await service.fetchLogs();
+        await service.getAvailableViews();
+        await service.clearLogs('engine:stable-diffusion');
+
+        expect(bridge.invoke).toHaveBeenCalledWith('clear_console_logs', {
+            viewId: 'engine:sdcpp',
+        });
+        expect(service.getLogsForView('general')).toEqual([
+            expect.objectContaining({ message: 'launcher' }),
+        ]);
+        expect(service.getLogsForView('engine:sdcpp')).toEqual([]);
     });
 
     it('should return false on clearLogs error', async () => {
@@ -305,7 +340,7 @@ describe('ConsoleLogService', () => {
         ]);
     });
 
-    it('should keep General limited to launcher logs and route module logs to module tabs', async () => {
+    it('should keep General limited to useful launcher logs and route module logs to module tabs', async () => {
         setupTauri(bridge, true);
         vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
             status: 'ok',
@@ -340,6 +375,12 @@ describe('ConsoleLogService', () => {
                         level: 'INFO',
                         message: 'ready line',
                     },
+                    {
+                        timestamp: 4,
+                        source: 'frontend',
+                        level: 'WARN',
+                        message: '[WindowService] setSize failed',
+                    },
                 ]);
             }
             return Promise.resolve(undefined);
@@ -351,7 +392,7 @@ describe('ConsoleLogService', () => {
         expect(service.getLogsForView('general')).toEqual([
             expect.objectContaining({
                 source: 'frontend',
-                message: 'Navigating to: console',
+                message: 'setSize failed',
             }),
         ]);
         expect(service.getLogsForView('module:llamacpp')).toEqual([
@@ -364,6 +405,163 @@ describe('ConsoleLogService', () => {
             expect.objectContaining({
                 source: 'llamacpp',
                 message: 'ready line',
+            }),
+        ]);
+    });
+
+    it('should filter noisy startup and progress logs before rendering', async () => {
+        setupTauri(bridge, true);
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
+            if (command === 'get_logs') {
+                return Promise.resolve([
+                    {
+                        timestamp: 1,
+                        source: 'frontend',
+                        level: 'INFO',
+                        message: '[CoreRuntimeSupport] Critical services hydrated.',
+                    },
+                    {
+                        timestamp: 2,
+                        source: 'frontend',
+                        level: 'INFO',
+                        message: '[CatalogService] Catalog initialized. AI: 10, Services: 1',
+                    },
+                    {
+                        timestamp: 3,
+                        source: 'sdcpp',
+                        level: 'INFO',
+                        message: '2026-04-24 07:00:00 [INFO] |====> | 8/28 - 1.03it/s',
+                    },
+                    {
+                        timestamp: 4,
+                        source: 'frontend',
+                        level: 'ERROR',
+                        message: '[CatalogService] Failed to load catalog: boom',
+                    },
+                ]);
+            }
+            return Promise.resolve(undefined);
+        });
+
+        await service.fetchLogs();
+
+        expect(service.getLogsForView('general')).toEqual([
+            expect.objectContaining({
+                level: 'ERROR',
+                message: 'Failed to load catalog: boom',
+            }),
+        ]);
+        expect(service.getLogsForView('engine:sdcpp')).toEqual([]);
+    });
+
+    it('should route stable-diffusion alias logs into the sdcpp engine tab', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'engine:sdcpp', label: 'Stable Diffusion.cpp' },
+                ],
+                status_items: [],
+            },
+        });
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
+            if (command === 'get_logs') {
+                return Promise.resolve([
+                    {
+                        timestamp: 1,
+                        source: 'stable-diffusion',
+                        level: 'INFO',
+                        message: '2026-04-24 07:00:00 [INFO] loaded model',
+                    },
+                ]);
+            }
+            return Promise.resolve(undefined);
+        });
+
+        await service.fetchLogs();
+        await service.getAvailableViews();
+
+        expect(service.getLogsForView('engine:sdcpp')).toEqual([
+            expect.objectContaining({
+                source: 'sdcpp',
+                message: 'loaded model',
+            }),
+        ]);
+        expect(service.getLogsForView('general')).toEqual([]);
+    });
+
+    it('should collapse duplicate engine views by label', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'engine:first-backend', label: 'Shared Engine' },
+                    { id: 'engine:second-backend', label: 'Shared   Engine' },
+                    { id: 'engine:other-backend', label: 'Other Engine' },
+                ],
+                status_items: [],
+            },
+        });
+
+        const views = await service.getAvailableViews();
+
+        expect(views).toEqual([
+            { id: 'general', label: 'General' },
+            { id: 'engine:first-backend', label: 'Shared Engine' },
+            { id: 'engine:other-backend', label: 'Other Engine' },
+        ]);
+    });
+
+    it('should dedupe engine logs received from live events and runtime files', async () => {
+        const listeners = new Map<string, (payload: unknown) => void>();
+
+        setupTauri(bridge, true);
+        vi.mocked(bridge.listen).mockImplementation(
+            <T>(event: string, callback: (payload: T) => void) => {
+                listeners.set(event, callback as (payload: unknown) => void);
+                return Promise.resolve(vi.fn());
+            },
+        );
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                views: [
+                    { id: 'general', label: 'General' },
+                    { id: 'engine:sdcpp', label: 'Stable Diffusion.cpp' },
+                ],
+                status_items: [],
+            },
+        });
+        vi.mocked(bridge.invoke).mockImplementation((command) => {
+            if (command === 'get_logs') {
+                return Promise.resolve([
+                    {
+                        timestamp: 2,
+                        source: 'sdcpp',
+                        level: 'INFO',
+                        message: '2026-04-24 07:00:00 [INFO] 8/28 - 1.03it/s',
+                    },
+                ]);
+            }
+            return Promise.resolve(undefined);
+        });
+
+        await service.init();
+        listeners.get('ai:engine:log')?.({
+            engine_id: 'stable-diffusion',
+            line: '8/28 - 1.03it/s',
+        });
+        await service.fetchLogs();
+        await service.getAvailableViews();
+
+        expect(service.getLogsForView('engine:sdcpp')).toEqual([
+            expect.objectContaining({
+                source: 'sdcpp',
+                message: '8/28 - 1.03it/s',
             }),
         ]);
     });
@@ -445,18 +643,20 @@ describe('ConsoleLogService', () => {
         ).toHaveLength(1);
     });
 
-    it('should open the launcher logs folder', async () => {
+    it('should open the selected logs folder', async () => {
         setupTauri(bridge, true);
         vi.mocked(bridge.invoke).mockImplementation((command) => {
-            if (command === 'open_log_dir') {
+            if (command === 'open_console_log_target') {
                 return Promise.resolve(undefined);
             }
             return Promise.resolve(undefined);
         });
 
-        const opened = await service.openLogsFolder();
+        const opened = await service.openLogsFolder('engine:stable-diffusion');
 
         expect(opened).toBe(true);
-        expect(bridge.invoke).toHaveBeenCalledWith('open_log_dir');
+        expect(bridge.invoke).toHaveBeenCalledWith('open_console_log_target', {
+            viewId: 'engine:sdcpp',
+        });
     });
 });

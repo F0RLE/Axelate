@@ -34,7 +34,6 @@ describe('ConsoleUI lifecycle', () => {
                 </div>
                 <button class="console-tab-scroll console-tab-scroll-right" type="button" hidden></button>
             </div>
-            <div id="console-runtime-cards" class="console-runtime-cards" hidden></div>
             <div id="page-console" class="active"></div>
             <div class="console-workspace">
                 <div id="console-container" class="console-logs-area">
@@ -223,7 +222,7 @@ describe('ConsoleUI lifecycle', () => {
 
         ui.init();
         await ui.clearLogs();
-        expect(service.clearLogs).toHaveBeenCalled();
+        expect(service.clearLogs).toHaveBeenCalledWith('general');
 
         await ui.copyLogs();
         expect(clipboardWrite).toHaveBeenCalledWith('hello\nboom');
@@ -255,6 +254,7 @@ describe('ConsoleUI lifecycle', () => {
 
         expect(clearButton.classList.contains('confirming')).toBe(false);
         expect(service.clearLogs).toHaveBeenCalledTimes(1);
+        expect(service.clearLogs).toHaveBeenCalledWith('general');
 
         vi.useRealTimers();
     });
@@ -288,6 +288,7 @@ describe('ConsoleUI lifecycle', () => {
         await flushPromises();
 
         expect(service.openLogsFolder).toHaveBeenCalledTimes(1);
+        expect(service.openLogsFolder).toHaveBeenCalledWith('general');
     });
 
     it('should scroll logs to the bottom on the first render', () => {
@@ -488,72 +489,6 @@ describe('ConsoleUI lifecycle', () => {
 
         expect(toolbar.scrollLeft).toBeGreaterThan(0);
         expect(previousButton.disabled).toBe(false);
-    });
-
-    it('should hide runtime status cards when matching log tabs already exist', async () => {
-        const service = createServiceMock({
-            getLogsForView: vi.fn((view: string) =>
-                normalizeLogs(
-                    view === 'module:sample-integration'
-                        ? [
-                              {
-                                  level: 'INFO',
-                                  message: 'integration runtime line',
-                                  source: 'module:sample-integration',
-                                  module_id: 'sample-integration',
-                                  timestamp: 1,
-                              },
-                          ]
-                        : [],
-                ),
-            ),
-            getAvailableViews: vi.fn().mockResolvedValue([
-                { id: 'general', label: 'General' },
-                { id: 'module:sample-integration', label: 'Sample Integration' },
-            ]),
-            getStatusItems: vi.fn().mockResolvedValue([
-                {
-                    id: 'module:sample-integration',
-                    label: 'Sample Integration',
-                    kind: 'module',
-                    status: 'running',
-                    detail: 'Running',
-                },
-            ]),
-            fetchLogs: vi.fn().mockResolvedValue([]),
-        });
-
-        ui = new ConsoleUI(service, createDeps());
-        ui.init();
-        await flushPromises();
-
-        const cardsRoot = document.getElementById('console-runtime-cards') as HTMLElement;
-        const card = cardsRoot.querySelector<HTMLElement>('.console-runtime-card');
-        expect(cardsRoot.hidden).toBe(true);
-        expect(card).toBeNull();
-    });
-
-    it('should hide idle engine status cards', async () => {
-        const service = createServiceMock({
-            getAvailableViews: vi.fn().mockResolvedValue([{ id: 'general', label: 'General' }]),
-            getStatusItems: vi.fn().mockResolvedValue([
-                {
-                    id: 'engine:idle',
-                    label: 'AI Engines',
-                    kind: 'engine',
-                    status: 'stopped',
-                    detail: 'No active engines',
-                },
-            ]),
-        });
-
-        ui = new ConsoleUI(service, createDeps());
-        ui.init();
-        await flushPromises();
-
-        const cardsRoot = document.getElementById('console-runtime-cards') as HTMLElement;
-        expect(cardsRoot.hidden).toBe(true);
-        expect(cardsRoot.textContent).not.toContain('No active engines');
     });
 
     it('should copy only logs from the active view', async () => {

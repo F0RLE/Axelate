@@ -62,6 +62,30 @@ export class ConsoleLogService {
     private static readonly _NOISE_PATTERNS = [
         /\[AIBridge\] Stream chunk received/i,
         /\[AIBridge\] Thought chunk received/i,
+        /\bCritical services hydrated\b/i,
+        /\bCore Ready\b/i,
+        /\bReady\.\s*$/i,
+        /\bLoading\s+[a-z-]+\.{3}$/i,
+        /\bLanguage changed to\b.*\bnotifications dispatched\b/i,
+        /\bSettings container found\b.*\bInitializing renderers\b/i,
+        /\bGeneralSettingsRenderer\b.*\bInitializing\b/i,
+        /\bInitializing taskbar toggles\b/i,
+        /\bInitializing monitor toggles\b/i,
+        /\bStarted listening to system_stats\b/i,
+        /\bNavigation initialized\b/i,
+        /\bPage\s+[a-z0-9._-]+\b/i,
+        /\bRestore page\s+[a-z0-9._-]+\b/i,
+        /\bNavigating to:\s*[a-z0-9._-]+\b/i,
+        /\bResolution changed:\b/i,
+        /\bFetched\s+\d+\s+modules\b/i,
+        /\bMapping config\b/i,
+        /\bAfter mapping\b/i,
+        /\b_ensureValidConfig passed\b/i,
+        /\bCatalog hydrated successfully\b/i,
+        /\bCatalog initialized\b/i,
+        /\bTransport initialized\b/i,
+        /\bListening for engine events\b/i,
+        /^\s*\|?[=>\s]+\|?\s*\d+\s*\/\s*\d+\s*-\s*\d+(?:\.\d+)?\s*(?:it\/s|s\/it)\s*$/i,
     ];
 
     private logs: ILogEntry[] = [];
@@ -104,12 +128,12 @@ export class ConsoleLogService {
         }
     }
 
-    public async clearLogs(): Promise<boolean> {
-        this.logs = [];
-        this.lastTimestamp = 0;
+    public async clearLogs(viewId = 'general'): Promise<boolean> {
+        const normalizedViewId = this._canonicalViewId(viewId);
+        this.logs = this.logs.filter((entry) => !this._isLogInView(entry, normalizedViewId));
 
         try {
-            await this.bridge.invoke('clear_logs');
+            await this.bridge.invoke('clear_console_logs', { viewId: normalizedViewId });
             return true;
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Clear logs failed:', error);
@@ -132,8 +156,9 @@ export class ConsoleLogService {
         try {
             const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
-                this._hydrateKnownRuntimeIds(result.data.views);
-                return result.data.views;
+                const views = this._normalizeViews(result.data.views);
+                this._hydrateKnownRuntimeIds(views);
+                return views;
             }
         } catch (error) {
             this._tracer.warn(
@@ -172,6 +197,39 @@ export class ConsoleLogService {
         });
     }
 
+    private _normalizeViews(views: readonly IConsoleLogView[]): IConsoleLogView[] {
+        const seenIds = new Set<string>();
+        const seenLabels = new Set<string>();
+        const normalizedViews: IConsoleLogView[] = [];
+
+        for (const view of views) {
+            const id = this._canonicalViewId(view.id);
+            const labelKey = this._normalizeViewLabel(view.label);
+            if (seenIds.has(id) || seenLabels.has(labelKey)) {
+                continue;
+            }
+
+            seenIds.add(id);
+            seenLabels.add(labelKey);
+            normalizedViews.push({ ...view, id });
+        }
+
+        return normalizedViews;
+    }
+
+    private _canonicalViewId(viewId: string): string {
+        const engineView = viewId.match(/^engine:(.+)$/);
+        if (engineView !== null) {
+            return `engine:${this._canonicalEngineId(engineView[1] ?? '')}`;
+        }
+
+        return viewId;
+    }
+
+    private _normalizeViewLabel(label: string): string {
+        return label.trim().toLowerCase().replaceAll(/\s+/gu, ' ');
+    }
+
     private _getModuleLabel(moduleId: string): string {
         return moduleId
             .replace(/^axelate-/, '')
@@ -196,9 +254,11 @@ export class ConsoleLogService {
 
         const engineView = viewId.match(/^engine:(.+)$/);
         if (engineView !== null) {
-            const engineId = engineView[1] ?? '';
+            const engineId = this._canonicalEngineId(engineView[1] ?? '');
             return this.logs.filter(
-                (entry) => this._getModuleId(entry) === null && entry.source.trim() === engineId,
+                (entry) =>
+                    this._getModuleId(entry) === null &&
+                    this._canonicalEngineId(entry.source) === engineId,
             );
         }
 
@@ -265,13 +325,15 @@ export class ConsoleLogService {
         }
     }
 
-    public async openLogsFolder(): Promise<boolean> {
+    public async openLogsFolder(viewId = 'general'): Promise<boolean> {
         if (!this.bridge.isTauri()) {
             return false;
         }
 
         try {
-            await this.bridge.invoke('open_log_dir');
+            await this.bridge.invoke('open_console_log_target', {
+                viewId: this._canonicalViewId(viewId),
+            });
             return true;
         } catch (error) {
             this._tracer.error(`[ConsoleLogService] Failed to open logs folder: ${String(error)}`);
@@ -281,16 +343,24 @@ export class ConsoleLogService {
 
     private async _registerEngineListeners(): Promise<void> {
         await this._listenToEngineEvent('ai:engine:log', (payload) => {
-            this._pushLog(payload.line, payload.engine_id, 'info');
+            this._pushLog(payload.line, this._canonicalEngineId(payload.engine_id), 'info');
         });
         await this._listenToEngineEvent('ai:engine:starting', (payload) => {
-            this._pushLog('Engine is starting...', payload.engine_id, 'info');
+            this._pushLog(
+                'Engine is starting...',
+                this._canonicalEngineId(payload.engine_id),
+                'info',
+            );
         });
         await this._listenToEngineEvent('ai:engine:ready', (payload) => {
-            this._pushLog(`Engine is ready at ${payload.endpoint}`, payload.engine_id, 'info');
+            this._pushLog(
+                `Engine is ready at ${payload.endpoint}`,
+                this._canonicalEngineId(payload.engine_id),
+                'info',
+            );
         });
         await this._listenToEngineEvent('ai:engine:error', (payload) => {
-            this._pushLog(payload.message, payload.engine_id, 'error');
+            this._pushLog(payload.message, this._canonicalEngineId(payload.engine_id), 'error');
         });
     }
 
@@ -317,9 +387,26 @@ export class ConsoleLogService {
         }
 
         this.lastTimestamp = newLogs.at(-1)?.timestamp ?? this.lastTimestamp;
+        const seenBatchKeys = new Set<string>();
         const visibleLogs = newLogs
             .filter((entry) => !this._isNoise(entry))
-            .map((entry) => this._normalizer.normalize(entry));
+            .map((entry) =>
+                this._normalizer.normalize({
+                    ...entry,
+                    source: this._canonicalRuntimeSource(entry.source),
+                }),
+            )
+            .filter((entry) => {
+                if (this._isNoise(entry)) {
+                    return false;
+                }
+                const key = this._dedupeKey(entry);
+                if (seenBatchKeys.has(key) || this._hasDuplicateLog(entry)) {
+                    return false;
+                }
+                seenBatchKeys.add(key);
+                return true;
+            });
         if (visibleLogs.length === 0) {
             return [];
         }
@@ -330,16 +417,23 @@ export class ConsoleLogService {
     }
 
     private _isNoise(entry: ILogEntry): boolean {
+        const levelSource = entry.normalized_level ?? entry.level;
+        const level = levelSource.toUpperCase();
+        if (level === 'ERROR' || level === 'WARN' || level === 'WARNING') {
+            return false;
+        }
+
         return ConsoleLogService._NOISE_PATTERNS.some((pattern) =>
             pattern.test(String(entry.message)),
         );
     }
 
     private _pushLog(message: string, source: string, level: string): void {
-        this._knownEngineIds.add(source);
+        const normalizedSource = this._canonicalRuntimeSource(source);
+        this._knownEngineIds.add(normalizedSource);
         const entry: ILogEntry = {
             timestamp: Date.now() / 1000,
-            source,
+            source: normalizedSource,
             level,
             message,
         };
@@ -348,7 +442,12 @@ export class ConsoleLogService {
             return;
         }
 
-        this.logs.push(this._normalizer.normalize(entry));
+        const normalized = this._normalizer.normalize(entry);
+        if (this._hasDuplicateLog(normalized)) {
+            return;
+        }
+
+        this.logs.push(normalized);
         this._trimLogs();
     }
 
@@ -372,7 +471,7 @@ export class ConsoleLogService {
         for (const view of views) {
             const engineId = view.id.match(/^engine:(.+)$/)?.[1]?.trim();
             if (engineId !== undefined && engineId !== '') {
-                this._knownEngineIds.add(engineId);
+                this._knownEngineIds.add(this._canonicalEngineId(engineId));
             }
 
             const moduleId = view.id.match(/^module:(.+)$/)?.[1]?.trim();
@@ -383,7 +482,29 @@ export class ConsoleLogService {
     }
 
     private _isKnownEngineLog(entry: ILogEntry): boolean {
-        return this._knownEngineIds.has(entry.source.trim());
+        return this._knownEngineIds.has(this._canonicalEngineId(entry.source));
+    }
+
+    private _isLogInView(entry: ILogEntry, viewId: string): boolean {
+        if (viewId === 'general') {
+            return this._getModuleId(entry) === null && !this._isKnownEngineLog(entry);
+        }
+
+        const moduleView = viewId.match(/^module:(.+)$/);
+        if (moduleView !== null) {
+            return this._getModuleId(entry) === (moduleView[1] ?? '');
+        }
+
+        const engineView = viewId.match(/^engine:(.+)$/);
+        if (engineView !== null) {
+            const engineId = this._canonicalEngineId(engineView[1] ?? '');
+            return (
+                this._getModuleId(entry) === null &&
+                this._canonicalEngineId(entry.source) === engineId
+            );
+        }
+
+        return this._getModuleId(entry) === viewId;
     }
 
     private _getModuleId(entry: ILogEntry): string | null {
@@ -393,7 +514,7 @@ export class ConsoleLogService {
             return moduleId;
         }
 
-        const source = entry.source.trim();
+        const source = this._canonicalEngineId(entry.source);
         if (this._knownEngineIds.has(source)) {
             return null;
         }
@@ -403,6 +524,36 @@ export class ConsoleLogService {
         }
 
         return null;
+    }
+
+    private _canonicalRuntimeSource(source: unknown): string {
+        const trimmed = typeof source === 'string' ? source.trim() : '';
+        if (trimmed.startsWith('module:')) {
+            return trimmed;
+        }
+
+        return this._canonicalEngineId(trimmed);
+    }
+
+    private _canonicalEngineId(engineId: unknown): string {
+        const normalized = typeof engineId === 'string' ? engineId.trim() : '';
+        return normalized === 'stable-diffusion' ? 'sdcpp' : normalized;
+    }
+
+    private _hasDuplicateLog(candidate: ILogEntry): boolean {
+        const candidateKey = this._dedupeKey(candidate);
+        return this.logs.some((entry) => {
+            return this._dedupeKey(entry) === candidateKey;
+        });
+    }
+
+    private _dedupeKey(entry: ILogEntry): string {
+        return [
+            this._canonicalRuntimeSource(entry.source),
+            entry.module_id ?? '',
+            entry.normalized_level ?? entry.level,
+            typeof entry.message === 'string' ? entry.message : '',
+        ].join('\u0000');
     }
 
     private _toRuntimeStatus(status: string): ConsoleRuntimeStatus {
