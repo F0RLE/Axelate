@@ -19,6 +19,7 @@ type ModuleSettingsControllerFactoryDeps = {
     getContext: () => IModuleSettingsUIContext;
     registerCleanup: (cleanup: () => void) => void;
     debouncedSave: (key: string, value: SettingValue) => void;
+    notifySettingsChanged: () => void;
     showSaveIndicator: () => void;
     hideSaveIndicator: () => void;
     showDirtyIndicator: () => void;
@@ -46,6 +47,9 @@ export class ModuleSettingsControllerFactory {
             },
             debouncedSave: (key, value) => {
                 this._deps.debouncedSave(key, value);
+            },
+            notifySettingsChanged: () => {
+                this._deps.notifySettingsChanged();
             },
             showSaveIndicator: () => {
                 this._deps.showSaveIndicator();
