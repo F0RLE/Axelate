@@ -84,7 +84,7 @@ export function createTokenEstimator(
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    let timeoutId!: ReturnType<typeof setTimeout>;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
         timeoutId = globalThis.setTimeout(() => {
             reject(new Error(`Timed out after ${String(timeoutMs)}ms`));
@@ -94,6 +94,8 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
     try {
         return await Promise.race([promise, timeout]);
     } finally {
-        globalThis.clearTimeout(timeoutId);
+        if (timeoutId !== undefined) {
+            globalThis.clearTimeout(timeoutId);
+        }
     }
 }
