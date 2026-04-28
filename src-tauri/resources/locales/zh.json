@@ -318,6 +318,7 @@
     "ui.settings.engine.sd_batch_size": "批量大小",
     "ui.settings.engine.sd_cfg": "CFG",
     "ui.settings.engine.sd_clip_skip": "Clip Skip",
+    "ui.settings.engine.sd_denoising_strength": "去噪强度",
     "ui.settings.engine.sd_height": "高度 (px)",
     "ui.settings.engine.sd_negative_prompt": "负向提示词前缀",
     "ui.settings.engine.sd_positive_prompt": "正向提示词前缀",

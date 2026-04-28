@@ -321,6 +321,7 @@
     "ui.settings.engine.sd_batch_size": "Batch Size",
     "ui.settings.engine.sd_cfg": "CFG",
     "ui.settings.engine.sd_clip_skip": "Clip Skip",
+    "ui.settings.engine.sd_denoising_strength": "Denoising strength",
     "ui.settings.engine.sd_height": "Height (px)",
     "ui.settings.engine.sd_negative_prompt": "Negative Prompt Prefix",
     "ui.settings.engine.sd_positive_prompt": "Positive Prompt Prefix",

@@ -106,6 +106,7 @@ export interface IImageGenerationRequest {
     original_prompt?: string;
     steps?: number | null;
     cfg_scale?: number | null;
+    denoising_strength?: number | null;
     width?: number | null;
     height?: number | null;
     /** Sampler algorithm */

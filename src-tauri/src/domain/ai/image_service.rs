@@ -458,6 +458,7 @@ fn build_sdcpp_native_image_payload(request: &ImageGenerationRequest) -> serde_j
             "scheduler": normalize_sdcpp_scheduler(request.scheduler.as_deref()),
             "sample_method": normalize_sdcpp_sampler(request.sampler.as_deref()),
             "sample_steps": request.steps.unwrap_or(20),
+            "strength": request.denoising_strength.unwrap_or(0.75),
             "guidance": {
                 "txt_cfg": request.cfg_scale.unwrap_or(7.0)
             }
@@ -1389,6 +1390,14 @@ fn apply_saved_image_defaults(
     request.cfg_scale = request
         .cfg_scale
         .or_else(|| resolve_f32_setting(settings, settings_key, &request.provider, "cfg_scale"));
+    request.denoising_strength = request.denoising_strength.or_else(|| {
+        resolve_f32_setting(
+            settings,
+            settings_key,
+            &request.provider,
+            "denoising_strength",
+        )
+    });
     request.width = request
         .width
         .or_else(|| resolve_u32_setting(settings, settings_key, &request.provider, "width"));
@@ -1524,12 +1533,12 @@ fn normalize_sdcpp_sampler(value: Option<&str>) -> String {
         "euler" => "euler".to_string(),
         "heun" => "heun".to_string(),
         "dpm2" => "dpm2".to_string(),
-        "dpm2 a" | "dpm2_a" => "dpm2_a".to_string(),
         "dpm++ 2s a" | "dpm++2s_a" | "dpmpp_2s_a" => "dpm++2s_a".to_string(),
         "dpm++ 2m" | "dpm++2m" | "dpmpp_2m" => "dpm++2m".to_string(),
         "dpm++ 2m v2" | "dpm++2mv2" | "dpmpp_2mv2" => "dpm++2mv2".to_string(),
         "ipndm" => "ipndm".to_string(),
         "ipndm_v" => "ipndm_v".to_string(),
+        "er sde" | "er_sde" => "er_sde".to_string(),
         "lcm" => "lcm".to_string(),
         "ddim trailing" | "ddim_trailing" => "ddim_trailing".to_string(),
         "tcd" => "tcd".to_string(),
@@ -1575,6 +1584,7 @@ mod tests {
             session_id: None,
             steps: None,
             cfg_scale: None,
+            denoising_strength: None,
             width: None,
             height: None,
             sampler: None,
@@ -1663,6 +1673,7 @@ mod tests {
             session_id: None,
             steps: Some(30),
             cfg_scale: Some(8.5),
+            denoising_strength: Some(0.42),
             width: Some(896),
             height: Some(1152),
             sampler: Some("Euler A".to_string()),
@@ -1690,6 +1701,23 @@ mod tests {
         assert_eq!(
             payload.pointer("/sample_params/guidance/txt_cfg"),
             Some(&json!(8.5))
+        );
+        let strength = payload
+            .pointer("/sample_params/strength")
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or_default();
+        assert!((strength - 0.42).abs() < 0.001);
+    }
+
+    #[test]
+    fn normalizes_sdcpp_er_sde_sampler() {
+        assert_eq!(
+            build_sdcpp_native_image_payload(&ImageGenerationRequest {
+                sampler: Some("ER SDE".to_string()),
+                ..make_cloud_request("default")
+            })
+            .pointer("/sample_params/sample_method"),
+            Some(&json!("er_sde"))
         );
     }
 

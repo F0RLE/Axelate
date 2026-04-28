@@ -761,6 +761,8 @@ export type ImageGenerationRequest = {
 	steps: number | null,
 	// Guidance scale (CFG)
 	cfg_scale: number | null,
+	// Denoising strength for image-to-image capable backends
+	denoising_strength: number | null,
 	// Image width in pixels
 	width: number | null,
 	// Image height in pixels

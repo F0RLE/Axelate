@@ -322,6 +322,7 @@
     "ui.settings.engine.sd_batch_size": "Размер пакета",
     "ui.settings.engine.sd_cfg": "CFG",
     "ui.settings.engine.sd_clip_skip": "Clip Skip",
+    "ui.settings.engine.sd_denoising_strength": "Сила денойзинга",
     "ui.settings.engine.sd_height": "Высота (px)",
     "ui.settings.engine.sd_negative_prompt": "Префикс негативного промпта",
     "ui.settings.engine.sd_positive_prompt": "Префикс позитивного промпта",
