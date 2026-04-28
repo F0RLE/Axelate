@@ -32,6 +32,7 @@ type ChatUiFactoryDeps = ChatFactoryDeps & {
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
+    readClipboardText: () => Promise<string | null>;
 };
 
 type ChatLifecycleFactoryDeps = {
@@ -93,8 +94,10 @@ type ChatSendFactoryDeps = {
     getHistory: () => IChatMessage[];
     pushUserMessage: (content: IChatMessage['content']) => void;
     createStreamingHandle: (typingId: string) => {
+        setStatus: (text: string) => void;
         update: (chunk: string) => void;
         replace: (chunk: string) => void;
+        cancel: () => void;
         finalize: (text: string, stats?: Record<string, unknown>) => void;
         discard: () => void;
     };
@@ -109,6 +112,7 @@ type ChatSendFactoryDeps = {
         cancel: (message?: string) => void;
         discard: () => void;
     };
+    translate: (key: string, fallback: string) => string;
     showTyping: (typingId: string) => void;
     registerReplaceChunk: (
         listenerId: string,
@@ -130,6 +134,7 @@ type ChatSendFactoryDeps = {
     startImagePreviewPolling: (
         handle: ReturnType<ChatSendFactoryDeps['createImageHandle']>,
     ) => void;
+    cancelTextGeneration: () => Promise<boolean>;
     isImageProvider: (providerId: string | null) => boolean;
     lockUi: (input: HTMLTextAreaElement | null) => {
         input: HTMLTextAreaElement | null;
@@ -161,6 +166,7 @@ export class ChatControllerFactory {
             isTauriRuntime: () => deps.isTauriRuntime(),
             openExternalUrl: async (url) => await deps.openExternalUrl(url),
             copyText: async (text) => await deps.copyText(text),
+            readClipboardText: async () => await deps.readClipboardText(),
             tracer: deps.tracer,
         });
     }
@@ -262,6 +268,7 @@ export class ChatControllerFactory {
             },
             createStreamingHandle: (typingId) => deps.createStreamingHandle(typingId),
             createImageHandle: () => deps.createImageHandle(),
+            translate: (key, fallback) => deps.translate(key, fallback),
             showTyping: (typingId) => {
                 deps.showTyping(typingId);
             },
@@ -290,6 +297,7 @@ export class ChatControllerFactory {
             startImagePreviewPolling: (handle) => {
                 deps.startImagePreviewPolling(handle);
             },
+            cancelTextGeneration: async () => await deps.cancelTextGeneration(),
             isImageProvider: (providerId) => deps.isImageProvider(providerId),
             lockUi: (input) => deps.lockUi(input),
             unlockUi: (els) => {

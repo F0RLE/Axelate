@@ -10,8 +10,10 @@ import { ChatSendFlow } from '../services/ChatSendFlow';
 type ChatSendLogger = Pick<LoggerService, 'info'>;
 
 type StreamingMessageHandle = {
+    setStatus: (text: string) => void;
     update: (chunk: string) => void;
     replace: (chunk: string) => void;
+    cancel: () => void;
     discard: () => void;
     finalize: (text: string, stats?: Record<string, unknown>) => void;
 };
@@ -30,12 +32,13 @@ type ImageGenerationHandle = {
 
 type ChatSendControllerOptions = {
     aiBridge: AIBridge;
-    fileHandler: Pick<ChatFileHandler, 'hasFiles' | 'getTotalTokenEstimate' | 'processForSend'>;
+    fileHandler: Pick<ChatFileHandler, 'hasFiles' | 'processForSend'>;
     service: ChatService;
     getHistory: () => IChatMessage[];
     pushUserMessage: (content: IChatMessage['content']) => void;
     createStreamingHandle: (typingId: string) => StreamingMessageHandle;
     createImageHandle: () => ImageGenerationHandle;
+    translate: (key: string, fallback: string) => string;
     showTyping: (typingId: string) => void;
     registerReplaceChunk: (
         listenerId: string,
@@ -55,6 +58,7 @@ type ChatSendControllerOptions = {
     cleanupStreamingState: (listenerId: string, typingId: string) => void;
     stopImagePreviewPolling: () => void;
     startImagePreviewPolling: (handle: ImageGenerationHandle) => void;
+    cancelTextGeneration: () => Promise<boolean>;
     isImageProvider: (providerId: string | null) => boolean;
     lockUi: (input: HTMLTextAreaElement | null) => {
         input: HTMLTextAreaElement | null;
@@ -80,6 +84,7 @@ export class ChatSendController {
         { listenerId: string; typingId: string }
     >();
     private _isDestroyed = false;
+    private _cancelRequested = false;
 
     constructor(private readonly _options: ChatSendControllerOptions) {
         this._autoStartHelper = new ChatAutoStartHelper({
@@ -106,6 +111,15 @@ export class ChatSendController {
         this._options.setSending(false);
     }
 
+    public async cancelActiveSend(): Promise<void> {
+        if (!this._options.isSending() && this._activeStreamingStates.size === 0) {
+            return;
+        }
+
+        this._cancelRequested = true;
+        await this._options.cancelTextGeneration();
+    }
+
     public validateInput(text: string): boolean {
         return text !== '' || this._options.fileHandler.hasFiles();
     }
@@ -125,6 +139,7 @@ export class ChatSendController {
         const activeProviderId = this._options.aiBridge.getState().activeProviderId;
         const isImageProvider = this._options.isImageProvider(activeProviderId);
 
+        this._cancelRequested = false;
         this._options.setSending(true);
         this._activeStreamingStates.set(listenerId, { listenerId, typingId });
 
@@ -149,8 +164,14 @@ export class ChatSendController {
                 imageHandle = this._options.createImageHandle();
                 this._options.startImagePreviewPolling(imageHandle);
             } else {
-                streamingHandle = ensureStreamingHandle();
+                const handle = ensureStreamingHandle();
+                handle.setStatus(this._options.translate('ui.chat.thinking', 'Thinking...'));
+
                 this._options.aiBridge.onChunk(listenerId, (chunk) => {
+                    if (streamingHandle === null && String(chunk).trim() === '') {
+                        return;
+                    }
+
                     ensureStreamingHandle().update(chunk);
                 });
             }
@@ -169,11 +190,19 @@ export class ChatSendController {
 
             this._cleanupStreamingState(listenerId, typingId);
             if (this._wasDestroyed()) return false;
+            if (this._isCancelRequested()) {
+                this._cancelStreamingHandle(streamingHandle as StreamingMessageHandle | null);
+                imageHandle?.cancel();
+                return false;
+            }
 
             await this._options.handleResponse(response, streamingHandle, imageHandle);
             return true;
         } catch (error: unknown) {
             this._cleanupStreamingState(listenerId, typingId);
+            if (this._isCancelRequested()) {
+                return false;
+            }
             if (!this._wasDestroyed()) {
                 this._options.handleError(error);
             }
@@ -190,12 +219,20 @@ export class ChatSendController {
         return this._isDestroyed;
     }
 
+    private _isCancelRequested(): boolean {
+        return this._cancelRequested;
+    }
+
     private _cleanupStreamingState(listenerId: string, typingId: string): void {
         if (!this._activeStreamingStates.delete(listenerId)) {
             return;
         }
 
         this._options.cleanupStreamingState(listenerId, typingId);
+    }
+
+    private _cancelStreamingHandle(handle: StreamingMessageHandle | null): void {
+        handle?.cancel();
     }
 
     public async tryAutoStartAi(prompt?: string): Promise<boolean> {

@@ -7,6 +7,7 @@ import type { IChatMessage, IChatResponse } from '../types/chatTypes';
 type ChatGenerationLogger = Pick<LoggerService, 'debug'>;
 
 type StreamingMessageHandle = {
+    setStatus: (text: string) => void;
     update: (chunk: string) => void;
     replace: (chunk: string) => void;
     discard: () => void;
@@ -243,7 +244,7 @@ export class ChatGenerationController {
         }
 
         if (replyText !== '') {
-            await this.handleTextReply(response, replyText, streamingHandle);
+            this.handleTextReply(response, replyText, streamingHandle);
             return;
         }
 
@@ -277,13 +278,15 @@ export class ChatGenerationController {
         );
     }
 
-    private async handleTextReply(
+    private handleTextReply(
         response: IChatResponse,
         replyText: string,
         streamingHandle?: StreamingMessageHandle | null,
-    ): Promise<void> {
-        const tokens = await this._options.estimateReplyTokens(replyText);
-        this._options.addContextTokens(tokens);
+    ): void {
+        const tokens = this._resolveBackendCompletionTokens(response);
+        if (tokens > 0) {
+            this._options.addContextTokens(tokens);
+        }
 
         if (streamingHandle) {
             streamingHandle.finalize(replyText, { tokens });
@@ -292,6 +295,15 @@ export class ChatGenerationController {
         }
 
         this._options.pushAssistantMessage(replyText, response.thought_signature);
+    }
+
+    private _resolveBackendCompletionTokens(response: IChatResponse): number {
+        const completionTokens = response.usage?.completion_tokens;
+        if (typeof completionTokens !== 'number' || !Number.isFinite(completionTokens)) {
+            return 0;
+        }
+
+        return Math.max(0, Math.trunc(completionTokens));
     }
 
     private handleFailedChatResponse(

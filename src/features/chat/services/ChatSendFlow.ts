@@ -4,7 +4,7 @@ import type { ChatFileHandler } from './ChatFileHandler';
 import type { IChatAttachment, IChatMessage } from '../types/chatTypes';
 
 type ChatSendFlowDeps = {
-    fileHandler: Pick<ChatFileHandler, 'getTotalTokenEstimate' | 'processForSend'>;
+    fileHandler: Pick<ChatFileHandler, 'processForSend'>;
     getHistory: () => IChatMessage[];
 };
 
@@ -20,12 +20,15 @@ export class ChatSendFlow {
     public constructor(private readonly _deps: ChatSendFlowDeps) {}
 
     public async prepare(text: string): Promise<PreparedChatSend> {
-        const tokenCount = await this._deps.fileHandler.getTotalTokenEstimate(text);
         const { attachments, combinedText } = await this._deps.fileHandler.processForSend(text);
         const historyHead = this._deps.getHistory().slice(-40);
+        const attachmentTokens = attachments.reduce((total, attachment) => {
+            const tokens = attachment.tokens;
+            return total + (typeof tokens === 'number' && Number.isFinite(tokens) ? tokens : 0);
+        }, 0);
 
         return {
-            tokenCount,
+            tokenCount: attachmentTokens,
             attachments,
             combinedText,
             historyHead,

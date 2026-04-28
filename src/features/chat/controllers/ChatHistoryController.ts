@@ -73,6 +73,25 @@ export class ChatHistoryController {
         }
     }
 
+    public async regenerateLastTurn(isSending: boolean): Promise<string | null> {
+        if (isSending) return null;
+
+        try {
+            const removedText = await this._options.aiBridge.rewindLastTurn();
+            if (removedText === null) {
+                return null;
+            }
+
+            this.rewindLocalHistory();
+            this._options.renderHistory(this._options.getHistory());
+            return removedText;
+        } catch (error: unknown) {
+            this._options.tracer.error('[Chat] Failed to regenerate last turn:', error);
+            this._options.showEditError();
+            return null;
+        }
+    }
+
     public rewindLocalHistory(): void {
         const history = [...this._options.getHistory()];
 

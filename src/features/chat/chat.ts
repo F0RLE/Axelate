@@ -6,7 +6,7 @@
 
 import { ChatService } from './services/ChatService';
 import type { ChatUI } from './ui/ChatUI';
-import type { IChatMessage, IChatResponse } from './types/chatTypes';
+import type { IChatMessage } from './types/chatTypes';
 import { ChatFileHandler } from './services/ChatFileHandler';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
@@ -17,7 +17,6 @@ import { FilePickerController } from './controllers/FilePickerController';
 import type { ChatHistoryController } from './controllers/ChatHistoryController';
 import type { ChatGenerationController } from './controllers/ChatGenerationController';
 import type { ChatSendController } from './controllers/ChatSendController';
-import type { ChatContent } from '@/features/ai/types/aiTypes';
 import { ChatContentHelper } from './services/ChatContentHelper';
 import { ChatInputCoordinator } from './services/ChatInputCoordinator';
 import { ChatActivationCoordinator } from './services/ChatActivationCoordinator';
@@ -31,18 +30,6 @@ import type { EventBus } from '@/shared/services/EventBus';
 import type { IApp } from '@/shared/types/coreTypes';
 import { ChatControllerState } from './services/ChatControllerState';
 
-type ImageGenerationHandle = {
-    setStatus: (chunk: string) => void;
-    setPreview: (dataUrl: string) => void;
-    finalize: (result: {
-        text: string;
-        images: Array<{ mime: string; data_base64: string }>;
-    }) => void;
-    fail: (message: string) => void;
-    cancel: (message?: string) => void;
-    discard: () => void;
-};
-
 export type PendingChatRevealStore = {
     getState: () => { pending_chat_reveal?: boolean };
     updateState: (updates: { pending_chat_reveal: boolean }) => void;
@@ -53,10 +40,14 @@ type ChatControllerDeps = {
         message: string,
         type?: 'success' | 'error' | 'warning' | 'info',
         duration?: number,
+        title?: string | null,
+        id?: string | null,
+        onClick?: (() => void) | null,
     ) => void;
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
+    readClipboardText: () => Promise<string | null>;
     getPendingChatRevealStore: () => PendingChatRevealStore | null;
     estimateTokens: (text: string, model?: string) => Promise<number>;
     hostBridge: IBridge;
@@ -121,7 +112,7 @@ export class ChatController {
         this._tracer = deps.tracer;
         this._service = new ChatService(_aiBridge, _i18n, this._tracer);
         this._fileHandler = new ChatFileHandler(this._tracer);
-        this._voiceInputService = new VoiceInputService(this._tracer, () =>
+        this._voiceInputService = new VoiceInputService(this._tracer, deps.hostBridge, () =>
             this._i18n.getCurrentLang(),
         );
         this._fileHandler.setTokenEstimator((text, model) => deps.estimateTokens(text, model));
@@ -136,7 +127,16 @@ export class ChatController {
         this._uiStateHelper = this._createUiStateHelper(_aiBridge, _i18n);
         this._viewHelper = this._createViewHelper(_i18n);
         this._lifecycleHelper = this._createLifecycleHelper(deps);
-        this._voice = new VoiceController(_i18n, _soundService, this._voiceInputService);
+        this._voice = new VoiceController(
+            _i18n,
+            _soundService,
+            this._voiceInputService,
+            (message, type, duration, title, id, onClick) =>
+                deps.showToast(message, type, duration, title, id, onClick),
+            async () => {
+                await deps.hostBridge.invoke('open_voice_privacy_settings');
+            },
+        );
         this._filePicker = this._createFilePicker(_i18n, deps);
         this._historyController = this._createHistoryController(deps);
         this._generationController = this._createGenerationController(_aiBridge, _i18n);
@@ -161,6 +161,7 @@ export class ChatController {
             isTauriRuntime: deps.isTauriRuntime,
             openExternalUrl: deps.openExternalUrl,
             copyText: deps.copyText,
+            readClipboardText: deps.readClipboardText,
         });
     }
 
@@ -194,7 +195,7 @@ export class ChatController {
             refreshTranslations: () => {
                 this._ui.refreshTranslations();
             },
-            ensureHistoryLoaded: () => this._ensureHistoryLoaded(),
+            ensureHistoryLoaded: () => this._historyController.ensureHistoryLoaded(),
             scheduleRevealLatestMessage: () => {
                 this._historyController.scheduleRevealLatestMessage();
             },
@@ -282,13 +283,14 @@ export class ChatController {
             },
             extractText: (data) => this._contentHelper.extractText(data),
             buildGeneratedImageContent: (images, text) =>
-                this._buildGeneratedImageContent(images, text),
-            estimateReplyTokens: async (text) => await this._estimateReplyTokens(text),
+                this._contentHelper.buildGeneratedImageContent(images, text),
+            estimateReplyTokens: async (text) =>
+                await this._contentHelper.estimateReplyTokens(text),
             addContextTokens: (tokens) => {
                 this._addContextTokens(tokens);
             },
             getFriendlyErrorMessage: (errorMsg, model) =>
-                this._getFriendlyErrorMessage(errorMsg, model),
+                this._contentHelper.getFriendlyErrorMessage(errorMsg, model),
             handleError: (errorMsg, model) => {
                 this._handleError(errorMsg, model);
             },
@@ -321,6 +323,7 @@ export class ChatController {
                         await this._aiBridge.cancelImageGeneration();
                     },
                 }),
+            translate: (key, fallback) => this._i18n.t(key, fallback),
             showTyping: (typingId) => {
                 this._ui.showTyping(typingId);
             },
@@ -360,10 +363,20 @@ export class ChatController {
             startImagePreviewPolling: (handle) => {
                 this._generationController.startImagePreviewPolling(handle);
             },
+            cancelTextGeneration: async () => {
+                const providerId = this._aiBridge.getState().activeProviderId;
+                if (this._generationController.isImageProvider(providerId)) {
+                    this._generationController.stopImagePreviewPolling();
+                    await this._aiBridge.cancelImageGeneration();
+                    return true;
+                }
+
+                return await this._aiBridge.cancelTextGeneration();
+            },
             isImageProvider: (providerId) => this._generationController.isImageProvider(providerId),
-            lockUi: (input) => this._lockUI(input),
+            lockUi: (input) => this._uiStateHelper.lockUi(input),
             unlockUi: (els) => {
-                this._unlockUI(els);
+                this._uiStateHelper.unlockUi(els);
             },
             handleError: (error) => {
                 this._handleError(error);
@@ -398,7 +411,10 @@ export class ChatController {
             this._tracer.error(`[Chat] UI init failed: ${String(err)}`);
         });
         this._ui.setEditMessageHandler(async (text) => {
-            await this._editLastTurn(text);
+            await this._historyController.editLastTurn(this._state.isSending, text);
+        });
+        this._ui.setRegenerateMessageHandler(async () => {
+            await this.regenerateLastResponse();
         });
         this._lifecycleHelper.start();
     }
@@ -409,7 +425,7 @@ export class ChatController {
         this._state.isInitialized = false;
         this._lifecycleHelper.stop();
         this._viewHelper.unbindEvents();
-        this._stopImagePreviewPolling();
+        this._generationController.stopImagePreviewPolling();
         this._uiStateHelper.dispose();
         this._sendController.destroy();
         this._historyController.destroy();
@@ -455,6 +471,11 @@ export class ChatController {
     // --- Send Message ---
 
     public async sendChat(): Promise<void> {
+        if (this._state.isSending) {
+            await this._sendController.cancelActiveSend();
+            return;
+        }
+
         const input = this._inputCoordinator.getInput();
         const text = input?.value.trim() ?? '';
         if (!this._sendController.validateInput(text)) {
@@ -469,6 +490,24 @@ export class ChatController {
         if (!isActive) return;
 
         await this._sendController.sendChat(input);
+    }
+
+    public async regenerateLastResponse(): Promise<void> {
+        if (this._state.isSending) {
+            return;
+        }
+
+        const text = await this._historyController.regenerateLastTurn(false);
+        if (text === null || text.trim() === '') {
+            this._ui.showToast(
+                this._i18n.t('ui.chat.regenerate_failed', 'Failed to regenerate response'),
+                'error',
+            );
+            return;
+        }
+
+        this._inputCoordinator.restore(text);
+        await this.sendChat();
     }
 
     // --- Greeting ---
@@ -487,47 +526,6 @@ export class ChatController {
         this._scheduleAutoResizeInput();
     }
 
-    private async _ensureHistoryLoaded(): Promise<void> {
-        await this._historyController.ensureHistoryLoaded();
-    }
-
-    private async _editLastTurn(text: string): Promise<void> {
-        await this._historyController.editLastTurn(this._state.isSending, text);
-    }
-
-    public async _loadHistory(): Promise<void> {
-        await this._historyController.loadHistory();
-    }
-
-    private _stopImagePreviewPolling(): void {
-        this._generationController.stopImagePreviewPolling();
-    }
-
-    public async _checkAIActive(input: HTMLTextAreaElement | null): Promise<boolean> {
-        return await this._activationCoordinator.ensureActive(input);
-    }
-
-    public _clearInactiveAiErrorTimeout(): void {
-        this._activationCoordinator.clearInactiveAiErrorTimeout();
-    }
-
-    public async _tryAutoStartAI(prompt?: string): Promise<boolean> {
-        return await this._sendController.tryAutoStartAi(prompt);
-    }
-
-    public async _handleChatResponse(
-        response: IChatResponse,
-        streamingHandle?: {
-            update: (chunk: string) => void;
-            replace: (chunk: string) => void;
-            finalize: (text: string, stats?: Record<string, unknown>) => void;
-            discard: () => void;
-        } | null,
-        imageHandle?: ImageGenerationHandle | null,
-    ): Promise<void> {
-        await this._generationController.handleChatResponse(response, streamingHandle, imageHandle);
-    }
-
     private _pushAssistantMessage(
         content: IChatMessage['content'],
         thoughtSignature?: string,
@@ -542,25 +540,10 @@ export class ChatController {
         this._state.pushHistoryMessage(assistantMessage);
     }
 
-    private _buildGeneratedImageContent(
-        images: Array<{ mime: string; data_base64: string }>,
-        text: string,
-    ): ChatContent {
-        return this._contentHelper.buildGeneratedImageContent(images, text);
-    }
-
-    private _getFriendlyErrorMessage(errorMsg: unknown, model?: string): string {
-        return this._contentHelper.getFriendlyErrorMessage(errorMsg, model);
-    }
-
     private _handleError(errorMsg: unknown = 'Unknown Error', _model?: string): void {
         const msgStr = this._contentHelper.extractText(errorMsg) || 'Unknown Error';
 
         this._ui.appendMessage('assistant', msgStr, { error: true });
-    }
-
-    private async _estimateReplyTokens(text: string): Promise<number> {
-        return this._contentHelper.estimateReplyTokens(text);
     }
 
     private _addContextTokens(tokens: number): void {
@@ -595,34 +578,7 @@ export class ChatController {
         this._ui.updateContextTokenCount(total, this._aiBridge.getContextWindow());
     }
 
-    private _lockUI(input: HTMLTextAreaElement | null) {
-        return this._uiStateHelper.lockUi(input);
-    }
-
-    private _unlockUI(els: {
-        input: HTMLTextAreaElement | null;
-        sendBtn: HTMLButtonElement | null;
-        voiceBtn: HTMLButtonElement | null;
-        attachBtn: HTMLButtonElement | null;
-        contextBtn: HTMLButtonElement | null;
-    }) {
-        this._uiStateHelper.unlockUi(els);
-    }
-
     private _scheduleAutoResizeInput(): void {
         this._uiStateHelper.scheduleAutoResizeInput();
-    }
-
-    public _autoResizeInput(): void {
-        this._uiStateHelper.autoResizeInput();
-    }
-
-    public get _chatHistory(): IChatMessage[] {
-        return this._state.history;
-    }
-
-    public set _chatHistory(history: IChatMessage[]) {
-        this._state.history = history;
-        void this._syncContextTokensFromHistory(history);
     }
 }

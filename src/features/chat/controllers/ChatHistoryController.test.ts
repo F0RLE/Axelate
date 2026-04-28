@@ -103,4 +103,28 @@ describe('ChatHistoryController', () => {
         expect(deps.setHistory).toHaveBeenLastCalledWith(defaultHistory);
         expect(deps.renderHistory).toHaveBeenLastCalledWith(defaultHistory);
     });
+
+    it('should rewind the last turn and return text for regeneration', async () => {
+        const { controller, deps, aiBridge } = createController({
+            history: [
+                { role: 'user', content: 'first' },
+                { role: 'assistant', content: 'first answer' },
+                { role: 'user', content: 'again' },
+                { role: 'assistant', content: 'again answer' },
+            ],
+        });
+        aiBridge.rewindLastTurn.mockResolvedValueOnce('again');
+
+        const text = await controller.regenerateLastTurn(false);
+
+        expect(text).toBe('again');
+        expect(deps.setHistory).toHaveBeenLastCalledWith([
+            { role: 'user', content: 'first' },
+            { role: 'assistant', content: 'first answer' },
+        ]);
+        expect(deps.renderHistory).toHaveBeenLastCalledWith([
+            { role: 'user', content: 'first' },
+            { role: 'assistant', content: 'first answer' },
+        ]);
+    });
 });

@@ -3,6 +3,7 @@ import { ChatAttachmentRenderer } from './ChatAttachmentRenderer';
 import { extractErrorMessage, safeExtractText } from './ChatContentFormatter';
 import { createChatImageGenerationMessage } from './ChatImageGenerationMessage';
 import { ChatImageController } from './ChatImageController';
+import { ChatInputContextMenu } from './ChatInputContextMenu';
 import { configureChatMarkdown } from './ChatMarkdown';
 import { ChatMessageInteractionController } from './ChatMessageInteractionController';
 import { ChatMessageRenderer } from './ChatMessageRenderer';
@@ -39,6 +40,7 @@ type ChatUIDeps = {
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
+    readClipboardText: () => Promise<string | null>;
     tracer: Pick<LoggerService, 'warn' | 'error' | 'debug'>;
 };
 
@@ -56,13 +58,16 @@ export class ChatUI {
     private _lastContextTokenCount = 0;
     private _lastContextWindow: number | undefined;
     private _lastEditableUserActionBar: HTMLElement | null = null;
+    private _lastRegeneratableAssistantActionBar: HTMLElement | null = null;
     private _editMessageHandler: ((text: string) => void | Promise<void>) | null = null;
+    private _regenerateMessageHandler: (() => void | Promise<void>) | null = null;
     private readonly _boundDocumentClick: (e: Event) => void;
     private _isInitialized = false;
     private _isDestroyed = false;
     private _attachmentRenderVersion = 0;
     private readonly _attachmentRenderer: ChatAttachmentRenderer;
     private readonly _imageController: ChatImageController;
+    private readonly _inputContextMenu: ChatInputContextMenu;
     private readonly _messageInteractionController: ChatMessageInteractionController;
     private readonly _messageRenderer: ChatMessageRenderer;
     private readonly _typingController: ChatTypingController;
@@ -97,6 +102,13 @@ export class ChatUI {
             translate: this._translate,
             tracer: deps.tracer,
         });
+        this._inputContextMenu = new ChatInputContextMenu({
+            translate: this._translate,
+            copyText: (text) => deps.copyText(text),
+            readClipboardText: () => deps.readClipboardText(),
+            canPaste: () => deps.isTauriRuntime(),
+            tracer: deps.tracer,
+        });
         this._attachmentRenderer = new ChatAttachmentRenderer({
             fileHandler: deps.fileHandler,
             isDestroyed: () => this._isDestroyed,
@@ -114,8 +126,12 @@ export class ChatUI {
             },
             copyText: (text) => deps.copyText(text),
             getEditMessageHandler: () => this._editMessageHandler,
+            getRegenerateMessageHandler: () => this._regenerateMessageHandler,
             setLastEditableUserActionBar: (actionBar) => {
                 this._setLastEditableUserActionBar(actionBar);
+            },
+            setLastRegeneratableAssistantActionBar: (actionBar) => {
+                this._setLastRegeneratableAssistantActionBar(actionBar);
             },
             translate: this._translate,
             tracer: deps.tracer,
@@ -146,6 +162,7 @@ export class ChatUI {
         if (this._isInitialized || this._isDestroyed) return;
         this._isInitialized = true;
         document.addEventListener('click', this._boundDocumentClick);
+        this._inputContextMenu.bind(this._dom.chatInput);
         await this._retryStatusListener.bind();
     }
 
@@ -155,13 +172,16 @@ export class ChatUI {
         this._isInitialized = false;
 
         document.removeEventListener('click', this._boundDocumentClick);
+        this._inputContextMenu.destroy();
         this._retryStatusListener.destroy();
         this._imageController.destroy();
         this._attachmentRenderer.revokeAttachmentObjectUrls();
         this._typingController.clearAll();
         this._timeoutManager.clearAll();
         this._lastEditableUserActionBar = null;
+        this._lastRegeneratableAssistantActionBar = null;
         this._editMessageHandler = null;
+        this._regenerateMessageHandler = null;
     }
 
     /**
@@ -174,6 +194,10 @@ export class ChatUI {
 
     public setEditMessageHandler(handler: (text: string) => void | Promise<void>): void {
         this._editMessageHandler = handler;
+    }
+
+    public setRegenerateMessageHandler(handler: () => void | Promise<void>): void {
+        this._regenerateMessageHandler = handler;
     }
 
     public renderHistory(
@@ -238,8 +262,10 @@ export class ChatUI {
         opts: Record<string, unknown> = {},
     ): {
         textNode: HTMLElement;
+        setStatus: (text: string) => void;
         update: (chunk: unknown) => void;
         replace: (text: string) => void;
+        cancel: () => void;
         discard: () => void;
         finalize: (fullContent: unknown, finalOpts?: Record<string, unknown>) => void;
     } {
@@ -343,6 +369,14 @@ export class ChatUI {
         }
         actionBar.classList.add('is-last-editable');
         this._lastEditableUserActionBar = actionBar;
+    }
+
+    private _setLastRegeneratableAssistantActionBar(actionBar: HTMLElement): void {
+        if (this._lastRegeneratableAssistantActionBar instanceof HTMLElement) {
+            this._lastRegeneratableAssistantActionBar.classList.remove('is-last-regeneratable');
+        }
+        actionBar.classList.add('is-last-regeneratable');
+        this._lastRegeneratableAssistantActionBar = actionBar;
     }
 
     /**

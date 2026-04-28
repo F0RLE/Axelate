@@ -12,23 +12,22 @@ export class ChatViewHelper {
     public constructor(private readonly _deps: ChatViewHelperDeps) {}
 
     public bindEvents(): void {
-        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
-        fileInput?.addEventListener('change', this._deps.onFileInputChange);
-
-        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        chatInput?.addEventListener('keydown', this._deps.onChatInputKeydown);
-        chatInput?.addEventListener('input', this._deps.onChatInputInput);
-        globalThis.addEventListener('resize', this._deps.onViewportResize);
+        this._setEventBindings('add');
     }
 
     public unbindEvents(): void {
-        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
-        fileInput?.removeEventListener('change', this._deps.onFileInputChange);
+        this._setEventBindings('remove');
+    }
 
+    private _setEventBindings(mode: 'add' | 'remove'): void {
+        const method = mode === 'add' ? 'addEventListener' : 'removeEventListener';
+        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        chatInput?.removeEventListener('keydown', this._deps.onChatInputKeydown);
-        chatInput?.removeEventListener('input', this._deps.onChatInputInput);
-        globalThis.removeEventListener('resize', this._deps.onViewportResize);
+
+        fileInput?.[method]('change', this._deps.onFileInputChange);
+        chatInput?.[method]('keydown', this._deps.onChatInputKeydown as EventListener);
+        chatInput?.[method]('input', this._deps.onChatInputInput);
+        globalThis[method]('resize', this._deps.onViewportResize);
     }
 
     public randomizeGreeting(currentGreetingIndex: number, forceIndex?: number): number {

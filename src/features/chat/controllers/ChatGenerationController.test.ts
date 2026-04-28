@@ -177,6 +177,7 @@ describe('ChatGenerationController', () => {
     it('discards partial streaming output when the backend returns an error', async () => {
         const controller = new ChatGenerationController(baseOptions as never);
         const streamingHandle = {
+            setStatus: vi.fn(),
             update: vi.fn(),
             replace: vi.fn(),
             discard: vi.fn(),
@@ -194,16 +195,46 @@ describe('ChatGenerationController', () => {
     });
 
     it('adds assistant text tokens to the context counter', async () => {
-        baseOptions.estimateReplyTokens.mockResolvedValueOnce(7);
         const controller = new ChatGenerationController(baseOptions as never);
 
-        await controller.handleChatResponse({ ok: true, message: 'answer' } as never, null, null);
+        await controller.handleChatResponse(
+            {
+                ok: true,
+                message: 'answer',
+                usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
+            } as never,
+            null,
+            null,
+        );
 
         expect(baseOptions.addContextTokens).toHaveBeenCalledWith(7);
+        expect(baseOptions.estimateReplyTokens).not.toHaveBeenCalled();
+    });
+
+    it('preserves thought signatures when storing assistant text replies', async () => {
+        const controller = new ChatGenerationController(baseOptions as never);
+
+        await controller.handleChatResponse(
+            { ok: true, message: 'answer', thought_signature: 'sig-1' } as never,
+            null,
+            null,
+        );
+
+        expect(baseOptions.pushAssistantMessage).toHaveBeenCalledWith('answer', 'sig-1');
     });
 
     it('adds generated image tokens to the context counter', async () => {
         baseOptions.estimateReplyTokens.mockResolvedValueOnce(3);
+        baseOptions.buildGeneratedImageContent.mockReturnValueOnce([
+            {
+                type: 'image_url',
+                image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+            },
+            {
+                type: 'text',
+                text: 'caption',
+            },
+        ]);
         const controller = new ChatGenerationController(baseOptions as never);
 
         await controller.handleChatResponse(
@@ -219,5 +250,21 @@ describe('ChatGenerationController', () => {
         );
 
         expect(baseOptions.addContextTokens).toHaveBeenCalledWith(261);
+        expect(baseOptions.appendAssistantMessage).toHaveBeenCalledWith('caption', {
+            images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+        });
+        expect(baseOptions.pushAssistantMessage).toHaveBeenCalledWith(
+            [
+                {
+                    type: 'image_url',
+                    image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
+                },
+                {
+                    type: 'text',
+                    text: 'caption',
+                },
+            ],
+            undefined,
+        );
     });
 });

@@ -17,8 +17,10 @@ type ChatTranslate = (
 
 export type StreamingMessageHandle = {
     textNode: HTMLElement;
+    setStatus: (text: string) => void;
     update: (chunk: unknown) => void;
     replace: (text: string) => void;
+    cancel: () => void;
     discard: () => void;
     finalize: (fullContent: unknown, finalOpts?: Record<string, unknown>) => void;
 };
@@ -55,10 +57,14 @@ export function createChatStreamingMessage(
 
     const textNode = document.createElement('div');
     textNode.className = 'markdown-body';
+
     const statusNode = document.createElement('div');
-    statusNode.className = 'chat-streaming-status';
-    statusNode.textContent = deps.translate('ui.chat.streaming_text', 'Model is typing...');
-    bubble.appendChild(statusNode);
+    statusNode.className = 'chat-streaming-state';
+
+    const statusText = document.createElement('span');
+    statusText.className = 'chat-streaming-state-text';
+
+    statusNode.appendChild(statusText);
     bubble.appendChild(textNode);
 
     row.appendChild(bubble);
@@ -70,7 +76,21 @@ export function createChatStreamingMessage(
     let renderVersion = 0;
     let isDiscarded = false;
     let renderFrame: number | null = null;
+    let renderTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
     let pendingScrollToBottom = false;
+
+    const setStatus = (text: string): void => {
+        const trimmed = text.trim();
+        if (trimmed === '' || isDiscarded) {
+            statusNode.remove();
+            return;
+        }
+
+        statusText.textContent = trimmed;
+        if (!bubble.contains(statusNode)) {
+            bubble.insertBefore(statusNode, textNode);
+        }
+    };
 
     const hideStatus = (): void => {
         statusNode.remove();
@@ -156,6 +176,10 @@ export function createChatStreamingMessage(
             return;
         }
 
+        if (renderTimeout !== null) {
+            return;
+        }
+
         const renderOnFrame = () => {
             const elapsed = Date.now() - lastRenderTime;
             if (elapsed >= 100) {
@@ -166,11 +190,26 @@ export function createChatStreamingMessage(
             renderFrame = globalThis.requestAnimationFrame(renderOnFrame);
         };
 
-        renderFrame = globalThis.requestAnimationFrame(renderOnFrame);
+        renderTimeout = globalThis.setTimeout(() => {
+            renderTimeout = null;
+            renderFrame = globalThis.requestAnimationFrame(renderOnFrame);
+        }, 0);
+    };
+
+    const cancelScheduledRender = (): void => {
+        if (renderFrame !== null) {
+            globalThis.cancelAnimationFrame(renderFrame);
+            renderFrame = null;
+        }
+        if (renderTimeout !== null) {
+            globalThis.clearTimeout(renderTimeout);
+            renderTimeout = null;
+        }
     };
 
     return {
         textNode,
+        setStatus,
         update: (chunk: unknown) => {
             const safeChunk = safeExtractText(chunk, deps.translate);
             if (safeChunk !== '') {
@@ -191,15 +230,29 @@ export function createChatStreamingMessage(
             if (copyBtn instanceof HTMLElement) {
                 copyBtn.dataset['copyText'] = accumulatedText;
             }
+            scheduleRender(false, true);
+        },
+        cancel: () => {
+            renderVersion += 1;
+            cancelScheduledRender();
+
+            if (accumulatedText.trim() === '') {
+                isDiscarded = true;
+                row.remove();
+                return;
+            }
+
+            hideStatus();
             scheduleRender(true, true);
+            if (actions !== null && !bubble.contains(actions.actionBar)) {
+                bubble.appendChild(actions.actionBar);
+            }
+            deps.scrollToBottom();
         },
         discard: () => {
             isDiscarded = true;
             renderVersion += 1;
-            if (renderFrame !== null) {
-                globalThis.cancelAnimationFrame(renderFrame);
-                renderFrame = null;
-            }
+            cancelScheduledRender();
             row.remove();
         },
         finalize: (fullContent: unknown, finalOpts: Record<string, unknown> = {}) => {
@@ -207,20 +260,18 @@ export function createChatStreamingMessage(
             if (safeFullContent.trim() === '') {
                 isDiscarded = true;
                 renderVersion += 1;
-                if (renderFrame !== null) {
-                    globalThis.cancelAnimationFrame(renderFrame);
-                    renderFrame = null;
-                }
+                cancelScheduledRender();
                 row.remove();
                 return;
             }
 
             accumulatedText = safeFullContent;
             hideStatus();
+            textNode.textContent = safeFullContent;
             if (copyBtn instanceof HTMLElement) {
                 copyBtn.dataset['copyText'] = safeFullContent;
             }
-            scheduleRender(true, true);
+            scheduleRender(false, true);
 
             if (finalOpts['attachments'] !== undefined) {
                 deps.appendAttachments(bubble, finalOpts['attachments'] as IChatAttachment[]);
@@ -239,7 +290,7 @@ export function createChatStreamingMessage(
             if (actions !== null && deps.role === 'assistant') {
                 deps.scheduleBubbleImageActions(bubble, actions.actionBar);
             }
-            deps.scrollToBottom();
+            deps.scrollToBottom(true);
         },
     };
 }

@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const appendMessage = vi.fn();
 const clearUi = vi.fn();
 const updateTokenCount = vi.fn();
+const mockChatUiInstances: Array<{
+    renderHistory: ReturnType<typeof vi.fn>;
+}> = [];
 const mockChatFileHandlerInstances: Array<{
     clear: ReturnType<typeof vi.fn>;
     setUpdateCallback: ReturnType<typeof vi.fn>;
@@ -10,12 +13,16 @@ const mockChatFileHandlerInstances: Array<{
     setBridge: ReturnType<typeof vi.fn>;
     setTokenEstimator: ReturnType<typeof vi.fn>;
 }> = [];
+const mockVoiceControllerInstances: Array<{
+    stop: ReturnType<typeof vi.fn>;
+}> = [];
 
 vi.mock('./ui/ChatUI', () => ({
     ChatUI: class {
         public init = vi.fn().mockResolvedValue(undefined);
         public destroy = vi.fn();
         public setEditMessageHandler = vi.fn();
+        public setRegenerateMessageHandler = vi.fn();
         public updateAttachments = vi.fn();
         public refreshTranslations = vi.fn();
         public revealLatestMessage = vi.fn();
@@ -26,6 +33,12 @@ vi.mock('./ui/ChatUI', () => ({
         public clear = clearUi;
         public updateTokenCount = updateTokenCount;
         public updateContextTokenCount = vi.fn();
+
+        public constructor() {
+            mockChatUiInstances.push({
+                renderHistory: this.renderHistory,
+            });
+        }
     },
 }));
 
@@ -33,6 +46,12 @@ vi.mock('./controllers/VoiceController', () => ({
     VoiceController: class {
         public toggle = vi.fn();
         public stop = vi.fn();
+
+        public constructor() {
+            mockVoiceControllerInstances.push({
+                stop: this.stop,
+            });
+        }
     },
 }));
 
@@ -42,10 +61,6 @@ vi.mock('./controllers/FilePickerController', () => ({
         public updateTokenCount = vi.fn().mockResolvedValue(undefined);
         public handleFileSelect = vi.fn();
     },
-}));
-
-vi.mock('./utils/chatUtils', () => ({
-    getTokenCount: vi.fn(),
 }));
 
 vi.mock('./services/ChatFileHandler', () => ({
@@ -73,22 +88,14 @@ vi.mock('./services/ChatFileHandler', () => ({
 }));
 
 import { ChatController } from './chat';
-import type { IChatResponse } from './types/chatTypes';
-import { getTokenCount } from './utils/chatUtils';
+import { ChatContentHelper } from './services/ChatContentHelper';
+import { ChatUiStateHelper } from './services/ChatUiStateHelper';
 import { EventBus } from '@/shared/services/EventBus';
 
 type ChatControllerTestAccess = {
-    init: () => Promise<void>;
-    _chatHistory: Array<{ role: string; content: unknown; thought_signature?: string }>;
-    _voice: { stop: ReturnType<typeof vi.fn> };
-    _lockUI: (input: HTMLTextAreaElement | null) => unknown;
-    _autoResizeInput: () => void;
-    _handleChatResponse: (response: IChatResponse, streamingHandle: null) => Promise<void>;
-    _checkAIActive: (messageId: string | null) => Promise<boolean>;
-    _tryAutoStartAI: () => Promise<boolean>;
-    _loadHistory: () => Promise<void>;
-    _getFriendlyErrorMessage: (errorMsg: unknown, model?: string) => string;
-    clearChat: () => void;
+    init: () => void;
+    sendChat: () => Promise<void>;
+    clearChat: () => Promise<void>;
     destroy: () => void;
 };
 
@@ -102,6 +109,7 @@ describe('ChatController', () => {
         getHistory: vi.fn().mockResolvedValue([]),
         clearHistory: vi.fn().mockResolvedValue(undefined),
         startProvider: vi.fn().mockResolvedValue(false),
+        rewindLastTurn: vi.fn().mockResolvedValue('last prompt'),
     };
 
     const i18n = {
@@ -117,6 +125,7 @@ describe('ChatController', () => {
         isTauriRuntime: vi.fn().mockReturnValue(false),
         openExternalUrl: vi.fn().mockResolvedValue(undefined),
         copyText: vi.fn().mockResolvedValue(undefined),
+        readClipboardText: vi.fn().mockResolvedValue(null),
         getPendingChatRevealStore: vi.fn().mockReturnValue(null),
         estimateTokens: vi.fn((text: string) =>
             Promise.resolve(Math.max(1, Math.ceil(text.length / 4))),
@@ -146,29 +155,36 @@ describe('ChatController', () => {
         ) as unknown as ChatControllerTestAccess;
     }
 
+    function createContentHelper(): ChatContentHelper {
+        return new ChatContentHelper(i18n as never, chatDeps.estimateTokens, chatDeps.tracer);
+    }
+
+    function createUiStateHelper(): ChatUiStateHelper {
+        return new ChatUiStateHelper({
+            aiBridge: aiBridge as never,
+            i18n: i18n as never,
+            appendAssistantError: appendMessage,
+            getChatInput: () => document.getElementById('chat-input') as HTMLTextAreaElement | null,
+            maxInputHeightPx: 200,
+            baseInputHeightPx: 42,
+        });
+    }
+
     beforeEach(() => {
         vi.clearAllMocks();
+        mockChatUiInstances.length = 0;
         mockChatFileHandlerInstances.length = 0;
+        mockVoiceControllerInstances.length = 0;
         document.body.innerHTML = '';
-    });
-
-    it('should use fallback token estimate when reply token counting fails', async () => {
-        vi.mocked(getTokenCount).mockRejectedValueOnce(new Error('token fail'));
-        const controller = createController();
-
-        await controller._handleChatResponse({ ok: true, message: 'hello' }, null);
-
-        expect(appendMessage).toHaveBeenCalledWith('assistant', 'hello', { tokens: 2 });
-        expect(controller._chatHistory).toEqual([{ role: 'assistant', content: 'hello' }]);
     });
 
     it('should not append delayed inactive-ai error after ai becomes active', async () => {
         vi.useFakeTimers();
+        document.body.innerHTML = '<textarea id="chat-input">hello</textarea>';
         aiBridge.isActive.mockReturnValue(false);
         const controller = createController();
-        controller._tryAutoStartAI = vi.fn().mockResolvedValue(false);
 
-        await controller._checkAIActive(null);
+        await controller.sendChat();
         aiBridge.isActive.mockReturnValue(true);
         vi.advanceTimersByTime(500);
 
@@ -178,12 +194,12 @@ describe('ChatController', () => {
 
     it('should clear pending inactive-ai error timeout when chat is cleared', async () => {
         vi.useFakeTimers();
+        document.body.innerHTML = '<textarea id="chat-input">hello</textarea>';
         aiBridge.isActive.mockReturnValue(false);
         const controller = createController();
-        controller._tryAutoStartAI = vi.fn().mockResolvedValue(false);
 
-        await controller._checkAIActive(null);
-        controller.clearChat();
+        await controller.sendChat();
+        await controller.clearChat();
         vi.advanceTimersByTime(500);
 
         expect(appendMessage).not.toHaveBeenCalled();
@@ -199,54 +215,6 @@ describe('ChatController', () => {
         controller.destroy();
 
         expect(mockChatFileHandlerInstances[0]?.clearUpdateCallback).toHaveBeenCalledTimes(1);
-    });
-
-    it('should preserve thought signature in local assistant history', async () => {
-        vi.mocked(getTokenCount).mockResolvedValueOnce(5);
-        const controller = createController();
-
-        await controller._handleChatResponse(
-            { ok: true, message: 'answer', thought_signature: 'sig-1' },
-            null,
-        );
-
-        expect(controller._chatHistory).toEqual([
-            { role: 'assistant', content: 'answer', thought_signature: 'sig-1' },
-        ]);
-    });
-
-    it('should render generated images as media-first assistant replies', async () => {
-        const controller = createController();
-
-        await controller._handleChatResponse(
-            {
-                ok: true,
-                reply: {
-                    text: 'caption',
-                    images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
-                },
-            },
-            null,
-        );
-
-        expect(appendMessage).toHaveBeenCalledWith('assistant', 'caption', {
-            images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
-        });
-        expect(controller._chatHistory).toEqual([
-            {
-                role: 'assistant',
-                content: [
-                    {
-                        type: 'image_url',
-                        image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
-                    },
-                    {
-                        type: 'text',
-                        text: 'caption',
-                    },
-                ],
-            },
-        ]);
     });
 
     it('should restore multimodal history without flattening stored content', async () => {
@@ -265,22 +233,11 @@ describe('ChatController', () => {
 
         const controller = createController();
 
-        await controller._loadHistory();
+        controller.init();
+        await Promise.resolve();
+        await Promise.resolve();
 
-        expect(controller._chatHistory[0]?.content).toEqual([
-            { type: 'text', text: 'Look here' },
-            {
-                type: 'image_url',
-                image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
-            },
-        ]);
-        expect(
-            (
-                controller as unknown as {
-                    _ui: { renderHistory: ReturnType<typeof vi.fn> };
-                }
-            )._ui.renderHistory,
-        ).toHaveBeenCalledWith([
+        expect(mockChatUiInstances[0]?.renderHistory).toHaveBeenCalledWith([
             {
                 role: 'user',
                 content: 'Look here',
@@ -292,9 +249,9 @@ describe('ChatController', () => {
     });
 
     it('should localize local model memory errors', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model.',
             'llamacpp',
         );
@@ -309,9 +266,9 @@ describe('ChatController', () => {
     });
 
     it('should localize image VRAM allocation errors', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             '[ERROR] ggml_backend_cuda_buffer_type_alloc_buffer: allocating 4900.07 MiB on device 0: cudaMalloc failed: out of memory',
             'sdcpp',
         );
@@ -326,9 +283,9 @@ describe('ChatController', () => {
     });
 
     it('should localize local image engine connection failures', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'Local image engine request failed at http://localhost:8082/sdapi/v1/txt2img: connection closed. The engine may have stopped, closed the connection, or run out of memory while generating.',
             'sdcpp',
         );
@@ -343,9 +300,9 @@ describe('ChatController', () => {
     });
 
     it('should map provider auth errors to the shared OpenRouter auth message', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'API Error 403: {"error":{"message":"Invalid API key"}}',
             'openrouter/auto',
         );
@@ -360,9 +317,9 @@ describe('ChatController', () => {
     });
 
     it('should map payment errors to the OpenRouter billing message', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'API Error 402: {"error":{"message":"Payment required. Add credits."}}',
             'openrouter/auto',
         );
@@ -377,9 +334,9 @@ describe('ChatController', () => {
     });
 
     it('should map rate limit errors to the shared OpenRouter quota message', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'API Error 429: {"error":{"message":"Rate limit reached"}}',
             'openrouter/auto',
         );
@@ -394,9 +351,9 @@ describe('ChatController', () => {
     });
 
     it('should map upstream availability errors to a generic server message', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'API Error 503: {"error":{"message":"Service unavailable"}}',
             'openrouter/auto',
         );
@@ -411,9 +368,9 @@ describe('ChatController', () => {
     });
 
     it('should map local engine availability errors without mentioning OpenRouter', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'API Error 503: {"error":{"message":"Service unavailable"}}',
             'llamacpp',
         );
@@ -428,9 +385,9 @@ describe('ChatController', () => {
     });
 
     it('should map local image input errors to a clear local model message', () => {
-        const controller = createController();
+        const contentHelper = createContentHelper();
 
-        const message = controller._getFriendlyErrorMessage(
+        const message = contentHelper.getFriendlyErrorMessage(
             'API Error 500: {"error":{"message":"image input is not supported - provide the mmproj"}}',
             'llamacpp',
         );
@@ -458,7 +415,7 @@ describe('ChatController', () => {
 
         controller.destroy();
 
-        expect(controller._voice.stop).toHaveBeenCalledTimes(1);
+        expect(mockVoiceControllerInstances[0]?.stop).toHaveBeenCalledTimes(1);
     });
 
     it('should not clear input text while ui is only locked', () => {
@@ -469,19 +426,45 @@ describe('ChatController', () => {
             <button id="chat-attach-btn"></button>
         `;
 
-        const controller = createController();
+        const uiStateHelper = createUiStateHelper();
         const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
 
-        controller._lockUI(input);
+        uiStateHelper.lockUi(input);
 
         expect(input?.value).toBe('keep me');
         expect(input?.disabled).toBe(true);
     });
 
+    it('should turn the send button into a stop button while ui is locked', () => {
+        document.body.innerHTML = `
+            <textarea id="chat-input">prompt</textarea>
+            <button id="chat-send-btn"><svg><use href="#icon-send"></use></svg></button>
+            <button id="chat-voice-btn"></button>
+            <button id="chat-attach-btn"></button>
+        `;
+
+        const uiStateHelper = createUiStateHelper();
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement | null;
+        const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement;
+        const iconUse = sendBtn.querySelector('use');
+        const locked = uiStateHelper.lockUi(input);
+
+        expect(sendBtn.disabled).toBe(false);
+        expect(sendBtn.classList.contains('is-generating')).toBe(true);
+        expect(sendBtn.getAttribute('aria-label')).toBe('Stop generation');
+        expect(iconUse?.getAttribute('href')).toBe('#icon-stop');
+
+        uiStateHelper.unlockUi(locked);
+
+        expect(sendBtn.classList.contains('is-generating')).toBe(false);
+        expect(sendBtn.getAttribute('aria-label')).toBe('Send');
+        expect(iconUse?.getAttribute('href')).toBe('#icon-send');
+    });
+
     it('should enable textarea scrolling when input exceeds max height', () => {
         document.body.innerHTML = '<textarea id="chat-input">long prompt</textarea>';
 
-        const controller = createController();
+        const uiStateHelper = createUiStateHelper();
         const input = document.getElementById('chat-input') as HTMLTextAreaElement;
 
         Object.defineProperty(input, 'scrollHeight', {
@@ -489,7 +472,7 @@ describe('ChatController', () => {
             value: 320,
         });
 
-        controller._autoResizeInput();
+        uiStateHelper.autoResizeInput();
 
         expect(input.style.height).toBe('200px');
         expect(input.style.overflowY).toBe('auto');
@@ -498,17 +481,17 @@ describe('ChatController', () => {
     it('should reset empty textarea to base height after resize', () => {
         document.body.innerHTML = '<textarea id="chat-input"></textarea>';
 
-        const controller = createController();
+        const uiStateHelper = createUiStateHelper();
         const input = document.getElementById('chat-input') as HTMLTextAreaElement;
         input.style.height = '200px';
 
-        controller._autoResizeInput();
+        uiStateHelper.autoResizeInput();
 
         expect(input.style.height).toBe('42px');
         expect(input.style.overflowY).toBe('hidden');
     });
 
-    it('should send chat on Enter from the textarea', async () => {
+    it('should send chat on Enter from the textarea', () => {
         document.body.innerHTML = `
             <input id="chat-file-input" />
             <textarea id="chat-input">hello</textarea>
@@ -523,7 +506,7 @@ describe('ChatController', () => {
         };
         const sendSpy = vi.spyOn(controller, 'sendChat').mockResolvedValue(undefined);
 
-        await controller.init();
+        controller.init();
 
         const input = document.getElementById('chat-input') as HTMLTextAreaElement;
         input.dispatchEvent(
