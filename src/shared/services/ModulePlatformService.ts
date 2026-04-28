@@ -56,18 +56,18 @@ export class ModulePlatformService {
      */
     public async stop(app: IApp): Promise<boolean> {
         const isApi = this._isApiModule(app);
+        const activeProviderId = this._aiBridge.getState().activeProviderId;
 
-        if (isApi) {
-            // Stop API Provider
-            const activeProviderId = this._aiBridge.getState().activeProviderId;
-            if (activeProviderId !== app.id) {
-                this._tracer.info(
-                    `[ModulePlatformService] Skip stop for inactive API module: ${app.id} (active: ${activeProviderId ?? 'none'})`,
-                );
-                return false;
-            }
+        if (activeProviderId === app.id) {
             this._aiBridge.stopProvider();
             return true;
+        }
+
+        if (isApi) {
+            this._tracer.info(
+                `[ModulePlatformService] Skip stop for inactive API module: ${app.id} (active: ${activeProviderId ?? 'none'})`,
+            );
+            return false;
         }
 
         if (app.managedExternally === true) {
@@ -119,9 +119,13 @@ export class ModulePlatformService {
      * Returns the real runtime status for an API provider or a local module.
      */
     public async getStatus(app: IApp): Promise<ModuleRuntimeStatus> {
+        const state = this._aiBridge.getState();
+        if (state.isRunning && state.activeProviderId === app.id) {
+            return 'running';
+        }
+
         if (this._isApiModule(app)) {
-            const state = this._aiBridge.getState();
-            return state.isRunning && state.activeProviderId === app.id ? 'running' : 'stopped';
+            return 'stopped';
         }
 
         if (app.managedExternally === true) {

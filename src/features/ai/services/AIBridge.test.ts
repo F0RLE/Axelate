@@ -86,6 +86,7 @@ vi.stubGlobal('tracer', {
 });
 
 import { AIBridge } from '@/features/ai/services/AIBridge';
+import { AIBridgeEvents } from '@/features/ai/services/AIBridgeEvents';
 
 const mockTracer = {
     info: vi.fn(),
@@ -223,24 +224,17 @@ describe('AIBridge', () => {
 
             await bridge2.init();
 
-            // Set up spys for broadcast methods
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const broadcastChunkSpy = vi
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                .spyOn(bridge2 as any, '_broadcastChunk')
-                .mockImplementation(() => {});
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const broadcastThoughtSpy = vi
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                .spyOn(bridge2 as any, '_broadcastThought')
-                .mockImplementation(() => {});
+            const chunkHandler = vi.fn();
+            const thoughtHandler = vi.fn();
+            bridge2.onChunk('stream-test', chunkHandler);
+            bridge2.onThought('thought-test', thoughtHandler);
 
             // Fire the callbacks so the lines are covered
             if (chunkCallback) chunkCallback('test chunk');
             if (thoughtCallback) thoughtCallback('test thought');
 
-            expect(broadcastChunkSpy).toHaveBeenCalledWith('test chunk');
-            expect(broadcastThoughtSpy).toHaveBeenCalledWith('test thought');
+            expect(chunkHandler).toHaveBeenCalledWith('test chunk');
+            expect(thoughtHandler).toHaveBeenCalledWith('test thought');
 
             bridge2.stopProvider();
         });
@@ -361,20 +355,22 @@ describe('AIBridge', () => {
             aiBridge.onChunk('test', handler);
             aiBridge.onThought('test', handler);
 
-            mockStoredApiKey();
+            mockInvoke.mockImplementation(async (cmd: string) => {
+                await Promise.resolve();
+                if (cmd === 'has_secure_key') return true;
+                if (cmd === 'get_secure_key') return 'sk-test-key';
+                if (cmd === 'send_chat_message') {
+                    return { ok: true, reply: { text: 'after-restart' } };
+                }
+                return null;
+            });
             await aiBridge.startProvider('gemini');
             aiBridge.stopProvider();
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastResponse('after-stop', 'chat');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastChunk('after-stop-chunk');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastThought('after-stop-thought');
+            await aiBridge.startProvider('gemini');
+            await aiBridge.sendMessage('after restart');
 
-            expect(handler).toHaveBeenCalledWith('after-stop', 'chat');
-            expect(handler).toHaveBeenCalledWith('after-stop-chunk');
-            expect(handler).toHaveBeenCalledWith('after-stop-thought');
+            expect(handler).toHaveBeenCalledWith('after-restart', 'chat');
         });
     });
 
@@ -519,101 +515,93 @@ describe('AIBridge', () => {
     });
 
     // ---------------------------------------------------------- Listener management
-    describe('onMessage / removeListener', () => {
+    describe('AIBridgeEvents listener management', () => {
         it('should register and invoke message handlers', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onMessage('listener-1', handler);
+            events.onMessage('listener-1', handler);
 
-            // Access private method via workaround
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastResponse('test msg', 'chat');
+            events.broadcastResponse('test msg', 'chat');
 
             expect(handler).toHaveBeenCalledWith('test msg', 'chat');
         });
 
         it('should remove listener by id', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onMessage('listener-1', handler);
-            aiBridge.removeListener('listener-1');
+            events.onMessage('listener-1', handler);
+            events.removeListener('listener-1');
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastResponse('test', 'chat');
+            events.broadcastResponse('test', 'chat');
 
             expect(handler).not.toHaveBeenCalled();
         });
 
         it('should support multiple handlers per listener id', () => {
+            const events = new AIBridgeEvents();
             const h1 = vi.fn();
             const h2 = vi.fn();
-            aiBridge.onMessage('multi', h1);
-            aiBridge.onMessage('multi', h2);
+            events.onMessage('multi', h1);
+            events.onMessage('multi', h2);
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastResponse('data', 'chat');
+            events.broadcastResponse('data', 'chat');
 
             expect(h1).toHaveBeenCalledOnce();
             expect(h2).toHaveBeenCalledOnce();
         });
-    });
 
-    describe('onChunk / removeChunkListener', () => {
         it('should register and invoke chunk handlers', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onChunk('chunk-1', handler);
+            events.onChunk('chunk-1', handler);
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastChunk('chunk data');
+            events.broadcastChunk('chunk data');
 
             expect(handler).toHaveBeenCalledWith('chunk data');
         });
 
         it('should remove chunk listener by id', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onChunk('chunk-1', handler);
-            aiBridge.removeChunkListener('chunk-1');
+            events.onChunk('chunk-1', handler);
+            events.removeChunkListener('chunk-1');
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastChunk('data');
+            events.broadcastChunk('data');
 
             expect(handler).not.toHaveBeenCalled();
         });
-    });
 
-    describe('onThought / removeThoughtListener', () => {
         it('should register and invoke thought handlers', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onThought('thought-1', handler);
+            events.onThought('thought-1', handler);
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastThought('thought data');
+            events.broadcastThought('thought data');
 
             expect(handler).toHaveBeenCalledWith('thought data');
         });
 
         it('should remove thought listener by id', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onThought('thought-1', handler);
-            aiBridge.removeThoughtListener('thought-1');
+            events.onThought('thought-1', handler);
+            events.removeThoughtListener('thought-1');
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastThought('data');
+            events.broadcastThought('data');
 
             expect(handler).not.toHaveBeenCalled();
         });
-    });
 
-    describe('onReplaceChunk / removeReplaceChunkListener', () => {
         it('should register, invoke and remove replace-chunk handlers', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onReplaceChunk('replace-1', handler);
+            events.onReplaceChunk('replace-1', handler);
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastReplaceChunk('replace data');
+            events.broadcastReplaceChunk('replace data');
             expect(handler).toHaveBeenCalledWith('replace data');
 
-            aiBridge.removeReplaceChunkListener('replace-1');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (aiBridge as any)._broadcastReplaceChunk('again');
+            events.removeReplaceChunkListener('replace-1');
+            events.broadcastReplaceChunk('again');
             expect(handler).toHaveBeenCalledTimes(1);
         });
     });
@@ -954,11 +942,6 @@ describe('AIBridge', () => {
             await tempBridge.init();
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (tempBridge as any)._broadcastChunk('chunk');
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (tempBridge as any)._broadcastThought('thought');
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (import.meta.env as any).DEV = orgDev;
         });
 
@@ -1005,17 +988,16 @@ describe('AIBridge', () => {
         });
 
         it('should handle repeating listener registrations (Lines 237-248)', () => {
+            const events = new AIBridgeEvents();
             const handler = vi.fn();
-            aiBridge.onChunk('repeat', handler);
-            aiBridge.onChunk('repeat', handler); // Adds to existing array
+            events.onChunk('repeat', handler);
+            events.onChunk('repeat', handler);
 
-            aiBridge.onThought('repeat', handler);
-            aiBridge.onThought('repeat', handler); // Adds to existing array
+            events.onThought('repeat', handler);
+            events.onThought('repeat', handler);
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((aiBridge as any)._chunkListeners.get('repeat')?.length).toBe(2);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            expect((aiBridge as any)._thoughtListeners.get('repeat')?.length).toBe(2);
+            expect(events.chunkListeners.get('repeat')?.length).toBe(2);
+            expect(events.thoughtListeners.get('repeat')?.length).toBe(2);
         });
 
         it('should forward full local history and let backend handle context compaction', async () => {

@@ -50,7 +50,7 @@ use api::{
     secure,
     settings::{self, theme, translations, ui_state, window_settings},
     system::{self, bootstrap, config, health, logs},
-    window,
+    voice, window,
 };
 
 // Import app-level helpers
@@ -153,6 +153,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         secure::has_secure_key,
         secure::get_secure_key_meta,
         ai::send_chat_message,
+        ai::cancel_chat_generation,
         ai::validate_api_key,
         ai::validate_stored_api_key,
         ai::clear_chat_history,
@@ -166,6 +167,8 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         ai::delete_chat_image,
         ai::open_chat_image_location,
         ai::save_chat_image_default,
+        voice::recognize_voice_once,
+        voice::open_voice_privacy_settings,
         custom_model_service::get_custom_models,
         custom_model_service::add_custom_model,
         custom_model_service::remove_custom_model,
@@ -253,6 +256,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     let sessions = std::sync::Arc::new(ChatSessionManager::new());
     sessions.start_saver();
     app.manage(std::sync::Arc::clone(&sessions));
+    app.manage(ai::ChatCancellationRegistry::default());
     let image_generation_state = std::sync::Arc::new(ImageGenerationState::new());
     app.manage(std::sync::Arc::clone(&image_generation_state));
     let monitor_service = std::sync::Arc::new(SystemMonitorService::new());

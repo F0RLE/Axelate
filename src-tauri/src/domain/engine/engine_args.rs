@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::errors::AppError;
 
-use super::types::EngineConfig;
+use super::types::{EngineComputeMode, EngineConfig};
 
 fn is_qwen_model(model_path: Option<&str>) -> bool {
     model_path.is_some_and(|path| path.to_ascii_lowercase().contains("qwen"))
@@ -63,6 +63,21 @@ fn extract_arg_value(args: &[String], candidates: &[&str]) -> Option<String> {
     }
 
     None
+}
+
+fn push_llamacpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
+    match config.compute_mode {
+        EngineComputeMode::Gpu => {
+            args.push("-ngl".to_string());
+            args.push("all".to_string());
+        }
+        EngineComputeMode::Cpu => {
+            args.push("--device".to_string());
+            args.push("none".to_string());
+            args.push("-ngl".to_string());
+            args.push("0".to_string());
+        }
+    }
 }
 
 /// Resolves the explicit stable-diffusion.cpp preview output path from extra arguments.
@@ -181,9 +196,8 @@ pub(super) fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<Strin
         port.to_string(),
         "--ctx-size".to_string(),
         effective_context_size.to_string(),
-        "-ngl".to_string(),
-        config.gpu_layers.to_string(),
     ];
+    push_llamacpp_compute_args(&mut args, config);
 
     push_arg_if_missing(
         &mut args,

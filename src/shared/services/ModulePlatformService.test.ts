@@ -126,6 +126,20 @@ describe('ModulePlatformService', () => {
             expect(result).toBe(true);
             expect(moduleService.control).toHaveBeenCalledWith('ollama', 'stop');
         });
+
+        it('should stop active local AI provider through AIBridge', async () => {
+            const app = createApp({ id: 'llamacpp', type: 'local', capability: 'text' });
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: 'llamacpp',
+                isRunning: true,
+            });
+
+            const result = await service.stop(app);
+
+            expect(result).toBe(true);
+            expect(aiBridge.stopProvider).toHaveBeenCalled();
+            expect(moduleService.control).not.toHaveBeenCalled();
+        });
     });
 
     describe('cancelDownload', () => {

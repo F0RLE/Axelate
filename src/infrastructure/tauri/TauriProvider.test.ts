@@ -408,6 +408,25 @@ describe('TauriProvider', () => {
         });
     });
 
+    describe('readClipboardText', () => {
+        it('should call clipboard plugin in Tauri', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce('clipboard text');
+
+            await expect(provider.readClipboardText()).resolves.toBe('clipboard text');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith(
+                'plugin:clipboard-manager|read_text',
+                {},
+            );
+        });
+
+        it('should not use browser clipboard reads in web mode', async () => {
+            const { provider: webProvider } = setupWebMode();
+
+            await expect(webProvider.readClipboardText()).resolves.toBeNull();
+        });
+    });
+
     // ---------------------------------------------------------- openUrl
     describe('openUrl', () => {
         it('should call shell plugin in Tauri', async () => {

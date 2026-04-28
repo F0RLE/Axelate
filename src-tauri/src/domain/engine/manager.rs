@@ -440,6 +440,7 @@ mod tests {
 
     use super::*;
     use crate::domain::engine::engine_runtime::classify_engine_start_failure;
+    use crate::domain::engine::types::EngineComputeMode;
     use crate::domain::system::ports::ENGINE_LOCAL_PORT_RANGE;
     use std::fs;
     use std::net::TcpListener;
@@ -448,7 +449,7 @@ mod tests {
     fn sample_config(model_path: Option<&str>) -> EngineConfig {
         EngineConfig {
             engine_id: "llamacpp".to_string(),
-            gpu_layers: -1,
+            compute_mode: EngineComputeMode::Gpu,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
             vae_path: None,
@@ -460,7 +461,7 @@ mod tests {
     fn sample_sdcpp_config(model_path: Option<&str>) -> EngineConfig {
         EngineConfig {
             engine_id: "sdcpp".to_string(),
-            gpu_layers: -1,
+            compute_mode: EngineComputeMode::Gpu,
             context_size: 4096,
             model_path: model_path.map(str::to_string),
             vae_path: None,
@@ -472,8 +473,20 @@ mod tests {
     #[test]
     fn builds_single_slot_llamacpp_args_by_default() {
         let args = build_llamacpp_args(&sample_config(None), 8081);
+        assert!(args.windows(2).any(|w| w == ["-ngl", "all"]));
         assert!(args.windows(2).any(|w| w == ["--parallel", "1"]));
         assert!(args.windows(2).any(|w| w == ["--reasoning", "off"]));
+    }
+
+    #[test]
+    fn builds_cpu_only_llamacpp_args_when_requested() {
+        let mut config = sample_config(None);
+        config.compute_mode = EngineComputeMode::Cpu;
+
+        let args = build_llamacpp_args(&config, 8081);
+
+        assert!(args.windows(2).any(|w| w == ["--device", "none"]));
+        assert!(args.windows(2).any(|w| w == ["-ngl", "0"]));
     }
 
     #[test]

@@ -18,11 +18,6 @@
         "label": "Port",
         "default": 8081
       },
-      "gpuLayers": {
-        "type": "number",
-        "label": "GPU Layers (-1 = all)",
-        "default": -1
-      },
       "contextSize": {
         "type": "number",
         "label": "Context Window",

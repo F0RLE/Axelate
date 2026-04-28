@@ -25,6 +25,7 @@ pub(super) async fn prepare_chat_dispatch(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
     local_engine_access: LocalEngineAccess,
 ) -> Result<PreparedChatDispatch, crate::errors::AppError> {
     let mut messages_context = request.messages.clone();
@@ -37,8 +38,14 @@ pub(super) async fn prepare_chat_dispatch(
     let mut model_max_tokens: Option<u32> = None;
     let mut is_local_engine = false;
 
-    if let Some(local_resolution) =
-        resolve_local_engine_request(request, sessions, engine_manager, local_engine_access).await?
+    if let Some(local_resolution) = resolve_local_engine_request(
+        request,
+        sessions,
+        engine_manager,
+        settings_service,
+        local_engine_access,
+    )
+    .await?
     {
         base_url = local_resolution.base_url;
         effective_model = local_resolution.effective_model;
@@ -86,7 +93,6 @@ pub(super) async fn persist_successful_response(
             reply,
             response.thought_signature.clone(),
         );
-        let _ = sessions.force_save().await;
     }
 }
 
@@ -147,6 +153,7 @@ async fn resolve_local_engine_request(
     request: &ChatRequest,
     sessions: &ChatSessionManager,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
     local_engine_access: LocalEngineAccess,
 ) -> Result<Option<LocalEngineResolution>, crate::errors::AppError> {
     let Some(definition) = engine_manager.get_definition(&request.provider).await else {
@@ -197,6 +204,8 @@ async fn resolve_local_engine_request(
                     &local_model_for_context,
                 );
             }
+            prepend_local_system_prompt(&mut messages_context, settings_service, &request.provider)
+                .await?;
 
             let base_url = format!("{}/v1", status.endpoint);
             tracing::info!(
@@ -231,12 +240,60 @@ async fn resolve_local_engine_request(
             LocalEngineResolution {
                 base_url,
                 effective_model,
-                messages_context: request.messages.clone(),
+                messages_context: local_messages_with_system_prompt(
+                    request.messages.clone(),
+                    settings_service,
+                    &request.provider,
+                )
+                .await?,
             }
         }
     };
 
     Ok(Some(resolution))
+}
+
+async fn local_messages_with_system_prompt(
+    mut messages: Vec<ChatMessage>,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
+    provider: &str,
+) -> Result<Vec<ChatMessage>, crate::errors::AppError> {
+    prepend_local_system_prompt(&mut messages, settings_service, provider).await?;
+    Ok(messages)
+}
+
+async fn prepend_local_system_prompt(
+    messages: &mut Vec<ChatMessage>,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
+    provider: &str,
+) -> Result<(), crate::errors::AppError> {
+    if messages.iter().any(|message| message.role == "system") {
+        return Ok(());
+    }
+
+    let settings = settings_service.get_settings().await?;
+    let key = format!("{provider}_system_prompt");
+    let prompt = settings
+        .extra_settings
+        .get(&key)
+        .map(String::as_str)
+        .unwrap_or_default()
+        .trim();
+    if prompt.is_empty() {
+        return Ok(());
+    }
+
+    messages.insert(
+        0,
+        ChatMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            role: "system".to_string(),
+            content: serde_json::Value::String(prompt.to_string()),
+            thought_signature: None,
+        },
+    );
+
+    Ok(())
 }
 
 fn resolve_cloud_provider_request(

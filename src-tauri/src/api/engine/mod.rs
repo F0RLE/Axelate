@@ -130,7 +130,7 @@ pub async fn get_engine_settings_payload(
 
 #[tauri::command]
 #[specta::specta]
-/// Persists user engine config (gpu_layers, context_size, model_path, extra_args).
+/// Persists user engine config (compute mode, context_size, model_path, extra_args).
 pub async fn set_engine_config(
     config: crate::domain::engine::types::EngineConfig,
     engine_manager: State<'_, Arc<EngineManager>>,

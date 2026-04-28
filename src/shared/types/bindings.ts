@@ -141,6 +141,8 @@ export const commands = {
 	getSecureKeyMeta: (service: string) => typedError<SecureKeyMeta, AppError>(__TAURI_INVOKE("get_secure_key_meta", { service })),
 	// Sends a chat message to the AI provider and streams the response
 	sendChatMessage: (request: ChatRequest, chatChannel: Channel<StreamChunkPayload>, thoughtChannel: Channel<StreamChunkPayload>) => typedError<ChatResponse, AppError>(__TAURI_INVOKE("send_chat_message", { request, chatChannel, thoughtChannel })),
+	// Cancels an active streamed chat request by request identifier.
+	cancelChatGeneration: (requestId: string) => __TAURI_INVOKE<boolean>("cancel_chat_generation", { requestId }),
 	// Validates an API key for the specified provider
 	validateApiKey: (provider: string, key: string) => typedError<boolean, AppError>(__TAURI_INVOKE("validate_api_key", { provider, key })),
 	// Validates the stored provider key without exposing it to the frontend
@@ -182,6 +184,10 @@ export const commands = {
 	openChatImageLocation: (filePath: string, folderPath: string) => typedError<null, AppError>(__TAURI_INVOKE("open_chat_image_location", { filePath, folderPath })),
 	// Saves a chat image to the default Pictures/axelate directory and returns the final path.
 	saveChatImageDefault: (base64Data: string, mimeType: string) => typedError<SavedChatImage, AppError>(__TAURI_INVOKE("save_chat_image_default", { base64Data, mimeType })),
+	// Captures one voice utterance with the native platform recognizer.
+	recognizeVoiceOnce: (request: VoiceRecognitionRequest) => typedError<VoiceRecognitionResponse, AppError>(__TAURI_INVOKE("recognize_voice_once", { request })),
+	// Opens the native Windows speech privacy settings page.
+	openVoicePrivacySettings: () => typedError<null, AppError>(__TAURI_INVOKE("open_voice_privacy_settings")),
 	// Retrieves all custom AI models configured by the user
 	getCustomModels: () => typedError<CustomModel[], AppError>(__TAURI_INVOKE("get_custom_models")),
 	// Adds a new custom AI model configuration
@@ -206,7 +212,7 @@ export const commands = {
 	getEngineConfig: (engineId: string) => typedError<EngineConfig, AppError>(__TAURI_INVOKE("get_engine_config", { engineId })),
 	// Returns the local engine modal payload in a single backend round-trip.
 	getEngineSettingsPayload: (engineId: string) => typedError<EngineSettingsPayload, AppError>(__TAURI_INVOKE("get_engine_settings_payload", { engineId })),
-	// Persists user engine config (gpu_layers, context_size, model_path, extra_args).
+	// Persists user engine config (compute mode, context_size, model_path, extra_args).
 	setEngineConfig: (config: EngineConfig) => typedError<null, AppError>(__TAURI_INVOKE("set_engine_config", { config })),
 };
 
@@ -594,12 +600,19 @@ export type DiskStats = {
 	activityPercent: number,
 };
 
+// Preferred compute backend for a local engine.
+export type EngineComputeMode =
+// Let the engine use available GPU devices automatically.
+"gpu" |
+// Force CPU execution and disable GPU offload.
+"cpu";
+
 // Runtime configuration for starting an engine
 export type EngineConfig = {
 	// Engine identifier (matches EngineDefinition.id)
 	engine_id: string,
-	// Number of GPU layers (-1 = all)
-	gpu_layers?: number,
+	// Preferred compute backend.
+	compute_mode?: EngineComputeMode,
 	// Context window size
 	context_size?: number,
 	// Path to model file
@@ -632,8 +645,6 @@ export type EngineDefinition = {
 	version?: string,
 	// Default port (extracted from configSchema.port.default)
 	default_port?: number,
-	// Default GPU layers (-1 = all, extracted from configSchema.gpuLayers.default)
-	default_gpu_layers?: number,
 	// Default context window size (extracted from configSchema.contextSize.default)
 	default_context_size?: number,
 	// Raw configuration schema for UI rendering (kept for frontend)
@@ -1131,9 +1142,20 @@ export type StreamChunkPayload = {
 	request_id: string,
 	// Identifies the assistant message currently being streamed.
 	message_id: string,
+	// Describes how the frontend should handle this stream event.
+	kind: StreamPayloadKind,
 	// The incremental text fragment emitted by the model.
 	content: string,
 };
+
+// Kind of streaming payload delivered to frontend chat channels.
+export type StreamPayloadKind =
+// A visible assistant text fragment.
+"chat_chunk" |
+// A reasoning/thinking text fragment.
+"thought_chunk" |
+// End-of-stream marker after all chunks have been delivered.
+"done";
 
 // Complete system statistics snapshot
 export type SystemStats = {
@@ -1222,6 +1244,22 @@ export type UIState = {
 	preferred_language?: string | null,
 	// Request to reopen the chat and reveal the latest message after background work.
 	pending_chat_reveal?: boolean,
+};
+
+// One-shot voice recognition request.
+export type VoiceRecognitionRequest = {
+	// Preferred UI language code, for example `en`, `ru`, or `ru-RU`.
+	language: string | null,
+};
+
+// One-shot voice recognition response.
+export type VoiceRecognitionResponse = {
+	// Recognized final text.
+	text: string,
+	// Native recognizer status.
+	status: string,
+	// Native confidence bucket when available.
+	confidence: string | null,
 };
 
 // VRAM (Video RAM) statistics

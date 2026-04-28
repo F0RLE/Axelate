@@ -15,6 +15,10 @@ type TauriRuntime = {
     openExternal: (url: string) => void;
 };
 
+type BrowserClipboardHost = {
+    clipboard?: Pick<Clipboard, 'writeText'>;
+};
+
 function createDefaultTauriRuntime(): TauriRuntime {
     return {
         hasTauriGlobals: () => {
@@ -176,10 +180,30 @@ export class TauriProvider implements IBridge {
 
     public async writeToClipboard(text: string): Promise<void> {
         if (this.isTauri()) {
-            await this.invoke('plugin:clipboard-manager|write_text', { text });
-        } else {
-            this._tracer.info(`[Mock Clipboard] Write: ${text}`);
+            try {
+                await this.invoke('plugin:clipboard-manager|write_text', { text });
+                return;
+            } catch (error) {
+                if (await this._writeBrowserClipboard(text)) {
+                    return;
+                }
+                throw error;
+            }
         }
+
+        if (await this._writeBrowserClipboard(text)) {
+            return;
+        }
+
+        this._tracer.info(`[Mock Clipboard] Write: ${text}`);
+    }
+
+    public async readClipboardText(): Promise<string | null> {
+        if (!this.isTauri()) {
+            return null;
+        }
+
+        return await this.invoke<string>('plugin:clipboard-manager|read_text');
     }
 
     public async openUrl(url: string): Promise<void> {
@@ -189,6 +213,16 @@ export class TauriProvider implements IBridge {
             this._tracer.info(`[Mock Shell] Open URL: ${url}`);
             this._runtime.openExternal(url);
         }
+    }
+
+    private async _writeBrowserClipboard(text: string): Promise<boolean> {
+        const clipboard = (globalThis.navigator as BrowserClipboardHost).clipboard;
+        if (clipboard === undefined) {
+            return false;
+        }
+
+        await clipboard.writeText(text);
+        return true;
     }
 
     /**

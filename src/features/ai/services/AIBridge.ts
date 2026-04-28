@@ -114,10 +114,10 @@ export class AIBridge implements IAIBridge {
                 events: this._events,
                 getActiveProviderId: () => this._manager.activeProviderId,
                 broadcastChunk: (payload) => {
-                    this._broadcastChunk(payload);
+                    this._events.broadcastChunk(payload);
                 },
                 broadcastThought: (payload) => {
-                    this._broadcastThought(payload);
+                    this._events.broadcastThought(payload);
                 },
             });
             this._unlisteners.push(...unlisteners);
@@ -278,6 +278,10 @@ export class AIBridge implements IAIBridge {
         await this._runtime.cancelImageGeneration(this._context, providerId);
     }
 
+    public async cancelTextGeneration(): Promise<boolean> {
+        return await this._transport.cancelActiveChatRequest();
+    }
+
     public async getImageGenerationPreview(): Promise<IImageGenerationPreview | null> {
         if (this._context?.tauriProvider.isTauri() !== true) {
             return null;
@@ -357,38 +361,6 @@ export class AIBridge implements IAIBridge {
             this._tracer.debug('[AIBridge] Local context window unavailable:', error);
             this._localContextWindows.set(providerId, 4096);
         }
-    }
-
-    public get _listeners(): ReadonlyMap<string, MessageHandler[]> {
-        return this._events.listeners;
-    }
-
-    public get _chunkListeners(): ReadonlyMap<string, IChunkHandler[]> {
-        return this._events.chunkListeners;
-    }
-
-    public get _replaceChunkListeners(): ReadonlyMap<string, IChunkHandler[]> {
-        return this._events.replaceChunkListeners;
-    }
-
-    public get _thoughtListeners(): ReadonlyMap<string, IChunkHandler[]> {
-        return this._events.thoughtListeners;
-    }
-
-    public _broadcastResponse(response: string, source: MessageSource): void {
-        this._events.broadcastResponse(response, source);
-    }
-
-    public _broadcastChunk(chunk: string): void {
-        this._events.broadcastChunk(chunk);
-    }
-
-    public _broadcastReplaceChunk(chunk: string): void {
-        this._events.broadcastReplaceChunk(chunk);
-    }
-
-    public _broadcastThought(chunk: string): void {
-        this._events.broadcastThought(chunk);
     }
 
     private _showErrorToast(key: string, fallback: string): void {

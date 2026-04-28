@@ -57,17 +57,6 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Safely starts a module with the given manifest
     pub async fn start(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
-        if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
-            if let Some(existing_pid) = self.reconcile_existing_script_processes(&entry_path).await
-            {
-                return Ok(ControlResponse {
-                    success: true,
-                    message: format!("Module already running with PID {existing_pid}"),
-                    status: Some("running".to_string()),
-                });
-            }
-        }
-
         // 1. Guard against double-start
         // Check registry first (atomic-ish)
         if self.controller.registry.contains_key(&self.module_id) {
@@ -88,6 +77,17 @@ impl<'a> LifecycleExecutor<'a> {
                 message: "Module is already running (PID file)".to_string(),
                 status: Some("running".to_string()),
             });
+        }
+
+        if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
+            if let Some(existing_pid) = self.reconcile_existing_script_processes(&entry_path).await
+            {
+                return Ok(ControlResponse {
+                    success: true,
+                    message: format!("Module already running with PID {existing_pid}"),
+                    status: Some("running".to_string()),
+                });
+            }
         }
 
         // 4. Spawn process
@@ -252,7 +252,7 @@ impl<'a> LifecycleExecutor<'a> {
         }
 
         if let Some(entry_path) = script_entry_path.as_ref() {
-            self.kill_matching_script_processes(entry_path);
+            self.kill_matching_script_processes(entry_path).await;
         }
 
         // 3. Escalation check (fallback for orphans or if still running)
@@ -300,7 +300,7 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     async fn reconcile_existing_script_processes(&self, entry_path: &Path) -> Option<usize> {
-        let matching_pids = process::find_script_module_processes(self.module_path, entry_path);
+        let matching_pids = self.find_matching_script_processes(entry_path).await;
         if matching_pids.is_empty() {
             return None;
         }
@@ -331,9 +331,29 @@ impl<'a> LifecycleExecutor<'a> {
         None
     }
 
-    fn kill_matching_script_processes(&self, entry_path: &Path) {
-        for pid in process::find_script_module_processes(self.module_path, entry_path) {
+    async fn kill_matching_script_processes(&self, entry_path: &Path) {
+        for pid in self.find_matching_script_processes(entry_path).await {
             let _ = process::kill_orphan(pid);
+        }
+    }
+
+    async fn find_matching_script_processes(&self, entry_path: &Path) -> Vec<usize> {
+        let module_path = self.module_path.to_path_buf();
+        let entry_path = entry_path.to_path_buf();
+
+        match tokio::task::spawn_blocking(move || {
+            process::find_script_module_processes(&module_path, &entry_path)
+        })
+        .await
+        {
+            Ok(pids) => pids,
+            Err(error) => {
+                tracing::warn!(
+                    "Failed to scan matching script module processes for {}: {error}",
+                    self.module_id
+                );
+                Vec::new()
+            }
         }
     }
 

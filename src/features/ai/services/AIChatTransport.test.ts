@@ -169,6 +169,44 @@ describe('AIChatTransport', () => {
             const result = await transport.send(makeRequest());
             expect(result).toEqual({ ok: false, error: '{"nested":true}' });
         });
+
+        it('should cancel a stale active request before starting another one', async () => {
+            let sendCalls = 0;
+            let firstRequestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+
+                    if (command === 'send_chat_message') {
+                        sendCalls += 1;
+                        const request = args['request'] as { request_id: string };
+                        if (sendCalls === 1) {
+                            firstRequestId = request.request_id;
+                            return new Promise(() => {});
+                        }
+                        return Promise.resolve({ ok: true, reply: { text: 'second' } });
+                    }
+
+                    return Promise.resolve(undefined);
+                },
+            );
+
+            const firstSend = transport.send(makeRequest());
+            await Promise.resolve();
+
+            const secondResult = await transport.send(makeRequest({ messages: [] }));
+
+            expect(secondResult).toEqual({ ok: true, text: 'second' });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId: firstRequestId,
+            });
+            expect(sendCalls).toBe(2);
+
+            vi.advanceTimersByTime(90_001);
+            await firstSend;
+        });
     });
 
     describe('generateImage', () => {
@@ -298,19 +336,38 @@ describe('AIChatTransport', () => {
             invokeMethod(listener);
             mockCore.tauriProvider.invoke.mockImplementation(
                 (_cmd: string, args: Record<string, unknown>) => {
+                    const chatChannel = args['chatChannel'] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
                     const channel = args[channelName] as {
                         onmessage?:
                             | ((payload: {
                                   request_id: string;
                                   message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
                                   content: string;
                               }) => void)
                             | null;
                     };
+                    const requestId = (args['request'] as { request_id: string }).request_id;
                     channel.onmessage?.({
-                        request_id: 'req-active',
+                        request_id: requestId,
                         message_id: 'msg-1',
+                        kind: channelName === 'chatChannel' ? 'chat_chunk' : 'thought_chunk',
                         content: 'chunk-data',
+                    });
+                    chatChannel.onmessage?.({
+                        request_id: requestId,
+                        message_id: 'msg-1',
+                        kind: 'done',
+                        content: '',
                     });
                     return Promise.resolve({ ok: true, reply: { text: 'done' } });
                 },
@@ -319,6 +376,60 @@ describe('AIChatTransport', () => {
             await transport.send(makeRequest());
 
             expect(listener).toHaveBeenCalledWith('chunk-data');
+        });
+
+        it('should ignore stream payloads from a different request', async () => {
+            const listener = vi.fn();
+            invokeMethod(listener);
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (_cmd: string, args: Record<string, unknown>) => {
+                    const chatChannel = args['chatChannel'] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    const channel = args[channelName] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    const requestId = (args['request'] as { request_id: string }).request_id;
+                    channel.onmessage?.({
+                        request_id: 'req-stale',
+                        message_id: 'msg-stale',
+                        kind: channelName === 'chatChannel' ? 'chat_chunk' : 'thought_chunk',
+                        content: 'stale',
+                    });
+                    channel.onmessage?.({
+                        request_id: requestId,
+                        message_id: 'msg-1',
+                        kind: channelName === 'chatChannel' ? 'chat_chunk' : 'thought_chunk',
+                        content: 'current',
+                    });
+                    chatChannel.onmessage?.({
+                        request_id: requestId,
+                        message_id: 'msg-1',
+                        kind: 'done',
+                        content: '',
+                    });
+                    return Promise.resolve({ ok: true, reply: { text: 'done' } });
+                },
+            );
+
+            await transport.send(makeRequest());
+
+            expect(listener).toHaveBeenCalledOnce();
+            expect(listener).toHaveBeenCalledWith('current');
         });
 
         it('should NOT forward payload after unsubscribe', async () => {
@@ -332,6 +443,7 @@ describe('AIChatTransport', () => {
                             | ((payload: {
                                   request_id: string;
                                   message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
                                   content: string;
                               }) => void)
                             | null;
@@ -339,6 +451,7 @@ describe('AIChatTransport', () => {
                     channel.onmessage?.({
                         request_id: 'req-active',
                         message_id: 'msg-3',
+                        kind: channelName === 'chatChannel' ? 'chat_chunk' : 'thought_chunk',
                         content: 'after-unsub',
                     });
                     return Promise.resolve({ ok: true, reply: { text: 'done' } });

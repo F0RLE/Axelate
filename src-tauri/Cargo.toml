@@ -103,6 +103,10 @@ sevenz-rust2 = "0.20.2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [
+    "Foundation",
+    "Globalization",
+    "Media_SpeechRecognition",
+    "System",
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_Ole",
