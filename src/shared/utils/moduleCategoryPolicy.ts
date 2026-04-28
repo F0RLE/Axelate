@@ -24,10 +24,6 @@ export function getOtherAiSlot(category: string): AiSlotCategory {
     return category === CategoryKey.AI_IMAGE ? CategoryKey.AI_TEXT : CategoryKey.AI_IMAGE;
 }
 
-export function shouldLaunchOnSelection(category: string): boolean {
-    return !isAiCategory(category);
-}
-
 export function resolveCatalogCategory(category: string): string {
     return isAiCategory(category) ? CategoryKey.AI : category;
 }

@@ -13,6 +13,7 @@ import {
     setModuleCardDownloadProgress,
 } from './ModuleCardDownloadProgress';
 import { ModuleCardPresentationHelper } from './ModuleCardPresentationHelper';
+import { isAiCategory } from '../../utils/moduleCategoryPolicy';
 
 type ModuleCardRendererDeps = {
     checkInstalled?: (moduleId: string) => Promise<boolean>;
@@ -101,7 +102,7 @@ export class ModuleCardRenderer {
         }
         card.dataset['appId'] = app.id;
 
-        const state = this._resolveCardState(app);
+        const state = this._resolveCardState(app, _category);
         this._applyCardState(card, state);
 
         const template = document.getElementById('tpl-module-card') as HTMLTemplateElement | null;
@@ -120,15 +121,15 @@ export class ModuleCardRenderer {
         this._applyExistingDownloadState(card, app);
 
         this._attachEventHandlers(card, app, state.isApi, onClick);
-        this._startAsyncInstallCheck(card, app, state, onClick);
 
         return card;
     }
 
-    private _resolveCardState(app: IApp): CardState {
+    private _resolveCardState(app: IApp, category: string): CardState {
         const isApi = this._isApiModule(app);
         const isComingSoon = app.comingSoon === true;
-        const isInstalled = isApi || (!isComingSoon && app.installed === true);
+        const isInstalled =
+            isApi || isAiCategory(category) || (!isComingSoon && app.installed === true);
 
         return {
             isApi,
@@ -304,61 +305,6 @@ export class ModuleCardRenderer {
         );
     }
 
-    private _startAsyncInstallCheck(
-        card: HTMLElement,
-        app: IApp,
-        state: CardState,
-        onClick: (e: MouseEvent, app: IApp) => void,
-    ): void {
-        if (state.isInstalled || state.isApi || state.isComingSoon) {
-            return;
-        }
-
-        const checkInstalled = this._deps.checkInstalled;
-        if (checkInstalled === undefined) {
-            return;
-        }
-
-        void this._runAsyncInstallCheck(card, app, state.isApi, onClick, checkInstalled);
-    }
-
-    private async _runAsyncInstallCheck(
-        card: HTMLElement,
-        app: IApp,
-        isApi: boolean,
-        onClick: (e: MouseEvent, app: IApp) => void,
-        checkInstalled: (moduleId: string) => Promise<boolean>,
-    ): Promise<void> {
-        try {
-            if (await checkInstalled(app.id)) {
-                this._handleAsyncInstallSuccess(card, app, isApi, onClick);
-            }
-        } catch (err) {
-            this._tracer?.debug(
-                `[ModuleCardRenderer] Failed to check installation status for ${app.id}: ${String(err)}`,
-            );
-        }
-    }
-
-    private _handleAsyncInstallSuccess(
-        card: HTMLElement,
-        app: IApp,
-        isApi: boolean,
-        onClick: (e: MouseEvent, app: IApp) => void,
-    ): void {
-        if (!card.isConnected) return;
-        if (card.dataset['appId'] !== app.id) return;
-
-        app.installed = true;
-
-        this._applyInstalledCardAppearance(card);
-        this._replaceCardActions(
-            card,
-            buildModuleCardActionButton(app, false, this._translate, onClick),
-        );
-        this._ensureDeleteBadge(card, isApi);
-    }
-
     public updateSlotCardAttributes(card: HTMLElement, app: IApp, capability?: string): void {
         card.dataset['currentModule'] = app.id;
         card.dataset['currentModuleName'] = app.name ?? app.id;
@@ -446,16 +392,6 @@ export class ModuleCardRenderer {
             typeBadge.classList.remove('not-installed');
             typeBadge.classList.add('installed');
         }
-    }
-
-    private _replaceCardActions(card: HTMLElement, actionButton: HTMLElement): void {
-        const actionsContainer = card.querySelector('.module-selection-card-actions');
-        if (actionsContainer === null) {
-            return;
-        }
-
-        actionsContainer.innerHTML = '';
-        actionsContainer.appendChild(actionButton);
     }
 
     private _ensureDeleteBadge(card: HTMLElement, isApi: boolean): void {

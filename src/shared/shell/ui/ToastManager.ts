@@ -9,6 +9,7 @@ type ToastType = 'success' | 'error' | 'warning' | 'info' | (string & {});
 export interface ToastElement extends HTMLElement {
     _timeout?: ReturnType<typeof setTimeout>;
     _removeTimeout?: ReturnType<typeof setTimeout>;
+    _actionHandler?: () => void;
 }
 
 /**
@@ -69,6 +70,7 @@ export class ToastManager {
         duration = 3000,
         title: string | null = null,
         id: string | null = null,
+        onClick: (() => void) | null = null,
     ): void {
         const normalizedMessage = message.trim();
         const normalizedTitle = title?.trim() ?? null;
@@ -87,11 +89,20 @@ export class ToastManager {
                 type,
                 normalizedTitle,
                 duration,
+                onClick,
             );
             return;
         }
 
-        this._createToast(container, normalizedMessage, type, duration, normalizedTitle, id);
+        this._createToast(
+            container,
+            normalizedMessage,
+            type,
+            duration,
+            normalizedTitle,
+            id,
+            onClick,
+        );
     }
 
     private _normalizeHiddenDialogs(): void {
@@ -151,6 +162,7 @@ export class ToastManager {
         type: ToastType,
         title: string | null,
         duration: number,
+        onClick: (() => void) | null,
     ): void {
         const contentElement = toast.querySelector('.toast-content');
         if (contentElement instanceof HTMLElement) {
@@ -159,6 +171,7 @@ export class ToastManager {
 
         toast.className = `toast ${type}`;
         toast.classList.remove('leaving');
+        this._setToastAction(toast, onClick);
         this._clearToastTimers(toast);
         this._scheduleToastRemoval(toast, duration);
     }
@@ -170,6 +183,7 @@ export class ToastManager {
         duration: number,
         title: string | null,
         id: string | null,
+        onClick: (() => void) | null,
     ): void {
         const toast = document.createElement('div') as ToastElement;
         toast.className = `toast ${type}`;
@@ -185,6 +199,7 @@ export class ToastManager {
             </div>
         `);
 
+        this._setToastAction(toast, onClick);
         container.appendChild(toast);
         this._scheduleToastRemoval(toast, duration);
     }
@@ -231,6 +246,40 @@ export class ToastManager {
             delete toast._removeTimeout;
         }
     }
+
+    private _setToastAction(toast: ToastElement, onClick: (() => void) | null): void {
+        if (toast._actionHandler !== undefined) {
+            toast.removeEventListener('click', toast._actionHandler);
+            toast.removeEventListener('keydown', this._handleActionKeydown);
+            delete toast._actionHandler;
+        }
+
+        if (onClick === null) {
+            toast.classList.remove('toast--actionable');
+            toast.removeAttribute('role');
+            toast.removeAttribute('tabindex');
+            return;
+        }
+
+        toast._actionHandler = onClick;
+        toast.classList.add('toast--actionable');
+        toast.setAttribute('role', 'button');
+        toast.setAttribute('tabindex', '0');
+        toast.addEventListener('click', onClick);
+        toast.addEventListener('keydown', this._handleActionKeydown);
+    }
+
+    private readonly _handleActionKeydown = (event: KeyboardEvent): void => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+
+        event.preventDefault();
+        const toast = event.currentTarget;
+        if (toast instanceof HTMLElement) {
+            toast.click();
+        }
+    };
 
     private _cleanupContainer(): void {
         const container = document.getElementById(ToastManager._containerId);

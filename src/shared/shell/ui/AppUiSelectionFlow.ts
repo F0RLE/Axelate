@@ -1,6 +1,4 @@
 import type { IApp } from '../../types/coreTypes';
-import { isAiCategory, shouldLaunchOnSelection } from '../../utils/moduleCategoryPolicy';
-
 type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 
 type AppUiSelectionFlowDeps = {
@@ -35,19 +33,10 @@ export class AppUiSelectionFlow {
             return;
         }
 
-        const launchSelectionVersion = this._deps.bumpLaunchSelectionVersion(category);
+        this._deps.bumpLaunchSelectionVersion(category);
         this._deps.updateModuleCard(category, app);
         this._deps.updateModalSelection(app.id);
         this._persistSelectedModule(category, app);
-
-        if (shouldLaunchOnSelection(category) && typeof this._deps.launchApp === 'function') {
-            void this._deps.launchSelectedApp(
-                category,
-                app,
-                launchSelectionVersion,
-                this._deps.launchApp,
-            );
-        }
     }
 
     private _persistSelectedModule(category: string, app: IApp): void {
@@ -63,10 +52,7 @@ export class AppUiSelectionFlow {
     }
 
     public activateExistingSelection(category: string, app: IApp): void {
-        if (isAiCategory(category) || typeof this._deps.launchApp !== 'function') {
-            return;
-        }
-
-        void this._deps.launchApp(category, app);
+        void category;
+        void app;
     }
 }

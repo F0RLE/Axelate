@@ -85,6 +85,29 @@ describe('AppUiModuleFlow', () => {
         expect(modalManager.refreshCurrentSelection).toHaveBeenCalledWith([app], 'svc');
     });
 
+    it('does not refresh modal selection after download success in another category', () => {
+        const app = { id: 'svc', name: 'Service', installed: false } as IApp;
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading indeterminate';
+        modalManager.isViewingCategory.mockReturnValue(false);
+
+        flow.onModalDownloadSuccess(btn, app, 'services');
+
+        expect(app.installed).toBe(true);
+        expect(btn.classList.contains('downloading')).toBe(false);
+        expect(modalManager.refreshCurrentSelection).not.toHaveBeenCalled();
+    });
+
+    it('resets download button and shows a toast after download errors', () => {
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading indeterminate';
+
+        flow.onModalDownloadError(btn, new Error('broken'));
+
+        expect(btn.classList.contains('downloading')).toBe(false);
+        expect(showToast).toHaveBeenCalledWith('Download failed', 'error');
+    });
+
     it('keeps paused download button state for resume', async () => {
         const app = { id: 'svc', name: 'Service', installed: false } as IApp;
         const btn = document.createElement('button');

@@ -377,7 +377,7 @@ describe('AppUI lifecycle', () => {
         expect(platformServiceMock.stop).toHaveBeenCalledWith(serviceApp);
     });
 
-    it('should stop the previous services module when switching cards without action button running state', () => {
+    it('should not stop the previous services module when only switching selected cards', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="selected">
@@ -399,10 +399,10 @@ describe('AppUI lifecycle', () => {
 
         appUI.updateModuleCard('services', newApp);
 
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(oldApp);
+        expect(platformServiceMock.stop).not.toHaveBeenCalled();
     });
 
-    it('should swallow stop errors when switching away from a previous module', async () => {
+    it('should not touch runtime stop path when switching selected cards', async () => {
         appUI = createAppUI();
         platformServiceMock.stop.mockRejectedValueOnce(new Error('stop failed'));
         document.body.innerHTML = `
@@ -427,6 +427,7 @@ describe('AppUI lifecycle', () => {
         }).not.toThrow();
 
         await Promise.resolve();
+        expect(platformServiceMock.stop).not.toHaveBeenCalled();
     });
 
     it('should reset services card instead of showing an AI module when clearing services', () => {
@@ -539,10 +540,7 @@ describe('AppUI lifecycle', () => {
         appUI.updateModuleCard('ai_image', sharedApp);
         expect(card.dataset['currentCapability']).toBe('ai_image');
 
-        const resolvedCategory = (
-            appUI as unknown as { _resolveCategoryFromCard: (card: HTMLElement) => string }
-        )._resolveCategoryFromCard(card);
-        expect(resolvedCategory).toBe('ai_image');
+        expect(appUI.getPreferredAiCategory()).toBe('ai_image');
     });
 
     it('should retarget AI card settings and close actions after wheel switching slots', () => {
@@ -633,13 +631,13 @@ describe('AppUI lifecycle', () => {
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenCalledWith('svc');
         expect(uiStateMocks.setSelectedModule).toHaveBeenCalled();
-        expect(launchAppMock).toHaveBeenCalledWith('services', serviceApp);
+        expect(launchAppMock).not.toHaveBeenCalled();
 
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenLastCalledWith(null);
     });
 
-    it('should mark selected service cards as running after backend status confirms launch', async () => {
+    it('should keep selected service cards as indicators without probing runtime status', async () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="empty">
@@ -664,42 +662,9 @@ describe('AppUI lifecycle', () => {
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 
         const card = document.getElementById('services-module-card') as HTMLElement;
-        expect(platformServiceMock.getStatus).toHaveBeenCalledWith(serviceApp);
-        expect(card.classList.contains('module-running')).toBe(true);
-        expect(card.dataset['runtimeStatus']).toBe('running');
-    });
-
-    it('should handle modal download success and error', () => {
-        appUI = createAppUI();
-        const privateAppUI = appUI as unknown as {
-            _onModalDownloadSuccess: (btn: HTMLElement | null, app: IApp, category: string) => void;
-            _onModalDownloadError: (btn: HTMLElement | null, err: unknown) => void;
-            _modalManager: {
-                refreshCurrentSelection: ReturnType<typeof vi.fn>;
-                isViewingCategory: ReturnType<typeof vi.fn>;
-            };
-        };
-        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(true);
-        const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
-
-        const card = document.createElement('div');
-        card.className = 'app-card';
-        card.innerHTML = `
-            <div class="module-selection-card-actions"></div>
-            <div class="app-type-badge not-installed"></div>
-            <div class="app-card-overlay"></div>
-        `;
-        const btn = document.createElement('button');
-        btn.className = 'download-btn downloading indeterminate';
-        card.appendChild(btn);
-
-        const app = { id: 'local-app', name: 'Local App', installed: false } as IApp;
-        privateAppUI._onModalDownloadSuccess(btn, app, 'services');
-        expect(app.installed).toBe(true);
-        expect(btn.classList.contains('downloading')).toBe(false);
-        expect(refreshSpy).toHaveBeenCalled();
-
-        privateAppUI._onModalDownloadError(btn, new Error('broken'));
+        expect(platformServiceMock.getStatus).not.toHaveBeenCalled();
+        expect(card.classList.contains('module-running')).toBe(false);
+        expect(card.dataset['runtimeStatus']).toBe('stopped');
     });
 
     it('should show a placeholder toast instead of selecting or downloading coming-soon modules', async () => {
@@ -729,7 +694,7 @@ describe('AppUI lifecycle', () => {
         expect(launchAppMock).not.toHaveBeenCalled();
     });
 
-    it('should stop stale launched module after quick reselection', async () => {
+    it('should not launch or stop services during quick reselection', async () => {
         appUI = createAppUI();
 
         let releaseFirstLaunch!: () => void;
@@ -777,9 +742,8 @@ describe('AppUI lifecycle', () => {
         await Promise.resolve();
         await Promise.resolve();
 
-        expect(launchApp).toHaveBeenNthCalledWith(1, 'services', firstApp);
-        expect(launchApp).toHaveBeenNthCalledWith(2, 'services', secondApp);
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(firstApp);
+        expect(launchApp).not.toHaveBeenCalled();
+        expect(platformServiceMock.stop).not.toHaveBeenCalled();
     });
 
     it('should not reopen modal after delete if app selection was already closed', async () => {
@@ -825,30 +789,6 @@ describe('AppUI lifecycle', () => {
         );
 
         expect(reopenSpy).toHaveBeenCalledWith('services', refreshedApps);
-    });
-
-    it('should not refresh modal after download success when viewing another category', () => {
-        appUI = createAppUI();
-
-        const privateAppUI = appUI as unknown as {
-            _onModalDownloadSuccess: (btn: HTMLElement | null, app: IApp, category: string) => void;
-            _modalManager: {
-                isViewingCategory: (category: string) => boolean;
-                refreshCurrentSelection: () => void;
-            };
-        };
-
-        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(false);
-        const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
-
-        const btn = document.createElement('button');
-        btn.className = 'download-btn downloading indeterminate';
-        const app = { id: 'local-app', name: 'Local App', installed: false } as IApp;
-
-        privateAppUI._onModalDownloadSuccess(btn, app, 'services');
-
-        expect(app.installed).toBe(true);
-        expect(refreshSpy).not.toHaveBeenCalled();
     });
 
     it('should resolve app by id from injected catalog resolver', () => {
