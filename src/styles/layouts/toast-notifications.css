@@ -57,6 +57,24 @@
     border-left: 4px solid rgba(177, 89, 255, 0.72);
 }
 
+.toast--actionable {
+    cursor: pointer;
+}
+
+.toast--actionable .toast-content {
+    pointer-events: none;
+}
+
+.toast--actionable:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(28, 26, 36, 0.98);
+}
+
+.toast--actionable:focus-visible {
+    outline: 2px solid rgba(var(--primary-raw), 0.72);
+    outline-offset: 2px;
+}
+
 .toast-icon {
     display: none;
 }
@@ -75,10 +93,6 @@
     font-size: 0.85rem;
     line-height: 1.45;
     color: rgba(255, 255, 255, 0.78);
-}
-
-.toast-close {
-    display: none;
 }
 
 .toast.leaving {
@@ -154,28 +168,4 @@
 
 .action-feedback.error .action-feedback-icon {
     color: var(--danger);
-}
-
-.section-divider {
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border-color), transparent);
-    margin: 1rem 0;
-    opacity: 0.5;
-}
-
-.helper-text {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: 0.5rem;
-    line-height: 1.4;
-    opacity: 0.7;
-}
-
-.helper-text a {
-    color: var(--primary);
-    text-decoration: none;
-}
-
-.helper-text a:hover {
-    text-decoration: underline;
 }
