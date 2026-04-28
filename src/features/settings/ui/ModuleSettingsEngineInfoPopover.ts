@@ -198,15 +198,13 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         const availableWidth = modalRect.width;
         const edgeGap = Math.max(16, Math.min(32, Math.round(availableWidth * 0.015)));
         const gap = Math.max(14, Math.min(20, Math.round(availableWidth * 0.008)));
-        const panelWidth = Math.max(300, Math.min(344, Math.round(availableWidth * 0.18)));
+        const panelWidth = Math.max(300, Math.min(328, Math.round(availableWidth * 0.18)));
 
         modal?.style.setProperty('--app-modal-edge-gap', `${edgeGap}px`);
         modal?.style.setProperty('--app-modal-popover-width', `${panelWidth}px`);
         modal?.style.setProperty('--app-modal-popover-spacing', `${gap}px`);
     };
     updatePosition();
-    modal?.classList.add('popover-open');
-
     popover.style.opacity = '0';
     popover.style.transition = 'opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1)';
     runtime.requestAnimationFrame(() => {
@@ -231,11 +229,8 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         globalThis.clearTimeout(settlePositionTimer);
 
         popover.classList.add('closing');
-        modal?.classList.remove('popover-open');
-        modal?.classList.add('popover-closing');
 
         globalThis.setTimeout(() => {
-            modal?.classList.remove('popover-closing');
             modal?.style.removeProperty('--app-modal-edge-gap');
             modal?.style.removeProperty('--app-modal-popover-width');
             modal?.style.removeProperty('--app-modal-popover-spacing');

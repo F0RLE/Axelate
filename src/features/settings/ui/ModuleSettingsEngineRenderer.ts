@@ -42,7 +42,7 @@ type EngineFieldControlOptions = {
     key: string;
     isEngineConfig: boolean;
     appId: string;
-    fileKind?: 'model' | 'vae' | 'llm';
+    fileKind?: 'model';
     placeholder?: string;
     defaultValue?: number | string;
     min?: number;
@@ -243,8 +243,7 @@ export class ModuleSettingsEngineRenderer {
             getTextFields: (translate) => this._fieldCatalog.buildTextEngineFields(translate),
             getCoreModelField: (translate, modelPlaceholder, isImage) =>
                 this._fieldCatalog.buildCoreModelField(translate, modelPlaceholder, isImage),
-            getImageCompanionFields: (translate, appId) =>
-                this._fieldCatalog.buildImageCompanionFields(translate, appId),
+            getComputeModeField: (translate) => this._fieldCatalog.buildComputeModeField(translate),
             getImageExtraArgsField: (translate) =>
                 this._fieldCatalog.buildImageExtraArgsField(translate),
         });

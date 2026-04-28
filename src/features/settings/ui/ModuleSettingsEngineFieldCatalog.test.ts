@@ -32,6 +32,9 @@ describe('ModuleSettingsEngineFieldCatalog', () => {
             showInfoButton: true,
             fullWidth: true,
         });
-        expect(catalog.buildImageCompanionFields(t, 'sdcpp')).toEqual([]);
+        expect(catalog.buildComputeModeField(t)).toMatchObject({
+            key: 'compute_mode',
+            defaultValue: 'gpu',
+        });
     });
 });

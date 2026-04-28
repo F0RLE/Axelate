@@ -14,7 +14,7 @@ export type EngineFieldDefinition = {
     fullWidth?: boolean;
     showInfoButton?: boolean;
     isFile?: boolean;
-    fileKind?: 'model' | 'vae' | 'llm';
+    fileKind?: 'model';
     description?: string;
 };
 
@@ -49,27 +49,31 @@ export class ModuleSettingsEngineFieldCatalog {
                 ? {
                       description: t(
                           'ui.settings.engine.image_model_path_hint',
-                          'Main image model. Use your SD model here, or a qwen-image*.gguf file for Qwen Image.',
+                          'Main diffusion model file.',
                       ),
                   }
                 : {}),
         };
     }
 
+    public buildComputeModeField(t: TranslateFn): EngineFieldDefinition {
+        return {
+            label: t('ui.settings.engine.compute_mode', 'Compute Device'),
+            key: 'compute_mode',
+            type: 'select',
+            isEngineConfig: true,
+            options: ['gpu', 'cpu'],
+            optionLabels: {
+                gpu: t('ui.settings.engine.compute_mode_gpu', 'GPU'),
+                cpu: t('ui.settings.engine.compute_mode_cpu', 'CPU'),
+            },
+            defaultValue: 'gpu',
+        };
+    }
+
     public buildTextEngineFields(t: TranslateFn): EngineFieldDefinition[] {
         return [
-            {
-                label: t('ui.settings.engine.compute_mode', 'Compute Device'),
-                key: 'compute_mode',
-                type: 'select',
-                isEngineConfig: true,
-                options: ['gpu', 'cpu'],
-                optionLabels: {
-                    gpu: t('ui.settings.engine.compute_mode_gpu', 'GPU'),
-                    cpu: t('ui.settings.engine.compute_mode_cpu', 'CPU'),
-                },
-                defaultValue: 'gpu',
-            },
+            this.buildComputeModeField(t),
             {
                 label: t('ui.settings.engine.context_size', 'Context Window'),
                 key: 'context_size',
@@ -247,10 +251,6 @@ export class ModuleSettingsEngineFieldCatalog {
         };
     }
 
-    public buildImageCompanionFields(_t: TranslateFn, _appId: string): EngineFieldDefinition[] {
-        return [];
-    }
-
     public buildImageExtraArgsField(t: TranslateFn): EngineFieldDefinition {
         return {
             label: t('ui.settings.engine.extra_args', 'Extra Arguments'),
@@ -263,7 +263,7 @@ export class ModuleSettingsEngineFieldCatalog {
             showInfoButton: true,
             description: t(
                 'ui.settings.engine.extra_args_hint',
-                'Advanced startup flags only. Qwen Image companion files are auto-detected next to the selected model or can be passed here.',
+                'Advanced startup flags appended to sd.cpp.',
             ),
         };
     }

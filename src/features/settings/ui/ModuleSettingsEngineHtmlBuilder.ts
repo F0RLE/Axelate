@@ -31,7 +31,7 @@ export class ModuleSettingsEngineHtmlBuilder {
                     <section class="thinking-level-section local-engine-section local-engine-section--core" aria-labelledby="${app.id}-core-title">
                         <div class="ai-content-panel">
                             <div class="local-engine-section-header">
-                                <h3 id="${app.id}-core-title">🧩 ${this.escapeHtml(
+                                <h3 id="${app.id}-core-title">${this.escapeHtml(
                                     this._translate(
                                         'ui.settings.engine.core_config',
                                         'Core Config',
@@ -88,7 +88,7 @@ export class ModuleSettingsEngineHtmlBuilder {
             <section class="thinking-level-section local-engine-section" aria-labelledby="${appId}-generation-title">
                 <div class="ai-content-panel">
                     <div class="local-engine-section-header">
-                        <h3 id="${appId}-generation-title">🎛️ ${this.escapeHtml(
+                        <h3 id="${appId}-generation-title">${this.escapeHtml(
                             this._translate(
                                 'ui.settings.engine.generation_presets',
                                 'Generation Presets',

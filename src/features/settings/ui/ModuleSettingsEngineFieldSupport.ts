@@ -3,7 +3,7 @@ type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaEle
 type EngineFieldValue = string | number | string[] | null | undefined;
 type ExtraArgsTranslate = (key: string, fallback: string) => string;
 type PerformanceTranslate = (key: string, fallback: string) => string;
-export type EngineModelFileKind = 'model' | 'vae' | 'llm';
+export type EngineModelFileKind = 'model';
 export type EngineModelFileFilter = { name: string; extensions: string[] };
 
 type EngineFieldInitialOptions = {
@@ -239,17 +239,9 @@ export function getEngineModelFileName(modelPath: string, notSelectedLabel: stri
 }
 
 export function getEngineModelFileFilters(
-    fileKind: EngineModelFileKind,
+    _fileKind: EngineModelFileKind,
     isImage: boolean,
 ): EngineModelFileFilter[] {
-    if (fileKind === 'vae') {
-        return [{ name: 'SafeTensors', extensions: ['safetensors'] }];
-    }
-
-    if (fileKind === 'llm') {
-        return [{ name: 'GGUF Models', extensions: ['gguf'] }];
-    }
-
     if (isImage) {
         return [
             { name: 'SD Models', extensions: ['gguf', 'safetensors'] },
@@ -373,8 +365,7 @@ export function getEngineExtraArgDocs(appId: string): EngineExtraArgDocs {
     if (appId === 'sdcpp' || appId === 'stable-diffusion') {
         return {
             title: 'Manual sd.cpp flags',
-            subtitle:
-                'These go into Extra Arguments as startup flags. Qwen Image companion files are auto-detected beside the selected model.',
+            subtitle: 'Startup flags appended to sd-server.',
             items: [
                 { flag: '--fa', description: 'Enable flash attention globally.' },
                 {
