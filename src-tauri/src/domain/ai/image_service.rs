@@ -928,7 +928,6 @@ pub(super) fn normalize_comfyui_sampler(value: Option<&str>) -> String {
         "dpm++ sde" | "dpmpp_sde" => "dpmpp_sde".to_string(),
         "dpm++ sde gpu" | "dpmpp_sde_gpu" => "dpmpp_sde_gpu".to_string(),
         "dpm++ 2m" | "dpm++2m" | "dpmpp_2m" => "dpmpp_2m".to_string(),
-        "dpm++ 2m sde" | "dpm++2m sde" | "dpmpp_2m_sde" => "dpmpp_2m_sde".to_string(),
         "dpm++ 3m sde" | "dpm++3m sde" | "dpmpp_3m_sde" => "dpmpp_3m_sde".to_string(),
         "dpm++ 3m sde gpu" | "dpm++3m sde gpu" | "dpmpp_3m_sde_gpu" => {
             "dpmpp_3m_sde_gpu".to_string()
