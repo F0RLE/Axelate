@@ -28,7 +28,7 @@ export class AppUiModuleFlow {
     public async handleDeleteModule(app: IApp, category: string): Promise<void> {
         this._deps.tracer.info('[AppUI] Remove module clicked:', app.id);
         try {
-            await this._deps.platformService.delete(app);
+            await this._deps.platformService.delete(app, category);
             app.installed = false;
 
             if (this._deps.getSelectedAppId(category) === app.id) {

@@ -2,6 +2,8 @@ import type { IApp, IModuleDownloadState } from '../types/coreTypes';
 import type { DownloadModuleOutcome, ModuleService } from './ModuleService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import { invokeSafe } from '@/shared/api/invoke';
+import { commands } from '@/shared/types/bindings';
 import { isApiApp } from '@/shared/utils/moduleTypeUtils';
 import { isAiCategory } from '@/shared/utils/moduleCategoryPolicy';
 
@@ -43,8 +45,13 @@ export class ModulePlatformService {
      * Deletes a module.
      * @param app The module to delete.
      */
-    public async delete(app: IApp): Promise<void> {
+    public async delete(app: IApp, category?: string): Promise<void> {
         this._tracer.info(`[ModulePlatformService] Deleting: ${app.id}`);
+        if (category !== undefined && isAiCategory(category)) {
+            await this._deleteAiEngine(app);
+            return;
+        }
+
         const success = await this._moduleService.deleteModule(app.id);
         if (!success) {
             throw new Error('ui.launcher.web.delete_model_error');
@@ -163,5 +170,19 @@ export class ModulePlatformService {
         const capability = category === 'ai_image' ? 'image' : 'text';
         this._tracer.info(`[ModulePlatformService] Force stopping AI engine slot: ${capability}`);
         await this._aiBridge.stopEngineSlot(capability);
+    }
+
+    private async _deleteAiEngine(app: IApp): Promise<void> {
+        if (app.managedExternally === true) {
+            this._tracer.info(
+                `[ModulePlatformService] Skip delete for externally managed AI engine: ${app.id}`,
+            );
+            return;
+        }
+
+        const result = await invokeSafe(commands.deleteEngine(app.id));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
     }
 }
