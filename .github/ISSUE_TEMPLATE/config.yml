@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+    - name: Development setup
+      url: https://github.com/F0RLE/Axelate/blob/nightly/docs/en/GETTING_STARTED.md
+      about: Start here for local development prerequisites and setup.
+    - name: Release process
+      url: https://github.com/F0RLE/Axelate/blob/nightly/docs/en/RELEASES.md
+      about: Read this before tagging or preparing a release.
