@@ -206,10 +206,10 @@ export class ModuleService {
             this._tracer.warn(
                 `[ModuleService] Release options failed for ${moduleId}: ${result.error.message}`,
             );
-            return null;
+            throw new Error(result.error.message);
         } catch (err) {
             this._tracer.error(`[ModuleService] Release options error: ${String(err)}`);
-            return null;
+            throw err;
         }
     }
 

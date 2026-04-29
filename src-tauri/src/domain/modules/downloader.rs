@@ -7,8 +7,8 @@ use super::downloader_progress::{
 use super::downloader_service::{DownloadRequest, resolve_existing_module_path};
 use super::downloader_support::{package_install_dir, remove_partial_metadata};
 use super::downloader_transfer::{
-    DownloadTask, ReleaseDownloadAsset, build_client, clone_repository_into, download_file,
-    resolve_download_url,
+    DownloadTask, ReleaseDownloadAsset, build_client, build_public_client, clone_repository_into,
+    download_file, resolve_download_url,
 };
 use super::github_releases::ReleaseDownloadSelection;
 use crate::errors::AppError;
@@ -60,7 +60,7 @@ pub async fn get_release_download_options(
     repo_url: &str,
 ) -> Result<super::github_releases::ReleaseDownloadOptions, AppError> {
     validate_module_id(module_id)?;
-    let client = build_client(module_id)?;
+    let client = build_public_client()?;
     super::github_releases::fetch_release_download_options(&client, repo_url, module_id).await
 }
 
@@ -123,7 +123,11 @@ pub async fn download_module(
             speed: 0,
         });
 
-        let client = build_client(&module_id)?;
+        let client = if dl_type.as_deref() == Some("release") && is_github_repo_url(&repo_url) {
+            build_public_client()?
+        } else {
+            build_client(&module_id)?
+        };
         let extraction_path = ArchiveExtractor::prepare_staging(&module_id)?;
         staging_path = Some(extraction_path.clone());
         let mut completed_downloaded_bytes: u64 = 0;
@@ -357,6 +361,10 @@ pub async fn download_module(
     downloader.remove_request(&module_id);
 
     Ok("completed".to_string())
+}
+
+fn is_github_repo_url(repo_url: &str) -> bool {
+    repo_url.trim().to_ascii_lowercase().contains("github.com/")
 }
 
 fn ensure_not_interrupted(
