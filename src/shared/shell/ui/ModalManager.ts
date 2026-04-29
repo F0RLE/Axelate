@@ -18,7 +18,11 @@ import {
 } from './ModuleCardDownloadProgress';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { ModalFocusTrapHelper } from './ModalFocusTrapHelper';
-import { resolveModalSidebarCategory } from '../../utils/moduleCategoryPolicy';
+import {
+    getAiSlotForCapability,
+    isAiCategory,
+    resolveModalSidebarCategory,
+} from '../../utils/moduleCategoryPolicy';
 
 /**
  * @class ModalManager
@@ -69,7 +73,11 @@ export class ModalManager {
     private readonly _onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void;
     // Called when user switches filter tab — returns the selected app ID for that capability
     private readonly _onFilterChange: (capability: 'text' | 'image') => string | null;
-    private readonly _onDownloadRequest: (app: IApp) => Promise<unknown>;
+    private readonly _onDownloadRequest: (
+        app: IApp,
+        category: string,
+        btn: HTMLElement | null,
+    ) => Promise<unknown>;
     private readonly _onCancelDownloadRequest: (app: IApp) => Promise<void>;
     private readonly _onPauseDownloadRequest: (app: IApp) => Promise<void>;
     private readonly _onResumeDownloadRequest: (app: IApp) => Promise<void>;
@@ -80,7 +88,11 @@ export class ModalManager {
         cardRenderer: ModuleCardRenderer,
         onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void,
         onFilterChange: (capability: 'text' | 'image') => string | null,
-        onDownloadRequest: (app: IApp) => Promise<unknown>,
+        onDownloadRequest: (
+            app: IApp,
+            category: string,
+            btn: HTMLElement | null,
+        ) => Promise<unknown>,
         onCancelDownloadRequest: (app: IApp) => Promise<void>,
         translate: (key: string, fallback: string) => string,
         tracer: LoggerService,
@@ -235,7 +247,11 @@ export class ModalManager {
     }
 
     public isViewingCategory(category: string): boolean {
-        return this.isAppSelectionOpen() && this._currentCategory === category;
+        return (
+            this.isAppSelectionOpen() &&
+            resolveModalSidebarCategory(this._currentCategory ?? '') ===
+                resolveModalSidebarCategory(category)
+        );
     }
 
     // --- Helpers ---
@@ -338,7 +354,10 @@ export class ModalManager {
         }
 
         this._tracer.info(`[ModalManager] Starting download: ${app.id}`);
-        void this._onDownloadRequest(app);
+        const interactionCategory = isAiCategory(this._currentCategory ?? '')
+            ? getAiSlotForCapability(this._currentFilter)
+            : (this._currentCategory ?? '');
+        void this._onDownloadRequest(app, interactionCategory, btn ?? null);
     }
 
     private _handleActiveDownloadAction(
