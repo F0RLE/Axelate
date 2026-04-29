@@ -180,6 +180,17 @@ pub(super) fn build_client(module_id: &str) -> Result<reqwest::Client, AppError>
     })
 }
 
+pub(super) fn build_public_client() -> Result<reqwest::Client, AppError> {
+    reqwest::Client::builder()
+        .user_agent("Axelate/1.0.0 (Tauri; Windows)")
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!("Client error: {error}"),
+        })
+}
+
 pub(super) struct DownloadTask<'a> {
     pub(super) app: &'a AppHandle,
     pub(super) downloader: &'a DownloaderService,

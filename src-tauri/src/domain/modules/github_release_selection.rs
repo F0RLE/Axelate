@@ -79,18 +79,32 @@ pub(super) fn select_release_assets(
         });
 
         for main_idx in &supported_cuda_candidates {
-            let main = assets.get(*main_idx)?;
+            let Some(main) = assets.get(*main_idx) else {
+                continue;
+            };
             if let Some(cuda_track) = detect_cuda_track(&main.name)
                 && let Some(runtime_idx) = runtime_candidates.iter().copied().find(|idx| {
                     assets
                         .get(*idx)
                         .is_some_and(|asset| detect_cuda_track(&asset.name) == Some(cuda_track))
                 })
+                && let (Some(runtime_asset), Some(main_asset)) = (
+                    assets.get(runtime_idx).and_then(asset_to_release_asset),
+                    asset_to_release_asset(main),
+                )
             {
-                return Some(vec![
-                    asset_to_release_asset(assets.get(runtime_idx)?)?,
-                    asset_to_release_asset(main)?,
-                ]);
+                return Some(vec![runtime_asset, main_asset]);
+            }
+        }
+
+        for main_idx in &main_candidates {
+            let Some(main) = assets.get(*main_idx) else {
+                continue;
+            };
+            if detect_cuda_track(&main.name).is_none()
+                && let Some(asset) = asset_to_release_asset(main)
+            {
+                return Some(vec![asset]);
             }
         }
 
@@ -98,18 +112,13 @@ pub(super) fn select_release_assets(
             return None;
         }
 
-        for main_idx in &main_candidates {
-            let main = assets.get(*main_idx)?;
-            if detect_cuda_track(&main.name).is_none() {
-                return Some(vec![asset_to_release_asset(main)?]);
-            }
-        }
-
         return None;
     }
 
-    let selected_main = main_candidates.first().copied()?;
-    Some(vec![asset_to_release_asset(assets.get(selected_main)?)?])
+    main_candidates
+        .iter()
+        .filter_map(|idx| assets.get(*idx))
+        .find_map(|asset| asset_to_release_asset(asset).map(|asset| vec![asset]))
 }
 
 fn runtime_assets(module_id: &str, platform: Platform, assets: &[Asset]) -> Vec<usize> {
@@ -313,7 +322,7 @@ fn main_score(module_id: &str, name: &str, hardware: HardwareProfile) -> i32 {
                 score -= 500;
             }
         }
-        AcceleratorClass::CpuOnly => {
+        AcceleratorClass::CpuOnly | AcceleratorClass::Unknown => {
             if detect_cuda_track(&lower).is_some()
                 || lower.contains("vulkan")
                 || lower.contains("rocm")
@@ -326,7 +335,6 @@ fn main_score(module_id: &str, name: &str, hardware: HardwareProfile) -> i32 {
 
             score += cpu_feature_score(&lower, hardware.cpu_tier);
         }
-        AcceleratorClass::Unknown => {}
     }
 
     score

@@ -1,7 +1,7 @@
 //! GitHub release asset selection for platform-specific module bundles.
 
 use crate::errors::AppError;
-use reqwest::Client;
+use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -90,6 +90,8 @@ pub struct ReleaseDownloadVariant {
 }
 
 const RELEASES_PER_PAGE: u8 = 100;
+const MAX_RELEASE_DOWNLOAD_OPTIONS: usize = 50;
+const GITHUB_API_USER_AGENT: &str = "Axelate";
 
 #[derive(Clone, Debug, Deserialize)]
 struct Release {
@@ -209,6 +211,10 @@ pub async fn fetch_release_download_options(
         versions.extend(release_download_versions(
             module_id, platform, hardware, releases,
         ));
+        if versions.len() >= MAX_RELEASE_DOWNLOAD_OPTIONS {
+            versions.truncate(MAX_RELEASE_DOWNLOAD_OPTIONS);
+            break;
+        }
         page += 1;
     }
 
@@ -287,11 +293,19 @@ async fn fetch_release_page(
 ) -> Result<Vec<Release>, AppError> {
     let response = client
         .get(repo_ref.releases_api_url(page))
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header(header::ACCEPT, "application/vnd.github+json")
+        .header(header::USER_AGENT, GITHUB_API_USER_AGENT)
         .send()
         .await?;
 
     if !response.status().is_success() {
+        if response.status() == reqwest::StatusCode::UNPROCESSABLE_ENTITY && page > 1 {
+            tracing::warn!(
+                "GitHub release pagination stopped for {module_id} at page {page}: {}",
+                response.status()
+            );
+            return Ok(Vec::new());
+        }
         return Err(map_release_fetch_error(
             response.status(),
             &response,
@@ -456,7 +470,24 @@ const fn hardware_for_target(
     target: ReleaseComputeTarget,
 ) -> HardwareProfile {
     match target {
-        ReleaseComputeTarget::Auto | ReleaseComputeTarget::Gpu => hardware,
+        ReleaseComputeTarget::Auto => hardware,
+        ReleaseComputeTarget::Gpu => {
+            if matches!(
+                hardware.accelerator,
+                crate::domain::system::hardware_probe::AcceleratorClass::CpuOnly
+                    | crate::domain::system::hardware_probe::AcceleratorClass::Unknown
+            ) {
+                HardwareProfile {
+                    accelerator:
+                        crate::domain::system::hardware_probe::AcceleratorClass::GenericGpu,
+                    cpu_tier: hardware.cpu_tier,
+                    cuda_driver_major: None,
+                    cuda_driver_minor: None,
+                }
+            } else {
+                hardware
+            }
+        }
         ReleaseComputeTarget::Cpu => HardwareProfile {
             accelerator: crate::domain::system::hardware_probe::AcceleratorClass::CpuOnly,
             cpu_tier: hardware.cpu_tier,
@@ -885,7 +916,7 @@ mod tests {
     }
 
     #[test]
-    fn skips_incomplete_windows_cuda_release_when_runtime_pair_is_missing() {
+    fn falls_back_when_windows_cuda_runtime_pair_is_missing() {
         let platform = Platform {
             os: PlatformOs::Windows,
             arch: PlatformArch::X64,
@@ -901,7 +932,14 @@ mod tests {
             asset("llama-b8726-bin-win-cpu-x64.zip"),
         ];
 
-        assert!(select_release_assets("llamacpp", platform, hardware, &assets).is_none());
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets)
+            .expect("expected CPU fallback when CUDA runtime pair is missing");
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("llama-b8726-bin-win-cpu-x64.zip")
+        );
     }
 
     #[test]
@@ -1048,6 +1086,94 @@ mod tests {
         assert_eq!(
             selected.first().map(|asset| asset.name.as_str()),
             Some("llama-b8724-bin-win-sycl-x64.zip")
+        );
+    }
+
+    #[test]
+    fn current_sdcpp_release_names_build_cpu_and_gpu_options() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::Unknown,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let releases = vec![Release {
+            tag_name: "master-593-3d6064b".to_string(),
+            published_at: Some("2026-04-29T10:00:00Z".to_string()),
+            draft: false,
+            prerelease: false,
+            assets: vec![
+                asset("cudart-sd-bin-win-cu12-x64.zip"),
+                asset("sd-master-3d6064b-bin-win-avx-x64.zip"),
+                asset("sd-master-3d6064b-bin-win-avx2-x64.zip"),
+                asset("sd-master-3d6064b-bin-win-avx512-x64.zip"),
+                asset("sd-master-3d6064b-bin-win-cuda12-x64.zip"),
+                asset("sd-master-3d6064b-bin-win-noavx-x64.zip"),
+                asset("sd-master-3d6064b-bin-win-rocm-x64.zip"),
+                asset("sd-master-3d6064b-bin-win-vulkan-x64.zip"),
+            ],
+        }];
+
+        let versions = release_download_versions("sdcpp", platform, hardware, releases);
+
+        assert_eq!(versions.len(), 1);
+        let version = versions.first().expect("expected sdcpp options");
+        assert_eq!(version.recommended, ReleaseComputeTarget::Gpu);
+        assert_eq!(
+            version.cpu.as_ref().and_then(|cpu| cpu.assets.first()),
+            Some(&"sd-master-3d6064b-bin-win-avx2-x64.zip".to_string())
+        );
+        assert_eq!(
+            version.gpu.as_ref().and_then(|gpu| gpu.assets.first()),
+            Some(&"sd-master-3d6064b-bin-win-vulkan-x64.zip".to_string())
+        );
+    }
+
+    #[test]
+    fn current_llamacpp_release_names_build_cpu_and_gpu_options() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::Unknown,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let releases = vec![Release {
+            tag_name: "b8981".to_string(),
+            published_at: Some("2026-04-29T10:00:00Z".to_string()),
+            draft: false,
+            prerelease: false,
+            assets: vec![
+                asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
+                asset("cudart-llama-bin-win-cuda-13.1-x64.zip"),
+                asset("llama-b8981-bin-win-cpu-x64.zip"),
+                asset("llama-b8981-bin-win-cuda-12.4-x64.zip"),
+                asset("llama-b8981-bin-win-cuda-13.1-x64.zip"),
+                asset("llama-b8981-bin-win-hip-radeon-x64.zip"),
+                asset("llama-b8981-bin-win-sycl-x64.zip"),
+                asset("llama-b8981-bin-win-vulkan-x64.zip"),
+            ],
+        }];
+
+        let versions = release_download_versions("llamacpp", platform, hardware, releases);
+
+        assert_eq!(versions.len(), 1);
+        let version = versions.first().expect("expected llama.cpp options");
+        assert_eq!(version.recommended, ReleaseComputeTarget::Gpu);
+        assert_eq!(
+            version.cpu.as_ref().and_then(|cpu| cpu.assets.first()),
+            Some(&"llama-b8981-bin-win-cpu-x64.zip".to_string())
+        );
+        assert_eq!(
+            version.gpu.as_ref().and_then(|gpu| gpu.assets.first()),
+            Some(&"llama-b8981-bin-win-vulkan-x64.zip".to_string())
         );
     }
 

@@ -215,11 +215,14 @@ export function openDownloadSelectionDialog({
                 selectedVersion = firstVersion;
                 selectedTarget = normalizeTarget(selectedVersion.recommended, selectedVersion);
             })
-            .catch(() => {
-                errorMessage = translate(
-                    'ui.download.load_versions_error',
-                    'Failed to load release versions',
-                );
+            .catch((err: unknown) => {
+                errorMessage =
+                    err instanceof Error && err.message.trim() !== ''
+                        ? err.message
+                        : translate(
+                              'ui.download.load_versions_error',
+                              'Failed to load release versions',
+                          );
             })
             .finally(() => {
                 if (resolved) return;
