@@ -4,8 +4,6 @@ on:
     workflow_dispatch:
     push:
         branches: ["main", "nightly"]
-    pull_request:
-        branches: ["main", "nightly"]
     schedule:
         - cron: "27 3 * * 1"
 

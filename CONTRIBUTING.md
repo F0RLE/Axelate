@@ -29,13 +29,14 @@ Use these documents first:
 - Run `npm run verify`.
 - If you changed Rust types exported to the frontend, run `npm run bindings:sync`.
 - Keep commit messages in Conventional Commits format. `npm run setup` installs Git hooks that enforce this.
-- Expect GitHub `Strict CI`, dependency review, CodeQL, and CodeRabbit on pull requests targeting `main` or `nightly`.
+- Expect GitHub `Strict CI` and CodeRabbit on pull requests targeting `main` or `nightly`.
+- Expect `Dependency Review` only when npm or Cargo dependency files change.
 - The protected branches do not require a second human approval right now because the project is maintained by a solo owner.
 
 ## Repository Automation
 
 - `Strict CI` is the required merge gate for protected branches.
-- `CodeQL`, `Dependency Review`, and scheduled `Security Audit` workflows provide additional security coverage.
+- `CodeQL`, `Dependency Review`, and scheduled `Security Audit` workflows provide additional security coverage without blocking every normal PR.
 - CodeRabbit reviews pull requests against `nightly` and `main`; its feedback is advisory unless a concrete bug or risk is confirmed.
 - Dependabot security and dependency update pull requests target `nightly`.
 - Secret scanning and push protection are enabled in GitHub repository settings.

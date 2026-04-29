@@ -24,8 +24,8 @@ The repository uses GitHub secret scanning, push protection, Dependabot alerts, 
 
 Additional repository security automation:
 
-- CodeQL scans TypeScript/JavaScript and Rust.
-- Dependency Review runs on pull requests targeting `main` and `nightly`.
+- CodeQL scans TypeScript/JavaScript and Rust on protected branch pushes, weekly schedule, and manual dispatch.
+- Dependency Review runs on pull requests targeting `main` and `nightly` when npm or Cargo dependency files change.
 - Scheduled Security Audit runs `npm audit --audit-level=high` and `cargo audit`.
 - CodeRabbit is configured to review security-sensitive Rust/Tauri, TypeScript, workflow, and resource changes.
 
