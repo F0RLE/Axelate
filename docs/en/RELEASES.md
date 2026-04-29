@@ -26,8 +26,8 @@ The CI gate checks frontend linting, formatting, type/build, bundle size, tests,
 
 Additional release-relevant automation:
 
-- `CodeQL` scans TypeScript/JavaScript and Rust code on PRs, protected branch pushes, weekly schedule, and manual dispatch.
-- `Dependency Review` checks dependency changes on PRs to `main` and `nightly`.
+- `CodeQL` scans TypeScript/JavaScript and Rust code on protected branch pushes, weekly schedule, and manual dispatch.
+- `Dependency Review` checks dependency changes on PRs to `main` and `nightly` when npm or Cargo dependency files change.
 - `Security Audit` runs `npm audit --audit-level=high` and `cargo audit` on a weekly schedule and manual dispatch.
 - CodeRabbit reviews PRs and is configured as advisory automation for the current solo-maintainer workflow.
 

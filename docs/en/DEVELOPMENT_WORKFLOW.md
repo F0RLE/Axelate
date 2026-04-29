@@ -94,13 +94,14 @@ npm run release
 GitHub Actions currently has these repository workflows:
 
 - `Strict CI`: runs on pushes and pull requests for `main` and `nightly`, plus manual dispatch
-- `CodeQL`: runs code scanning for TypeScript/JavaScript and Rust on pushes to `main` or `nightly`, pull requests, weekly schedule, and manual dispatch
-- `Dependency Review`: reviews dependency changes on pull requests to `main` and `nightly`
+- `CodeQL`: runs code scanning for TypeScript/JavaScript and Rust on pushes to `main` or `nightly`, weekly schedule, and manual dispatch
+- `Dependency Review`: reviews dependency changes on pull requests to `main` and `nightly` when npm or Cargo dependency files change
 - `Security Audit`: runs scheduled and manual `npm audit` plus `cargo audit`
 - `Release Build`: runs on pushed `v*` tags, plus manual dispatch for an existing tag
 
 Protected branches require the `Frontend Strict Check` and `Backend Strict Check` jobs from `Strict CI`.
-The security workflows and CodeRabbit are additional review signals, not required branch-protection checks today.
+CodeRabbit is the normal advisory review signal on pull requests.
+CodeQL and scheduled security audits run outside the normal PR path to avoid slowing down solo development.
 
 The release workflow builds the Windows Tauri bundles, verifies release hardening, writes `SHA256SUMS.txt`, and attaches checksums to the GitHub release.
 The release tag must match the versions in `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`.

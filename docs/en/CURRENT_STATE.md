@@ -319,8 +319,8 @@ Current GitHub automation:
 - strict CI runs on `main` and `nightly`
 - Dependabot opens dependency update pull requests against `nightly`
 - Dependabot security updates, secret scanning, and push protection are enabled
-- CodeQL scans TypeScript/JavaScript and Rust
-- dependency review runs on pull requests
+- CodeQL scans TypeScript/JavaScript and Rust on protected branch pushes, weekly schedule, and manual dispatch
+- dependency review runs on pull requests only when npm or Cargo dependency files change
 - scheduled security audit runs `npm audit` and `cargo audit`
 - CodeRabbit reviews pull requests targeting `nightly` and `main`
 - release builds run when a `v*` tag is pushed
