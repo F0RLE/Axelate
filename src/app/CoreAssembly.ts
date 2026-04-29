@@ -13,6 +13,8 @@ import {
     configureTracerTransport,
     registerCoreContainer,
 } from './CoreComposition';
+import { createClipboardReader, createClipboardWriter } from './CoreUiBridgeHelpers';
+import { GlobalTextContextMenu } from '@/shared/shell/GlobalTextContextMenu';
 
 type CoreAssemblyState = {
     isDestroyed: () => boolean;
@@ -38,6 +40,7 @@ type AssemblyParts = {
     infra: CoreInfrastructure;
     bridge: GlobalBridge;
     eventHandler: EventHandler;
+    globalTextContextMenu: GlobalTextContextMenu;
 };
 
 function createStateManager(args: {
@@ -112,6 +115,12 @@ export function createCoreAssembly(args: CreateCoreAssemblyArgs): CoreAssembly {
         windowService: serviceBundle.windowService,
         windowUI: ui.windowUI,
     });
+    const globalTextContextMenu = new GlobalTextContextMenu({
+        translate: (key, fallback) => serviceBundle.i18n.t(key, fallback),
+        copyText: createClipboardWriter(serviceBundle.tauriProvider),
+        readClipboardText: createClipboardReader(serviceBundle.tauriProvider),
+        tracer: args.tracer,
+    });
 
     bindAIBridgeContext({
         aiBridge: serviceBundle.aiBridge,
@@ -169,7 +178,7 @@ export function createCoreAssembly(args: CreateCoreAssemblyArgs): CoreAssembly {
 
     const lifecycleController = new CoreLifecycleController(
         createLifecycleDeps(
-            { services, ui, infra, bridge, eventHandler },
+            { services, ui, infra, bridge, eventHandler, globalTextContextMenu },
             {
                 state: args.state,
                 globalShortcutKeydown: args.globalShortcutKeydown,
@@ -256,6 +265,7 @@ function createLifecycleDeps(
             aiBridge: services.aiBridge,
             bridge,
             errorHandler: infra.errorHandler,
+            globalTextContextMenu: parts.globalTextContextMenu,
         },
         state: runtime.state,
         globalShortcutKeydown: runtime.globalShortcutKeydown,

@@ -125,7 +125,6 @@ describe('ChatController', () => {
         isTauriRuntime: vi.fn().mockReturnValue(false),
         openExternalUrl: vi.fn().mockResolvedValue(undefined),
         copyText: vi.fn().mockResolvedValue(undefined),
-        readClipboardText: vi.fn().mockResolvedValue(null),
         getPendingChatRevealStore: vi.fn().mockReturnValue(null),
         estimateTokens: vi.fn((text: string) =>
             Promise.resolve(Math.max(1, Math.ceil(text.length / 4))),

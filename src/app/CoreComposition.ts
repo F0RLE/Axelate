@@ -93,6 +93,7 @@ export async function destroyCoreResources(args: DestroyCoreResourcesArgs): Prom
         () => args.aiBridge.destroy(),
         () => args.bridge.destroy(),
         () => args.errorHandler.destroy(),
+        () => args.globalTextContextMenu.destroy(),
     ];
     const errors: unknown[] = [];
 

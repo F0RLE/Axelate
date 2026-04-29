@@ -47,7 +47,6 @@ type ChatControllerDeps = {
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
-    readClipboardText: () => Promise<string | null>;
     getPendingChatRevealStore: () => PendingChatRevealStore | null;
     estimateTokens: (text: string, model?: string) => Promise<number>;
     hostBridge: IBridge;
@@ -163,7 +162,6 @@ export class ChatController {
             isTauriRuntime: deps.isTauriRuntime,
             openExternalUrl: deps.openExternalUrl,
             copyText: deps.copyText,
-            readClipboardText: deps.readClipboardText,
         });
     }
 

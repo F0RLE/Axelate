@@ -32,7 +32,6 @@ type ChatUiFactoryDeps = ChatFactoryDeps & {
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
-    readClipboardText: () => Promise<string | null>;
 };
 
 type ChatLifecycleFactoryDeps = {
@@ -168,7 +167,6 @@ export class ChatControllerFactory {
             isTauriRuntime: () => deps.isTauriRuntime(),
             openExternalUrl: async (url) => await deps.openExternalUrl(url),
             copyText: async (text) => await deps.copyText(text),
-            readClipboardText: async () => await deps.readClipboardText(),
             tracer: deps.tracer,
         });
     }

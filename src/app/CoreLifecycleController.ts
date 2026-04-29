@@ -19,6 +19,7 @@ import type { ErrorHandler } from '@/shared/services/ErrorHandler';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import type { UiStateStore } from '@/shared/services/state/UiStateStore';
 import type { AppUI } from '@/shared/shell/AppUI';
+import type { GlobalTextContextMenu } from '@/shared/shell/GlobalTextContextMenu';
 import type { Particles } from '@/shared/shell/Particles';
 import type { SidebarUI } from '@/shared/shell/SidebarUI';
 import type { WindowUI } from '@/shared/shell/WindowUI';
@@ -113,6 +114,7 @@ export type CoreDisposables = {
     aiBridge: AIBridge;
     bridge: GlobalBridge;
     errorHandler: ErrorHandler;
+    globalTextContextMenu: GlobalTextContextMenu;
 };
 
 export type CoreLifecycleDeps = {
@@ -146,6 +148,7 @@ export class CoreLifecycleController {
         if (this._deps.state.isDestroyed()) {
             return;
         }
+        this._deps.disposables.globalTextContextMenu.init();
 
         if (bootstrapResult.currentPage !== 'chat') {
             this.scheduleDeferredChatInit();

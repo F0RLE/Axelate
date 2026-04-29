@@ -55,13 +55,6 @@ function createChatUI(options?: {
 
             await navigator.clipboard.writeText(text);
         },
-        readClipboardText: async () => {
-            if (!isTauriRuntime) {
-                return null;
-            }
-
-            return await invoke<string>('plugin:clipboard-manager|read_text');
-        },
         tracer: chatUiTracer,
     });
 }
