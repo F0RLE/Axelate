@@ -417,7 +417,7 @@ describe('ModuleSettingsEngineRenderer', () => {
         expect(input.value).toBe('512');
     });
 
-    it('should save engine field values', () => {
+    it('should save engine field values', async () => {
         const setConfig = vi.fn();
         const showSaveIndicator = vi.fn();
         const fieldController = new ModuleSettingsEngineFieldController({
@@ -436,7 +436,7 @@ describe('ModuleSettingsEngineRenderer', () => {
         const engineInput = document.createElement('input');
         engineInput.value = '--ctx 4096';
         const config = { extra_args: [] as string[] };
-        fieldController.handleSave(engineInput, {
+        await fieldController.handleSave(engineInput, {
             key: 'extra_args',
             type: 'text',
             isEngineConfig: true,

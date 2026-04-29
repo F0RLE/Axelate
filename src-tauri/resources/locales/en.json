@@ -64,7 +64,7 @@
     "ui.chat.context_used": "used",
     "ui.chat.context_remaining": "remaining",
     "ui.chat.context_unknown": "unknown",
-    "ui.chat.error.local_model_memory": "Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model.",
+    "ui.chat.error.local_model_memory": "Not enough memory to start the local model. Reduce context size or change Compute Device to CPU, or use a smaller model.",
     "ui.chat.error.local_model_system_memory": "Not enough system memory to start the local model. Close other apps or use a smaller model.",
     "ui.chat.error.image_vram": "Not enough GPU memory to generate the image. Lower image size, steps, or batch size, or use a smaller model.",
     "ui.chat.error.local_image_engine_connection": "Local image engine stopped or closed the connection while generating. Restart the image engine and lower image size, steps, or batch size if it happens again.",

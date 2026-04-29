@@ -129,7 +129,11 @@ export class VoiceInputService {
 
             const text = response.text.trim();
             if (text.length > 0) {
-                onResult(text);
+                try {
+                    onResult(text);
+                } catch (err) {
+                    this._tracer.error(`[VoiceInputService] onResult handler threw: ${String(err)}`);
+                }
             }
             this._finishSession('ended');
         } catch (error) {
