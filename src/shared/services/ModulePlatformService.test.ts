@@ -5,6 +5,21 @@ import type { IApp } from '../types/coreTypes';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
+const mocks = vi.hoisted(() => ({
+    deleteEngine: vi.fn(),
+    invokeSafe: vi.fn(),
+}));
+
+vi.mock('@/shared/types/bindings', () => ({
+    commands: {
+        deleteEngine: (...args: unknown[]): unknown => mocks.deleteEngine(...args),
+    },
+}));
+
+vi.mock('@/shared/api/invoke', () => ({
+    invokeSafe: (...args: unknown[]): unknown => mocks.invokeSafe(...args),
+}));
+
 function createMockModuleService(): ModuleService {
     return {
         downloadModule: vi.fn().mockResolvedValue(undefined),
@@ -29,15 +44,16 @@ function createApp(overrides: Partial<IApp> = {}): IApp {
 describe('ModulePlatformService', () => {
     let moduleService: ModuleService;
     let service: ModulePlatformService;
-    let aiBridge: Pick<AIBridge, 'stopProvider' | 'getState'>;
+    let aiBridge: Pick<AIBridge, 'stopProvider' | 'stopEngineSlot' | 'getState'>;
     let tracer: Pick<LoggerService, 'info'>;
 
     beforeEach(() => {
         moduleService = createMockModuleService();
         aiBridge = {
             stopProvider: vi.fn(),
+            stopEngineSlot: vi.fn(),
             getState: vi.fn(() => ({ activeProviderId: 'test-module', isRunning: true })),
-        };
+        } as unknown as Pick<AIBridge, 'stopProvider' | 'stopEngineSlot' | 'getState'>;
         tracer = { info: vi.fn() };
         service = new ModulePlatformService(() => moduleService, aiBridge as AIBridge, tracer);
         vi.clearAllMocks();
@@ -82,6 +98,31 @@ describe('ModulePlatformService', () => {
             (moduleService.deleteModule as ReturnType<typeof vi.fn>).mockResolvedValue(false);
             const app = createApp();
             await expect(service.delete(app)).rejects.toThrow('ui.launcher.web.delete_model_error');
+        });
+
+        it('should delete AI engines through the engine command', async () => {
+            mocks.deleteEngine.mockReturnValue('delete-engine-promise');
+            mocks.invokeSafe.mockResolvedValue({ status: 'ok', data: null });
+            const app = createApp({ id: 'llamacpp', type: 'local' });
+
+            await service.delete(app, 'ai_text');
+
+            expect(mocks.deleteEngine).toHaveBeenCalledWith('llamacpp');
+            expect(mocks.invokeSafe).toHaveBeenCalledWith('delete-engine-promise');
+            expect(moduleService.deleteModule).not.toHaveBeenCalled();
+        });
+
+        it('should skip deleting externally managed AI engines', async () => {
+            const app = createApp({
+                id: 'external-engine',
+                type: 'local',
+                managedExternally: true,
+            });
+
+            await service.delete(app, 'ai_text');
+
+            expect(mocks.deleteEngine).not.toHaveBeenCalled();
+            expect(moduleService.deleteModule).not.toHaveBeenCalled();
         });
     });
 

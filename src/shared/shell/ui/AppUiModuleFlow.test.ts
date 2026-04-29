@@ -59,6 +59,7 @@ describe('AppUiModuleFlow', () => {
 
         await flow.handleDeleteModule(app, 'services');
 
+        expect(platformService.delete).toHaveBeenCalledWith(app, 'services');
         expect(app.installed).toBe(false);
         expect(clearModuleCard).toHaveBeenCalledWith('services');
         expect(openAppSelection).toHaveBeenCalledWith('services', [

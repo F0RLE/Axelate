@@ -179,6 +179,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         engine::stop_engine_slot,
         engine::get_engine_state,
         engine::check_engine_installed,
+        engine::delete_engine,
         engine::get_engine_definitions,
         engine::get_engine_config,
         engine::get_engine_settings_payload,

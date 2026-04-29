@@ -208,6 +208,8 @@ export const commands = {
 	getEngineState: () => typedError<EngineState, AppError>(__TAURI_INVOKE("get_engine_state")),
 	// Checks if an engine binary is present (in ENGINES_DIR or system PATH).
 	checkEngineInstalled: (engineId: string, binaryName: string | null) => __TAURI_INVOKE<boolean>("check_engine_installed", { engineId, binaryName }),
+	// Deletes an Axelate-managed engine from local storage.
+	deleteEngine: (engineId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_engine", { engineId })),
 	// Returns all registered engine definitions with real-time installation status.
 	getEngineDefinitions: () => typedError<EngineDefinition[], AppError>(__TAURI_INVOKE("get_engine_definitions")),
 	// Returns the persisted user config for an engine, or defaults if none saved yet.

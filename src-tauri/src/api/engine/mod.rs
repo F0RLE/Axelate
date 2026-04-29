@@ -71,6 +71,14 @@ pub fn check_engine_installed(engine_id: String, binary_name: Option<String>) ->
 
 #[tauri::command]
 #[specta::specta]
+/// Deletes an Axelate-managed engine from local storage.
+#[allow(clippy::needless_pass_by_value)] // Tauri commands require owned params
+pub async fn delete_engine(engine_id: String) -> Result<(), AppError> {
+    crate::domain::engine::detector::delete_installed_engine(&engine_id).await
+}
+
+#[tauri::command]
+#[specta::specta]
 /// Returns all registered engine definitions with real-time installation status.
 pub async fn get_engine_definitions(
     engine_manager: State<'_, Arc<EngineManager>>,
