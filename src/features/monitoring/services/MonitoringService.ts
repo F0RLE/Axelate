@@ -55,11 +55,11 @@ export class MonitoringService {
                     return;
                 }
                 this._tracer.error('[MonitoringService] Failed to listen to events:', e);
-                this.startFallback();
+                this.startFallback(lifecycleToken);
             }
         } else {
             this._tracer.warn('[MonitoringService] Event transport unavailable, starting polling');
-            this.startFallback();
+            this.startFallback(lifecycleToken);
         }
     }
 
@@ -110,16 +110,16 @@ export class MonitoringService {
         });
     }
 
-    private startFallback(): void {
+    private startFallback(lifecycleToken: number): void {
         if (this.pollingTimeout !== null) {
             return;
         }
 
         const poll = (): void => {
             this.pollingTimeout = globalThis.setTimeout(() => {
-                void this._pollFallbackStats().finally(() => {
+                void this._pollFallbackStats(lifecycleToken).finally(() => {
                     this.pollingTimeout = null;
-                    if (this.isListening) {
+                    if (this.isListening && lifecycleToken === this._lifecycleToken) {
                         poll();
                     }
                 });
@@ -129,11 +129,17 @@ export class MonitoringService {
         poll();
     }
 
-    private async _pollFallbackStats(): Promise<void> {
+    private async _pollFallbackStats(lifecycleToken: number): Promise<void> {
         try {
             const stats = await this._tauri.invoke<ISystemStats>('get_system_stats');
+            if (!this.isListening || lifecycleToken !== this._lifecycleToken) {
+                return;
+            }
             this.notifyListeners(stats);
         } catch (e) {
+            if (!this.isListening || lifecycleToken !== this._lifecycleToken) {
+                return;
+            }
             this._tracer.warn('[MonitoringService] Poll failed', e);
         }
     }

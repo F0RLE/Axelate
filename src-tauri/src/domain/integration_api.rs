@@ -265,9 +265,12 @@ fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiCont
         match incoming {
             Ok(stream) => {
                 let request_context = context.clone();
-                let _ = std::thread::Builder::new()
+                if let Err(error) = std::thread::Builder::new()
                     .name("axelate-local-http-request".to_string())
-                    .spawn(move || handle_stream(stream, request_context));
+                    .spawn(move || handle_stream(stream, request_context))
+                {
+                    tracing::warn!("Failed to spawn launcher HTTP API request handler: {error}");
+                }
             }
             Err(error) => {
                 tracing::warn!("Launcher HTTP API accept failed: {error}");
@@ -346,6 +349,9 @@ fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
             .parse::<usize>()
             .map_err(|error| format!("Invalid content-length: {error}"))
     })?;
+    if content_length > MAX_REQUEST_BYTES {
+        return Err("HTTP request body is too large".to_string());
+    }
 
     let body_start = header_end
         .checked_add(4)
@@ -356,7 +362,10 @@ fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
             .read(&mut chunk)
             .map_err(|error| format!("Failed to read request body: {error}"))?;
         if read == 0 {
-            break;
+            return Err(format!(
+                "HTTP request body ended before content-length was reached: expected {content_length} bytes, got {}",
+                body.len()
+            ));
         }
         let read_chunk = chunk
             .get(..read)
@@ -405,7 +414,19 @@ async fn dispatch_http_request(
 
     match route_authorized_request(path, &request, context).await {
         Ok(response) => response,
-        Err(error) => json_error(500, &error.to_string()),
+        Err(error) => json_error(status_for_app_error(&error), &error.to_string()),
+    }
+}
+
+const fn status_for_app_error(error: &AppError) -> u16 {
+    match error {
+        AppError::Validation(_) | AppError::Config(_) => 400,
+        AppError::NotFound(_) => 404,
+        AppError::PermissionDenied(_) => 403,
+        AppError::Io(_)
+        | AppError::Serialization(_)
+        | AppError::External { .. }
+        | AppError::Internal { .. } => 500,
     }
 }
 
@@ -429,6 +450,7 @@ async fn route_authorized_request(
             ))
         }
         ("GET", ["v1", "modules", module_id, "status"]) => {
+            crate::domain::modules::downloader::validate_module_id(module_id)?;
             let status = module_controller::get_module_status(module_id).await;
             Ok(json_response(
                 200,
@@ -457,6 +479,7 @@ fn handle_module_stage_request(
     context: &LauncherHttpApiContext,
     module_id: &str,
 ) -> Result<HttpResponse, AppError> {
+    crate::domain::modules::downloader::validate_module_id(module_id)?;
     let payload: IntegrationModuleStageRequest = parse_json_body(request)?;
     let stage = payload.stage.trim();
     let label = payload.label.trim();
@@ -511,7 +534,7 @@ async fn handle_text_request(
     let ui_provider = match requested_provider.as_ref() {
         Some(provider) => provider.clone(),
         None => selected_module_id(&context.ui_state_service, "ai_text")
-            .await
+            .await?
             .ok_or_else(|| AppError::Validation("No selected text AI provider".to_string()))?,
     };
     if requested_provider.is_some() {
@@ -530,6 +553,11 @@ async fn handle_text_request(
     let session_id =
         resolve_session_id(&context.ui_state_service, payload.session_id.as_deref()).await;
     let mut messages = payload.messages.unwrap_or_default();
+    if messages.is_empty() && payload.prompt.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Text request requires a prompt or messages".to_string(),
+        ));
+    }
     if messages.is_empty() || !payload.prompt.trim().is_empty() {
         messages.push(ChatMessage {
             id: uuid::Uuid::new_v4().to_string(),
@@ -541,11 +569,11 @@ async fn handle_text_request(
 
     let thinking_level = match payload.thinking_level {
         Some(value) => Some(value),
-        None => selected_thinking_level(&context.ui_state_service, &provider).await,
+        None => selected_thinking_level(&context.ui_state_service, &provider).await?,
     };
     let web_search = match payload.web_search {
         Some(value) => Some(value),
-        None => selected_web_search(&context.ui_state_service, &provider).await,
+        None => selected_web_search(&context.ui_state_service, &provider).await?,
     };
 
     let mut chat_request = ChatRequest {
@@ -586,11 +614,16 @@ async fn handle_image_request(
     context: LauncherHttpApiContext,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationImageRequest = parse_json_body(request)?;
+    if payload.prompt.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Image request requires a prompt".to_string(),
+        ));
+    }
     let requested_provider = payload.provider.filter(|value| !value.trim().is_empty());
     let ui_provider = match requested_provider.as_ref() {
         Some(provider) => provider.clone(),
         None => selected_module_id(&context.ui_state_service, "ai_image")
-            .await
+            .await?
             .ok_or_else(|| AppError::Validation("No selected image AI provider".to_string()))?,
     };
     if requested_provider.is_some() {
@@ -660,11 +693,7 @@ async fn select_provider_for_category(
     provider_id: &str,
 ) -> Result<(), AppError> {
     let selected_module = resolve_selected_provider_module(&context.config_service, provider_id)?;
-    let mut state = context
-        .ui_state_service
-        .get_ui_state()
-        .await
-        .unwrap_or_default();
+    let mut state = context.ui_state_service.get_ui_state().await?;
     let previous_id = state
         .selected_modules
         .get(category)
@@ -761,13 +790,16 @@ fn is_custom_provider_id(provider_id: &str) -> bool {
     )
 }
 
-async fn selected_module_id(ui_state_service: &UiStateService, category: &str) -> Option<String> {
-    let state = ui_state_service.get_ui_state().await.ok()?;
-    state
+async fn selected_module_id(
+    ui_state_service: &UiStateService,
+    category: &str,
+) -> Result<Option<String>, AppError> {
+    let state = ui_state_service.get_ui_state().await?;
+    Ok(state
         .selected_modules
         .get(category)
         .map(|module| module.id.trim().to_string())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty()))
 }
 
 async fn resolve_session_id(
@@ -789,30 +821,32 @@ async fn resolve_session_id(
 async fn selected_thinking_level(
     ui_state_service: &UiStateService,
     provider: &str,
-) -> Option<String> {
-    ui_state_service
+) -> Result<Option<String>, AppError> {
+    Ok(ui_state_service
         .get_ui_state()
-        .await
-        .ok()
-        .and_then(|state| state.ai_thinking_level.get(provider).cloned())
-        .filter(|value| !value.trim().is_empty())
+        .await?
+        .ai_thinking_level
+        .get(provider)
+        .cloned()
+        .filter(|value| !value.trim().is_empty()))
 }
 
 async fn selected_web_search(
     ui_state_service: &UiStateService,
     provider: &str,
-) -> Option<WebSearchOptions> {
+) -> Result<Option<WebSearchOptions>, AppError> {
     let enabled = ui_state_service
         .get_ui_state()
-        .await
-        .ok()
-        .and_then(|state| state.ai_web_search_enabled.get(provider).copied())
+        .await?
+        .ai_web_search_enabled
+        .get(provider)
+        .copied()
         .unwrap_or(false);
 
-    enabled.then_some(WebSearchOptions {
+    Ok(enabled.then_some(WebSearchOptions {
         enabled,
         ..WebSearchOptions::default()
-    })
+    }))
 }
 
 async fn resolve_model_id(
@@ -830,13 +864,13 @@ async fn resolve_model_id(
         return Ok(model.to_string());
     }
 
-    let state = ui_state_service.get_ui_state().await.ok();
-    let selected_model = state.as_ref().and_then(|state| {
+    let state = ui_state_service.get_ui_state().await?;
+    let selected_model = {
         ui_provider_id
             .and_then(|id| state.selected_ai_models.get(id))
             .or_else(|| state.selected_ai_models.get(provider_id))
             .cloned()
-    });
+    };
     let config = config_service.load_full_config()?;
     let provider = config
         .api_providers
@@ -970,10 +1004,13 @@ mod tests {
 
     use super::{
         backend_provider_id, find_header_end, is_authorized, model_api_id, parse_header_line,
-        status_text, tier_rank,
+        read_http_request, status_for_app_error, status_text, tier_rank,
     };
+    use crate::errors::AppError;
     use crate::models::{AiModel, ApiModelConfig, ModelStats, ModelTier};
     use std::collections::HashMap;
+    use std::io::Write;
+    use std::net::{Shutdown, TcpListener, TcpStream};
 
     fn model_with_api_ids() -> AiModel {
         AiModel {
@@ -1048,5 +1085,62 @@ mod tests {
     fn ranks_model_tiers_for_default_selection() {
         assert!(tier_rank(&ModelTier::Strong) > tier_rank(&ModelTier::Medium));
         assert_eq!(status_text(404), "Not Found");
+    }
+
+    #[test]
+    fn maps_app_errors_to_http_status_codes() {
+        assert_eq!(
+            status_for_app_error(&AppError::Validation("bad input".to_string())),
+            400
+        );
+        assert_eq!(
+            status_for_app_error(&AppError::NotFound("missing".to_string())),
+            404
+        );
+        assert_eq!(
+            status_for_app_error(&AppError::PermissionDenied("denied".to_string())),
+            403
+        );
+        assert_eq!(status_for_app_error(&AppError::Io("disk".to_string())), 500);
+    }
+
+    #[test]
+    fn rejects_http_body_larger_than_limit_before_waiting_for_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+        let addr = listener.local_addr().expect("local addr");
+        let client = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(addr).expect("connect test listener");
+            write!(
+                stream,
+                "POST /v1/ai/text HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+                super::MAX_REQUEST_BYTES + 1
+            )
+            .expect("write request");
+        });
+
+        let (mut stream, _) = listener.accept().expect("accept test client");
+        let error = read_http_request(&mut stream).expect_err("oversized body must fail");
+        client.join().expect("client thread");
+
+        assert_eq!(error, "HTTP request body is too large");
+    }
+
+    #[test]
+    fn rejects_http_body_shorter_than_content_length() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+        let addr = listener.local_addr().expect("local addr");
+        let client = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(addr).expect("connect test listener");
+            stream
+                .write_all(b"POST /v1/ai/text HTTP/1.1\r\nContent-Length: 8\r\n\r\nabc")
+                .expect("write request");
+            stream.shutdown(Shutdown::Write).expect("shutdown write");
+        });
+
+        let (mut stream, _) = listener.accept().expect("accept test client");
+        let error = read_http_request(&mut stream).expect_err("truncated body must fail");
+        client.join().expect("client thread");
+
+        assert!(error.contains("expected 8 bytes, got 3"));
     }
 }

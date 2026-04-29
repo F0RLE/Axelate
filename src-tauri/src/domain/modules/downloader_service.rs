@@ -41,6 +41,7 @@ pub struct DownloadRequest {
     pub repo_url: String,
     pub expected_hash: Option<String>,
     pub dl_type: Option<String>,
+    pub release_selection: Option<super::github_releases::ReleaseDownloadSelection>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -240,6 +241,7 @@ mod tests {
                 repo_url: "https://example.com/file.zip".to_string(),
                 expected_hash: Some("hash".to_string()),
                 dl_type: Some("release".to_string()),
+                release_selection: None,
             },
         );
 

@@ -131,7 +131,12 @@ pub(super) async fn clone_repository_into(
 
     let git_dir = extraction_path.join(".git");
     if git_dir.exists() {
-        let _ = tokio::fs::remove_dir_all(git_dir).await;
+        tokio::fs::remove_dir_all(&git_dir).await.map_err(|error| {
+            AppError::Io(format!(
+                "Failed to remove git metadata directory '{}': {error}",
+                git_dir.display()
+            ))
+        })?;
     }
 
     Ok(())
@@ -142,7 +147,7 @@ pub(super) fn build_client(module_id: &str) -> Result<reqwest::Client, AppError>
         .user_agent("Axelate/1.0.0 (Tauri; Windows)")
         .timeout(std::time::Duration::from_secs(600));
 
-    if let Some(license) = crate::domain::license::storage::load_license()
+    if let Some(license) = crate::domain::license::storage::load_license()?
         && !license.key.is_empty()
     {
         tracing::info!("Injecting license key for module download: {module_id}");
@@ -185,14 +190,41 @@ pub(super) async fn download_file(
     };
     fs::create_dir_all(&*TEMP_DIR).map_err(|error| AppError::Io(error.to_string()))?;
 
-    let resume_metadata = load_partial_metadata(task.dest_path)
-        .await
-        .filter(|metadata| metadata.url == task.url);
-    let existing_bytes = tokio::fs::metadata(task.dest_path)
+    let loaded_resume_metadata = match load_partial_metadata(task.dest_path).await {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            tracing::warn!(
+                module_id = task.module_id,
+                path = %task.dest_path.display(),
+                "Ignoring corrupt partial download metadata: {error}"
+            );
+            remove_partial_metadata(task.dest_path).await?;
+            None
+        }
+    };
+    let resume_metadata = loaded_resume_metadata.filter(|metadata| metadata.url == task.url);
+    let mut existing_bytes = tokio::fs::metadata(task.dest_path)
         .await
         .ok()
         .filter(std::fs::Metadata::is_file)
         .map_or(0, |metadata| metadata.len());
+    if existing_bytes > 0 && resume_metadata.is_none() {
+        tracing::warn!(
+            module_id = task.module_id,
+            path = %task.dest_path.display(),
+            "Discarding partial download without matching resume metadata"
+        );
+        remove_partial_metadata(task.dest_path).await?;
+        if let Err(error) = tokio::fs::remove_file(task.dest_path).await
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(AppError::Io(format!(
+                "Failed to remove stale partial download '{}': {error}",
+                task.dest_path.display()
+            )));
+        }
+        existing_bytes = 0;
+    }
 
     let mut request = task.client.get(task.url);
     if existing_bytes > 0 {
@@ -220,7 +252,7 @@ pub(super) async fn download_file(
             });
         }
 
-        remove_partial_metadata(task.dest_path).await;
+        remove_partial_metadata(task.dest_path).await?;
         response = task
             .client
             .get(task.url)
@@ -341,6 +373,9 @@ pub(super) async fn download_file(
     let snapshot = progress.emit_download(bytes_downloaded, total_size, last_speed_bytes_per_sec);
 
     file.flush()
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
+    file.sync_all()
         .await
         .map_err(|error| AppError::Io(error.to_string()))?;
 

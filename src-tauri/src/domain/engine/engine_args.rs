@@ -11,41 +11,6 @@ const SDCPP_UNSUPPORTED_FLAGS: [&str; 4] = [
 const SDCPP_SERVER_UNSUPPORTED_FLAGS: [&str; 3] =
     ["--preview", "--preview-path", "--preview-interval"];
 
-fn is_qwen_model(model_path: Option<&str>) -> bool {
-    model_path.is_some_and(|path| path.to_ascii_lowercase().contains("qwen"))
-}
-
-fn has_arg(args: &[String], candidates: &[&str]) -> bool {
-    args.iter().any(|arg| {
-        candidates.iter().any(|candidate| {
-            arg == candidate
-                || arg
-                    .strip_prefix(candidate)
-                    .is_some_and(|suffix| suffix.starts_with('='))
-        })
-    })
-}
-
-fn push_arg_if_missing(
-    args: &mut Vec<String>,
-    existing_args: &[String],
-    candidates: &[&str],
-    value: Option<&str>,
-) {
-    if has_arg(args, candidates) || has_arg(existing_args, candidates) {
-        return;
-    }
-
-    let Some(candidate) = candidates.first() else {
-        return;
-    };
-
-    args.push((*candidate).to_string());
-    if let Some(value) = value {
-        args.push(value.to_string());
-    }
-}
-
 fn push_llamacpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
     match config.compute_mode {
         EngineComputeMode::Gpu => {
@@ -115,32 +80,6 @@ pub(super) fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<Strin
         effective_context_size.to_string(),
     ];
     push_llamacpp_compute_args(&mut args, config);
-
-    push_arg_if_missing(
-        &mut args,
-        &config.extra_args,
-        &["--parallel", "-np"],
-        Some("1"),
-    );
-    push_arg_if_missing(
-        &mut args,
-        &config.extra_args,
-        &["--reasoning", "-rea"],
-        Some("off"),
-    );
-
-    if is_qwen_model(config.model_path.as_deref()) {
-        push_arg_if_missing(&mut args, &config.extra_args, &["--jinja"], None);
-        push_arg_if_missing(
-            &mut args,
-            &config.extra_args,
-            &["--reasoning-format"],
-            Some("deepseek"),
-        );
-        push_arg_if_missing(&mut args, &config.extra_args, &["--no-context-shift"], None);
-        push_arg_if_missing(&mut args, &config.extra_args, &["--flash-attn"], Some("on"));
-    }
-
     args.extend(config.extra_args.clone());
     args
 }

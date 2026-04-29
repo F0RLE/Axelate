@@ -277,7 +277,7 @@ impl OpenAiCompatibleProvider {
     }
 }
 
-fn is_local_base_url(base_url: &str) -> bool {
+pub(super) fn is_local_base_url(base_url: &str) -> bool {
     provider_payload::is_local_base_url(base_url)
 }
 

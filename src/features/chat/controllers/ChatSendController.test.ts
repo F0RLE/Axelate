@@ -90,6 +90,19 @@ describe('ChatSendController', () => {
         vi.clearAllMocks();
     });
 
+    it('does not send empty chat messages without attachments', async () => {
+        const { controller, options, sendMessage } = createController();
+        const input = document.createElement('textarea');
+        input.value = '   ';
+
+        const result = await controller.sendChat(input);
+
+        expect(result).toBe(false);
+        expect(options.lockUi).not.toHaveBeenCalled();
+        expect(options.appendUserMessage).not.toHaveBeenCalled();
+        expect(sendMessage).not.toHaveBeenCalled();
+    });
+
     it('shows a pending response state until the first text chunk', async () => {
         const { controller, options, aiBridge, streamingHandle } = createController();
         const input = document.createElement('textarea');

@@ -261,6 +261,31 @@ describe('MonitoringService', () => {
         vi.useRealTimers();
     });
 
+    it('should not notify subscribers from an in-flight fallback poll after stop', async () => {
+        vi.mocked(mockTauri.isTauri).mockReturnValue(false);
+        vi.useFakeTimers();
+
+        let resolveStats: ((value: ISystemStats) => void) | undefined;
+        vi.mocked(mockTauri.invoke).mockImplementation(
+            () =>
+                new Promise<ISystemStats>((resolve) => {
+                    resolveStats = resolve;
+                }),
+        );
+
+        const subscriber = vi.fn();
+        service.subscribe(subscriber);
+        await service.startMonitoring();
+        await vi.advanceTimersByTimeAsync(2100);
+
+        service.stopMonitoring();
+        resolveStats?.(mockStats);
+        await Promise.resolve();
+
+        expect(subscriber).not.toHaveBeenCalled();
+        vi.useRealTimers();
+    });
+
     it('should dispose a late listener when monitoring is stopped before listen resolves', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(true);
 

@@ -270,6 +270,7 @@ export class AIBridge implements IAIBridge {
                 return await this._runtime.getHistory(this._context, this._manager.sessionId);
             } catch (e) {
                 this._tracer.error('[AIBridge] Failed to load history:', e);
+                throw e;
             }
         }
         return [];

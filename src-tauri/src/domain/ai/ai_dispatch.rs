@@ -32,6 +32,9 @@ pub(super) async fn prepare_chat_dispatch(
     let mut messages_context = request.messages.clone();
     if let Some(session_id) = &request.session_id {
         messages_context = sessions.merge_request_messages(session_id, &request.messages);
+        if !request.messages.is_empty() {
+            sessions.force_save().await?;
+        }
     }
 
     let mut base_url = "https://openrouter.ai/api/v1".to_string();
@@ -82,7 +85,7 @@ pub(super) async fn persist_successful_response(
     session_id: Option<&str>,
     message_id: String,
     response: &Result<ChatResponse, crate::errors::AppError>,
-) {
+) -> Result<(), crate::errors::AppError> {
     if let Ok(response) = response
         && response.ok
         && let Some(reply) = &response.reply
@@ -94,7 +97,10 @@ pub(super) async fn persist_successful_response(
             reply,
             response.thought_signature.clone(),
         );
+        sessions.force_save().await?;
     }
+
+    Ok(())
 }
 
 pub(super) async fn active_local_engine_status(

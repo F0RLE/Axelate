@@ -85,7 +85,7 @@ pub async fn save_zoom_level(
     ui_service: tauri::State<'_, ui_state::UiStateService>,
     zoom: f64,
 ) -> Result<(), AppError> {
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let mut state = ui_service.get_ui_state().await?;
     if (state.zoom_level - zoom).abs() < f64::EPSILON {
         return Ok(());
     }
@@ -102,7 +102,7 @@ async fn persist_zoom_for_window(
         window_settings::SCALING_MIN_ZOOM,
         window_settings::SCALING_MAX_ZOOM,
     );
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let mut state = ui_service.get_ui_state().await?;
     let previous_zoom = state.zoom_level;
     state.zoom_level = zoom;
 
@@ -161,7 +161,7 @@ pub async fn get_resolution_zoom(
     window: tauri::WebviewWindow,
     ui_service: tauri::State<'_, ui_state::UiStateService>,
 ) -> Result<f64, AppError> {
-    let state = ui_service.get_ui_state().await.unwrap_or_default();
+    let state = ui_service.get_ui_state().await?;
     let res_key = res_key_from_window(&window).unwrap_or_else(|| "unknown".to_string());
     Ok(resolve_zoom(&state, &res_key))
 }
@@ -210,15 +210,14 @@ pub async fn get_window_policy(
     }
 
     // Get current zoom from state to calculate effective dimensions
-    let zoom = ui_service
-        .get_ui_state()
-        .await
-        .map(|s| s.zoom_level)
-        .unwrap_or(1.0);
+    let zoom = ui_service.get_ui_state().await?.zoom_level;
 
     let win_size = window
         .inner_size()
-        .unwrap_or_default()
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!("Failed to read window inner size: {error}"),
+        })?
         .to_logical::<f64>(scale_factor);
 
     let effective_w = u32::try_from((win_size.width / zoom).round() as i64).unwrap_or(1920);

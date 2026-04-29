@@ -124,12 +124,31 @@ impl SecureStorage {
             fs::rename(&path, &backup_path).map_err(|e| AppError::Io(e.to_string()))?;
         }
 
-        if let Err(error) = fs::copy(&pending_path, &path) {
-            if backup_path.exists() {
-                let _ = fs::rename(&backup_path, &path);
+        if let Err(error) = fs::rename(&pending_path, &path) {
+            let rollback_error = if backup_path.exists() {
+                fs::rename(&backup_path, &path).err()
+            } else {
+                None
+            };
+            if pending_path.exists()
+                && let Err(cleanup_error) = fs::remove_file(&pending_path)
+            {
+                tracing::warn!(
+                    path = %pending_path.display(),
+                    "Failed to remove pending secure storage file after publish failure: {cleanup_error}"
+                );
             }
-            let _ = fs::remove_file(&pending_path);
-            return Err(AppError::Io(error.to_string()));
+            if let Some(rollback_error) = rollback_error {
+                return Err(AppError::Io(format!(
+                    "Failed to publish secure storage '{}': {error}; rollback from '{}' also failed: {rollback_error}",
+                    path.display(),
+                    backup_path.display()
+                )));
+            }
+            return Err(AppError::Io(format!(
+                "Failed to publish secure storage '{}': {error}",
+                path.display()
+            )));
         }
 
         fs::OpenOptions::new()

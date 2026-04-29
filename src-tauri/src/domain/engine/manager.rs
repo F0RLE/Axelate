@@ -170,6 +170,17 @@ impl EngineManager {
             .collect()
     }
 
+    /// Checks whether the given engine is currently running in any capability slot.
+    pub async fn is_engine_running(&self, id: &str) -> bool {
+        let id = canonical_engine_id(id);
+        self.prune_dead_slots().await;
+        self.slots
+            .lock()
+            .await
+            .values()
+            .any(|engine| engine.definition.id == id)
+    }
+
     /// Acquires exclusive access to local inference work.
     ///
     /// Hold this guard for the full request, not just engine startup. Without it,
@@ -259,7 +270,7 @@ impl EngineManager {
                             let stale = slots.remove(&primary_cap);
                             drop(slots);
                             if let Some(stale) = stale {
-                                Self::kill_engine(stale).await;
+                                Self::kill_engine(stale).await?;
                             }
                         }
                     }
@@ -300,7 +311,7 @@ impl EngineManager {
             );
             self.emitter
                 .emit_swapping(&old.definition.id, &config.engine_id);
-            Self::kill_engine(old).await;
+            Self::kill_engine(old).await?;
         }
 
         let binary_name = definition.binary.as_deref().ok_or_else(|| {
@@ -371,13 +382,28 @@ impl EngineManager {
         // Pipe engine stdout/stderr to files in logs directory
         let log_dir =
             crate::utils::paths::ENGINE_LOGS_DIR.join(canonical_engine_log_id(&config.engine_id));
-        let _ = std::fs::create_dir_all(&log_dir);
+        std::fs::create_dir_all(&log_dir).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to create engine log directory '{}': {error}",
+                log_dir.display()
+            ))
+        })?;
 
         let stdout_path = log_dir.join("stdout.log");
         let stderr_path = log_dir.join("stderr.log");
 
-        let stdout_file = File::create(&stdout_path).ok();
-        let stderr_file = File::create(&stderr_path).ok();
+        let stdout_file = File::create(&stdout_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to create engine stdout log '{}': {error}",
+                stdout_path.display()
+            ))
+        })?;
+        let stderr_file = File::create(&stderr_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to create engine stderr log '{}': {error}",
+                stderr_path.display()
+            ))
+        })?;
 
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
@@ -402,7 +428,7 @@ impl EngineManager {
         if let Some(stdout) = process.stdout.take() {
             spawn_log_reader(
                 stdout,
-                stdout_file,
+                Some(stdout_file),
                 Arc::clone(&self.emitter),
                 config.engine_id.clone(),
             );
@@ -411,7 +437,7 @@ impl EngineManager {
         if let Some(stderr) = process.stderr.take() {
             spawn_log_reader(
                 stderr,
-                stderr_file,
+                Some(stderr_file),
                 Arc::clone(&self.emitter),
                 config.engine_id.clone(),
             );
@@ -452,7 +478,13 @@ impl EngineManager {
                 self.emitter
                     .emit_error(&running.definition.id, &diagnosed_message);
                 // Kill the process if health check fails
-                let _ = running.process.kill().await;
+                if let Err(error) = running.process.kill().await {
+                    warn!(
+                        engine = %running.definition.id,
+                        error = %error,
+                        "Failed to kill unhealthy engine process after startup failure"
+                    );
+                }
                 return Err(AppError::External {
                     request_id: None,
                     message: diagnosed_message,
@@ -499,9 +531,19 @@ impl EngineManager {
     pub async fn stop(&self) -> Result<(), AppError> {
         let _lifecycle_guard = self.lifecycle_lock.lock().await;
         let engines: Vec<(Capability, RunningEngine)> = self.slots.lock().await.drain().collect();
+        let mut errors = Vec::new();
         for (cap, engine) in engines {
             info!(engine = %engine.definition.id, slot = ?cap, "Stopping engine");
-            Self::kill_engine(engine).await;
+            if let Err(error) = Self::kill_engine(engine).await {
+                warn!(slot = ?cap, error = %error, "Failed to stop engine in slot");
+                errors.push(error.to_string());
+            }
+        }
+        if !errors.is_empty() {
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Failed to stop one or more engines: {}", errors.join("; ")),
+            });
         }
         Ok(())
     }
@@ -512,18 +554,33 @@ impl EngineManager {
         let engine = self.slots.lock().await.remove(&capability);
         if let Some(engine) = engine {
             info!(engine = %engine.definition.id, slot = ?capability, "Stopping engine in slot");
-            Self::kill_engine(engine).await;
+            Self::kill_engine(engine).await?;
         }
         Ok(())
     }
 
     /// Kill an engine process and wait for exit
-    async fn kill_engine(mut engine: RunningEngine) {
+    async fn kill_engine(mut engine: RunningEngine) -> Result<(), AppError> {
         if let Err(e) = engine.process.kill().await {
             error!(engine = %engine.definition.id, error = %e, "Failed to kill engine process");
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Failed to kill engine '{}': {e}", engine.definition.id),
+            });
         }
-        let _ = engine.process.wait().await;
+        engine
+            .process
+            .wait()
+            .await
+            .map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to wait for engine '{}' after kill: {error}",
+                    engine.definition.id
+                ),
+            })?;
         info!(engine = %engine.definition.id, "Engine stopped");
+        Ok(())
     }
 
     async fn prune_dead_slots(&self) {
@@ -624,8 +681,8 @@ mod tests {
     fn builds_single_slot_llamacpp_args_by_default() {
         let args = build_llamacpp_args(&sample_config(None), 8081);
         assert!(args.windows(2).any(|w| w == ["-ngl", "all"]));
-        assert!(args.windows(2).any(|w| w == ["--parallel", "1"]));
-        assert!(args.windows(2).any(|w| w == ["--reasoning", "off"]));
+        assert!(!args.contains(&"--parallel".to_string()));
+        assert!(!args.contains(&"--reasoning".to_string()));
     }
 
     #[test]
@@ -647,18 +704,6 @@ mod tests {
 
         let args = build_llamacpp_args(&config, 8081);
         assert!(args.windows(2).any(|w| w == ["--ctx-size", "4096"]));
-    }
-
-    #[test]
-    fn adds_qwen_specific_llamacpp_args() {
-        let args = build_llamacpp_args(&sample_config(Some("Qwen3.5-9B-Q4_K_M.gguf")), 8081);
-        assert!(args.contains(&"--jinja".to_string()));
-        assert!(
-            args.windows(2)
-                .any(|w| w == ["--reasoning-format", "deepseek"])
-        );
-        assert!(args.contains(&"--no-context-shift".to_string()));
-        assert!(args.windows(2).any(|w| w == ["--flash-attn", "on"]));
     }
 
     #[test]

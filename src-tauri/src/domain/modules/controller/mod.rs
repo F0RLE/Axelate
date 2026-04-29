@@ -366,13 +366,18 @@ pub async fn control(
     if action == ModuleAction::Uninstall {
         let executor = LifecycleExecutor::new(&controller, module_id.to_string(), &module_path);
         if let Ok(manifest) = module_lifecycle::ManifestLoader::load(&module_path) {
-            let _ = executor.stop(&manifest).await;
+            executor.stop(&manifest).await?;
         } else {
             let pid_file = module_path.join("module.pid");
             if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
                 && let Ok(pid) = pid_str.trim().parse::<usize>()
             {
-                let _ = process::kill_orphan(pid);
+                process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                    request_id: None,
+                    message: format!(
+                        "Failed to stop module {module_id} from PID file before uninstall: {error}"
+                    ),
+                })?;
             }
         }
         downloader::delete_module(module_id).await?;
@@ -392,10 +397,10 @@ pub async fn control(
 
     match action {
         ModuleAction::Start => executor.start(&manifest).await,
-        ModuleAction::Stop => Ok(executor.stop(&manifest).await),
+        ModuleAction::Stop => executor.stop(&manifest).await,
         ModuleAction::Restart => {
             tracing::info!("Restarting module: {module_id}");
-            let _ = executor.stop(&manifest).await;
+            executor.stop(&manifest).await?;
 
             // Wait for it to actually die (up to 5s) with survival check
             let mut terminated = false;

@@ -236,17 +236,23 @@ fn escape_applescript(value: &str) -> String {
 fn open_external_url(url: &str) {
     #[cfg(target_os = "windows")]
     {
-        let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+        if let Err(error) = Command::new("cmd").args(["/C", "start", "", url]).spawn() {
+            tracing::warn!("Failed to open startup install guide URL '{url}': {error}");
+        }
     }
 
     #[cfg(target_os = "macos")]
     {
-        let _ = Command::new("open").arg(url).spawn();
+        if let Err(error) = Command::new("open").arg(url).spawn() {
+            tracing::warn!("Failed to open startup install guide URL '{url}': {error}");
+        }
     }
 
     #[cfg(target_os = "linux")]
     {
-        let _ = Command::new("xdg-open").arg(url).spawn();
+        if let Err(error) = Command::new("xdg-open").arg(url).spawn() {
+            tracing::warn!("Failed to open startup install guide URL '{url}': {error}");
+        }
     }
 }
 

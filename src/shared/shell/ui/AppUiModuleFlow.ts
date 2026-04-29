@@ -1,11 +1,14 @@
-import type { IApp } from '../../types/coreTypes';
+import type { IApp, ReleaseDownloadSelection } from '../../types/coreTypes';
 import { resolveCatalogCategory } from '../../utils/moduleCategoryPolicy';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import { openDownloadSelectionDialog } from './DownloadSelectionDialog';
 
 type ModalBridge = {
     isAppSelectionOpen(): boolean;
     isViewingCategory(category: string): boolean;
+    closeAppSelection(): void;
+    openAppSelection(category: string, apps: IApp[], selectedId?: string): void;
     refreshCurrentSelection(apps?: IApp[], selectedId?: string | null): void;
 };
 
@@ -56,17 +59,53 @@ export class AppUiModuleFlow {
         btn: HTMLElement | null,
     ): Promise<void> {
         this._deps.tracer.info('[AppUI] Download module clicked:', app.id);
-        this.prepareDownloadButton(btn);
+        let activeButton = btn;
 
         try {
-            const outcome = await this._deps.platformService.download(app);
-            if (outcome !== 'completed') {
-                this.onModalDownloadInterrupted(btn, outcome);
+            const releaseSelection = await this._resolveReleaseDownloadSelection(app, category);
+            if (releaseSelection === null && app.dlType === 'release') {
                 return;
             }
-            this.onModalDownloadSuccess(btn, app, category);
+
+            activeButton =
+                app.dlType === 'release' ? (this._findModalDownloadButton(app) ?? btn) : btn;
+
+            this.prepareDownloadButton(activeButton);
+
+            const outcome = await this._deps.platformService.download(app, releaseSelection);
+            if (outcome !== 'completed') {
+                this.onModalDownloadInterrupted(activeButton, outcome);
+                return;
+            }
+            this.onModalDownloadSuccess(activeButton, app, category);
         } catch (err: unknown) {
-            this.onModalDownloadError(btn, err);
+            this.onModalDownloadError(activeButton, err);
+        }
+    }
+
+    private async _resolveReleaseDownloadSelection(
+        app: IApp,
+        category: string,
+    ): Promise<ReleaseDownloadSelection | undefined | null> {
+        if (app.dlType !== 'release') {
+            return undefined;
+        }
+
+        const shouldRestoreSelection = this._deps.modalManager.isAppSelectionOpen();
+        if (shouldRestoreSelection) {
+            this._deps.modalManager.closeAppSelection();
+        }
+
+        try {
+            return await openDownloadSelectionDialog({
+                app,
+                loadOptions: () => this._deps.platformService.getReleaseDownloadOptions(app),
+                translate: this._deps.translate,
+            });
+        } finally {
+            if (shouldRestoreSelection) {
+                this._restoreAppSelection(category);
+            }
         }
     }
 
@@ -145,6 +184,7 @@ export class AppUiModuleFlow {
     public onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
         this._deps.tracer.error('[AppUI] Download error:', err);
         this.resetDownloadButton(btn);
+        this.restoreDownloadButtonLabel(btn);
         this._deps.showToast(
             this._getLocalizedError(err, 'ui.launcher.web.download_error', 'Download failed'),
             'error',
@@ -152,13 +192,31 @@ export class AppUiModuleFlow {
     }
 
     private _getLocalizedError(err: unknown, fallbackKey: string, fallbackText: string): string {
-        const error = err as Error;
-        const msg = error.message.startsWith('ui.') ? error.message : fallbackKey;
+        const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+        const msg = message.startsWith('ui.') ? message : fallbackKey;
         const fallback = msg === fallbackKey ? fallbackText : msg;
         return this._deps.translate(msg, fallback);
     }
 
     private _toRawCategory(category: string): string {
         return resolveCatalogCategory(category);
+    }
+
+    private _restoreAppSelection(category: string): void {
+        this._deps.modalManager.openAppSelection(
+            category,
+            this._deps.getCatalogApps(this._toRawCategory(category)),
+            this._deps.getSelectedAppId(category) ?? undefined,
+        );
+    }
+
+    private _findModalDownloadButton(app: IApp): HTMLElement | null {
+        const cards = document.querySelectorAll<HTMLElement>('#app-modal-list .app-card');
+        for (const card of cards) {
+            if (card.dataset['appId'] === app.id) {
+                return card.querySelector<HTMLElement>('.download-btn');
+            }
+        }
+        return null;
     }
 }

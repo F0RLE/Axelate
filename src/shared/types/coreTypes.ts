@@ -124,6 +124,32 @@ export interface IModuleDownloadState {
     error?: unknown;
 }
 
+export type ReleaseComputeTarget = 'auto' | 'gpu' | 'cpu';
+
+export interface ReleaseDownloadSelection {
+    tag_name: string | null;
+    compute_target: ReleaseComputeTarget;
+}
+
+export interface ReleaseDownloadVariant {
+    compute_target: ReleaseComputeTarget;
+    assets: string[];
+    total_size: number;
+}
+
+export interface ReleaseDownloadVersion {
+    tag_name: string;
+    published_at?: string | null;
+    cpu?: ReleaseDownloadVariant | null;
+    gpu?: ReleaseDownloadVariant | null;
+    recommended: ReleaseComputeTarget;
+}
+
+export interface ReleaseDownloadOptions {
+    module_id: string;
+    versions: ReleaseDownloadVersion[];
+}
+
 /**
  * Unified application bootstrap data from backend.
  */

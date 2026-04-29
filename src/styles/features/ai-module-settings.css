@@ -483,6 +483,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    color: var(--text-primary);
 }
 
 .thinking-option-card:hover {
@@ -507,6 +508,7 @@
     font-size: 0.95rem;
     margin-bottom: 0.1rem;
     pointer-events: none;
+    color: inherit;
 }
 
 /* === API KEY SECTION (AXELATE PREMIUM V9 - NO DOUBLE BORDER) === */
@@ -723,14 +725,26 @@
 
 /* === LOCAL ENGINE SETTINGS === */
 
+#module-settings-modal .module-settings-content:has(.local-engine-config) {
+    padding: 0.65rem 0.85rem 1rem;
+}
+
 .local-engine-config {
-    gap: 0.85rem;
+    width: min(100%, 920px);
+    margin: 0 auto;
+    gap: 0.55rem;
+}
+
+.local-engine-config .ai-content-panel {
+    padding: 0.72rem 0.85rem;
+    border-radius: 14px;
+    border-color: rgba(255, 255, 255, 0.03);
 }
 
 .local-engine-layout {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 0.55rem;
 }
 
 .local-engine-section {
@@ -744,11 +758,11 @@
     align-items: center;
     text-align: center;
     gap: 0;
-    margin-bottom: 0.7rem;
+    margin-bottom: 0.42rem;
 }
 
 .local-engine-section-header h3 {
-    font-size: 1.05rem;
+    font-size: 0.98rem;
     line-height: 1.15;
     letter-spacing: 0;
     width: 100%;
@@ -807,7 +821,7 @@
 .local-engine-field-stack,
 .local-engine-field-grid {
     display: grid;
-    gap: 1rem;
+    gap: 0.58rem;
 }
 
 .local-engine-field-stack--tight {
@@ -826,7 +840,7 @@
 .local-engine-field-stack--tight .local-engine-field-label {
     width: 100%;
     text-align: center;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.14rem;
     color: var(--text-primary);
 }
 
@@ -834,10 +848,15 @@
     justify-content: center;
 }
 
+.local-engine-field-row--compute-mode .local-engine-label-row,
+.local-engine-field-row--compute-mode .local-engine-field-hint {
+    display: none;
+}
+
 .local-engine-field-row {
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
+    gap: 0.18rem;
     min-width: 0;
 }
 
@@ -857,9 +876,22 @@
     gap: 0;
 }
 
+.local-engine-compute-toggle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    width: 100%;
+}
+
+.local-engine-compute-option {
+    min-height: 44px;
+    padding: 0.5rem 0.7rem;
+    border-radius: 12px;
+}
+
 .local-engine-field-label {
     color: var(--text-secondary);
-    font-size: 0.92rem;
+    font-size: 0.84rem;
     font-weight: 600;
 }
 
@@ -1212,14 +1244,14 @@
     flex: 1;
     min-width: 0;
     border-radius: 12px;
-    padding: 0.72rem 0.9rem;
+    padding: 0.58rem 0.78rem;
     border: none !important;
     background: transparent !important;
     color: var(--text-primary);
     transition: all 0.2s ease;
     outline: none !important;
     box-sizing: border-box;
-    font-size: 0.98rem;
+    font-size: 0.88rem;
     font-family: var(--app-font-family);
 }
 
@@ -1641,6 +1673,15 @@
     border-radius: 0;
 }
 
+.local-engine-field-row--compute-mode .local-engine-input-row,
+.local-engine-input-row:has(.local-engine-compute-toggle) {
+    padding: 0;
+    gap: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
 .local-engine-section--context .local-engine-input {
     min-height: 58px;
     text-align: center;
@@ -1807,7 +1848,7 @@
 
 /* Local image engines reuse the same visual system as API provider settings. */
 .local-engine-section--core .local-engine-field-stack--tight {
-    gap: 0.85rem;
+    gap: 0.58rem;
 }
 
 .local-engine-field-row--model-path .local-engine-input-row,
@@ -1815,10 +1856,10 @@
     display: flex;
     align-items: center;
     width: 100%;
-    min-height: 58px;
-    gap: 0.5rem;
-    padding: 0 6px 0 14px;
-    border-radius: 16px;
+    min-height: 48px;
+    gap: 0.42rem;
+    padding: 0 5px 0 11px;
+    border-radius: 13px;
     border: 1px solid rgba(255, 255, 255, 0.04);
     background: rgba(255, 255, 255, 0.022);
     box-shadow: none;
@@ -1842,17 +1883,46 @@
 
 .local-engine-field-row--model-path .local-engine-input,
 .local-engine-field-row--extra-args.full-width .local-engine-extra-args-input {
-    min-height: 58px;
-    padding: 0 0.55rem;
+    min-height: 46px;
+    padding: 0 0.45rem;
     border: none !important;
     background: transparent !important;
 }
 
+.local-engine-section--core .local-engine-field-row--context-size .local-engine-input-row,
+.local-engine-section--core
+    .local-engine-field-row--llamacpp-system-prompt
+    .local-engine-input-row {
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+.local-engine-section--core .local-engine-field-row--context-size .local-engine-input {
+    min-height: 42px;
+    padding: 0.48rem 0.78rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.022) !important;
+    border: 1px solid rgba(255, 255, 255, 0.038) !important;
+    border-radius: 14px;
+}
+
+.local-engine-section--core
+    .local-engine-field-row--llamacpp-system-prompt
+    .local-engine-input--textarea {
+    min-height: 72px;
+    padding: 0.72rem 0.85rem;
+    background: rgba(255, 255, 255, 0.022) !important;
+    border: 1px solid rgba(255, 255, 255, 0.038) !important;
+    border-radius: 14px;
+}
+
 .local-engine-field-row--model-path .local-engine-browse-btn {
     width: auto;
-    min-width: 140px;
-    min-height: 42px;
-    height: 42px;
+    min-width: 118px;
+    min-height: 36px;
+    height: 36px;
     border-radius: var(--module-button-radius);
     border: 1px solid var(--premium-purple-border) !important;
     background: var(--premium-purple-bg) !important;
@@ -1942,9 +2012,33 @@
 
 .local-engine-profile-grid {
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 0.85rem;
+    gap: 0.75rem;
 }
 
 .local-engine-profile-card {
-    min-height: 112px;
+    min-height: 108px;
+    justify-content: center;
+}
+
+.local-engine-profile-card .ai-model-card-copy {
+    flex: 0;
+    justify-content: center;
+}
+
+.local-engine-profile-card .model-name {
+    margin-bottom: 0;
+    overflow-wrap: anywhere;
+}
+
+.local-engine-profile-card .model-desc {
+    overflow-wrap: anywhere;
+}
+
+.local-engine-profile-card .ai-model-card-action {
+    position: absolute;
+    left: 0.85rem;
+    right: 0.85rem;
+    bottom: 0.72rem;
+    width: auto;
+    margin: 0;
 }

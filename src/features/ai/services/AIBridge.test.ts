@@ -615,11 +615,10 @@ describe('AIBridge', () => {
             expect(mockInvoke).toHaveBeenCalledWith('get_chat_history', expect.any(Object));
         });
 
-        it('should return empty array on error', async () => {
+        it('should surface history load errors', async () => {
             mockInvoke.mockRejectedValueOnce(new Error('History failed'));
 
-            const history = await aiBridge.getHistory();
-            expect(history).toEqual([]);
+            await expect(aiBridge.getHistory()).rejects.toThrow('History failed');
         });
 
         it('should return empty array in web mode', async () => {

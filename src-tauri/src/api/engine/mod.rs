@@ -73,7 +73,17 @@ pub fn check_engine_installed(engine_id: String, binary_name: Option<String>) ->
 #[specta::specta]
 /// Deletes an Axelate-managed engine from local storage.
 #[allow(clippy::needless_pass_by_value)] // Tauri commands require owned params
-pub async fn delete_engine(engine_id: String) -> Result<(), AppError> {
+pub async fn delete_engine(
+    engine_id: String,
+    engine_manager: State<'_, Arc<EngineManager>>,
+) -> Result<(), AppError> {
+    let engine_id = canonical_engine_id(&engine_id).to_string();
+    if engine_manager.is_engine_running(&engine_id).await {
+        return Err(AppError::Validation(format!(
+            "Cannot delete engine '{engine_id}' while it is running"
+        )));
+    }
+
     crate::domain::engine::detector::delete_installed_engine(&engine_id).await
 }
 
@@ -153,7 +163,7 @@ pub async fn set_engine_config(
         .await
         .ok_or_else(|| AppError::Config(format!("Unknown engine: {}", config.engine_id)))?;
 
-    let mut map = load_engine_config_map().await.unwrap_or_default();
+    let mut map = load_engine_config_map().await?;
     let normalized = merge_user_engine_config(&def, &normalize_engine_config(config));
     map.insert(normalized.engine_id.clone(), normalized);
     save_engine_config_map(&map).await

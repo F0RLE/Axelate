@@ -223,9 +223,19 @@ impl ArchiveExtractor {
         let extraction_path = TEMP_DIR.join(extraction_id);
 
         if extraction_path.exists() {
-            fs::remove_dir_all(&extraction_path).ok();
+            fs::remove_dir_all(&extraction_path).map_err(|error| {
+                AppError::Io(format!(
+                    "Failed to remove stale extraction directory '{}': {error}",
+                    extraction_path.display()
+                ))
+            })?;
         }
-        fs::create_dir_all(&extraction_path).map_err(|e| AppError::Io(e.to_string()))?;
+        fs::create_dir_all(&extraction_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to create extraction directory '{}': {error}",
+                extraction_path.display()
+            ))
+        })?;
 
         Ok(extraction_path)
     }
@@ -577,7 +587,12 @@ impl ArchiveExtractor {
             }
 
             if file.name().ends_with('/') {
-                fs::create_dir_all(&outpath).ok();
+                fs::create_dir_all(&outpath).map_err(|error| {
+                    format!(
+                        "Failed to create extraction directory {}: {error}",
+                        outpath.display()
+                    )
+                })?;
             } else {
                 Self::extract_zip_file_entry(
                     &mut file,
@@ -642,7 +657,12 @@ impl ArchiveExtractor {
         if let Some(parent) = outpath.parent()
             && !parent.exists()
         {
-            fs::create_dir_all(parent).ok();
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "Failed to create extraction directory {}: {error}",
+                    parent.display()
+                )
+            })?;
         }
 
         let u_size = file.size();
@@ -696,9 +716,18 @@ impl ArchiveExtractor {
             "version": release_tag.unwrap_or("unknown"),
         });
         let manifest_path = extraction_path.join("metadata.json");
-        if let Ok(manifest_file) = fs::File::create(manifest_path) {
-            let _ = serde_json::to_writer_pretty(manifest_file, &manifest);
-        }
+        let manifest_file = fs::File::create(&manifest_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to create install metadata {}: {error}",
+                manifest_path.display()
+            ))
+        })?;
+        serde_json::to_writer_pretty(manifest_file, &manifest).map_err(|error| {
+            AppError::Serialization(format!(
+                "Failed to write install metadata {}: {error}",
+                manifest_path.display()
+            ))
+        })?;
 
         let backup_path = TEMP_DIR.join(format!("{module_id}_backup_{}", uuid::Uuid::new_v4()));
 
@@ -710,7 +739,14 @@ impl ArchiveExtractor {
 
         if let Err(e) = fs::rename(extraction_path, &final_path) {
             if backup_path.exists() {
-                let _ = fs::rename(&backup_path, &final_path);
+                if let Err(restore_error) = fs::rename(&backup_path, &final_path) {
+                    tracing::error!(
+                        module_id,
+                        backup = %backup_path.display(),
+                        target = %final_path.display(),
+                        "Failed to restore previous module version after install failure: {restore_error}"
+                    );
+                }
             }
 
             return Err(AppError::Io(format!(

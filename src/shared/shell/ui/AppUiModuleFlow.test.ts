@@ -15,6 +15,8 @@ describe('AppUiModuleFlow', () => {
     const modalManager = {
         isAppSelectionOpen: vi.fn(),
         isViewingCategory: vi.fn(),
+        closeAppSelection: vi.fn(),
+        openAppSelection: vi.fn(),
         refreshCurrentSelection: vi.fn(),
     };
 
@@ -117,8 +119,24 @@ describe('AppUiModuleFlow', () => {
     it('resets download button and shows a toast after download errors', () => {
         const btn = document.createElement('button');
         btn.className = 'download-btn downloading indeterminate';
+        btn.innerHTML = `
+            <span class="download-pct"></span>
+            <span class="download-label" style="display:none"></span>
+        `;
 
         flow.onModalDownloadError(btn, new Error('broken'));
+
+        expect(btn.classList.contains('downloading')).toBe(false);
+        expect(btn.querySelector<HTMLElement>('.download-pct')?.style.display).toBe('none');
+        expect(btn.querySelector<HTMLElement>('.download-label')?.textContent).toBe('Download');
+        expect(showToast).toHaveBeenCalledWith('Download failed', 'error');
+    });
+
+    it('falls back to default download error text for non-error rejections', () => {
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading indeterminate';
+
+        flow.onModalDownloadError(btn, 'network down');
 
         expect(btn.classList.contains('downloading')).toBe(false);
         expect(showToast).toHaveBeenCalledWith('Download failed', 'error');

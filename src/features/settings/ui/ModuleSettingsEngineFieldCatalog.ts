@@ -26,6 +26,25 @@ export type ImageEngineFieldGroups = {
 };
 
 export class ModuleSettingsEngineFieldCatalog {
+    public buildComputeModeField(t: TranslateFn): EngineFieldDefinition {
+        return {
+            label: t('ui.settings.engine.compute_mode', 'Compute Device'),
+            key: 'compute_mode',
+            type: 'select',
+            isEngineConfig: true,
+            options: ['gpu', 'cpu'],
+            optionLabels: {
+                gpu: t('ui.settings.engine.compute_gpu', 'GPU'),
+                cpu: t('ui.settings.engine.compute_cpu', 'CPU'),
+            },
+            defaultValue: 'gpu',
+            description: t(
+                'ui.settings.engine.compute_mode_hint',
+                'Choose whether this engine starts on the GPU or CPU.',
+            ),
+        };
+    }
+
     public buildCoreModelField(
         t: TranslateFn,
         modelPlaceholder: string,

@@ -56,12 +56,12 @@ export class Core {
         await this._assembly.lifecycleController.runInit();
     }
 
-    public destroy(): void {
+    public async destroy(): Promise<void> {
         if (this._isDestroyed) return;
         this._isDestroyed = true;
         this._isInitialized = false;
         this._initPromise = null;
-        this._assembly.lifecycleController.destroy();
+        await this._assembly.lifecycleController.destroy();
     }
 }
 bindCoreEntry(() => new Core(), tracer);

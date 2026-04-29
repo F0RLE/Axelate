@@ -1,4 +1,9 @@
-import type { IApp, IModuleDownloadState } from '../types/coreTypes';
+import type {
+    IApp,
+    IModuleDownloadState,
+    ReleaseDownloadOptions,
+    ReleaseDownloadSelection,
+} from '../types/coreTypes';
 import type { DownloadModuleOutcome, ModuleService } from './ModuleService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
@@ -30,7 +35,10 @@ export class ModulePlatformService {
      * Downloads a module.
      * @param app The module to download.
      */
-    public async download(app: IApp): Promise<DownloadModuleOutcome> {
+    public async download(
+        app: IApp,
+        releaseSelection?: ReleaseDownloadSelection | null,
+    ): Promise<DownloadModuleOutcome> {
         this._tracer.info(`[ModulePlatformService] Downloading: ${app.id}`);
 
         if (app.repoUrl === undefined || app.repoUrl === '') {
@@ -38,7 +46,21 @@ export class ModulePlatformService {
         }
 
         const url: string = app.repoUrl;
-        return await this._moduleService.downloadModule(app.id, url, app.expectedHash, app.dlType);
+        return await this._moduleService.downloadModule(
+            app.id,
+            url,
+            app.expectedHash,
+            app.dlType,
+            releaseSelection,
+        );
+    }
+
+    public async getReleaseDownloadOptions(app: IApp): Promise<ReleaseDownloadOptions | null> {
+        if (app.repoUrl === undefined || app.repoUrl === '' || app.dlType !== 'release') {
+            return null;
+        }
+
+        return await this._moduleService.getReleaseDownloadOptions(app.id, app.repoUrl);
     }
 
     /**

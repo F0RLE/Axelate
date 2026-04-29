@@ -632,7 +632,7 @@ fn clear_module_runtime_logs() {
 pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuard, String> {
     let log_dir = &*crate::utils::paths::LOG_DIR;
     std::fs::create_dir_all(log_dir).map_err(|e| e.to_string())?;
-    clear_startup_log_files(log_dir);
+    clear_startup_log_files(log_dir).map_err(|e| e.to_string())?;
 
     // Keep the launcher log easy to open from the UI and external editors.
     let file_appender = tracing_appender::rolling::never(log_dir, "axelate.log");
@@ -672,9 +672,10 @@ pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuar
     Ok(guard)
 }
 
-fn clear_startup_log_files(log_dir: &Path) {
-    let _ = fs::write(log_dir.join("axelate.log"), "");
+fn clear_startup_log_files(log_dir: &Path) -> std::io::Result<()> {
+    fs::write(log_dir.join("axelate.log"), "")?;
     clear_module_runtime_logs();
+    Ok(())
 }
 
 impl RuntimeLogCollector {
@@ -806,7 +807,12 @@ impl RuntimeLogCollector {
             for log_file in log_files.filter_map(Result::ok) {
                 let path = log_file.path();
                 if Self::is_log_file(&path) {
-                    let _ = fs::write(path, "");
+                    if let Err(error) = fs::write(&path, "") {
+                        tracing::warn!(
+                            path = %path.display(),
+                            "Failed to clear runtime log file: {error}"
+                        );
+                    }
                 }
             }
         }

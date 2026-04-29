@@ -230,13 +230,18 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     /// Gracefully stops a module with escalation
-    pub async fn stop(&self, manifest: &ModuleManifest) -> ControlResponse {
+    pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
         tracing::info!("Stopping module: {}", self.module_id);
         let script_entry_path = self.resolve_script_entry_path(manifest);
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
-            let _ = self.run_command(stop_cmd, Duration::from_secs(5)).await;
+            if let Err(error) = self.run_command(stop_cmd, Duration::from_secs(5)).await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Module stop script failed, continuing with process termination: {error}"
+                );
+            }
         }
 
         // 2. Attempt soft termination and wait
@@ -258,7 +263,12 @@ impl<'a> LifecycleExecutor<'a> {
             // Wait with timeout
             if timeout(Duration::from_secs(5), child.wait()).await.is_err() {
                 tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
-                let _ = child.kill().await;
+                if let Err(error) = child.kill().await {
+                    tracing::warn!(
+                        module_id = %self.module_id,
+                        "Failed to force-kill registered module process: {error}"
+                    );
+                }
             }
         }
 
@@ -297,16 +307,44 @@ impl<'a> LifecycleExecutor<'a> {
                     && let Ok(pid) = pid_str.trim().parse::<usize>()
                 {
                     // Safe kill_orphan now includes existence check
-                    let _ = crate::domain::modules::controller::process::kill_orphan(pid);
+                    if let Err(error) =
+                        crate::domain::modules::controller::process::kill_orphan(pid)
+                    {
+                        tracing::warn!(
+                            module_id = %self.module_id,
+                            pid,
+                            "Failed to force-kill orphan module process: {error}"
+                        );
+                    }
                 }
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        // 4. Cleanup PID file (Wait loop already verified termination)
-        let _ = std::fs::remove_file(self.module_path.join("module.pid"));
+        if self
+            .controller
+            .is_running(&self.module_id, self.module_path)
+            .await
+        {
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Module {} failed to stop", self.module_id),
+            });
+        }
 
-        ControlResponse {
+        // 4. Cleanup PID file (Wait loop already verified termination)
+        match std::fs::remove_file(self.module_path.join("module.pid")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to remove module PID file after stop: {error}"
+                );
+            }
+        }
+
+        Ok(ControlResponse {
             success: process_scan_error.is_none(),
             message: process_scan_error.map_or_else(
                 || format!("Module {} stopped", self.module_id),
@@ -318,7 +356,7 @@ impl<'a> LifecycleExecutor<'a> {
                 },
             ),
             status: Some("stopped".to_string()),
-        }
+        })
     }
 
     fn resolve_script_entry_path(&self, manifest: &ModuleManifest) -> Option<std::path::PathBuf> {
@@ -348,21 +386,52 @@ impl<'a> LifecycleExecutor<'a> {
         );
 
         if let Some(mut child) = self.controller.unregister(&self.module_id) {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
+            if let Err(error) = child.kill().await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to kill registered duplicate module child: {error}"
+                );
+            }
+            if let Err(error) = child.wait().await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to wait registered duplicate module child after kill: {error}"
+                );
+            }
         }
 
         for pid in matching_pids {
-            let _ = process::kill_orphan(pid);
+            process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to clean duplicate module process {pid} for '{}': {error}",
+                    self.module_id
+                ),
+            })?;
         }
 
-        let _ = std::fs::remove_file(self.module_path.join("module.pid"));
+        match std::fs::remove_file(self.module_path.join("module.pid")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to remove stale module PID file after duplicate cleanup: {error}"
+                );
+            }
+        }
         Ok(None)
     }
 
     async fn kill_matching_script_processes(&self, entry_path: &Path) -> Result<(), AppError> {
         for pid in self.find_matching_script_processes(entry_path).await? {
-            let _ = process::kill_orphan(pid);
+            process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to kill module process {pid} for '{}': {error}",
+                    self.module_id
+                ),
+            })?;
         }
         Ok(())
     }

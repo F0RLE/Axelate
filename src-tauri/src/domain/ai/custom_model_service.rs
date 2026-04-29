@@ -53,7 +53,7 @@ pub struct CustomModelManager;
 impl CustomModelManager {
     /// Retrieves all configured custom models.
     pub fn get_all() -> Result<Vec<CustomModel>, AppError> {
-        let config = CustomModelConfigRepository::load().unwrap_or_default();
+        let config = CustomModelConfigRepository::load()?;
         Ok(config.models)
     }
 
@@ -64,7 +64,7 @@ impl CustomModelManager {
         name: String,
         base_model_id: String,
     ) -> Result<(), AppError> {
-        let mut config = CustomModelConfigRepository::load().unwrap_or_default();
+        let mut config = CustomModelConfigRepository::load()?;
 
         // Idempotency check
         if config
@@ -92,7 +92,7 @@ impl CustomModelManager {
 
     /// Removes a custom model by its ID.
     pub fn remove(id: &str) -> Result<(), AppError> {
-        let mut config = CustomModelConfigRepository::load().unwrap_or_default();
+        let mut config = CustomModelConfigRepository::load()?;
         config.models.retain(|m| m.id != id);
         CustomModelConfigRepository::save(&config)
     }

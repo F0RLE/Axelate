@@ -103,31 +103,50 @@ export class AIBridgeRuntime {
             return [];
         }
 
-        const unlistenLog = await args.context.tauriProvider.listen<{
-            engine_id: string;
-            line: string;
-        }>('ai:engine:log', (payload) => {
-            const line = payload.line;
-            if (!isActiveEngineLog(args.getActiveProviderId(), payload.engine_id)) {
-                return;
+        const cleanup: Array<() => void> = [];
+        try {
+            const unlistenLog = await args.context.tauriProvider.listen<{
+                engine_id: string;
+                line: string;
+            }>('ai:engine:log', (payload) => {
+                const line = payload.line;
+                if (!isActiveEngineLog(args.getActiveProviderId(), payload.engine_id)) {
+                    return;
+                }
+
+                const progressChunk = buildImageGenerationProgressChunk(line);
+                if (progressChunk !== null) {
+                    args.events.broadcastReplaceChunk(progressChunk);
+                }
+            });
+            cleanup.push(unlistenLog);
+
+            cleanup.push(
+                args.transport.onStream((payload: string) => {
+                    args.broadcastChunk(payload);
+                }),
+            );
+
+            cleanup.push(
+                args.transport.onThought((payload: string) => {
+                    args.broadcastThought(payload);
+                }),
+            );
+
+            this._tracer.debug('[AIBridge] Streaming active (IPC via Transport)');
+            return cleanup;
+        } catch (error) {
+            for (const dispose of cleanup.splice(0).reverse()) {
+                try {
+                    dispose();
+                } catch (cleanupError) {
+                    this._tracer.warn(
+                        `[AIBridge] Failed to cleanup partial stream subscription: ${String(cleanupError)}`,
+                    );
+                }
             }
-
-            const progressChunk = buildImageGenerationProgressChunk(line);
-            if (progressChunk !== null) {
-                args.events.broadcastReplaceChunk(progressChunk);
-            }
-        });
-
-        const unlistenChunk = args.transport.onStream((payload: string) => {
-            args.broadcastChunk(payload);
-        });
-
-        const unlistenThought = args.transport.onThought((payload: string) => {
-            args.broadcastThought(payload);
-        });
-
-        this._tracer.debug('[AIBridge] Streaming active (IPC via Transport)');
-        return [unlistenLog, unlistenChunk, unlistenThought];
+            throw error;
+        }
     }
 
     public stopProviderEngine(context: AIBridgeContext | null): void {

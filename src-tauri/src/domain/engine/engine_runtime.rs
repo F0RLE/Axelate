@@ -105,6 +105,9 @@ pub(super) fn spawn_log_reader<R>(
         }
 
         if !current_line.is_empty() {
+            if let Some(ref mut f) = file {
+                write_engine_log_line(f, &current_line);
+            }
             let trimmed = current_line.trim();
             if is_progress_log_line(trimmed) {
                 emitter.emit_log(&engine_id, trimmed);
@@ -169,4 +172,45 @@ pub(super) async fn is_endpoint_healthy(endpoint: &str) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::expect_used)]
+
+    use super::spawn_log_reader;
+    use crate::domain::engine::events::NoopEmitter;
+    use std::io::Write;
+    use std::sync::Arc;
+    use tokio::io::AsyncWriteExt;
+
+    #[tokio::test]
+    async fn log_reader_flushes_trailing_line_without_newline() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let log_path = temp_dir.path().join("stderr.log");
+        let file = std::fs::File::create(&log_path).expect("log file");
+        let (mut writer, reader) = tokio::io::duplex(64);
+
+        spawn_log_reader(
+            reader,
+            Some(file),
+            Arc::new(NoopEmitter),
+            "llamacpp".to_string(),
+        );
+
+        writer
+            .write_all(b"fatal out of memory")
+            .await
+            .expect("write log chunk");
+        drop(writer);
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&log_path)
+            .expect("reopen log");
+        file.flush().expect("flush log");
+        let content = std::fs::read_to_string(log_path).expect("read log");
+        assert!(content.contains("fatal out of memory"));
+    }
 }

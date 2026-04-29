@@ -46,6 +46,9 @@ export class ChatHistoryController {
         if (this._historyLoaded && this._loadedSessionId === sessionId) return;
         if (this._historyLoadInFlight !== null) {
             await this._historyLoadInFlight;
+            if (this._loadedSessionId !== this._options.aiBridge.getSessionId()) {
+                await this.ensureHistoryLoaded();
+            }
             return;
         }
 

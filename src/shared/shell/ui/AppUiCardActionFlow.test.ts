@@ -85,7 +85,6 @@ describe('AppUiCardActionFlow', () => {
         platformService.delete.mockResolvedValue(undefined);
 
         await flow.tryDownloadAction(event, app, 'services');
-        await Promise.resolve();
 
         expect(deps.pauseDownload).toHaveBeenCalledWith('svc');
         expect(btn.dataset['downloadStatus']).toBe('paused');
@@ -120,7 +119,6 @@ describe('AppUiCardActionFlow', () => {
         const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
 
         await flow.tryDownloadAction(event, app, 'services');
-        await Promise.resolve();
 
         expect(deps.resumeDownload).toHaveBeenCalledWith('svc');
         expect(btn.dataset['downloadStatus']).toBe('downloading');
@@ -151,7 +149,6 @@ describe('AppUiCardActionFlow', () => {
         const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
 
         await flow.tryDownloadAction(event, app, 'services');
-        await Promise.resolve();
 
         expect(deps.cancelDownload).toHaveBeenCalledWith('svc');
         expect(platformService.delete).not.toHaveBeenCalled();
@@ -159,7 +156,69 @@ describe('AppUiCardActionFlow', () => {
         expect(deps.restoreDownloadButtonLabel).toHaveBeenCalledWith(btn);
     });
 
-    it('does not start a download from a plain card click', async () => {
+    it('keeps active download button state when pause is rejected by backend', async () => {
+        deps.pauseDownload.mockResolvedValue(false);
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading';
+        btn.dataset['resumeLabel'] = 'Resume';
+        btn.innerHTML = '<span class="download-hover-action-pause">Pause</span>';
+        btn.getBoundingClientRect = vi.fn(
+            () =>
+                ({
+                    left: 0,
+                    width: 100,
+                }) as DOMRect,
+        );
+        card.appendChild(btn);
+        const event = {
+            stopPropagation: vi.fn(),
+            currentTarget: card,
+            target: btn,
+            clientX: 20,
+        } as unknown as MouseEvent;
+        const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
+
+        await flow.tryDownloadAction(event, app, 'services');
+
+        expect(btn.dataset['downloadStatus']).toBeUndefined();
+        expect(btn.querySelector('.download-hover-action-pause')?.textContent).toBe('Pause');
+        expect(deps.resetDownloadButton).not.toHaveBeenCalled();
+        expect(deps.showToast).toHaveBeenCalledWith('Download control failed', 'warning');
+    });
+
+    it('keeps active download button state when cancel is rejected by backend', async () => {
+        deps.cancelDownload.mockResolvedValue(false);
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading';
+        btn.getBoundingClientRect = vi.fn(
+            () =>
+                ({
+                    left: 0,
+                    width: 100,
+                }) as DOMRect,
+        );
+        card.appendChild(btn);
+        const event = {
+            stopPropagation: vi.fn(),
+            currentTarget: card,
+            target: btn,
+            clientX: 75,
+        } as unknown as MouseEvent;
+        const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
+
+        await flow.tryDownloadAction(event, app, 'services');
+
+        expect(deps.cancelDownload).toHaveBeenCalledWith('svc');
+        expect(deps.resetDownloadButton).not.toHaveBeenCalled();
+        expect(deps.restoreDownloadButtonLabel).not.toHaveBeenCalled();
+        expect(deps.showToast).toHaveBeenCalledWith('Download control failed', 'warning');
+    });
+
+    it('starts a download from a plain uninstalled card click', async () => {
         const card = document.createElement('div');
         card.className = 'app-card';
         const btn = document.createElement('button');
@@ -176,7 +235,31 @@ describe('AppUiCardActionFlow', () => {
 
         await flow.handleAppCardClick(event, app, 'ai_text');
 
+        expect(event.stopPropagation).toHaveBeenCalled();
+        expect(deps.handleDownloadModule).toHaveBeenCalledWith(app, 'ai_text', btn);
+        expect(deps.performSelectionAction).not.toHaveBeenCalled();
+    });
+
+    it('ignores plain card clicks while download is already active', async () => {
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading';
+        card.appendChild(btn);
+
+        const event = {
+            stopPropagation: vi.fn(),
+            currentTarget: card,
+            target: card,
+            clientX: 20,
+        } as unknown as MouseEvent;
+        const app = { id: 'llamacpp', installed: false, repoUrl: 'https://repo' } as IApp;
+
+        await flow.handleAppCardClick(event, app, 'ai_text');
+
         expect(deps.handleDownloadModule).not.toHaveBeenCalled();
+        expect(deps.pauseDownload).not.toHaveBeenCalled();
+        expect(deps.cancelDownload).not.toHaveBeenCalled();
         expect(deps.performSelectionAction).not.toHaveBeenCalled();
     });
 

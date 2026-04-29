@@ -51,6 +51,7 @@ type ModuleSettingsEngineRenderOptions = {
         modelPlaceholder: string,
         isImage: boolean,
     ) => EngineFieldDefinition;
+    getComputeModeField: (translate: TranslateFn) => EngineFieldDefinition;
     getImageExtraArgsField: (translate: TranslateFn) => EngineFieldDefinition;
 };
 
@@ -79,7 +80,9 @@ export class ModuleSettingsEngineRenderFlow {
             modelPlaceholder,
             translate: options.translate,
             getCoreModelField: options.getCoreModelField,
+            getComputeModeField: options.getComputeModeField,
             getImageExtraArgsField: options.getImageExtraArgsField,
+            getTextFields: options.getTextFields,
         });
 
         if (isImage) {
@@ -93,13 +96,7 @@ export class ModuleSettingsEngineRenderFlow {
             return;
         }
 
-        this._renderTextFields({
-            container,
-            appId: app.id,
-            config,
-            translate: options.translate,
-            getTextFields: options.getTextFields,
-        });
+        this._deps.syncPromptTextareaHeights(corePrimary);
     }
 
     private _renderCoreFields(options: {
@@ -110,22 +107,32 @@ export class ModuleSettingsEngineRenderFlow {
         modelPlaceholder: string;
         translate: TranslateFn;
         getCoreModelField: ModuleSettingsEngineRenderOptions['getCoreModelField'];
+        getComputeModeField: ModuleSettingsEngineRenderOptions['getComputeModeField'];
         getImageExtraArgsField: ModuleSettingsEngineRenderOptions['getImageExtraArgsField'];
+        getTextFields: ModuleSettingsEngineRenderOptions['getTextFields'];
     }): void {
         const coreField = options.getCoreModelField(
             options.translate,
             options.modelPlaceholder,
             options.isImage,
         );
+        const computeField = options.getComputeModeField(options.translate);
+
+        this._deps.renderFieldRow(options.container, {
+            ...coreField,
+            isFile: true,
+            isImage: options.isImage,
+            appId: options.appId,
+            config: options.config,
+        });
+
+        this._deps.renderFieldRow(options.container, {
+            ...computeField,
+            appId: options.appId,
+            config: options.config,
+        });
 
         if (options.isImage) {
-            this._deps.renderFieldRow(options.container, {
-                ...coreField,
-                isFile: true,
-                isImage: true,
-                appId: options.appId,
-                config: options.config,
-            });
             this._deps.renderModelProfiles(options.container, options.appId, options.config);
 
             this._deps.renderFieldRow(options.container, {
@@ -136,12 +143,12 @@ export class ModuleSettingsEngineRenderFlow {
             return;
         }
 
-        this._deps.renderFieldRow(options.container, {
-            ...coreField,
-            isFile: true,
-            isImage: false,
-            appId: options.appId,
-            config: options.config,
+        options.getTextFields(options.translate).forEach((field) => {
+            this._deps.renderFieldRow(options.container, {
+                ...field,
+                appId: options.appId,
+                config: options.config,
+            });
         });
     }
 
