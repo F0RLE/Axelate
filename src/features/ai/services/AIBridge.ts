@@ -184,6 +184,10 @@ export class AIBridge implements IAIBridge {
     public async stopEngineSlot(capability: 'text' | 'image' | 'vision'): Promise<void> {
         const providerId = this._manager.activeProviderId;
         await this._runtime.stopEngineSlot(this._context, capability);
+        if (this._manager.activeProviderId !== providerId) {
+            return;
+        }
+
         if (
             providerId !== null &&
             ((capability === 'image' &&

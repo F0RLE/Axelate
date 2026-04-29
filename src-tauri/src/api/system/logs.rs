@@ -90,9 +90,10 @@ pub fn clear_logs() -> Result<(), AppError> {
 /// Clears log entries and files for a single console view.
 #[allow(clippy::needless_pass_by_value)]
 pub fn clear_console_logs(view_id: String) -> Result<(), AppError> {
-    let target = resolve_console_log_target(&view_id);
-    logs::clear_logs_for_view(&view_id);
-    clear_console_log_target(&view_id, &target)?;
+    let canonical_view_id = canonical_console_view_id(&view_id);
+    let target = resolve_console_log_target(&canonical_view_id);
+    logs::clear_logs_for_view(&canonical_view_id);
+    clear_console_log_target(&canonical_view_id, &target)?;
     Ok(())
 }
 

@@ -70,7 +70,11 @@ function bootCoreOnce(createCore: CoreFactory, tracer: EntryLogger): void {
             if (state.activeCoreInstance === coreInstance) {
                 clearBootState();
             }
-            coreInstance.destroy();
+            try {
+                coreInstance.destroy();
+            } catch (destroyError: unknown) {
+                tracer.error(`[Core] Destroy after boot failure failed: ${String(destroyError)}`);
+            }
             tracer.error(`[Core] Boot failed: ${String(error)}`);
         });
     } catch (error: unknown) {

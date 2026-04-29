@@ -115,7 +115,7 @@ export class ConsoleLogService {
     }
 
     public getLogsForView(viewId: string): ILogEntry[] {
-        return this._logsByView.get(this._canonicalViewId(viewId)) ?? [];
+        return [...(this._logsByView.get(this._canonicalViewId(viewId)) ?? [])];
     }
 
     public async getAvailableViews(): Promise<IConsoleLogView[]> {

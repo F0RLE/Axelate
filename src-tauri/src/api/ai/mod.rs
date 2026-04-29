@@ -453,9 +453,12 @@ pub async fn send_chat_message(
     let mut request = request;
     let request_id = ensure_request_id(&mut request);
     let model = request.model.clone();
-    fill_chat_request_api_key(&mut request, &config_service).await?;
-
     let cancellation = cancellation_registry.register(&request_id);
+    if let Err(error) = fill_chat_request_api_key(&mut request, &config_service).await {
+        cancellation_registry.clear(&request_id);
+        return Err(error);
+    }
+
     let sink = create_stream_sink(request_id.clone(), chat_channel, thought_channel);
     let cancel_sink = Arc::clone(&sink);
 

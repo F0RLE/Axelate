@@ -79,12 +79,12 @@ export class AIBridgeMessageController {
 
     public async prepareImagePrompt(text: string): Promise<IBridgeResponse> {
         if (this._deps.manager.activeProviderId === null) {
-            return this._handleMissingProvider('service');
+            return this._silentMissingProviderResponse();
         }
 
         await this._deps.manager.refreshActiveApiKey();
         if (this._deps.manager.apiKey === null && this._deps.manager.isActive() === false) {
-            return this._handleMissingApiKey('service');
+            return this._silentMissingApiKeyResponse();
         }
 
         try {
@@ -122,6 +122,20 @@ export class AIBridgeMessageController {
             this._deps.tracer.error('[AIBridge] Silent prompt preparation failed:', error);
             return { ok: false, error: errorMsg };
         }
+    }
+
+    private _silentMissingProviderResponse(): IBridgeResponse {
+        return {
+            ok: false,
+            error: this._deps.translate('ui.ai.no_provider', 'No AI provider selected'),
+        };
+    }
+
+    private _silentMissingApiKeyResponse(): IBridgeResponse {
+        return {
+            ok: false,
+            error: this._deps.translate('ui.ai.missing_api_key', 'API key missing'),
+        };
     }
 
     private async _sendImageMessage(

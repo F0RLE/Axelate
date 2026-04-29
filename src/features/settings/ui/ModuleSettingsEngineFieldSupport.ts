@@ -572,7 +572,19 @@ export function tokenizeEngineExtraArgs(raw: string): string[] {
     let current = '';
     let quote: '"' | "'" | null = null;
 
-    for (const char of raw) {
+    for (let index = 0; index < raw.length; index += 1) {
+        const char = raw[index] ?? '';
+        if (quote !== null && char === '\\') {
+            const nextChar = raw[index + 1];
+            if (nextChar === quote || nextChar === '\\') {
+                current += nextChar;
+                index += 1;
+            } else {
+                current += char;
+            }
+            continue;
+        }
+
         if ((char === '"' || char === "'") && (quote === null || quote === char)) {
             quote = quote === null ? char : null;
             continue;

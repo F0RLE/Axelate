@@ -37,6 +37,9 @@ pub(super) fn retry_delay(attempt: u32, status: StatusCode) -> std::time::Durati
     };
     let backoff_multiplier = 2u64.saturating_pow(capped_attempt.saturating_sub(1));
     let jitter_ms = rand::random_range(0..150u64);
+    let delay_ms = base_ms
+        .saturating_mul(backoff_multiplier)
+        .saturating_add(jitter_ms);
 
-    std::time::Duration::from_millis(base_ms * backoff_multiplier + jitter_ms)
+    std::time::Duration::from_millis(delay_ms)
 }

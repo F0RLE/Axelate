@@ -243,7 +243,7 @@ export class ChatGenerationController {
         }
 
         if (replyText !== '') {
-            this.handleTextReply(response, replyText, streamingHandle);
+            await this.handleTextReply(response, replyText, streamingHandle);
             return;
         }
 
@@ -277,12 +277,12 @@ export class ChatGenerationController {
         );
     }
 
-    private handleTextReply(
+    private async handleTextReply(
         response: IChatResponse,
         replyText: string,
         streamingHandle?: StreamingMessageHandle | null,
-    ): void {
-        const tokens = this._resolveBackendCompletionTokens(response);
+    ): Promise<void> {
+        const tokens = await this._resolveBackendCompletionTokens(response, replyText);
         if (tokens > 0) {
             this._options.addContextTokens(tokens);
         }
@@ -296,10 +296,17 @@ export class ChatGenerationController {
         this._options.pushAssistantMessage(replyText, response.thought_signature);
     }
 
-    private _resolveBackendCompletionTokens(response: IChatResponse): number {
+    private async _resolveBackendCompletionTokens(
+        response: IChatResponse,
+        replyText: string,
+    ): Promise<number> {
         const completionTokens = response.usage?.completion_tokens;
         if (typeof completionTokens !== 'number' || !Number.isFinite(completionTokens)) {
-            return 0;
+            const estimatedTokens = await this._options.estimateReplyTokens(replyText);
+            if (!Number.isFinite(estimatedTokens)) {
+                return 0;
+            }
+            return Math.max(0, Math.trunc(estimatedTokens));
         }
 
         return Math.max(0, Math.trunc(completionTokens));
