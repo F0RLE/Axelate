@@ -529,6 +529,7 @@ describe('ModalManager lifecycle', () => {
         );
         expect(document.querySelector('.download-label')?.textContent).toBe('Download');
 
+        modalManager.openAppSelection('services', []);
         list.innerHTML = `<div class="app-card" data-app-id="svc"><button class="download-btn"></button></div>`;
         handleDownload.call(modalManager, {
             id: 'svc',
@@ -545,6 +546,8 @@ describe('ModalManager lifecycle', () => {
                 expectedHash: 'abc',
                 dlType: 'github',
             }),
+            'services',
+            expect.any(HTMLButtonElement),
         );
     });
 

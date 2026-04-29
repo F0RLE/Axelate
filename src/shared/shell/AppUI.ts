@@ -109,7 +109,8 @@ export class AppUI {
             this._cardRenderer,
             async (e, app, category) => await this._handleAppCardClick(e, app, category),
             (capability) => this._selectionState.get(`ai_${capability}`)?.id ?? null,
-            async (app) => await this._platformService.download(app),
+            async (app, category, btn) =>
+                await this._moduleFlow.handleDownloadModule(app, category, btn),
             async (app) => {
                 await this._platformService.cancelDownload(app.id);
             },
