@@ -400,7 +400,7 @@ impl<'a> LifecycleExecutor<'a> {
         &self,
         entry_path: &Path,
     ) -> Result<Option<usize>, AppError> {
-        let matching_pids = self.find_matching_script_processes(entry_path).await;
+        let matching_pids = self.find_matching_script_processes(entry_path).await?;
         if matching_pids.is_empty() {
             return Ok(None);
         }
@@ -460,7 +460,7 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     async fn kill_matching_script_processes(&self, entry_path: &Path) -> Result<(), AppError> {
-        for pid in self.find_matching_script_processes(entry_path).await {
+        for pid in self.find_matching_script_processes(entry_path).await? {
             process::kill_orphan(pid).map_err(|error| AppError::Internal {
                 request_id: None,
                 message: format!(
@@ -472,7 +472,10 @@ impl<'a> LifecycleExecutor<'a> {
         Ok(())
     }
 
-    async fn find_matching_script_processes(&self, entry_path: &Path) -> Vec<usize> {
+    async fn find_matching_script_processes(
+        &self,
+        entry_path: &Path,
+    ) -> Result<Vec<usize>, AppError> {
         let module_path = self.module_path.to_path_buf();
         let entry_path = entry_path.to_path_buf();
 
@@ -481,13 +484,19 @@ impl<'a> LifecycleExecutor<'a> {
         })
         .await
         {
-            Ok(pids) => pids,
+            Ok(pids) => Ok(pids),
             Err(error) => {
-                tracing::warn!(
+                tracing::error!(
                     "Failed to scan matching script module processes for {}: {error}",
                     self.module_id
                 );
-                Vec::new()
+                Err(AppError::Internal {
+                    request_id: None,
+                    message: format!(
+                        "Failed to scan module processes for '{}': {error}",
+                        self.module_id
+                    ),
+                })
             }
         }
     }

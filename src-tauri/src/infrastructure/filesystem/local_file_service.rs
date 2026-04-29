@@ -40,6 +40,18 @@ impl LocalFileService {
         drop(file);
 
         if let Err(first_error) = fs::rename(&tmp, path).await {
+            let retryable_replace = matches!(
+                first_error.kind(),
+                std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::PermissionDenied
+            );
+            if !retryable_replace {
+                let _ = fs::remove_file(&tmp).await;
+                return Err(AppError::Io(format!(
+                    "Failed to publish atomic write to '{}': rename failed: {first_error}",
+                    path.display()
+                )));
+            }
+
             if let Err(remove_error) = fs::remove_file(path).await
                 && remove_error.kind() != std::io::ErrorKind::NotFound
             {

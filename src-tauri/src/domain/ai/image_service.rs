@@ -108,7 +108,13 @@ async fn process_image_request_with_local_engine_access(
             &reply.role,
             None,
         );
-        sessions.force_save().await?;
+        if let Err(error) = sessions.force_save().await {
+            tracing::warn!(
+                session_id,
+                image_count = images.len(),
+                "Failed to persist generated image transcript: {error}"
+            );
+        }
     }
 
     Ok(ImageGenerationResponse {

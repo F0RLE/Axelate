@@ -147,7 +147,18 @@ pub(super) fn build_client(module_id: &str) -> Result<reqwest::Client, AppError>
         .user_agent("Axelate/1.0.0 (Tauri; Windows)")
         .timeout(std::time::Duration::from_secs(600));
 
-    if let Some(license) = crate::domain::license::storage::load_license()?
+    let loaded_license = match crate::domain::license::storage::load_license() {
+        Ok(license) => license,
+        Err(error) => {
+            tracing::warn!(
+                module_id = module_id,
+                "Failed to load license for download headers: {error}"
+            );
+            None
+        }
+    };
+
+    if let Some(license) = loaded_license
         && !license.key.is_empty()
     {
         tracing::info!("Injecting license key for module download: {module_id}");
@@ -192,7 +203,7 @@ pub(super) async fn download_file(
 
     let loaded_resume_metadata = match load_partial_metadata(task.dest_path).await {
         Ok(metadata) => metadata,
-        Err(error) => {
+        Err(AppError::Serialization(error)) => {
             tracing::warn!(
                 module_id = task.module_id,
                 path = %task.dest_path.display(),
@@ -201,6 +212,7 @@ pub(super) async fn download_file(
             remove_partial_metadata(task.dest_path).await?;
             None
         }
+        Err(error) => return Err(error),
     };
     let resume_metadata = loaded_resume_metadata.filter(|metadata| metadata.url == task.url);
     let mut existing_bytes = tokio::fs::metadata(task.dest_path)

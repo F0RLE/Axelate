@@ -556,6 +556,10 @@ fn handle_stream_json_line(
         .get("stop")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
+        || json
+            .get("done")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
     {
         state.saw_terminal_chunk = true;
     }

@@ -82,13 +82,6 @@ impl ChatSessionManager {
         SessionPersistence::flush_snapshot(snapshot)
     }
 
-    fn take_snapshot(&self) -> HashMap<String, ChatSession> {
-        self.sessions
-            .iter()
-            .map(|e| (e.key().clone(), e.value().clone()))
-            .collect()
-    }
-
     fn mark_dirty(&self) {
         if !self.persistence_available.load(Ordering::Relaxed) {
             tracing::warn!("Chat history changed while persistence is disabled; skipping save");
@@ -122,13 +115,10 @@ impl ChatSessionManager {
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 if dirty.swap(false, Ordering::AcqRel) {
                     let save_lock = Arc::clone(&save_lock);
-                    let snapshot: HashMap<String, ChatSession> = sessions
-                        .iter()
-                        .map(|e| (e.key().clone(), e.value().clone()))
-                        .collect();
+                    let sessions = Arc::clone(&sessions);
 
                     match tokio::task::spawn_blocking(move || {
-                        Self::flush_snapshot_locked(&save_lock, &snapshot)
+                        Self::flush_sessions_locked(&save_lock, &sessions)
                     })
                     .await
                     {
@@ -156,9 +146,9 @@ impl ChatSessionManager {
     /// Immediately saves all sessions to disk, bypassing the debounce timer.
     pub async fn force_save(&self) -> Result<(), crate::errors::AppError> {
         self.ensure_persistence_available()?;
-        let snapshot = self.take_snapshot();
         let save_lock = Arc::clone(&self.save_lock);
-        tokio::task::spawn_blocking(move || Self::flush_snapshot_locked(&save_lock, &snapshot))
+        let sessions = Arc::clone(&self.sessions);
+        tokio::task::spawn_blocking(move || Self::flush_sessions_locked(&save_lock, &sessions))
             .await
             .map_err(|e| crate::errors::AppError::Internal {
                 request_id: None,
@@ -171,7 +161,7 @@ impl ChatSessionManager {
     /// Synchronous save — intended for use in Tauri shutdown hooks (called from a blocking context).
     pub fn save_to_disk(&self) -> Result<(), crate::errors::AppError> {
         self.ensure_persistence_available()?;
-        Self::flush_snapshot_locked(&self.save_lock, &self.take_snapshot())
+        Self::flush_sessions_locked(&self.save_lock, &self.sessions)
     }
 
     fn ensure_persistence_available(&self) -> Result<(), crate::errors::AppError> {
@@ -494,9 +484,9 @@ impl SessionPersistence {
 }
 
 impl ChatSessionManager {
-    fn flush_snapshot_locked(
+    fn flush_sessions_locked(
         save_lock: &Mutex<()>,
-        snapshot: &HashMap<String, ChatSession>,
+        sessions: &DashMap<String, ChatSession>,
     ) -> Result<(), crate::errors::AppError> {
         let _guard = save_lock
             .lock()
@@ -504,7 +494,11 @@ impl ChatSessionManager {
                 request_id: None,
                 message: "Chat history save lock is poisoned".to_string(),
             })?;
-        Self::flush_snapshot(snapshot)
+        let snapshot: HashMap<String, ChatSession> = sessions
+            .iter()
+            .map(|e| (e.key().clone(), e.value().clone()))
+            .collect();
+        Self::flush_snapshot(&snapshot)
     }
 }
 

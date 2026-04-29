@@ -48,6 +48,7 @@ pub(super) async fn prepare_chat_dispatch(
         engine_manager,
         settings_service,
         local_engine_access,
+        &messages_context,
     )
     .await?
     {
@@ -165,6 +166,7 @@ async fn resolve_local_engine_request(
     engine_manager: &crate::domain::engine::manager::EngineManager,
     settings_service: &crate::infrastructure::config::settings::SettingsService,
     local_engine_access: LocalEngineAccess,
+    prepared_messages_context: &[ChatMessage],
 ) -> Result<Option<LocalEngineResolution>, crate::errors::AppError> {
     let Some(definition) = engine_manager.get_definition(&request.provider).await else {
         return Ok(None);
@@ -251,7 +253,7 @@ async fn resolve_local_engine_request(
                 base_url,
                 effective_model,
                 messages_context: local_messages_with_system_prompt(
-                    request.messages.clone(),
+                    prepared_messages_context.to_vec(),
                     settings_service,
                     &request.provider,
                 )

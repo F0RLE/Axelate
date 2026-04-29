@@ -64,25 +64,11 @@ pub async fn save_engine_config_map(map: &EngineConfigMap) -> Result<(), AppErro
     }
 
     if let Err(rename_error) = tokio::fs::rename(&tmp, path).await {
-        tracing::warn!(
-            "Atomic engine config rename failed ({rename_error}); retrying with replace fallback"
-        );
-        match tokio::fs::remove_file(path).await {
-            Ok(()) => {}
-            Err(error) if error.kind() == ErrorKind::NotFound => {}
-            Err(error) => {
-                cleanup_engine_config_tmp(&tmp).await;
-                return Err(AppError::Io(format!(
-                    "Failed to replace engine config after rename error ({rename_error}): {error}"
-                )));
-            }
-        }
-        if let Err(error) = tokio::fs::rename(&tmp, path).await {
-            cleanup_engine_config_tmp(&tmp).await;
-            return Err(AppError::Io(format!(
-                "Failed to publish engine config after rename error ({rename_error}): {error}"
-            )));
-        }
+        cleanup_engine_config_tmp(&tmp).await;
+        return Err(AppError::Io(format!(
+            "Failed to atomically publish engine config '{}': {rename_error}",
+            path.display()
+        )));
     }
 
     Ok(())
