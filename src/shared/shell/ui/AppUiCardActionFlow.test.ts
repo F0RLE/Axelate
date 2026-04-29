@@ -177,6 +177,22 @@ describe('AppUiCardActionFlow', () => {
         await flow.handleAppCardClick(event, app, 'ai_text');
 
         expect(deps.handleDownloadModule).not.toHaveBeenCalled();
+        expect(deps.performSelectionAction).not.toHaveBeenCalled();
+    });
+
+    it('selects installed local cards from a plain card click', async () => {
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const event = {
+            stopPropagation: vi.fn(),
+            currentTarget: card,
+            target: card,
+            clientX: 20,
+        } as unknown as MouseEvent;
+        const app = { id: 'llamacpp', installed: true, repoUrl: 'https://repo' } as IApp;
+
+        await flow.handleAppCardClick(event, app, 'ai_text');
+
         expect(deps.performSelectionAction).toHaveBeenCalledWith('ai_text', app);
     });
 });

@@ -131,7 +131,6 @@ export class AppUI {
             getCatalogApps: (category) => this._getCatalogApps(category),
             getSelectedAppId: (category) => this._selectionState.get(category)?.id ?? null,
             clearModuleCard: (category) => this.clearModuleCard(category),
-            openAppSelection: (category, apps) => this.openAppSelection(category, apps),
             markSlotCardAsInstalled: (card, app) =>
                 this._dashboardSupport.markSlotCardAsInstalled(card, app),
             showToast: (message, type = 'info') => this.showToast(message, type),
