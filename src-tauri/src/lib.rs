@@ -99,6 +99,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         settings::save_module_settings,
         settings::get_system_language,
         logs::get_logs,
+        logs::get_console_logs,
         logs::get_console_overview,
         logs::clear_logs,
         logs::clear_console_logs,
@@ -161,7 +162,6 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         ai::rewind_last_turn,
         ai::count_tokens,
         ai::generate_image,
-        ai::generate_image_background,
         ai::cancel_image_generation,
         ai::get_image_generation_preview,
         ai::delete_chat_image,
@@ -300,7 +300,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
             ui_state_service_for_api,
         ),
     )?;
-    tracing::info!(
+    tracing::debug!(
         "Launcher integration API ready at {}",
         integration_api.base_url()
     );

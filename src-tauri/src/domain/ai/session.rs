@@ -92,7 +92,7 @@ impl ChatSessionManager {
         let save_notify = Arc::clone(&self.save_notify);
 
         tauri::async_runtime::spawn(async move {
-            tracing::info!("Background chat session saver started.");
+            tracing::debug!("Background chat session saver started.");
             loop {
                 save_notify.notified().await;
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;

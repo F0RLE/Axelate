@@ -223,6 +223,11 @@ export class NavigationUI {
         return Promise.resolve();
     }
 
+    public syncActiveNavigationButton(pageId: string): void {
+        const navBtns = document.querySelectorAll('.nav-btn');
+        this._activateNavigationButton(navBtns, pageId, null);
+    }
+
     private _bindWindowHandlers(): void {
         this._mouseDownHandler = (e: MouseEvent) => {
             this._handleMouseNavigation(e);

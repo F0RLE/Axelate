@@ -34,7 +34,7 @@ function createController(stateOverrides?: Partial<MutableState>) {
         isDestroyed: vi.fn(() => false),
         getPendingChatRevealStore: vi.fn(() => null),
         tracer: {
-            info: vi.fn(),
+            debug: vi.fn(),
             error: vi.fn(),
         },
     };

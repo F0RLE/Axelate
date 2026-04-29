@@ -1,7 +1,6 @@
 import type { IChatMessage, IChunkHandler, IImageGenerationPreview } from '../types/aiTypes';
 import type { AIBridgeContext } from './AIBridgeContext';
 import type { AIBridgeEvents } from './AIBridgeEvents';
-import type { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
 import type { IChatTransport } from './AIChatTransport';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
@@ -16,12 +15,6 @@ type InitializeStreamingArgs = {
     getActiveProviderId: () => string | null;
     broadcastChunk: IChunkHandler;
     broadcastThought: IChunkHandler;
-};
-
-type StopCrossSlotEnginesArgs = {
-    context: AIBridgeContext | null;
-    providerId: string;
-    providerPolicy: AIBridgeProviderPolicy;
 };
 
 type ImageGenerationLogProgress = {
@@ -133,45 +126,8 @@ export class AIBridgeRuntime {
             args.broadcastThought(payload);
         });
 
-        this._tracer.info('[AIBridge] Streaming active (IPC via Transport)');
+        this._tracer.debug('[AIBridge] Streaming active (IPC via Transport)');
         return [unlistenLog, unlistenChunk, unlistenThought];
-    }
-
-    public async stopCrossSlotEngines(args: StopCrossSlotEnginesArgs): Promise<void> {
-        if (args.context?.tauriProvider.isTauri() !== true) {
-            return;
-        }
-
-        if (args.providerPolicy.isCloudProvider(args.providerId)) {
-            return;
-        }
-
-        const isImageProvider = args.providerPolicy.isImageProvider(args.providerId);
-        const isManagedLocalImageEngine = args.providerPolicy.isManagedLocalImageEngine(
-            args.providerId,
-        );
-
-        try {
-            if (isImageProvider) {
-                await args.context.tauriProvider.invoke('stop_engine_slot', {
-                    capability: 'text',
-                });
-                if (!isManagedLocalImageEngine) {
-                    await args.context.tauriProvider.invoke('stop_engine_slot', {
-                        capability: 'image',
-                    });
-                }
-                return;
-            }
-
-            await args.context.tauriProvider.invoke('stop_engine_slot', {
-                capability: 'image',
-            });
-        } catch (error) {
-            this._tracer.warn(
-                `[AIBridge] Failed to stop cross-slot engine for VRAM savings: ${String(error)}`,
-            );
-        }
     }
 
     public stopProviderEngine(context: AIBridgeContext | null): void {
@@ -182,6 +138,17 @@ export class AIBridgeRuntime {
         void context.tauriProvider.invoke('stop_engine').catch((error) => {
             this._tracer.warn(`[AIBridge] Failed to invoke stop_engine: ${String(error)}`);
         });
+    }
+
+    public async stopEngineSlot(
+        context: AIBridgeContext | null,
+        capability: 'text' | 'image' | 'vision',
+    ): Promise<void> {
+        if (context?.tauriProvider.isTauri() !== true) {
+            return;
+        }
+
+        await context.tauriProvider.invoke('stop_engine_slot', { capability });
     }
 
     public async getHistory(

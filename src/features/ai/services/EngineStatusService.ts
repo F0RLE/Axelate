@@ -1,7 +1,7 @@
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { EngineStatusContext } from './AIBridgeContext';
 
-type EngineStatusLogger = Pick<LoggerService, 'info' | 'error'>;
+type EngineStatusLogger = Pick<LoggerService, 'debug' | 'info' | 'error'>;
 
 type EngineState = 'idle' | 'starting' | 'swapping' | 'ready' | 'error';
 type BackendEngineState =
@@ -100,7 +100,7 @@ export class EngineStatusService {
             }),
         );
 
-        this._tracer.info('[EngineStatusService] Listening for engine events');
+        this._tracer.debug('[EngineStatusService] Listening for engine events');
         this._initialized = true;
         this._startDomSyncObserver();
         void this.refreshFromBackend();
@@ -111,10 +111,7 @@ export class EngineStatusService {
         this._unlisteners.length = 0;
         this._domObserver?.disconnect();
         this._domObserver = null;
-        if (this._domSyncFrame !== null) {
-            cancelAnimationFrame(this._domSyncFrame);
-            this._domSyncFrame = null;
-        }
+        this._cancelDomSyncFrame();
         this._activeSlots.clear();
         this._initialized = false;
     }
@@ -204,6 +201,8 @@ export class EngineStatusService {
 
     private _startDomSyncObserver(): void {
         this._domObserver?.disconnect();
+        this._cancelDomSyncFrame();
+
         this._domObserver = new MutationObserver((records) => {
             if (this._retargetDomSyncObserver(records)) {
                 this._scheduleDomSync();
@@ -214,13 +213,14 @@ export class EngineStatusService {
                 this._scheduleDomSync();
             }
         });
-        const target = this._getDomSyncTarget();
-        this._domObserver.observe(target, {
+        const observeOptions: MutationObserverInit = {
             childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ['data-app-id', 'data-current-module'],
-        });
+        };
+        const target = this._getDomSyncTarget();
+        this._domObserver.observe(target, observeOptions);
     }
 
     private _getDomSyncTarget(): HTMLElement {
@@ -289,22 +289,31 @@ export class EngineStatusService {
         return element.hasAttribute('data-app-id') || element.hasAttribute('data-current-module');
     }
 
-    private _scheduleDomSync(): void {
-        if (this._domSyncFrame !== null) {
-            return;
-        }
-
-        this._domSyncFrame = requestAnimationFrame(() => {
-            this._domSyncFrame = null;
-            this._applyActiveStatesToDom();
-        });
-    }
-
     private _applyActiveStatesToDom(): void {
         this._activeSlots.forEach((_endpoint, engineId) => {
             this._setCardState(engineId, 'ready');
             this._setDashboardCardState(engineId, 'ready');
         });
+    }
+
+    private _scheduleDomSync(): void {
+        if (this._domSyncFrame !== null) {
+            return;
+        }
+
+        this._domSyncFrame = globalThis.requestAnimationFrame(() => {
+            this._domSyncFrame = null;
+            this._applyActiveStatesToDom();
+        });
+    }
+
+    private _cancelDomSyncFrame(): void {
+        if (this._domSyncFrame === null) {
+            return;
+        }
+
+        globalThis.cancelAnimationFrame(this._domSyncFrame);
+        this._domSyncFrame = null;
     }
 
     private _applyBackendState(state: BackendEngineState): void {

@@ -32,6 +32,7 @@ describe('LoggerService', () => {
         (tracer as unknown as { _transport: null })._transport = null;
         (tracer as unknown as { _fallbackTransport: null })._fallbackTransport = null;
         (tracer as unknown as { _buffer: unknown[] })._buffer = [];
+        (tracer as unknown as { _flushPromise: null })._flushPromise = null;
         (tracer as unknown as { _initialized: boolean })._initialized = false; // allow re-init for tests that test init
     });
 
@@ -174,6 +175,7 @@ describe('LoggerService', () => {
                     reason: 'String rejection',
                 } as PromiseRejectionEvent);
             }
+            await Promise.resolve();
             await Promise.resolve();
             const logs2 = mockTransport.mock.calls[0]?.[0] as Array<Record<string, unknown>>;
             expect(logs2[0]?.['message']).toBe('Unhandled Promise: String rejection');
@@ -448,6 +450,41 @@ describe('LoggerService', () => {
 
             expect(mockTransport).toHaveBeenCalledTimes(1);
             expect(mockTransport.mock.calls[0]?.[0] as unknown[]).toHaveLength(10);
+            expect(tracer.getLogs()).toHaveLength(0);
+        });
+
+        it('should not send the same buffered logs twice while a flush is pending', async () => {
+            let resolveTransport: (() => void) | undefined;
+            const pendingTransport = vi
+                .fn<(logs: { level: string; message: string }[]) => Promise<void>>()
+                .mockImplementationOnce(
+                    () =>
+                        new Promise<void>((resolve) => {
+                            resolveTransport = resolve;
+                        }),
+                )
+                .mockImplementation(() => Promise.resolve());
+            tracer.setTransport(pendingTransport);
+
+            for (let i = 0; i < 10; i++) {
+                tracer.info(`Msg ${i}`);
+            }
+            tracer.error('Error during pending flush');
+            await Promise.resolve();
+
+            expect(pendingTransport).toHaveBeenCalledTimes(1);
+            expect(pendingTransport.mock.calls[0]?.[0] as unknown as unknown[]).toHaveLength(10);
+
+            expect(resolveTransport).toBeDefined();
+            resolveTransport?.();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(pendingTransport).toHaveBeenCalledTimes(2);
+            expect(pendingTransport.mock.calls[1]?.[0]).toEqual([
+                { level: 'ERROR', message: 'Error during pending flush' },
+            ]);
             expect(tracer.getLogs()).toHaveLength(0);
         });
 

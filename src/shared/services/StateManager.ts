@@ -14,7 +14,7 @@
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
-type StateManagerLogger = Pick<LoggerService, 'info' | 'warn'>;
+type StateManagerLogger = Pick<LoggerService, 'debug' | 'info' | 'warn'>;
 
 export interface StatePersistenceTarget {
     /** Human-readable name for logging */
@@ -47,7 +47,7 @@ export class StateManager {
     register(target: StatePersistenceTarget): void {
         if (this._isDestroyed) return;
         this._targets.set(target.name, target);
-        this._tracer.info(`[StateManager] Registered: ${target.name}`);
+        this._tracer.debug(`[StateManager] Registered: ${target.name}`);
     }
 
     /**
@@ -125,7 +125,7 @@ export class StateManager {
     init(): void {
         document.addEventListener('visibilitychange', this._boundVisibilityChange);
         globalThis.addEventListener('beforeunload', this._boundBeforeUnload);
-        this._tracer.info('[StateManager] Global listeners registered');
+        this._tracer.debug('[StateManager] Global listeners registered');
     }
 
     /**

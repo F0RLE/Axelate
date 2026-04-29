@@ -38,7 +38,7 @@ export class NavigationService {
             this._historyStack.push(lastPage);
             this._currentIndex = this._historyStack.length - 1;
             this._trimHistoryStack();
-            this._tracer.info(`[NavigationService] Restored last page: ${lastPage}`);
+            this._tracer.debug(`[NavigationService] Restored last page: ${lastPage}`);
         }
     }
 

@@ -5,6 +5,7 @@ import type { IWindowPolicy } from './WindowService';
 import type { WindowServiceZoom } from './WindowServiceZoom';
 
 type WindowPolicyLogger = {
+    debug: (message: string) => void;
     info: (message: string) => void;
     error: (message: string) => void;
 };
@@ -59,7 +60,7 @@ export class WindowServicePolicy {
 
         const previousResolutionKey = this._lastResolutionKey;
         this._lastResolutionKey = currentResolutionKey;
-        this._deps.tracer.info(
+        this._deps.tracer.debug(
             `[WindowService] Resolution changed: ${previousResolutionKey} -> ${currentResolutionKey}`,
         );
         void this.handleResolutionChange();

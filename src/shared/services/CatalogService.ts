@@ -10,7 +10,7 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import type { CatalogLoadSnapshot, EngineDefinition } from './CatalogLoadSnapshot';
 
-type CatalogLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+type CatalogLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
@@ -213,7 +213,7 @@ export class CatalogService {
         if (discovered.length === 0) return;
 
         this._appData.services.push(...discovered);
-        this._tracer.info(
+        this._tracer.debug(
             `[CatalogService] Added ${String(discovered.length)} discovered integration(s).`,
         );
     }

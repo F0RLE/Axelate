@@ -7,7 +7,7 @@ describe('EngineStatusService', () => {
     let service: EngineStatusService;
     let listeners: Record<string, (payload: unknown) => void>;
     let core: EngineStatusContext;
-    let tracer: Pick<LoggerService, 'info' | 'error'>;
+    let tracer: Pick<LoggerService, 'debug' | 'info' | 'error'>;
 
     beforeEach(() => {
         listeners = {};
@@ -33,6 +33,7 @@ describe('EngineStatusService', () => {
         } as unknown as EngineStatusContext;
 
         tracer = {
+            debug: vi.fn(),
             info: vi.fn(),
             error: vi.fn(),
         };

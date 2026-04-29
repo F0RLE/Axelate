@@ -17,8 +17,8 @@ describe('CoreRuntimeSupport', () => {
             init: vi.fn(() => {
                 callOrder.push('navigation:init');
             }),
-            showPage: vi.fn(() => {
-                callOrder.push('navigation:showPage');
+            syncActiveNavigationButton: vi.fn(() => {
+                callOrder.push('navigation:syncActiveNavigationButton');
             }),
         };
         const moduleService = {
@@ -42,11 +42,11 @@ describe('CoreRuntimeSupport', () => {
 
         expect(sidebarUI.init).toHaveBeenCalledTimes(1);
         expect(navigationUI.init).toHaveBeenCalledTimes(1);
-        expect(navigationUI.showPage).toHaveBeenCalledWith('settings', null, true, true);
+        expect(navigationUI.syncActiveNavigationButton).toHaveBeenCalledWith('settings');
         expect(callOrder).toEqual([
             'sidebar:init',
             'navigation:init',
-            'navigation:showPage',
+            'navigation:syncActiveNavigationButton',
             'module:init',
             'download:init',
         ]);
@@ -61,7 +61,7 @@ describe('CoreRuntimeSupport', () => {
         };
         const navigationUI = {
             init: vi.fn(() => {}),
-            showPage: vi.fn(() => {}),
+            syncActiveNavigationButton: vi.fn(() => {}),
         };
         const moduleService = {
             init: vi.fn(() => {}),
@@ -78,6 +78,6 @@ describe('CoreRuntimeSupport', () => {
             sidebarUI: sidebarUI as never,
         });
 
-        expect(navigationUI.showPage).toHaveBeenCalledWith('home', null, true, true);
+        expect(navigationUI.syncActiveNavigationButton).toHaveBeenCalledWith('home');
     });
 });

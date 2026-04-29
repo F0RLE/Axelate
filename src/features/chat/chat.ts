@@ -79,6 +79,8 @@ export class ChatController {
     private readonly _generationController: ChatGenerationController;
     private readonly _sendController: ChatSendController;
     private readonly _state = new ChatControllerState();
+    private _restoredImageGenerationTimer: ReturnType<typeof setTimeout> | null = null;
+    private _forceImageGeneration = false;
     private _contextTokenTotal = 0;
     private _contextTokenVersion = 0;
     private readonly _boundFileInputChange = (e: Event) => this._filePicker.handleFileSelect(e);
@@ -316,13 +318,7 @@ export class ChatController {
                 this._ui.removeTyping(typingId);
                 return this._ui.createStreamingMessage('assistant');
             },
-            createImageHandle: () =>
-                this._ui.createImageGenerationMessage({
-                    onCancel: async () => {
-                        this._generationController.stopImagePreviewPolling();
-                        await this._aiBridge.cancelImageGeneration();
-                    },
-                }),
+            createImageHandle: () => this._ui.createImageGenerationMessage(),
             translate: (key, fallback) => this._i18n.t(key, fallback),
             showTyping: (typingId) => {
                 this._ui.showTyping(typingId);
@@ -348,6 +344,10 @@ export class ChatController {
             },
             getSelectedModule: (category) => deps.getSelectedModule(category),
             getPreferredAiCategory: () => deps.getPreferredAiCategory(),
+            isForceImageGeneration: () => this._forceImageGeneration,
+            clearForceImageGeneration: () => {
+                this._forceImageGeneration = false;
+            },
             handleResponse: async (response, streamingHandle, imageHandle) =>
                 await this._generationController.handleChatResponse(
                     response,
@@ -411,8 +411,8 @@ export class ChatController {
         this._state.isInitialized = true;
         this._state.isDestroyed = false;
 
-        this._tracer.info('[Chat] Initializing TS Controller...');
-        await this._ui.init().catch((err: unknown) => {
+        this._tracer.debug('[Chat] Initializing TS Controller...');
+        void this._ui.init().catch((err: unknown) => {
             this._tracer.error(`[Chat] UI init failed: ${String(err)}`);
         });
         this._ui.setEditMessageHandler(async (text) => {
@@ -422,12 +422,14 @@ export class ChatController {
             await this.regenerateLastResponse();
         });
         this._lifecycleHelper.start();
+        void this._restoreActiveImageGeneration();
     }
 
     public destroy(): void {
         if (this._state.isDestroyed) return;
         this._state.isDestroyed = true;
         this._state.isInitialized = false;
+        this._clearRestoredImageGenerationTimer();
         this._lifecycleHelper.stop();
         this._viewHelper.unbindEvents();
         this._generationController.stopImagePreviewPolling();
@@ -439,10 +441,128 @@ export class ChatController {
         this._ui.destroy();
     }
 
+    private async _restoreActiveImageGeneration(): Promise<void> {
+        if (this._state.isDestroyed || this._state.isSending) {
+            return;
+        }
+
+        const previewProvider = this._aiBridge as {
+            getImageGenerationPreview?: () => Promise<
+                Awaited<ReturnType<AIBridge['getImageGenerationPreview']>>
+            >;
+        };
+        if (typeof previewProvider.getImageGenerationPreview !== 'function') {
+            return;
+        }
+
+        const preview = await previewProvider.getImageGenerationPreview();
+        if (preview === null) {
+            return;
+        }
+
+        const imageHandle = this._ui.createImageGenerationMessage();
+        imageHandle.setStatus('image status=running elapsed=0s');
+        if (preview.data_url.trim() !== '') {
+            imageHandle.setPreview(preview.data_url);
+        }
+
+        this._state.isSending = true;
+        this._generationController.startImagePreviewPolling(imageHandle);
+        this._scheduleRestoredImageGenerationCheck();
+    }
+
+    private _scheduleRestoredImageGenerationCheck(): void {
+        this._clearRestoredImageGenerationTimer();
+        this._restoredImageGenerationTimer = globalThis.setTimeout(() => {
+            this._restoredImageGenerationTimer = null;
+            void this._checkRestoredImageGeneration();
+        }, 1200);
+    }
+
+    private async _checkRestoredImageGeneration(): Promise<void> {
+        if (this._state.isDestroyed || !this._state.isSending) {
+            return;
+        }
+
+        const preview = await this._aiBridge.getImageGenerationPreview();
+        if (preview !== null) {
+            this._scheduleRestoredImageGenerationCheck();
+            return;
+        }
+
+        this._generationController.stopImagePreviewPolling();
+        this._state.isSending = false;
+        await this._historyController.loadHistory();
+    }
+
+    private _clearRestoredImageGenerationTimer(): void {
+        if (this._restoredImageGenerationTimer === null) {
+            return;
+        }
+
+        globalThis.clearTimeout(this._restoredImageGenerationTimer);
+        this._restoredImageGenerationTimer = null;
+    }
+
     // --- Public Actions ---
 
     public async pickChatFiles(): Promise<void> {
         await this._filePicker.pick();
+    }
+
+    public toggleAttachMenu(): void {
+        const existing = document.querySelector('.chat-attach-menu');
+        if (existing instanceof HTMLElement) {
+            existing.remove();
+            return;
+        }
+
+        const button = document.getElementById('chat-attach-btn');
+        const compose = document.getElementById('chat-compose');
+        if (!(button instanceof HTMLElement) || !(compose instanceof HTMLElement)) {
+            return;
+        }
+
+        const menu = document.createElement('div');
+        menu.className = 'chat-attach-menu';
+        menu.setAttribute('role', 'menu');
+
+        const fileButton = this._createAttachMenuButton(
+            'file',
+            this._i18n.t('ui.chat.attach_file', 'Add file'),
+            '#icon-paperclip',
+        );
+        const imageButton = this._createAttachMenuButton(
+            'image',
+            this._i18n.t('ui.chat.generate_image', 'Generate image'),
+            '#icon-ai',
+        );
+
+        menu.append(fileButton, imageButton);
+        compose.appendChild(menu);
+
+        const close = (event: MouseEvent) => {
+            if (event.target instanceof Node && menu.contains(event.target)) {
+                return;
+            }
+            if (event.target instanceof Node && button.contains(event.target)) {
+                return;
+            }
+            menu.remove();
+            document.removeEventListener('mousedown', close, true);
+        };
+        setTimeout(() => document.addEventListener('mousedown', close, true), 0);
+    }
+
+    public async pickChatFilesFromMenu(): Promise<void> {
+        document.querySelector('.chat-attach-menu')?.remove();
+        await this.pickChatFiles();
+    }
+
+    public async sendImageGenerationFromMenu(): Promise<void> {
+        document.querySelector('.chat-attach-menu')?.remove();
+        this._forceImageGeneration = true;
+        await this.sendChat();
     }
 
     public toggleVoiceInput(): void {
@@ -484,6 +604,7 @@ export class ChatController {
         const input = this._inputCoordinator.getInput();
         const text = input?.value.trim() ?? '';
         if (!this._sendController.validateInput(text)) {
+            this._forceImageGeneration = false;
             this._ui.showToast(
                 this._i18n.t('ui.chat.input_required', 'Enter a message or attach a file'),
                 'error',
@@ -491,8 +612,12 @@ export class ChatController {
             return;
         }
 
-        const isActive = await this._activationCoordinator.ensureActive(input);
-        if (!isActive) return;
+        const activationPrompt = this._forceImageGeneration ? `generate image ${text}` : undefined;
+        const isActive = await this._activationCoordinator.ensureActive(input, activationPrompt);
+        if (!isActive) {
+            this._forceImageGeneration = false;
+            return;
+        }
 
         await this._sendController.sendChat(input);
     }
@@ -513,7 +638,7 @@ export class ChatController {
             return;
         }
 
-        const text = await this._historyController.regenerateLastTurn(false);
+        const text = await this._historyController.regenerateLastTurn(this._state.isSending);
         if (text === null || text.trim() === '') {
             this._ui.showToast(
                 this._i18n.t('ui.chat.regenerate_failed', 'Failed to regenerate response'),
@@ -540,6 +665,29 @@ export class ChatController {
     private _bindEvents(): void {
         this._viewHelper.bindEvents();
         this._scheduleAutoResizeInput();
+    }
+
+    private _createAttachMenuButton(action: string, label: string, iconHref: string): HTMLElement {
+        const button = document.createElement('button');
+        button.className = 'chat-attach-menu-item';
+        button.type = 'button';
+        button.dataset['chatAttachAction'] = action;
+        button.setAttribute('role', 'menuitem');
+
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('class', 'icon');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.setAttribute('focusable', 'false');
+        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', iconHref);
+        icon.appendChild(use);
+
+        const text = document.createElement('span');
+        text.textContent = label;
+
+        button.append(icon, text);
+        return button;
     }
 
     private _pushAssistantMessage(

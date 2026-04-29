@@ -6,7 +6,7 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 describe('ErrorHandler', () => {
     let errorHandler: ErrorHandler;
     let testEventBus: EventBus;
-    let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+    let tracer: Pick<LoggerService, 'debug' | 'warn' | 'error'>;
 
     const resetHandler = () => {
         errorHandler.destroy();
@@ -18,7 +18,7 @@ describe('ErrorHandler', () => {
     beforeEach(() => {
         testEventBus = new EventBus();
         tracer = {
-            info: vi.fn(),
+            debug: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),
         };
