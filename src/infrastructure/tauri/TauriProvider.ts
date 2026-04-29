@@ -48,7 +48,7 @@ export class TauriProvider implements IBridge {
             // Priority Check: Try to call a safe, neutral command
             await this._performInvoke('get_health', {});
             this._isTauriDetected = true;
-            this._tracer.info('[TauriProvider] IPC Handshake successful');
+            this._tracer.debug('[TauriProvider] IPC Handshake successful');
         } catch {
             this._isTauriDetected = false;
             this._tracer.warn('[TauriProvider] Handshake failed, operating in Mock mode');

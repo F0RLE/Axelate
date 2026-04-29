@@ -15,7 +15,7 @@ import {
     type WindowZoomSettingsStore,
 } from './WindowServiceZoom';
 
-type WindowServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+type WindowServiceLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 
 export interface IWindowBreakpoints {
     compact: number;
@@ -177,7 +177,9 @@ export class WindowService {
                     (await this._bridge.invoke<IWindowConfig>('get_window_config'));
 
                 // Update breakpoints from backend (placeholder/not used in UI yet)
-                this._tracer.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
+                this._tracer.debug(
+                    `[WindowService] Loaded config: ${JSON.stringify(this._config)}`,
+                );
 
                 // Use pre-loaded initialZoom or determine it
                 const zoom =

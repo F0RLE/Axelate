@@ -65,7 +65,7 @@ export function createCoreAssembly(args: CreateCoreAssemblyArgs): CoreAssembly {
     const serviceBundle = createCoreServiceBundle(args.tracer);
 
     configureTracerTransport(args.tracer, serviceBundle.tauriProvider);
-    args.tracer.info(`AXELATE v${__APP_VERSION__}`);
+    args.tracer.debug(`AXELATE v${__APP_VERSION__}`);
 
     configureCoreServices({
         windowService: serviceBundle.windowService,

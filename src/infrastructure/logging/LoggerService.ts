@@ -17,6 +17,7 @@ import type { ILogEntry } from '@/shared/types/coreTypes';
 export class LoggerService {
     private _buffer: ILogEntry[] = [];
     private _flushTimeout: ReturnType<typeof setTimeout> | null = null;
+    private _flushPromise: Promise<void> | null = null;
     private readonly _FLUSH_INTERVAL = 500;
     private readonly _MAX_BUFFER = 10;
     private _originalConsoleError: (..._args: unknown[]) => void;
@@ -221,12 +222,10 @@ export class LoggerService {
             });
 
             if (level === 'ERROR' || this._buffer.length >= this._MAX_BUFFER) {
+                this._clearFlushTimeout();
                 void this._flush();
             } else {
-                if (this._flushTimeout) clearTimeout(this._flushTimeout);
-                this._flushTimeout = setTimeout(() => {
-                    void this._flush();
-                }, this._FLUSH_INTERVAL);
+                this._scheduleFlush();
             }
         } finally {
             this._isInternalLog = false;
@@ -266,8 +265,33 @@ export class LoggerService {
      * Flushes the current log buffer to the backend.
      */
     private async _flush(): Promise<void> {
+        if (this._flushPromise !== null) {
+            return this._flushPromise;
+        }
+
         if (this._buffer.length === 0) return;
 
+        this._clearFlushTimeout();
+        this._flushPromise = (async () => {
+            const flushed = await this._flushOnce();
+            this._flushPromise = null;
+
+            if (this._buffer.length === 0) {
+                return;
+            }
+
+            if (flushed) {
+                void this._flush();
+                return;
+            }
+
+            this._scheduleFlush();
+        })();
+
+        return this._flushPromise;
+    }
+
+    private async _flushOnce(): Promise<boolean> {
         // Take snapshot
         const logs = [...this._buffer];
 
@@ -282,9 +306,26 @@ export class LoggerService {
             }
             // Clear only the logs we successfully sent
             this._buffer = this._buffer.slice(logs.length);
+            return true;
         } catch (e) {
             // Keep buffer intact so next flush might succeed
             this._originalConsoleError('Log batch sync failed:', e);
+            return false;
+        }
+    }
+
+    private _scheduleFlush(): void {
+        this._clearFlushTimeout();
+        this._flushTimeout = setTimeout(() => {
+            this._flushTimeout = null;
+            void this._flush();
+        }, this._FLUSH_INTERVAL);
+    }
+
+    private _clearFlushTimeout(): void {
+        if (this._flushTimeout !== null) {
+            clearTimeout(this._flushTimeout);
+            this._flushTimeout = null;
         }
     }
 
@@ -317,6 +358,7 @@ export class LoggerService {
      */
     public clear(): void {
         this._buffer = [];
+        this._clearFlushTimeout();
         const overlay = document.getElementById('debug-overlay');
         if (overlay !== null) {
             overlay.innerHTML = '';

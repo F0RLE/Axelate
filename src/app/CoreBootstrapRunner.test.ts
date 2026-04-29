@@ -69,6 +69,7 @@ function createRunnerDeps() {
         navigationUI: {
             showPage: recordAsync('navigation-ui:show-page'),
             init: record('navigation-ui:init'),
+            syncActiveNavigationButton: record('navigation-ui:sync-active-button'),
         },
         chatController: {
             init: record('chat:init'),

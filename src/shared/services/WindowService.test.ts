@@ -18,7 +18,7 @@ describe('WindowService', () => {
         getResolutionZoom: ReturnType<typeof vi.fn>;
         setResolutionZoom: ReturnType<typeof vi.fn>;
     };
-    let mockTracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+    let mockTracer: Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
     let service: WindowService;
     let mockRuntime: {
         addEventListener: ReturnType<typeof vi.fn>;
@@ -57,6 +57,7 @@ describe('WindowService', () => {
         };
 
         mockTracer = {
+            debug: vi.fn(),
             info: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),

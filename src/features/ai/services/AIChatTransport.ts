@@ -9,7 +9,7 @@ import type {
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { AITransportContext } from './AIBridgeContext';
 
-type AIChatTransportLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+type AIChatTransportLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 const STALE_REQUEST_CANCEL_TIMEOUT_MS = 750;
 
 /**
@@ -38,9 +38,9 @@ interface IStreamChunkEnvelope {
 export interface IChatTransport {
     init(): Promise<void>;
     send(request: IChatRequest): Promise<IBridgeResponse>;
+    sendSilent(request: IChatRequest): Promise<IBridgeResponse>;
     cancelActiveChatRequest(): Promise<boolean>;
     generateImage(request: IImageGenerationRequest): Promise<IBridgeResponse>;
-    generateImageBackground(request: IImageGenerationRequest): Promise<IBridgeResponse>;
     onStream(listener: (chunk: string) => void): () => void;
     onThought(listener: (chunk: string) => void): () => void;
     setContext(context: AITransportContext): void;
@@ -74,7 +74,7 @@ export class AIChatTransport implements IChatTransport {
             // Setup global listener for streaming chunks if needed here,
             // or let the bridge handle the subscription via onStream.
             // For now, we follow the pattern that Transport manages the low-level listener.
-            this._tracer.info('[AIChatTransport] Transport initialized');
+            this._tracer.debug('[AIChatTransport] Transport initialized');
         }
         await Promise.resolve();
     }
@@ -158,6 +158,39 @@ export class AIChatTransport implements IChatTransport {
         }
     }
 
+    public async sendSilent(request: IChatRequest): Promise<IBridgeResponse> {
+        if (this._context?.tauriProvider.isTauri() !== true) {
+            return { ok: false, error: 'IPC host unavailable' };
+        }
+
+        const requestId = this._generateRequestId();
+        const { session_id: _sessionId, ...requestWithoutSession } = request;
+        const requestWithId: IChatRequest = {
+            ...requestWithoutSession,
+            request_id: requestId,
+        };
+        const chatChannel = new Channel<IStreamChunkEnvelope>();
+        const thoughtChannel = new Channel<IStreamChunkEnvelope>();
+
+        try {
+            const response = await this._runWithTimeout(
+                this._context.tauriProvider.invoke<IChatResponse>('send_chat_message', {
+                    request: requestWithId,
+                    chatChannel,
+                    thoughtChannel,
+                }),
+                90000,
+                'AI request timed out',
+            );
+
+            return this._normalizeResponse(response);
+        } catch (error: unknown) {
+            const errorMsg = extractError(error);
+            this._tracer.error('[AIChatTransport] Silent IPC error:', error);
+            return { ok: false, error: errorMsg };
+        }
+    }
+
     private async _cancelStaleActiveRequest(requestId: string): Promise<void> {
         try {
             await this._runWithTimeout(
@@ -225,26 +258,6 @@ export class AIChatTransport implements IChatTransport {
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] IPC image error:', error);
-            return { ok: false, error: errorMsg };
-        }
-    }
-
-    /**
-     * Starts an image generation job that survives window closure.
-     */
-    public async generateImageBackground(
-        request: IImageGenerationRequest,
-    ): Promise<IBridgeResponse> {
-        if (this._context?.tauriProvider.isTauri() !== true) {
-            return { ok: false, error: 'IPC host unavailable' };
-        }
-
-        try {
-            await this._context.tauriProvider.invoke('generate_image_background', { request });
-            return { ok: true };
-        } catch (error: unknown) {
-            const errorMsg = extractError(error);
-            this._tracer.error('[AIChatTransport] IPC background image error:', error);
             return { ok: false, error: errorMsg };
         }
     }

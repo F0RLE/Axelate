@@ -17,7 +17,7 @@ pub fn load_engine_definitions(modules: &[ModuleItem]) -> Vec<EngineDefinition> 
         .map(convert_module_to_definition)
         .collect();
 
-    tracing::info!(
+    tracing::debug!(
         count = defs.len(),
         "Loaded engine definitions from local_modules"
     );

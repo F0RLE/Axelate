@@ -29,6 +29,10 @@ use tauri::{AppHandle, Emitter};
 
 const DEFAULT_API_BASE_URL: &str = "http://127.0.0.1:3000";
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
+const CUSTOM_TEXT_PROVIDER_ID: &str = "openrouter-custom-text";
+const CUSTOM_IMAGE_PROVIDER_ID: &str = "openrouter-custom-image";
+const CUSTOM_TEXT_BACKEND_PROVIDER_ID: &str = "gpt";
+const CUSTOM_IMAGE_BACKEND_PROVIDER_ID: &str = "gpt-image";
 
 static API_BASE_URL: OnceCell<String> = OnceCell::new();
 static API_TOKEN: Lazy<String> = Lazy::new(|| {
@@ -90,7 +94,7 @@ pub fn start_launcher_http_api(
             message: format!("Failed to start launcher HTTP API thread: {error}"),
         })?;
 
-    tracing::info!("Launcher integration API listening at {base_url}");
+    tracing::debug!("Launcher integration API listening at {base_url}");
     Ok(LauncherHttpApiHandle { base_url })
 }
 
@@ -503,17 +507,22 @@ async fn handle_text_request(
     context: LauncherHttpApiContext,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationTextRequest = parse_json_body(request)?;
-    let provider = match payload.provider.filter(|value| !value.trim().is_empty()) {
-        Some(provider) => provider,
+    let requested_provider = payload.provider.filter(|value| !value.trim().is_empty());
+    let ui_provider = match requested_provider.as_ref() {
+        Some(provider) => provider.clone(),
         None => selected_module_id(&context.ui_state_service, "ai_text")
             .await
             .ok_or_else(|| AppError::Validation("No selected text AI provider".to_string()))?,
     };
-    select_provider_for_category(&context, "ai_text", &provider).await?;
+    if requested_provider.is_some() {
+        select_provider_for_category(&context, "ai_text", &ui_provider).await?;
+    }
+    let provider = backend_provider_id(&ui_provider).to_string();
     let model = resolve_model_id(
         &context.config_service,
         &context.ui_state_service,
         &provider,
+        Some(&ui_provider),
         payload.model.as_deref(),
         "text",
     )
@@ -577,17 +586,22 @@ async fn handle_image_request(
     context: LauncherHttpApiContext,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationImageRequest = parse_json_body(request)?;
-    let provider = match payload.provider.filter(|value| !value.trim().is_empty()) {
-        Some(provider) => provider,
+    let requested_provider = payload.provider.filter(|value| !value.trim().is_empty());
+    let ui_provider = match requested_provider.as_ref() {
+        Some(provider) => provider.clone(),
         None => selected_module_id(&context.ui_state_service, "ai_image")
             .await
             .ok_or_else(|| AppError::Validation("No selected image AI provider".to_string()))?,
     };
-    select_provider_for_category(&context, "ai_image", &provider).await?;
+    if requested_provider.is_some() {
+        select_provider_for_category(&context, "ai_image", &ui_provider).await?;
+    }
+    let provider = backend_provider_id(&ui_provider).to_string();
     let model = resolve_model_id(
         &context.config_service,
         &context.ui_state_service,
         &provider,
+        Some(&ui_provider),
         payload.model.as_deref(),
         "image",
     )
@@ -732,6 +746,21 @@ fn selected_module_from_api_provider(provider: &ApiProvider) -> SelectedModule {
     }
 }
 
+fn backend_provider_id(provider_id: &str) -> &str {
+    match provider_id {
+        CUSTOM_TEXT_PROVIDER_ID => CUSTOM_TEXT_BACKEND_PROVIDER_ID,
+        CUSTOM_IMAGE_PROVIDER_ID => CUSTOM_IMAGE_BACKEND_PROVIDER_ID,
+        _ => provider_id,
+    }
+}
+
+fn is_custom_provider_id(provider_id: &str) -> bool {
+    matches!(
+        provider_id,
+        CUSTOM_TEXT_PROVIDER_ID | CUSTOM_IMAGE_PROVIDER_ID
+    )
+}
+
 async fn selected_module_id(ui_state_service: &UiStateService, category: &str) -> Option<String> {
     let state = ui_state_service.get_ui_state().await.ok()?;
     state
@@ -790,6 +819,7 @@ async fn resolve_model_id(
     config_service: &ConfigService,
     ui_state_service: &UiStateService,
     provider_id: &str,
+    ui_provider_id: Option<&str>,
     requested_model: Option<&str>,
     capability: &str,
 ) -> Result<String, AppError> {
@@ -800,11 +830,13 @@ async fn resolve_model_id(
         return Ok(model.to_string());
     }
 
-    let selected_model = ui_state_service
-        .get_ui_state()
-        .await
-        .ok()
-        .and_then(|state| state.selected_ai_models.get(provider_id).cloned());
+    let state = ui_state_service.get_ui_state().await.ok();
+    let selected_model = state.as_ref().and_then(|state| {
+        ui_provider_id
+            .and_then(|id| state.selected_ai_models.get(id))
+            .or_else(|| state.selected_ai_models.get(provider_id))
+            .cloned()
+    });
     let config = config_service.load_full_config()?;
     let provider = config
         .api_providers
@@ -816,6 +848,15 @@ async fn resolve_model_id(
         .and_then(|model_id| resolve_provider_model(provider, model_id, capability))
     {
         return Ok(model);
+    }
+
+    if ui_provider_id.is_some_and(is_custom_provider_id)
+        && let Some(model) = selected_model
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    {
+        return Ok(model.to_string());
     }
 
     if let Some(model) =
@@ -928,7 +969,8 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{
-        find_header_end, is_authorized, model_api_id, parse_header_line, status_text, tier_rank,
+        backend_provider_id, find_header_end, is_authorized, model_api_id, parse_header_line,
+        status_text, tier_rank,
     };
     use crate::models::{AiModel, ApiModelConfig, ModelStats, ModelTier};
     use std::collections::HashMap;
@@ -993,6 +1035,13 @@ mod tests {
         let model = model_with_api_ids();
         assert_eq!(model_api_id(&model, "text").as_deref(), Some("api-text"));
         assert_eq!(model_api_id(&model, "image").as_deref(), Some("api-image"));
+    }
+
+    #[test]
+    fn maps_custom_ui_provider_ids_to_backend_providers() {
+        assert_eq!(backend_provider_id("openrouter-custom-text"), "gpt");
+        assert_eq!(backend_provider_id("openrouter-custom-image"), "gpt-image");
+        assert_eq!(backend_provider_id("llamacpp"), "llamacpp");
     }
 
     #[test]

@@ -154,7 +154,7 @@ export async function showInitialPage(args: ShowInitialPageArgs): Promise<void> 
 export async function initializeImmediateUi(args: InitializeImmediateUiArgs): Promise<void> {
     await args.sidebarUI.init();
     args.navigationUI.init();
-    await args.navigationUI.showPage(args.navigation.getCurrentPage() ?? 'home', null, true, true);
+    args.navigationUI.syncActiveNavigationButton(args.navigation.getCurrentPage() ?? 'home');
     void args.moduleService.init();
     void args.downloadUI.init();
 }

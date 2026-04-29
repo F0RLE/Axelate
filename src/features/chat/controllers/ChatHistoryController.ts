@@ -2,7 +2,7 @@ import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage } from '../types/chatTypes';
 
-type ChatHistoryLogger = Pick<LoggerService, 'info' | 'error'>;
+type ChatHistoryLogger = Pick<LoggerService, 'debug' | 'error'>;
 
 type PendingChatRevealStore = {
     getState: () => { pending_chat_reveal?: boolean };
@@ -139,13 +139,14 @@ export class ChatHistoryController {
                           return historyMessage;
                       })
                 : [];
+            const visibleHistory = this._stripPersistedImagePromptPreparation(nextHistory);
 
-            this._options.setHistory(nextHistory);
-            this._options.renderHistory(nextHistory);
+            this._options.setHistory(visibleHistory);
+            this._options.renderHistory(visibleHistory);
 
-            if (nextHistory.length > 0) {
-                this._options.tracer.info(
-                    `[ChatController] Restoring ${String(nextHistory.length)} messages from persistence`,
+            if (visibleHistory.length > 0) {
+                this._options.tracer.debug(
+                    `[ChatController] Restoring ${String(visibleHistory.length)} messages from persistence`,
                 );
             }
 
@@ -158,6 +159,39 @@ export class ChatHistoryController {
                 error,
             );
         }
+    }
+
+    private _stripPersistedImagePromptPreparation(history: IChatMessage[]): IChatMessage[] {
+        const visible: IChatMessage[] = [];
+        for (let index = 0; index < history.length; index += 1) {
+            const message = history[index];
+            if (message === undefined) {
+                continue;
+            }
+
+            if (message.role === 'user' && this._isImagePromptPreparationRequest(message.content)) {
+                const next = history[index + 1];
+                if (next?.role === 'assistant') {
+                    index += 1;
+                }
+                continue;
+            }
+
+            visible.push(message);
+        }
+
+        return visible;
+    }
+
+    private _isImagePromptPreparationRequest(content: IChatMessage['content']): boolean {
+        if (typeof content !== 'string') {
+            return false;
+        }
+
+        return (
+            content.includes('Stable Diffusion') &&
+            content.includes('Return only the final prompt text')
+        );
     }
 
     public scheduleRevealLatestMessage(): void {

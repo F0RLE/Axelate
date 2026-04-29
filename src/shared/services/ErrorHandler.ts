@@ -23,7 +23,7 @@ type ErrorCallback = (_error: IErrorInfo) => void;
 
 type ErrorHandlerDeps = {
     eventBus: EventBus;
-    tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+    tracer: Pick<LoggerService, 'debug' | 'warn' | 'error'>;
 };
 
 type UnhandledRejectionHandler = (event: PromiseRejectionEvent) => unknown;
@@ -73,7 +73,7 @@ export class ErrorHandler {
         };
 
         this._initialized = true;
-        this._deps.tracer.info('[ErrorHandler] Initialized');
+        this._deps.tracer.debug('[ErrorHandler] Initialized');
     }
 
     public destroy(): void {

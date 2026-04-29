@@ -38,11 +38,12 @@ function makeRequest(overrides: Partial<IChatRequest> = {}): IChatRequest {
 describe('AIChatTransport', () => {
     let transport: AIChatTransport;
     let mockCore: ReturnType<typeof createMockCore>;
-    let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+    let tracer: Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 
     beforeEach(() => {
         vi.useFakeTimers();
         tracer = {
+            debug: vi.fn(),
             info: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),
@@ -269,35 +270,6 @@ describe('AIChatTransport', () => {
             await expect(promise).resolves.toEqual({
                 ok: true,
                 images: ['file:///late.png'],
-            });
-        });
-    });
-
-    describe('generateImageBackground', () => {
-        const request = { provider: 'sdcpp', prompt: 'city', model: 'default' } as Parameters<
-            AIChatTransport['generateImageBackground']
-        >[0];
-
-        it('should reject in web mode', async () => {
-            mockCore.tauriProvider.isTauri.mockReturnValue(false);
-            await expect(transport.generateImageBackground(request)).resolves.toEqual({
-                ok: false,
-                error: 'IPC host unavailable',
-            });
-        });
-
-        it('should invoke background generation and normalize errors', async () => {
-            mockCore.tauriProvider.invoke.mockResolvedValueOnce(undefined);
-            await expect(transport.generateImageBackground(request)).resolves.toEqual({ ok: true });
-            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith(
-                'generate_image_background',
-                { request },
-            );
-
-            mockCore.tauriProvider.invoke.mockRejectedValueOnce('bg failed');
-            await expect(transport.generateImageBackground(request)).resolves.toEqual({
-                ok: false,
-                error: 'bg failed',
             });
         });
     });

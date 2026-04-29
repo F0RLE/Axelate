@@ -1,7 +1,7 @@
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { EngineStatusContext } from './AIBridgeContext';
 
-type EngineStatusLogger = Pick<LoggerService, 'info' | 'error'>;
+type EngineStatusLogger = Pick<LoggerService, 'debug' | 'info' | 'error'>;
 
 type EngineState = 'idle' | 'starting' | 'swapping' | 'ready' | 'error';
 type BackendEngineState =
@@ -48,6 +48,7 @@ export class EngineStatusService {
     private _context: EngineStatusContext | null = null;
     private readonly _unlisteners: (() => void)[] = [];
     private _domObserver: MutationObserver | null = null;
+    private _domSyncFrame: number | null = null;
     private _initialized = false;
 
     public constructor(private readonly _tracer: EngineStatusLogger) {}
@@ -99,7 +100,7 @@ export class EngineStatusService {
             }),
         );
 
-        this._tracer.info('[EngineStatusService] Listening for engine events');
+        this._tracer.debug('[EngineStatusService] Listening for engine events');
         this._initialized = true;
         this._startDomSyncObserver();
         void this.refreshFromBackend();
@@ -110,6 +111,7 @@ export class EngineStatusService {
         this._unlisteners.length = 0;
         this._domObserver?.disconnect();
         this._domObserver = null;
+        this._cancelDomSyncFrame();
         this._activeSlots.clear();
         this._initialized = false;
     }
@@ -199,21 +201,72 @@ export class EngineStatusService {
 
     private _startDomSyncObserver(): void {
         this._domObserver?.disconnect();
-        this._domObserver = new MutationObserver(() => {
-            this._applyActiveStatesToDom();
+        this._cancelDomSyncFrame();
+
+        this._domObserver = new MutationObserver((mutations) => {
+            if (!this._shouldSyncDomForMutations(mutations)) {
+                return;
+            }
+
+            this._scheduleDomSync();
         });
-        this._domObserver.observe(document.body, {
+
+        const observeOptions: MutationObserverInit = {
             childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ['data-app-id', 'data-current-module'],
-        });
+        };
+
+        this._domObserver.observe(document.body, observeOptions);
     }
 
     private _applyActiveStatesToDom(): void {
         this._activeSlots.forEach((_endpoint, engineId) => {
             this._setCardState(engineId, 'ready');
             this._setDashboardCardState(engineId, 'ready');
+        });
+    }
+
+    private _scheduleDomSync(): void {
+        if (this._domSyncFrame !== null) {
+            return;
+        }
+
+        this._domSyncFrame = globalThis.requestAnimationFrame(() => {
+            this._domSyncFrame = null;
+            this._applyActiveStatesToDom();
+        });
+    }
+
+    private _cancelDomSyncFrame(): void {
+        if (this._domSyncFrame === null) {
+            return;
+        }
+
+        globalThis.cancelAnimationFrame(this._domSyncFrame);
+        this._domSyncFrame = null;
+    }
+
+    private _shouldSyncDomForMutations(mutations: MutationRecord[]): boolean {
+        return mutations.some((mutation) => {
+            if (mutation.type === 'attributes') {
+                return (
+                    mutation.attributeName === 'data-app-id' ||
+                    mutation.attributeName === 'data-current-module'
+                );
+            }
+
+            return Array.from(mutation.addedNodes).some((node) => {
+                if (!(node instanceof HTMLElement)) {
+                    return false;
+                }
+
+                return (
+                    node.matches('[data-app-id], [data-current-module]') ||
+                    node.querySelector('[data-app-id], [data-current-module]') !== null
+                );
+            });
         });
     }
 
