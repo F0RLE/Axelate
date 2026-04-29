@@ -50,8 +50,12 @@ export class TauriProvider implements IBridge {
             this._isTauriDetected = true;
             this._tracer.debug('[TauriProvider] IPC Handshake successful');
         } catch {
-            this._isTauriDetected = false;
-            this._tracer.warn('[TauriProvider] Handshake failed, operating in Mock mode');
+            this._isTauriDetected = this._runtime.hasTauriGlobals();
+            this._tracer.warn(
+                this._isTauriDetected
+                    ? '[TauriProvider] Handshake failed, keeping Tauri IPC because runtime globals are present'
+                    : '[TauriProvider] Handshake failed, operating in Mock mode',
+            );
         }
     }
 
@@ -109,7 +113,9 @@ export class TauriProvider implements IBridge {
                         'payload' in errorPayload
                     ) {
                         // Some AppErrors might have a payload field
-                        message = String((errorPayload as { payload: unknown }).payload);
+                        message = stringifyInvokePayload(
+                            (errorPayload as { payload: unknown }).payload,
+                        );
                     }
 
                     const err = new Error(message);
@@ -342,5 +348,17 @@ export class TauriProvider implements IBridge {
         };
 
         return Promise.resolve((saneDefaults[cmd] ?? {}) as unknown as T);
+    }
+}
+
+function stringifyInvokePayload(payload: unknown): string {
+    if (typeof payload === 'string') {
+        return payload;
+    }
+
+    try {
+        return JSON.stringify(payload);
+    } catch {
+        return String(payload);
     }
 }

@@ -16,13 +16,15 @@ pub use super::types::{
     ChatMessage, ChatReply, ChatRequest, ChatResponse, ChatSession, TokenUsage,
 };
 
-const AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+const CLOUD_AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+const LOCAL_AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 struct PreparedRequestExecution {
     provider: OpenAiCompatibleProvider,
     effective_request: ChatRequest,
     request_id: String,
     message_id: String,
+    timeout: std::time::Duration,
 }
 const fn conflicting_local_capability(
     capability: crate::domain::engine::types::Capability,
@@ -258,6 +260,7 @@ async fn prepare_request_execution(
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let message_id = request_id.clone();
+    let timeout = timeout_for_base_url(&base_url);
     tracing::info!(
         "[AI] Starting request {} (msg {}) for model {}",
         request_id,
@@ -270,7 +273,16 @@ async fn prepare_request_execution(
         effective_request,
         request_id,
         message_id,
+        timeout,
     })
+}
+
+fn timeout_for_base_url(base_url: &str) -> std::time::Duration {
+    if crate::domain::ai::streaming::is_local_base_url(base_url) {
+        LOCAL_AI_REQUEST_TIMEOUT
+    } else {
+        CLOUD_AI_REQUEST_TIMEOUT
+    }
 }
 
 async fn execute_prepared_request<Run, Fut, Timeout>(
@@ -287,26 +299,24 @@ where
 {
     let message_id = execution.message_id.clone();
     let request_id = execution.request_id.clone();
-    let response = tokio::time::timeout(AI_REQUEST_TIMEOUT, run(execution)).await;
+    let timeout = execution.timeout;
+    let response = tokio::time::timeout(timeout, run(execution)).await;
 
     let response = if let Ok(result) = response {
         result
     } else {
         on_timeout(&message_id);
-        Err(timeout_error(request_id))
+        Err(timeout_error(request_id, timeout))
     };
 
-    persist_successful_response(sessions, session_id, message_id, &response).await;
+    persist_successful_response(sessions, session_id, message_id, &response).await?;
     response
 }
 
-fn timeout_error(request_id: String) -> crate::errors::AppError {
+fn timeout_error(request_id: String, timeout: std::time::Duration) -> crate::errors::AppError {
     crate::errors::AppError::Internal {
         request_id: Some(request_id),
-        message: format!(
-            "AI Request timed out after {} seconds.",
-            AI_REQUEST_TIMEOUT.as_secs()
-        ),
+        message: format!("AI Request timed out after {} seconds.", timeout.as_secs()),
     }
 }
 
@@ -516,6 +526,19 @@ mod tests {
             conflicting_local_capability(crate::domain::engine::types::Capability::Vision),
             None
         );
+    }
+
+    #[test]
+    fn local_chat_requests_get_longer_timeout_than_cloud_requests() {
+        assert_eq!(
+            timeout_for_base_url("http://127.0.0.1:8080/v1"),
+            LOCAL_AI_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            timeout_for_base_url("https://openrouter.ai/api/v1"),
+            CLOUD_AI_REQUEST_TIMEOUT
+        );
+        assert!(LOCAL_AI_REQUEST_TIMEOUT > CLOUD_AI_REQUEST_TIMEOUT);
     }
 
     #[test]

@@ -324,15 +324,30 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
 }
 
 fn nvidia_probe_from_nvml() -> Option<GpuInfo> {
-    let (cuda_driver_major, cuda_driver_minor) = detect_cuda_driver_version();
-    cuda_driver_major.map(|major| GpuInfo {
+    let Ok(nvml) = Nvml::init() else {
+        return None;
+    };
+    let Ok(device_count) = nvml.device_count() else {
+        return None;
+    };
+    if device_count == 0 {
+        return None;
+    }
+    let Ok(version) = nvml.sys_cuda_driver_version() else {
+        return None;
+    };
+
+    let major = u32::try_from(cuda_driver_version_major(version)).ok()?;
+    let minor = u32::try_from(cuda_driver_version_minor(version)).ok();
+
+    Some(GpuInfo {
         detected: true,
         name: "NVIDIA CUDA GPU".to_string(),
         cuda: true,
         backend: "cuda".to_string(),
         memory: 0,
         cuda_driver_major: Some(major),
-        cuda_driver_minor,
+        cuda_driver_minor: minor,
     })
 }
 

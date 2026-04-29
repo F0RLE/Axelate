@@ -120,8 +120,7 @@ impl SettingsService {
         let mut ui_state = self
             .json_store
             .load_async::<UIState>(&FILE_UI_STATE)
-            .await
-            .unwrap_or_default();
+            .await?;
 
         let normalized = language.trim().to_lowercase();
         ui_state.preferred_language = if normalized.is_empty() {

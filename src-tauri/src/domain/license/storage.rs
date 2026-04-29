@@ -5,11 +5,14 @@ use crate::infrastructure::crypto::secure_storage::SecureStorage;
 const LICENSE_KEY: &str = "license_data";
 
 /// Loads license from storage
-pub fn load_license() -> Option<LicenseInfo> {
-    match SecureStorage::get_key(LICENSE_KEY) {
-        Ok(Some(json)) => serde_json::from_str(&json).ok(),
-        _ => None,
-    }
+pub fn load_license() -> Result<Option<LicenseInfo>, AppError> {
+    let Some(json) = SecureStorage::get_key(LICENSE_KEY)? else {
+        return Ok(None);
+    };
+
+    serde_json::from_str(&json)
+        .map(Some)
+        .map_err(|e| AppError::Serialization(format!("Failed to parse stored license: {e}")))
 }
 
 /// Saves license to encrypted storage

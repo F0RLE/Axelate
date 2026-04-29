@@ -20,12 +20,24 @@ pub fn get_translations(_app: &AppHandle, lang: &str) -> Result<serde_json::Valu
             _ => None,
         };
 
-        if let Some(content) = target_content
-            && let Ok(target_json) = serde_json::from_str::<serde_json::Value>(&content)
-            && let Some(target_map) = target_json.as_object()
-        {
-            for (k, v) in target_map {
-                translations.insert(k.clone(), v.clone());
+        if let Some(content) = target_content {
+            match serde_json::from_str::<serde_json::Value>(&content) {
+                Ok(target_json) => {
+                    if let Some(target_map) = target_json.as_object() {
+                        for (k, v) in target_map {
+                            translations.insert(k.clone(), v.clone());
+                        }
+                    } else {
+                        tracing::warn!(
+                            "Locale '{lang}' root is not a JSON object; using English fallbacks"
+                        );
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        "Failed to parse locale '{lang}', using English fallbacks: {error}"
+                    );
+                }
             }
         }
     }

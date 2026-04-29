@@ -295,7 +295,7 @@ export class ConsoleLogService {
             case 'stable.diffusion.cpp':
                 return 'sdcpp';
             default:
-                return engineId.trim();
+                return key;
         }
     }
 

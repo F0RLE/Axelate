@@ -73,6 +73,33 @@ describe('ChatHistoryController', () => {
         expect(deps.renderHistory).toHaveBeenLastCalledWith(secondHistory);
     });
 
+    it('should load the new session when session id changes during an in-flight restore', async () => {
+        const firstHistory: IChatMessage[] = [{ role: 'user', content: 'first' }];
+        const secondHistory: IChatMessage[] = [{ role: 'assistant', content: 'second' }];
+        let resolveFirstLoad: (history: IChatMessage[]) => void = () => {};
+        const { controller, deps, aiBridge, state } = createController({
+            history: firstHistory,
+        });
+        aiBridge.getHistory
+            .mockImplementationOnce(
+                () =>
+                    new Promise<IChatMessage[]>((resolve) => {
+                        resolveFirstLoad = resolve;
+                    }),
+            )
+            .mockImplementationOnce(() => Promise.resolve(secondHistory));
+
+        const firstLoad = controller.ensureHistoryLoaded();
+        state.sessionId = 'session-2';
+        const secondLoad = controller.ensureHistoryLoaded();
+        resolveFirstLoad(firstHistory);
+        await Promise.all([firstLoad, secondLoad]);
+
+        expect(aiBridge.getHistory).toHaveBeenCalledTimes(2);
+        expect(deps.setHistory).toHaveBeenLastCalledWith(secondHistory);
+        expect(deps.renderHistory).toHaveBeenLastCalledWith(secondHistory);
+    });
+
     it('should clear rendered chat when the current session has no persisted history', async () => {
         const { controller, deps, state } = createController({
             history: [{ role: 'user', content: 'stale' }],

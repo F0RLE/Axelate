@@ -404,6 +404,62 @@ describe('AIChatTransport', () => {
             expect(listener).toHaveBeenCalledWith('current');
         });
 
+        it('should keep notifying listeners when one stream listener throws', async () => {
+            const failingListener = vi.fn(() => {
+                throw new Error('listener failed');
+            });
+            const healthyListener = vi.fn();
+            invokeMethod(failingListener);
+            invokeMethod(healthyListener);
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (_cmd: string, args: Record<string, unknown>) => {
+                    const chatChannel = args['chatChannel'] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    const channel = args[channelName] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    const requestId = (args['request'] as { request_id: string }).request_id;
+                    channel.onmessage?.({
+                        request_id: requestId,
+                        message_id: 'msg-1',
+                        kind: channelName === 'chatChannel' ? 'chat_chunk' : 'thought_chunk',
+                        content: 'current',
+                    });
+                    chatChannel.onmessage?.({
+                        request_id: requestId,
+                        message_id: 'msg-1',
+                        kind: 'done',
+                        content: '',
+                    });
+                    return Promise.resolve({ ok: true, reply: { text: 'done' } });
+                },
+            );
+
+            await transport.send(makeRequest());
+
+            expect(failingListener).toHaveBeenCalledWith('current');
+            expect(healthyListener).toHaveBeenCalledWith('current');
+            expect(tracer.error).toHaveBeenCalledWith(
+                '[AIChatTransport] Stream listener failed:',
+                expect.any(Error),
+            );
+        });
+
         it('should NOT forward payload after unsubscribe', async () => {
             const listener = vi.fn();
             const unsub = invokeMethod(listener);

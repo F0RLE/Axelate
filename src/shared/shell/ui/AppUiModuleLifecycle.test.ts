@@ -49,7 +49,7 @@ describe('AppUiModuleLifecycle', () => {
 
         const app = { id: 'svc-a', name: 'Service A' } as IApp;
         const version = lifecycle.bumpLaunchSelectionVersion('services');
-        platformService.stop.mockResolvedValue(undefined);
+        platformService.stop.mockResolvedValue(true);
         getSelectedApp.mockReturnValue({ id: 'svc-b' });
 
         const pending = lifecycle.launchSelectedApp('services', app, version, launchApp);
@@ -79,12 +79,28 @@ describe('AppUiModuleLifecycle', () => {
         const nextApp = { id: 'svc-new', name: 'New Service' } as IApp;
         const previousApp = { id: 'svc-old', name: 'Old Service' } as IApp;
         resolveAppById.mockReturnValue(previousApp);
-        platformService.stop.mockResolvedValue(undefined);
+        platformService.stop.mockResolvedValue(true);
 
         lifecycle.stopPreviousModule(card, nextApp, 'services');
         await Promise.resolve();
 
         expect(platformService.stop).toHaveBeenCalledWith(previousApp);
         expect(showToast).toHaveBeenCalledWith('Old Service stopped', 'info');
+    });
+
+    it('does not show stopped toast when previous module stop reports failure', async () => {
+        const card = document.createElement('div');
+        card.dataset['currentModule'] = 'svc-old';
+        card.dataset['currentModuleName'] = 'Old Service';
+        const nextApp = { id: 'svc-new', name: 'New Service' } as IApp;
+        const previousApp = { id: 'svc-old', name: 'Old Service' } as IApp;
+        resolveAppById.mockReturnValue(previousApp);
+        platformService.stop.mockResolvedValue(false);
+
+        lifecycle.stopPreviousModule(card, nextApp, 'services');
+        await Promise.resolve();
+
+        expect(platformService.stop).toHaveBeenCalledWith(previousApp);
+        expect(showToast).not.toHaveBeenCalled();
     });
 });

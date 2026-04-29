@@ -534,7 +534,7 @@ pub async fn clear_chat_history(
     sessions: State<'_, Arc<ChatSessionManager>>,
 ) -> Result<(), AppError> {
     sessions.clear_chat_history(session_id);
-    let _ = sessions.force_save().await;
+    sessions.force_save().await?;
     Ok(())
 }
 
@@ -558,7 +558,7 @@ pub async fn rewind_last_turn(
     sessions: State<'_, Arc<ChatSessionManager>>,
 ) -> Result<Option<String>, AppError> {
     let removed = sessions.rewind_last_turn(session_id);
-    let _ = sessions.force_save().await;
+    sessions.force_save().await?;
     Ok(removed)
 }
 

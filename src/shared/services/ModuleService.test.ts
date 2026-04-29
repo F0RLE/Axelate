@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
             getModuleStatus: vi.fn(),
             downloadModule: vi.fn(),
             deleteModule: vi.fn(),
+            controlModule: vi.fn(),
             pauseDownload: vi.fn().mockResolvedValue(true),
             resumeDownload: vi.fn(),
             cancelDownload: vi.fn().mockResolvedValue(true),
@@ -95,6 +96,22 @@ describe('ModuleService', () => {
 
             expect(mocks.tauriProvider.listen).toHaveBeenCalledTimes(1);
         });
+
+        it('should allow retry when progress listener registration fails', async () => {
+            mocks.tauriProvider.listen
+                .mockRejectedValueOnce(new Error('listen failed'))
+                .mockResolvedValueOnce(() => {
+                    /* no-op */
+                });
+
+            await expect(moduleService.init()).rejects.toThrow('listen failed');
+            await moduleService.init();
+
+            expect(mocks.tauriProvider.listen).toHaveBeenCalledTimes(2);
+            expect(mocks.tracer.error).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to subscribe to download progress'),
+            );
+        });
     });
 
     describe('checkInstalled', () => {
@@ -165,6 +182,7 @@ describe('ModuleService', () => {
             expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
                 'test-module',
                 'https://repo.com/module',
+                null,
                 null,
                 null,
             );
@@ -248,17 +266,19 @@ describe('ModuleService', () => {
 
     describe('control', () => {
         it('should invoke control_module command', async () => {
-            mocks.tauriProvider.invoke.mockResolvedValueOnce(undefined);
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'ok',
+                data: { success: true, message: 'started', status: 'running' },
+            });
 
             const result = await moduleService.control('test-service', 'start');
 
             expect(result).toBe(true);
-            expect(mocks.tauriProvider.invoke).toHaveBeenCalledWith('control_module', {
-                request: {
-                    module_id: 'test-service',
-                    action: 'start',
-                },
+            expect(mocks.commands.controlModule).toHaveBeenCalledWith({
+                module_id: 'test-service',
+                action: 'start',
             });
+            expect(mocks.invokeSafe).toHaveBeenCalled();
         });
 
         it('should return false when not in Tauri', async () => {
@@ -270,9 +290,23 @@ describe('ModuleService', () => {
         });
 
         it('should return false on error', async () => {
-            mocks.tauriProvider.invoke.mockRejectedValueOnce(new Error('Control failed'));
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'Control failed' },
+            });
 
             const result = await moduleService.control('test-service', 'start');
+
+            expect(result).toBe(false);
+        });
+
+        it('should return false when backend reports unsuccessful control response', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'ok',
+                data: { success: false, message: 'not implemented', status: null },
+            });
+
+            const result = await moduleService.control('test-service', 'restart');
 
             expect(result).toBe(false);
         });
@@ -435,6 +469,7 @@ describe('ModuleService', () => {
                 'https://repo.com',
                 'abc123',
                 null,
+                null,
             );
         });
 
@@ -444,6 +479,7 @@ describe('ModuleService', () => {
             expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
                 'mod',
                 'https://repo.com',
+                null,
                 null,
                 null,
             );
@@ -477,6 +513,7 @@ describe('ModuleService', () => {
             expect(mocks.commands.downloadModule).toHaveBeenCalledWith(
                 'mod',
                 'https://repo.com',
+                null,
                 null,
                 null,
             );

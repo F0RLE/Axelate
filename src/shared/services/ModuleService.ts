@@ -5,7 +5,11 @@
 
 import { type IBridge } from '@/shared/types/IBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { IModuleDownloadState } from '../types/coreTypes';
+import type {
+    IModuleDownloadState,
+    ReleaseDownloadOptions,
+    ReleaseDownloadSelection,
+} from '../types/coreTypes';
 import { commands } from '../types/bindings';
 import { invokeSafe } from '../api/invoke';
 
@@ -29,46 +33,54 @@ export class ModuleService {
      */
     public async init() {
         if (this._initialized) return;
-        this._initialized = true;
         if (!this._bridge.isTauri()) return;
 
-        this._downloadProgressUnlisten = await this._bridge.listen<{
-            module_id: string;
-            status: string;
-            progress: number;
-            message: string;
-            downloaded: number;
-            total: number;
-            speed: number;
-        }>('download_progress', (payload) => {
-            this._logDownloadPhase(payload);
+        try {
+            this._downloadProgressUnlisten = await this._bridge.listen<{
+                module_id: string;
+                status: string;
+                progress: number;
+                message: string;
+                downloaded: number;
+                total: number;
+                speed: number;
+            }>('download_progress', (payload) => {
+                this._logDownloadPhase(payload);
 
-            this._downloadState[payload.module_id] = {
-                status: payload.status as
-                    | 'init'
-                    | 'pending'
-                    | 'connecting'
-                    | 'downloading'
-                    | 'verifying'
-                    | 'extracting'
-                    | 'paused'
-                    | 'complete'
-                    | 'error'
-                    | 'cancelled',
-                progress: payload.progress,
-                message: payload.message,
-                downloaded: payload.downloaded,
-                total: payload.total,
-                speed: payload.speed,
-            };
+                this._downloadState[payload.module_id] = {
+                    status: payload.status as
+                        | 'init'
+                        | 'pending'
+                        | 'connecting'
+                        | 'downloading'
+                        | 'verifying'
+                        | 'extracting'
+                        | 'paused'
+                        | 'complete'
+                        | 'error'
+                        | 'cancelled',
+                    progress: payload.progress,
+                    message: payload.message,
+                    downloaded: payload.downloaded,
+                    total: payload.total,
+                    speed: payload.speed,
+                };
 
-            if (payload.status === 'complete') {
-                (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
-            }
-            // Dispatch custom event for UI components that don't use this service directly
-            const event = new CustomEvent('download-progress-update', { detail: payload });
-            globalThis.dispatchEvent(event);
-        });
+                if (payload.status === 'complete') {
+                    (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
+                }
+                // Dispatch custom event for UI components that don't use this service directly
+                const event = new CustomEvent('download-progress-update', { detail: payload });
+                globalThis.dispatchEvent(event);
+            });
+            this._initialized = true;
+        } catch (error) {
+            this._initialized = false;
+            this._tracer.error(
+                `[ModuleService] Failed to subscribe to download progress: ${String(error)}`,
+            );
+            throw error;
+        }
     }
 
     /**
@@ -132,6 +144,7 @@ export class ModuleService {
         repoUrl: string,
         expectedHash?: string,
         dlType?: string,
+        releaseSelection?: ReleaseDownloadSelection | null,
     ): Promise<DownloadModuleOutcome> {
         this._tracer.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
         if (expectedHash !== undefined && expectedHash !== '') {
@@ -150,7 +163,13 @@ export class ModuleService {
 
             // Updated to use new API layer
             const result = await invokeSafe(
-                commands.downloadModule(moduleId, repoUrl, hashToPass, dlType ?? null),
+                commands.downloadModule(
+                    moduleId,
+                    repoUrl,
+                    hashToPass,
+                    dlType ?? null,
+                    releaseSelection ?? null,
+                ),
             );
 
             if (result.status === 'error') {
@@ -170,6 +189,27 @@ export class ModuleService {
             this._tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
             this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
             throw err;
+        }
+    }
+
+    public async getReleaseDownloadOptions(
+        moduleId: string,
+        repoUrl: string,
+    ): Promise<ReleaseDownloadOptions | null> {
+        if (!this._bridge.isTauri()) return null;
+
+        try {
+            const result = await invokeSafe(commands.getReleaseDownloadOptions(moduleId, repoUrl));
+            if (result.status === 'ok') {
+                return result.data as ReleaseDownloadOptions;
+            }
+            this._tracer.warn(
+                `[ModuleService] Release options failed for ${moduleId}: ${result.error.message}`,
+            );
+            return null;
+        } catch (err) {
+            this._tracer.error(`[ModuleService] Release options error: ${String(err)}`);
+            return null;
         }
     }
 
@@ -281,13 +321,17 @@ export class ModuleService {
         this._tracer.info(`[ModuleService] Control ${serviceName} -> ${action}`);
         if (this._bridge.isTauri()) {
             try {
-                await this._bridge.invoke('control_module', {
-                    request: {
+                const result = await invokeSafe(
+                    commands.controlModule({
                         module_id: serviceName,
                         action: action.toLowerCase(),
-                    },
-                });
-                return true;
+                    }),
+                );
+                if (result.status === 'error') {
+                    this._tracer.error(`[ModuleService] Control failed: ${result.error.message}`);
+                    return false;
+                }
+                return result.data.success === true;
             } catch (e) {
                 this._tracer.error(`[ModuleService] Control failed: ${String(e)}`);
                 return false;

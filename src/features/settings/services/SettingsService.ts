@@ -3,6 +3,8 @@ import type { IApp } from '@/shared/types/coreTypes';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { AppSettings } from '@/shared/types/bindings';
+import { commands } from '@/shared/types/bindings';
+import { invokeSafe } from '@/shared/api/invoke';
 export type ISettings = AppSettings;
 export type SettingsValue = string | number | boolean;
 type SettingsLogger = Pick<LoggerService, 'error'>;
@@ -85,8 +87,17 @@ export class SettingsService {
         service: string,
     ): Promise<boolean> {
         try {
-            await this._tauri.invoke('control_service', { action, service });
-            return true;
+            const result = await invokeSafe(
+                commands.controlModule({
+                    module_id: service,
+                    action,
+                }),
+            );
+            if (result.status === 'error') {
+                this._tracer.error('[SettingsService] Control service failed:', result.error);
+                return false;
+            }
+            return result.data.success === true;
         } catch (e) {
             this._tracer.error('[SettingsService] Control service failed:', e);
             return false;

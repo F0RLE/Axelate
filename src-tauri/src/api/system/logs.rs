@@ -133,7 +133,13 @@ pub async fn get_console_overview(
     ui_state_service: State<'_, crate::infrastructure::config::ui_state::UiStateService>,
 ) -> Result<ConsoleOverview, AppError> {
     let engine_state = engine_manager.state().await;
-    let ui_state = ui_state_service.get_ui_state().await.unwrap_or_default();
+    let ui_state = ui_state_service
+        .get_ui_state()
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!("Failed to load UI state for console overview, using defaults: {error}");
+            UIState::default()
+        });
     let logs = logger::get_frontend_logs_since(0.0);
     Ok(ConsoleOverviewBuilder::build(&engine_state, &ui_state, &logs).await)
 }

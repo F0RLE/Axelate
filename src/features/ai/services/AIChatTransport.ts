@@ -395,7 +395,11 @@ export class AIChatTransport implements IChatTransport {
 
     private _emitListeners(listeners: ReadonlySet<(chunk: string) => void>, payload: string): void {
         listeners.forEach((listener) => {
-            listener(payload);
+            try {
+                listener(payload);
+            } catch (error) {
+                this._tracer.error('[AIChatTransport] Stream listener failed:', error);
+            }
         });
     }
 

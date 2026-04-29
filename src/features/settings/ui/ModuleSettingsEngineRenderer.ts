@@ -278,6 +278,7 @@ export class ModuleSettingsEngineRenderer {
             getTextFields: (translate) => this._fieldCatalog.buildTextEngineFields(translate),
             getCoreModelField: (translate, modelPlaceholder, isImage) =>
                 this._fieldCatalog.buildCoreModelField(translate, modelPlaceholder, isImage),
+            getComputeModeField: (translate) => this._fieldCatalog.buildComputeModeField(translate),
             getImageExtraArgsField: (translate) =>
                 this._fieldCatalog.buildImageExtraArgsField(translate),
         });
@@ -322,6 +323,10 @@ export class ModuleSettingsEngineRenderer {
     private _createEngineFieldControl(
         options: EngineFieldControlOptions,
     ): EngineFieldControlResult {
+        if (options.type === 'select' && options.isEngineConfig && options.key === 'compute_mode') {
+            return this._createComputeModeControl(options);
+        }
+
         if (options.type === 'select') {
             return this._createSelectFieldControl(options);
         }
@@ -351,6 +356,68 @@ export class ModuleSettingsEngineRenderer {
             input: customSelect.root,
             engineInput: customSelect.input,
             customSelect,
+            extraArgsControl: null,
+        };
+    }
+
+    private _createComputeModeControl(
+        options: EngineFieldControlOptions,
+    ): EngineFieldControlResult {
+        const root = document.createElement('div');
+        root.className = 'local-engine-compute-toggle';
+
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.className = 'local-engine-compute-value';
+
+        const buttons = new Map<string, HTMLButtonElement>();
+        const syncDisplay = () => {
+            const currentValue =
+                hiddenInput.value === ''
+                    ? String(options.defaultValue ?? 'gpu')
+                    : hiddenInput.value;
+            buttons.forEach((button, value) => {
+                const selected = value === currentValue;
+                button.classList.toggle('selected', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
+        };
+
+        options.options?.forEach((option) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'thinking-option-card local-engine-compute-option';
+            button.dataset['value'] = option;
+            button.setAttribute('aria-pressed', 'false');
+
+            const title = document.createElement('span');
+            title.className = 'thinking-option-title';
+            title.textContent = options.optionLabels?.[option] ?? option;
+
+            button.append(title);
+            button.addEventListener('click', () => {
+                hiddenInput.value = option;
+                syncDisplay();
+                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+
+            buttons.set(option, button);
+            root.appendChild(button);
+        });
+
+        root.prepend(hiddenInput);
+
+        return {
+            input: root,
+            engineInput: hiddenInput,
+            customSelect: {
+                input: hiddenInput,
+                root,
+                syncDisplay,
+                destroy: () => {
+                    return;
+                },
+            },
             extraArgsControl: null,
         };
     }
@@ -413,7 +480,7 @@ export class ModuleSettingsEngineRenderer {
     ): HTMLDivElement {
         const card = document.createElement('div');
         const selected = config?.model_path === profile.modelPath;
-        card.className = `ai-model-card local-engine-profile-card${selected ? ' selected' : ''}`;
+        card.className = `ai-model-card ai-model-card--custom local-engine-profile-card${selected ? ' selected' : ''}`;
         card.tabIndex = 0;
         card.role = 'option';
         card.setAttribute('aria-selected', String(selected));
@@ -423,7 +490,8 @@ export class ModuleSettingsEngineRenderer {
 
         const name = document.createElement('div');
         name.className = 'model-name';
-        name.textContent = profile.name;
+        name.textContent = this._getModelProfileDisplayName(profile);
+        name.title = profile.modelPath;
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -450,6 +518,13 @@ export class ModuleSettingsEngineRenderer {
         return card;
     }
 
+    private _getModelProfileDisplayName(profile: LocalEngineModelProfile): string {
+        return (profile.name.trim() || this._getModelFileName(profile.modelPath)).replace(
+            /\.(?:gguf|safetensors)$/iu,
+            '',
+        );
+    }
+
     private _createSaveModelProfileCard(
         appId: string,
         config: EngineConfig | null,
@@ -470,6 +545,9 @@ export class ModuleSettingsEngineRenderer {
             'Store model, generation settings, and startup flags.',
         );
 
+        const body = document.createElement('div');
+        body.className = 'model-pricing ai-custom-model-composer-body';
+
         const saveButton = document.createElement('button');
         saveButton.type = 'button';
         saveButton.className = 'ai-check-btn ai-custom-model-save-btn';
@@ -488,7 +566,8 @@ export class ModuleSettingsEngineRenderer {
             }
         });
 
-        card.append(name, desc, saveButton);
+        body.append(saveButton);
+        card.append(name, desc, body);
         return card;
     }
 
@@ -556,7 +635,10 @@ export class ModuleSettingsEngineRenderer {
             name: this._getModelFileName(modelPath),
             modelPath,
             extraArgs: this._extraArgsControls.get(appId)?.getGroups() ?? config?.extra_args ?? [],
-            generationSettings: this._readGenerationPresetSettings(appId),
+            generationSettings: this._readGenerationPresetSettings(
+                appId,
+                card.closest<HTMLElement>('.local-engine-config') ?? undefined,
+            ),
         };
         profiles.unshift(profile);
         this._saveModelProfiles(appId, profiles);
@@ -611,15 +693,43 @@ export class ModuleSettingsEngineRenderer {
         });
     }
 
-    private _readGenerationPresetSettings(appId: string): Record<string, string | number | null> {
+    private _readGenerationPresetSettings(
+        appId: string,
+        root: HTMLElement | Document = document,
+    ): Record<string, string | number | null> {
         const settings = this._deps.service.getSettings();
         return Object.fromEntries(
             IMAGE_GENERATION_PRESET_SETTING_SUFFIXES.map((suffix) => {
                 const key = `${appId}_${suffix}`;
-                const value = settings[key];
+                const value = this._readGenerationPresetInputValue(root, key) ?? settings[key];
                 return [key, typeof value === 'string' || typeof value === 'number' ? value : null];
             }),
         );
+    }
+
+    private _readGenerationPresetInputValue(
+        root: HTMLElement | Document,
+        key: string,
+    ): string | number | null | undefined {
+        const keyClass = key.replaceAll('_', '-');
+        const input = root.querySelector<
+            HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+        >(
+            `.local-engine-field-row--${keyClass} input, .local-engine-field-row--${keyClass} select, .local-engine-field-row--${keyClass} textarea`,
+        );
+        if (input === null) {
+            return undefined;
+        }
+
+        const value = input.value.trim();
+        if (value === '') {
+            return null;
+        }
+        if (input instanceof HTMLInputElement && input.type === 'number') {
+            const numericValue = Number(value);
+            return Number.isFinite(numericValue) ? numericValue : value;
+        }
+        return value;
     }
 
     private _applyGenerationPresetSettings(

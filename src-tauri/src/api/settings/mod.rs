@@ -51,6 +51,7 @@ pub async fn get_module_settings(
     settings_service: tauri::State<'_, settings::SettingsService>,
     module_id: String,
 ) -> Result<HashMap<String, Value>, AppError> {
+    crate::domain::modules::downloader::validate_module_id(&module_id)?;
     settings_service.get_module_settings(&module_id).await
 }
 
@@ -63,6 +64,7 @@ pub async fn save_module_settings(
     module_id: String,
     settings: HashMap<String, Value>,
 ) -> Result<(), AppError> {
+    crate::domain::modules::downloader::validate_module_id(&module_id)?;
     settings_service
         .save_module_settings(&module_id, &settings)
         .await

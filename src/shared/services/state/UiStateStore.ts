@@ -66,6 +66,7 @@ const MAX_UI_ZOOM = 2.6;
 export class UiStateStore {
     private _state: IUIState = { ...DEFAULT_UI_STATE };
     private _isDirty = false;
+    private _revision = 0;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly _STORAGE_KEY = 'axelate_ui_state';
     private _isDestroyed = false;
@@ -107,6 +108,7 @@ export class UiStateStore {
         this._state = { ...this._state, ...updates };
         if (markDirty) {
             this._isDirty = true;
+            this._revision += 1;
             this._debouncedSave();
         }
     }
@@ -121,6 +123,7 @@ export class UiStateStore {
         target[nestedKey] = value;
         if (markDirty) {
             this._isDirty = true;
+            this._revision += 1;
             this._debouncedSave();
         }
     }
@@ -134,6 +137,7 @@ export class UiStateStore {
         delete target[nestedKey];
         if (markDirty) {
             this._isDirty = true;
+            this._revision += 1;
             this._debouncedSave();
         }
     }
@@ -167,29 +171,41 @@ export class UiStateStore {
 
     public async saveAsync(): Promise<void> {
         if (!this._isDirty) return;
+        const revision = this._revision;
+        const state = this._snapshotState();
         try {
             if (this._bridge.isTauri()) {
-                await this._bridge.invoke('save_ui_state', { state: this._state });
+                await this._bridge.invoke('save_ui_state', { state });
             } else {
-                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(state));
             }
-            this._isDirty = false;
+            if (this._revision === revision) {
+                this._isDirty = false;
+            }
         } catch (e) {
             this._tracer.error(`[UiStateStore] Failed to save state: ${String(e)}`);
         }
     }
 
-    public saveImmediate(): void {
+    public async saveImmediate(): Promise<void> {
         if (!this._isDirty) return;
+        const revision = this._revision;
+        const state = this._snapshotState();
         try {
             if (this._bridge.isTauri()) {
-                void this._bridge.invoke('save_ui_state', { state: this._state });
+                await this._bridge.invoke('save_ui_state', { state });
+                if (this._revision === revision) {
+                    this._isDirty = false;
+                }
             } else {
-                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(state));
+                if (this._revision === revision) {
+                    this._isDirty = false;
+                }
             }
-            this._isDirty = false;
         } catch (e) {
             this._tracer.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
+            throw e;
         }
     }
 
@@ -214,6 +230,10 @@ export class UiStateStore {
                 ]),
             ),
         };
+    }
+
+    private _snapshotState(): IUIState {
+        return structuredClone(this._state);
     }
 
     private _clampZoom(zoom: number): number {

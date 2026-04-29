@@ -80,7 +80,9 @@ impl<'a> LifecycleExecutor<'a> {
         }
 
         if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
-            if let Some(existing_pid) = self.reconcile_existing_script_processes(&entry_path).await
+            if let Some(existing_pid) = self
+                .reconcile_existing_script_processes(&entry_path)
+                .await?
             {
                 return Ok(ControlResponse {
                     success: true,
@@ -192,8 +194,14 @@ impl<'a> LifecycleExecutor<'a> {
         let temp_pid_file = self.module_path.join("module.pid.tmp");
         if let Err(e) = std::fs::write(&temp_pid_file, pid.to_string()) {
             tracing::error!("Failed to write temp PID file: {e}");
-        } else {
-            let _ = std::fs::rename(temp_pid_file, pid_file);
+        } else if let Err(error) = std::fs::rename(&temp_pid_file, &pid_file) {
+            tracing::error!(
+                module_id = %self.module_id,
+                temp = %temp_pid_file.display(),
+                target = %pid_file.display(),
+                "Failed to publish module PID file: {error}"
+            );
+            let _ = std::fs::remove_file(&temp_pid_file);
         }
 
         ControlResponse {
@@ -215,17 +223,30 @@ impl<'a> LifecycleExecutor<'a> {
             return;
         }
 
-        let _ = std::fs::rename(temp_pid_file, pid_file);
+        if let Err(error) = std::fs::rename(&temp_pid_file, &pid_file) {
+            tracing::error!(
+                module_id = %self.module_id,
+                temp = %temp_pid_file.display(),
+                target = %pid_file.display(),
+                "Failed to publish reconciled module PID file: {error}"
+            );
+            let _ = std::fs::remove_file(&temp_pid_file);
+        }
     }
 
     /// Gracefully stops a module with escalation
-    pub async fn stop(&self, manifest: &ModuleManifest) -> ControlResponse {
+    pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
         tracing::info!("Stopping module: {}", self.module_id);
         let script_entry_path = self.resolve_script_entry_path(manifest);
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
-            let _ = self.run_command(stop_cmd, Duration::from_secs(5)).await;
+            if let Err(error) = self.run_command(stop_cmd, Duration::from_secs(5)).await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Module stop script failed, continuing with process termination: {error}"
+                );
+            }
         }
 
         // 2. Attempt soft termination and wait
@@ -247,12 +268,17 @@ impl<'a> LifecycleExecutor<'a> {
             // Wait with timeout
             if timeout(Duration::from_secs(5), child.wait()).await.is_err() {
                 tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
-                let _ = child.kill().await;
+                if let Err(error) = child.kill().await {
+                    tracing::warn!(
+                        module_id = %self.module_id,
+                        "Failed to force-kill registered module process: {error}"
+                    );
+                }
             }
         }
 
         if let Some(entry_path) = script_entry_path.as_ref() {
-            self.kill_matching_script_processes(entry_path).await;
+            self.kill_matching_script_processes(entry_path).await?;
         }
 
         // 3. Escalation check (fallback for orphans or if still running)
@@ -279,37 +305,68 @@ impl<'a> LifecycleExecutor<'a> {
                     && let Ok(pid) = pid_str.trim().parse::<usize>()
                 {
                     // Safe kill_orphan now includes existence check
-                    let _ = crate::domain::modules::controller::process::kill_orphan(pid);
+                    if let Err(error) =
+                        crate::domain::modules::controller::process::kill_orphan(pid)
+                    {
+                        tracing::warn!(
+                            module_id = %self.module_id,
+                            pid,
+                            "Failed to force-kill orphan module process: {error}"
+                        );
+                    }
                 }
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        // 4. Cleanup PID file (Wait loop already verified termination)
-        let _ = std::fs::remove_file(self.module_path.join("module.pid"));
+        if self
+            .controller
+            .is_running(&self.module_id, self.module_path)
+            .await
+        {
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Module {} failed to stop", self.module_id),
+            });
+        }
 
-        ControlResponse {
+        // 4. Cleanup PID file (Wait loop already verified termination)
+        match std::fs::remove_file(self.module_path.join("module.pid")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to remove module PID file after stop: {error}"
+                );
+            }
+        }
+
+        Ok(ControlResponse {
             success: true,
             message: format!("Module {} stopped", self.module_id),
             status: Some("stopped".to_string()),
-        }
+        })
     }
 
     fn resolve_script_entry_path(&self, manifest: &ModuleManifest) -> Option<std::path::PathBuf> {
         script_runtime::resolve_entry_path(self.module_path, manifest).ok()
     }
 
-    async fn reconcile_existing_script_processes(&self, entry_path: &Path) -> Option<usize> {
+    async fn reconcile_existing_script_processes(
+        &self,
+        entry_path: &Path,
+    ) -> Result<Option<usize>, AppError> {
         let matching_pids = self.find_matching_script_processes(entry_path).await;
         if matching_pids.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         if let Some(&existing_pid) = matching_pids.first()
             && matching_pids.len() == 1
         {
             self.persist_pid(existing_pid);
-            return Some(existing_pid);
+            return Ok(Some(existing_pid));
         }
 
         tracing::warn!(
@@ -319,22 +376,54 @@ impl<'a> LifecycleExecutor<'a> {
         );
 
         if let Some(mut child) = self.controller.unregister(&self.module_id) {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
+            if let Err(error) = child.kill().await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to kill registered duplicate module child: {error}"
+                );
+            }
+            if let Err(error) = child.wait().await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to wait registered duplicate module child after kill: {error}"
+                );
+            }
         }
 
         for pid in matching_pids {
-            let _ = process::kill_orphan(pid);
+            process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to clean duplicate module process {pid} for '{}': {error}",
+                    self.module_id
+                ),
+            })?;
         }
 
-        let _ = std::fs::remove_file(self.module_path.join("module.pid"));
-        None
+        match std::fs::remove_file(self.module_path.join("module.pid")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to remove stale module PID file after duplicate cleanup: {error}"
+                );
+            }
+        }
+        Ok(None)
     }
 
-    async fn kill_matching_script_processes(&self, entry_path: &Path) {
+    async fn kill_matching_script_processes(&self, entry_path: &Path) -> Result<(), AppError> {
         for pid in self.find_matching_script_processes(entry_path).await {
-            let _ = process::kill_orphan(pid);
+            process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to kill module process {pid} for '{}': {error}",
+                    self.module_id
+                ),
+            })?;
         }
+        Ok(())
     }
 
     async fn find_matching_script_processes(&self, entry_path: &Path) -> Vec<usize> {

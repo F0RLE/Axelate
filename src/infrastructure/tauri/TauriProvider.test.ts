@@ -138,7 +138,18 @@ describe('TauriProvider', () => {
             win['__TAURI__'] = origTauri;
         });
 
-        it('should return _isTauriDetected=false from line 31 after failed handshake', async () => {
+        it('should keep Tauri mode after a failed handshake when runtime globals are present', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Handshake fail'),
+            );
+            provider.init();
+
+            await vi.waitFor(() => {
+                expect(provider.isTauri()).toBe(true);
+            });
+        });
+
+        it('should return _isTauriDetected=false after failed handshake without runtime globals', async () => {
             const { win, origTauri } = setupWebMode();
 
             (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
@@ -147,9 +158,7 @@ describe('TauriProvider', () => {
             const p = new TauriProvider(createTracer());
             p.init();
 
-            // Wait for handshake to fail → _isTauriDetected becomes false
             await vi.waitFor(() => {
-                // isTauri() now returns this._isTauriDetected (false), not the static check
                 expect(p.isTauri()).toBe(false);
             });
 
@@ -231,7 +240,7 @@ describe('TauriProvider', () => {
 
             await expect(provider.invoke('specta_err_string')).rejects.toThrow('rate limited');
             await expect(provider.invoke('specta_err_message')).rejects.toThrow('boom');
-            await expect(provider.invoke('specta_err_payload')).rejects.toThrow('[object Object]');
+            await expect(provider.invoke('specta_err_payload')).rejects.toThrow('{"detail":"bad"}');
         });
 
         it('should normalize object rejections with message, code and stringify fallback', async () => {
@@ -505,7 +514,7 @@ describe('TauriProvider', () => {
 
     // ---------------------------------------------------------- handshake failure (lines 24-25)
     describe('init handshake failure', () => {
-        it('should set _isTauriDetected to false when handshake fails', () => {
+        it('should not disable Tauri mode when handshake fails but globals exist', async () => {
             // Make invoke throw so handshake fails
             (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
                 new Error('Handshake failed'),
@@ -514,16 +523,20 @@ describe('TauriProvider', () => {
             const provider2 = new TauriProvider(createTracer());
             provider2.init();
 
-            // After failed handshake, isTauri falls back to static detection (globalThis.__TAURI__ present)
-            // _isTauriDetected is now false, but isTauri() returns static check (true since __TAURI__ exists)
-            // The internal flag is false — verify by checking it doesn't use handshake-based detection
-            // We can verify indirectly: a new provider with no __TAURI__ and failed handshake returns false
+            await vi.waitFor(() => {
+                expect(provider2.isTauri()).toBe(true);
+            });
+        });
+
+        it('should set _isTauriDetected to false when handshake fails without globals', async () => {
             const { win, origTauri, provider: provider3 } = setupWebMode();
 
             (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(new Error('Fail'));
             provider3.init();
 
-            expect(provider3.isTauri()).toBe(false);
+            await vi.waitFor(() => {
+                expect(provider3.isTauri()).toBe(false);
+            });
 
             win['__TAURI__'] = origTauri;
         });

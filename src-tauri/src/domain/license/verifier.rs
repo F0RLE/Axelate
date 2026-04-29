@@ -3,11 +3,11 @@ use super::types::{LicenseInfo, LicenseStatus};
 use crate::errors::AppError;
 
 /// Verifies current license status
-pub fn verify() -> LicenseStatus {
-    match storage::load_license() {
+pub fn verify() -> Result<LicenseStatus, AppError> {
+    Ok(match storage::load_license()? {
         Some(info) => verify_license_info(&info),
         None => LicenseStatus::Free,
-    }
+    })
 }
 
 /// Verifies a license info object
@@ -52,14 +52,14 @@ pub fn deactivate() -> Result<(), AppError> {
 }
 
 /// Checks if a feature is available in the current license
-pub fn has_feature(feature: &str) -> bool {
-    let status = verify();
+pub fn has_feature(feature: &str) -> Result<bool, AppError> {
+    let status = verify()?;
     match status {
-        LicenseStatus::Enterprise => true,
+        LicenseStatus::Enterprise => Ok(true),
         LicenseStatus::Pro => {
             // Pro features list
-            matches!(feature, "advanced_stats" | "custom_themes")
+            Ok(matches!(feature, "advanced_stats" | "custom_themes"))
         }
-        _ => false,
+        _ => Ok(false),
     }
 }

@@ -141,6 +141,9 @@ export class ChatSendController {
         if (this._isDestroyed || this._options.isSending()) return false;
 
         const text = input?.value.trim() ?? '';
+        if (!this.validateInput(text)) {
+            return false;
+        }
 
         const uiElements = this._options.lockUi(input);
         const typingId = `typing-${String(Date.now())}`;

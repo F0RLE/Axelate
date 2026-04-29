@@ -720,6 +720,92 @@ describe('WindowService', () => {
                 y: 50,
             });
         });
+
+        it('should await immediate window state save', async () => {
+            const mockIsMaximized = vi.fn().mockResolvedValue(true);
+            vi.stubGlobal('__TAURI__', {
+                window: {
+                    getCurrentWindow: () => ({
+                        isMaximized: mockIsMaximized,
+                        innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                        outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                    }),
+                },
+            });
+
+            await service.saveImmediate();
+
+            expect(mockBridge.invoke).toHaveBeenCalledWith('save_maximized_state', {
+                maximized: true,
+            });
+        });
+
+        it('should cancel pending debounced save when saving immediately', async () => {
+            const mockIsMaximized = vi.fn().mockResolvedValue(true);
+            vi.stubGlobal('__TAURI__', {
+                window: {
+                    getCurrentWindow: () => ({
+                        isMaximized: mockIsMaximized,
+                        innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                        outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                    }),
+                },
+            });
+
+            service.scheduleSave();
+            await service.saveImmediate();
+            vi.advanceTimersByTime(1500);
+            await vi.runAllTimersAsync();
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(1);
+            expect(mockBridge.invoke).toHaveBeenCalledWith('save_maximized_state', {
+                maximized: true,
+            });
+        });
+
+        it('should serialize overlapping window state saves', async () => {
+            let releaseFirst!: () => void;
+            const mockIsMaximized = vi
+                .fn()
+                .mockImplementationOnce(
+                    () =>
+                        new Promise<boolean>((resolve) => {
+                            releaseFirst = () => {
+                                resolve(false);
+                            };
+                        }),
+                )
+                .mockResolvedValueOnce(true);
+            const mockInnerSize = vi.fn().mockResolvedValue({ width: 1000, height: 600 });
+            const mockOuterPos = vi.fn().mockResolvedValue({ x: 100, y: 50 });
+
+            vi.stubGlobal('__TAURI__', {
+                window: {
+                    getCurrentWindow: () => ({
+                        isMaximized: mockIsMaximized,
+                        innerSize: mockInnerSize,
+                        outerPosition: mockOuterPos,
+                    }),
+                },
+            });
+
+            const first = service.saveImmediate();
+            const second = service.saveImmediate();
+            await Promise.resolve();
+
+            expect(mockIsMaximized).toHaveBeenCalledTimes(1);
+            releaseFirst();
+            await first;
+            await second;
+
+            expect(mockIsMaximized).toHaveBeenCalledTimes(2);
+            expect(mockBridge.invoke).toHaveBeenNthCalledWith(1, 'save_maximized_state', {
+                maximized: false,
+            });
+            expect(mockBridge.invoke).toHaveBeenLastCalledWith('save_maximized_state', {
+                maximized: true,
+            });
+        });
     });
 
     // ---------------------------------------------------------- Resolution change zoom handling
@@ -807,6 +893,17 @@ describe('WindowService', () => {
             await Promise.resolve();
 
             expect(unlisten).toHaveBeenCalledTimes(1);
+        });
+
+        it('should log tauri move listener registration failures', async () => {
+            mockBridge.listen.mockRejectedValue(new Error('listen failed'));
+
+            await service.init(mockWindowConfig, 1);
+            await Promise.resolve();
+
+            expect(mockTracer.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to subscribe to window move events'),
+            );
         });
     });
 

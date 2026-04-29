@@ -101,10 +101,23 @@ fn partial_metadata_path(dest_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.resume.json", dest_path.to_string_lossy()))
 }
 
-pub(super) async fn load_partial_metadata(dest_path: &Path) -> Option<PartialDownloadMetadata> {
+pub(super) async fn load_partial_metadata(
+    dest_path: &Path,
+) -> Result<Option<PartialDownloadMetadata>, AppError> {
     let metadata_path = partial_metadata_path(dest_path);
-    let raw = tokio::fs::read_to_string(metadata_path).await.ok()?;
-    serde_json::from_str(&raw).ok()
+    match tokio::fs::read_to_string(&metadata_path).await {
+        Ok(raw) => serde_json::from_str(&raw).map(Some).map_err(|error| {
+            AppError::Serialization(format!(
+                "Failed to parse partial download metadata '{}': {error}",
+                metadata_path.display()
+            ))
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(AppError::Io(format!(
+            "Failed to read partial download metadata '{}': {error}",
+            metadata_path.display()
+        ))),
+    }
 }
 
 pub(super) async fn store_partial_metadata(
@@ -121,10 +134,15 @@ pub(super) async fn store_partial_metadata(
         .map_err(|e| AppError::Io(e.to_string()))
 }
 
-pub(super) async fn remove_partial_metadata(dest_path: &Path) {
+pub(super) async fn remove_partial_metadata(dest_path: &Path) -> Result<(), AppError> {
     let metadata_path = partial_metadata_path(dest_path);
-    if tokio::fs::try_exists(&metadata_path).await.unwrap_or(false) {
-        let _ = tokio::fs::remove_file(metadata_path).await;
+    match tokio::fs::remove_file(&metadata_path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::Io(format!(
+            "Failed to remove partial download metadata '{}': {error}",
+            metadata_path.display()
+        ))),
     }
 }
 

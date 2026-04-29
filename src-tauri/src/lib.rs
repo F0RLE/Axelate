@@ -109,6 +109,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         logs::add_log,
         logs::log_batch,
         downloader::download_module,
+        downloader::get_release_download_options,
         downloader::resume_download,
         downloader::check_module_installed,
         downloader::get_module_path,
@@ -229,6 +230,8 @@ fn strip_generated_trailing_whitespace(path: &Path) -> Result<(), std::io::Error
 
 /// Registers all managed services into Tauri's DI container.
 fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    crate::utils::paths::init_filesystem()?;
+
     let file_service: std::sync::Arc<dyn crate::domain::filesystem::service::FileService> =
         std::sync::Arc::new(LocalFileService::new());
     let json_store = JsonStore::new(std::sync::Arc::clone(&file_service));
@@ -305,8 +308,6 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
         integration_api.base_url()
     );
     app.manage(integration_api);
-
-    crate::utils::paths::init_filesystem().ok();
 
     let monitor_emitter = std::sync::Arc::new(
         crate::infrastructure::monitoring::tauri_emitter::TauriMonitoringEmitter::new(
@@ -414,6 +415,12 @@ pub fn run() {
                 );
                 if IS_QUITTING.load(Ordering::Relaxed) {
                     tracing::info!("App Exiting...");
+                    if let Some(sessions) =
+                        app_handle.try_state::<std::sync::Arc<ChatSessionManager>>()
+                        && let Err(error) = sessions.save_to_disk()
+                    {
+                        tracing::error!("Failed to save chat history during exit: {error:?}");
+                    }
                     if let Some(am) = app_handle.try_state::<std::sync::Arc<EngineManager>>() {
                         tauri::async_runtime::block_on(async move {
                             let _ = am.stop().await;

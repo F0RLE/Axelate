@@ -6,7 +6,7 @@
 use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 use tokio::sync::Notify;
@@ -44,6 +44,8 @@ struct LocalContextState {
 pub struct ChatSessionManager {
     sessions: Arc<DashMap<String, ChatSession>>,
     dirty: Arc<AtomicBool>,
+    persistence_available: Arc<AtomicBool>,
+    save_lock: Arc<Mutex<()>>,
     save_notify: Arc<Notify>,
 }
 
@@ -51,9 +53,19 @@ impl ChatSessionManager {
     /// Creates a new manager and loads existing sessions from disk.
     /// Call [`start_saver`] after the Tokio runtime is ready.
     pub fn new() -> Self {
+        let (sessions, persistence_available) = match Self::load_from_disk() {
+            Ok(sessions) => (sessions, true),
+            Err(error) => {
+                tracing::error!("Failed to load chat history; persistence disabled: {error}");
+                (DashMap::new(), false)
+            }
+        };
+
         Self {
-            sessions: Arc::new(Self::load_from_disk().unwrap_or_default()),
+            sessions: Arc::new(sessions),
             dirty: Arc::new(AtomicBool::new(false)),
+            persistence_available: Arc::new(AtomicBool::new(persistence_available)),
+            save_lock: Arc::new(Mutex::new(())),
             save_notify: Arc::new(Notify::new()),
         }
     }
@@ -78,6 +90,11 @@ impl ChatSessionManager {
     }
 
     fn mark_dirty(&self) {
+        if !self.persistence_available.load(Ordering::Relaxed) {
+            tracing::warn!("Chat history changed while persistence is disabled; skipping save");
+            return;
+        }
+
         self.dirty.store(true, Ordering::Relaxed);
         self.save_notify.notify_one();
     }
@@ -89,20 +106,31 @@ impl ChatSessionManager {
     pub fn start_saver(&self) {
         let sessions = Arc::clone(&self.sessions);
         let dirty = Arc::clone(&self.dirty);
+        let persistence_available = Arc::clone(&self.persistence_available);
+        let save_lock = Arc::clone(&self.save_lock);
         let save_notify = Arc::clone(&self.save_notify);
 
         tauri::async_runtime::spawn(async move {
             tracing::debug!("Background chat session saver started.");
             loop {
                 save_notify.notified().await;
+                if !persistence_available.load(Ordering::Relaxed) {
+                    tracing::warn!("Chat session saver skipped because persistence is disabled");
+                    continue;
+                }
+
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 if dirty.swap(false, Ordering::AcqRel) {
+                    let save_lock = Arc::clone(&save_lock);
                     let snapshot: HashMap<String, ChatSession> = sessions
                         .iter()
                         .map(|e| (e.key().clone(), e.value().clone()))
                         .collect();
 
-                    match tokio::task::spawn_blocking(move || Self::flush_snapshot(&snapshot)).await
+                    match tokio::task::spawn_blocking(move || {
+                        Self::flush_snapshot_locked(&save_lock, &snapshot)
+                    })
+                    .await
                     {
                         Ok(Ok(())) => {
                             tracing::debug!("Chat history saved to disk.");
@@ -127,8 +155,10 @@ impl ChatSessionManager {
 
     /// Immediately saves all sessions to disk, bypassing the debounce timer.
     pub async fn force_save(&self) -> Result<(), crate::errors::AppError> {
+        self.ensure_persistence_available()?;
         let snapshot = self.take_snapshot();
-        tokio::task::spawn_blocking(move || Self::flush_snapshot(&snapshot))
+        let save_lock = Arc::clone(&self.save_lock);
+        tokio::task::spawn_blocking(move || Self::flush_snapshot_locked(&save_lock, &snapshot))
             .await
             .map_err(|e| crate::errors::AppError::Internal {
                 request_id: None,
@@ -140,7 +170,19 @@ impl ChatSessionManager {
 
     /// Synchronous save — intended for use in Tauri shutdown hooks (called from a blocking context).
     pub fn save_to_disk(&self) -> Result<(), crate::errors::AppError> {
-        Self::flush_snapshot(&self.take_snapshot())
+        self.ensure_persistence_available()?;
+        Self::flush_snapshot_locked(&self.save_lock, &self.take_snapshot())
+    }
+
+    fn ensure_persistence_available(&self) -> Result<(), crate::errors::AppError> {
+        if self.persistence_available.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
+        Err(crate::errors::AppError::Internal {
+            request_id: None,
+            message: "Chat history persistence is disabled after a load failure".to_string(),
+        })
     }
 
     /// Merges the latest frontend-provided request messages into persistent history
@@ -295,25 +337,87 @@ impl SessionPersistence {
     }
 
     fn load_sessions() -> Result<DashMap<String, ChatSession>, crate::errors::AppError> {
-        Self::recover_from_interrupted_write();
+        Self::recover_from_interrupted_write()?;
 
         if !Self::history_path().exists() {
             return Ok(DashMap::new());
         }
 
         let content = std::fs::read_to_string(Self::history_path())?;
-        let persisted = Self::parse_sessions(&content)?;
+        let persisted = match Self::parse_sessions(&content) {
+            Ok(persisted) => persisted,
+            Err(error) => {
+                let backup_path = Self::backup_corrupt_history()?;
+                tracing::error!(
+                    backup = %backup_path.display(),
+                    "Failed to parse chat history. Moved corrupt file aside: {error}"
+                );
+                return Ok(DashMap::new());
+            }
+        };
         Ok(Self::normalize_sessions(persisted))
     }
 
-    fn recover_from_interrupted_write() {
+    fn backup_corrupt_history() -> Result<std::path::PathBuf, crate::errors::AppError> {
+        let timestamp_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let backup_path =
+            Self::history_path().with_extension(format!("corrupt-{timestamp_ms}.json"));
+        std::fs::rename(Self::history_path(), &backup_path)?;
+        Ok(backup_path)
+    }
+
+    fn recover_from_interrupted_write() -> Result<(), crate::errors::AppError> {
         let tmp_path = Self::temp_history_path();
-        if tmp_path.exists() && !Self::history_path().exists() {
-            tracing::warn!("Detected crash during last save. Recovering from .tmp...");
-            if let Err(error) = std::fs::rename(&tmp_path, Self::history_path()) {
-                tracing::error!("Crash recovery failed: {error}");
-            }
+        if !tmp_path.exists() {
+            return Ok(());
         }
+
+        if !Self::is_valid_history_file(&tmp_path) {
+            tracing::warn!(
+                tmp = %tmp_path.display(),
+                "Discarding invalid interrupted chat history write"
+            );
+            Self::remove_recovered_tmp(&tmp_path)?;
+            return Ok(());
+        }
+
+        if !Self::history_path().exists() || Self::tmp_history_is_newer(&tmp_path) {
+            tracing::warn!("Detected interrupted chat history save. Recovering from .tmp...");
+            std::fs::copy(&tmp_path, Self::history_path())?;
+        }
+
+        Self::remove_recovered_tmp(&tmp_path)?;
+        Ok(())
+    }
+
+    fn remove_recovered_tmp(tmp_path: &std::path::Path) -> Result<(), crate::errors::AppError> {
+        match std::fs::remove_file(tmp_path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(crate::errors::AppError::Io(format!(
+                "Failed to remove recovered chat history tmp file {}: {error}",
+                tmp_path.display()
+            ))),
+        }
+    }
+
+    fn is_valid_history_file(path: &std::path::Path) -> bool {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|content| Self::parse_sessions(&content).ok())
+            .is_some()
+    }
+
+    fn tmp_history_is_newer(tmp_path: &std::path::Path) -> bool {
+        let tmp_modified = tmp_path.metadata().and_then(|metadata| metadata.modified());
+        let history_modified = Self::history_path()
+            .metadata()
+            .and_then(|metadata| metadata.modified());
+
+        matches!((tmp_modified, history_modified), (Ok(tmp), Ok(history)) if tmp > history)
     }
 
     fn parse_sessions(
@@ -367,11 +471,40 @@ impl SessionPersistence {
 
         if let Err(error) = std::fs::rename(&tmp_path, path) {
             tracing::warn!("Rename failed ({error}), using fallback for Windows locks...");
-            let _ = std::fs::remove_file(path);
-            std::fs::rename(&tmp_path, path)?;
+            match std::fs::remove_file(path) {
+                Ok(()) => {}
+                Err(remove_error) if remove_error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(remove_error) => {
+                    return Err(crate::errors::AppError::Io(format!(
+                        "Failed to replace chat history '{}': rename failed: {error}; removing existing file failed: {remove_error}",
+                        path.display()
+                    )));
+                }
+            }
+            std::fs::rename(&tmp_path, path).map_err(|second_error| {
+                crate::errors::AppError::Io(format!(
+                    "Failed to publish chat history '{}': first rename failed: {error}; second rename failed: {second_error}",
+                    path.display()
+                ))
+            })?;
         }
 
         Ok(())
+    }
+}
+
+impl ChatSessionManager {
+    fn flush_snapshot_locked(
+        save_lock: &Mutex<()>,
+        snapshot: &HashMap<String, ChatSession>,
+    ) -> Result<(), crate::errors::AppError> {
+        let _guard = save_lock
+            .lock()
+            .map_err(|_| crate::errors::AppError::Internal {
+                request_id: None,
+                message: "Chat history save lock is poisoned".to_string(),
+            })?;
+        Self::flush_snapshot(snapshot)
     }
 }
 
@@ -533,10 +666,15 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
 
+    static TEST_CHAT_HISTORY_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
+        std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
+
     fn test_manager() -> ChatSessionManager {
         ChatSessionManager {
             sessions: Arc::new(DashMap::new()),
             dirty: Arc::new(AtomicBool::new(false)),
+            persistence_available: Arc::new(AtomicBool::new(true)),
+            save_lock: Arc::new(Mutex::new(())),
             save_notify: Arc::new(Notify::new()),
         }
     }
@@ -580,6 +718,30 @@ mod tests {
         manager.clear_chat_history("session-1");
         assert!(manager.get_chat_history("session-1").is_empty());
         assert!(manager.dirty.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_disabled_persistence_does_not_mark_dirty() {
+        let manager = ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+            persistence_available: Arc::new(AtomicBool::new(false)),
+            save_lock: Arc::new(Mutex::new(())),
+            save_notify: Arc::new(Notify::new()),
+        };
+
+        manager.merge_request_messages(
+            "session-1",
+            &[ChatMessage {
+                id: "msg-1".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("hello".to_string()),
+                thought_signature: None,
+            }],
+        );
+
+        assert!(!manager.dirty.load(Ordering::Relaxed));
+        assert!(manager.save_to_disk().is_err());
     }
 
     #[test]
@@ -757,6 +919,141 @@ mod tests {
         assert_eq!(msg.id, "abc-123");
         assert_eq!(msg.role, "assistant");
         assert!((session.last_updated - 1_234_567_890.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_corrupt_history_is_backed_up_before_starting_empty() {
+        let _guard = TEST_CHAT_HISTORY_LOCK
+            .lock()
+            .expect("chat history test lock");
+        let history_path = SessionPersistence::history_path();
+        let chat_dir = history_path
+            .parent()
+            .expect("history path should have a parent");
+        let _ = std::fs::remove_dir_all(chat_dir);
+        std::fs::create_dir_all(chat_dir).expect("chat dir should be created");
+        std::fs::write(history_path, "{not valid json").expect("history fixture should be written");
+
+        let sessions = SessionPersistence::load_sessions().expect("corrupt history should recover");
+
+        assert!(sessions.is_empty());
+        assert!(!history_path.exists());
+        let backups = std::fs::read_dir(chat_dir)
+            .expect("chat dir should be readable")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("history.corrupt-")
+            })
+            .count();
+        assert_eq!(backups, 1);
+    }
+
+    #[test]
+    fn test_force_save_survives_manager_restart() {
+        let _guard = TEST_CHAT_HISTORY_LOCK
+            .lock()
+            .expect("chat history test lock");
+        let history_path = SessionPersistence::history_path();
+        let chat_dir = history_path
+            .parent()
+            .expect("history path should have a parent");
+        let _ = std::fs::remove_dir_all(chat_dir);
+        std::fs::create_dir_all(chat_dir).expect("chat dir should be created");
+
+        let manager = test_manager();
+        manager.merge_request_messages(
+            "session-restart",
+            &[ChatMessage {
+                id: "msg-1".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("persist me".to_string()),
+                thought_signature: None,
+            }],
+        );
+        tokio::runtime::Runtime::new()
+            .expect("tokio runtime")
+            .block_on(manager.force_save())
+            .expect("force save should persist history");
+
+        let restarted = ChatSessionManager {
+            sessions: Arc::new(
+                SessionPersistence::load_sessions().expect("saved history should reload"),
+            ),
+            dirty: Arc::new(AtomicBool::new(false)),
+            persistence_available: Arc::new(AtomicBool::new(true)),
+            save_lock: Arc::new(Mutex::new(())),
+            save_notify: Arc::new(Notify::new()),
+        };
+        let history = restarted.get_chat_history("session-restart");
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            history[0].content,
+            serde_json::Value::String("persist me".to_string())
+        );
+    }
+
+    #[test]
+    fn test_interrupted_newer_tmp_history_is_recovered_on_restart() {
+        let _guard = TEST_CHAT_HISTORY_LOCK
+            .lock()
+            .expect("chat history test lock");
+        let history_path = SessionPersistence::history_path();
+        let tmp_path = SessionPersistence::temp_history_path();
+        let chat_dir = history_path
+            .parent()
+            .expect("history path should have a parent");
+        let _ = std::fs::remove_dir_all(chat_dir);
+        std::fs::create_dir_all(chat_dir).expect("chat dir should be created");
+
+        std::fs::write(
+            history_path,
+            serde_json::json!({
+                "session-restart": {
+                    "history": [{
+                        "id": "old",
+                        "role": "user",
+                        "content": "old",
+                        "thought_signature": null
+                    }],
+                    "summary": null,
+                    "summary_message_count": 0,
+                    "last_updated": 1.0
+                }
+            })
+            .to_string(),
+        )
+        .expect("old history should be written");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(
+            &tmp_path,
+            serde_json::json!({
+                "session-restart": {
+                    "history": [{
+                        "id": "new",
+                        "role": "user",
+                        "content": "new",
+                        "thought_signature": null
+                    }],
+                    "summary": null,
+                    "summary_message_count": 0,
+                    "last_updated": 2.0
+                }
+            })
+            .to_string(),
+        )
+        .expect("tmp history should be written");
+
+        let sessions = SessionPersistence::load_sessions().expect("tmp history should recover");
+        let restored = sessions
+            .get("session-restart")
+            .expect("session should be restored");
+
+        assert_eq!(restored.history[0].id, "new");
+        assert!(!tmp_path.exists());
     }
 
     #[test]

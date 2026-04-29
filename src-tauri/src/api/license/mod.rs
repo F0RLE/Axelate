@@ -10,7 +10,7 @@ use crate::models::LicenseStatusResponse;
 /// Retrieves current license activation status
 #[allow(clippy::missing_const_for_fn)] // Wrapper around const verify() function
 pub fn get_license_status() -> Result<LicenseStatusResponse, AppError> {
-    let status = license::verify();
+    let status = license::verify()?;
     Ok(LicenseStatusResponse {
         status,
         email: None, // In real app, load from storage
@@ -38,5 +38,5 @@ pub async fn deactivate_license() -> Result<(), AppError> {
 #[specta::specta]
 /// Checks if a specific feature is enabled by the current license
 pub fn check_feature(feature: &str) -> Result<bool, AppError> {
-    Ok(license::has_feature(feature))
+    license::has_feature(feature)
 }

@@ -12,6 +12,7 @@ pub async fn download_module(
     repo_url: String,
     expected_hash: Option<String>,
     dl_type: Option<String>,
+    release_selection: Option<crate::domain::modules::github_releases::ReleaseDownloadSelection>,
 ) -> Result<String, AppError> {
     downloader::download_module(
         app,
@@ -20,8 +21,19 @@ pub async fn download_module(
         repo_url,
         expected_hash,
         dl_type,
+        release_selection,
     )
     .await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Lists compatible release versions and CPU/GPU package choices for a module.
+pub async fn get_release_download_options(
+    module_id: String,
+    repo_url: String,
+) -> Result<crate::domain::modules::github_releases::ReleaseDownloadOptions, AppError> {
+    downloader::get_release_download_options(&module_id, &repo_url).await
 }
 
 #[tauri::command]
@@ -43,6 +55,7 @@ pub async fn resume_download(
         request.repo_url,
         request.expected_hash,
         request.dl_type,
+        request.release_selection,
     )
     .await
 }

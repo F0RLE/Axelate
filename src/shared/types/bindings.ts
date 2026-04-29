@@ -46,7 +46,14 @@ export const commands = {
 	// Adds multiple log entries in batch from frontend
 	logBatch: (logs: BatchLogEntry[]) => typedError<null, AppError>(__TAURI_INVOKE("log_batch", { logs })),
 	// Downloads and verifies a module from a Git repository
-	downloadModule: (moduleId: string, repoUrl: string, expectedHash: string | null, dlType: string | null) => typedError<string, AppError>(__TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash, dlType })),
+	downloadModule: (moduleId: string, repoUrl: string, expectedHash: string | null, dlType: string | null, releaseSelection: {
+	// GitHub release tag to download. `None` means the newest compatible release.
+	tag_name: string | null,
+	// Compute target selected by the user.
+	compute_target?: ReleaseComputeTarget,
+} | null) => typedError<string, AppError>(__TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash, dlType, releaseSelection })),
+	// Lists compatible release versions and CPU/GPU package choices for a module.
+	getReleaseDownloadOptions: (moduleId: string, repoUrl: string) => typedError<ReleaseDownloadOptions, AppError>(__TAURI_INVOKE("get_release_download_options", { moduleId, repoUrl })),
 	// Resumes a paused module download using backend-owned request metadata.
 	resumeDownload: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("resume_download", { moduleId })),
 	// Checks if a module is already installed locally
@@ -1090,6 +1097,55 @@ export type RamStats = {
 	totalGb: number,
 	// RAM available for allocation (GB)
 	availableGb: number,
+};
+
+// User-facing compute target for release package selection.
+export type ReleaseComputeTarget =
+// Let Axelate choose the best compatible package for this machine.
+"auto" |
+// Prefer a GPU package, for example CUDA, Vulkan, HIP, or SYCL.
+"gpu" |
+// Prefer a CPU package.
+"cpu";
+
+// User-visible release download options for a single module.
+export type ReleaseDownloadOptions = {
+	// Module identifier these options belong to.
+	module_id: string,
+	// GitHub release versions in newest-first order.
+	versions: ReleaseDownloadVersion[],
+};
+
+// Explicit release package selection passed from the frontend.
+export type ReleaseDownloadSelection = {
+	// GitHub release tag to download. `None` means the newest compatible release.
+	tag_name: string | null,
+	// Compute target selected by the user.
+	compute_target?: ReleaseComputeTarget,
+};
+
+// User-visible package variant for one compute target.
+export type ReleaseDownloadVariant = {
+	// Compute target represented by this variant.
+	compute_target: ReleaseComputeTarget,
+	// Asset filenames that will be downloaded.
+	assets: string[],
+	// Combined download size in bytes.
+	total_size: number,
+};
+
+// User-visible package choices for a GitHub release version.
+export type ReleaseDownloadVersion = {
+	// GitHub release tag.
+	tag_name: string,
+	// GitHub release publish timestamp when available.
+	published_at: string | null,
+	// CPU package choice for this release, when compatible.
+	cpu: ReleaseDownloadVariant | null,
+	// GPU package choice for this release, when compatible.
+	gpu: ReleaseDownloadVariant | null,
+	// Recommended package target for this machine.
+	recommended: ReleaseComputeTarget,
 };
 
 // Result of saving a generated chat image to disk.

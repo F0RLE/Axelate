@@ -2,6 +2,29 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SettingsService } from './SettingsService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type * as Bindings from '@/shared/types/bindings';
+
+const mocks = vi.hoisted(() => ({
+    invokeSafe: vi.fn(),
+    commands: {
+        controlModule: vi.fn(),
+    },
+}));
+
+vi.mock('@/shared/api/invoke', (): { invokeSafe: (...args: unknown[]) => unknown } => ({
+    invokeSafe: (...args: unknown[]): unknown => mocks.invokeSafe(...args) as unknown,
+}));
+
+vi.mock('@/shared/types/bindings', async (importOriginal) => {
+    const actual = await importOriginal<typeof Bindings>();
+    return {
+        ...actual,
+        commands: {
+            ...actual.commands,
+            controlModule: mocks.commands.controlModule,
+        },
+    };
+});
 
 function createMockTauri(): TauriProvider {
     return {
@@ -21,9 +44,17 @@ describe('SettingsService', () => {
     let tracer: Pick<LoggerService, 'error'>;
 
     beforeEach(() => {
+        vi.clearAllMocks();
         tauri = createMockTauri();
         tracer = { error: vi.fn() };
         service = new SettingsService(tauri, tracer);
+        mocks.commands.controlModule.mockReturnValue(
+            Promise.resolve({
+                status: 'ok',
+                data: { success: true, message: 'ok', status: 'running' },
+            }),
+        );
+        mocks.invokeSafe.mockImplementation((promise: Promise<unknown>) => promise);
     });
 
     describe('loadSettings', () => {
@@ -106,18 +137,32 @@ describe('SettingsService', () => {
 
     describe('controlService', () => {
         it('should return true on success', async () => {
-            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
             const result = await service.controlService('start', 'ollama');
             expect(result).toBe(true);
-            expect(tauri.invoke).toHaveBeenCalledWith('control_service', {
+            expect(mocks.commands.controlModule).toHaveBeenCalledWith({
+                module_id: 'ollama',
                 action: 'start',
-                service: 'ollama',
             });
+            expect(mocks.invokeSafe).toHaveBeenCalled();
         });
 
         it('should return false on error', async () => {
-            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'fail' },
+            });
             const result = await service.controlService('stop', 'ollama');
+            expect(result).toBe(false);
+        });
+
+        it('should return false when backend reports unsuccessful control', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'ok',
+                data: { success: false, message: 'not implemented', status: null },
+            });
+
+            const result = await service.controlService('restart', 'ollama');
+
             expect(result).toBe(false);
         });
     });

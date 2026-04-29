@@ -2,7 +2,7 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type CoreRuntime = {
     init: () => Promise<void>;
-    destroy: () => void;
+    destroy: () => Promise<void> | void;
 };
 
 type CoreFactory = () => CoreRuntime;
@@ -42,10 +42,24 @@ function clearBootState(): void {
     state.coreInitializationInFlight = false;
 }
 
-function destroyActiveCoreInstance(): void {
+function reportDestroyFailure(
+    result: Promise<void> | void,
+    tracer: EntryLogger,
+    context: string,
+): void {
+    if (result === undefined) return;
+    result.catch((error: unknown) => {
+        tracer.error(`[Core] ${context}: ${String(error)}`);
+    });
+}
+
+function destroyActiveCoreInstance(tracer?: EntryLogger): void {
     const state = getCoreEntryState();
     try {
-        state.activeCoreInstance?.destroy();
+        const result = state.activeCoreInstance?.destroy();
+        if (tracer !== undefined) {
+            reportDestroyFailure(result, tracer, 'Destroy failed');
+        }
     } finally {
         clearBootState();
     }
@@ -72,11 +86,17 @@ function bootCoreOnce(createCore: CoreFactory, tracer: EntryLogger): void {
         coreInstance.init().catch((error: unknown) => {
             if (state.activeCoreInstance === coreInstance) {
                 clearBootState();
-            }
-            try {
-                coreInstance.destroy();
-            } catch (destroyError: unknown) {
-                tracer.error(`[Core] Destroy after boot failure failed: ${String(destroyError)}`);
+                try {
+                    reportDestroyFailure(
+                        coreInstance.destroy(),
+                        tracer,
+                        'Destroy after boot failure failed',
+                    );
+                } catch (destroyError: unknown) {
+                    tracer.error(
+                        `[Core] Destroy after boot failure failed: ${String(destroyError)}`,
+                    );
+                }
             }
             tracer.error(`[Core] Boot failed: ${String(error)}`);
         });
@@ -106,14 +126,18 @@ export function bindCoreEntry(createCore: CoreFactory, tracer: EntryLogger): voi
     if (!state.coreBeforeUnloadBound) {
         state.coreBeforeUnloadBound = true;
         state.beforeUnloadHandler = () => {
-            destroyActiveCoreInstance();
+            destroyActiveCoreInstance(tracer);
         };
         globalThis.addEventListener('beforeunload', state.beforeUnloadHandler);
     }
 
     if (import.meta.hot) {
         import.meta.hot.dispose(() => {
-            destroyActiveCoreInstance();
+            try {
+                destroyActiveCoreInstance(tracer);
+            } catch (error: unknown) {
+                tracer.error(`[Core] Destroy during HMR dispose failed: ${String(error)}`);
+            }
             if (state.bootHandler !== null) {
                 document.removeEventListener('DOMContentLoaded', state.bootHandler);
                 state.bootHandler = null;

@@ -106,6 +106,7 @@ async fn process_image_request_with_local_engine_access(
             &reply.role,
             None,
         );
+        sessions.force_save().await?;
     }
 
     Ok(ImageGenerationResponse {

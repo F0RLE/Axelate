@@ -10,6 +10,7 @@ use super::downloader_transfer::{
     DownloadTask, ReleaseDownloadAsset, build_client, clone_repository_into, download_file,
     resolve_download_url,
 };
+use super::github_releases::ReleaseDownloadSelection;
 use crate::errors::AppError;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
@@ -53,6 +54,16 @@ pub fn is_module_installed(module_id: &str) -> bool {
     resolve_existing_module_path(module_id).is_some()
 }
 
+/// Lists compatible release versions and CPU/GPU package choices for a module.
+pub async fn get_release_download_options(
+    module_id: &str,
+    repo_url: &str,
+) -> Result<super::github_releases::ReleaseDownloadOptions, AppError> {
+    validate_module_id(module_id)?;
+    let client = build_client(module_id)?;
+    super::github_releases::fetch_release_download_options(&client, repo_url, module_id).await
+}
+
 /// Deletes a module from disk
 pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
     validate_module_id(module_id)?;
@@ -81,6 +92,7 @@ pub async fn download_module(
     repo_url: String,
     expected_hash: Option<String>,
     dl_type: Option<String>,
+    release_selection: Option<ReleaseDownloadSelection>,
 ) -> Result<String, AppError> {
     validate_module_id(&module_id)?;
     downloader.remember_request(
@@ -89,6 +101,7 @@ pub async fn download_module(
             repo_url: repo_url.clone(),
             expected_hash: expected_hash.clone(),
             dl_type: dl_type.clone(),
+            release_selection: release_selection.clone(),
         },
     );
 
@@ -122,7 +135,10 @@ pub async fn download_module(
                 (None, Vec::new())
             } else if dl_type.as_deref() == Some("release") {
                 let bundle = crate::domain::modules::github_releases::fetch_release_bundle(
-                    &client, &repo_url, &module_id,
+                    &client,
+                    &repo_url,
+                    &module_id,
+                    release_selection.as_ref(),
                 )
                 .await?;
 
@@ -199,7 +215,7 @@ pub async fn download_module(
                     });
                 }
 
-                ensure_not_cancelled(&control)?;
+                ensure_not_interrupted(&control)?;
                 FileVerifier::verify(
                     &app,
                     &archive_path,
@@ -209,7 +225,7 @@ pub async fn download_module(
                 )
                 .await?;
 
-                ensure_not_cancelled(&control)?;
+                ensure_not_interrupted(&control)?;
                 ArchiveExtractor::extract_into(
                     &app,
                     &archive_path,
@@ -219,13 +235,13 @@ pub async fn download_module(
                 )
                 .await?;
 
-                ensure_not_cancelled(&control)?;
+                ensure_not_interrupted(&control)?;
             }
         }
 
         final_progress_snapshot = latest_progress_snapshot;
 
-        ensure_not_cancelled(&control)?;
+        ensure_not_interrupted(&control)?;
         ArchiveExtractor::finalize(
             &module_id,
             &extraction_path,
@@ -250,9 +266,23 @@ pub async fn download_module(
     if cleanup_archives {
         for archive_path in &temp_archives {
             if archive_path.exists() {
-                let _ = tokio::fs::remove_file(archive_path).await;
+                if let Err(error) = tokio::fs::remove_file(archive_path).await
+                    && error.kind() != std::io::ErrorKind::NotFound
+                {
+                    tracing::warn!(
+                        module_id = module_id,
+                        path = %archive_path.display(),
+                        "Failed to remove temporary archive after interrupted download: {error}"
+                    );
+                }
             }
-            remove_partial_metadata(archive_path).await;
+            if let Err(error) = remove_partial_metadata(archive_path).await {
+                tracing::warn!(
+                    module_id = module_id,
+                    path = %archive_path.display(),
+                    "Failed to remove partial download metadata after interrupted download: {error}"
+                );
+            }
         }
     }
 
@@ -260,7 +290,13 @@ pub async fn download_module(
         && let Some(path) = &staging_path
         && path.exists()
     {
-        let _ = tokio::fs::remove_dir_all(path).await;
+        if let Err(error) = tokio::fs::remove_dir_all(path).await {
+            tracing::warn!(
+                module_id = module_id,
+                path = %path.display(),
+                "Failed to remove staging directory after failed install: {error}"
+            );
+        }
     }
 
     if let Err(e) = result {
@@ -304,7 +340,13 @@ pub async fn download_module(
     });
 
     for archive_path in &temp_archives {
-        remove_partial_metadata(archive_path).await;
+        if let Err(error) = remove_partial_metadata(archive_path).await {
+            tracing::warn!(
+                module_id = module_id,
+                path = %archive_path.display(),
+                "Failed to remove partial download metadata after successful install: {error}"
+            );
+        }
     }
 
     crate::infrastructure::logging::logger::add_log(
@@ -317,7 +359,7 @@ pub async fn download_module(
     Ok("completed".to_string())
 }
 
-fn ensure_not_cancelled(
+fn ensure_not_interrupted(
     control: &super::downloader_service::DownloadControl,
 ) -> Result<(), AppError> {
     if control.is_cancel_requested() {
@@ -326,6 +368,13 @@ fn ensure_not_cancelled(
             message: DownloadInterruption::Cancelled
                 .as_error_message()
                 .to_string(),
+        });
+    }
+
+    if control.is_pause_requested() {
+        return Err(AppError::External {
+            request_id: None,
+            message: DownloadInterruption::Paused.as_error_message().to_string(),
         });
     }
 
@@ -340,12 +389,37 @@ pub fn check_module_installed(module_id: &str) -> bool {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
+    use super::ensure_not_interrupted;
+    use crate::domain::modules::downloader_service::DownloaderService;
     use crate::domain::modules::downloader_support::{
         PartialDownloadMetadata, TarEntryAction, classify_tar_entry_type, if_range_validator,
-        normalize_archive_relative_path, parse_content_range_total,
+        load_partial_metadata, normalize_archive_relative_path, parse_content_range_total,
+        store_partial_metadata,
     };
     use sevenz_rust2::{ArchiveReader, Password};
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn ensure_not_interrupted_reports_pause_requests() {
+        let service = DownloaderService::new();
+        let control = service.request_control("demo");
+        assert!(service.pause("demo"));
+
+        let error = ensure_not_interrupted(&control).expect_err("pause should interrupt");
+
+        assert!(error.to_string().contains("Download paused"));
+    }
+
+    #[test]
+    fn ensure_not_interrupted_reports_cancel_requests() {
+        let service = DownloaderService::new();
+        let control = service.request_control("demo");
+        assert!(service.cancel("demo"));
+
+        let error = ensure_not_interrupted(&control).expect_err("cancel should interrupt");
+
+        assert!(error.to_string().contains("Download cancelled"));
+    }
 
     #[test]
     fn normalize_archive_relative_path_rejects_traversal() {
@@ -419,6 +493,48 @@ mod tests {
         };
 
         assert_eq!(if_range_validator(&metadata), Some("\"etag-value\""));
+    }
+
+    #[tokio::test]
+    async fn partial_metadata_load_reports_corrupt_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let archive_path = temp_dir.path().join("module.zip");
+        tokio::fs::write(
+            format!("{}.resume.json", archive_path.to_string_lossy()),
+            "{not-json",
+        )
+        .await
+        .expect("write corrupt metadata");
+
+        let error = load_partial_metadata(&archive_path)
+            .await
+            .expect_err("corrupt metadata must be reported");
+
+        assert!(error.to_string().contains("partial download metadata"));
+    }
+
+    #[tokio::test]
+    async fn partial_metadata_round_trips_valid_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let archive_path = temp_dir.path().join("module.zip");
+        let metadata = PartialDownloadMetadata {
+            url: "https://example.com/module.zip".to_string(),
+            etag: Some("\"etag-value\"".to_string()),
+            last_modified: None,
+            total_bytes: Some(42),
+        };
+
+        store_partial_metadata(&archive_path, &metadata)
+            .await
+            .expect("store metadata");
+        let loaded = load_partial_metadata(&archive_path)
+            .await
+            .expect("load metadata")
+            .expect("metadata exists");
+
+        assert_eq!(loaded.url, metadata.url);
+        assert_eq!(loaded.etag, metadata.etag);
+        assert_eq!(loaded.total_bytes, metadata.total_bytes);
     }
 
     #[test]

@@ -350,7 +350,11 @@ fn parse_module_id_from_label(label: &str) -> Result<String, AppError> {
         ));
     }
 
-    let module_id = module_id.unwrap_or_default();
+    let Some(module_id) = module_id else {
+        return Err(AppError::PermissionDenied(
+            "Module settings route is only available to owned settings webviews".to_string(),
+        ));
+    };
     crate::domain::modules::downloader::validate_module_id(module_id)?;
     Ok(module_id.to_string())
 }

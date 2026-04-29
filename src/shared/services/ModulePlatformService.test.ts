@@ -68,6 +68,26 @@ describe('ModulePlatformService', () => {
                 'https://repo.com/module.zip',
                 'abc123',
                 undefined,
+                undefined,
+            );
+        });
+
+        it('passes release selection to release downloads', async () => {
+            const app = createApp({ dlType: 'release' });
+            await service.download(app, {
+                tag_name: 'v1.2.3',
+                compute_target: 'gpu',
+            });
+
+            expect(moduleService.downloadModule).toHaveBeenCalledWith(
+                'test-module',
+                'https://repo.com/module.zip',
+                undefined,
+                'release',
+                {
+                    tag_name: 'v1.2.3',
+                    compute_target: 'gpu',
+                },
             );
         });
 

@@ -201,15 +201,11 @@ pub fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Err
                     .try_state::<std::sync::Arc<crate::domain::ai::ChatSessionManager>>()
                     .map(|s| std::sync::Arc::clone(&*s));
                 if let Some(sessions) = sessions_arc {
-                    std::thread::spawn(move || {
-                        if let Err(error) = sessions.save_to_disk() {
-                            tracing::error!(
-                                "Failed to save chat history during shutdown: {error:?}"
-                            );
-                        } else {
-                            tracing::info!("AI history flushed successfully during shutdown.");
-                        }
-                    });
+                    if let Err(error) = sessions.save_to_disk() {
+                        tracing::error!("Failed to save chat history during shutdown: {error:?}");
+                    } else {
+                        tracing::info!("AI history flushed successfully during shutdown.");
+                    }
                 }
 
                 app.exit(0);

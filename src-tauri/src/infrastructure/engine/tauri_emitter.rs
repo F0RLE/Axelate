@@ -129,29 +129,39 @@ fn current_time_ms_f64() -> f64 {
 
 impl EngineEventEmitter for TauriEngineEmitter {
     fn emit_swapping(&self, from: &str, to: &str) {
-        let _ = self
+        if let Err(error) = self
             .handle
-            .emit("ai:engine:swapping", json!({ "from": from, "to": to }));
+            .emit("ai:engine:swapping", json!({ "from": from, "to": to }))
+        {
+            tracing::warn!("Failed to emit engine swapping event: {error}");
+        }
     }
 
     fn emit_starting(&self, engine_id: &str) {
-        let _ = self
+        if let Err(error) = self
             .handle
-            .emit("ai:engine:starting", json!({ "engine_id": engine_id }));
+            .emit("ai:engine:starting", json!({ "engine_id": engine_id }))
+        {
+            tracing::warn!("Failed to emit engine starting event for {engine_id}: {error}");
+        }
     }
 
     fn emit_ready(&self, engine_id: &str, endpoint: &str) {
-        let _ = self.handle.emit(
+        if let Err(error) = self.handle.emit(
             "ai:engine:ready",
             json!({ "engine_id": engine_id, "endpoint": endpoint }),
-        );
+        ) {
+            tracing::warn!("Failed to emit engine ready event for {engine_id}: {error}");
+        }
     }
 
     fn emit_error(&self, engine_id: &str, message: &str) {
-        let _ = self.handle.emit(
+        if let Err(error) = self.handle.emit(
             "ai:engine:error",
             json!({ "engine_id": engine_id, "message": message }),
-        );
+        ) {
+            tracing::warn!("Failed to emit engine error event for {engine_id}: {error}");
+        }
     }
 
     fn emit_log(&self, engine_id: &str, line: &str) {
@@ -165,10 +175,12 @@ impl EngineEventEmitter for TauriEngineEmitter {
                 });
             }
         }
-        let _ = self.handle.emit(
+        if let Err(error) = self.handle.emit(
             "ai:engine:log",
             json!({ "engine_id": engine_id, "line": line }),
-        );
+        ) {
+            tracing::warn!("Failed to emit engine log event for {engine_id}: {error}");
+        }
     }
 }
 

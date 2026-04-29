@@ -415,10 +415,10 @@ export class WindowService {
     }
 
     /**
-     * Immediate window state save (fire-and-forget).
+     * Immediate window state save.
      * Exposed for StateManager registration.
      */
-    public saveImmediate(): void {
-        void this._persistence.saveWindowState();
+    public async saveImmediate(): Promise<void> {
+        await this._persistence.saveWindowState();
     }
 }
