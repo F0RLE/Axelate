@@ -3,7 +3,6 @@ import { ChatAttachmentRenderer } from './ChatAttachmentRenderer';
 import { extractErrorMessage, safeExtractText } from './ChatContentFormatter';
 import { createChatImageGenerationMessage } from './ChatImageGenerationMessage';
 import { ChatImageController } from './ChatImageController';
-import { ChatInputContextMenu } from './ChatInputContextMenu';
 import { configureChatMarkdown } from './ChatMarkdown';
 import { ChatMessageInteractionController } from './ChatMessageInteractionController';
 import { ChatMessageRenderer } from './ChatMessageRenderer';
@@ -40,7 +39,6 @@ type ChatUIDeps = {
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
-    readClipboardText: () => Promise<string | null>;
     tracer: Pick<LoggerService, 'warn' | 'error' | 'debug'>;
 };
 
@@ -67,7 +65,6 @@ export class ChatUI {
     private _attachmentRenderVersion = 0;
     private readonly _attachmentRenderer: ChatAttachmentRenderer;
     private readonly _imageController: ChatImageController;
-    private readonly _inputContextMenu: ChatInputContextMenu;
     private readonly _messageInteractionController: ChatMessageInteractionController;
     private readonly _messageRenderer: ChatMessageRenderer;
     private readonly _typingController: ChatTypingController;
@@ -100,25 +97,6 @@ export class ChatUI {
                 this.showToast(message, type);
             },
             translate: this._translate,
-            tracer: deps.tracer,
-        });
-        this._inputContextMenu = new ChatInputContextMenu({
-            translate: this._translate,
-            copyText: (text) => deps.copyText(text),
-            readClipboardText: () => deps.readClipboardText(),
-            canPaste: () => {
-                const browserGlobals = globalThis as unknown as {
-                    navigator?: {
-                        clipboard?: {
-                            readText?: unknown;
-                        };
-                    };
-                };
-                return (
-                    deps.isTauriRuntime() ||
-                    typeof browserGlobals.navigator?.clipboard?.readText === 'function'
-                );
-            },
             tracer: deps.tracer,
         });
         this._attachmentRenderer = new ChatAttachmentRenderer({
@@ -174,7 +152,6 @@ export class ChatUI {
         if (this._isInitialized || this._isDestroyed) return;
         this._isInitialized = true;
         document.addEventListener('click', this._boundDocumentClick);
-        this._inputContextMenu.bind(this._dom.chatInput);
         await this._retryStatusListener.bind();
     }
 
@@ -184,7 +161,6 @@ export class ChatUI {
         this._isInitialized = false;
 
         document.removeEventListener('click', this._boundDocumentClick);
-        this._inputContextMenu.destroy();
         this._retryStatusListener.destroy();
         this._imageController.destroy();
         this._attachmentRenderer.revokeAttachmentObjectUrls();

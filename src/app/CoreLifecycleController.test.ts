@@ -93,6 +93,7 @@ function createDeps(isDestroyed: () => boolean): CoreLifecycleDeps {
             aiBridge: {},
             bridge: {},
             errorHandler: {},
+            globalTextContextMenu: { init: vi.fn(), destroy: vi.fn() },
         },
         state: { isDestroyed },
         globalShortcutKeydown: vi.fn(),
