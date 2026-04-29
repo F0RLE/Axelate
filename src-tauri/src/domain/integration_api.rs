@@ -461,6 +461,7 @@ async fn route_authorized_request(
             handle_module_stage_request(request, &context, module_id)
         }
         ("POST", ["v1", "modules", module_id, action]) => {
+            crate::domain::modules::downloader::validate_module_id(module_id)?;
             let action = parse_module_action(action)?;
             let response = module_controller::control(context.app, module_id, action).await?;
             Ok(json_response(
@@ -646,7 +647,7 @@ async fn handle_image_request(
         prompt: payload.prompt.clone(),
         original_prompt: Some(payload.prompt),
         model: model.clone(),
-        settings_key: payload.settings_key.or_else(|| Some(provider.clone())),
+        settings_key: payload.settings_key.or_else(|| Some(ui_provider.clone())),
         session_id,
         steps: payload.steps,
         cfg_scale: payload.cfg_scale,

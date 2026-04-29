@@ -10,6 +10,7 @@ const SDCPP_UNSUPPORTED_FLAGS: [&str; 4] = [
 ];
 const SDCPP_SERVER_UNSUPPORTED_FLAGS: [&str; 3] =
     ["--preview", "--preview-path", "--preview-interval"];
+const SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG: &str = "--sdcpp-preview";
 
 fn push_llamacpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
     match config.compute_mode {
@@ -27,35 +28,71 @@ fn push_llamacpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
 }
 
 fn sdcpp_extra_args(config: &EngineConfig) -> Vec<String> {
-    config
-        .extra_args
+    let unsupported_flags = SDCPP_UNSUPPORTED_FLAGS
         .iter()
-        .filter(|arg| {
-            !SDCPP_UNSUPPORTED_FLAGS.iter().any(|flag| {
-                arg.as_str() == *flag
-                    || arg
-                        .strip_prefix(flag)
-                        .is_some_and(|suffix| suffix.starts_with('='))
-            }) && !SDCPP_SERVER_UNSUPPORTED_FLAGS.iter().any(|flag| {
-                arg.as_str() == *flag
-                    || arg
-                        .strip_prefix(flag)
-                        .is_some_and(|suffix| suffix.starts_with('='))
-            })
-        })
-        .cloned()
-        .collect()
+        .chain(SDCPP_SERVER_UNSUPPORTED_FLAGS.iter())
+        .copied()
+        .chain(std::iter::once(SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG))
+        .collect::<Vec<_>>();
+    let mut filtered = Vec::new();
+    let mut index = 0;
+
+    while let Some(arg) = config.extra_args.get(index) {
+        let should_skip = unsupported_flags.iter().any(|flag| {
+            arg.as_str() == *flag
+                || arg
+                    .strip_prefix(flag)
+                    .is_some_and(|suffix| suffix.starts_with('='))
+        });
+
+        if should_skip {
+            let skip_value = unsupported_flags.contains(&arg.as_str())
+                && config
+                    .extra_args
+                    .get(index + 1)
+                    .is_some_and(|next| !next.starts_with('-'));
+            index += if skip_value { 2 } else { 1 };
+            continue;
+        }
+
+        filtered.push(arg.clone());
+        index += 1;
+    }
+
+    filtered
 }
 
 /// Resolves the explicit stable-diffusion.cpp preview output path from extra arguments.
-pub const fn resolve_sdcpp_preview_path(extra_args: &[String]) -> Option<PathBuf> {
-    let _ = extra_args;
+pub fn resolve_sdcpp_preview_path(extra_args: &[String]) -> Option<PathBuf> {
+    let mut index = 0;
+    while let Some(arg) = extra_args.get(index) {
+        if let Some(path) = arg
+            .strip_prefix(SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG)
+            .and_then(|suffix| suffix.strip_prefix('='))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Some(PathBuf::from(path));
+        }
+
+        if arg == SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG
+            && let Some(path) = extra_args
+                .get(index + 1)
+                .map(String::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && !value.starts_with('-'))
+        {
+            return Some(PathBuf::from(path));
+        }
+
+        index += 1;
+    }
+
     None
 }
 
-pub(super) const fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
-    let _ = extra_args;
-    false
+pub(super) fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
+    resolve_sdcpp_preview_path(extra_args).is_some()
 }
 
 pub(super) fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Vec<String> {

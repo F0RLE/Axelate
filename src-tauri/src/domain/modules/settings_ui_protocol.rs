@@ -350,7 +350,7 @@ fn parse_module_id_from_label(label: &str) -> Result<String, AppError> {
         ));
     }
 
-    let Some(module_id) = module_id else {
+    let Some(module_id) = module_id.filter(|value| !value.trim().is_empty()) else {
         return Err(AppError::PermissionDenied(
             "Module settings route is only available to owned settings webviews".to_string(),
         ));

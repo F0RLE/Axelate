@@ -97,9 +97,16 @@ export class AIChatTransport implements IChatTransport {
             request_id: requestId,
         };
         this._activeChatRequestId = requestId;
+        let streamDoneResolved = false;
         let resolveStreamDone: (() => void) | null = null;
         const streamDone = new Promise<void>((resolve) => {
-            resolveStreamDone = resolve;
+            resolveStreamDone = () => {
+                if (streamDoneResolved) {
+                    return;
+                }
+                streamDoneResolved = true;
+                resolve();
+            };
         });
         const chatChannel = new Channel<IStreamChunkEnvelope>();
         chatChannel.onmessage = (payload) => {
@@ -121,10 +128,16 @@ export class AIChatTransport implements IChatTransport {
 
         const thoughtChannel = new Channel<IStreamChunkEnvelope>();
         thoughtChannel.onmessage = (payload) => {
-            if (
-                !this._isPayloadForRequest(payload, requestId) ||
-                payload.kind !== 'thought_chunk'
-            ) {
+            if (!this._isPayloadForRequest(payload, requestId)) {
+                return;
+            }
+
+            if (payload.kind === 'done') {
+                resolveStreamDone?.();
+                return;
+            }
+
+            if (payload.kind !== 'thought_chunk') {
                 return;
             }
 
@@ -167,9 +180,8 @@ export class AIChatTransport implements IChatTransport {
         }
 
         const requestId = this._generateRequestId();
-        const { session_id: _sessionId, ...requestWithoutSession } = request;
         const requestWithId: IChatRequest = {
-            ...requestWithoutSession,
+            ...request,
             request_id: requestId,
         };
         const chatChannel = new Channel<IStreamChunkEnvelope>();
