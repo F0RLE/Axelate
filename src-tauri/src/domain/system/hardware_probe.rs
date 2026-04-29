@@ -171,7 +171,7 @@ async fn probe_gpu_info_uncached() -> GpuInfo {
 fn probe_gpu_from_names(names: Option<Vec<String>>) -> GpuInfo {
     match names {
         Some(names) if !names.is_empty() => gpu_probe_from_names(&names),
-        _ => default_probe(),
+        _ => nvidia_probe_from_nvml().unwrap_or_else(default_probe),
     }
 }
 
@@ -289,6 +289,12 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
         .unwrap_or_else(|| "Integrated / No GPU".to_string());
 
     let brand = gpu_name_brand(&primary_name);
+    if brand == GpuBrand::Software {
+        if let Some(probe) = nvidia_probe_from_nvml() {
+            return probe;
+        }
+    }
+
     let backend = preferred_backend_for_gpu_brand(brand);
     let detected = brand != GpuBrand::Software;
     let (cuda_driver_major, cuda_driver_minor) = if backend == "cuda" {
@@ -309,6 +315,19 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
         cuda_driver_major,
         cuda_driver_minor,
     }
+}
+
+fn nvidia_probe_from_nvml() -> Option<GpuInfo> {
+    let (cuda_driver_major, cuda_driver_minor) = detect_cuda_driver_version();
+    cuda_driver_major.map(|major| GpuInfo {
+        detected: true,
+        name: "NVIDIA CUDA GPU".to_string(),
+        cuda: true,
+        backend: "cuda".to_string(),
+        memory: 0,
+        cuda_driver_major: Some(major),
+        cuda_driver_minor,
+    })
 }
 
 const fn preferred_backend_for_gpu_brand(brand: GpuBrand) -> &'static str {
@@ -507,8 +526,13 @@ mod tests {
         assert_eq!(intel.backend, "sycl");
 
         let fallback = gpu_probe_from_names(&[String::from("Microsoft Basic Display Adapter")]);
-        assert_eq!(fallback.backend, "cpu");
-        assert!(!fallback.detected);
+        if fallback.detected {
+            assert_eq!(fallback.backend, "cuda");
+            assert!(fallback.cuda);
+        } else {
+            assert_eq!(fallback.backend, "cpu");
+            assert!(!fallback.detected);
+        }
     }
 
     #[test]
@@ -549,6 +573,17 @@ mod tests {
 
         assert_eq!(probe.name, "NVIDIA GeForce RTX 4070");
         assert_eq!(probe.backend, "cuda");
+    }
+
+    #[test]
+    fn nvml_fallback_is_used_when_windows_gpu_names_are_unavailable() {
+        let probe = probe_gpu_from_names(None);
+        if probe.detected {
+            assert_eq!(probe.backend, "cuda");
+            assert!(probe.cuda);
+        } else {
+            assert_eq!(probe.backend, "cpu");
+        }
     }
 
     #[test]

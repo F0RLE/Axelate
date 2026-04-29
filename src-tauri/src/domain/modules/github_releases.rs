@@ -90,6 +90,11 @@ pub async fn fetch_release_bundle(
     let repo_ref = parse_repo(repo_url)?;
     let platform = current_platform();
     let hardware = detect_hardware_profile().await;
+    tracing::info!(
+        "Selecting release bundle for {module_id}: platform={:?}, hardware={:?}",
+        platform,
+        hardware
+    );
     let mut page = 1_u32;
 
     loop {
@@ -101,6 +106,16 @@ pub async fn fetch_release_bundle(
         if let Some(bundle) =
             find_compatible_release_bundle(module_id, platform, hardware, releases)
         {
+            tracing::info!(
+                "Selected release bundle for {module_id}: tag={} assets={}",
+                bundle.tag_name,
+                bundle
+                    .assets
+                    .iter()
+                    .map(|asset| asset.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             return Ok(bundle);
         }
 
