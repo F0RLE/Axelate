@@ -601,6 +601,7 @@ export class ChatController {
     public async sendChat(): Promise<void> {
         if (this._state.isSending) {
             await this._sendController.cancelActiveSend();
+            this._forceImageGeneration = false;
             return;
         }
 

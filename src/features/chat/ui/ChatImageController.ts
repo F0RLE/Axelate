@@ -67,7 +67,6 @@ export class ChatImageController {
     public constructor(private readonly _deps: ChatImageControllerDeps) {
         this._boundImageViewerKeydown = (event: KeyboardEvent) => {
             if (event.ctrlKey && ['+', '-', '=', '0'].includes(event.key)) {
-                event.preventDefault();
                 return;
             }
             if (event.key === 'Escape') {
@@ -84,7 +83,6 @@ export class ChatImageController {
         };
         this._boundImageViewerWheel = (event: WheelEvent) => {
             if (!event.ctrlKey) return;
-            event.preventDefault();
         };
     }
 

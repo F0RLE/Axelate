@@ -690,7 +690,7 @@ describe('ChatUI lifecycle', () => {
         expect(preview.src.startsWith('data:image/png;base64,b25l')).toBe(true);
     });
 
-    it('should prevent launcher zoom shortcuts while image preview is open', async () => {
+    it('should preserve native browser zoom shortcuts while image preview is open', async () => {
         ui = createChatUI();
         await renderAssistantImage(ui, true);
 
@@ -706,7 +706,7 @@ describe('ChatUI lifecycle', () => {
         });
         document.dispatchEvent(wheelEvent);
 
-        expect(wheelEvent.defaultPrevented).toBe(true);
+        expect(wheelEvent.defaultPrevented).toBe(false);
 
         const keyEvent = new KeyboardEvent('keydown', {
             bubbles: true,
@@ -716,7 +716,7 @@ describe('ChatUI lifecycle', () => {
         });
         document.dispatchEvent(keyEvent);
 
-        expect(keyEvent.defaultPrevented).toBe(true);
+        expect(keyEvent.defaultPrevented).toBe(false);
     });
 
     it('should not open image preview for thumbnails without a usable source', async () => {

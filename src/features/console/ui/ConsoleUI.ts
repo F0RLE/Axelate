@@ -256,9 +256,18 @@ export class ConsoleUI {
         this._viewState.activeViewId = view;
         this._activateTab('.console-tab', '.logs-pane', `logs-${view}`, btn);
         this.renderLogs(true);
-        void this.service.fetchLogs(view).then(() => {
-            this.renderLogs(true);
-        });
+        const requestedView = view;
+        void this.service
+            .fetchLogs(requestedView)
+            .then(() => {
+                if (this._viewState.activeViewId === requestedView) {
+                    this.renderLogs(true);
+                }
+            })
+            .catch((error: unknown) => {
+                // eslint-disable-next-line no-console
+                console.error('[ConsoleUI] Failed to fetch logs for view:', error);
+            });
     }
 
     public async clearLogs(): Promise<void> {

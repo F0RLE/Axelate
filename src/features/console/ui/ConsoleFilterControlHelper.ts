@@ -151,6 +151,7 @@ export class ConsoleFilterControlHelper<Level extends string> {
             return;
         }
 
+        delete button.dataset['confirmingAll'];
         button.dataset['confirming'] = 'true';
         button.classList.add('confirming');
         button.setAttribute('aria-label', 'Confirm clear console logs');
