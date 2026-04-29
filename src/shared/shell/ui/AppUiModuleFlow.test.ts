@@ -21,7 +21,6 @@ describe('AppUiModuleFlow', () => {
     const getCatalogApps = vi.fn();
     const getSelectedAppId = vi.fn();
     const clearModuleCard = vi.fn();
-    const openAppSelection = vi.fn();
     const markSlotCardAsInstalled = vi.fn();
     const showToast = vi.fn();
     const translate = vi.fn((_key: string, fallback: string) => fallback);
@@ -43,14 +42,13 @@ describe('AppUiModuleFlow', () => {
             getCatalogApps,
             getSelectedAppId,
             clearModuleCard,
-            openAppSelection,
             markSlotCardAsInstalled,
             showToast,
             translate,
         });
     });
 
-    it('reopens modal after delete when selection stays open', async () => {
+    it('refreshes modal after deleting the selected module', async () => {
         const app = { id: 'svc', name: 'Service', installed: true } as IApp;
         platformService.delete.mockResolvedValue(undefined);
         modalManager.isAppSelectionOpen.mockReturnValue(true);
@@ -62,9 +60,26 @@ describe('AppUiModuleFlow', () => {
         expect(platformService.delete).toHaveBeenCalledWith(app, 'services');
         expect(app.installed).toBe(false);
         expect(clearModuleCard).toHaveBeenCalledWith('services');
-        expect(openAppSelection).toHaveBeenCalledWith('services', [
-            { id: 'svc', installed: false },
-        ]);
+        expect(modalManager.refreshCurrentSelection).toHaveBeenCalledWith(
+            [{ id: 'svc', installed: false }],
+            null,
+        );
+    });
+
+    it('refreshes modal after deleting an unselected module without selecting it', async () => {
+        const app = { id: 'svc', name: 'Service', installed: true } as IApp;
+        platformService.delete.mockResolvedValue(undefined);
+        modalManager.isAppSelectionOpen.mockReturnValue(true);
+        getCatalogApps.mockReturnValue([{ id: 'svc', installed: false }]);
+        getSelectedAppId.mockReturnValue('other');
+
+        await flow.handleDeleteModule(app, 'services');
+
+        expect(clearModuleCard).not.toHaveBeenCalled();
+        expect(modalManager.refreshCurrentSelection).toHaveBeenCalledWith(
+            [{ id: 'svc', installed: false }],
+            'other',
+        );
     });
 
     it('refreshes modal selection after successful download', () => {

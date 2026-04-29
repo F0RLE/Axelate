@@ -16,7 +16,6 @@ type AppUiModuleFlowDeps = {
     getCatalogApps: (category: string) => IApp[];
     getSelectedAppId: (category: string) => string | null;
     clearModuleCard: (category: string) => void;
-    openAppSelection: (category: string, apps?: IApp[]) => void;
     markSlotCardAsInstalled: (card: HTMLElement, app: IApp) => void;
     showToast: (message: string, type?: string) => void;
     translate: (key: string, fallback: string) => string;
@@ -31,14 +30,15 @@ export class AppUiModuleFlow {
             await this._deps.platformService.delete(app, category);
             app.installed = false;
 
-            if (this._deps.getSelectedAppId(category) === app.id) {
+            const wasSelected = this._deps.getSelectedAppId(category) === app.id;
+            if (wasSelected) {
                 this._deps.clearModuleCard(category);
             }
 
             if (this._deps.modalManager.isAppSelectionOpen()) {
-                this._deps.openAppSelection(
-                    category,
+                this._deps.modalManager.refreshCurrentSelection(
                     this._deps.getCatalogApps(this._toRawCategory(category)),
+                    wasSelected ? null : this._deps.getSelectedAppId(category),
                 );
             }
         } catch (err: unknown) {

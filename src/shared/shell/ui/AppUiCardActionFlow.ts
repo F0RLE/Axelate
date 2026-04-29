@@ -34,6 +34,9 @@ export class AppUiCardActionFlow {
         }
         if (await this.tryDeleteAction(event, app, category)) return;
         if (await this.tryDownloadAction(event, app, category)) return;
+        if (!this._deps.platformService.isApiModule(app) && app.installed !== true) {
+            return;
+        }
         this._deps.performSelectionAction(category, app);
     }
 

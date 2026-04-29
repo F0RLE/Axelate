@@ -770,16 +770,19 @@ describe('AppUI lifecycle', () => {
         expect(reopenSpy).not.toHaveBeenCalled();
     });
 
-    it('should reopen modal after delete when app selection is still open', async () => {
+    it('should refresh modal after delete when app selection is still open', async () => {
         appUI = createAppUI();
 
         const privateAppUI = appUI as unknown as {
             _handleDeleteModule: (app: IApp, category: string) => Promise<void>;
-            _modalManager: { isAppSelectionOpen: () => boolean };
+            _modalManager: {
+                isAppSelectionOpen: () => boolean;
+                refreshCurrentSelection: (apps?: IApp[], selectedId?: string | null) => void;
+            };
         };
 
         vi.spyOn(privateAppUI._modalManager, 'isAppSelectionOpen').mockReturnValue(true);
-        const reopenSpy = vi.spyOn(appUI, 'openAppSelection');
+        const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
 
         platformServiceMock.delete.mockResolvedValue(undefined);
         const refreshedApps = [{ id: 'svc', name: 'Service', installed: false }] as IApp[];
@@ -790,7 +793,7 @@ describe('AppUI lifecycle', () => {
             'services',
         );
 
-        expect(reopenSpy).toHaveBeenCalledWith('services', refreshedApps);
+        expect(refreshSpy).toHaveBeenCalledWith(refreshedApps, null);
     });
 
     it('should resolve app by id from injected catalog resolver', () => {
