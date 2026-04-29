@@ -13,7 +13,6 @@ import {
     setModuleCardDownloadProgress,
 } from './ModuleCardDownloadProgress';
 import { ModuleCardPresentationHelper } from './ModuleCardPresentationHelper';
-import { isAiCategory } from '../../utils/moduleCategoryPolicy';
 
 type ModuleCardRendererDeps = {
     checkInstalled?: (moduleId: string) => Promise<boolean>;
@@ -125,11 +124,10 @@ export class ModuleCardRenderer {
         return card;
     }
 
-    private _resolveCardState(app: IApp, category: string): CardState {
+    private _resolveCardState(app: IApp, _category: string): CardState {
         const isApi = this._isApiModule(app);
         const isComingSoon = app.comingSoon === true;
-        const isInstalled =
-            isApi || isAiCategory(category) || (!isComingSoon && app.installed === true);
+        const isInstalled = isApi || (!isComingSoon && app.installed === true);
 
         return {
             isApi,
