@@ -10,6 +10,7 @@
 - Dependabot targets `nightly`.
 - Release tags should be created from the commit that is meant to ship.
 - Release tags must point to a commit that is already reachable from `main`.
+- Release tags matching `v*` are protected by a repository ruleset against deletion and non-fast-forward updates.
 
 ## CI
 
@@ -22,6 +23,13 @@
 - manual dispatch from GitHub Actions
 
 The CI gate checks frontend linting, formatting, type/build, bundle size, tests, Rust clippy, Rust check, Rust tests, and audit reporting.
+
+Additional release-relevant automation:
+
+- `CodeQL` scans TypeScript/JavaScript and Rust code on PRs, protected branch pushes, weekly schedule, and manual dispatch.
+- `Dependency Review` checks dependency changes on PRs to `main` and `nightly`.
+- `Security Audit` runs `npm audit --audit-level=high` and `cargo audit` on a weekly schedule and manual dispatch.
+- CodeRabbit reviews PRs and is configured as advisory automation for the current solo-maintainer workflow.
 
 ## Local Release Check
 

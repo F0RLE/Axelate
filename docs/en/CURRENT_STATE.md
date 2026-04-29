@@ -1,6 +1,6 @@
 # Axelate Current State
 
-> Repository-grounded snapshot as of 2026-04-23.
+> Repository-grounded snapshot as of 2026-04-29.
 > This document describes what exists now, not what the future product aspires to become.
 
 For setup and contributor workflow, use [Getting Started](GETTING_STARTED.md) and [Development Workflow](DEVELOPMENT_WORKFLOW.md).
@@ -318,8 +318,24 @@ Current GitHub automation:
 
 - strict CI runs on `main` and `nightly`
 - Dependabot opens dependency update pull requests against `nightly`
+- Dependabot security updates, secret scanning, and push protection are enabled
+- CodeQL scans TypeScript/JavaScript and Rust
+- dependency review runs on pull requests
+- scheduled security audit runs `npm audit` and `cargo audit`
+- CodeRabbit reviews pull requests targeting `nightly` and `main`
 - release builds run when a `v*` tag is pushed
 - release tags must match all project manifest versions
+- release tags matching `v*` are protected against deletion and non-fast-forward updates
+
+Current branch and merge settings:
+
+- `nightly` is the default branch
+- `main` and `nightly` are protected
+- protected branches require the frontend and backend strict CI checks
+- protected branches require linear history and resolved conversations
+- protected branches reject force-push and branch deletion
+- human approval and CODEOWNERS review are not required during the solo-maintainer phase
+- squash merge is enabled; merge commits and rebase merges are disabled
 
 The repository is still alpha-stage. `nightly` is where active development lands; `main` should stay release-ready.
 
