@@ -374,6 +374,38 @@ mod tests {
     }
 
     #[test]
+    fn treats_cuda_runtime_version_as_cuda_track_support() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: Some(13),
+            cuda_driver_minor: Some(2),
+        };
+        let assets = vec![
+            asset("cudart-llama-bin-win-cuda-13.1-x64.zip"),
+            asset("llama-b8971-bin-win-cuda-13.1-x64.zip"),
+            asset("llama-b8971-bin-win-vulkan-x64.zip"),
+        ];
+
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets)
+            .expect("expected cuda runtime version to support cuda asset selection");
+
+        assert_eq!(selected.len(), 2);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("cudart-llama-bin-win-cuda-13.1-x64.zip")
+        );
+        assert_eq!(
+            selected.get(1).map(|asset| asset.name.as_str()),
+            Some("llama-b8971-bin-win-cuda-13.1-x64.zip")
+        );
+    }
+
+    #[test]
     fn prefers_cuda12_when_cuda_driver_version_is_unknown() {
         let platform = Platform {
             os: PlatformOs::Windows,
