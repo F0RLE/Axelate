@@ -99,6 +99,15 @@ export class ChatHistoryController {
         return typeof lastUserMessage?.content === 'string';
     }
 
+    public getLocalHistorySnapshot(): IChatMessage[] {
+        return this._options.getHistory().map((message) => ({ ...message }));
+    }
+
+    public restoreLocalHistorySnapshot(history: IChatMessage[]): void {
+        this._options.setHistory(history.map((message) => ({ ...message })));
+        this._options.renderHistory(this._options.getHistory());
+    }
+
     public rewindLocalHistory(): void {
         const history = [...this._options.getHistory()];
 

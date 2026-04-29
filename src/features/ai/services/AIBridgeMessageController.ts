@@ -13,6 +13,7 @@ import type { IChatTransport } from './AIChatTransport';
 import type { AIProviderManager } from './AIProviderManager';
 import type { AIBridgeEvents } from './AIBridgeEvents';
 import type { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
+import type { IAIBridgeSendMessageOptions } from '../types/IAIBridge';
 import { resolveCustomProviderBackendId } from '@/shared/utils/customProviderSupport';
 
 type AIBridgeMessageLogger = Pick<LoggerService, 'error'>;
@@ -32,10 +33,6 @@ type AIBridgeMessageControllerDeps = {
     onSuccessfulResponse: () => void;
 };
 
-export type AIBridgeSendMessageOptions = {
-    originalPrompt?: string;
-};
-
 export class AIBridgeMessageController {
     constructor(private readonly _deps: AIBridgeMessageControllerDeps) {}
 
@@ -44,7 +41,7 @@ export class AIBridgeMessageController {
         source: MessageSource,
         attachments: { name: string; type: string; data_base64: string }[],
         history: IChatMessage[],
-        options: AIBridgeSendMessageOptions = {},
+        options: IAIBridgeSendMessageOptions = {},
     ): Promise<IBridgeResponse> {
         if (this._deps.manager.activeProviderId === null) {
             return this._handleMissingProvider(source);
@@ -142,7 +139,7 @@ export class AIBridgeMessageController {
         providerId: string,
         text: string,
         source: MessageSource,
-        options: AIBridgeSendMessageOptions,
+        options: IAIBridgeSendMessageOptions,
     ): Promise<IBridgeResponse> {
         const context = this._deps.getContext();
         const selectedImageModule = context?.stateStore.getSelectedModule('ai_image');

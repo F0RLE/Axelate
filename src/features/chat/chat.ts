@@ -458,7 +458,13 @@ export class ChatController {
             return;
         }
 
-        const preview = await previewProvider.getImageGenerationPreview();
+        let preview: Awaited<ReturnType<AIBridge['getImageGenerationPreview']>>;
+        try {
+            preview = await previewProvider.getImageGenerationPreview();
+        } catch (error: unknown) {
+            this._tracer.error('[Chat] Failed to restore active image generation:', error);
+            return;
+        }
         if (preview === null) {
             return;
         }
@@ -470,6 +476,7 @@ export class ChatController {
         }
 
         this._state.isSending = true;
+        this._state.currentGenerationProviderId = this._aiBridge.getState().activeProviderId;
         this._generationController.startImagePreviewPolling(imageHandle);
         this._scheduleRestoredImageGenerationCheck();
     }
@@ -487,15 +494,23 @@ export class ChatController {
             return;
         }
 
-        const preview = await this._aiBridge.getImageGenerationPreview();
-        if (preview !== null) {
-            this._scheduleRestoredImageGenerationCheck();
-            return;
-        }
+        try {
+            const preview = await this._aiBridge.getImageGenerationPreview();
+            if (preview !== null) {
+                this._scheduleRestoredImageGenerationCheck();
+                return;
+            }
 
-        this._generationController.stopImagePreviewPolling();
-        this._state.isSending = false;
-        await this._historyController.loadHistory();
+            this._generationController.stopImagePreviewPolling();
+            this._state.isSending = false;
+            this._state.currentGenerationProviderId = null;
+            await this._historyController.loadHistory();
+        } catch (error: unknown) {
+            this._generationController.stopImagePreviewPolling();
+            this._state.isSending = false;
+            this._state.currentGenerationProviderId = null;
+            this._tracer.error('[Chat] Restored image generation check failed:', error);
+        }
     }
 
     private _clearRestoredImageGenerationTimer(): void {
@@ -598,11 +613,11 @@ export class ChatController {
 
     // --- Send Message ---
 
-    public async sendChat(): Promise<void> {
+    public async sendChat(): Promise<boolean> {
         if (this._state.isSending) {
             await this._sendController.cancelActiveSend();
             this._forceImageGeneration = false;
-            return;
+            return false;
         }
 
         const input = this._inputCoordinator.getInput();
@@ -613,17 +628,17 @@ export class ChatController {
                 this._i18n.t('ui.chat.input_required', 'Enter a message or attach a file'),
                 'error',
             );
-            return;
+            return false;
         }
 
         const activationPrompt = this._forceImageGeneration ? `generate image ${text}` : undefined;
         const isActive = await this._activationCoordinator.ensureActive(input, activationPrompt);
         if (!isActive) {
             this._forceImageGeneration = false;
-            return;
+            return false;
         }
 
-        await this._sendController.sendChat(input);
+        return await this._sendController.sendChat(input);
     }
 
     public async regenerateLastResponse(): Promise<void> {
@@ -642,8 +657,10 @@ export class ChatController {
             return;
         }
 
+        const historySnapshot = this._historyController.getLocalHistorySnapshot();
         const text = await this._historyController.regenerateLastTurn(this._state.isSending);
         if (text === null || text.trim() === '') {
+            this._historyController.restoreLocalHistorySnapshot(historySnapshot);
             this._ui.showToast(
                 this._i18n.t('ui.chat.regenerate_failed', 'Failed to regenerate response'),
                 'error',
@@ -652,7 +669,20 @@ export class ChatController {
         }
 
         this._inputCoordinator.restore(text);
-        await this.sendChat();
+        let started: boolean;
+        try {
+            started = await this.sendChat();
+        } catch (error: unknown) {
+            this._historyController.restoreLocalHistorySnapshot(historySnapshot);
+            this._inputCoordinator.restore(text);
+            this._tracer.error('[Chat] Failed to resend regenerated turn:', error);
+            throw error;
+        }
+
+        if (!started) {
+            this._historyController.restoreLocalHistorySnapshot(historySnapshot);
+            this._inputCoordinator.restore(text);
+        }
     }
 
     // --- Greeting ---

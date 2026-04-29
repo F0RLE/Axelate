@@ -85,11 +85,11 @@ export class ConsoleLogService {
 
     public async clearLogs(viewId = 'general'): Promise<boolean> {
         const normalizedViewId = this._canonicalViewId(viewId);
-        this._logsByView.set(normalizedViewId, []);
-        this._lastTimestampByView.set(normalizedViewId, 0);
 
         try {
             await this.bridge.invoke('clear_console_logs', { viewId: normalizedViewId });
+            this._logsByView.set(normalizedViewId, []);
+            this._lastTimestampByView.set(normalizedViewId, 0);
             return true;
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Clear logs failed:', error);
@@ -98,11 +98,10 @@ export class ConsoleLogService {
     }
 
     public async clearAllLogs(): Promise<boolean> {
-        this._logsByView.clear();
-        this._lastTimestampByView.clear();
-
         try {
             await this.bridge.invoke('clear_logs');
+            this._logsByView.clear();
+            this._lastTimestampByView.clear();
             return true;
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Clear all logs failed:', error);

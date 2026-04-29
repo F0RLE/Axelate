@@ -6,7 +6,7 @@ import type {
     IChunkHandler,
     IImageGenerationPreview,
 } from '../types/aiTypes';
-import type { AIBridgeSendMessageOptions } from './AIBridgeMessageController';
+import type { IAIBridgeSendMessageOptions } from '../types/IAIBridge';
 import { AIProviderManager } from './AIProviderManager';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AIChatTransport, type IChatTransport } from './AIChatTransport';
@@ -217,7 +217,7 @@ export class AIBridge implements IAIBridge {
         source: MessageSource = 'chat',
         attachments: { name: string; type: string; data_base64: string }[] = [],
         history: IChatMessage[] = [],
-        options: AIBridgeSendMessageOptions = {},
+        options: IAIBridgeSendMessageOptions = {},
     ): Promise<IBridgeResponse> {
         return await this._messageController.sendMessage(
             text,

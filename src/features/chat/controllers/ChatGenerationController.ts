@@ -302,11 +302,15 @@ export class ChatGenerationController {
     ): Promise<number> {
         const completionTokens = response.usage?.completion_tokens;
         if (typeof completionTokens !== 'number' || !Number.isFinite(completionTokens)) {
-            const estimatedTokens = await this._options.estimateReplyTokens(replyText);
-            if (!Number.isFinite(estimatedTokens)) {
+            try {
+                const estimatedTokens = await this._options.estimateReplyTokens(replyText);
+                if (!Number.isFinite(estimatedTokens)) {
+                    return 0;
+                }
+                return Math.max(0, Math.trunc(estimatedTokens));
+            } catch {
                 return 0;
             }
-            return Math.max(0, Math.trunc(estimatedTokens));
         }
 
         return Math.max(0, Math.trunc(completionTokens));
