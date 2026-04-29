@@ -212,12 +212,12 @@ fn query_windows_gpu_names_wmi() -> Option<Vec<String>> {
 
     let connection = match wmi::WMIConnection::new() {
         Ok(connection) => connection,
-        Err(_) => return query_nvidia_smi_gpu_names(),
+        Err(_) => return None,
     };
     let controllers: Vec<VideoController> =
         match connection.raw_query("SELECT Name FROM Win32_VideoController") {
             Ok(controllers) => controllers,
-            Err(_) => return query_nvidia_smi_gpu_names(),
+            Err(_) => return None,
         };
     let names = controllers
         .into_iter()
@@ -226,7 +226,7 @@ fn query_windows_gpu_names_wmi() -> Option<Vec<String>> {
         .filter(|name| !name.is_empty())
         .collect::<Vec<_>>();
 
-    normalize_names(names).or_else(query_nvidia_smi_gpu_names)
+    normalize_names(names)
 }
 
 #[cfg(target_os = "macos")]
@@ -383,61 +383,14 @@ fn gpu_name_brand(name: &str) -> GpuBrand {
 
 fn detect_cuda_driver_version() -> (Option<u32>, Option<u32>) {
     let Ok(nvml) = Nvml::init() else {
-        return detect_cuda_driver_version_with_nvidia_smi();
+        return (None, None);
     };
     let Ok(version) = nvml.sys_cuda_driver_version() else {
-        return detect_cuda_driver_version_with_nvidia_smi();
+        return (None, None);
     };
 
     let major = u32::try_from(cuda_driver_version_major(version)).ok();
     let minor = u32::try_from(cuda_driver_version_minor(version)).ok();
-    (major, minor)
-}
-
-fn query_nvidia_smi_gpu_names() -> Option<Vec<String>> {
-    let output = std::process::Command::new("nvidia-smi")
-        .args(["--query-gpu=name", "--format=csv,noheader"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let raw = String::from_utf8_lossy(&output.stdout);
-    normalize_names(raw.lines().map(str::to_string).collect())
-}
-
-fn detect_cuda_driver_version_with_nvidia_smi() -> (Option<u32>, Option<u32>) {
-    let output = std::process::Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=driver_version",
-            "--format=csv,noheader,nounits",
-        ])
-        .output();
-    let Ok(output) = output else {
-        return (None, None);
-    };
-    if !output.status.success() {
-        return (None, None);
-    }
-
-    let raw = String::from_utf8_lossy(&output.stdout);
-    let Some(version) = raw
-        .lines()
-        .next()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-    else {
-        return (None, None);
-    };
-
-    parse_nvidia_driver_version(version)
-}
-
-fn parse_nvidia_driver_version(version: &str) -> (Option<u32>, Option<u32>) {
-    let mut parts = version.split('.');
-    let major = parts.next().and_then(|part| part.parse::<u32>().ok());
-    let minor = parts.next().and_then(|part| part.parse::<u32>().ok());
     (major, minor)
 }
 
@@ -637,13 +590,6 @@ mod tests {
         } else {
             assert_eq!(probe.backend, "cpu");
         }
-    }
-
-    #[test]
-    fn parses_nvidia_smi_driver_version() {
-        assert_eq!(parse_nvidia_driver_version("566.36"), (Some(566), Some(36)));
-        assert_eq!(parse_nvidia_driver_version("580"), (Some(580), None));
-        assert_eq!(parse_nvidia_driver_version("bad"), (None, None));
     }
 
     #[test]

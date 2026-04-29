@@ -490,6 +490,10 @@ impl HardwareProfile {
 
     fn supports_cuda_track(&self, track: CudaTrack) -> bool {
         match self.cuda_driver_major {
+            Some(driver_major) if driver_major < 100 => match track {
+                CudaTrack::Cuda12 => driver_major >= 12,
+                CudaTrack::Cuda13 => driver_major >= 13,
+            },
             Some(driver_major) => driver_major >= track.min_driver_major(),
             None => track == CudaTrack::Cuda12,
         }
