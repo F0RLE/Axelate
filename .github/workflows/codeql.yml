@@ -10,7 +10,7 @@ on:
         - cron: "27 3 * * 1"
 
 concurrency:
-    group: codeql-${{ github.workflow }}-${{ github.ref }}-${{ matrix.language }}
+    group: codeql-${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
 
 permissions:
