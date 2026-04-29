@@ -6,6 +6,7 @@ import type {
     IChunkHandler,
     IImageGenerationPreview,
 } from '../types/aiTypes';
+import type { AIBridgeSendMessageOptions } from './AIBridgeMessageController';
 import { AIProviderManager } from './AIProviderManager';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AIChatTransport, type IChatTransport } from './AIChatTransport';
@@ -141,13 +142,6 @@ export class AIBridge implements IAIBridge {
 
         if (started && this._context?.tauriProvider.isTauri() === true) {
             this._inactivityController.reset();
-            if (!this._providerPolicy.isCloudProvider(providerId)) {
-                await this._runtime.stopCrossSlotEngines({
-                    context: this._context,
-                    providerId,
-                    providerPolicy: this._providerPolicy,
-                });
-            }
             await this._refreshLocalContextWindow(providerId);
         }
 
@@ -187,6 +181,20 @@ export class AIBridge implements IAIBridge {
         }
     }
 
+    public async stopEngineSlot(capability: 'text' | 'image' | 'vision'): Promise<void> {
+        const providerId = this._manager.activeProviderId;
+        await this._runtime.stopEngineSlot(this._context, capability);
+        if (
+            providerId !== null &&
+            ((capability === 'image' &&
+                this._providerPolicy.isManagedLocalImageEngine(providerId)) ||
+                (capability === 'text' && this._providerPolicy.isLocalTextProvider(providerId)))
+        ) {
+            this._manager.stopProvider();
+            this._engineStatus.setEngineState(providerId, 'idle');
+        }
+    }
+
     public isActive(): boolean {
         return this._manager.isActive();
     }
@@ -205,8 +213,19 @@ export class AIBridge implements IAIBridge {
         source: MessageSource = 'chat',
         attachments: { name: string; type: string; data_base64: string }[] = [],
         history: IChatMessage[] = [],
+        options: AIBridgeSendMessageOptions = {},
     ): Promise<IBridgeResponse> {
-        return await this._messageController.sendMessage(text, source, attachments, history);
+        return await this._messageController.sendMessage(
+            text,
+            source,
+            attachments,
+            history,
+            options,
+        );
+    }
+
+    public async prepareImagePrompt(text: string): Promise<IBridgeResponse> {
+        return await this._messageController.prepareImagePrompt(text);
     }
 
     public onMessage(listenerId: string, handler: MessageHandler): void {

@@ -1,4 +1,3 @@
-use crate::app::window::{create_main_window, show_and_focus_window};
 use crate::domain::ai::{
     self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
@@ -8,15 +7,14 @@ use crate::domain::engine::manager::EngineManager;
 use crate::domain::engine::types::Capability;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
-use crate::infrastructure::config::ui_state::UiStateService;
 use crate::infrastructure::crypto::secure_storage::SecureStorage;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use dashmap::DashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+use tauri::State;
 use tauri::ipc::Channel;
-use tauri::{Manager, State, Window};
 use tokio::sync::oneshot;
 
 #[cfg(target_os = "windows")]
@@ -197,16 +195,6 @@ impl StreamSink for TauriStreamSink {
     }
 }
 
-#[derive(Clone)]
-struct BackgroundImageGenerationContext {
-    sessions: Arc<ChatSessionManager>,
-    config_service: Arc<ConfigService>,
-    engine_manager: Arc<EngineManager>,
-    image_generation_state: Arc<crate::domain::ai::ImageGenerationState>,
-    settings_service: crate::infrastructure::config::settings::SettingsService,
-    ui_state_service: UiStateService,
-}
-
 fn ensure_request_id(request: &mut ChatRequest) -> String {
     let request_id = request
         .request_id
@@ -280,66 +268,6 @@ pub(crate) async fn fill_chat_request_api_key(
     }
 
     Ok(())
-}
-
-fn build_background_image_generation_context(
-    sessions: &State<'_, Arc<ChatSessionManager>>,
-    config_service: &State<'_, Arc<ConfigService>>,
-    engine_manager: &State<'_, Arc<EngineManager>>,
-    image_generation_state: &State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
-    settings_service: &State<'_, crate::infrastructure::config::settings::SettingsService>,
-    ui_state_service: &State<'_, UiStateService>,
-) -> BackgroundImageGenerationContext {
-    BackgroundImageGenerationContext {
-        sessions: Arc::clone(sessions.inner()),
-        config_service: Arc::clone(config_service.inner()),
-        engine_manager: Arc::clone(engine_manager.inner()),
-        image_generation_state: Arc::clone(image_generation_state.inner()),
-        settings_service: settings_service.inner().clone(),
-        ui_state_service: ui_state_service.inner().clone(),
-    }
-}
-
-fn spawn_background_image_generation(
-    app_handle: tauri::AppHandle,
-    request: ai::ImageGenerationRequest,
-    context: BackgroundImageGenerationContext,
-) {
-    tauri::async_runtime::spawn(async move {
-        crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");
-        let result = ai_service::process_image_request(
-            request,
-            &context.sessions,
-            &context.config_service,
-            &context.engine_manager,
-            &context.image_generation_state,
-            &context.settings_service,
-        )
-        .await;
-
-        if let Err(error) = &result {
-            tracing::error!("Background image generation failed: {error}");
-        }
-
-        reveal_chat_window_after_background_generation(&context.ui_state_service).await;
-        crate::app::tray::clear_background_generation(&app_handle);
-        restore_or_create_main_window(&app_handle);
-    });
-}
-
-async fn reveal_chat_window_after_background_generation(ui_state_service: &UiStateService) {
-    let mut ui_state = ui_state_service.get_ui_state().await.unwrap_or_default();
-    ui_state.last_page = Some("chat".to_string());
-    ui_state.pending_chat_reveal = true;
-    let _ = ui_state_service.save_ui_state(&ui_state).await;
-}
-
-fn restore_or_create_main_window(app_handle: &tauri::AppHandle) {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        show_and_focus_window(&window);
-    } else if let Some(window) = create_main_window(app_handle) {
-        show_and_focus_window(&window);
-    }
 }
 
 async fn cancel_comfyui_job(
@@ -668,34 +596,6 @@ pub async fn generate_image(
 
 #[tauri::command]
 #[specta::specta]
-#[allow(clippy::too_many_arguments)]
-/// Starts image generation as a detached backend task and restores the window on completion.
-pub async fn generate_image_background(
-    app: tauri::AppHandle,
-    _window: Window,
-    request: ai::ImageGenerationRequest,
-    sessions: State<'_, Arc<ChatSessionManager>>,
-    config_service: State<'_, Arc<ConfigService>>,
-    engine_manager: State<'_, Arc<EngineManager>>,
-    image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
-    settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
-    ui_state_service: State<'_, UiStateService>,
-) -> Result<(), AppError> {
-    let context = build_background_image_generation_context(
-        &sessions,
-        &config_service,
-        &engine_manager,
-        &image_generation_state,
-        &settings_service,
-        &ui_state_service,
-    );
-    spawn_background_image_generation(app, request, context);
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
 /// Cancels the current image generation request for the selected provider.
 pub async fn cancel_image_generation(
     provider: String,
@@ -728,9 +628,10 @@ pub async fn get_image_generation_preview(
         .and_then(|snapshot| snapshot.speed.clone());
     let has_status =
         merged_progress.is_some() || step.is_some() || total.is_some() || speed.is_some();
+    let has_active_job = image_generation_state.is_active("sdcpp").await;
 
     let Some(path) = engine_manager.active_image_preview_path().await else {
-        return Ok(if has_status {
+        return Ok(if has_status || has_active_job {
             Some(ImageGenerationPreview {
                 data_url: String::new(),
                 updated_at_ms: log_progress

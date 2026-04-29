@@ -36,7 +36,11 @@ pub async fn load_engine_config_map() -> Result<EngineConfigMap, AppError> {
 /// Saves persisted engine configuration map atomically.
 pub async fn save_engine_config_map(map: &EngineConfigMap) -> Result<(), AppError> {
     let path = &*FILE_ENGINE_CONFIG;
-    let tmp = path.with_extension("tmp");
+    let tmp = path.with_extension(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
 
     if let Some(dir) = path.parent() {
         tokio::fs::create_dir_all(dir)

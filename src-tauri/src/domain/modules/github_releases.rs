@@ -258,8 +258,8 @@ mod tests {
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
             cpu_tier: CpuInstructionTier::Avx2,
-            cuda_driver_major: None,
-            cuda_driver_minor: None,
+            cuda_driver_major: Some(580),
+            cuda_driver_minor: Some(0),
         };
 
         let incomplete_latest = vec![
@@ -298,8 +298,8 @@ mod tests {
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
             cpu_tier: CpuInstructionTier::Avx2,
-            cuda_driver_major: None,
-            cuda_driver_minor: None,
+            cuda_driver_major: Some(580),
+            cuda_driver_minor: Some(0),
         };
         let assets = vec![
             asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
@@ -331,8 +331,8 @@ mod tests {
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
             cpu_tier: CpuInstructionTier::Avx2,
-            cuda_driver_major: None,
-            cuda_driver_minor: None,
+            cuda_driver_major: Some(580),
+            cuda_driver_minor: Some(0),
         };
         let assets = vec![
             asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
@@ -355,6 +355,68 @@ mod tests {
         assert_eq!(
             selected.get(1).map(|asset| asset.name.as_str()),
             Some("llama-b8461-bin-win-cuda-13.1-x64.zip")
+        );
+    }
+
+    #[test]
+    fn prefers_cuda12_when_cuda_driver_version_is_unknown() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let assets = vec![
+            asset("cudart-llama-bin-win-cuda-12.4-x64.zip"),
+            asset("cudart-llama-bin-win-cuda-13.1-x64.zip"),
+            asset("llama-b8461-bin-win-cuda-12.4-x64.zip"),
+            asset("llama-b8461-bin-win-cuda-13.1-x64.zip"),
+            asset("llama-b8461-bin-win-cpu-x64.zip"),
+        ];
+
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets)
+            .expect("expected a compatible llama.cpp bundle");
+
+        assert_eq!(selected.len(), 2);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("cudart-llama-bin-win-cuda-12.4-x64.zip")
+        );
+        assert_eq!(
+            selected.get(1).map(|asset| asset.name.as_str()),
+            Some("llama-b8461-bin-win-cuda-12.4-x64.zip")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_cpu_when_only_unsupported_cuda_track_is_available() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: Some(550),
+            cuda_driver_minor: Some(0),
+        };
+        let assets = vec![
+            asset("cudart-llama-bin-win-cuda-13.1-x64.zip"),
+            asset("llama-b8461-bin-win-cuda-13.1-x64.zip"),
+            asset("llama-b8461-bin-win-cpu-x64.zip"),
+        ];
+
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets)
+            .expect("expected CPU fallback when CUDA 13 is unsupported");
+
+        assert_eq!(selected.len(), 1);
+        assert_eq!(
+            selected.first().map(|asset| asset.name.as_str()),
+            Some("llama-b8461-bin-win-cpu-x64.zip")
         );
     }
 
@@ -404,8 +466,8 @@ mod tests {
         let hardware = HardwareProfile {
             accelerator: AcceleratorClass::NvidiaCuda,
             cpu_tier: CpuInstructionTier::Avx2,
-            cuda_driver_major: None,
-            cuda_driver_minor: None,
+            cuda_driver_major: Some(580),
+            cuda_driver_minor: Some(0),
         };
         let assets = vec![
             asset("llama-b8726-bin-win-cuda-13.1-x64.zip"),

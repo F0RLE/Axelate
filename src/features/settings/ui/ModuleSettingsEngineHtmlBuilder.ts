@@ -50,16 +50,6 @@ export class ModuleSettingsEngineHtmlBuilder {
 
     private _buildTextRuntimeSections(appId: string): string {
         return `
-            <section class="thinking-level-section local-engine-section local-engine-section--compute" aria-labelledby="${appId}-compute-title">
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center local-engine-section-header">
-                        <h3 id="${appId}-compute-title">${this.escapeHtml(
-                            this._translate('ui.settings.engine.compute_mode', 'Compute Device'),
-                        )}</h3>
-                    </div>
-                    <div id="local-engine-compute-${appId}" class="local-engine-api-control"></div>
-                </div>
-            </section>
             <section class="thinking-level-section local-engine-section local-engine-section--context" aria-labelledby="${appId}-context-title">
                 <div class="ai-content-panel">
                     <div class="settings-card-header-center local-engine-section-header">
@@ -90,8 +80,8 @@ export class ModuleSettingsEngineHtmlBuilder {
                     <div class="local-engine-section-header">
                         <h3 id="${appId}-generation-title">${this.escapeHtml(
                             this._translate(
-                                'ui.settings.engine.generation_presets',
-                                'Generation Presets',
+                                'ui.settings.engine.generation_settings',
+                                'Generation Settings',
                             ),
                         )}</h3>
                     </div>

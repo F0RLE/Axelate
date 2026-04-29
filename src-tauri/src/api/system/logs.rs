@@ -69,9 +69,19 @@ pub fn get_logs(since: f64) -> Result<Vec<LogEntry>, AppError> {
 
 #[tauri::command]
 #[specta::specta]
+/// Retrieves log entries for a single console view since a given timestamp.
+#[allow(clippy::needless_pass_by_value)]
+pub fn get_console_logs(view_id: String, since: f64) -> Result<Vec<LogEntry>, AppError> {
+    let view_id = canonical_console_view_id(&view_id);
+    Ok(logs::get_frontend_logs_for_view(&view_id, since))
+}
+
+#[tauri::command]
+#[specta::specta]
 /// Clears all stored log entries
 pub fn clear_logs() -> Result<(), AppError> {
     logs::clear_logs();
+    clear_all_console_log_files(crate::utils::paths::LOG_DIR.as_path())?;
     Ok(())
 }
 
@@ -131,7 +141,11 @@ pub async fn get_console_overview(
 #[specta::specta]
 /// Adds a single log entry to the log store
 pub fn add_log(msg: &str, source: &str, level: &str) -> Result<(), AppError> {
-    logs::add_log(msg, source, level);
+    if source.trim().eq_ignore_ascii_case("frontend") {
+        trace_frontend_log(level, msg);
+    } else {
+        logs::add_log(msg, source, level);
+    }
     Ok(())
 }
 /// Batch log entry from frontend
@@ -148,9 +162,19 @@ pub struct BatchLogEntry {
 /// Adds multiple log entries in batch from frontend
 pub fn log_batch(logs: Vec<BatchLogEntry>) -> Result<(), AppError> {
     for log in logs {
-        logs::add_log(&log.message, "Frontend", &log.level);
+        trace_frontend_log(&log.level, &log.message);
     }
     Ok(())
+}
+
+fn trace_frontend_log(level: &str, message: &str) {
+    match level.trim().to_ascii_lowercase().as_str() {
+        "error" => tracing::error!(target: "frontend", message = message),
+        "warn" | "warning" => tracing::warn!(target: "frontend", message = message),
+        "debug" => tracing::debug!(target: "frontend", message = message),
+        "trace" => tracing::trace!(target: "frontend", message = message),
+        _ => tracing::info!(target: "frontend", message = message),
+    }
 }
 
 const fn describe_status(status: ConsoleRuntimeStatus) -> &'static str {
@@ -162,10 +186,17 @@ const fn describe_status(status: ConsoleRuntimeStatus) -> &'static str {
     }
 }
 
-fn canonical_engine_id(engine_id: &str) -> &str {
-    match engine_id {
-        "stable-diffusion" => "sdcpp",
-        value => value,
+fn canonical_engine_id(engine_id: &str) -> String {
+    let key = engine_id
+        .trim()
+        .to_ascii_lowercase()
+        .replace([' ', '_'], "-");
+    match key.as_str() {
+        "stable-diffusion"
+        | "stable-diffusion.cpp"
+        | "stable-diffusion-cpp"
+        | "stable.diffusion.cpp" => "sdcpp".to_string(),
+        _ => engine_id.trim().to_string(),
     }
 }
 
@@ -179,6 +210,14 @@ fn resolve_console_log_target(view_id: &str) -> PathBuf {
     }
 
     crate::utils::paths::LOG_DIR.clone()
+}
+
+fn canonical_console_view_id(view_id: &str) -> String {
+    if let Some(engine_id) = view_id.strip_prefix("engine:") {
+        return format!("engine:{}", canonical_engine_id(engine_id));
+    }
+
+    view_id.trim().to_string()
 }
 
 fn clear_console_log_target(view_id: &str, target: &Path) -> Result<(), AppError> {
@@ -216,6 +255,29 @@ fn clear_log_file(path: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
+fn clear_all_console_log_files(root: &Path) -> Result<(), AppError> {
+    if !root.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(root)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            clear_all_console_log_files(&path)?;
+            continue;
+        }
+
+        if path
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("log"))
+        {
+            clear_log_file(&path)?;
+        }
+    }
+
+    Ok(())
+}
+
 impl ConsoleOverviewBuilder {
     async fn build(
         engine_state: &crate::domain::engine::types::EngineState,
@@ -224,7 +286,10 @@ impl ConsoleOverviewBuilder {
     ) -> ConsoleOverview {
         let module_labels = Self::collect_module_labels(&ui_state.selected_modules);
         let module_ids = Self::collect_module_ids(logs, &module_labels);
-        let engine_labels = Self::collect_engine_labels(engine_state);
+        let mut engine_labels = Self::collect_engine_labels(engine_state);
+        engine_labels.extend(Self::collect_selected_engine_labels(
+            &ui_state.selected_modules,
+        ));
         let views = Self::build_views(&engine_labels, &module_labels, &module_ids);
         let status_items =
             Self::build_status_items(engine_state, &engine_labels, &module_labels, &module_ids)
@@ -240,8 +305,21 @@ impl ConsoleOverviewBuilder {
         modules: &std::collections::HashMap<String, SelectedModule>,
     ) -> BTreeMap<String, String> {
         modules
-            .values()
-            .map(|module| (module.id.clone(), module.name.clone()))
+            .iter()
+            .filter(|(category, module)| category.as_str() == "services" && module.type_ != "api")
+            .map(|(_, module)| (module.id.clone(), module.name.clone()))
+            .collect()
+    }
+
+    fn collect_selected_engine_labels(
+        modules: &std::collections::HashMap<String, SelectedModule>,
+    ) -> BTreeMap<String, String> {
+        modules
+            .iter()
+            .filter(|(category, module)| {
+                matches!(category.as_str(), "ai_text" | "ai_image") && module.type_ != "api"
+            })
+            .map(|(_, module)| (canonical_engine_id(&module.id), module.name.clone()))
             .collect()
     }
 
@@ -262,18 +340,18 @@ impl ConsoleOverviewBuilder {
     fn collect_engine_labels(
         state: &crate::domain::engine::types::EngineState,
     ) -> BTreeMap<String, String> {
-        match state {
-            crate::domain::engine::types::EngineState::Ready { slots } => slots
-                .iter()
-                .map(|slot| {
-                    (
-                        canonical_engine_id(&slot.engine.id).to_string(),
-                        slot.engine.name.clone(),
-                    )
-                })
-                .collect(),
-            _ => BTreeMap::new(),
+        let mut labels = BTreeMap::new();
+
+        if let crate::domain::engine::types::EngineState::Ready { slots } = state {
+            labels.extend(slots.iter().map(|slot| {
+                (
+                    canonical_engine_id(&slot.engine.id),
+                    slot.engine.name.clone(),
+                )
+            }));
         }
+
+        labels
     }
 
     fn build_views(
@@ -286,10 +364,10 @@ impl ConsoleOverviewBuilder {
         let mut view_labels = BTreeSet::new();
         views.push(ConsoleLogView {
             id: "general".to_string(),
-            label: "General".to_string(),
+            label: "Platform".to_string(),
         });
         view_ids.insert("general".to_string());
-        view_labels.insert(Self::normalize_view_label("General"));
+        view_labels.insert(Self::normalize_view_label("Platform"));
 
         for (id, label) in engine_labels {
             Self::push_unique_view(
@@ -349,6 +427,22 @@ impl ConsoleOverviewBuilder {
         module_ids: &BTreeSet<String>,
     ) -> Vec<ConsoleStatusItem> {
         let mut status_items = Self::build_engine_status_items(engine_state);
+        let known_status_ids = status_items
+            .iter()
+            .map(|item| item.id.clone())
+            .collect::<BTreeSet<_>>();
+        for (engine_id, label) in engine_labels {
+            let status_id = format!("engine:{engine_id}");
+            if !known_status_ids.contains(&status_id) {
+                status_items.push(ConsoleStatusItem {
+                    id: status_id,
+                    label: label.clone(),
+                    kind: "engine".to_string(),
+                    status: ConsoleRuntimeStatus::Stopped,
+                    detail: describe_status(ConsoleRuntimeStatus::Stopped).to_string(),
+                });
+            }
+        }
         for module_id in module_ids {
             status_items.push(
                 Self::build_module_status_item(module_id, engine_labels, module_labels).await,
@@ -423,7 +517,7 @@ impl ConsoleOverviewBuilder {
                     let label_key = Self::normalize_view_label(&slot.engine.name);
                     let id = label_to_id
                         .entry(label_key)
-                        .or_insert_with(|| canonical_engine_id(&slot.engine.id).to_string())
+                        .or_insert_with(|| canonical_engine_id(&slot.engine.id))
                         .clone();
                     let detail = ConsoleLabelFormatter::format_capability(slot.capability);
                     items

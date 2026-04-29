@@ -49,6 +49,7 @@ describe('VoiceInputService', () => {
             listen: vi.fn(),
             isTauri: vi.fn(() => true),
         };
+        Object.assign(bridge, { hasCapability: vi.fn(() => true) });
     });
 
     const createService = (getLang: () => string = () => 'en') =>

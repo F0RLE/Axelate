@@ -223,17 +223,26 @@ export class ChatUI {
     ): void {
         this._prepareContainer();
 
+        const rawImages = opts['images'];
+        const primaryImage = this._getPrimaryImage(rawImages);
+        const isSingleAssistantImage =
+            role === 'assistant' && Array.isArray(rawImages) && rawImages.length === 1;
+        if (isSingleAssistantImage && primaryImage !== null) {
+            const handle = this.createImageGenerationMessage();
+            handle.finalize({
+                text: safeExtractText(content, this._translate),
+                images: rawImages as ChatImagePayload[],
+            });
+            return;
+        }
+
         const row = document.createElement('div');
         row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
 
         const safeContent = safeExtractText(content, this._translate);
 
         const bubble = this._createMessageBubble(opts);
-        const actions = this._appendMessageActions(
-            safeContent,
-            role,
-            this._getPrimaryImage(opts['images']),
-        );
+        const actions = this._appendMessageActions(safeContent, role, primaryImage);
         const textNode = this._createMessageTextNode(safeContent, opts);
         bubble.appendChild(textNode);
 
@@ -295,12 +304,9 @@ export class ChatUI {
         });
     }
 
-    public createImageGenerationMessage(opts: {
-        onCancel: () => void | Promise<void>;
-    }): ImageGenerationMessageHandle {
+    public createImageGenerationMessage(): ImageGenerationMessageHandle {
         this._prepareContainer();
         return createChatImageGenerationMessage({
-            opts,
             translate: this._translate,
             isDestroyed: () => this._isDestroyed,
             tracer: this._deps.tracer,

@@ -465,8 +465,10 @@ pub async fn process_image_request_without_engine_autostart(
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
-    use crate::domain::ai::image_service::{
+    use crate::domain::ai::image_comfyui::{
         normalize_comfyui_sampler, normalize_comfyui_scheduler, parse_comfyui_checkpoint_list,
+    };
+    use crate::domain::ai::image_settings::{
         resolve_f32_setting, resolve_string_setting, resolve_u32_setting,
     };
     use crate::models::AppSettings;

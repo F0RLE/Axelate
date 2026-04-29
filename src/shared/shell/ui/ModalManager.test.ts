@@ -280,7 +280,7 @@ describe('ModalManager lifecycle', () => {
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps keyboard focus inside the app selection modal', () => {
+    it('disables tab focus movement inside the app selection modal', () => {
         modalManager = createManager();
         const outsideButton = document.createElement('button');
         outsideButton.textContent = 'Outside';
@@ -298,16 +298,17 @@ describe('ModalManager lifecycle', () => {
             '#app-modal-list .module-selection-card-actions button',
         ) as HTMLButtonElement;
 
-        expect(document.activeElement).toBe(modalAction);
+        expect(document.activeElement).toBe(document.body);
 
         modalAction.focus();
-        modal.dispatchEvent(
-            new KeyboardEvent('keydown', {
-                key: 'Tab',
-                bubbles: true,
-            }),
-        );
-        expect(document.activeElement).toBe(closeButton);
+        const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            bubbles: true,
+            cancelable: true,
+        });
+        modal.dispatchEvent(tabEvent);
+        expect(tabEvent.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(document.body);
 
         outsideButton.focus();
         const focusInEvent = new FocusEvent('focusin', {
@@ -318,7 +319,8 @@ describe('ModalManager lifecycle', () => {
             value: outsideButton,
         });
         document.dispatchEvent(focusInEvent);
-        expect(document.activeElement).toBe(modalAction);
+        expect(document.activeElement).toBe(document.body);
+        expect(closeButton).toBeInstanceOf(HTMLButtonElement);
     });
 
     it('should preserve current selection when replaying modal back action', () => {

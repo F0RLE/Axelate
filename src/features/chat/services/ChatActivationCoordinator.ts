@@ -17,8 +17,11 @@ export class ChatActivationCoordinator {
         this._deps.uiStateHelper.clearInactiveAiErrorTimeout();
     }
 
-    public async ensureActive(input: HTMLTextAreaElement | null): Promise<boolean> {
-        const prompt = input?.value.trim() ?? '';
+    public async ensureActive(
+        input: HTMLTextAreaElement | null,
+        promptOverride?: string,
+    ): Promise<boolean> {
+        const prompt = promptOverride ?? input?.value.trim() ?? '';
         const selectedProviderId = this._deps.getSelectedProviderId(prompt);
         const { activeProviderId } = this._deps.aiBridge.getState();
 

@@ -91,6 +91,14 @@ impl ImageGenerationState {
         None
     }
 
+    /// Returns whether a matching provider currently has an active image job.
+    pub async fn is_active(&self, provider: &str) -> bool {
+        let guard = self.inner.lock().await;
+        guard
+            .as_ref()
+            .is_some_and(|job| provider_matches(&job.provider, provider) && !job.cancelled)
+    }
+
     /// Updates the prompt identifier for the current active job.
     pub async fn update_prompt_id(&self, provider: &str, prompt_id: String) {
         let mut guard = self.inner.lock().await;

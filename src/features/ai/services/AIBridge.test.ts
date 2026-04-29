@@ -284,7 +284,7 @@ describe('AIBridge', () => {
             expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine', expect.any(Object));
         });
 
-        it('should stop conflicting local engine slots only for local providers', async () => {
+        it('should not stop engine slots when selecting a local provider', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
                 if (cmd === 'get_engine_config') return { context_size: 4096 };
@@ -293,9 +293,7 @@ describe('AIBridge', () => {
 
             await aiBridge.startProvider('llamacpp');
 
-            expect(mockInvoke).toHaveBeenCalledWith('stop_engine_slot', {
-                capability: 'image',
-            });
+            expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine_slot', expect.any(Object));
         });
 
         it('should NOT fallback to localStorage when backend returns null', async () => {

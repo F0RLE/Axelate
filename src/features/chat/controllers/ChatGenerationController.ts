@@ -228,7 +228,6 @@ export class ChatGenerationController {
 
         await this.handleSuccessfulChatResponse(response, streamingHandle, imageHandle);
     }
-
     private async handleSuccessfulChatResponse(
         response: IChatResponse,
         streamingHandle?: StreamingMessageHandle | null,

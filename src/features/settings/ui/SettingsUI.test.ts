@@ -127,7 +127,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         return privateUI;
     }
 
-    it('should render compute mode, context size, and system prompt for llamacpp local settings', async () => {
+    it('should render context size and system prompt for llamacpp local settings', async () => {
         const ui = createSettingsUI();
         const container = document.createElement('div');
         (
@@ -149,7 +149,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         const labels = Array.from(container.querySelectorAll('.local-engine-field-label')).map(
             (node) => node.textContent,
         );
-        expect(labels).toContain('t:ui.settings.engine.compute_mode:Compute Device');
+        expect(labels).not.toContain('t:ui.settings.engine.compute_mode:Compute Device');
         expect(labels).toContain('t:ui.settings.engine.context_size:Context Window');
         expect(labels).toContain('t:ui.settings.engine.system_prompt:System Prompt');
     });

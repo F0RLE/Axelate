@@ -154,8 +154,21 @@ export class EventHandler {
             return;
         }
 
+        const attachMenuAction = target.closest('[data-chat-attach-action]');
+        if (attachMenuAction instanceof HTMLElement) {
+            const action = attachMenuAction.dataset['chatAttachAction'];
+            if (action === 'file') {
+                await this._core.chatController.pickChatFilesFromMenu();
+                return;
+            }
+            if (action === 'image') {
+                await this._core.chatController.sendImageGenerationFromMenu();
+                return;
+            }
+        }
+
         if (target.closest('#chat-attach-btn') !== null) {
-            await this._core.chatController.pickChatFiles();
+            this._core.chatController.toggleAttachMenu();
             return;
         }
 

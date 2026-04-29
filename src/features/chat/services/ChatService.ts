@@ -4,6 +4,9 @@ import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 type ChatServiceLogger = Pick<LoggerService, 'error'>;
+export type ChatSendOptions = {
+    originalPrompt?: string;
+};
 
 function parseGeneratedImages(
     images: string[] | undefined,
@@ -50,6 +53,7 @@ export class ChatService {
         text: string,
         history: IChatMessage[],
         attachments: IChatAttachment[],
+        options: ChatSendOptions = {},
     ): Promise<IChatResponse> {
         // Validation
         if ((text === '' || text.trim() === '') && attachments.length === 0) {
@@ -69,7 +73,13 @@ export class ChatService {
 
         try {
             // Send through AIBridge
-            const response = await this._aiBridge.sendMessage(text, 'chat', attachments, history);
+            const response = await this._aiBridge.sendMessage(
+                text,
+                'chat',
+                attachments,
+                history,
+                options,
+            );
 
             if (!response.ok) {
                 const result: IChatResponse = {

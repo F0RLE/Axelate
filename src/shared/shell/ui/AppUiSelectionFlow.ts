@@ -7,7 +7,7 @@ type AppUiSelectionFlowDeps = {
     updateModuleCard: (category: string, app: IApp) => void;
     updateModalSelection: (appId: string | null) => void;
     bumpLaunchSelectionVersion: (category: string) => number;
-    stopSelectedApp: (app: IApp) => Promise<boolean>;
+    stopSelectedApp: (app: IApp, category: string) => Promise<boolean>;
     launchSelectedApp: (
         category: string,
         app: IApp,
@@ -29,14 +29,23 @@ export class AppUiSelectionFlow {
             this._deps.clearModuleCard(category);
             this._deps.removeSelectedModule(category);
             this._deps.updateModalSelection(null);
-            void this._deps.stopSelectedApp(app);
+            void this._deps.stopSelectedApp(app, category);
             return;
         }
 
-        this._deps.bumpLaunchSelectionVersion(category);
+        const launchSelectionVersion = this._deps.bumpLaunchSelectionVersion(category);
         this._deps.updateModuleCard(category, app);
         this._deps.updateModalSelection(app.id);
         this._persistSelectedModule(category, app);
+
+        if (this._deps.launchApp !== undefined) {
+            void this._deps.launchSelectedApp(
+                category,
+                app,
+                launchSelectionVersion,
+                this._deps.launchApp,
+            );
+        }
     }
 
     private _persistSelectedModule(category: string, app: IApp): void {

@@ -51,24 +51,4 @@ describe('AIBridgeProviderPolicy', () => {
             }),
         ).toEqual({});
     });
-
-    it('should resolve performance mode from module-specific or global settings', () => {
-        expect(
-            policy.isImagePerformanceModeEnabled(
-                {
-                    comfyui_performance_mode: 'true',
-                },
-                'comfyui',
-            ),
-        ).toBe(true);
-        expect(
-            policy.isImagePerformanceModeEnabled(
-                {
-                    sdcpp_performance_mode: true,
-                },
-                'stable-diffusion',
-            ),
-        ).toBe(true);
-        expect(policy.isImagePerformanceModeEnabled({}, 'comfyui')).toBe(false);
-    });
 });

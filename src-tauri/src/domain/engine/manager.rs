@@ -19,7 +19,8 @@ use crate::errors::AppError;
 
 use super::engine_args::{build_llamacpp_args, build_sdcpp_args, sdcpp_preview_enabled};
 use super::engine_runtime::{
-    diagnose_engine_start_failure, find_available_local_port, spawn_log_reader, wait_for_health,
+    diagnose_engine_start_failure, find_available_local_port, is_endpoint_healthy,
+    spawn_log_reader, wait_for_health,
 };
 use super::events::EngineEventEmitter;
 use super::types::{
@@ -91,11 +92,13 @@ impl EngineManager {
 
     /// Checks if a definition exists for the given engine ID
     pub async fn has_definition(&self, id: &str) -> bool {
+        let id = canonical_engine_id(id);
         self.definitions.lock().await.iter().any(|d| d.id == id)
     }
 
     /// Gets the definition for an engine ID
     pub async fn get_definition(&self, id: &str) -> Option<EngineDefinition> {
+        let id = canonical_engine_id(id);
         self.definitions
             .lock()
             .await
@@ -106,6 +109,8 @@ impl EngineManager {
 
     /// Gets the current engine state (all active slots)
     pub async fn state(&self) -> EngineState {
+        self.prune_dead_slots().await;
+
         let slots = self.slots.lock().await;
         if slots.is_empty() {
             return EngineState::Idle;
@@ -130,6 +135,8 @@ impl EngineManager {
 
     /// Gets the endpoint for a given capability (if an active engine supports it)
     pub async fn endpoint_for(&self, capability: Capability) -> Option<String> {
+        self.prune_dead_slots().await;
+
         let slots = self.slots.lock().await;
         slots.get(&capability).and_then(|engine| {
             if engine.healthy {
@@ -142,16 +149,19 @@ impl EngineManager {
 
     /// Checks if any active engine supports a capability
     pub async fn supports(&self, capability: Capability) -> bool {
+        self.prune_dead_slots().await;
         self.slots.lock().await.contains_key(&capability)
     }
 
     /// Checks if any engine is currently active
     pub async fn is_active(&self) -> bool {
+        self.prune_dead_slots().await;
         !self.slots.lock().await.is_empty()
     }
 
     /// Gets all active engine IDs
     pub async fn active_ids(&self) -> Vec<String> {
+        self.prune_dead_slots().await;
         self.slots
             .lock()
             .await
@@ -189,6 +199,8 @@ impl EngineManager {
     /// launcher on a single active local engine by default.
     pub async fn start(&self, config: EngineConfig) -> Result<EngineStatus, AppError> {
         let _lifecycle_guard = self.lifecycle_lock.lock().await;
+        let mut config = config;
+        config.engine_id = canonical_engine_id(&config.engine_id).to_string();
         let definition = self.find_definition(&config.engine_id).await?;
         let primary_cap = definition
             .capabilities
@@ -196,6 +208,68 @@ impl EngineManager {
             .copied()
             .unwrap_or(Capability::Text);
         // Check if this exact engine AND model is already running in this slot
+        {
+            let mut slots = self.slots.lock().await;
+            if let Some(existing) = slots.get_mut(&primary_cap) {
+                if existing.definition.id == config.engine_id
+                    && existing.config.model_path == config.model_path
+                {
+                    match existing.process.try_wait() {
+                        Ok(Some(status)) => {
+                            warn!(
+                                engine = %config.engine_id,
+                                slot = ?primary_cap,
+                                exit_status = %status,
+                                "Dropping stale engine slot because process already exited"
+                            );
+                            slots.remove(&primary_cap);
+                        }
+                        Err(error) => {
+                            warn!(
+                                engine = %config.engine_id,
+                                slot = ?primary_cap,
+                                error = %error,
+                                "Dropping stale engine slot because process status check failed"
+                            );
+                            slots.remove(&primary_cap);
+                        }
+                        Ok(None) => {
+                            let status = EngineStatus {
+                                id: existing.definition.id.clone(),
+                                name: existing.definition.name.clone(),
+                                capabilities: existing.definition.capabilities.clone(),
+                                endpoint: existing.endpoint.clone(),
+                                healthy: existing.healthy,
+                            };
+                            let endpoint = existing.endpoint.clone();
+                            drop(slots);
+
+                            if is_endpoint_healthy(&endpoint).await {
+                                info!(engine = %config.engine_id, slot = ?primary_cap, "Engine and model already running in slot");
+                                return Ok(status);
+                            }
+
+                            warn!(
+                                engine = %config.engine_id,
+                                slot = ?primary_cap,
+                                endpoint = %endpoint,
+                                "Dropping stale engine slot because health check failed"
+                            );
+                            let mut slots = self.slots.lock().await;
+                            let stale = slots.remove(&primary_cap);
+                            drop(slots);
+                            if let Some(stale) = stale {
+                                Self::kill_engine(stale).await;
+                            }
+                        }
+                    }
+                } else {
+                    // Different engine or model: hot-swap below.
+                }
+            }
+        }
+
+        // Re-check after stale cleanup; a different caller may have started it while we probed.
         {
             let slots = self.slots.lock().await;
             if let Some(existing) = slots.get(&primary_cap) {
@@ -278,13 +352,19 @@ impl EngineManager {
             cmd.arg("--port").arg(selected_port.to_string());
         }
 
-        if config.engine_id != "sdcpp" {
+        if config.engine_id != "sdcpp" && config.engine_id != "llamacpp" {
             if let Some(ref model) = config.model_path {
                 cmd.arg("--model").arg(model);
             }
 
             for arg in &config.extra_args {
                 cmd.arg(arg);
+            }
+        }
+
+        if config.engine_id == "llamacpp" {
+            if let Some(ref model) = config.model_path {
+                cmd.arg("--model").arg(model);
             }
         }
 
@@ -348,6 +428,18 @@ impl EngineManager {
         // Wait for health check
         match wait_for_health(&endpoint).await {
             Ok(()) => {
+                if let Ok(Some(status)) = running.process.try_wait() {
+                    let message = format!(
+                        "Engine '{}' exited during startup: {status}",
+                        running.definition.id
+                    );
+                    warn!(engine = %running.definition.id, %status, "Engine exited during startup");
+                    self.emitter.emit_error(&running.definition.id, &message);
+                    return Err(AppError::External {
+                        request_id: None,
+                        message,
+                    });
+                }
                 running.healthy = true;
                 info!(engine = %running.definition.id, "Engine is healthy");
                 self.emitter.emit_ready(&running.definition.id, &endpoint);
@@ -381,6 +473,28 @@ impl EngineManager {
         Ok(status)
     }
 
+    /// Emits an error for the engine in a slot, then stops and removes that slot.
+    pub async fn stop_slot_after_error(&self, capability: Capability, message: &str) {
+        let engine_id = {
+            let slots = self.slots.lock().await;
+            slots
+                .get(&capability)
+                .map(|engine| engine.definition.id.clone())
+        };
+
+        if let Some(engine_id) = engine_id {
+            self.emitter.emit_error(&engine_id, message);
+        }
+
+        if let Err(error) = self.stop_slot(capability).await {
+            warn!(
+                slot = ?capability,
+                error = %error,
+                "Failed to stop engine slot after runtime error"
+            );
+        }
+    }
+
     /// Stop all running engines
     pub async fn stop(&self) -> Result<(), AppError> {
         let _lifecycle_guard = self.lifecycle_lock.lock().await;
@@ -412,8 +526,48 @@ impl EngineManager {
         info!(engine = %engine.definition.id, "Engine stopped");
     }
 
+    async fn prune_dead_slots(&self) {
+        let mut dead = Vec::new();
+        {
+            let mut slots = self.slots.lock().await;
+            for (capability, engine) in slots.iter_mut() {
+                match engine.process.try_wait() {
+                    Ok(Some(status)) => {
+                        warn!(
+                            engine = %engine.definition.id,
+                            slot = ?capability,
+                            exit_status = %status,
+                            "Pruning dead engine slot"
+                        );
+                        dead.push((*capability, engine.definition.id.clone()));
+                    }
+                    Err(error) => {
+                        warn!(
+                            engine = %engine.definition.id,
+                            slot = ?capability,
+                            error = %error,
+                            "Pruning engine slot after process status check failed"
+                        );
+                        dead.push((*capability, engine.definition.id.clone()));
+                    }
+                    Ok(None) => {}
+                }
+            }
+
+            for (capability, _) in &dead {
+                slots.remove(capability);
+            }
+        }
+
+        for (_, engine_id) in dead {
+            self.emitter
+                .emit_error(&engine_id, "Local engine process exited.");
+        }
+    }
+
     /// Find an engine definition by ID
     async fn find_definition(&self, id: &str) -> Result<EngineDefinition, AppError> {
+        let id = canonical_engine_id(id);
         let definitions = self.definitions.lock().await;
         definitions
             .iter()
@@ -423,11 +577,16 @@ impl EngineManager {
     }
 }
 
-fn canonical_engine_log_id(engine_id: &str) -> &str {
+/// Returns the registry id used internally for known engine aliases.
+pub fn canonical_engine_id(engine_id: &str) -> &str {
     match engine_id {
         "stable-diffusion" => "sdcpp",
         value => value,
     }
+}
+
+fn canonical_engine_log_id(engine_id: &str) -> &str {
+    canonical_engine_id(engine_id)
 }
 
 #[cfg(test)]
@@ -436,6 +595,7 @@ mod tests {
 
     use super::*;
     use crate::domain::engine::engine_runtime::classify_engine_start_failure;
+    use crate::domain::engine::events::NoopEmitter;
     use crate::domain::engine::types::EngineComputeMode;
     use crate::domain::system::ports::ENGINE_LOCAL_PORT_RANGE;
     use std::net::TcpListener;
@@ -533,7 +693,7 @@ mod tests {
         assert_eq!(
             message.as_deref(),
             Some(
-                "Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model."
+                "Not enough memory to start the local model. Reduce context size, switch compute mode, or use a smaller model."
             )
         );
     }
@@ -564,14 +724,69 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn resolves_stable_diffusion_alias_to_sdcpp_definition() {
+        let manager = EngineManager::new(Arc::new(NoopEmitter));
+        manager
+            .register_definitions(vec![EngineDefinition {
+                id: "sdcpp".to_string(),
+                name: "Stable Diffusion.cpp".to_string(),
+                desc: String::new(),
+                icon: String::new(),
+                capabilities: vec![Capability::Image],
+                binary: Some("sd-server".to_string()),
+                repo_url: None,
+                version: "1.0.0".to_string(),
+                default_port: 8082,
+                default_context_size: 4096,
+                config_schema: None,
+                installed: false,
+                managed_externally: false,
+            }])
+            .await;
+
+        let Some(resolved) = manager.get_definition("stable-diffusion").await else {
+            panic!("stable-diffusion alias should resolve to sdcpp");
+        };
+
+        assert_eq!(resolved.id, "sdcpp");
+    }
+
     #[test]
-    fn builds_sdcpp_cpu_mode_args() {
+    fn sdcpp_keeps_user_supplied_cpu_extra_args() {
         let mut config = sample_sdcpp_config(Some("C:/models/sd15.safetensors"));
-        config.compute_mode = EngineComputeMode::Cpu;
+        config.extra_args = vec![
+            "--offload-to-cpu".to_string(),
+            "--clip-on-cpu".to_string(),
+            "--vae-on-cpu".to_string(),
+            "--mmap".to_string(),
+        ];
+
         let args = build_sdcpp_args(&config, 8082);
 
         assert!(args.contains(&"--offload-to-cpu".to_string()));
         assert!(args.contains(&"--clip-on-cpu".to_string()));
         assert!(args.contains(&"--vae-on-cpu".to_string()));
+        assert!(args.contains(&"--mmap".to_string()));
+    }
+
+    #[test]
+    fn sdcpp_filters_cli_only_preview_flags_from_server_args() {
+        let mut config = sample_sdcpp_config(Some("C:/models/sd15.safetensors"));
+        config.extra_args = vec![
+            "--preview".to_string(),
+            "vae".to_string(),
+            "--preview-path".to_string(),
+            "C:/tmp/preview.png".to_string(),
+            "--preview-interval=1".to_string(),
+        ];
+
+        let args = build_sdcpp_args(&config, 8082);
+
+        assert!(!args.contains(&"--preview".to_string()));
+        assert!(!args.contains(&"--preview-path".to_string()));
+        assert!(!args.contains(&"--preview-interval=1".to_string()));
+        assert!(!sdcpp_preview_enabled(&config.extra_args));
+        assert!(resolve_sdcpp_preview_path(&config.extra_args).is_none());
     }
 }
