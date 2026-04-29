@@ -192,7 +192,7 @@ describe('ModuleCardRenderer', () => {
         expect(card.querySelector('.download-btn')).toBeNull();
     });
 
-    it('renders AI engine cards as selectable even before install checks', () => {
+    it('renders uninstalled AI engine cards as downloadable', () => {
         const onClick = vi.fn();
         const onDownload = vi.fn();
 
@@ -202,6 +202,28 @@ describe('ModuleCardRenderer', () => {
                 name: 'llama.cpp',
                 desc: 'Local engine',
                 installed: false,
+                type: 'local',
+                capability: 'text',
+            } as never,
+            'ai_text',
+            false,
+            onClick,
+            onDownload,
+        );
+
+        expect(card.querySelector('.download-btn')?.textContent).toContain('Download');
+    });
+
+    it('renders installed AI engine cards as selectable', () => {
+        const onClick = vi.fn();
+        const onDownload = vi.fn();
+
+        const card = renderer.createSelectionCard(
+            {
+                id: 'llamacpp',
+                name: 'llama.cpp',
+                desc: 'Local engine',
+                installed: true,
                 type: 'local',
                 capability: 'text',
             } as never,
