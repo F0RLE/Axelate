@@ -502,13 +502,19 @@ impl<'a> LifecycleExecutor<'a> {
         .await
         {
             Ok(pids) => Ok(pids),
-            Err(error) => Err(AppError::Internal {
-                request_id: None,
-                message: format!(
+            Err(error) => {
+                tracing::error!(
                     "Failed to scan matching script module processes for {}: {error}",
                     self.module_id
-                ),
-            }),
+                );
+                Err(AppError::Internal {
+                    request_id: None,
+                    message: format!(
+                        "Failed to scan module processes for '{}': {error}",
+                        self.module_id
+                    ),
+                })
+            }
         }
     }
 
