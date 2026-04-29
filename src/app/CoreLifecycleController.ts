@@ -133,6 +133,10 @@ export class CoreLifecycleController {
     constructor(private readonly _deps: CoreLifecycleDeps) {}
 
     public async runInit(): Promise<void> {
+        if (this._deps.state.isDestroyed()) {
+            return;
+        }
+
         const bootstrapResult = await runCoreBootstrap({
             bootstrap: this._deps.bootstrap,
             immediateUi: this._deps.immediateUi,
@@ -180,7 +184,14 @@ export class CoreLifecycleController {
             globalThis.removeEventListener('keydown', this._activeGlobalShortcutKeydown);
             this._activeGlobalShortcutKeydown = null;
         }
-        this._selectedModuleChangedUnlisten?.();
+        try {
+            this._selectedModuleChangedUnlisten?.();
+        } catch (error) {
+            this._deps.bootstrap.tracer.warn(
+                '[Core] Failed to remove selected module listener during destroy:',
+                error,
+            );
+        }
         this._selectedModuleChangedUnlisten = null;
         try {
             await destroyCoreResources({

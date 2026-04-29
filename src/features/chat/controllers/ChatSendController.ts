@@ -212,14 +212,16 @@ export class ChatSendController {
                 imageHandle = this._options.createImageHandle();
                 this._options.startImagePreviewPolling(imageHandle);
             } else {
+                let hasRenderedTextChunk = false;
                 const handle = ensureStreamingHandle();
                 handle.setStatus(this._options.translate('ui.chat.thinking', 'Thinking...'));
 
                 this._options.aiBridge.onChunk(listenerId, (chunk) => {
-                    if (String(chunk).trim() === '') {
+                    if (!hasRenderedTextChunk && String(chunk).trim() === '') {
                         return;
                     }
 
+                    hasRenderedTextChunk = true;
                     ensureStreamingHandle().update(chunk);
                 });
             }
@@ -227,7 +229,7 @@ export class ChatSendController {
             this._options.registerReplaceChunk(
                 listenerId,
                 () => imageHandle,
-                () => streamingHandle ?? ensureStreamingHandle(),
+                () => streamingHandle,
             );
 
             const response = await this._options.service.sendMessage(

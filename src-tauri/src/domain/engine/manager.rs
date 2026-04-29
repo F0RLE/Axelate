@@ -240,9 +240,19 @@ impl EngineManager {
                                 engine = %config.engine_id,
                                 slot = ?primary_cap,
                                 error = %error,
-                                "Dropping stale engine slot because process status check failed"
+                                "Engine process status check failed; attempting to stop it before dropping slot"
                             );
-                            slots.remove(&primary_cap);
+                            let stale = slots.remove(&primary_cap);
+                            drop(slots);
+                            if let Some(stale) = stale {
+                                match Self::kill_engine_retaining_on_failure(stale).await {
+                                    Ok(()) => {}
+                                    Err((error, stale)) => {
+                                        self.slots.lock().await.insert(primary_cap, stale);
+                                        return Err(error);
+                                    }
+                                }
+                            }
                         }
                         Ok(None) => {
                             let status = EngineStatus {
@@ -516,14 +526,30 @@ impl EngineManager {
 
         if let Some(engine_id) = engine_id {
             self.emitter.emit_error(&engine_id, message);
-        }
+            let _lifecycle_guard = self.lifecycle_lock.lock().await;
+            let engine = {
+                let mut slots = self.slots.lock().await;
+                match slots.get(&capability) {
+                    Some(current) if current.definition.id == engine_id => {
+                        slots.remove(&capability)
+                    }
+                    _ => None,
+                }
+            };
 
-        if let Err(error) = self.stop_slot(capability).await {
-            warn!(
-                slot = ?capability,
-                error = %error,
-                "Failed to stop engine slot after runtime error"
-            );
+            if let Some(engine) = engine {
+                match Self::kill_engine_retaining_on_failure(engine).await {
+                    Ok(()) => {}
+                    Err((error, engine)) => {
+                        self.slots.lock().await.insert(capability, engine);
+                        warn!(
+                            slot = ?capability,
+                            error = %error,
+                            "Failed to stop engine slot after runtime error"
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -560,31 +586,44 @@ impl EngineManager {
     }
 
     /// Kill an engine process and wait for exit
-    async fn kill_engine(mut engine: RunningEngine) -> Result<(), AppError> {
+    async fn kill_engine(engine: RunningEngine) -> Result<(), AppError> {
+        Self::kill_engine_retaining_on_failure(engine)
+            .await
+            .map_err(|(error, _engine)| error)
+    }
+
+    async fn kill_engine_retaining_on_failure(
+        mut engine: RunningEngine,
+    ) -> Result<(), (AppError, RunningEngine)> {
         if let Err(e) = engine.process.kill().await {
             error!(engine = %engine.definition.id, error = %e, "Failed to kill engine process");
-            return Err(AppError::Internal {
-                request_id: None,
-                message: format!("Failed to kill engine '{}': {e}", engine.definition.id),
-            });
+            return Err((
+                AppError::Internal {
+                    request_id: None,
+                    message: format!("Failed to kill engine '{}': {e}", engine.definition.id),
+                },
+                engine,
+            ));
         }
-        engine
-            .process
-            .wait()
-            .await
-            .map_err(|error| AppError::Internal {
-                request_id: None,
-                message: format!(
-                    "Failed to wait for engine '{}' after kill: {error}",
-                    engine.definition.id
-                ),
-            })?;
+        if let Err(error) = engine.process.wait().await {
+            return Err((
+                AppError::Internal {
+                    request_id: None,
+                    message: format!(
+                        "Failed to wait for engine '{}' after kill: {error}",
+                        engine.definition.id
+                    ),
+                },
+                engine,
+            ));
+        }
         info!(engine = %engine.definition.id, "Engine stopped");
         Ok(())
     }
 
     async fn prune_dead_slots(&self) {
-        let mut dead = Vec::new();
+        let mut exited = Vec::new();
+        let mut errored = Vec::new();
         {
             let mut slots = self.slots.lock().await;
             for (capability, engine) in slots.iter_mut() {
@@ -596,27 +635,46 @@ impl EngineManager {
                             exit_status = %status,
                             "Pruning dead engine slot"
                         );
-                        dead.push((*capability, engine.definition.id.clone()));
+                        exited.push((*capability, engine.definition.id.clone()));
                     }
                     Err(error) => {
                         warn!(
                             engine = %engine.definition.id,
                             slot = ?capability,
                             error = %error,
-                            "Pruning engine slot after process status check failed"
+                            "Engine process status check failed; attempting to stop before pruning"
                         );
-                        dead.push((*capability, engine.definition.id.clone()));
+                        errored.push(*capability);
                     }
                     Ok(None) => {}
                 }
             }
 
-            for (capability, _) in &dead {
+            for (capability, _) in &exited {
                 slots.remove(capability);
             }
         }
 
-        for (_, engine_id) in dead {
+        for capability in errored {
+            let engine = self.slots.lock().await.remove(&capability);
+            let Some(engine) = engine else {
+                continue;
+            };
+            let engine_id = engine.definition.id.clone();
+            match Self::kill_engine_retaining_on_failure(engine).await {
+                Ok(()) => exited.push((capability, engine_id)),
+                Err((error, engine)) => {
+                    warn!(
+                        slot = ?capability,
+                        error = %error,
+                        "Keeping engine slot because forced stop after status error failed"
+                    );
+                    self.slots.lock().await.insert(capability, engine);
+                }
+            }
+        }
+
+        for (_, engine_id) in exited {
             self.emitter
                 .emit_error(&engine_id, "Local engine process exited.");
         }
@@ -656,6 +714,7 @@ mod tests {
     use crate::domain::engine::types::EngineComputeMode;
     use crate::domain::system::ports::ENGINE_LOCAL_PORT_RANGE;
     use std::net::TcpListener;
+    use std::path::PathBuf;
 
     fn sample_config(model_path: Option<&str>) -> EngineConfig {
         EngineConfig {
@@ -834,5 +893,46 @@ mod tests {
         assert!(!args.contains(&"--preview-interval=1".to_string()));
         assert!(!sdcpp_preview_enabled(&config.extra_args));
         assert!(resolve_sdcpp_preview_path(&config.extra_args).is_none());
+    }
+
+    #[test]
+    fn sdcpp_filters_unsupported_flags_with_separate_values() {
+        let mut config = sample_sdcpp_config(Some("C:/models/sd15.safetensors"));
+        config.extra_args = vec![
+            "--vae-on-gpu".to_string(),
+            "1".to_string(),
+            "--mmap".to_string(),
+            "--preview-path".to_string(),
+            "C:/tmp/preview.png".to_string(),
+        ];
+
+        let args = build_sdcpp_args(&config, 8082);
+
+        assert!(!args.contains(&"--vae-on-gpu".to_string()));
+        assert!(!args.contains(&"1".to_string()));
+        assert!(!args.contains(&"--preview-path".to_string()));
+        assert!(!args.contains(&"C:/tmp/preview.png".to_string()));
+        assert!(args.contains(&"--mmap".to_string()));
+    }
+
+    #[test]
+    fn sdcpp_resolves_launcher_preview_path_without_passing_it_to_server() {
+        let mut config = sample_sdcpp_config(Some("C:/models/sd15.safetensors"));
+        config.extra_args = vec![
+            "--sdcpp-preview".to_string(),
+            "C:/tmp/sdcpp-preview.png".to_string(),
+            "--mmap".to_string(),
+        ];
+
+        let args = build_sdcpp_args(&config, 8082);
+
+        assert_eq!(
+            resolve_sdcpp_preview_path(&config.extra_args),
+            Some(PathBuf::from("C:/tmp/sdcpp-preview.png"))
+        );
+        assert!(sdcpp_preview_enabled(&config.extra_args));
+        assert!(!args.contains(&"--sdcpp-preview".to_string()));
+        assert!(!args.contains(&"C:/tmp/sdcpp-preview.png".to_string()));
+        assert!(args.contains(&"--mmap".to_string()));
     }
 }

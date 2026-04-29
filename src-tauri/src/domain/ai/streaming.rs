@@ -388,7 +388,13 @@ impl AiProvider for OpenAiCompatibleProvider {
             }
         }
 
-        if !saw_done && !state.saw_terminal_chunk && state.full_content.trim().is_empty() {
+        if !saw_done && !state.saw_terminal_chunk {
+            tracing::warn!(
+                request_id = %request_id,
+                message_id = %message_id,
+                chunks = state.chunks_emitted,
+                "AI stream ended before a completion marker was received"
+            );
             return Ok(ChatResponse {
                 id: message_id,
                 ok: false,
@@ -398,15 +404,6 @@ impl AiProvider for OpenAiCompatibleProvider {
                 thought_signature: None,
                 usage: state.final_usage,
             });
-        }
-
-        if !saw_done && !state.saw_terminal_chunk {
-            tracing::warn!(
-                request_id = %request_id,
-                message_id = %message_id,
-                chunks = state.chunks_emitted,
-                "AI stream ended without completion marker after emitting content"
-            );
         }
 
         // Final event

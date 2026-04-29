@@ -43,11 +43,14 @@ describe('destroyCoreResources', () => {
             errorHandler: destroyable(errorHandlerDestroy),
         } as unknown as Parameters<typeof destroyCoreResources>[0];
 
-        await expect(destroyCoreResources(args)).rejects.toThrow(AggregateError);
+        try {
+            await expect(destroyCoreResources(args)).rejects.toThrow(AggregateError);
 
-        expect(clearTimeoutSpy).toHaveBeenCalledWith(123);
-        expect(eventHandlerDestroy).toHaveBeenCalledTimes(1);
-        expect(errorHandlerDestroy).toHaveBeenCalledTimes(1);
-        clearTimeoutSpy.mockRestore();
+            expect(clearTimeoutSpy).toHaveBeenCalledWith(123);
+            expect(eventHandlerDestroy).toHaveBeenCalledTimes(1);
+            expect(errorHandlerDestroy).toHaveBeenCalledTimes(1);
+        } finally {
+            clearTimeoutSpy.mockRestore();
+        }
     });
 });

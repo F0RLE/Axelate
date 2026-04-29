@@ -154,11 +154,15 @@ impl<'a> LifecycleExecutor<'a> {
             request_id: None,
             message: format!("Spawned process for {} has no PID", self.module_id),
         })?;
-        if let Err(error) = self.persist_pid(pid as usize) {
-            let _ = child.kill().await;
-            return Err(error);
-        }
-
+        self.persist_or_kill_spawned_child(&mut child, pid as usize)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(
+                    module_id = %self.module_id,
+                    pid,
+                    "Failed to publish module PID file after spawn: {error}"
+                );
+            })?;
         let module_id = self.module_id.clone();
         let controller_registry = self.controller.registry; // Pass registry reference to the task
 
@@ -190,7 +194,14 @@ impl<'a> LifecycleExecutor<'a> {
                         tracing::warn!(
                             "Failed to poll child status for module {module_id}: {error}"
                         );
-                        controller_registry.remove(&module_id);
+                        if let Some((_, mut child)) = controller_registry.remove(&module_id) {
+                            if let Err(kill_error) = child.kill().await {
+                                tracing::warn!(
+                                    module_id = %module_id,
+                                    "Failed to kill module after status polling failed: {kill_error}"
+                                );
+                            }
+                        }
                         return;
                     }
                 }
@@ -204,8 +215,21 @@ impl<'a> LifecycleExecutor<'a> {
         })
     }
 
-    fn module_log_path(&self) -> PathBuf {
-        module_paths::runtime_log_path(&self.module_id)
+    async fn kill_unregistered_child(&self, child: &mut Child, reason: &str) {
+        if let Err(error) = child.kill().await {
+            tracing::warn!(
+                module_id = %self.module_id,
+                "Failed to kill spawned module after {reason}: {error}"
+            );
+            return;
+        }
+
+        if let Err(error) = child.wait().await {
+            tracing::warn!(
+                module_id = %self.module_id,
+                "Failed to wait spawned module after {reason}: {error}"
+            );
+        }
     }
 
     fn persist_pid(&self, pid: usize) -> Result<(), AppError> {
@@ -213,14 +237,15 @@ impl<'a> LifecycleExecutor<'a> {
         let temp_pid_file = self.module_path.join("module.pid.tmp");
         std::fs::write(&temp_pid_file, pid.to_string()).map_err(|error| {
             AppError::Io(format!(
-                "Failed to write temp PID file {}: {error}",
+                "Failed to write module PID temp file '{}': {error}",
                 temp_pid_file.display()
             ))
         })?;
 
         std::fs::rename(&temp_pid_file, &pid_file).map_err(|error| {
+            let _ = std::fs::remove_file(&temp_pid_file);
             AppError::Io(format!(
-                "Failed to move temp PID file {} to {}: {error}",
+                "Failed to publish module PID file '{}' -> '{}': {error}",
                 temp_pid_file.display(),
                 pid_file.display()
             ))
@@ -229,6 +254,31 @@ impl<'a> LifecycleExecutor<'a> {
         Ok(())
     }
 
+    async fn persist_or_kill_spawned_child(
+        &self,
+        child: &mut Child,
+        pid: usize,
+    ) -> Result<(), AppError> {
+        match self.persist_pid(pid) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.kill_unregistered_child(child, "PID publish failure")
+                    .await;
+                Err(error)
+            }
+        }
+    }
+
+    fn log_reconciled_pid_publish_failure(&self, error: &AppError) {
+        tracing::error!(
+                module_id = %self.module_id,
+                "Failed to publish reconciled module PID file: {error}"
+        );
+    }
+
+    fn module_log_path(&self) -> PathBuf {
+        module_paths::runtime_log_path(&self.module_id)
+    }
     /// Gracefully stops a module with escalation
     pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
         tracing::info!("Stopping module: {}", self.module_id);
@@ -375,7 +425,10 @@ impl<'a> LifecycleExecutor<'a> {
         if let Some(&existing_pid) = matching_pids.first()
             && matching_pids.len() == 1
         {
-            self.persist_pid(existing_pid)?;
+            if let Err(error) = self.persist_pid(existing_pid) {
+                self.log_reconciled_pid_publish_failure(&error);
+                return Err(error);
+            }
             return Ok(Some(existing_pid));
         }
 

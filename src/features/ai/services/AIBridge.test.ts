@@ -294,6 +294,7 @@ describe('AIBridge', () => {
             await aiBridge.startProvider('llamacpp');
 
             expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine_slot', expect.any(Object));
+            expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine', expect.any(Object));
         });
 
         it('should NOT fallback to localStorage when backend returns null', async () => {
