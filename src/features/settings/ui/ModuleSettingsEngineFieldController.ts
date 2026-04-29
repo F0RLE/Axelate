@@ -14,7 +14,7 @@ type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaEle
 
 type ModuleSettingsEngineFieldControllerDeps = {
     getSettings: () => Record<string, string | number | undefined>;
-    setConfig: (config: EngineConfig) => void;
+    setConfig: (config: EngineConfig) => Promise<void>;
     debouncedSave: (key: string, value: string | number | boolean | null) => void;
     showSaveIndicator: () => void;
     translate: (key: string, fallback: string) => string;
@@ -78,7 +78,7 @@ export class ModuleSettingsEngineFieldController {
             input.parentElement?.classList.remove('focused');
         });
 
-        const handleSave = () => this.handleSave(input, options);
+        const handleSave = () => void this.handleSave(input, options);
 
         if (
             options.type === 'text' ||
@@ -131,7 +131,7 @@ export class ModuleSettingsEngineFieldController {
         container.appendChild(browseBtn);
     }
 
-    public handleSave(
+    public async handleSave(
         input: EngineInputElement,
         options: {
             key: string;
@@ -143,7 +143,7 @@ export class ModuleSettingsEngineFieldController {
             max?: number;
             defaultValue?: number | string;
         },
-    ): void {
+    ): Promise<void> {
         let rawValue = input.value.trim();
         if (options.isFile === true && input instanceof HTMLInputElement) {
             rawValue = input.dataset['fullPath']?.trim() ?? rawValue;
@@ -159,7 +159,7 @@ export class ModuleSettingsEngineFieldController {
             (options.config as unknown as Record<string, string | number | string[] | null>)[
                 options.key
             ] = formatEngineFieldSaveValue(options.key, value);
-            this._deps.setConfig(options.config);
+            await this._deps.setConfig(options.config);
             this._deps.showSaveIndicator();
         }
     }

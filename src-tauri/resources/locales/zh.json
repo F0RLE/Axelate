@@ -64,7 +64,7 @@
     "ui.chat.context_used": "已用",
     "ui.chat.context_remaining": "剩余",
     "ui.chat.context_unknown": "未知",
-    "ui.chat.error.local_model_memory": "启动本地模型的内存不足。请降低上下文大小或 GPU layers，或改用更小的模型。",
+    "ui.chat.error.local_model_memory": "启动本地模型的内存不足。请降低上下文大小或将计算设备切换为 CPU，或改用更小的模型。",
     "ui.chat.error.local_model_system_memory": "启动本地模型的系统内存不足。请关闭其他应用，或改用更小的模型。",
     "ui.chat.error.image_vram": "生成图片所需的显存不足。请降低图片尺寸、steps 或 batch size，或改用更小的模型。",
     "ui.chat.error.local_image_engine_connection": "本地图像引擎在生成时停止或关闭了连接。请重启图像引擎；如果再次发生，请降低图片尺寸、steps 或 batch size。",

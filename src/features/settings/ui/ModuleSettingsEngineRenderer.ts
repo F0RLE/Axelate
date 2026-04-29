@@ -156,9 +156,14 @@ export class ModuleSettingsEngineRenderer {
         return {
             getSettings: () =>
                 this._deps.service.getSettings() as Record<string, string | number | undefined>,
-            setConfig: (config) => {
-                void this._deps.engineConfigService.setConfig(config);
-                this._deps.notifySettingsChanged();
+            setConfig: async (config) => {
+                try {
+                    await this._deps.engineConfigService.setConfig(config);
+                    this._deps.notifySettingsChanged();
+                } catch (error) {
+                    this._deps.tracer.error('[ModuleSettingsEngineRenderer] setConfig failed:', error);
+                    throw error;
+                }
             },
             debouncedSave: (key, value) => {
                 this._deps.debouncedSave(key, value);

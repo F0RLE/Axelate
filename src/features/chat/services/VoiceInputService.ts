@@ -54,7 +54,7 @@ export class VoiceInputService {
             return false;
         }
 
-        return capabilityBridge.hasCapability?.('speechRecognition') ?? true;
+        return capabilityBridge.hasCapability?.('speechRecognition') ?? false;
     }
 
     /**
@@ -120,7 +120,11 @@ export class VoiceInputService {
 
             const text = response.text.trim();
             if (text.length > 0) {
-                onResult(text);
+                try {
+                    onResult(text);
+                } catch (err) {
+                    this._tracer.error(`[VoiceInputService] onResult handler threw: ${String(err)}`);
+                }
             }
             this._finishSession('ended');
         } catch (error) {
