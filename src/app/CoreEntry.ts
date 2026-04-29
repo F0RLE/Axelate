@@ -44,8 +44,11 @@ function clearBootState(): void {
 
 function destroyActiveCoreInstance(): void {
     const state = getCoreEntryState();
-    state.activeCoreInstance?.destroy();
-    clearBootState();
+    try {
+        state.activeCoreInstance?.destroy();
+    } finally {
+        clearBootState();
+    }
 }
 
 function bootCoreOnce(createCore: CoreFactory, tracer: EntryLogger): void {

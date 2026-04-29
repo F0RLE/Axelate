@@ -196,14 +196,22 @@ export class AIChatTransport implements IChatTransport {
 
     private async _cancelStaleActiveRequest(requestId: string): Promise<void> {
         try {
-            await this._runWithTimeout(
+            const cancelled = await this._runWithTimeout(
                 this._context?.tauriProvider.invoke<boolean>('cancel_chat_generation', {
                     requestId,
                 }) ?? Promise.resolve(false),
                 STALE_REQUEST_CANCEL_TIMEOUT_MS,
                 'Stale AI request cancel timed out',
             );
-            this._tracer.info('[AIChatTransport] Cancelled stale active request before restart');
+            if (cancelled) {
+                this._tracer.info(
+                    '[AIChatTransport] Cancelled stale active request before restart',
+                );
+            } else {
+                this._tracer.warn(
+                    '[AIChatTransport] Stale active request was not registered for cancellation',
+                );
+            }
         } catch (error: unknown) {
             this._tracer.warn('[AIChatTransport] Failed to cancel stale active request:', error);
         } finally {

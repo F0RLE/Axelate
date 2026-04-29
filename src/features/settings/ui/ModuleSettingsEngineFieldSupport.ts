@@ -406,8 +406,8 @@ export function createEngineExtraArgsField(translate: ExtraArgsTranslate): Engin
         input.value = flattenGroups(groups);
     };
 
-    const setGroups = (groups: string[], options: { emit?: boolean } = {}) => {
-        input.value = flattenGroups(groups);
+    const setGroups = (newGroups: string[], options: { emit?: boolean } = {}) => {
+        input.value = flattenGroups(newGroups);
         syncTokens();
         if (options.emit === false) {
             return;
@@ -650,6 +650,7 @@ function setInitialEngineSettingsValue(
     settings: Record<string, string | number | null | undefined>,
 ): void {
     const value = settings[key];
+    // Some persisted settings stored the literal "null"; keep empty defaults empty.
     if (value !== undefined && value !== null && !(value === 'null' && defaultValue === '')) {
         input.value = String(value);
         return;

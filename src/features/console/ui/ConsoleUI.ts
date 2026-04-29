@@ -271,13 +271,29 @@ export class ConsoleUI {
     }
 
     public async clearLogs(): Promise<void> {
-        await this.service.clearLogs(this._viewState.activeViewId);
+        const success = await this.service.clearLogs(this._viewState.activeViewId);
+        if (!success) {
+            this._showToast(
+                this._translate('ui.debug.logs_clear_failed', 'Failed to clear logs'),
+                'error',
+            );
+            return;
+        }
+
         this.renderLogs(true);
         this._clipboardHelper.showLogsCleared();
     }
 
     public async clearAllLogs(): Promise<void> {
-        await this.service.clearAllLogs();
+        const success = await this.service.clearAllLogs();
+        if (!success) {
+            this._showToast(
+                this._translate('ui.debug.logs_clear_failed', 'Failed to clear logs'),
+                'error',
+            );
+            return;
+        }
+
         this.renderLogs(true);
         this._clipboardHelper.showLogsCleared();
     }

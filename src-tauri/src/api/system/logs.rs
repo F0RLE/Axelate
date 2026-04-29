@@ -169,11 +169,18 @@ pub fn log_batch(logs: Vec<BatchLogEntry>) -> Result<(), AppError> {
 }
 
 fn trace_frontend_log(level: &str, message: &str) {
-    match level.trim().to_ascii_lowercase().as_str() {
+    let normalized_level = level.trim().to_ascii_lowercase();
+    match normalized_level.as_str() {
         "error" => tracing::error!(target: "frontend", message = message),
         "warn" | "warning" => tracing::warn!(target: "frontend", message = message),
-        "debug" => tracing::debug!(target: "frontend", message = message),
-        "trace" => tracing::trace!(target: "frontend", message = message),
+        "debug" => {
+            logs::add_log(message, "frontend", &normalized_level);
+            tracing::debug!(target: "frontend", message = message);
+        }
+        "trace" => {
+            logs::add_log(message, "frontend", &normalized_level);
+            tracing::trace!(target: "frontend", message = message);
+        }
         _ => tracing::info!(target: "frontend", message = message),
     }
 }
@@ -197,7 +204,7 @@ fn canonical_engine_id(engine_id: &str) -> String {
         | "stable-diffusion.cpp"
         | "stable-diffusion-cpp"
         | "stable.diffusion.cpp" => "sdcpp".to_string(),
-        _ => engine_id.trim().to_string(),
+        _ => key,
     }
 }
 

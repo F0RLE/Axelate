@@ -55,7 +55,6 @@ export class ChatImageController {
     `);
 
     private readonly _boundImageViewerKeydown: (event: KeyboardEvent) => void;
-    private readonly _boundImageViewerWheel: (event: WheelEvent) => void;
     private _imageViewerOverlay: HTMLElement | null = null;
     private _imageViewerImage: HTMLImageElement | null = null;
     private _imageViewerPrevButton: HTMLButtonElement | null = null;
@@ -80,9 +79,6 @@ export class ChatImageController {
             if (event.key === 'ArrowRight') {
                 this._showAdjacentImage(1);
             }
-        };
-        this._boundImageViewerWheel = (event: WheelEvent) => {
-            if (!event.ctrlKey) return;
         };
     }
 
@@ -332,7 +328,6 @@ export class ChatImageController {
         this._imageViewerOverlay.classList.remove('hidden');
         document.body.classList.add('chat-image-viewer-open');
         document.addEventListener('keydown', this._boundImageViewerKeydown);
-        document.addEventListener('wheel', this._boundImageViewerWheel, { passive: false });
     }
 
     private closeImageViewer(): void {
@@ -342,7 +337,6 @@ export class ChatImageController {
         this._imageViewerImage?.removeAttribute('src');
         document.body.classList.remove('chat-image-viewer-open');
         document.removeEventListener('keydown', this._boundImageViewerKeydown);
-        document.removeEventListener('wheel', this._boundImageViewerWheel);
     }
 
     private _collectImageViewerSources(): string[] {
