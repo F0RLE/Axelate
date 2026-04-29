@@ -20,4 +20,13 @@ Include:
 
 ## Security Defaults
 
-The repository uses GitHub secret scanning, push protection, Dependabot alerts, and Dependabot security updates. Release tags must match project versions and point to commits reachable from `main`.
+The repository uses GitHub secret scanning, push protection, Dependabot alerts, and Dependabot security updates.
+
+Additional repository security automation:
+
+- CodeQL scans TypeScript/JavaScript and Rust.
+- Dependency Review runs on pull requests targeting `main` and `nightly`.
+- Scheduled Security Audit runs `npm audit --audit-level=high` and `cargo audit`.
+- CodeRabbit is configured to review security-sensitive Rust/Tauri, TypeScript, workflow, and resource changes.
+
+Release tags must match project versions and point to commits reachable from `main`. Tags matching `v*` are protected against deletion and non-fast-forward updates.

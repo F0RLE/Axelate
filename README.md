@@ -81,6 +81,8 @@ npm run verify
 - `nightly` is the active development branch.
 - `main` is the release-ready branch.
 - Strict CI runs on pushes and pull requests targeting `main` or `nightly`.
+- CodeQL, dependency review, scheduled security audits, Dependabot, and CodeRabbit are configured for repository review and security coverage.
+- Protected branches require the strict frontend and backend CI checks, but not a second human approval; this matches the current solo-maintainer workflow.
 - Dependabot targets `nightly`.
 - GitHub releases are created by pushing a version tag that starts with `v`.
 - Release tags must point to a commit that is already reachable from `main`.

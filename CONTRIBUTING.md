@@ -22,13 +22,23 @@ Use these documents first:
 - Keep `main` release-ready.
 - Send dependency update work to `nightly`.
 - Create release tags only from commits that are ready to ship.
+- Use squash merge for pull requests. Merge commits and rebase merges are disabled in the repository settings.
 
 ## Before Opening A PR
 
 - Run `npm run verify`.
 - If you changed Rust types exported to the frontend, run `npm run bindings:sync`.
 - Keep commit messages in Conventional Commits format. `npm run setup` installs Git hooks that enforce this.
-- Expect GitHub `Strict CI` on pull requests targeting `main` or `nightly`.
+- Expect GitHub `Strict CI`, dependency review, CodeQL, and CodeRabbit on pull requests targeting `main` or `nightly`.
+- The protected branches do not require a second human approval right now because the project is maintained by a solo owner.
+
+## Repository Automation
+
+- `Strict CI` is the required merge gate for protected branches.
+- `CodeQL`, `Dependency Review`, and scheduled `Security Audit` workflows provide additional security coverage.
+- CodeRabbit reviews pull requests against `nightly` and `main`; its feedback is advisory unless a concrete bug or risk is confirmed.
+- Dependabot security and dependency update pull requests target `nightly`.
+- Secret scanning and push protection are enabled in GitHub repository settings.
 
 ## Releases
 
@@ -36,6 +46,7 @@ Use these documents first:
 - Tags must start with `v`.
 - Tag versions must match `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`.
 - Release tags must point to a commit that is already reachable from `main`.
+- Release tags matching `v*` are protected against deletion and non-fast-forward updates.
 - Pushing a matching `v*` tag triggers the GitHub release workflow.
 
 ## Docs Policy

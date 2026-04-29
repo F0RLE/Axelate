@@ -16,6 +16,9 @@ Branch model:
 - `main` is the release-ready branch
 - dependency update pull requests target `nightly`
 - merge to `main` only after CI is green and the change is ready to release
+- protected branches require strict frontend/backend checks, linear history, resolved conversations, and no force-push or deletion
+- protected branches currently do not require a second human approval because the repository is in a solo-maintainer phase
+- pull requests use squash merge; merge commits and rebase merges are disabled
 
 The repository currently splits responsibilities this way:
 
@@ -86,17 +89,31 @@ npm run release
 - `tauri:build`: desktop app build
 - `release`: full verification plus release bundle build
 
-## CI And Releases
+## Automation, CI, And Releases
 
-GitHub Actions currently has two repository workflows:
+GitHub Actions currently has these repository workflows:
 
 - `Strict CI`: runs on pushes and pull requests for `main` and `nightly`, plus manual dispatch
+- `CodeQL`: runs code scanning for TypeScript/JavaScript and Rust on pushes to `main` or `nightly`, pull requests, weekly schedule, and manual dispatch
+- `Dependency Review`: reviews dependency changes on pull requests to `main` and `nightly`
+- `Security Audit`: runs scheduled and manual `npm audit` plus `cargo audit`
 - `Release Build`: runs on pushed `v*` tags, plus manual dispatch for an existing tag
+
+Protected branches require the `Frontend Strict Check` and `Backend Strict Check` jobs from `Strict CI`.
+The security workflows and CodeRabbit are additional review signals, not required branch-protection checks today.
 
 The release workflow builds the Windows Tauri bundles, verifies release hardening, writes `SHA256SUMS.txt`, and attaches checksums to the GitHub release.
 The release tag must match the versions in `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`.
 
 See [Releases](RELEASES.md) for the release checklist.
+
+Repository review automation:
+
+- CodeRabbit reviews pull requests targeting `nightly` and `main`
+- CodeRabbit is configured for a low-noise solo-maintainer workflow and should prioritize correctness, security, data loss, user-flow regressions, and missing tests
+- CodeRabbit labeling is advisory; labels are not auto-applied
+- generated bindings, lockfiles, build output, caches, and dependency directories are excluded from CodeRabbit review noise where configured
+- GitHub secret scanning, push protection, Dependabot alerts, and Dependabot security updates are enabled in repository settings
 
 Cleanup command:
 
