@@ -86,17 +86,12 @@ impl GpuInfo {
             "cuda" => AcceleratorClass::NvidiaCuda,
             "hip" => AcceleratorClass::AmdGpu,
             "sycl" => AcceleratorClass::IntelGpu,
-            "vulkan" => {
-                if gpu_name_brand(&self.name) == GpuBrand::Amd {
-                    AcceleratorClass::AmdGpu
-                } else if gpu_name_brand(&self.name) == GpuBrand::Intel {
-                    AcceleratorClass::IntelGpu
-                } else if self.detected {
-                    AcceleratorClass::GenericGpu
-                } else {
-                    AcceleratorClass::CpuOnly
-                }
-            }
+            "vulkan" => match gpu_name_brand(&self.name) {
+                GpuBrand::Amd => AcceleratorClass::AmdGpu,
+                GpuBrand::Intel => AcceleratorClass::IntelGpu,
+                _ if self.detected => AcceleratorClass::GenericGpu,
+                _ => AcceleratorClass::CpuOnly,
+            },
             "cpu" => AcceleratorClass::CpuOnly,
             _ => {
                 if self.detected {
@@ -293,8 +288,9 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
         .or_else(|| names.first().cloned())
         .unwrap_or_else(|| "Integrated / No GPU".to_string());
 
-    let backend = preferred_backend_for_gpu_name(&primary_name);
-    let detected = gpu_name_brand(&primary_name) != GpuBrand::Software;
+    let brand = gpu_name_brand(&primary_name);
+    let backend = preferred_backend_for_gpu_brand(brand);
+    let detected = brand != GpuBrand::Software;
     let (cuda_driver_major, cuda_driver_minor) = if backend == "cuda" {
         detect_cuda_driver_version()
     } else {
@@ -315,8 +311,8 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
     }
 }
 
-fn preferred_backend_for_gpu_name(name: &str) -> &'static str {
-    match gpu_name_brand(name) {
+const fn preferred_backend_for_gpu_brand(brand: GpuBrand) -> &'static str {
+    match brand {
         GpuBrand::Nvidia => "cuda",
         GpuBrand::Amd => "hip",
         GpuBrand::Intel => "sycl",

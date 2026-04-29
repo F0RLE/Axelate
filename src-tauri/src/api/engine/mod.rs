@@ -8,6 +8,7 @@ use crate::domain::engine::config::{
     build_default_engine_config, merge_user_engine_config, normalize_engine_config,
 };
 use crate::domain::engine::manager::EngineManager;
+use crate::domain::engine::manager::canonical_engine_id;
 use crate::domain::engine::types::{
     Capability, EngineConfig, EngineDefinition, EngineState, EngineStatus,
 };
@@ -93,6 +94,7 @@ pub async fn get_engine_config(
     engine_id: String,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<crate::domain::engine::types::EngineConfig, AppError> {
+    let engine_id = canonical_engine_id(&engine_id).to_string();
     let def = engine_manager
         .get_definition(&engine_id)
         .await
@@ -113,6 +115,7 @@ pub async fn get_engine_settings_payload(
     engine_id: String,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<EngineSettingsPayload, AppError> {
+    let engine_id = canonical_engine_id(&engine_id).to_string();
     let def = engine_manager
         .get_definition(&engine_id)
         .await
@@ -135,6 +138,8 @@ pub async fn set_engine_config(
     config: crate::domain::engine::types::EngineConfig,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<(), AppError> {
+    let mut config = config;
+    config.engine_id = canonical_engine_id(&config.engine_id).to_string();
     let def = engine_manager
         .get_definition(&config.engine_id)
         .await

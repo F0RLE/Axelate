@@ -224,13 +224,13 @@ body.snapping .modal-backdrop {
 .app-modal-tab:focus,
 .app-close-btn:focus {
     outline: none;
+    box-shadow: none;
 }
 
 .app-modal-tab:focus-visible,
 .app-close-btn:focus-visible {
-    outline: 1px solid rgba(var(--primary-raw), 0.58);
-    outline-offset: -3px;
-    box-shadow: 0 0 0 3px rgba(var(--primary-raw), 0.14);
+    outline: none;
+    box-shadow: none;
 }
 
 .app-close-btn {

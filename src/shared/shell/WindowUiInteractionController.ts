@@ -155,6 +155,16 @@ export class WindowUiInteractionController {
     }
 
     private _handleKeydown(e: KeyboardEvent): void {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur();
+            }
+            return;
+        }
+
         if (
             e.key === 'F12' ||
             (e.ctrlKey &&

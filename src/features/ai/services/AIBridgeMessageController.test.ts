@@ -11,7 +11,6 @@ function createTextController() {
     const transport = {
         send: vi.fn().mockResolvedValue({ ok: true, text: 'done' }),
         generateImage: vi.fn(),
-        generateImageBackground: vi.fn(),
     };
     const events = {
         broadcastResponse: vi.fn(),
@@ -66,7 +65,6 @@ function createImageController() {
         generateImage: vi
             .fn()
             .mockResolvedValue({ ok: true, images: ['data:image/png;base64,abc'] }),
-        generateImageBackground: vi.fn(),
     };
     const events = {
         broadcastResponse: vi.fn(),

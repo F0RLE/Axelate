@@ -1,6 +1,7 @@
 use super::session::ChatSessionManager;
 use super::types::{ChatMessage, ChatRequest, ChatResponse};
 use crate::domain::engine::config::{build_default_engine_config, merge_user_engine_config};
+use crate::domain::engine::manager::canonical_engine_id;
 use crate::infrastructure::config::engine_settings::load_engine_config_map;
 
 #[derive(Clone, Copy)]
@@ -105,7 +106,9 @@ pub(super) async fn active_local_engine_status(
         crate::domain::engine::types::EngineState::Ready { slots } => slots
             .into_iter()
             .find(|slot| {
-                slot.capability == capability && slot.engine.id == provider && slot.engine.healthy
+                slot.capability == capability
+                    && canonical_engine_id(&slot.engine.id) == canonical_engine_id(provider)
+                    && slot.engine.healthy
             })
             .map(|slot| slot.engine)
             .ok_or_else(|| {
@@ -123,7 +126,8 @@ pub(super) async fn build_engine_config(
     definition: &crate::domain::engine::types::EngineDefinition,
 ) -> Result<crate::domain::engine::types::EngineConfig, crate::errors::AppError> {
     let saved = load_engine_config_map().await?;
-    Ok(saved.get(&definition.id).map_or_else(
+    let canonical_id = canonical_engine_id(&definition.id);
+    Ok(saved.get(canonical_id).map_or_else(
         || build_default_engine_config(definition),
         |config| merge_user_engine_config(definition, config),
     ))

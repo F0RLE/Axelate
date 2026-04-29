@@ -124,6 +124,8 @@ type ChatSendFactoryDeps = {
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     getPreferredAiCategory: () => 'ai_text' | 'ai_image';
+    isForceImageGeneration: () => boolean;
+    clearForceImageGeneration: () => void;
     handleResponse: (
         response: IChatResponse,
         streamingHandle?: ReturnType<ChatSendFactoryDeps['createStreamingHandle']> | null,
@@ -134,7 +136,7 @@ type ChatSendFactoryDeps = {
     startImagePreviewPolling: (
         handle: ReturnType<ChatSendFactoryDeps['createImageHandle']>,
     ) => void;
-    cancelTextGeneration: () => Promise<boolean>;
+    cancelTextGeneration: (providerId: string | null) => Promise<boolean>;
     isImageProvider: (providerId: string | null) => boolean;
     lockUi: (input: HTMLTextAreaElement | null) => {
         input: HTMLTextAreaElement | null;
@@ -286,6 +288,10 @@ export class ChatControllerFactory {
             },
             getSelectedModule: (category) => deps.getSelectedModule(category),
             getPreferredAiCategory: () => deps.getPreferredAiCategory(),
+            isForceImageGeneration: () => deps.isForceImageGeneration(),
+            clearForceImageGeneration: () => {
+                deps.clearForceImageGeneration();
+            },
             handleResponse: async (response, streamingHandle, imageHandle) =>
                 await deps.handleResponse(response, streamingHandle, imageHandle),
             cleanupStreamingState: (listenerId, typingId) => {
@@ -297,7 +303,7 @@ export class ChatControllerFactory {
             startImagePreviewPolling: (handle) => {
                 deps.startImagePreviewPolling(handle);
             },
-            cancelTextGeneration: async () => await deps.cancelTextGeneration(),
+            cancelTextGeneration: async (providerId) => await deps.cancelTextGeneration(providerId),
             isImageProvider: (providerId) => deps.isImageProvider(providerId),
             lockUi: (input) => deps.lockUi(input),
             unlockUi: (els) => {

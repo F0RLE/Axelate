@@ -6,6 +6,7 @@ import type { IChatMessage, IChatAttachment } from '../types/chatTypes';
 import type { IApp } from '@/shared/types/coreTypes';
 import { ChatAutoStartHelper } from '../services/ChatAutoStartHelper';
 import { ChatSendFlow } from '../services/ChatSendFlow';
+import { AIBridgeProviderPolicy } from '@/features/ai/services/AIBridgeProviderPolicy';
 
 type ChatSendLogger = Pick<LoggerService, 'info'>;
 
@@ -31,7 +32,11 @@ type ImageGenerationHandle = {
 };
 
 type ChatSendControllerOptions = {
-    aiBridge: AIBridge;
+    aiBridge: AIBridge & {
+        prepareImagePrompt?: (
+            text: string,
+        ) => Promise<{ ok: boolean; text?: string; error?: string }>;
+    };
     fileHandler: Pick<ChatFileHandler, 'hasFiles' | 'processForSend'>;
     service: ChatService;
     getHistory: () => IChatMessage[];
@@ -50,6 +55,8 @@ type ChatSendControllerOptions = {
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     getPreferredAiCategory: () => 'ai_text' | 'ai_image';
+    isForceImageGeneration: () => boolean;
+    clearForceImageGeneration: () => void;
     handleResponse: (
         response: Awaited<ReturnType<ChatService['sendMessage']>>,
         streamingHandle: StreamingMessageHandle | null,
@@ -58,7 +65,7 @@ type ChatSendControllerOptions = {
     cleanupStreamingState: (listenerId: string, typingId: string) => void;
     stopImagePreviewPolling: () => void;
     startImagePreviewPolling: (handle: ImageGenerationHandle) => void;
-    cancelTextGeneration: () => Promise<boolean>;
+    cancelTextGeneration: (providerId: string | null) => Promise<boolean>;
     isImageProvider: (providerId: string | null) => boolean;
     lockUi: (input: HTMLTextAreaElement | null) => {
         input: HTMLTextAreaElement | null;
@@ -85,6 +92,8 @@ export class ChatSendController {
     >();
     private _isDestroyed = false;
     private _cancelRequested = false;
+    private _activeProviderId: string | null = null;
+    private readonly _providerPolicy = new AIBridgeProviderPolicy();
 
     constructor(private readonly _options: ChatSendControllerOptions) {
         this._autoStartHelper = new ChatAutoStartHelper({
@@ -117,7 +126,7 @@ export class ChatSendController {
         }
 
         this._cancelRequested = true;
-        await this._options.cancelTextGeneration();
+        await this._options.cancelTextGeneration(this._activeProviderId);
     }
 
     public validateInput(text: string): boolean {
@@ -136,15 +145,19 @@ export class ChatSendController {
         const uiElements = this._options.lockUi(input);
         const typingId = `typing-${String(Date.now())}`;
         const listenerId = `chat-stream-${String(Date.now())}`;
-        const activeProviderId = this._options.aiBridge.getState().activeProviderId;
-        const isImageProvider = this._options.isImageProvider(activeProviderId);
+        let activeProviderId = this._options.aiBridge.getState().activeProviderId;
+        let isImageProvider =
+            this._options.isForceImageGeneration() ||
+            this._options.isImageProvider(activeProviderId);
 
         this._cancelRequested = false;
+        this._activeProviderId = activeProviderId;
         this._options.setSending(true);
         this._activeStreamingStates.set(listenerId, { listenerId, typingId });
 
         let streamingHandle: StreamingMessageHandle | null = null;
         let imageHandle: ImageGenerationHandle | null = null;
+        let shouldStopImageEngine = false;
 
         try {
             const sendPlan = await this._sendFlow.prepare(text);
@@ -155,12 +168,44 @@ export class ChatSendController {
             this._options.appendUserMessage(text, sendPlan.attachments, sendPlan.tokenCount);
             this._options.pushUserMessage(sendPlan.userContent);
 
+            let imagePrompt = sendPlan.combinedText;
+            if (isImageProvider) {
+                const preparedPrompt = await this._prepareImagePromptWithTextProvider(
+                    sendPlan.combinedText,
+                );
+                if (this._wasDestroyed()) return false;
+                imagePrompt = preparedPrompt;
+
+                const imageProviderId = this._getSelectedModuleId('ai_image');
+                if (
+                    imageProviderId !== null &&
+                    this._options.aiBridge.getState().activeProviderId !== imageProviderId
+                ) {
+                    const started = await this._options.aiBridge.startProvider(imageProviderId);
+                    if (!started) {
+                        throw new Error(
+                            this._options.translate(
+                                'ui.ai.provider_activation_failed',
+                                'Provider activation failed',
+                            ),
+                        );
+                    }
+                }
+
+                activeProviderId = this._options.aiBridge.getState().activeProviderId;
+                this._activeProviderId = activeProviderId;
+                isImageProvider = this._options.isImageProvider(activeProviderId);
+            }
+
             const ensureStreamingHandle = (): StreamingMessageHandle => {
                 streamingHandle ??= this._options.createStreamingHandle(typingId);
                 return streamingHandle;
             };
 
             if (isImageProvider) {
+                shouldStopImageEngine =
+                    activeProviderId !== null &&
+                    this._providerPolicy.isManagedLocalImageEngine(activeProviderId);
                 imageHandle = this._options.createImageHandle();
                 this._options.startImagePreviewPolling(imageHandle);
             } else {
@@ -183,9 +228,10 @@ export class ChatSendController {
             );
 
             const response = await this._options.service.sendMessage(
-                sendPlan.combinedText,
+                imagePrompt,
                 sendPlan.historyHead,
                 sendPlan.attachments,
+                isImageProvider ? { originalPrompt: sendPlan.combinedText } : {},
             );
 
             this._cleanupStreamingState(listenerId, typingId);
@@ -216,11 +262,88 @@ export class ChatSendController {
             if (imageHandle !== null) {
                 this._options.stopImagePreviewPolling();
             }
+            if (shouldStopImageEngine) {
+                await this._stopImageEngineAfterCompletion();
+            }
             if (!this._wasDestroyed()) {
                 this._options.unlockUi(uiElements);
             }
             this._options.setSending(false);
+            this._activeProviderId = null;
+            this._options.clearForceImageGeneration();
         }
+    }
+
+    private async _prepareImagePromptWithTextProvider(prompt: string): Promise<string> {
+        const textProviderId = this._getSelectedModuleId('ai_text');
+        const imageProviderId = this._getSelectedModuleId('ai_image');
+        if (
+            textProviderId === null ||
+            imageProviderId === null ||
+            textProviderId === imageProviderId ||
+            prompt.trim() === ''
+        ) {
+            return prompt;
+        }
+
+        const currentProviderId = this._options.aiBridge.getState().activeProviderId;
+        if (currentProviderId !== textProviderId) {
+            const started = await this._options.aiBridge.startProvider(textProviderId);
+            if (!started) {
+                return prompt;
+            }
+        }
+
+        const response =
+            typeof this._options.aiBridge.prepareImagePrompt === 'function'
+                ? await this._options.aiBridge.prepareImagePrompt(
+                      this._buildImagePromptRewriteRequest(prompt),
+                  )
+                : { ok: false };
+        if (!response.ok) {
+            return prompt;
+        }
+
+        const prepared = this._extractPreparedPrompt(response);
+        return prepared === '' ? prompt : this._stripPromptEnvelope(prepared);
+    }
+
+    private _extractPreparedPrompt(response: {
+        ok: boolean;
+        text?: string;
+        message?: string;
+        reply?: { text?: string };
+    }): string {
+        return (response.text ?? response.message ?? response.reply?.text ?? '').trim();
+    }
+
+    private _buildImagePromptRewriteRequest(prompt: string): string {
+        return [
+            'You are preparing a prompt for Stable Diffusion.',
+            'Task: translate the user request into English, preserve the exact subject and intent, and lightly enhance it with useful visual details.',
+            'Rules:',
+            '- Remove command words like generate, draw, create, please, сгенерируй, нарисуй, сделай.',
+            '- Do not invent extra people, objects, actions, identities, or locations that the user did not ask for.',
+            '- You may add concise visual quality details: composition, lighting, camera, mood, texture, style, and render quality.',
+            '- Keep it as one prompt, 12-45 words.',
+            '- Return only the final prompt text. No quotes, no markdown, no explanation.',
+            '',
+            `User request: ${prompt}`,
+        ].join('\n');
+    }
+
+    private _stripPromptEnvelope(prompt: string): string {
+        return prompt
+            .replace(/^```(?:text|markdown)?\s*/iu, '')
+            .replace(/```\s*$/u, '')
+            .replace(/^["'`]+|["'`]+$/gu, '')
+            .trim();
+    }
+
+    private _getSelectedModuleId(category: 'ai_text' | 'ai_image'): string | null {
+        const module = this._options.getSelectedModule(category);
+        const id = module?.id;
+        return typeof id === 'string' && id.trim() !== '' ? id : null;
     }
 
     private _wasDestroyed(): boolean {
@@ -245,5 +368,13 @@ export class ChatSendController {
 
     public async tryAutoStartAi(prompt?: string): Promise<boolean> {
         return await this._autoStartHelper.startSelectedModule(prompt);
+    }
+
+    private async _stopImageEngineAfterCompletion(): Promise<void> {
+        try {
+            await this._options.aiBridge.stopEngineSlot('image');
+        } catch {
+            /* stopping the local image engine must not replace the generation result */
+        }
     }
 }

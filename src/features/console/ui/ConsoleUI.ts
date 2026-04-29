@@ -96,6 +96,9 @@ export class ConsoleUI {
             onClearLogs: () => {
                 void this.clearLogs();
             },
+            onClearAllLogs: () => {
+                void this.clearAllLogs();
+            },
             onCopyLogs: () => {
                 void this.copyLogs();
             },
@@ -121,6 +124,7 @@ export class ConsoleUI {
         });
         this._refreshCoordinator = new ConsoleRefreshCoordinator({
             service: this.service,
+            getActiveViewId: () => this._viewState.activeViewId,
             refreshLogViews: async () => await this.refreshLogViews(),
             renderLogs: (clear) => {
                 this.renderLogs(clear);
@@ -252,10 +256,19 @@ export class ConsoleUI {
         this._viewState.activeViewId = view;
         this._activateTab('.console-tab', '.logs-pane', `logs-${view}`, btn);
         this.renderLogs(true);
+        void this.service.fetchLogs(view).then(() => {
+            this.renderLogs(true);
+        });
     }
 
     public async clearLogs(): Promise<void> {
         await this.service.clearLogs(this._viewState.activeViewId);
+        this.renderLogs(true);
+        this._clipboardHelper.showLogsCleared();
+    }
+
+    public async clearAllLogs(): Promise<void> {
+        await this.service.clearAllLogs();
         this.renderLogs(true);
         this._clipboardHelper.showLogsCleared();
     }

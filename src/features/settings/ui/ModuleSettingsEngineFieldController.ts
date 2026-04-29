@@ -13,7 +13,7 @@ type EngineFieldType = 'number' | 'text' | 'select' | 'password' | 'textarea';
 type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 type ModuleSettingsEngineFieldControllerDeps = {
-    getSettings: () => Record<string, string | number | undefined>;
+    getSettings: () => Record<string, string | number | null | undefined>;
     setConfig: (config: EngineConfig) => Promise<void>;
     debouncedSave: (key: string, value: string | number | boolean | null) => void;
     showSaveIndicator: () => void;
@@ -107,6 +107,11 @@ export class ModuleSettingsEngineFieldController {
         browseBtn.textContent = this._deps.translate('ui.settings.engine.browse', 'Browse');
 
         browseBtn.onclick = async () => {
+            if (browseBtn.disabled) {
+                return;
+            }
+
+            browseBtn.disabled = true;
             try {
                 const selected = await open({
                     multiple: false,
@@ -121,10 +126,14 @@ export class ModuleSettingsEngineFieldController {
                     input.dataset['fullPath'] = selected;
                     input.value = this._deps.getModelFileName(selected);
                     input.title = selected;
-                    input.dispatchEvent(new Event('change'));
+                    window.setTimeout(() => {
+                        input.dispatchEvent(new Event('change'));
+                    }, 0);
                 }
             } catch (error: unknown) {
                 this._deps.tracer.error('[ModuleSettingsUI] Failed to open file dialog', error);
+            } finally {
+                browseBtn.disabled = false;
             }
         };
 

@@ -23,6 +23,9 @@ describe('ChatSendController', () => {
         const aiBridge = {
             getState: vi.fn(() => ({ activeProviderId: 'gpt', isRunning: true })),
             onChunk: vi.fn(),
+            startProvider: vi.fn().mockResolvedValue(true),
+            prepareImagePrompt: vi.fn().mockResolvedValue({ ok: true, text: 'prepared prompt' }),
+            stopEngineSlot: vi.fn().mockResolvedValue(undefined),
         };
         const sendMessage = vi.fn().mockResolvedValue({ ok: true, message: 'done' });
         const options = {
@@ -51,12 +54,14 @@ describe('ChatSendController', () => {
             appendUserMessage: vi.fn(),
             getSelectedModule: vi.fn(),
             getPreferredAiCategory: vi.fn(() => 'ai_text' as const),
+            isForceImageGeneration: vi.fn(() => false),
+            clearForceImageGeneration: vi.fn(),
             handleResponse: vi.fn().mockResolvedValue(undefined),
             cleanupStreamingState: vi.fn(),
             stopImagePreviewPolling: vi.fn(),
             startImagePreviewPolling: vi.fn(),
             cancelTextGeneration: vi.fn().mockResolvedValue(true),
-            isImageProvider: vi.fn(() => false),
+            isImageProvider: vi.fn((_providerId: string | null) => false),
             lockUi: vi.fn(() => ({
                 input: null,
                 sendBtn: null,
@@ -76,6 +81,7 @@ describe('ChatSendController', () => {
             options,
             aiBridge,
             streamingHandle,
+            imageHandle,
             sendMessage,
         };
     };
@@ -170,5 +176,65 @@ describe('ChatSendController', () => {
         expect(streamingHandle.cancel).toHaveBeenCalledOnce();
         expect(options.handleResponse).not.toHaveBeenCalled();
         expect(options.handleError).not.toHaveBeenCalled();
+    });
+
+    it('stops the image engine after a successful image send', async () => {
+        const { controller, options, aiBridge } = createController();
+        aiBridge.getState.mockReturnValue({ activeProviderId: 'sdcpp', isRunning: true });
+        options.isImageProvider.mockReturnValue(true);
+        const input = document.createElement('textarea');
+        input.value = 'draw image';
+
+        await controller.sendChat(input);
+
+        expect(options.startImagePreviewPolling).toHaveBeenCalledOnce();
+        expect(options.handleResponse).toHaveBeenCalledOnce();
+        expect(aiBridge.stopEngineSlot).toHaveBeenCalledWith('image');
+    });
+
+    it('stops the image engine after an image send throws', async () => {
+        const { controller, options, aiBridge, sendMessage } = createController();
+        aiBridge.getState.mockReturnValue({ activeProviderId: 'sdcpp', isRunning: true });
+        options.isImageProvider.mockReturnValue(true);
+        sendMessage.mockRejectedValueOnce(new Error('generation failed'));
+        const input = document.createElement('textarea');
+        input.value = 'draw image';
+
+        await controller.sendChat(input);
+
+        expect(options.handleError).toHaveBeenCalled();
+        expect(aiBridge.stopEngineSlot).toHaveBeenCalledWith('image');
+    });
+
+    it('prepares image prompts with the selected text provider before local image generation', async () => {
+        const { controller, options, aiBridge, sendMessage } = createController();
+        aiBridge.getState
+            .mockReturnValueOnce({ activeProviderId: 'sdcpp', isRunning: true })
+            .mockReturnValueOnce({ activeProviderId: 'sdcpp', isRunning: true })
+            .mockReturnValueOnce({ activeProviderId: 'text-model', isRunning: true })
+            .mockReturnValue({ activeProviderId: 'sdcpp', isRunning: true });
+        vi.mocked(options.isImageProvider).mockImplementation(
+            (providerId: string | null) => providerId === 'sdcpp',
+        );
+        options.getSelectedModule.mockImplementation((category: 'ai_text' | 'ai_image') =>
+            category === 'ai_text' ? { id: 'text-model' } : { id: 'sdcpp' },
+        );
+        aiBridge.prepareImagePrompt.mockResolvedValueOnce({
+            ok: true,
+            text: 'cinematic cat, rain, neon',
+        });
+        sendMessage.mockResolvedValueOnce({ ok: true, message: 'done' });
+        const input = document.createElement('textarea');
+        input.value = 'сгенерируй кота под дождем';
+
+        await controller.sendChat(input);
+
+        expect(aiBridge.startProvider).toHaveBeenNthCalledWith(1, 'text-model');
+        expect(aiBridge.startProvider).toHaveBeenNthCalledWith(2, 'sdcpp');
+        expect(aiBridge.prepareImagePrompt).toHaveBeenCalledOnce();
+        expect(sendMessage).toHaveBeenCalledOnce();
+        expect(sendMessage).toHaveBeenCalledWith('cinematic cat, rain, neon', [], [], {
+            originalPrompt: 'сгенерируй кота под дождем',
+        });
     });
 });

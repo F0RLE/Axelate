@@ -364,7 +364,9 @@ export class ChatController {
                 this._generationController.startImagePreviewPolling(handle);
             },
             cancelTextGeneration: async () => {
-                const providerId = this._state.currentGenerationProviderId ?? this._aiBridge.getState().activeProviderId;
+                const providerId =
+                    this._state.currentGenerationProviderId ??
+                    this._aiBridge.getState().activeProviderId;
                 if (this._generationController.isImageProvider(providerId)) {
                     this._generationController.stopImagePreviewPolling();
                     await this._aiBridge.cancelImageGeneration();
@@ -385,7 +387,8 @@ export class ChatController {
             setSending: (value) => {
                 this._state.isSending = value;
                 if (value) {
-                    this._state.currentGenerationProviderId = this._aiBridge.getState().activeProviderId;
+                    this._state.currentGenerationProviderId =
+                        this._aiBridge.getState().activeProviderId;
                 } else {
                     this._state.currentGenerationProviderId = null;
                 }

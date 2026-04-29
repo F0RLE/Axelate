@@ -86,7 +86,7 @@ function requireSaveImageButton(): HTMLButtonElement {
 }
 
 function requireChatImage(): HTMLImageElement {
-    const image = document.querySelector('.chat-img');
+    const image = document.querySelector('.chat-img, .chat-generated-image');
     if (!(image instanceof HTMLImageElement)) {
         throw new TypeError('chat image not found');
     }
@@ -102,6 +102,16 @@ function requireImageViewer(): { overlay: HTMLElement; preview: HTMLImageElement
     }
 
     return { overlay, preview };
+}
+
+function requireImageViewerNav(): { prev: HTMLButtonElement; next: HTMLButtonElement } {
+    const prev = document.querySelector('.chat-image-viewer-prev');
+    const next = document.querySelector('.chat-image-viewer-next');
+    if (!(prev instanceof HTMLButtonElement) || !(next instanceof HTMLButtonElement)) {
+        throw new TypeError('image viewer navigation not found');
+    }
+
+    return { prev, next };
 }
 
 async function renderAssistantImage(ui: ChatUI, initialize = false): Promise<void> {
@@ -230,7 +240,17 @@ describe('ChatUI lifecycle', () => {
             't:ui.chat.save_image:Save Image',
         );
         expect(
+            (document.querySelector('.chat-save-image-btn') as HTMLButtonElement).dataset[
+                'tooltip'
+            ],
+        ).toBe('t:ui.chat.save_image:Save Image');
+        expect(
             (document.querySelector('.chat-open-image-folder-btn') as HTMLButtonElement).title,
+        ).toBe('t:ui.chat.open_image_folder:Open image folder');
+        expect(
+            (document.querySelector('.chat-open-image-folder-btn') as HTMLButtonElement).dataset[
+                'tooltip'
+            ],
         ).toBe('t:ui.chat.open_image_folder:Open image folder');
         expect((document.querySelector('.media-remove') as HTMLButtonElement).title).toBe(
             't:ui.launcher.web.remove_attachment:Remove attachment',
@@ -331,9 +351,7 @@ describe('ChatUI lifecycle', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = createChatUI();
-        const handle = ui.createImageGenerationMessage({
-            onCancel: vi.fn(),
-        });
+        const handle = ui.createImageGenerationMessage();
 
         handle.finalize({
             text: 'caption',
@@ -341,22 +359,59 @@ describe('ChatUI lifecycle', () => {
         });
 
         expect(document.querySelector('.chat-generated-control.is-regenerate')).toBeNull();
-        expect(
-            document.querySelector('.chat-generated-controls')?.classList.contains('hidden'),
-        ).toBe(true);
+        expect(document.querySelector('.chat-generated-controls')).toBeNull();
         expect(document.querySelector('.chat-generated-caption')?.textContent).toBe('caption');
         expect((document.querySelector('.chat-generated-image') as HTMLImageElement).src).toContain(
             'data:image/png;base64,ZmFrZQ==',
         );
     });
 
+    it('should suppress default generated image ready caption', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage();
+
+        handle.finalize({
+            text: 'Generated image',
+            images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+        });
+
+        expect(document.querySelector('.chat-generated-caption')?.textContent).toBe('');
+        expect(
+            document.querySelector('.chat-image-generation')?.classList.contains('has-no-caption'),
+        ).toBe(true);
+    });
+
+    it('should restore assistant image history with generated image layout', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        ui.renderHistory([
+            {
+                role: 'assistant',
+                content: 'Generated image',
+                opts: {
+                    images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+                },
+            },
+        ]);
+
+        expect(document.querySelector('.chat-row--generated-image')).not.toBeNull();
+        expect(document.querySelector('.chat-bubble--media')).toBeNull();
+        expect((document.querySelector('.chat-generated-image') as HTMLImageElement).src).toContain(
+            'data:image/png;base64,ZmFrZQ==',
+        );
+        expect(
+            document.querySelector('.chat-image-generation')?.classList.contains('has-no-caption'),
+        ).toBe(true);
+    });
+
     it('should render image progress percent and speed separately from status text', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = createChatUI();
-        const handle = ui.createImageGenerationMessage({
-            onCancel: vi.fn(),
-        });
+        const handle = ui.createImageGenerationMessage();
 
         handle.setStatus('image status=running percent=40 step=8 total=20 speed=1.25it/s');
 
@@ -375,9 +430,7 @@ describe('ChatUI lifecycle', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = createChatUI();
-        const handle = ui.createImageGenerationMessage({
-            onCancel: vi.fn(),
-        });
+        const handle = ui.createImageGenerationMessage();
 
         handle.setStatus('image status=running elapsed=12s');
 
@@ -393,16 +446,9 @@ describe('ChatUI lifecycle', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = createChatUI();
-        const handle = ui.createImageGenerationMessage({
-            onCancel: vi.fn(),
-        });
+        const handle = ui.createImageGenerationMessage();
 
-        const cancelBtn = document.querySelector('.chat-generated-control.is-cancel');
-        if (!(cancelBtn instanceof HTMLButtonElement)) {
-            throw new Error('cancel button not found');
-        }
-
-        cancelBtn.click();
+        handle.cancel();
         handle.fail('error sending request for url (http://localhost:8082/sdapi/v1/txt2img)');
 
         expect(
@@ -582,6 +628,95 @@ describe('ChatUI lifecycle', () => {
 
         expect(overlay.classList.contains('hidden')).toBe(true);
         expect(preview.getAttribute('src')).toBeNull();
+    });
+
+    it('should close image preview when clicking empty viewer stage', async () => {
+        ui = createChatUI();
+        await renderAssistantImage(ui, true);
+
+        const image = requireChatImage();
+        image.click();
+        await flushPromises();
+
+        const { overlay, preview } = requireImageViewer();
+        const stage = document.querySelector('.chat-image-viewer-stage');
+        if (!(stage instanceof HTMLElement)) {
+            throw new TypeError('image viewer stage not found');
+        }
+
+        stage.click();
+        await flushPromises();
+
+        expect(overlay.classList.contains('hidden')).toBe(true);
+        expect(preview.getAttribute('src')).toBeNull();
+    });
+
+    it('should switch between chat images from the image viewer', async () => {
+        renderImageChatBody();
+        ui = createChatUI();
+        await ui.init();
+
+        ui.appendMessage('assistant', 'image', {
+            images: [
+                { mime: 'image/png', data_base64: 'b25l' },
+                { mime: 'image/png', data_base64: 'dHdv' },
+            ],
+            skipAnimation: true,
+        });
+
+        const firstImage = document.querySelector('.chat-img');
+        if (!(firstImage instanceof HTMLImageElement)) {
+            throw new TypeError('first chat image not found');
+        }
+
+        firstImage.click();
+        await flushPromises();
+
+        const { overlay, preview } = requireImageViewer();
+        const { next, prev } = requireImageViewerNav();
+
+        expect(overlay.classList.contains('hidden')).toBe(false);
+        expect(preview.src.startsWith('data:image/png;base64,b25l')).toBe(true);
+
+        next.click();
+        await flushPromises();
+
+        expect(overlay.classList.contains('hidden')).toBe(false);
+        expect(preview.src.startsWith('data:image/png;base64,dHdv')).toBe(true);
+
+        prev.click();
+        await flushPromises();
+
+        expect(preview.src.startsWith('data:image/png;base64,b25l')).toBe(true);
+    });
+
+    it('should prevent launcher zoom shortcuts while image preview is open', async () => {
+        ui = createChatUI();
+        await renderAssistantImage(ui, true);
+
+        const image = requireChatImage();
+        image.click();
+        await flushPromises();
+
+        const wheelEvent = new WheelEvent('wheel', {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+            deltaY: 100,
+        });
+        document.dispatchEvent(wheelEvent);
+
+        expect(wheelEvent.defaultPrevented).toBe(true);
+
+        const keyEvent = new KeyboardEvent('keydown', {
+            bubbles: true,
+            cancelable: true,
+            ctrlKey: true,
+            key: '+',
+        });
+        document.dispatchEvent(keyEvent);
+
+        expect(keyEvent.defaultPrevented).toBe(true);
     });
 
     it('should not open image preview for thumbnails without a usable source', async () => {

@@ -84,6 +84,7 @@ export class VoiceInputService {
         const sessionId = ++this._sessionId;
         this._onStateChange = callbacks.onStateChange ?? null;
         this._onError = callbacks.onError ?? null;
+        this._nativeRecognitionActive = true;
         this._setState('starting');
         this._setState('listening');
 
@@ -105,6 +106,7 @@ export class VoiceInputService {
             );
         });
         this._sessionId += 1;
+        this._nativeRecognitionActive = false;
         if (this.isActive()) {
             this._setState('stopping');
         }
@@ -112,7 +114,6 @@ export class VoiceInputService {
     }
 
     private async _recognize(sessionId: number, onResult: VoiceResultCallback): Promise<void> {
-        this._nativeRecognitionActive = true;
         try {
             const language = this._getCurrentLang();
             this._tracer.info(`[VoiceInputService] Native recognition language: ${language}`);
@@ -132,7 +133,9 @@ export class VoiceInputService {
                 try {
                     onResult(text);
                 } catch (err) {
-                    this._tracer.error(`[VoiceInputService] onResult handler threw: ${String(err)}`);
+                    this._tracer.error(
+                        `[VoiceInputService] onResult handler threw: ${String(err)}`,
+                    );
                 }
             }
             this._finishSession('ended');
@@ -146,7 +149,9 @@ export class VoiceInputService {
             this._onError?.(payload);
             this._finishSession(payload.code === 'startup_failed' ? 'startup_failed' : 'error');
         } finally {
-            this._nativeRecognitionActive = false;
+            if (this._sessionId === sessionId) {
+                this._nativeRecognitionActive = false;
+            }
         }
     }
 

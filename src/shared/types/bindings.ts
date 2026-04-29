@@ -27,6 +27,8 @@ export const commands = {
 	getSystemLanguage: () => typedError<string, AppError>(__TAURI_INVOKE("get_system_language")),
 	// Retrieves log entries since a given timestamp
 	getLogs: (since: number) => typedError<LogEntry[], AppError>(__TAURI_INVOKE("get_logs", { since })),
+	// Retrieves log entries for a single console view since a given timestamp.
+	getConsoleLogs: (viewId: string, since: number) => typedError<LogEntry[], AppError>(__TAURI_INVOKE("get_console_logs", { viewId, since })),
 	// Returns aggregated console metadata for views and runtime statuses.
 	getConsoleOverview: () => typedError<ConsoleOverview, AppError>(__TAURI_INVOKE("get_console_overview")),
 	// Clears all stored log entries
@@ -157,8 +159,6 @@ export const commands = {
 	countTokens: (text: string, model: string | null) => typedError<number, string>(__TAURI_INVOKE("count_tokens", { text, model })),
 	// Sends an image generation request to the connected AI provider
 	generateImage: (request: ImageGenerationRequest) => typedError<ImageGenerationResponse, AppError>(__TAURI_INVOKE("generate_image", { request })),
-	// Starts image generation as a detached backend task and restores the window on completion.
-	generateImageBackground: (request: ImageGenerationRequest) => typedError<null, AppError>(__TAURI_INVOKE("generate_image_background", { request })),
 	// Cancels the current image generation request for the selected provider.
 	cancelImageGeneration: (provider: string) => typedError<null, AppError>(__TAURI_INVOKE("cancel_image_generation", { provider })),
 	// Returns the latest image-generation preview when the local image engine writes one.

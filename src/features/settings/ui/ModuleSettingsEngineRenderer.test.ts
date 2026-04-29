@@ -5,12 +5,12 @@ import { ModuleSettingsEngineRenderer } from './ModuleSettingsEngineRenderer';
 import { ModuleSettingsEngineFieldController } from './ModuleSettingsEngineFieldController';
 import {
     createEngineExtraArgsField,
+    getEngineExtraArgDocs,
     getEngineModelFileFilters,
     getEngineModelFileName,
     formatEngineFieldSaveValue,
     ModuleSettingsEngineInputFactory,
     parseEngineFieldValue,
-    renderEnginePerformanceModeField,
     setupInitialEngineFieldValue,
 } from './ModuleSettingsEngineFieldSupport';
 import { ModuleSettingsEngineHtmlBuilder } from './ModuleSettingsEngineHtmlBuilder';
@@ -164,7 +164,7 @@ describe('ModuleSettingsEngineRenderer', () => {
             {} as never,
         );
 
-        expect(imageHtml).toContain('t:ui.settings.engine.generation_presets:Generation Presets');
+        expect(imageHtml).toContain('t:ui.settings.engine.generation_settings:Generation Settings');
         expect(imageHtml).not.toContain('Auto download package');
         expect(imageHtml).toContain(
             't:ui.settings.engine.config_unavailable:Engine config unavailable (Tauri not connected)',
@@ -223,55 +223,22 @@ describe('ModuleSettingsEngineRenderer', () => {
         expect(document.querySelectorAll('.local-engine-select-menu')).toHaveLength(0);
     });
 
-    it('should render compute mode as a segmented control without a dropdown overlay', () => {
-        const { renderer } = createRendererHarness();
-        const container = document.createElement('div');
-        const config = {
-            engine_id: 'llamacpp',
-            compute_mode: 'gpu',
-            context_size: 4096,
-            model_path: null,
-            extra_args: [],
-        };
-
-        renderer._fieldRowRenderer.render(container, {
-            label: 'Compute Device',
-            key: 'compute_mode',
-            type: 'select',
-            isEngineConfig: true,
-            options: ['gpu', 'cpu'],
-            optionLabels: { gpu: 'GPU', cpu: 'CPU' },
-            defaultValue: 'gpu',
-            appId: 'llamacpp',
-            config,
-        });
-
-        expect(container.querySelector('.local-engine-segmented-control')).toBeInstanceOf(
-            HTMLDivElement,
-        );
-        expect(document.querySelector('.local-engine-select-menu')).toBeNull();
-
-        const cpuButton = container.querySelector(
-            '.local-engine-segmented-option[data-value="cpu"]',
-        ) as HTMLButtonElement;
-        cpuButton.click();
-
-        expect(config.compute_mode).toBe('cpu');
-        expect(cpuButton.classList.contains('is-selected')).toBe(true);
-    });
-
     it('should localize extra args field labels and actions', () => {
         const control = createEngineExtraArgsField((key, fallback) => `t:${key}:${fallback}`);
 
-        const hiddenInput = control.root.querySelector('.local-engine-tags-value');
-        expect(hiddenInput).toBeInstanceOf(HTMLInputElement);
+        const input = control.root.querySelector('.local-engine-extra-args-input');
+        const draft = control.root.querySelector('.local-engine-extra-args-draft');
+        expect(input).toBeInstanceOf(HTMLInputElement);
+        expect(draft).toBeInstanceOf(HTMLInputElement);
+        expect((draft as HTMLInputElement).placeholder).toBe(
+            't:ui.settings.engine.extra_args.placeholder:Add startup flags',
+        );
 
         control.setGroups(['--ctx-size 4096']);
 
-        const chip = control.root.querySelector('.local-engine-tag-chip');
-        expect(chip).toBeInstanceOf(HTMLButtonElement);
-        expect((chip as HTMLButtonElement).title).toBe(
-            't:ui.settings.engine.extra_args.remove:Remove',
+        expect((input as HTMLInputElement).value).toBe('--ctx-size 4096');
+        expect(control.root.querySelector('.local-engine-extra-arg-chip')?.textContent).toContain(
+            '--ctx-size 4096',
         );
     });
 
@@ -295,7 +262,7 @@ describe('ModuleSettingsEngineRenderer', () => {
         const popover = document.querySelector('.local-engine-args-popover') as HTMLElement;
         expect(popover.textContent).toContain('Manual llama.cpp flags');
 
-        (popover.querySelector('.local-engine-args-copy-all') as HTMLButtonElement).click();
+        (popover.querySelector('.local-engine-args-recommended') as HTMLButtonElement).click();
         expect(showToast).toHaveBeenCalled();
 
         const firstItem = popover.querySelector('.local-engine-args-item') as HTMLElement;
@@ -336,7 +303,26 @@ describe('ModuleSettingsEngineRenderer', () => {
         const popover = document.querySelector('.local-engine-args-popover') as HTMLElement;
         (popover.querySelector('.local-engine-args-recommended') as HTMLButtonElement).click();
 
-        expect(control.getGroups()).toEqual(['--diffusion-fa', '--fa', '--mmap', '--vae-tiling']);
+        expect(control.getGroups()).toEqual(['--diffusion-fa', '--mmap', '--vae-tiling']);
+    });
+
+    it('should expose official stable-diffusion.cpp startup flag names', () => {
+        const docs = getEngineExtraArgDocs('sdcpp');
+        const flags = docs.items.map((item) => item.flag);
+
+        expect(flags).toContain('--clip_l path');
+        expect(flags).toContain('--clip_g path');
+        expect(flags).toContain('--clip_vision path');
+        expect(flags).toContain('--init-img path');
+        expect(flags).toContain('--pm-style-strength 20');
+        expect(flags).toContain('--vae-tile-size 32x32');
+        expect(flags).toContain('--vae-tile-overlap 0.5');
+        expect(flags).toContain('--vae-relative-tile-size 0.5x0.5');
+        expect(flags).toContain('--timestep-shift 250');
+        expect(flags).not.toContain('--clip-l path');
+        expect(flags).not.toContain('--init-image path');
+        expect(flags).not.toContain('--style-ratio 20');
+        expect(flags).not.toContain('--schedule-shift 3');
     });
 
     it('should create text fields and parse values correctly', () => {
@@ -380,6 +366,17 @@ describe('ModuleSettingsEngineRenderer', () => {
             '4096',
             '--threads',
             '8',
+        ]);
+        expect(
+            formatEngineFieldSaveValue(
+                'extra_args',
+                String.raw`--clip_l "C:\My Models\clip.safetensors" --vae C:\vae.sft`,
+            ),
+        ).toEqual([
+            '--clip_l',
+            String.raw`C:\My Models\clip.safetensors`,
+            '--vae',
+            String.raw`C:\vae.sft`,
         ]);
     });
 
@@ -481,32 +478,6 @@ describe('ModuleSettingsEngineRenderer', () => {
         expect((browseBtn as HTMLButtonElement).textContent).toBe(
             't:ui.settings.engine.browse:Browse',
         );
-    });
-
-    it('should localize performance mode title and state', () => {
-        const debouncedSave = vi.fn();
-        const container = document.createElement('div');
-
-        renderEnginePerformanceModeField(
-            container,
-            'sdcpp',
-            {},
-            (key, fallback) => `t:${key}:${fallback}`,
-            debouncedSave,
-        );
-
-        const label = container.querySelector('.local-engine-field-label');
-        const status = container.querySelector('.local-engine-perf-status');
-        const checkbox = container.querySelector(
-            'input[type="checkbox"]',
-        ) as HTMLInputElement | null;
-
-        expect(label?.textContent).toBe('t:ui.settings.engine.performance_mode:Performance Mode');
-        expect(status?.textContent).toBe('t:ui.common.disabled:Disabled');
-
-        checkbox?.click();
-        expect(status?.textContent).toBe('t:ui.common.enabled:Enabled');
-        expect(debouncedSave).toHaveBeenCalledWith('sdcpp_performance_mode', true);
     });
 
     it('should allow both gguf and safetensors for image engines', async () => {

@@ -36,7 +36,7 @@ pub(super) fn classify_engine_start_failure(log: &str) -> Option<String> {
         || normalized.contains("failed to allocate compute")
     {
         return Some(
-            "Not enough memory to start the local model. Reduce context size or GPU layers, or use a smaller model."
+            "Not enough memory to start the local model. Reduce context size, switch compute mode, or use a smaller model."
                 .to_string(),
         );
     }
@@ -148,4 +148,25 @@ pub(super) async fn wait_for_health(endpoint: &str) -> Result<(), AppError> {
             "Engine health check timed out after {max_attempts} attempts (60s). Check engine logs for details."
         ),
     })
+}
+
+pub(super) async fn is_endpoint_healthy(endpoint: &str) -> bool {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_millis(900))
+        .build()
+    else {
+        return false;
+    };
+
+    for health_url in [
+        format!("{endpoint}/health"),
+        format!("{endpoint}/v1/models"),
+        format!("{endpoint}/"),
+    ] {
+        if matches!(client.get(&health_url).send().await, Ok(resp) if resp.status().is_success()) {
+            return true;
+        }
+    }
+
+    false
 }

@@ -103,6 +103,7 @@ describe('ConsoleUI lifecycle', () => {
             init: ReturnType<typeof vi.fn>;
             destroy: ReturnType<typeof vi.fn>;
             clearLogs: ReturnType<typeof vi.fn>;
+            clearAllLogs: ReturnType<typeof vi.fn>;
             getLogs: ReturnType<typeof vi.fn>;
             getLogsForView: ReturnType<typeof vi.fn>;
             getAvailableViews: ReturnType<typeof vi.fn>;
@@ -117,6 +118,7 @@ describe('ConsoleUI lifecycle', () => {
             init: vi.fn().mockResolvedValue(undefined),
             destroy: vi.fn(),
             clearLogs: vi.fn().mockResolvedValue(true),
+            clearAllLogs: vi.fn().mockResolvedValue(true),
             getLogs: vi.fn().mockReturnValue([]),
             getLogsForView: vi.fn().mockReturnValue([]),
             getAvailableViews: vi.fn().mockResolvedValue([{ id: 'general', label: 'General' }]),
@@ -255,6 +257,30 @@ describe('ConsoleUI lifecycle', () => {
         expect(clearButton.classList.contains('confirming')).toBe(false);
         expect(service.clearLogs).toHaveBeenCalledTimes(1);
         expect(service.clearLogs).toHaveBeenCalledWith('general');
+
+        vi.useRealTimers();
+    });
+
+    it('should require a second right click before clearing all logs', async () => {
+        vi.useFakeTimers();
+        const service = createServiceMock();
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+
+        const clearButton = document.getElementById('clear-logs-btn') as HTMLButtonElement;
+        clearButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+        expect(clearButton.classList.contains('confirming')).toBe(true);
+        expect(service.clearAllLogs).not.toHaveBeenCalled();
+        expect(service.clearLogs).not.toHaveBeenCalled();
+
+        clearButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(clearButton.classList.contains('confirming')).toBe(false);
+        expect(service.clearAllLogs).toHaveBeenCalledTimes(1);
+        expect(service.clearLogs).not.toHaveBeenCalled();
 
         vi.useRealTimers();
     });

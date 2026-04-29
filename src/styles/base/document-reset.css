@@ -77,9 +77,8 @@ button:focus-visible,
 a[href]:focus-visible,
 summary:focus-visible,
 [tabindex]:not([tabindex='-1']):focus-visible {
-    outline: 1px solid rgba(var(--primary-raw), 0.58);
-    outline-offset: 2px;
-    box-shadow: 0 0 0 3px rgba(var(--primary-raw), 0.14);
+    outline: none;
+    box-shadow: none;
 }
 
 /* Globals moved to top */

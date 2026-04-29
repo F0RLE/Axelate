@@ -96,6 +96,7 @@ export class AppUI {
             removeSelectedModule: (category) => {
                 this._deps.uiState.removeSelectedModule(category);
             },
+            stopSelectedApp: (app, category) => this._platformService.stop(app, category),
             openAppSelection: (category) => this.openAppSelection(category),
             updateMultiSlotBadge: () => this._updateMultiSlotBadge(),
             activateAiSlot: (category, app) => {
@@ -173,7 +174,7 @@ export class AppUI {
             updateModalSelection: (appId) => this._modalManager.updateSelection(appId),
             bumpLaunchSelectionVersion: (category) =>
                 this._moduleLifecycle.bumpLaunchSelectionVersion(category),
-            stopSelectedApp: (app) => this._platformService.stop(app),
+            stopSelectedApp: (app, category) => this._platformService.stop(app, category),
             launchSelectedApp: (category, app, launchSelectionVersion, launchApp) =>
                 this._moduleLifecycle.launchSelectedApp(
                     category,
@@ -355,7 +356,7 @@ export class AppUI {
             return;
         }
 
-        void this._platformService.stop(app).catch((err: unknown) => {
+        void this._platformService.stop(app, category).catch((err: unknown) => {
             this._deps.tracer.warn(
                 `[AppUI] Failed to stop removed module ${app.id}: ${String(err)}`,
             );

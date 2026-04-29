@@ -6,6 +6,35 @@ use super::github_releases::{
     Asset, HardwareProfile, Platform, PlatformArch, PlatformOs, ReleaseAsset,
 };
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+enum CudaTrack {
+    Cuda12,
+    Cuda13,
+}
+
+impl CudaTrack {
+    const fn min_driver_major(self) -> u32 {
+        match self {
+            Self::Cuda12 => 525,
+            Self::Cuda13 => 580,
+        }
+    }
+
+    const fn base_score(self) -> i32 {
+        match self {
+            Self::Cuda12 => 450,
+            Self::Cuda13 => 500,
+        }
+    }
+
+    const fn runtime_score(self) -> i32 {
+        match self {
+            Self::Cuda12 => 180,
+            Self::Cuda13 => 200,
+        }
+    }
+}
+
 pub(super) async fn detect_hardware_profile() -> HardwareProfile {
     let probe = probe_gpu_info().await;
     HardwareProfile::from_probe(&probe)
@@ -32,14 +61,24 @@ pub(super) fn select_release_assets(
         && platform.os == PlatformOs::Windows
         && hardware.accelerator == AcceleratorClass::NvidiaCuda
     {
+        let supported_cuda_candidates = main_candidates
+            .iter()
+            .copied()
+            .filter(|idx| {
+                assets
+                    .get(*idx)
+                    .and_then(|asset| detect_cuda_track(&asset.name))
+                    .is_some_and(|track| hardware.supports_cuda_track(track))
+            })
+            .collect::<Vec<_>>();
         let has_cuda_main = main_candidates.iter().copied().any(|idx| {
             assets
                 .get(idx)
                 .and_then(|asset| detect_cuda_track(&asset.name))
-                .is_some()
+                .is_some_and(|track| hardware.supports_cuda_track(track))
         });
 
-        for main_idx in &main_candidates {
+        for main_idx in &supported_cuda_candidates {
             let main = assets.get(*main_idx)?;
             if let Some(cuda_track) = detect_cuda_track(&main.name)
                 && let Some(runtime_idx) = runtime_candidates.iter().copied().find(|idx| {
@@ -53,19 +92,20 @@ pub(super) fn select_release_assets(
                     asset_to_release_asset(main)?,
                 ]);
             }
-
-            if detect_cuda_track(&main.name).is_some() {
-                continue;
-            }
-
-            if !has_cuda_main {
-                return Some(vec![asset_to_release_asset(main)?]);
-            }
         }
 
         if has_cuda_main {
             return None;
         }
+
+        for main_idx in &main_candidates {
+            let main = assets.get(*main_idx)?;
+            if detect_cuda_track(&main.name).is_none() {
+                return Some(vec![asset_to_release_asset(main)?]);
+            }
+        }
+
+        return None;
     }
 
     let selected_main = main_candidates.first().copied()?;
@@ -217,8 +257,12 @@ fn main_score(module_id: &str, name: &str, hardware: HardwareProfile) -> i32 {
 
     match hardware.accelerator {
         AcceleratorClass::NvidiaCuda => {
-            if detect_cuda_track(&lower).is_some() {
-                score += 1_000;
+            if let Some(cuda_track) = detect_cuda_track(&lower) {
+                score += if hardware.supports_cuda_track(cuda_track) {
+                    1_000 + cuda_track.base_score()
+                } else {
+                    -1_500
+                };
             }
             if lower.contains("vulkan")
                 || lower.contains("rocm")
@@ -329,11 +373,7 @@ fn comfyui_main_score(lower: &str, hardware: HardwareProfile) -> i32 {
 pub(super) fn base_main_score(lower: &str) -> i32 {
     let mut score = 0;
     if let Some(cuda_track) = detect_cuda_track(lower) {
-        score += match cuda_track {
-            "cuda13" => 500,
-            "cuda12" => 450,
-            _ => 400,
-        };
+        score += cuda_track.base_score();
     }
 
     if lower.contains("vulkan") {
@@ -389,23 +429,18 @@ fn has_avx_marker(lower: &str) -> bool {
 }
 
 fn runtime_score(name: &str) -> i32 {
-    match detect_cuda_track(name) {
-        Some("cuda13") => 200,
-        Some("cuda12") => 180,
-        Some(_) => 160,
-        None => 0,
-    }
+    detect_cuda_track(name).map_or(0, CudaTrack::runtime_score)
 }
 
-fn detect_cuda_track(name: &str) -> Option<&'static str> {
+fn detect_cuda_track(name: &str) -> Option<CudaTrack> {
     let lower = name.to_ascii_lowercase();
 
     if lower.contains("cuda-12") || lower.contains("cuda12") || lower.contains("cu12") {
-        return Some("cuda12");
+        return Some(CudaTrack::Cuda12);
     }
 
     if lower.contains("cuda-13") || lower.contains("cuda13") || lower.contains("cu13") {
-        return Some("cuda13");
+        return Some(CudaTrack::Cuda13);
     }
 
     None
@@ -450,6 +485,13 @@ impl HardwareProfile {
                 driver_major > major || (driver_major == major && driver_minor >= minor)
             }
             _ => false,
+        }
+    }
+
+    fn supports_cuda_track(&self, track: CudaTrack) -> bool {
+        match self.cuda_driver_major {
+            Some(driver_major) => driver_major >= track.min_driver_major(),
+            None => track == CudaTrack::Cuda12,
         }
     }
 }

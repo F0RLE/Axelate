@@ -38,7 +38,7 @@ export type EngineInfoPopoverHandle = {
 
 export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfoPopoverHandle {
     const { anchor, appId, runtime } = deps;
-    const docs = getEngineExtraArgDocs(appId);
+    const docs = getEngineExtraArgDocs(appId, deps.translate);
     const popover = document.createElement('div');
     popover.className = 'local-engine-args-popover';
     popover.dataset['appId'] = appId;
@@ -63,13 +63,6 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         'Recommended',
     );
     actions.appendChild(recommendedBtn);
-
-    const addAllBtn = document.createElement('button');
-    addAllBtn.type = 'button';
-    addAllBtn.className = 'local-engine-args-copy-all';
-    addAllBtn.dataset['action'] = 'add-all';
-    addAllBtn.textContent = deps.translate('ui.settings.engine.extra_args.add_all', 'Add all');
-    actions.appendChild(addAllBtn);
 
     const list = document.createElement('div');
     list.className = 'local-engine-args-list';
@@ -105,6 +98,7 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
     });
 
     popover.append(title, subtitle, actions, list);
+
     const appendFlags = (flags: string[]) => {
         const added = deps.appendExtraArgs(appId, flags);
         if (flags.length > 1) {
@@ -143,12 +137,6 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
     popover.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) {
-            return;
-        }
-
-        const addAllAction = target.closest<HTMLButtonElement>('[data-action="add-all"]');
-        if (addAllAction instanceof HTMLButtonElement) {
-            appendFlags(docs.items.map((item) => item.flag));
             return;
         }
 
@@ -198,13 +186,14 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         const availableWidth = modalRect.width;
         const edgeGap = Math.max(16, Math.min(32, Math.round(availableWidth * 0.015)));
         const gap = Math.max(14, Math.min(20, Math.round(availableWidth * 0.008)));
-        const panelWidth = Math.max(300, Math.min(328, Math.round(availableWidth * 0.18)));
+        const panelWidth = Math.max(380, Math.min(460, Math.round(availableWidth * 0.24)));
 
         modal?.style.setProperty('--app-modal-edge-gap', `${edgeGap}px`);
         modal?.style.setProperty('--app-modal-popover-width', `${panelWidth}px`);
         modal?.style.setProperty('--app-modal-popover-spacing', `${gap}px`);
     };
     updatePosition();
+    modal?.classList.add('popover-open');
     popover.style.opacity = '0';
     popover.style.transition = 'opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1)';
     runtime.requestAnimationFrame(() => {
@@ -229,14 +218,17 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         globalThis.clearTimeout(settlePositionTimer);
 
         popover.classList.add('closing');
+        modal?.classList.remove('popover-open');
+        modal?.classList.add('popover-closing');
 
         globalThis.setTimeout(() => {
+            modal?.classList.remove('popover-closing');
             modal?.style.removeProperty('--app-modal-edge-gap');
             modal?.style.removeProperty('--app-modal-popover-width');
             modal?.style.removeProperty('--app-modal-popover-spacing');
             popover.remove();
             deps.onClose();
-        }, 280);
+        }, 190);
     };
 
     const handleDocumentClick = (event: MouseEvent) => {

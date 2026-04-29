@@ -32,6 +32,10 @@ type AIBridgeMessageControllerDeps = {
     onSuccessfulResponse: () => void;
 };
 
+export type AIBridgeSendMessageOptions = {
+    originalPrompt?: string;
+};
+
 export class AIBridgeMessageController {
     constructor(private readonly _deps: AIBridgeMessageControllerDeps) {}
 
@@ -40,6 +44,7 @@ export class AIBridgeMessageController {
         source: MessageSource,
         attachments: { name: string; type: string; data_base64: string }[],
         history: IChatMessage[],
+        options: AIBridgeSendMessageOptions = {},
     ): Promise<IBridgeResponse> {
         if (this._deps.manager.activeProviderId === null) {
             return this._handleMissingProvider(source);
@@ -58,7 +63,7 @@ export class AIBridgeMessageController {
             const isImageProvider = this._deps.providerPolicy.isImageProvider(providerId);
 
             if (isImageProvider) {
-                return await this._sendImageMessage(providerId, text, source);
+                return await this._sendImageMessage(providerId, text, source, options);
             }
 
             return await this._sendTextMessage(providerId, text, attachments, history, source);
@@ -72,50 +77,76 @@ export class AIBridgeMessageController {
         }
     }
 
+    public async prepareImagePrompt(text: string): Promise<IBridgeResponse> {
+        if (this._deps.manager.activeProviderId === null) {
+            return this._handleMissingProvider('service');
+        }
+
+        await this._deps.manager.refreshActiveApiKey();
+        if (this._deps.manager.apiKey === null && this._deps.manager.isActive() === false) {
+            return this._handleMissingApiKey('service');
+        }
+
+        try {
+            const providerId = this._deps.manager.activeProviderId;
+            const backendProviderId = resolveCustomProviderBackendId(providerId);
+            const requestOptions = this._deps.providerPolicy.buildRequestOptions({
+                hasApiKey: this._deps.manager.apiKey !== null,
+                maxOutputTokens: Math.min(this._deps.manager.maxOutputTokens ?? 320, 420),
+                thinkingLevel: 'off',
+                webSearchEnabled: false,
+            });
+            const request = constructChatRequest(
+                [],
+                {
+                    role: 'user',
+                    content: text,
+                },
+                [],
+                {
+                    providerId: backendProviderId,
+                    model: this._deps.manager.model || 'default',
+                    apiKey: null,
+                    sessionId: '',
+                    ...requestOptions,
+                },
+            );
+
+            const response = await this._deps.transport.sendSilent(request);
+            return this._withModelContext(response, providerId, request.model);
+        } catch (error: unknown) {
+            const errorMsg =
+                error instanceof Error
+                    ? error.message
+                    : this._deps.translate('ui.ai.communication_failure', 'Communication failure');
+            this._deps.tracer.error('[AIBridge] Silent prompt preparation failed:', error);
+            return { ok: false, error: errorMsg };
+        }
+    }
+
     private async _sendImageMessage(
         providerId: string,
         text: string,
         source: MessageSource,
+        options: AIBridgeSendMessageOptions,
     ): Promise<IBridgeResponse> {
         const context = this._deps.getContext();
-        const settings = context?.settingsService.getSettings() as
-            | Record<string, unknown>
-            | undefined;
         const selectedImageModule = context?.stateStore.getSelectedModule('ai_image');
         const settingsKey = selectedImageModule?.id ?? providerId;
-        const performanceMode = this._deps.providerPolicy.isImagePerformanceModeEnabled(
-            settings,
-            settingsKey,
-        );
         const backendProviderId = resolveCustomProviderBackendId(providerId);
+        const originalPrompt = options.originalPrompt?.trim();
 
         const request: IImageGenerationRequest = {
             provider: backendProviderId,
             prompt: text,
-            original_prompt: text,
-            model: this._deps.manager.model || 'default',
+            original_prompt:
+                originalPrompt !== undefined && originalPrompt !== '' ? originalPrompt : text,
+            model: this._deps.manager.model,
             settings_key: settingsKey,
             session_id: this._deps.manager.sessionId,
         };
 
         this._deps.events.broadcastReplaceChunk('image status=starting\n');
-
-        if (performanceMode) {
-            const backgroundResponse = await this._deps.transport.generateImageBackground(request);
-            if (!backgroundResponse.ok) {
-                return this._handleTransportResponse(
-                    this._withModelContext(backgroundResponse, providerId, request.model),
-                    source,
-                );
-            }
-
-            this._deps.showToast(
-                this._deps.translate('ui.ai.performance_mode_active', 'Performance mode active'),
-                'success',
-            );
-            await context?.windowService.close();
-            return { ok: true, text: '' };
-        }
 
         this._deps.onLongActivityStart();
         const imageResponse = await this._deps.transport.generateImage(request).finally(() => {

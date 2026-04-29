@@ -350,8 +350,8 @@ describe('AppUI lifecycle', () => {
         appUI.clearModuleCard('ai_image');
         expect(card.classList.contains('empty')).toBe(true);
         expect(stopAiProviderMock).toHaveBeenCalled();
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(textApp);
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(textApp, 'ai_text');
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp, 'ai_image');
     });
 
     it('should stop the current services module when clearing its card', () => {
@@ -374,7 +374,7 @@ describe('AppUI lifecycle', () => {
 
         appUI.clearModuleCard('services');
 
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(serviceApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(serviceApp, 'services');
     });
 
     it('should not stop the previous services module when only switching selected cards', () => {
@@ -580,7 +580,7 @@ describe('AppUI lifecycle', () => {
         closeBadge.click();
 
         expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('ai_image');
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp, 'ai_image');
         expect(card.dataset['currentModule']).toBe('text-model');
     });
 
@@ -631,13 +631,13 @@ describe('AppUI lifecycle', () => {
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenCalledWith('svc');
         expect(uiStateMocks.setSelectedModule).toHaveBeenCalled();
-        expect(launchAppMock).not.toHaveBeenCalled();
+        expect(launchAppMock).toHaveBeenCalledWith('services', serviceApp);
 
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenLastCalledWith(null);
     });
 
-    it('should keep selected service cards as indicators without probing runtime status', async () => {
+    it('should show selected service runtime status after launch', async () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="empty">
@@ -662,9 +662,9 @@ describe('AppUI lifecycle', () => {
         await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 
         const card = document.getElementById('services-module-card') as HTMLElement;
-        expect(platformServiceMock.getStatus).not.toHaveBeenCalled();
-        expect(card.classList.contains('module-running')).toBe(false);
-        expect(card.dataset['runtimeStatus']).toBe('stopped');
+        expect(platformServiceMock.getStatus).toHaveBeenCalledWith(serviceApp);
+        expect(card.classList.contains('module-running')).toBe(true);
+        expect(card.dataset['runtimeStatus']).toBe('running');
     });
 
     it('should show a placeholder toast instead of selecting or downloading coming-soon modules', async () => {
@@ -694,7 +694,7 @@ describe('AppUI lifecycle', () => {
         expect(launchAppMock).not.toHaveBeenCalled();
     });
 
-    it('should not launch or stop services during quick reselection', async () => {
+    it('should stop stale service launch during quick reselection', async () => {
         appUI = createAppUI();
 
         let releaseFirstLaunch!: () => void;
@@ -741,9 +741,11 @@ describe('AppUI lifecycle', () => {
         releaseFirstLaunch();
         await Promise.resolve();
         await Promise.resolve();
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 
-        expect(launchApp).not.toHaveBeenCalled();
-        expect(platformServiceMock.stop).not.toHaveBeenCalled();
+        expect(launchApp).toHaveBeenCalledWith('services', firstApp);
+        expect(launchApp).toHaveBeenCalledWith('services', secondApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(firstApp);
     });
 
     it('should not reopen modal after delete if app selection was already closed', async () => {

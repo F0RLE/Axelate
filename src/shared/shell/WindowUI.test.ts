@@ -292,6 +292,14 @@ describe('WindowUI lifecycle', () => {
         document.dispatchEvent(blockedShortcut);
         expect(blockedShortcut.defaultPrevented).toBe(true);
 
+        const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            bubbles: true,
+            cancelable: true,
+        });
+        document.dispatchEvent(tabEvent);
+        expect(tabEvent.defaultPrevented).toBe(true);
+
         const plainContext = new MouseEvent('contextmenu', {
             bubbles: true,
             cancelable: true,

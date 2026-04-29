@@ -64,30 +64,4 @@ export class AIBridgeProviderPolicy {
 
         return requestOptions;
     }
-
-    public isImagePerformanceModeEnabled(
-        settings: Record<string, unknown> | undefined,
-        settingsKey: string,
-    ): boolean {
-        return (
-            this._readBooleanSetting(settings, `${settingsKey}_performance_mode`) ||
-            this._readBooleanSetting(settings, 'sdcpp_performance_mode')
-        );
-    }
-
-    private _readBooleanSetting(
-        settings: Record<string, unknown> | undefined,
-        key: string,
-    ): boolean {
-        const value = settings?.[key];
-        if (typeof value === 'boolean') {
-            return value;
-        }
-
-        if (typeof value === 'string') {
-            return value.trim().toLowerCase() === 'true';
-        }
-
-        return false;
-    }
 }

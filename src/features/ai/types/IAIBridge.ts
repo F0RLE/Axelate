@@ -7,6 +7,10 @@ import type {
     IImageGenerationPreview,
 } from './aiTypes';
 
+export type IAIBridgeSendMessageOptions = {
+    originalPrompt?: string;
+};
+
 export interface IAIBridge {
     isActive(): boolean;
     getActiveProvider(): { id: string; name: string } | null;
@@ -15,9 +19,11 @@ export interface IAIBridge {
         source?: MessageSource,
         attachments?: { name: string; type: string; data_base64: string }[],
         history?: IChatMessage[],
+        options?: IAIBridgeSendMessageOptions,
     ): Promise<IBridgeResponse>;
     startProvider(providerId: string): Promise<boolean>;
     stopProvider(): void;
+    stopEngineSlot(capability: 'text' | 'image' | 'vision'): Promise<void>;
     clearHistory(): Promise<void>;
     getHistory(): Promise<IChatMessage[]>;
     cancelTextGeneration(): Promise<boolean>;

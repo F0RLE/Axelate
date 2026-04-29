@@ -3,6 +3,7 @@ import type { DownloadModuleOutcome, ModuleService } from './ModuleService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { isApiApp } from '@/shared/utils/moduleTypeUtils';
+import { isAiCategory } from '@/shared/utils/moduleCategoryPolicy';
 
 type ModulePlatformLogger = Pick<LoggerService, 'info'>;
 export type ModuleRuntimeStatus = 'running' | 'stopped' | string;
@@ -54,7 +55,7 @@ export class ModulePlatformService {
      * Stops a running module or provider.
      * @param app The module to stop.
      */
-    public async stop(app: IApp): Promise<boolean> {
+    public async stop(app: IApp, category?: string): Promise<boolean> {
         const isApi = this._isApiModule(app);
         const { activeProviderId, isRunning } = this._aiBridge.getState();
 
@@ -74,6 +75,11 @@ export class ModulePlatformService {
             this._tracer.info(
                 `[ModulePlatformService] Skip local stop for externally managed module: ${app.id}`,
             );
+            return true;
+        }
+
+        if (category !== undefined && isAiCategory(category)) {
+            await this._stopAiEngineSlot(category);
             return true;
         }
 
@@ -151,5 +157,11 @@ export class ModulePlatformService {
 
     private _isApiModule(app: IApp): boolean {
         return isApiApp(app);
+    }
+
+    private async _stopAiEngineSlot(category: string): Promise<void> {
+        const capability = category === 'ai_image' ? 'image' : 'text';
+        this._tracer.info(`[ModulePlatformService] Force stopping AI engine slot: ${capability}`);
+        await this._aiBridge.stopEngineSlot(capability);
     }
 }

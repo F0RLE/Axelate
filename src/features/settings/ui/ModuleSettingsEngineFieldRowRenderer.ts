@@ -146,10 +146,7 @@ export class ModuleSettingsEngineFieldRowRenderer {
             extraArgsControl.root.style.cursor = 'pointer';
             extraArgsControl.root.addEventListener('click', (event) => {
                 const target = event.target as Node;
-                if (
-                    target === extraArgsControl.root ||
-                    target === extraArgsControl.root.firstChild
-                ) {
+                if (target === extraArgsControl.root) {
                     event.preventDefault();
                     event.stopPropagation();
                     this._deps.toggleInfoPopover(infoButton, options.appId, options.config);
