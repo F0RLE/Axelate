@@ -857,6 +857,53 @@ describe('DownloadUI', () => {
             expect(list?.querySelectorAll('.download-item-card').length).toBe(0);
         });
 
+        it('should return downloads layout to empty state after final cleanup', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-final',
+                        progress: 0.4,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            expect(
+                document
+                    .getElementById('downloads-container')
+                    ?.classList.contains('active-download'),
+            ).toBe(true);
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-final',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+
+            vi.advanceTimersByTime(2100);
+
+            expect(
+                document
+                    .getElementById('downloads-container')
+                    ?.classList.contains('active-download'),
+            ).toBe(false);
+            expect(
+                document.getElementById('downloads-body')?.classList.contains('empty-state'),
+            ).toBe(true);
+            expect(
+                document.getElementById('downloads-empty-text')?.classList.contains('hidden'),
+            ).toBe(false);
+            expect(document.getElementById('downloads-item-label')?.textContent).toBe(
+                'No active downloads',
+            );
+        });
+
         it('should cancel stale terminal cleanup when the same module restarts downloading', () => {
             ui.init();
 
