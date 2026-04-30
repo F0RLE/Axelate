@@ -179,6 +179,7 @@ export class ChatSendController {
 
         let streamingHandle: StreamingMessageHandle | null = null;
         let imageHandle: ImageGenerationHandle | null = null;
+        let streamingHandle: StreamingMessageHandle | null = null;
         let shouldStopImageEngine = false;
 
         try {

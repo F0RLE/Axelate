@@ -238,6 +238,34 @@ describe('ChatSendController', () => {
         expect(options.handleError).not.toHaveBeenCalled();
     });
 
+    it('cleans the pending text bubble when a cancelled request rejects', async () => {
+        let rejectSend: (error: unknown) => void = () => {
+            throw new Error('sendMessage promise was not started');
+        };
+        const { controller, options, sendMessage, streamingHandle } = createController();
+        sendMessage.mockImplementation(
+            () =>
+                new Promise((_resolve, reject) => {
+                    rejectSend = reject;
+                }),
+        );
+        const input = document.createElement('textarea');
+        input.value = 'hello';
+
+        const sendPromise = controller.sendChat(input);
+        for (let index = 0; index < 10 && sendMessage.mock.calls.length === 0; index += 1) {
+            await Promise.resolve();
+        }
+
+        await controller.cancelActiveSend();
+        rejectSend(new Error('transport aborted'));
+        await sendPromise;
+
+        expect(streamingHandle.cancel).toHaveBeenCalledOnce();
+        expect(options.handleResponse).not.toHaveBeenCalled();
+        expect(options.handleError).not.toHaveBeenCalled();
+    });
+
     it('stops the image engine after a successful image send', async () => {
         const { controller, options, aiBridge } = createController();
         aiBridge.getState.mockReturnValue({ activeProviderId: 'sdcpp', isRunning: true });
