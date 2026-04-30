@@ -55,7 +55,15 @@ export class AIProviderManager {
     }
 
     public async startProvider(providerId: string): Promise<boolean> {
-        if (this._activeProviderId === providerId) return true;
+        if (this._activeProviderId === providerId) {
+            await this.refreshActiveApiKey();
+            if (!this.isActive()) {
+                this.stopProvider();
+                return false;
+            }
+
+            return true;
+        }
 
         this._tracer.info(`[AIProviderManager] Switching provider to: ${providerId}`);
 
@@ -166,6 +174,9 @@ export class AIProviderManager {
         if (this._activeProviderId !== null) {
             const hasApiKey = await this._resolveHasApiKey(this._activeProviderId);
             this._hasApiKey = this._isLocalProvider(this._activeProviderId) || hasApiKey;
+            if (!this._hasApiKey && !this._isLocalProvider(this._activeProviderId)) {
+                this.stopProvider();
+            }
         }
     }
 

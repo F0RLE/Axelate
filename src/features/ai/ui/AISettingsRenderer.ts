@@ -300,8 +300,8 @@ class AISettingsRenderer extends BaseComponent {
         keyProviderId: string,
         appId: string,
     ): Promise<void> {
-        await this._keyController.removeClearedStoredKey(input, keyProviderId);
-        if (input.value.trim() === '') {
+        const removed = await this._keyController.removeClearedStoredKey(input, keyProviderId);
+        if (removed && input.value.trim() === '') {
             this._resetKeyCheckButton(appId);
         }
     }

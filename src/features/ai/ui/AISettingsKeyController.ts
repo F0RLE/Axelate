@@ -42,13 +42,13 @@ export class AISettingsKeyController {
         target.dataset['keyDirty'] = 'true';
     }
 
-    public async removeClearedStoredKey(input: KeyInput, providerId: string): Promise<void> {
+    public async removeClearedStoredKey(input: KeyInput, providerId: string): Promise<boolean> {
         if (input.value.trim() !== '') {
-            return;
+            return false;
         }
 
         if (input.dataset['keyRemoveInFlight'] === 'true') {
-            return;
+            return false;
         }
 
         input.dataset['keyRemoveInFlight'] = 'true';
@@ -59,12 +59,14 @@ export class AISettingsKeyController {
                 this._options.getTranslator()('ui.settings.key_removed', 'API key removed'),
                 'success',
             );
+            return true;
         } catch (error: unknown) {
             this._options.tracer.error('[AISettingsKeyController] Key removal failed:', error);
             this._showToast(
                 this._options.getTranslator()('ui.settings.key_remove_error', 'Key remove error'),
                 'error',
             );
+            return false;
         } finally {
             delete input.dataset['keyRemoveInFlight'];
         }
