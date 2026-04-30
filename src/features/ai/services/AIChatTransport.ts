@@ -11,6 +11,7 @@ import type { AITransportContext } from './AIBridgeContext';
 
 type AIChatTransportLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 const STALE_REQUEST_CANCEL_TIMEOUT_MS = 750;
+const AI_REQUEST_TIMEOUT_MESSAGE = 'AI request timed out';
 
 /**
  * Safely extracts a human-readable error string from any error shape.
@@ -152,7 +153,7 @@ export class AIChatTransport implements IChatTransport {
                     thoughtChannel,
                 }),
                 90000,
-                'AI request timed out',
+                AI_REQUEST_TIMEOUT_MESSAGE,
             );
 
             if (
@@ -166,6 +167,9 @@ export class AIChatTransport implements IChatTransport {
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] IPC error:', error);
+            if (errorMsg === AI_REQUEST_TIMEOUT_MESSAGE) {
+                await this._cancelStaleActiveRequest(requestId);
+            }
             return { ok: false, error: errorMsg };
         } finally {
             if (this._activeChatRequestId === requestId) {
@@ -179,11 +183,16 @@ export class AIChatTransport implements IChatTransport {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
+        if (this._activeChatRequestId !== null) {
+            await this._cancelStaleActiveRequest(this._activeChatRequestId);
+        }
+
         const requestId = this._generateRequestId();
         const requestWithId: IChatRequest = {
             ...request,
             request_id: requestId,
         };
+        this._activeChatRequestId = requestId;
         const chatChannel = new Channel<IStreamChunkEnvelope>();
         const thoughtChannel = new Channel<IStreamChunkEnvelope>();
 
@@ -195,14 +204,21 @@ export class AIChatTransport implements IChatTransport {
                     thoughtChannel,
                 }),
                 90000,
-                'AI request timed out',
+                AI_REQUEST_TIMEOUT_MESSAGE,
             );
 
             return this._normalizeResponse(response);
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] Silent IPC error:', error);
+            if (errorMsg === AI_REQUEST_TIMEOUT_MESSAGE) {
+                await this._cancelStaleActiveRequest(requestId);
+            }
             return { ok: false, error: errorMsg };
+        } finally {
+            if (this._activeChatRequestId === requestId) {
+                this._activeChatRequestId = null;
+            }
         }
     }
 

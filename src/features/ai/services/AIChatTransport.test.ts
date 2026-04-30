@@ -145,8 +145,16 @@ describe('AIChatTransport', () => {
         });
 
         it('should timeout after 90 seconds', async () => {
-            // Invoke never resolves
-            mockCore.tauriProvider.invoke.mockReturnValue(new Promise(() => {}));
+            let requestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+                    requestId = (args['request'] as { request_id: string }).request_id;
+                    return new Promise(() => {});
+                },
+            );
 
             const sendPromise = transport.send(makeRequest());
 
@@ -155,6 +163,9 @@ describe('AIChatTransport', () => {
 
             const result = await sendPromise;
             expect(result).toEqual({ ok: false, error: 'AI request timed out' });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId,
+            });
         });
 
         it('should extract message from plain error objects', async () => {
@@ -207,6 +218,96 @@ describe('AIChatTransport', () => {
 
             vi.advanceTimersByTime(90_001);
             await firstSend;
+        });
+
+        it('should keep timed-out requests cancellable before clearing active state', async () => {
+            let requestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+
+                    requestId = (args['request'] as { request_id: string }).request_id;
+                    return new Promise(() => {});
+                },
+            );
+
+            const sendPromise = transport.send(makeRequest());
+            vi.advanceTimersByTime(90_001);
+
+            await expect(sendPromise).resolves.toEqual({
+                ok: false,
+                error: 'AI request timed out',
+            });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId,
+            });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((transport as any)._activeChatRequestId).toBeNull();
+        });
+    });
+
+    describe('sendSilent', () => {
+        it('should register its request and cancel stale active work before sending', async () => {
+            let sendCalls = 0;
+            let firstRequestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+
+                    sendCalls += 1;
+                    const request = args['request'] as { request_id: string };
+                    if (sendCalls === 1) {
+                        firstRequestId = request.request_id;
+                        return new Promise(() => {});
+                    }
+                    return Promise.resolve({ ok: true, reply: { text: 'silent' } });
+                },
+            );
+
+            const firstSend = transport.send(makeRequest());
+            await Promise.resolve();
+
+            await expect(transport.sendSilent(makeRequest())).resolves.toEqual({
+                ok: true,
+                text: 'silent',
+            });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId: firstRequestId,
+            });
+
+            vi.advanceTimersByTime(90_001);
+            await firstSend;
+        });
+
+        it('should cancel a timed-out silent request before clearing active state', async () => {
+            let requestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+
+                    requestId = (args['request'] as { request_id: string }).request_id;
+                    return new Promise(() => {});
+                },
+            );
+
+            const sendPromise = transport.sendSilent(makeRequest());
+            vi.advanceTimersByTime(90_001);
+
+            await expect(sendPromise).resolves.toEqual({
+                ok: false,
+                error: 'AI request timed out',
+            });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId,
+            });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((transport as any)._activeChatRequestId).toBeNull();
         });
     });
 
@@ -504,9 +605,11 @@ describe('AIChatTransport', () => {
     // ---------------------------------------------------------- missing branches
     describe('Missing branch cases', () => {
         it('should hit timeout error line (Line 45)', async () => {
-            // Need the timeout to actually reject
-            mockCore.tauriProvider.invoke.mockImplementation(() => {
-                return new Promise(() => {}); // never resolves
+            mockCore.tauriProvider.invoke.mockImplementation((command: string) => {
+                if (command === 'cancel_chat_generation') {
+                    return Promise.resolve(true);
+                }
+                return new Promise(() => {});
             });
 
             // Start send

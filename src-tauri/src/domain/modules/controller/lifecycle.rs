@@ -155,11 +155,16 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     async fn register_spawned_child(&self, mut child: Child) -> Result<ControlResponse, AppError> {
-        let pid = child.id().ok_or_else(|| AppError::Internal {
-            request_id: None,
-            message: format!("Spawned process for {} has no PID", self.module_id),
-        })?;
-        self.persist_or_kill_spawned_child(&mut child, pid as usize)
+        let Some(pid) = child.id().map(|pid| pid as usize) else {
+            self.kill_unregistered_child(&mut child, "missing PID after spawn")
+                .await;
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Module {} exited before PID capture", self.module_id),
+            });
+        };
+
+        self.persist_or_kill_spawned_child(&mut child, pid)
             .await
             .inspect_err(|error| {
                 tracing::error!(
@@ -244,11 +249,20 @@ impl<'a> LifecycleExecutor<'a> {
             }
         }
 
-        if let Err(error) = child.wait().await {
-            tracing::warn!(
-                module_id,
-                "Failed to wait module child after kill attempt: {error}"
-            );
+        match timeout(Duration::from_secs(5), child.wait()).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(
+                    module_id,
+                    "Failed to wait module child after kill attempt: {error}"
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    module_id,
+                    "Timed out waiting for module child after kill attempt"
+                );
+            }
         }
     }
 
@@ -302,7 +316,6 @@ impl<'a> LifecycleExecutor<'a> {
     /// Gracefully stops a module with escalation
     pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
         tracing::info!("Stopping module: {}", self.module_id);
-        let script_entry_path = self.resolve_script_entry_path(manifest)?;
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
@@ -405,6 +418,11 @@ impl<'a> LifecycleExecutor<'a> {
                 }
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
+        let script_entry_path = self.resolve_script_entry_path(manifest)?;
+        if let Some(entry_path) = script_entry_path.as_ref() {
+            self.kill_matching_script_processes(entry_path).await?;
         }
 
         if self

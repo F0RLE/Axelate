@@ -30,7 +30,11 @@ export class AIProviderManager {
 
     public async init(): Promise<void> {
         // Initialize Session ID using Secure Storage with UI state as a recovery fallback.
-        let sid = await this._getSecureVal('ai_session_id');
+        const secureSid = await this._getSecureVal('ai_session_id').catch((error: unknown) => {
+            this._tracer.error('[AIProviderManager] Failed to read ai_session_id:', error);
+            return null;
+        });
+        let sid = secureSid;
         if (!this._isValidSessionId(sid)) {
             sid = this._context?.aiSettings.getAiSessionId() ?? null;
         }
@@ -38,7 +42,7 @@ export class AIProviderManager {
             sid = crypto.randomUUID();
         }
 
-        if ((await this._getSecureVal('ai_session_id')) !== sid) {
+        if (secureSid !== sid) {
             await this._saveSecureVal('ai_session_id', sid);
         }
 
