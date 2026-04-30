@@ -32,6 +32,7 @@ function createMockTauri(): TauriProvider {
         isTauri: vi.fn(() => true),
         listen: vi.fn().mockResolvedValue(() => {}),
         saveSecureKey: vi.fn().mockResolvedValue(undefined),
+        removeSecureKey: vi.fn().mockResolvedValue(undefined),
         getSecureKey: vi.fn().mockResolvedValue(null),
         hasSecureKey: vi.fn().mockResolvedValue(false),
         getSecureKeyMeta: vi.fn().mockResolvedValue({ exists: false, length: 0 }),
@@ -236,6 +237,33 @@ describe('SettingsService', () => {
         it('should handle error gracefully', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
             await expect(service.saveSecureKey('x', 'k')).rejects.toThrow('fail');
+        });
+    });
+
+    describe('removeSecureKey', () => {
+        it('should remove secure key through tauri provider helper', async () => {
+            await service.removeSecureKey('gemini');
+
+            expect(tauri.removeSecureKey).toHaveBeenCalledWith('gemini_api_key');
+            expect(tauri.invoke).not.toHaveBeenCalledWith('remove_secure_key', expect.anything());
+        });
+
+        it('should fall back to invoke when helper is unavailable', async () => {
+            delete (tauri as unknown as { removeSecureKey?: unknown }).removeSecureKey;
+
+            await service.removeSecureKey('gemini');
+
+            expect(tauri.invoke).toHaveBeenCalledWith('remove_secure_key', {
+                service: 'gemini_api_key',
+            });
+        });
+
+        it('should propagate remove errors', async () => {
+            (tauri.removeSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(
+                new Error('fail'),
+            );
+
+            await expect(service.removeSecureKey('gemini')).rejects.toThrow('fail');
         });
     });
 

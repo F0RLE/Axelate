@@ -9,6 +9,7 @@ describe('AISettingsKeyController', () => {
         getSecureKeyMeta: vi.fn(),
         getSecureKey: vi.fn(),
         saveSecureKey: vi.fn(),
+        removeSecureKey: vi.fn(),
         validateApiKey: vi.fn(),
         validateStoredApiKey: vi.fn(),
     };
@@ -74,5 +75,24 @@ describe('AISettingsKeyController', () => {
         expect(input.dataset['storedMasked']).toBe('true');
         expect(button.disabled).toBe(false);
         expect(button.innerHTML).toBe('Check');
+    });
+
+    it('should remove stored keys when a dirty key input is cleared', async () => {
+        const input = document.createElement('input');
+        const button = document.createElement('button');
+        button.innerHTML = 'Check';
+        document.body.append(input, button);
+
+        input.dataset['keyDirty'] = 'true';
+        input.value = '';
+        settingsService.removeSecureKey.mockResolvedValue(undefined);
+
+        await controller.checkKey(input, button, 'openrouter');
+
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(settingsService.saveSecureKey).not.toHaveBeenCalled();
+        expect(input.dataset['storedMasked']).toBeUndefined();
+        expect(input.value).toBe('');
+        expect(button.disabled).toBe(false);
     });
 });

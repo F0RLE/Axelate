@@ -143,6 +143,26 @@ export class SettingsService {
     }
 
     /**
+     * Remove a securely stored API key.
+     */
+    public async removeSecureKey(provider: string): Promise<void> {
+        const storageKey = `${provider}_api_key`;
+        try {
+            if (typeof this._tauri.removeSecureKey === 'function') {
+                await this._tauri.removeSecureKey(storageKey);
+                return;
+            }
+
+            await this._tauri.invoke('remove_secure_key', {
+                service: storageKey,
+            });
+        } catch (e) {
+            this._tracer.error('[SettingsService] Failed to remove secure key:', e);
+            throw e;
+        }
+    }
+
+    /**
      * Checks whether a secure API key exists without exposing the secret value.
      */
     public async hasSecureKey(provider: string): Promise<boolean> {

@@ -142,6 +142,8 @@ export const commands = {
 	getAppBootstrapData: () => typedError<BootstrapData, AppError>(__TAURI_INVOKE("get_app_bootstrap_data")),
 	// Saves anAPI key securely to system credential storage
 	saveSecureKey: (service: string, key: string) => typedError<null, AppError>(__TAURI_INVOKE("save_secure_key", { service, key })),
+	// Removes a frontend-managed secret from system credential storage
+	removeSecureKey: (service: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_secure_key", { service })),
 	// Retrieves a frontend-managed secret from system credential storage
 	getSecureKey: (service: string) => typedError<string | null, AppError>(__TAURI_INVOKE("get_secure_key", { service })),
 	// Checks whether a non-empty API key exists in secure storage

@@ -151,6 +151,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         ui_state::save_ui_state,
         bootstrap::get_app_bootstrap_data,
         secure::save_secure_key,
+        secure::remove_secure_key,
         secure::get_secure_key,
         secure::has_secure_key,
         secure::get_secure_key_meta,
