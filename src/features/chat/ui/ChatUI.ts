@@ -299,6 +299,7 @@ export class ChatUI {
             isDestroyed: () => this._isDestroyed,
             tracer: this._deps.tracer,
             scrollToBottom: (sticky) => this._scrollToBottom(sticky),
+            isNearBottom: () => this._isNearBottom(),
             appendRow: (row) => {
                 this._dom.messagesContainer?.appendChild(row);
             },
@@ -320,6 +321,10 @@ export class ChatUI {
 
     private _scrollToBottom(sticky = false): void {
         this._viewportController.scrollToBottom(this._dom.messagesContainer, sticky);
+    }
+
+    private _isNearBottom(): boolean {
+        return this._viewportController.isNearBottom(this._dom.messagesContainer);
     }
 
     public revealLatestMessage(): void {
