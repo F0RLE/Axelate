@@ -71,13 +71,6 @@ pub(super) fn select_release_assets(
                     .is_some_and(|track| hardware.supports_cuda_track(track))
             })
             .collect::<Vec<_>>();
-        let has_cuda_main = main_candidates.iter().copied().any(|idx| {
-            assets
-                .get(idx)
-                .and_then(|asset| detect_cuda_track(&asset.name))
-                .is_some_and(|track| hardware.supports_cuda_track(track))
-        });
-
         for main_idx in &supported_cuda_candidates {
             let Some(main) = assets.get(*main_idx) else {
                 continue;
@@ -106,10 +99,6 @@ pub(super) fn select_release_assets(
             {
                 return Some(vec![asset]);
             }
-        }
-
-        if has_cuda_main {
-            return None;
         }
 
         return None;
@@ -498,6 +487,8 @@ impl HardwareProfile {
 
     fn supports_cuda_track(&self, track: CudaTrack) -> bool {
         match self.cuda_driver_major {
+            // Values below 100 are CUDA majors such as 12/13; values at or above 100
+            // are NVIDIA driver majors such as 525/580.
             Some(driver_major) if driver_major < 100 => match track {
                 CudaTrack::Cuda12 => driver_major >= 12,
                 CudaTrack::Cuda13 => driver_major >= 13,

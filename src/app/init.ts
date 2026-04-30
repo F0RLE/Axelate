@@ -43,12 +43,17 @@ export class Core {
             return;
         }
 
-        this._initPromise = this._runInit();
+        const initPromise = this._runInit();
+        this._initPromise = initPromise;
         try {
-            await this._initPromise;
-            this._isInitialized = true;
+            await initPromise;
+            if (this._initPromise === initPromise && !this._isDestroyed) {
+                this._isInitialized = true;
+            }
         } finally {
-            this._initPromise = null;
+            if (this._initPromise === initPromise) {
+                this._initPromise = null;
+            }
         }
     }
 

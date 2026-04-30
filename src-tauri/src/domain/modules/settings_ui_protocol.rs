@@ -344,17 +344,16 @@ fn parse_module_id_from_label(label: &str) -> Result<String, AppError> {
     let module_id = parts.next();
     let nonce = parts.next();
 
-    if prefix != Some(MODULE_SETTINGS_LABEL_PREFIX) || module_id.is_none() || nonce.is_none() {
-        return Err(AppError::PermissionDenied(
-            "Module settings route is only available to owned settings webviews".to_string(),
-        ));
-    }
-
     let Some(module_id) = module_id.filter(|value| !value.trim().is_empty()) else {
         return Err(AppError::PermissionDenied(
             "Module settings route is only available to owned settings webviews".to_string(),
         ));
     };
+    if prefix != Some(MODULE_SETTINGS_LABEL_PREFIX) || nonce.is_none() {
+        return Err(AppError::PermissionDenied(
+            "Module settings route is only available to owned settings webviews".to_string(),
+        ));
+    }
     crate::domain::modules::downloader::validate_module_id(module_id)?;
     Ok(module_id.to_string())
 }

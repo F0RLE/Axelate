@@ -218,8 +218,7 @@ describe('ChatController', () => {
     });
 
     it('should remove attach menu listeners on destroy', () => {
-        vi.useFakeTimers();
-        const removeEventListener = vi.spyOn(document, 'removeEventListener');
+        const addEventListener = vi.spyOn(document, 'addEventListener');
         document.body.innerHTML = `
             <div id="chat-compose">
                 <button id="chat-attach-btn"></button>
@@ -228,12 +227,20 @@ describe('ChatController', () => {
         const controller = createController();
 
         controller.toggleAttachMenu();
-        vi.runOnlyPendingTimers();
+        const listenerOptions = addEventListener.mock.calls.find(
+            ([eventName]) => eventName === 'mousedown',
+        )?.[2];
+        if (
+            typeof listenerOptions !== 'object' ||
+            !('signal' in listenerOptions) ||
+            !(listenerOptions.signal instanceof AbortSignal)
+        ) {
+            throw new Error('attach menu listener signal was not registered');
+        }
         controller.destroy();
 
         expect(document.querySelector('.chat-attach-menu')).toBeNull();
-        expect(removeEventListener).toHaveBeenCalledWith('mousedown', expect.any(Function), true);
-        vi.useRealTimers();
+        expect(listenerOptions.signal.aborted).toBe(true);
     });
 
     it('should restore multimodal history without flattening stored content', async () => {

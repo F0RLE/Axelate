@@ -326,6 +326,10 @@ impl SessionPersistence {
         Self::history_path().with_extension("tmp")
     }
 
+    fn backup_history_path() -> std::path::PathBuf {
+        Self::history_path().with_extension("bak")
+    }
+
     fn load_sessions() -> Result<DashMap<String, ChatSession>, crate::errors::AppError> {
         Self::recover_from_interrupted_write()?;
 
@@ -460,23 +464,46 @@ impl SessionPersistence {
         drop(file);
 
         if let Err(error) = std::fs::rename(&tmp_path, path) {
-            tracing::warn!("Rename failed ({error}), using fallback for Windows locks...");
-            match std::fs::remove_file(path) {
+            tracing::warn!("Rename failed ({error}), using backup replace fallback...");
+            let backup_path = Self::backup_history_path();
+            match std::fs::remove_file(&backup_path) {
                 Ok(()) => {}
                 Err(remove_error) if remove_error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(remove_error) => {
+                    let _ = std::fs::remove_file(&tmp_path);
                     return Err(crate::errors::AppError::Io(format!(
-                        "Failed to replace chat history '{}': rename failed: {error}; removing existing file failed: {remove_error}",
-                        path.display()
+                        "Failed to prepare chat history backup '{}': first rename failed: {error}; removing stale backup failed: {remove_error}",
+                        backup_path.display()
                     )));
                 }
             }
-            std::fs::rename(&tmp_path, path).map_err(|second_error| {
-                crate::errors::AppError::Io(format!(
+
+            let had_original = path.exists();
+            if had_original {
+                std::fs::rename(path, &backup_path).map_err(|backup_error| {
+                    let _ = std::fs::remove_file(&tmp_path);
+                    crate::errors::AppError::Io(format!(
+                        "Failed to back up chat history '{}' to '{}': first rename failed: {error}; backup rename failed: {backup_error}",
+                        path.display(),
+                        backup_path.display()
+                    ))
+                })?;
+            }
+
+            if let Err(second_error) = std::fs::rename(&tmp_path, path) {
+                if had_original {
+                    let _ = std::fs::rename(&backup_path, path);
+                }
+                let _ = std::fs::remove_file(&tmp_path);
+                return Err(crate::errors::AppError::Io(format!(
                     "Failed to publish chat history '{}': first rename failed: {error}; second rename failed: {second_error}",
                     path.display()
-                ))
-            })?;
+                )));
+            }
+
+            if had_original {
+                let _ = std::fs::remove_file(&backup_path);
+            }
         }
 
         Ok(())

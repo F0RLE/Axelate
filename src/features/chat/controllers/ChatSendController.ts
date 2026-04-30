@@ -84,6 +84,19 @@ type ChatSendControllerOptions = {
 
 type UiLock = ReturnType<ChatSendControllerOptions['lockUi']>;
 
+const IMAGE_PROMPT_REWRITE_TEMPLATE = [
+    'You are preparing a prompt for Stable Diffusion.',
+    'Task: translate the user request into English, preserve the exact subject and intent, and lightly enhance it with useful visual details.',
+    'Rules:',
+    '- Remove command words like generate, draw, create, please, сгенерируй, нарисуй, сделай.',
+    '- Do not invent extra people, objects, actions, identities, or locations that the user did not ask for.',
+    '- You may add concise visual quality details: composition, lighting, camera, mood, texture, style, and render quality.',
+    '- Keep it as one prompt, 12-45 words.',
+    '- Return only the final prompt text. No quotes, no markdown, no explanation.',
+    '',
+    'User request: {{prompt}}',
+].join('\n');
+
 export class ChatSendController {
     private readonly _autoStartHelper: ChatAutoStartHelper;
     private readonly _sendFlow: ChatSendFlow;
@@ -325,18 +338,7 @@ export class ChatSendController {
     }
 
     private _buildImagePromptRewriteRequest(prompt: string): string {
-        return [
-            'You are preparing a prompt for Stable Diffusion.',
-            'Task: translate the user request into English, preserve the exact subject and intent, and lightly enhance it with useful visual details.',
-            'Rules:',
-            '- Remove command words like generate, draw, create, please, сгенерируй, нарисуй, сделай.',
-            '- Do not invent extra people, objects, actions, identities, or locations that the user did not ask for.',
-            '- You may add concise visual quality details: composition, lighting, camera, mood, texture, style, and render quality.',
-            '- Keep it as one prompt, 12-45 words.',
-            '- Return only the final prompt text. No quotes, no markdown, no explanation.',
-            '',
-            `User request: ${prompt}`,
-        ].join('\n');
+        return IMAGE_PROMPT_REWRITE_TEMPLATE.replace('{{prompt}}', prompt);
     }
 
     private _stripPromptEnvelope(prompt: string): string {

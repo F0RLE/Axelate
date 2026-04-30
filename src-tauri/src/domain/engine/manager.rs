@@ -211,7 +211,7 @@ impl EngineManager {
     pub async fn start(&self, config: EngineConfig) -> Result<EngineStatus, AppError> {
         let _lifecycle_guard = self.lifecycle_lock.lock().await;
         let mut config = config;
-        config.engine_id = canonical_engine_id(&config.engine_id).to_string();
+        config.engine_id = canonical_engine_id(&config.engine_id);
         let definition = self.find_definition(&config.engine_id).await?;
         let primary_cap = definition
             .capabilities
@@ -310,9 +310,12 @@ impl EngineManager {
         }
 
         // Hot-swap: stop every active engine before starting the next one.
-        let old_engines: Vec<(Capability, RunningEngine)> =
-            self.slots.lock().await.drain().collect();
-        for (old_cap, old) in old_engines {
+        let old_caps = self.slots.lock().await.keys().copied().collect::<Vec<_>>();
+        for old_cap in old_caps {
+            let old = self.slots.lock().await.remove(&old_cap);
+            let Some(old) = old else {
+                continue;
+            };
             info!(
                 from = %old.definition.id,
                 to = %config.engine_id,
@@ -321,7 +324,10 @@ impl EngineManager {
             );
             self.emitter
                 .emit_swapping(&old.definition.id, &config.engine_id);
-            Self::kill_engine(old).await?;
+            if let Err((error, old)) = Self::kill_engine_retaining_on_failure(old).await {
+                self.slots.lock().await.insert(old_cap, old);
+                return Err(error);
+            }
         }
 
         let binary_name = definition.binary.as_deref().ok_or_else(|| {
@@ -556,12 +562,17 @@ impl EngineManager {
     /// Stop all running engines
     pub async fn stop(&self) -> Result<(), AppError> {
         let _lifecycle_guard = self.lifecycle_lock.lock().await;
-        let engines: Vec<(Capability, RunningEngine)> = self.slots.lock().await.drain().collect();
+        let engine_caps = self.slots.lock().await.keys().copied().collect::<Vec<_>>();
         let mut errors = Vec::new();
-        for (cap, engine) in engines {
+        for cap in engine_caps {
+            let engine = self.slots.lock().await.remove(&cap);
+            let Some(engine) = engine else {
+                continue;
+            };
             info!(engine = %engine.definition.id, slot = ?cap, "Stopping engine");
-            if let Err(error) = Self::kill_engine(engine).await {
+            if let Err((error, engine)) = Self::kill_engine_retaining_on_failure(engine).await {
                 warn!(slot = ?cap, error = %error, "Failed to stop engine in slot");
+                self.slots.lock().await.insert(cap, engine);
                 errors.push(error.to_string());
             }
         }
@@ -580,7 +591,10 @@ impl EngineManager {
         let engine = self.slots.lock().await.remove(&capability);
         if let Some(engine) = engine {
             info!(engine = %engine.definition.id, slot = ?capability, "Stopping engine in slot");
-            Self::kill_engine(engine).await?;
+            if let Err((error, engine)) = Self::kill_engine_retaining_on_failure(engine).await {
+                self.slots.lock().await.insert(capability, engine);
+                return Err(error);
+            }
         }
         Ok(())
     }
@@ -693,14 +707,26 @@ impl EngineManager {
 }
 
 /// Returns the registry id used internally for known engine aliases.
-pub fn canonical_engine_id(engine_id: &str) -> &str {
-    match engine_id {
-        "stable-diffusion" => "sdcpp",
-        value => value,
+pub fn canonical_engine_id(engine_id: &str) -> String {
+    let mut normalized = engine_id
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['.', '_'], "-");
+    if let Some(stripped) = normalized.strip_suffix("-cpp") {
+        normalized = stripped.to_string();
+    }
+    while normalized.contains("--") {
+        normalized = normalized.replace("--", "-");
+    }
+
+    if normalized == "stable-diffusion" || normalized.starts_with("stable-diffusion-") {
+        "sdcpp".to_string()
+    } else {
+        normalized
     }
 }
 
-fn canonical_engine_log_id(engine_id: &str) -> &str {
+fn canonical_engine_log_id(engine_id: &str) -> String {
     canonical_engine_id(engine_id)
 }
 
@@ -829,6 +855,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn builds_cpu_sdcpp_args_when_requested() {
+        let mut config = sample_sdcpp_config(Some("C:/models/sd15.safetensors"));
+        config.compute_mode = EngineComputeMode::Cpu;
+
+        let args = build_sdcpp_args(&config, 8082);
+
+        assert!(args.contains(&"--clip-on-cpu".to_string()));
+        assert!(args.contains(&"--vae-on-cpu".to_string()));
+    }
+
+    #[test]
+    fn canonicalizes_stable_diffusion_variants_to_sdcpp() {
+        assert_eq!(canonical_engine_id("stable-diffusion"), "sdcpp");
+        assert_eq!(canonical_engine_id("Stable_Diffusion.cpp"), "sdcpp");
+        assert_eq!(canonical_engine_id("stable.diffusion.cpp"), "sdcpp");
+    }
+
     #[tokio::test]
     async fn resolves_stable_diffusion_alias_to_sdcpp_definition() {
         let manager = EngineManager::new(Arc::new(NoopEmitter));
@@ -934,5 +978,13 @@ mod tests {
         assert!(!args.contains(&"--sdcpp-preview".to_string()));
         assert!(!args.contains(&"C:/tmp/sdcpp-preview.png".to_string()));
         assert!(args.contains(&"--mmap".to_string()));
+    }
+
+    #[test]
+    fn sdcpp_preview_flag_enables_preview_without_explicit_path() {
+        let extra_args = vec!["--sdcpp-preview".to_string()];
+
+        assert!(sdcpp_preview_enabled(&extra_args));
+        assert!(resolve_sdcpp_preview_path(&extra_args).is_none());
     }
 }

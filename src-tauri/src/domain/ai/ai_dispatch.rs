@@ -33,7 +33,12 @@ pub(super) async fn prepare_chat_dispatch(
     if let Some(session_id) = &request.session_id {
         messages_context = sessions.merge_request_messages(session_id, &request.messages);
         if !request.messages.is_empty() {
-            sessions.force_save().await?;
+            if let Err(error) = sessions.force_save().await {
+                tracing::warn!(
+                    session_id,
+                    "Failed to persist incoming chat messages before dispatch: {error}"
+                );
+            }
         }
     }
 
@@ -98,7 +103,12 @@ pub(super) async fn persist_successful_response(
             reply,
             response.thought_signature.clone(),
         );
-        sessions.force_save().await?;
+        if let Err(error) = sessions.force_save().await {
+            tracing::warn!(
+                session_id,
+                "Failed to persist successful chat response: {error}"
+            );
+        }
     }
 
     Ok(())
@@ -134,7 +144,7 @@ pub(super) async fn build_engine_config(
 ) -> Result<crate::domain::engine::types::EngineConfig, crate::errors::AppError> {
     let saved = load_engine_config_map().await?;
     let canonical_id = canonical_engine_id(&definition.id);
-    Ok(saved.get(canonical_id).map_or_else(
+    Ok(saved.get(&canonical_id).map_or_else(
         || build_default_engine_config(definition),
         |config| merge_user_engine_config(definition, config),
     ))
