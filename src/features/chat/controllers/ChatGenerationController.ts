@@ -62,6 +62,7 @@ export class ChatGenerationController {
     public cleanupStreamingState(listenerId: string, typingId: string): void {
         this._options.aiBridge.removeChunkListener(listenerId);
         this._options.aiBridge.removeReplaceChunkListener(listenerId);
+        this._options.aiBridge.removeThoughtListener(listenerId);
         this.stopImagePreviewPolling();
         this._options.removeTyping(typingId);
     }
@@ -326,7 +327,8 @@ export class ChatGenerationController {
             response.model,
         );
         if (imageHandle !== null && imageHandle !== undefined) {
-            imageHandle.fail(friendlyMsg);
+            imageHandle.discard();
+            this._options.handleError(friendlyMsg, response.model);
             return;
         }
 

@@ -7,6 +7,7 @@ describe('ChatGenerationController', () => {
         getImageGenerationPreview: vi.fn(),
         removeChunkListener: vi.fn(),
         removeReplaceChunkListener: vi.fn(),
+        removeThoughtListener: vi.fn(),
     };
 
     const baseOptions = {
@@ -191,6 +192,28 @@ describe('ChatGenerationController', () => {
         );
 
         expect(streamingHandle.discard).toHaveBeenCalledTimes(1);
+        expect(baseOptions.handleError).toHaveBeenCalled();
+    });
+
+    it('removes failed image generation placeholders and reports the error as a toast', async () => {
+        const controller = new ChatGenerationController(baseOptions as never);
+        const imageHandle = {
+            setStatus: vi.fn(),
+            setPreview: vi.fn(),
+            finalize: vi.fn(),
+            fail: vi.fn(),
+            cancel: vi.fn(),
+            discard: vi.fn(),
+        };
+
+        await controller.handleChatResponse(
+            { ok: false, error: 'image failed', model: 'sdcpp' } as never,
+            null,
+            imageHandle,
+        );
+
+        expect(imageHandle.discard).toHaveBeenCalledOnce();
+        expect(imageHandle.fail).not.toHaveBeenCalled();
         expect(baseOptions.handleError).toHaveBeenCalled();
     });
 
