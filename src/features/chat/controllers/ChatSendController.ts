@@ -178,6 +178,7 @@ export class ChatSendController {
         this._activeStreamingStates.set(listenerId, { listenerId, typingId });
 
         let imageHandle: ImageGenerationHandle | null = null;
+        let streamingHandle: StreamingMessageHandle | null = null;
         let shouldStopImageEngine = false;
 
         try {
@@ -218,7 +219,6 @@ export class ChatSendController {
                 isImageProvider = this._options.isImageProvider(activeProviderId);
             }
 
-            let streamingHandle: StreamingMessageHandle | null = null;
             const ensureStreamingHandle = (): StreamingMessageHandle => {
                 streamingHandle ??= this._options.createStreamingHandle(typingId);
                 return streamingHandle;
@@ -271,6 +271,8 @@ export class ChatSendController {
         } catch (error: unknown) {
             this._cleanupStreamingState(listenerId, typingId);
             if (this._isCancelRequested()) {
+                this._cancelStreamingHandle(streamingHandle);
+                imageHandle?.cancel();
                 return false;
             }
             if (!this._wasDestroyed()) {

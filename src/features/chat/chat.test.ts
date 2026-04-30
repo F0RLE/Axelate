@@ -5,6 +5,7 @@ const clearUi = vi.fn();
 const updateTokenCount = vi.fn();
 const mockChatUiInstances: Array<{
     renderHistory: ReturnType<typeof vi.fn>;
+    createImageGenerationMessage: ReturnType<typeof vi.fn>;
 }> = [];
 const mockChatFileHandlerInstances: Array<{
     clear: ReturnType<typeof vi.fn>;
@@ -33,10 +34,19 @@ vi.mock('./ui/ChatUI', () => ({
         public clear = clearUi;
         public updateTokenCount = updateTokenCount;
         public updateContextTokenCount = vi.fn();
+        public createImageGenerationMessage = vi.fn(() => ({
+            setStatus: vi.fn(),
+            setPreview: vi.fn(),
+            finalize: vi.fn(),
+            fail: vi.fn(),
+            cancel: vi.fn(),
+            discard: vi.fn(),
+        }));
 
         public constructor() {
             mockChatUiInstances.push({
                 renderHistory: this.renderHistory,
+                createImageGenerationMessage: this.createImageGenerationMessage,
             });
         }
     },
@@ -111,6 +121,9 @@ describe('ChatController', () => {
         clearHistory: vi.fn().mockResolvedValue(undefined),
         startProvider: vi.fn().mockResolvedValue(false),
         rewindLastTurn: vi.fn().mockResolvedValue('last prompt'),
+        getImageGenerationPreview: vi.fn().mockResolvedValue(null),
+        cancelTextGeneration: vi.fn().mockResolvedValue(true),
+        cancelImageGeneration: vi.fn().mockResolvedValue(undefined),
     };
 
     const i18n = {
@@ -206,6 +219,59 @@ describe('ChatController', () => {
         expect(clearUi).toHaveBeenCalledTimes(1);
         expect(updateTokenCount).toHaveBeenCalledWith(0, undefined);
         vi.useRealTimers();
+    });
+
+    it('should cancel active generation before clearing chat', async () => {
+        const controller = createController();
+        const internals = controller as unknown as {
+            _state: { isSending: boolean; currentGenerationProviderId: string | null };
+            _sendController: { cancelActiveSend: () => Promise<void> };
+        };
+        internals._state.isSending = true;
+        internals._state.currentGenerationProviderId = 'gpt';
+        const cancelSpy = vi
+            .spyOn(internals._sendController, 'cancelActiveSend')
+            .mockResolvedValue(undefined);
+
+        await controller.clearChat();
+
+        expect(cancelSpy).toHaveBeenCalledOnce();
+        expect(clearUi).toHaveBeenCalledOnce();
+        expect(internals._state.isSending).toBe(false);
+        expect(internals._state.currentGenerationProviderId).toBeNull();
+    });
+
+    it('should not restore an image generation placeholder if a send starts while probing preview', async () => {
+        let resolvePreview: (
+            value: Awaited<ReturnType<typeof aiBridge.getImageGenerationPreview>>,
+        ) => void = () => {
+            throw new Error('preview promise was not started');
+        };
+        aiBridge.getImageGenerationPreview.mockReturnValueOnce(
+            new Promise((resolve) => {
+                resolvePreview = resolve;
+            }),
+        );
+        const controller = createController();
+        const internals = controller as unknown as {
+            _state: { isSending: boolean };
+        };
+
+        controller.init();
+        internals._state.isSending = true;
+        resolvePreview({
+            data_url: 'data:image/png;base64,abc',
+            updated_at_ms: 1,
+            progress: 0.5,
+            step: null,
+            total: null,
+            speed: null,
+            eta_relative: null,
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(mockChatUiInstances[0]?.createImageGenerationMessage).not.toHaveBeenCalled();
     });
 
     it('should clear file update callback on destroy', () => {
