@@ -141,7 +141,11 @@ export class ChatSendController {
         }
 
         this._cancelRequested = true;
-        await this._options.cancelTextGeneration(this._activeProviderId);
+        try {
+            await this._options.cancelTextGeneration(this._activeProviderId);
+        } catch (error: unknown) {
+            this._options.tracer.info(`Chat cancellation request failed: ${String(error)}`);
+        }
     }
 
     public validateInput(text: string): boolean {
