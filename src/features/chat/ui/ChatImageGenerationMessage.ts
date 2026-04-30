@@ -1,7 +1,9 @@
-type ChatImagePayload = {
-    mime: string;
-    data_base64: string;
-};
+import {
+    buildSafeImageDataUrl,
+    isSafeImageDataUrl,
+    normalizeImagePayload,
+    type ChatImagePayload,
+} from './ChatImagePayload';
 
 type ChatTranslate = (
     key: string,
@@ -183,6 +185,7 @@ export function createChatImageGenerationMessage(
 
     const showPreview = (dataUrl: string): void => {
         if (dataUrl.trim() === '') return;
+        if (!isSafeImageDataUrl(dataUrl)) return;
         if (image.src === dataUrl) return;
         const shouldKeepPinned = deps.isNearBottom();
         keepPinnedAfterImageLoad = shouldKeepPinned;
@@ -224,9 +227,13 @@ export function createChatImageGenerationMessage(
         },
         finalize: (result: { text: string; images: ChatImagePayload[] }) => {
             if (isCancelled) return;
-            finalImage = result.images[0] ?? null;
-            if (finalImage !== null) {
-                showPreview(`data:${finalImage.mime};base64,${finalImage.data_base64}`);
+            const shouldKeepPinned = deps.isNearBottom();
+            finalImage =
+                result.images[0] === undefined ? null : normalizeImagePayload(result.images[0]);
+            const finalImageDataUrl =
+                finalImage === null ? null : buildSafeImageDataUrl(finalImage);
+            if (finalImageDataUrl !== null) {
+                showPreview(finalImageDataUrl);
             }
 
             status.textContent = deps.translate('ui.chat.image_ready', 'Generated image');
@@ -244,28 +251,30 @@ export function createChatImageGenerationMessage(
             row.classList.add('is-complete');
             bubble.classList.add('is-complete');
             ensureImageActions(result.text);
-            deps.scrollToBottom();
+            deps.scrollToBottom(!shouldKeepPinned);
         },
         fail: (message: string) => {
             if (isCancelled) {
                 return;
             }
+            const shouldKeepPinned = deps.isNearBottom();
             bubble.classList.add('chat-error');
             status.textContent = message;
             hideProgress();
             caption.classList.add('hidden');
-            deps.scrollToBottom();
+            deps.scrollToBottom(!shouldKeepPinned);
         },
         cancel: (
             message = deps.translate('ui.chat.image_cancelled', 'Image generation cancelled'),
         ) => {
+            const shouldKeepPinned = deps.isNearBottom();
             isCancelled = true;
             bubble.classList.remove('chat-error');
             bubble.classList.add('is-cancelled');
             status.textContent = message;
             hideProgress();
             caption.classList.add('hidden');
-            deps.scrollToBottom();
+            deps.scrollToBottom(!shouldKeepPinned);
         },
         discard: () => {
             row.remove();
