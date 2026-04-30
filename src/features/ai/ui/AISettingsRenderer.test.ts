@@ -316,6 +316,33 @@ describe('AISettingsRenderer', () => {
         );
     });
 
+    it('does not reset a success check state when secure key removal fails', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+        await aiSettingsRenderer.render(container, {
+            id: 'gpt',
+            name: 'GPT',
+            apiProviderData: { models },
+        } as never);
+
+        const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
+        const button = document.getElementById('gpt-key-check-btn') as HTMLButtonElement;
+        button.classList.add('success');
+        button.innerHTML = '<check>';
+        settingsService.removeSecureKey.mockRejectedValueOnce(new Error('secure storage failed'));
+
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(button.classList.contains('success')).toBe(true);
+        expect(button.innerHTML).toContain('check');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_remove_error:Key remove error',
+            'error',
+        );
+    });
+
     it('hides model stats for custom providers', async () => {
         const container = document.getElementById('root') as HTMLElement;
 

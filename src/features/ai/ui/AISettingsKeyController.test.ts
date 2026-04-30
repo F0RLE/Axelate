@@ -103,8 +103,9 @@ describe('AISettingsKeyController', () => {
         input.value = '';
         settingsService.removeSecureKey.mockResolvedValue(undefined);
 
-        await controller.removeClearedStoredKey(input, 'openrouter');
+        const removed = await controller.removeClearedStoredKey(input, 'openrouter');
 
+        expect(removed).toBe(true);
         expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
         expect(input.dataset['storedMasked']).toBeUndefined();
         expect(input.dataset['storedRevealed']).toBeUndefined();
@@ -113,6 +114,26 @@ describe('AISettingsKeyController', () => {
         expect(showToast).toHaveBeenCalledWith(
             'ui.settings.key_removed:API key removed',
             'success',
+        );
+    });
+
+    it('should keep the local key state when immediate removal fails', async () => {
+        const input = document.createElement('input');
+        input.dataset['storedMasked'] = 'true';
+        input.value = '';
+        settingsService.removeSecureKey.mockRejectedValue(new Error('secure storage failed'));
+
+        const removed = await controller.removeClearedStoredKey(input, 'openrouter');
+
+        expect(removed).toBe(false);
+        expect(input.dataset['storedMasked']).toBe('true');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_remove_error:Key remove error',
+            'error',
+        );
+        expect(tracer.error).toHaveBeenCalledWith(
+            '[AISettingsKeyController] Key removal failed:',
+            expect.any(Error),
         );
     });
 

@@ -151,6 +151,25 @@ describe('AIProviderManager', () => {
 
             const result = await manager.startProvider('gemini');
             expect(result).toBe(true);
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledTimes(2);
+        });
+
+        it('should deactivate a cloud provider when its key was removed before restart', async () => {
+            let hasKey = true;
+            const mockCore = createMockCore(
+                () => Promise.resolve(hasKey ? 'sk-key' : null),
+                () => Promise.resolve(hasKey),
+            );
+            manager.setCore(mockCore);
+            await manager.startProvider('gemini');
+
+            hasKey = false;
+            const result = await manager.startProvider('gemini');
+
+            expect(result).toBe(false);
+            expect(manager.activeProviderId).toBeNull();
+            expect(manager.apiKey).toBeNull();
+            expect(manager.isActive()).toBe(false);
         });
 
         it('should stop previous provider when switching', async () => {
@@ -265,6 +284,7 @@ describe('AIProviderManager', () => {
             await manager.refreshActiveApiKey();
 
             expect(manager.apiKey).toBeNull();
+            expect(manager.activeProviderId).toBeNull();
             expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenLastCalledWith(
                 'openrouter_api_key',
             );
