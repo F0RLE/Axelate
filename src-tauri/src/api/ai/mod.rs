@@ -366,22 +366,57 @@ fn read_image_generation_preview_file(path: &Path) -> Option<ImageGenerationPrev
     })
 }
 
-fn image_extension_for_mime_type(mime_type: &str) -> &'static str {
-    match mime_type.to_ascii_lowercase().as_str() {
-        mime if mime.contains("jpeg") || mime.contains("jpg") => "jpg",
-        mime if mime.contains("webp") => "webp",
-        mime if mime.contains("gif") => "gif",
-        _ => "png",
+fn image_extension_for_mime_type(mime_type: &str) -> Result<&'static str, AppError> {
+    match mime_type.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Ok("png"),
+        "image/jpeg" | "image/jpg" => Ok("jpg"),
+        "image/webp" => Ok("webp"),
+        "image/gif" => Ok("gif"),
+        "image/bmp" => Ok("bmp"),
+        "image/avif" => Ok("avif"),
+        _ => Err(AppError::Validation(format!(
+            "Unsupported image type: {mime_type}"
+        ))),
     }
 }
 
-fn decode_chat_image_payload(base64_data: &str) -> Result<Vec<u8>, AppError> {
+fn decode_chat_image_payload(base64_data: &str, mime_type: &str) -> Result<Vec<u8>, AppError> {
     let payload = base64_data
         .split_once(',')
         .map_or(base64_data, |(_, data)| data);
-    STANDARD
+    let bytes = STANDARD
         .decode(payload)
-        .map_err(|error| AppError::Validation(format!("Invalid image data: {error}")))
+        .map_err(|error| AppError::Validation(format!("Invalid image data: {error}")))?;
+
+    validate_chat_image_signature(&bytes, mime_type)?;
+    Ok(bytes)
+}
+
+fn validate_chat_image_signature(bytes: &[u8], mime_type: &str) -> Result<(), AppError> {
+    let mime = mime_type.trim().to_ascii_lowercase();
+    let valid = match mime.as_str() {
+        "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "image/jpeg" | "image/jpg" => bytes.starts_with(&[0xFF, 0xD8, 0xFF]),
+        "image/webp" => {
+            bytes.len() >= 12 && bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP")
+        }
+        "image/gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+        "image/bmp" => bytes.starts_with(b"BM"),
+        "image/avif" => {
+            bytes.len() >= 12
+                && bytes.get(4..8) == Some(b"ftyp")
+                && (bytes.get(8..12) == Some(b"avif") || bytes.get(8..12) == Some(b"avis"))
+        }
+        _ => false,
+    };
+
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::Validation(
+            "Image data does not match the declared image type".to_string(),
+        ))
+    }
 }
 
 fn build_chat_image_file_path(target_dir: &Path, ext: &str) -> PathBuf {
@@ -700,9 +735,9 @@ pub fn save_chat_image_default(
 ) -> Result<SavedChatImage, AppError> {
     let target_dir = chat_image_root_dir()?;
     std::fs::create_dir_all(&target_dir)?;
-    let bytes = decode_chat_image_payload(&base64_data)?;
-    let file_path =
-        build_chat_image_file_path(&target_dir, image_extension_for_mime_type(&mime_type));
+    let extension = image_extension_for_mime_type(&mime_type)?;
+    let bytes = decode_chat_image_payload(&base64_data, &mime_type)?;
+    let file_path = build_chat_image_file_path(&target_dir, extension);
     std::fs::write(&file_path, bytes)?;
 
     Ok(SavedChatImage {
@@ -931,8 +966,11 @@ fn is_local_provider(provider: &str) -> bool {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::resolve_existing_path_within_root;
+    use super::{
+        decode_chat_image_payload, image_extension_for_mime_type, resolve_existing_path_within_root,
+    };
     use crate::errors::AppError;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
 
     #[test]
     fn resolve_existing_path_within_root_allows_file_inside_root() {
@@ -964,6 +1002,35 @@ mod tests {
 
         assert!(
             matches!(error, AppError::Validation(message) if message.contains("outside chat image directory"))
+        );
+    }
+
+    #[test]
+    fn image_extension_for_mime_type_rejects_unsupported_types() {
+        let error = image_extension_for_mime_type("image/svg+xml")
+            .expect_err("svg should not be saved from chat");
+
+        assert!(
+            matches!(error, AppError::Validation(message) if message.contains("Unsupported image type"))
+        );
+    }
+
+    #[test]
+    fn decode_chat_image_payload_accepts_matching_png_signature() {
+        let png = STANDARD.encode(b"\x89PNG\r\n\x1a\npayload");
+        let decoded = decode_chat_image_payload(&png, "image/png").expect("png should decode");
+
+        assert!(decoded.starts_with(b"\x89PNG\r\n\x1a\n"));
+    }
+
+    #[test]
+    fn decode_chat_image_payload_rejects_mismatched_signature() {
+        let fake_png = STANDARD.encode(b"not a png");
+        let error = decode_chat_image_payload(&fake_png, "image/png")
+            .expect_err("invalid image signature must be rejected");
+
+        assert!(
+            matches!(error, AppError::Validation(message) if message.contains("does not match"))
         );
     }
 }

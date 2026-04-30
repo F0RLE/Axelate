@@ -400,6 +400,19 @@ describe('ChatUI lifecycle', () => {
         ).toBe(true);
     });
 
+    it('should ignore generated image payloads with unsafe mime or base64', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        ui.appendMessage('assistant', 'image', {
+            images: [{ mime: 'image/svg+xml', data_base64: '<svg></svg>' }],
+            skipAnimation: true,
+        });
+
+        expect(document.querySelector('.chat-img, .chat-generated-image')).toBeNull();
+        expect(document.querySelector('.chat-save-image-btn')).toBeNull();
+    });
+
     it('should render attachment file names as text only', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
@@ -518,6 +531,40 @@ describe('ChatUI lifecycle', () => {
         handle.setPreview('data:image/png;base64,dGVzdA==');
 
         expect(messages.scrollTop).toBe(100);
+    });
+
+    it('should not force generated image finalization to bottom when the user scrolled up', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+        const messages = document.getElementById('chat-messages') as HTMLDivElement;
+
+        Object.defineProperty(messages, 'clientHeight', { configurable: true, value: 400 });
+        Object.defineProperty(messages, 'scrollHeight', {
+            configurable: true,
+            get: () =>
+                document.querySelector('.chat-generated-media:not(.hidden)') === null ? 1000 : 2000,
+        });
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage();
+        messages.scrollTop = 100;
+
+        handle.finalize({
+            text: 'done',
+            images: [{ mime: 'image/png', data_base64: 'dGVzdA==' }],
+        });
+
+        expect(messages.scrollTop).toBe(100);
+    });
+
+    it('should ignore unsafe live generated image preview URLs', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage();
+        handle.setPreview('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=');
+
+        expect(document.querySelector('.chat-generated-media:not(.hidden)')).toBeNull();
+        expect(document.querySelector<HTMLImageElement>('.chat-generated-image')?.src).toBe('');
     });
 
     it('should scroll chat history to the bottom after restore', () => {
