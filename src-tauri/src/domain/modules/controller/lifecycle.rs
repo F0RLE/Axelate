@@ -198,6 +198,7 @@ impl<'a> LifecycleExecutor<'a> {
                                     "Failed to kill module after status polling failed: {kill_error}"
                                 );
                             }
+                            Self::reap_child_after_kill_attempt(&module_id, &mut child).await;
                         }
                         return;
                     }
@@ -218,13 +219,27 @@ impl<'a> LifecycleExecutor<'a> {
                 module_id = %self.module_id,
                 "Failed to kill spawned module after {reason}: {error}"
             );
-            return;
+        }
+
+        Self::reap_child_after_kill_attempt(&self.module_id, child).await;
+    }
+
+    async fn reap_child_after_kill_attempt(module_id: &str, child: &mut Child) {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id,
+                    "Failed to poll module child after kill attempt: {error}"
+                );
+            }
         }
 
         if let Err(error) = child.wait().await {
             tracing::warn!(
-                module_id = %self.module_id,
-                "Failed to wait spawned module after {reason}: {error}"
+                module_id,
+                "Failed to wait module child after kill attempt: {error}"
             );
         }
     }
@@ -317,6 +332,7 @@ impl<'a> LifecycleExecutor<'a> {
                         "Failed to force-kill registered module process: {error}"
                     );
                 }
+                Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
             }
         }
 
@@ -428,12 +444,7 @@ impl<'a> LifecycleExecutor<'a> {
                     "Failed to kill registered duplicate module child: {error}"
                 );
             }
-            if let Err(error) = child.wait().await {
-                tracing::warn!(
-                    module_id = %self.module_id,
-                    "Failed to wait registered duplicate module child after kill: {error}"
-                );
-            }
+            Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
         }
 
         for pid in matching_pids {

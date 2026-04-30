@@ -27,6 +27,16 @@ fn push_llamacpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
     }
 }
 
+fn push_sdcpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
+    match config.compute_mode {
+        EngineComputeMode::Gpu => {}
+        EngineComputeMode::Cpu => {
+            args.push("--clip-on-cpu".to_string());
+            args.push("--vae-on-cpu".to_string());
+        }
+    }
+}
+
 fn sdcpp_extra_args(config: &EngineConfig) -> Vec<String> {
     let unsupported_flags = SDCPP_UNSUPPORTED_FLAGS
         .iter()
@@ -93,11 +103,18 @@ pub fn resolve_sdcpp_preview_path(extra_args: &[String]) -> Option<PathBuf> {
 
 pub(super) fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
     resolve_sdcpp_preview_path(extra_args).is_some()
+        || extra_args.iter().any(|arg| {
+            arg == SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG
+                || arg
+                    .strip_prefix(SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG)
+                    .is_some_and(|suffix| suffix.starts_with('='))
+        })
 }
 
 pub(super) fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
     let mut args = vec!["--listen-port".to_string(), port.to_string()];
     let extra_args = sdcpp_extra_args(config);
+    push_sdcpp_compute_args(&mut args, config);
 
     if let Some(model_path) = config.model_path.as_deref() {
         args.push("--model".to_string());

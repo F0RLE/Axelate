@@ -79,8 +79,7 @@ export class ChatController {
     private readonly _sendController: ChatSendController;
     private readonly _state = new ChatControllerState();
     private _restoredImageGenerationTimer: ReturnType<typeof setTimeout> | null = null;
-    private _attachMenuOpenTimer: ReturnType<typeof setTimeout> | null = null;
-    private _attachMenuCloseHandler: ((event: MouseEvent) => void) | null = null;
+    private _attachMenuAbortController: AbortController | null = null;
     private _forceImageGeneration = false;
     private _contextTokenTotal = 0;
     private _contextTokenVersion = 0;
@@ -525,14 +524,8 @@ export class ChatController {
     }
 
     private _closeAttachMenu(): void {
-        if (this._attachMenuOpenTimer !== null) {
-            globalThis.clearTimeout(this._attachMenuOpenTimer);
-            this._attachMenuOpenTimer = null;
-        }
-        if (this._attachMenuCloseHandler !== null) {
-            document.removeEventListener('mousedown', this._attachMenuCloseHandler, true);
-            this._attachMenuCloseHandler = null;
-        }
+        this._attachMenuAbortController?.abort();
+        this._attachMenuAbortController = null;
         document.querySelector('.chat-attach-menu')?.remove();
     }
 
@@ -575,6 +568,7 @@ export class ChatController {
         menu.append(fileButton, imageButton);
         compose.appendChild(menu);
 
+        const controller = new AbortController();
         const close = (event: MouseEvent) => {
             if (event.target instanceof Node && menu.contains(event.target)) {
                 return;
@@ -584,14 +578,11 @@ export class ChatController {
             }
             this._closeAttachMenu();
         };
-        this._attachMenuCloseHandler = close;
-        this._attachMenuOpenTimer = globalThis.setTimeout(() => {
-            this._attachMenuOpenTimer = null;
-            if (this._state.isDestroyed || !menu.isConnected) {
-                return;
-            }
-            document.addEventListener('mousedown', close, true);
-        }, 0);
+        this._attachMenuAbortController = controller;
+        document.addEventListener('mousedown', close, {
+            capture: true,
+            signal: controller.signal,
+        });
     }
 
     public async pickChatFilesFromMenu(): Promise<void> {

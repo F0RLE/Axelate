@@ -445,6 +445,10 @@ fn is_runtime_asset_name(name: &str) -> bool {
 
 fn is_gpu_asset_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
+    is_gpu_asset_name_lower(&lower)
+}
+
+fn is_gpu_asset_name_lower(lower: &str) -> bool {
     lower.contains("cuda")
         || lower.contains("cu12")
         || lower.contains("cu13")
@@ -462,7 +466,7 @@ fn is_cpu_asset_name(name: &str) -> bool {
     lower.contains("cpu")
         || lower.contains("avx")
         || lower.contains("noavx")
-        || !is_gpu_asset_name(&lower)
+        || !is_gpu_asset_name_lower(&lower)
 }
 
 const fn hardware_for_target(

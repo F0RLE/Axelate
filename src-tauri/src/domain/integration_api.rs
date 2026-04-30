@@ -182,7 +182,7 @@ struct HttpResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct IntegrationTextRequest {
-    prompt: String,
+    prompt: Option<String>,
     provider: Option<String>,
     model: Option<String>,
     session_id: Option<String>,
@@ -531,6 +531,7 @@ async fn handle_text_request(
     context: LauncherHttpApiContext,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationTextRequest = parse_json_body(request)?;
+    let prompt = payload.prompt.as_deref().unwrap_or("");
     let requested_provider = payload.provider.filter(|value| !value.trim().is_empty());
     let ui_provider = match requested_provider.as_ref() {
         Some(provider) => provider.clone(),
@@ -554,27 +555,27 @@ async fn handle_text_request(
     let session_id =
         resolve_session_id(&context.ui_state_service, payload.session_id.as_deref()).await;
     let mut messages = payload.messages.unwrap_or_default();
-    if messages.is_empty() && payload.prompt.trim().is_empty() {
+    if messages.is_empty() && prompt.trim().is_empty() {
         return Err(AppError::Validation(
             "Text request requires a prompt or messages".to_string(),
         ));
     }
-    if messages.is_empty() || !payload.prompt.trim().is_empty() {
+    if messages.is_empty() || !prompt.trim().is_empty() {
         messages.push(ChatMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "user".to_string(),
-            content: serde_json::Value::String(payload.prompt),
+            content: serde_json::Value::String(prompt.to_string()),
             thought_signature: None,
         });
     }
 
     let thinking_level = match payload.thinking_level {
         Some(value) => Some(value),
-        None => selected_thinking_level(&context.ui_state_service, &provider).await?,
+        None => selected_thinking_level(&context.ui_state_service, &ui_provider).await?,
     };
     let web_search = match payload.web_search {
         Some(value) => Some(value),
-        None => selected_web_search(&context.ui_state_service, &provider).await?,
+        None => selected_web_search(&context.ui_state_service, &ui_provider).await?,
     };
 
     let mut chat_request = ChatRequest {
@@ -1004,8 +1005,9 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{
-        backend_provider_id, find_header_end, is_authorized, model_api_id, parse_header_line,
-        read_http_request, status_for_app_error, status_text, tier_rank,
+        IntegrationTextRequest, backend_provider_id, find_header_end, is_authorized, model_api_id,
+        parse_header_line, parse_json_body, read_http_request, status_for_app_error, status_text,
+        tier_rank,
     };
     use crate::errors::AppError;
     use crate::models::{AiModel, ApiModelConfig, ModelStats, ModelTier};
@@ -1080,6 +1082,21 @@ mod tests {
         assert_eq!(backend_provider_id("openrouter-custom-text"), "gpt");
         assert_eq!(backend_provider_id("openrouter-custom-image"), "gpt-image");
         assert_eq!(backend_provider_id("llamacpp"), "llamacpp");
+    }
+
+    #[test]
+    fn parses_text_request_without_prompt_when_messages_are_present() {
+        let request = super::HttpRequest {
+            method: "POST".to_string(),
+            path: "/v1/ai/text".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"messages":[{"id":"m1","role":"user","content":"hello"}]}"#.to_vec(),
+        };
+
+        let payload: IntegrationTextRequest = parse_json_body(&request).expect("payload");
+
+        assert!(payload.prompt.is_none());
+        assert_eq!(payload.messages.expect("messages").len(), 1);
     }
 
     #[test]

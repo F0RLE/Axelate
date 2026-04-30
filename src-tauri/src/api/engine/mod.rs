@@ -77,7 +77,7 @@ pub async fn delete_engine(
     engine_id: String,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<(), AppError> {
-    let engine_id = canonical_engine_id(&engine_id).to_string();
+    let engine_id = canonical_engine_id(&engine_id);
     if engine_manager.is_engine_running(&engine_id).await {
         return Err(AppError::Validation(format!(
             "Cannot delete engine '{engine_id}' while it is running"
@@ -112,7 +112,7 @@ pub async fn get_engine_config(
     engine_id: String,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<crate::domain::engine::types::EngineConfig, AppError> {
-    let engine_id = canonical_engine_id(&engine_id).to_string();
+    let engine_id = canonical_engine_id(&engine_id);
     let def = engine_manager
         .get_definition(&engine_id)
         .await
@@ -133,7 +133,7 @@ pub async fn get_engine_settings_payload(
     engine_id: String,
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<EngineSettingsPayload, AppError> {
-    let engine_id = canonical_engine_id(&engine_id).to_string();
+    let engine_id = canonical_engine_id(&engine_id);
     let def = engine_manager
         .get_definition(&engine_id)
         .await
@@ -157,7 +157,7 @@ pub async fn set_engine_config(
     engine_manager: State<'_, Arc<EngineManager>>,
 ) -> Result<(), AppError> {
     let mut config = config;
-    config.engine_id = canonical_engine_id(&config.engine_id).to_string();
+    config.engine_id = canonical_engine_id(&config.engine_id);
     let def = engine_manager
         .get_definition(&config.engine_id)
         .await

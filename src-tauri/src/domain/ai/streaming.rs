@@ -603,6 +603,11 @@ fn handle_stream_json_line(
                 .and_then(provider_response::extract_stream_text)
         })
         .or_else(|| {
+            json.get("message")
+                .and_then(|message| message.get("content"))
+                .and_then(provider_response::extract_stream_text)
+        })
+        .or_else(|| {
             json.get("token")
                 .and_then(|token| token.get("text"))
                 .and_then(provider_response::extract_stream_text)
@@ -822,6 +827,25 @@ mod tests {
         assert_eq!(usage.prompt_tokens, 7);
         assert_eq!(usage.completion_tokens, 11);
         assert_eq!(usage.total_tokens, 18);
+    }
+
+    #[test]
+    fn process_stream_chunk_supports_ollama_message_content() {
+        let sink = TestSink::default();
+        let mut state = StreamingAccumulator::new();
+        let chunk = b"data: {\"message\":{\"content\":\"hello from ollama\"},\"done\":true}\n\n";
+
+        let result = process_stream_chunk(chunk, "msg-1", &sink, &mut state);
+
+        assert!(matches!(result, StreamChunkResult::Continue));
+        assert_eq!(state.full_content, "hello from ollama");
+        assert!(state.saw_terminal_chunk);
+
+        let events = sink.events.lock().expect("sink events");
+        assert!(matches!(
+            events.first(),
+            Some(StreamEvent::ChatChunk { content, .. }) if content == "hello from ollama"
+        ));
     }
 
     #[test]

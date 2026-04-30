@@ -52,22 +52,33 @@ impl LocalFileService {
                 )));
             }
 
-            if let Err(remove_error) = fs::remove_file(path).await
-                && remove_error.kind() != std::io::ErrorKind::NotFound
-            {
+            let backup = path.with_extension(format!(
+                "bak-{}-{}",
+                std::process::id(),
+                chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+            ));
+            let had_original = path.exists();
+            if had_original && let Err(backup_error) = fs::rename(path, &backup).await {
                 let _ = fs::remove_file(&tmp).await;
                 return Err(AppError::Io(format!(
-                    "Failed to replace '{}': rename failed: {first_error}; removing existing file failed: {remove_error}",
+                    "Failed to replace '{}': rename failed: {first_error}; backing up existing file failed: {backup_error}",
                     path.display()
                 )));
             }
 
             if let Err(second_error) = fs::rename(&tmp, path).await {
+                if had_original {
+                    let _ = fs::rename(&backup, path).await;
+                }
                 let _ = fs::remove_file(&tmp).await;
                 return Err(AppError::Io(format!(
                     "Failed to publish atomic write to '{}': first rename failed: {first_error}; second rename failed: {second_error}",
                     path.display()
                 )));
+            }
+
+            if had_original {
+                let _ = fs::remove_file(&backup).await;
             }
         }
 
