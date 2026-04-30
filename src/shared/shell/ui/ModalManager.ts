@@ -141,6 +141,7 @@ export class ModalManager {
         this._currentApps = apps;
         this._currentSelectedAppId = selectedAppId ?? null;
 
+        document.body.classList.add('app-selection-open');
         const container = document.querySelector('.models-container');
         if (container !== null) container.classList.add('content-hidden');
 
@@ -215,6 +216,7 @@ export class ModalManager {
         }
 
         // Restore main content visibility
+        document.body.classList.remove('app-selection-open');
         const container = document.querySelector('.models-container');
         if (container !== null) container.classList.remove('content-hidden');
     }
