@@ -941,6 +941,38 @@ describe('DownloadUI', () => {
             expect(card?.querySelector('.downloads-status-pill')?.textContent).toBe('Downloading');
         });
 
+        it('should patch existing download cards for module ids that need selector escaping', () => {
+            ui.init();
+            const moduleId = 'mod"quoted\\id';
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: moduleId,
+                        progress: 0.2,
+                        status: 'downloading',
+                    },
+                }),
+            );
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: moduleId,
+                        progress: 0.6,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const cards = list?.querySelectorAll('.download-item-card');
+            expect(cards?.length).toBe(1);
+            expect(cards?.[0]?.getAttribute('data-module-id')).toBe(moduleId);
+            expect(cards?.[0]?.querySelector('.downloads-progress-percent')?.textContent).toBe(
+                '60%',
+            );
+        });
+
         it('should render error status card', () => {
             ui.init();
 

@@ -542,6 +542,30 @@ describe('ModalManager lifecycle', () => {
         ).toBe(true);
     });
 
+    it('should route modal progress updates for app ids that need selector escaping', () => {
+        modalManager = createManager();
+        const list = document.getElementById('app-modal-list') as HTMLElement;
+        const appId = 'svc"quoted\\id';
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        card.dataset['appId'] = appId;
+        const button = document.createElement('button');
+        button.className = 'download-btn';
+        button.innerHTML =
+            '<span class="download-label">Download</span><span class="download-pct"></span>';
+        card.appendChild(button);
+        list.appendChild(card);
+
+        globalThis.dispatchEvent(
+            new CustomEvent('download-progress-update', {
+                detail: { module_id: appId, status: 'downloading', progress: 0.42 },
+            }),
+        );
+
+        expect(button.classList.contains('downloading')).toBe(true);
+        expect(button.querySelector('.download-pct')?.textContent).toBe('42%');
+    });
+
     it('should cancel and start downloads through injected callbacks', async () => {
         const onDownloadRequest = vi.fn().mockResolvedValue(undefined);
         const onCancelDownloadRequest = vi.fn().mockResolvedValue(undefined);
@@ -601,6 +625,46 @@ describe('ModalManager lifecycle', () => {
             }),
             'services',
             expect.any(HTMLButtonElement),
+        );
+    });
+
+    it('should start modal downloads for app ids that need selector escaping', () => {
+        const onDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        modalManager = new ModalManager(
+            new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
+            interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
+            () => null,
+            onDownloadRequest,
+            vi.fn().mockResolvedValue(undefined),
+            (_key, fallback) => fallback,
+            tracer,
+            navigation,
+        );
+
+        modalManager.openAppSelection('services', []);
+        const list = document.getElementById('app-modal-list') as HTMLElement;
+        const appId = 'svc"quoted\\id';
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        card.dataset['appId'] = appId;
+        const button = document.createElement('button');
+        button.className = 'download-btn';
+        card.appendChild(button);
+        list.appendChild(card);
+
+        const handleDownload = (modalManager as unknown as { _handleDownload: (app: IApp) => void })
+            ._handleDownload;
+        handleDownload.call(modalManager, {
+            id: appId,
+            name: 'Service',
+            installed: false,
+            repoUrl: 'https://example.com/service.zip',
+        } as IApp);
+
+        expect(onDownloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ id: appId }),
+            'services',
+            button,
         );
     });
 
