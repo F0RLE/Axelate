@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSendController } from './ChatSendController';
 
@@ -91,6 +91,10 @@ describe('ChatSendController', () => {
         vi.clearAllMocks();
     });
 
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('does not send empty chat messages without attachments', async () => {
         const { controller, options, sendMessage } = createController();
         const input = document.createElement('textarea');
@@ -137,6 +141,43 @@ describe('ChatSendController', () => {
         await controller.sendChat(input);
 
         expect(options.addContextTokens).toHaveBeenCalledWith(3);
+    });
+
+    it('does not clear input or append a user turn when image provider activation fails', async () => {
+        const { controller, options, aiBridge, sendMessage } = createController();
+        aiBridge.startProvider.mockResolvedValueOnce(false);
+        vi.mocked(options.isForceImageGeneration).mockReturnValue(true);
+        vi.mocked(options.getSelectedModule).mockImplementation(
+            (category: 'ai_text' | 'ai_image') =>
+                category === 'ai_image' ? { id: 'sdcpp' } : undefined,
+        );
+        const input = document.createElement('textarea');
+        input.value = 'draw a cat';
+
+        const result = await controller.sendChat(input);
+
+        expect(result).toBe(false);
+        expect(options.clearInput).not.toHaveBeenCalled();
+        expect(options.addContextTokens).not.toHaveBeenCalled();
+        expect(options.appendUserMessage).not.toHaveBeenCalled();
+        expect(options.pushUserMessage).not.toHaveBeenCalled();
+        expect(sendMessage).not.toHaveBeenCalled();
+        expect(options.handleError).toHaveBeenCalled();
+    });
+
+    it('uses distinct stream listener ids when sends start in the same millisecond', async () => {
+        vi.spyOn(Date, 'now').mockReturnValue(123);
+        const { controller, aiBridge } = createController();
+        const firstInput = document.createElement('textarea');
+        firstInput.value = 'first';
+        const secondInput = document.createElement('textarea');
+        secondInput.value = 'second';
+
+        await controller.sendChat(firstInput);
+        await controller.sendChat(secondInput);
+
+        expect(aiBridge.onChunk).toHaveBeenCalledTimes(2);
+        expect(aiBridge.onChunk.mock.calls[0]?.[0]).not.toBe(aiBridge.onChunk.mock.calls[1]?.[0]);
     });
 
     it('counts image attachment tokens without double-counting text attachments', async () => {

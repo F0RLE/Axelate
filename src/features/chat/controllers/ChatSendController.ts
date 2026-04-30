@@ -107,6 +107,7 @@ export class ChatSendController {
     private _isDestroyed = false;
     private _cancelRequested = false;
     private _activeProviderId: string | null = null;
+    private _sendSequence = 0;
     private readonly _providerPolicy = new AIBridgeProviderPolicy();
 
     constructor(private readonly _options: ChatSendControllerOptions) {
@@ -165,8 +166,9 @@ export class ChatSendController {
         }
 
         const uiElements = this._options.lockUi(input);
-        const typingId = `typing-${String(Date.now())}`;
-        const listenerId = `chat-stream-${String(Date.now())}`;
+        const sendId = this._createSendId();
+        const typingId = `typing-${sendId}`;
+        const listenerId = `chat-stream-${sendId}`;
         let activeProviderId = this._options.aiBridge.getState().activeProviderId;
         let isImageProvider =
             this._options.isForceImageGeneration() ||
@@ -185,11 +187,6 @@ export class ChatSendController {
         try {
             const sendPlan = await this._sendFlow.prepare(text);
             if (this._wasDestroyed()) return false;
-
-            this._options.clearInput();
-            this._options.addContextTokens(sendPlan.tokenCount);
-            this._options.appendUserMessage(text, sendPlan.attachments, sendPlan.tokenCount);
-            this._options.pushUserMessage(sendPlan.userContent);
 
             let imagePrompt = sendPlan.combinedText;
             if (isImageProvider) {
@@ -219,6 +216,11 @@ export class ChatSendController {
                 this._activeProviderId = activeProviderId;
                 isImageProvider = this._options.isImageProvider(activeProviderId);
             }
+
+            this._options.clearInput();
+            this._options.addContextTokens(sendPlan.tokenCount);
+            this._options.appendUserMessage(text, sendPlan.attachments, sendPlan.tokenCount);
+            this._options.pushUserMessage(sendPlan.userContent);
 
             const ensureStreamingHandle = (): StreamingMessageHandle => {
                 streamingHandle ??= this._options.createStreamingHandle(typingId);
@@ -378,6 +380,11 @@ export class ChatSendController {
 
     private _cancelStreamingHandle(handle: StreamingMessageHandle | null): void {
         handle?.cancel();
+    }
+
+    private _createSendId(): string {
+        this._sendSequence += 1;
+        return `${Date.now().toString(36)}-${this._sendSequence.toString(36)}`;
     }
 
     public async tryAutoStartAi(prompt?: string): Promise<boolean> {
