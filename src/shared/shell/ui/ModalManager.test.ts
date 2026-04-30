@@ -280,6 +280,37 @@ describe('ModalManager lifecycle', () => {
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
     });
 
+    it('should suspend and resume app selection without exposing the dashboard', () => {
+        vi.stubGlobal(
+            'requestAnimationFrame',
+            vi.fn((callback: FrameRequestCallback) => {
+                callback(0);
+                return 0;
+            }),
+        );
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+        const container = document.querySelector('.models-container') as HTMLElement;
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: true } as IApp],
+            'svc-a',
+        );
+
+        expect(modalManager.suspendAppSelection()).toBe(true);
+        expect(modal.open).toBe(true);
+        expect(modal.classList.contains('hidden')).toBe(false);
+        expect(modal.style.visibility).toBe('hidden');
+        expect(container.classList.contains('content-hidden')).toBe(true);
+
+        modalManager.resumeAppSelection();
+
+        expect(modal.style.visibility).toBe('');
+        expect(container.classList.contains('content-hidden')).toBe(true);
+        expect(navigation.removeBackAction).not.toHaveBeenCalledWith('app-selection-modal');
+    });
+
     it('disables tab focus movement inside the app selection modal', () => {
         modalManager = createManager();
         const outsideButton = document.createElement('button');
