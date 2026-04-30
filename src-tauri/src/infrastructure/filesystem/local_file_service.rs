@@ -57,7 +57,9 @@ impl LocalFileService {
                 std::process::id(),
                 chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
             ));
-            let had_original = path.exists();
+            let had_original = fs::try_exists(path)
+                .await
+                .map_err(|e| AppError::Io(e.to_string()))?;
             if had_original && let Err(backup_error) = fs::rename(path, &backup).await {
                 let _ = fs::remove_file(&tmp).await;
                 return Err(AppError::Io(format!(
@@ -116,17 +118,15 @@ impl FileService for LocalFileService {
     }
 
     async fn delete(&self, path: &Path) -> Result<(), AppError> {
-        if !path.exists() {
-            return Ok(());
-        }
-        if path.is_dir() {
-            fs::remove_dir_all(path)
+        match fs::metadata(path).await {
+            Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(path)
                 .await
-                .map_err(|e| AppError::Io(e.to_string()))
-        } else {
-            fs::remove_file(path)
+                .map_err(|e| AppError::Io(e.to_string())),
+            Ok(_) => fs::remove_file(path)
                 .await
-                .map_err(|e| AppError::Io(e.to_string()))
+                .map_err(|e| AppError::Io(e.to_string())),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(AppError::Io(error.to_string())),
         }
     }
 

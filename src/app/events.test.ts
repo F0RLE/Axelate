@@ -63,7 +63,11 @@ describe('EventHandler', () => {
         });
         handler.init();
 
-        document.querySelector<HTMLButtonElement>('[data-page]')?.click();
+        const navButton = document.querySelector<HTMLButtonElement>('[data-page]');
+        if (navButton === null) {
+            throw new Error('Navigation button not found');
+        }
+        navButton.click();
         await Promise.resolve();
 
         expect(core.navigationUI.showPage).not.toHaveBeenCalled();

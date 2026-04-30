@@ -85,6 +85,8 @@ export class AIBridgeMessageController {
         }
 
         try {
+            this._deps.onActivity();
+
             const providerId = this._deps.manager.activeProviderId;
             const backendProviderId = resolveCustomProviderBackendId(providerId);
             const requestOptions = this._deps.providerPolicy.buildRequestOptions({

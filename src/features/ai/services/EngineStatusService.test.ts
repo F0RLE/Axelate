@@ -189,6 +189,57 @@ describe('EngineStatusService', () => {
         expect(service.hasActiveEngines).toBe(false);
     });
 
+    it('ignores stale backend refresh results after destroy', async () => {
+        let resolveRefresh: (state: unknown) => void = () => {
+            throw new Error('refresh was not started');
+        };
+        vi.mocked(core.tauriProvider.invoke).mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    resolveRefresh = resolve;
+                }),
+        );
+        service.init();
+        service.destroy();
+
+        resolveRefresh({
+            ready: {
+                slots: [
+                    {
+                        engine: {
+                            id: 'llamacpp',
+                            endpoint: 'http://127.0.0.1:8080',
+                            healthy: true,
+                        },
+                    },
+                ],
+            },
+        });
+        await Promise.resolve();
+
+        expect(service.activeEngineIds).toEqual([]);
+    });
+
+    it('does not reset unrelated launcher cards when backend reports idle', async () => {
+        document.body.innerHTML = `
+            <div class="app-card module-running"></div>
+            <div class="app-card engine-ready" data-app-id="llamacpp"></div>
+            <div class="module-slot-card module-running" data-current-module="llamacpp"></div>
+        `;
+        vi.mocked(core.tauriProvider.invoke).mockResolvedValueOnce('idle');
+
+        await service.refreshFromBackend();
+
+        const unrelated = document.querySelector<HTMLElement>('.app-card:not([data-app-id])');
+        const engineCard = document.querySelector<HTMLElement>('[data-app-id="llamacpp"]');
+        const slotCard = document.querySelector<HTMLElement>('[data-current-module="llamacpp"]');
+        expect(unrelated?.classList.contains('engine-idle')).toBe(false);
+        expect(unrelated?.classList.contains('module-running')).toBe(true);
+        expect(engineCard?.classList.contains('engine-idle')).toBe(true);
+        expect(slotCard?.classList.contains('module-stopped')).toBe(true);
+        expect(slotCard?.dataset['runtimeStatus']).toBe('idle');
+    });
+
     it('returns noop unlisten and handles listen promise failure branches', async () => {
         const webCore = {
             tauriProvider: {

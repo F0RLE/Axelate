@@ -38,6 +38,7 @@ export class Core {
      * Executes the core initialization sequence with hardened survival logic.
      */
     public async init(): Promise<void> {
+        if (this._isCoreDestroyed()) return;
         if (this._isInitialized) return;
         if (this._initPromise !== null) {
             await this._initPromise;
@@ -48,7 +49,7 @@ export class Core {
         this._initPromise = initPromise;
         try {
             await initPromise;
-            if (this._initPromise === initPromise && !this._isDestroyed) {
+            if (this._initPromise === initPromise && !this._isCoreDestroyed()) {
                 this._isInitialized = true;
             }
         } finally {
@@ -60,6 +61,10 @@ export class Core {
 
     private async _runInit(): Promise<void> {
         await this._assembly.lifecycleController.runInit();
+    }
+
+    private _isCoreDestroyed(): boolean {
+        return this._isDestroyed;
     }
 
     public get aiBridge(): CoreServices['aiBridge'] {

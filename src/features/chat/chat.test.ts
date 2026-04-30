@@ -106,7 +106,7 @@ import { EventBus } from '@/shared/services/EventBus';
 
 type ChatControllerTestAccess = {
     init: () => Promise<void>;
-    sendChat: () => Promise<void>;
+    sendChat: () => Promise<boolean>;
     clearChat: () => Promise<void>;
     destroy: () => void;
     toggleAttachMenu: () => void;
@@ -279,6 +279,29 @@ describe('ChatController', () => {
         expect(internals._state.currentGenerationProviderId).toBeNull();
     });
 
+    it('should still clear chat when active send cancellation fails', async () => {
+        const controller = createController();
+        const internals = controller as unknown as {
+            _state: { isSending: boolean; currentGenerationProviderId: string | null };
+            _sendController: { cancelActiveSend: () => Promise<void> };
+        };
+        internals._state.isSending = true;
+        internals._state.currentGenerationProviderId = 'gpt';
+        vi.spyOn(internals._sendController, 'cancelActiveSend').mockRejectedValueOnce(
+            new Error('cancel failed'),
+        );
+
+        await controller.clearChat();
+
+        expect(clearUi).toHaveBeenCalledOnce();
+        expect(internals._state.isSending).toBe(false);
+        expect(internals._state.currentGenerationProviderId).toBeNull();
+        expect(chatDeps.tracer.warn).toHaveBeenCalledWith(
+            '[Chat] Failed to cancel active send during clear:',
+            expect.any(Error),
+        );
+    });
+
     it('should not restore an image generation placeholder if a send starts while probing preview', async () => {
         let resolvePreview: (
             value: Awaited<ReturnType<typeof aiBridge.getImageGenerationPreview>>,
@@ -310,6 +333,38 @@ describe('ChatController', () => {
         await Promise.resolve();
 
         expect(mockChatUiInstances[0]?.createImageGenerationMessage).not.toHaveBeenCalled();
+    });
+
+    it('should not reload restored image history after destruction during preview polling', async () => {
+        let resolvePreview: (
+            value: Awaited<ReturnType<typeof aiBridge.getImageGenerationPreview>>,
+        ) => void = () => {
+            throw new Error('preview promise was not started');
+        };
+        aiBridge.getImageGenerationPreview.mockReturnValueOnce(
+            new Promise((resolve) => {
+                resolvePreview = resolve;
+            }),
+        );
+        const controller = createController();
+        const internals = controller as unknown as {
+            _state: { isDestroyed: boolean; isSending: boolean };
+            _checkRestoredImageGeneration: () => Promise<void>;
+            _historyController: { loadHistory: () => Promise<void> };
+            _generationController: { stopImagePreviewPolling: () => void };
+        };
+        internals._state.isSending = true;
+        const loadHistorySpy = vi.spyOn(internals._historyController, 'loadHistory');
+        const stopPollingSpy = vi.spyOn(internals._generationController, 'stopImagePreviewPolling');
+
+        const checkPromise = internals._checkRestoredImageGeneration();
+        await Promise.resolve();
+        internals._state.isDestroyed = true;
+        resolvePreview(null);
+        await checkPromise;
+
+        expect(loadHistorySpy).not.toHaveBeenCalled();
+        expect(stopPollingSpy).not.toHaveBeenCalled();
     });
 
     it('should clear file update callback on destroy', () => {

@@ -121,17 +121,20 @@ export function bindCoreEntry(createCore: CoreFactory, tracer: EntryLogger): voi
 
     if (import.meta.hot) {
         import.meta.hot.dispose(() => {
-            void destroyActiveCoreInstance(tracer, 'Destroy during HMR dispose failed');
-            if (state.bootHandler !== null) {
-                document.removeEventListener('DOMContentLoaded', state.bootHandler);
-                state.bootHandler = null;
-            }
-            if (state.beforeUnloadHandler !== null) {
-                globalThis.removeEventListener('beforeunload', state.beforeUnloadHandler);
-                state.beforeUnloadHandler = null;
-            }
-            state.coreBootBound = false;
-            state.coreBeforeUnloadBound = false;
+            return destroyActiveCoreInstance(tracer, 'Destroy during HMR dispose failed').finally(
+                () => {
+                    if (state.bootHandler !== null) {
+                        document.removeEventListener('DOMContentLoaded', state.bootHandler);
+                        state.bootHandler = null;
+                    }
+                    if (state.beforeUnloadHandler !== null) {
+                        globalThis.removeEventListener('beforeunload', state.beforeUnloadHandler);
+                        state.beforeUnloadHandler = null;
+                    }
+                    state.coreBootBound = false;
+                    state.coreBeforeUnloadBound = false;
+                },
+            );
         });
     }
 }

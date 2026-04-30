@@ -50,6 +50,7 @@ export class EngineStatusService {
     private readonly _unlisteners: (() => void)[] = [];
     private _domObserver: MutationObserver | null = null;
     private _domSyncFrame: number | null = null;
+    private _refreshGeneration = 0;
     private _initialized = false;
 
     public constructor(private readonly _tracer: EngineStatusLogger) {}
@@ -71,6 +72,7 @@ export class EngineStatusService {
         }
         if (this._context?.tauriProvider.isTauri() !== true) return;
 
+        this._refreshGeneration += 1;
         this._unlisteners.push(
             this._listen<EngineSwappingPayload>('ai:engine:swapping', (payload) => {
                 this._tracer.info(`[EngineStatus] Swapping from ${payload.from} to ${payload.to}`);
@@ -108,6 +110,7 @@ export class EngineStatusService {
     }
 
     public destroy(): void {
+        this._refreshGeneration += 1;
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.length = 0;
         this._domObserver?.disconnect();
@@ -151,11 +154,18 @@ export class EngineStatusService {
             return;
         }
 
+        const refreshGeneration = this._refreshGeneration;
         try {
             const state =
                 await this._context.tauriProvider.invoke<BackendEngineState>('get_engine_state');
+            if (refreshGeneration !== this._refreshGeneration) {
+                return;
+            }
             this._applyBackendState(state);
         } catch (error) {
+            if (refreshGeneration !== this._refreshGeneration) {
+                return;
+            }
             this._tracer.error('[EngineStatusService] Failed to refresh engine state:', error);
         }
     }
@@ -370,15 +380,35 @@ export class EngineStatusService {
         activeIds.forEach((engineId) => {
             this.setEngineState(engineId, 'idle');
         });
-        document.querySelectorAll<HTMLElement>('.app-card, .module-slot-card').forEach((card) => {
-            this._resetCardClasses(card);
-            card.classList.add('engine-idle');
-            card.classList.remove('module-running');
-            if (card.classList.contains('module-slot-card')) {
-                card.classList.add('module-stopped');
-                card.dataset['runtimeStatus'] = 'idle';
-            }
-        });
+        document
+            .querySelectorAll<HTMLElement>(
+                [
+                    '[data-app-id]',
+                    '[data-current-module]',
+                    '.engine-idle',
+                    '.engine-starting',
+                    '.engine-swapping',
+                    '.engine-ready',
+                    '.engine-error',
+                ].join(', '),
+            )
+            .forEach((card) => {
+                if (!this._isEngineBoundCard(card)) {
+                    return;
+                }
+
+                this._resetCardClasses(card);
+                card.classList.add('engine-idle');
+                card.classList.remove('module-running');
+                if (card.dataset['currentModule'] !== undefined) {
+                    card.classList.add('module-stopped');
+                    card.dataset['runtimeStatus'] = 'idle';
+                }
+            });
+    }
+
+    private _isEngineBoundCard(card: HTMLElement): boolean {
+        return card.dataset['appId'] !== undefined || card.dataset['currentModule'] !== undefined;
     }
 
     private _resetCardClasses(card: HTMLElement): void {
