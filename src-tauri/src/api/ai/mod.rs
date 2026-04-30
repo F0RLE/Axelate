@@ -702,7 +702,7 @@ pub async fn get_image_generation_preview(
         preview.total = total;
         preview.speed.clone_from(&speed);
         preview.eta_relative = None;
-    } else if has_status {
+    } else if has_status || has_active_job {
         preview = Some(ImageGenerationPreview {
             data_url: String::new(),
             updated_at_ms: log_progress

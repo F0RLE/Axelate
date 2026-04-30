@@ -232,6 +232,7 @@ describe('ChatSendController', () => {
         await sendPromise;
 
         expect(options.cancelTextGeneration).toHaveBeenCalledOnce();
+        expect(options.cancelTextGeneration).toHaveBeenCalledWith('gpt');
         expect(streamingHandle.cancel).toHaveBeenCalledOnce();
         expect(options.handleResponse).not.toHaveBeenCalled();
         expect(options.handleError).not.toHaveBeenCalled();

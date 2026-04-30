@@ -289,17 +289,20 @@ export class AIBridge implements IAIBridge {
         }
     }
 
-    public async cancelImageGeneration(): Promise<void> {
+    public async cancelImageGeneration(providerId?: string | null): Promise<void> {
         if (this._context?.tauriProvider.isTauri() !== true) {
             return;
         }
 
-        const providerId = this._manager.activeProviderId;
-        if (providerId === null || !this._providerPolicy.isImageProvider(providerId)) {
+        const effectiveProviderId = providerId ?? this._manager.activeProviderId;
+        if (
+            effectiveProviderId === null ||
+            !this._providerPolicy.isImageProvider(effectiveProviderId)
+        ) {
             return;
         }
 
-        await this._runtime.cancelImageGeneration(this._context, providerId);
+        await this._runtime.cancelImageGeneration(this._context, effectiveProviderId);
     }
 
     public async cancelTextGeneration(): Promise<boolean> {

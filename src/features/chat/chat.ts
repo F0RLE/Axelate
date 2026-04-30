@@ -363,13 +363,14 @@ export class ChatController {
             startImagePreviewPolling: (handle) => {
                 this._generationController.startImagePreviewPolling(handle);
             },
-            cancelTextGeneration: async () => {
+            cancelTextGeneration: async (providerIdFromSend) => {
                 const providerId =
+                    providerIdFromSend ??
                     this._state.currentGenerationProviderId ??
                     this._aiBridge.getState().activeProviderId;
                 if (this._generationController.isImageProvider(providerId)) {
                     this._generationController.stopImagePreviewPolling();
-                    await this._aiBridge.cancelImageGeneration();
+                    await this._aiBridge.cancelImageGeneration(providerId);
                     return true;
                 }
 
