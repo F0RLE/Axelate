@@ -170,8 +170,8 @@ export class ChatController {
         return new ChatUiStateHelper({
             aiBridge,
             i18n,
-            appendAssistantError: (message) => {
-                this._ui.appendMessage('assistant', message, { error: true });
+            showErrorToast: (message) => {
+                this._ui.showToast(message, 'error', 5000);
             },
             getChatInput: () => this._inputCoordinator.getInput(),
             maxInputHeightPx: ChatController._maxInputHeightPx,
@@ -768,7 +768,7 @@ export class ChatController {
     private _handleError(errorMsg: unknown = 'Unknown Error', _model?: string): void {
         const msgStr = this._contentHelper.extractText(errorMsg) || 'Unknown Error';
 
-        this._ui.appendMessage('assistant', msgStr, { error: true });
+        this._ui.showToast(msgStr, 'error', 5000);
     }
 
     private _addContextTokens(tokens: number): void {

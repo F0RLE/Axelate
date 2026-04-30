@@ -293,16 +293,15 @@ export class AIBridgeMessageController {
         };
     }
 
-    private _handleMissingApiKey(source: MessageSource): IBridgeResponse {
+    private _handleMissingApiKey(_source: MessageSource): IBridgeResponse {
         const msg = this._deps.translate('ui.ai.no_api_key', 'API key missing');
-        this._deps.events.broadcastResponse(`Error: ${msg}`, source);
         this._deps.showToast(msg, 'error');
         return { ok: false, error: msg };
     }
 
-    private _handleMissingProvider(source: MessageSource): IBridgeResponse {
+    private _handleMissingProvider(_source: MessageSource): IBridgeResponse {
         const msg = this._deps.translate('ui.ai.no_provider', 'No engine found');
-        this._deps.events.broadcastResponse(msg, source);
+        this._deps.showToast(msg, 'error');
         return { ok: false, error: msg };
     }
 

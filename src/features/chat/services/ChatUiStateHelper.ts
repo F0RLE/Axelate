@@ -4,7 +4,7 @@ import type { I18nService } from '@/infrastructure/i18n/I18nService';
 type ChatUiDeps = {
     aiBridge: AIBridge;
     i18n: I18nService;
-    appendAssistantError: (message: string) => void;
+    showErrorToast: (message: string) => void;
     getChatInput: () => HTMLTextAreaElement | null;
     maxInputHeightPx: number;
     baseInputHeightPx: number;
@@ -38,7 +38,7 @@ export class ChatUiStateHelper {
             if (this._deps.aiBridge.isActive()) {
                 return;
             }
-            this._deps.appendAssistantError(
+            this._deps.showErrorToast(
                 this._deps.i18n.t(
                     'ui.ai.no_provider',
                     'No AI module running. Please select and launch a module first.',

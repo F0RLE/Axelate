@@ -6,6 +6,7 @@ const updateTokenCount = vi.fn();
 const mockChatUiInstances: Array<{
     renderHistory: ReturnType<typeof vi.fn>;
     createImageGenerationMessage: ReturnType<typeof vi.fn>;
+    showToast: ReturnType<typeof vi.fn>;
 }> = [];
 const mockChatFileHandlerInstances: Array<{
     clear: ReturnType<typeof vi.fn>;
@@ -47,6 +48,7 @@ vi.mock('./ui/ChatUI', () => ({
             mockChatUiInstances.push({
                 renderHistory: this.renderHistory,
                 createImageGenerationMessage: this.createImageGenerationMessage,
+                showToast: this.showToast,
             });
         }
     },
@@ -176,7 +178,7 @@ describe('ChatController', () => {
         return new ChatUiStateHelper({
             aiBridge: aiBridge as never,
             i18n: i18n as never,
-            appendAssistantError: appendMessage,
+            showErrorToast: vi.fn(),
             getChatInput: () => document.getElementById('chat-input') as HTMLTextAreaElement | null,
             maxInputHeightPx: 200,
             baseInputHeightPx: 42,
@@ -202,6 +204,7 @@ describe('ChatController', () => {
         vi.advanceTimersByTime(500);
 
         expect(appendMessage).not.toHaveBeenCalled();
+        expect(mockChatUiInstances[0]?.showToast).not.toHaveBeenCalled();
         vi.useRealTimers();
     });
 
@@ -216,9 +219,44 @@ describe('ChatController', () => {
         vi.advanceTimersByTime(500);
 
         expect(appendMessage).not.toHaveBeenCalled();
+        expect(mockChatUiInstances[0]?.showToast).not.toHaveBeenCalled();
         expect(clearUi).toHaveBeenCalledTimes(1);
         expect(updateTokenCount).toHaveBeenCalledWith(0, undefined);
         vi.useRealTimers();
+    });
+
+    it('should show inactive-ai errors as toast instead of chat messages', async () => {
+        vi.useFakeTimers();
+        document.body.innerHTML = '<textarea id="chat-input">hello</textarea>';
+        aiBridge.isActive.mockReturnValue(false);
+        const controller = createController();
+
+        await controller.sendChat();
+        vi.advanceTimersByTime(500);
+
+        expect(appendMessage).not.toHaveBeenCalled();
+        expect(mockChatUiInstances[0]?.showToast).toHaveBeenCalledWith(
+            'No AI module running. Please select and launch a module first.',
+            'error',
+            5000,
+        );
+        vi.useRealTimers();
+    });
+
+    it('should show send failures as toast instead of persistent chat messages', () => {
+        const controller = createController();
+        const internals = controller as unknown as {
+            _handleError: (error: unknown) => void;
+        };
+
+        internals._handleError('Provider activation failed');
+
+        expect(appendMessage).not.toHaveBeenCalled();
+        expect(mockChatUiInstances[0]?.showToast).toHaveBeenCalledWith(
+            'Provider activation failed',
+            'error',
+            5000,
+        );
     });
 
     it('should cancel active generation before clearing chat', async () => {

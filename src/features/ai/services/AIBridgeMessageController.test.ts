@@ -16,7 +16,15 @@ function createTextController() {
         broadcastResponse: vi.fn(),
         broadcastReplaceChunk: vi.fn(),
     };
-    const manager = {
+    const manager: {
+        activeProviderId: string | null;
+        apiKey: string | null;
+        model: string;
+        sessionId: string;
+        maxOutputTokens: number | undefined;
+        refreshActiveApiKey: ReturnType<typeof vi.fn>;
+        isActive: ReturnType<typeof vi.fn>;
+    } = {
         activeProviderId: CUSTOM_TEXT_PROVIDER_ID,
         apiKey: '[secure]',
         model: 'deepseek/deepseek-r1-0528',
@@ -40,6 +48,7 @@ function createTextController() {
             close: vi.fn().mockResolvedValue(undefined),
         },
     };
+    const showToast = vi.fn();
 
     const controller = new AIBridgeMessageController({
         getContext: () => context as never,
@@ -49,14 +58,14 @@ function createTextController() {
         providerPolicy: new AIBridgeProviderPolicy(),
         tracer: { error: vi.fn() },
         translate: (_key, fallback) => fallback,
-        showToast: vi.fn(),
+        showToast,
         onActivity: vi.fn(),
         onLongActivityStart: vi.fn(),
         onLongActivityEnd: vi.fn(),
         onSuccessfulResponse: vi.fn(),
     });
 
-    return { controller, transport, events, manager, context };
+    return { controller, transport, events, manager, context, showToast };
 }
 
 function createImageController() {
@@ -296,5 +305,28 @@ describe('AIBridgeMessageController custom providers', () => {
             model: 'llamacpp',
         });
         expect(transport.send).not.toHaveBeenCalled();
+    });
+
+    it('shows missing provider errors as toast without broadcasting chat text', async () => {
+        const { controller, events, manager, showToast } = createTextController();
+        manager.activeProviderId = null;
+
+        const response = await controller.sendMessage('hello', 'chat', [], []);
+
+        expect(response).toEqual({ ok: false, error: 'No engine found' });
+        expect(showToast).toHaveBeenCalledWith('No engine found', 'error');
+        expect(events.broadcastResponse).not.toHaveBeenCalled();
+    });
+
+    it('shows missing api key errors as toast without broadcasting chat text', async () => {
+        const { controller, events, manager, showToast } = createTextController();
+        manager.apiKey = null;
+        manager.isActive.mockReturnValue(false);
+
+        const response = await controller.sendMessage('hello', 'chat', [], []);
+
+        expect(response).toEqual({ ok: false, error: 'API key missing' });
+        expect(showToast).toHaveBeenCalledWith('API key missing', 'error');
+        expect(events.broadcastResponse).not.toHaveBeenCalled();
     });
 });
