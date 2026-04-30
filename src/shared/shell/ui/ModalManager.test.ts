@@ -104,6 +104,8 @@ describe('ModalManager lifecycle', () => {
         modalManager.closeAppSelection();
         modalManager.openAppSelection('services', []);
 
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
+
         const closeSpy = vi.spyOn(modalManager, 'closeAppSelection');
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
         modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -302,13 +304,33 @@ describe('ModalManager lifecycle', () => {
         expect(modal.open).toBe(true);
         expect(modal.classList.contains('hidden')).toBe(false);
         expect(modal.style.visibility).toBe('hidden');
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
         expect(container.classList.contains('content-hidden')).toBe(true);
 
         modalManager.resumeAppSelection();
 
         expect(modal.style.visibility).toBe('');
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
         expect(container.classList.contains('content-hidden')).toBe(true);
         expect(navigation.removeBackAction).not.toHaveBeenCalledWith('app-selection-modal');
+    });
+
+    it('should clear page-hidden state after closing app selection', () => {
+        modalManager = createManager();
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: true } as IApp],
+            'svc-a',
+        );
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
+
+        modalManager.closeAppSelection();
+
+        expect(document.body.classList.contains('app-selection-open')).toBe(false);
+        expect(
+            document.querySelector('.models-container')?.classList.contains('content-hidden'),
+        ).toBe(false);
     });
 
     it('disables tab focus movement inside the app selection modal', () => {

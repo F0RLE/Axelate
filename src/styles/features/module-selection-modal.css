@@ -816,6 +816,7 @@ body.snapping .modal-backdrop {
     transform: none !important;
 }
 
+body.app-selection-open #main-area,
 body.download-selection-open #main-area {
     visibility: hidden !important;
     opacity: 0 !important;
