@@ -736,6 +736,27 @@ describe('AIBridge', () => {
             expect(fn).toHaveBeenCalled();
         });
 
+        it('should continue cleanup when an unlistener throws', () => {
+            const throwingUnlistener = vi.fn(() => {
+                throw new Error('cleanup failed');
+            });
+            const healthyUnlistener = vi.fn();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const transportDestroySpy = vi.spyOn((aiBridge as any)._transport, 'destroy');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._unlisteners.push(throwingUnlistener, healthyUnlistener);
+
+            expect(() => aiBridge.destroy()).not.toThrow();
+
+            expect(throwingUnlistener).toHaveBeenCalledOnce();
+            expect(healthyUnlistener).toHaveBeenCalledOnce();
+            expect(transportDestroySpy).toHaveBeenCalledOnce();
+            expect(mockTracer.warn).toHaveBeenCalledWith(
+                '[AIBridge] Stream cleanup listener failed:',
+                expect.any(Error),
+            );
+        });
+
         it('should be safe to call multiple times', () => {
             aiBridge.destroy();
             aiBridge.destroy();

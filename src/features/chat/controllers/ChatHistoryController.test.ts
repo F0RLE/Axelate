@@ -154,6 +154,65 @@ describe('ChatHistoryController', () => {
         expect(deps.renderHistory).toHaveBeenLastCalledWith(defaultHistory);
     });
 
+    it('should isolate multimodal history snapshots from later mutations', () => {
+        const { controller, state } = createController({
+            history: [
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: 'look' },
+                        {
+                            type: 'image_url',
+                            image_url: { url: 'data:image/png;base64,old', detail: 'auto' },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const snapshot = controller.getLocalHistorySnapshot();
+        const snapshotContent = snapshot[0]?.content;
+        if (!Array.isArray(snapshotContent) || snapshotContent[1]?.type !== 'image_url') {
+            throw new Error('snapshot did not keep image content');
+        }
+        snapshotContent[1].image_url.url = 'data:image/png;base64,mutated';
+
+        const currentContent = state.history[0]?.content;
+        expect(Array.isArray(currentContent) ? currentContent[1] : undefined).toEqual({
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,old', detail: 'auto' },
+        });
+    });
+
+    it('should isolate restored multimodal history from caller-owned objects', () => {
+        const { controller, state } = createController();
+        const snapshot: IChatMessage[] = [
+            {
+                role: 'user',
+                content: [
+                    { type: 'text', text: 'look' },
+                    {
+                        type: 'image_url',
+                        image_url: { url: 'data:image/png;base64,old', detail: 'high' },
+                    },
+                ],
+            },
+        ];
+
+        controller.restoreLocalHistorySnapshot(snapshot);
+        const snapshotContent = snapshot[0]?.content;
+        if (!Array.isArray(snapshotContent) || snapshotContent[1]?.type !== 'image_url') {
+            throw new Error('snapshot did not keep image content');
+        }
+        snapshotContent[1].image_url.url = 'data:image/png;base64,mutated';
+
+        const currentContent = state.history[0]?.content;
+        expect(Array.isArray(currentContent) ? currentContent[1] : undefined).toEqual({
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,old', detail: 'high' },
+        });
+    });
+
     it('should rewind the last turn and return text for regeneration', async () => {
         const { controller, deps, aiBridge } = createController({
             history: [

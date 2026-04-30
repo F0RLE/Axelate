@@ -8,10 +8,13 @@ import type {
 } from '../types/aiTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { AITransportContext } from './AIBridgeContext';
+import { isCloudProviderId } from '@/shared/utils/providerSupport';
 
 type AIChatTransportLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 const STALE_REQUEST_CANCEL_TIMEOUT_MS = 750;
 const AI_REQUEST_TIMEOUT_MESSAGE = 'AI request timed out';
+const CLOUD_CHAT_REQUEST_TIMEOUT_MS = 90_000;
+const LOCAL_CHAT_REQUEST_TIMEOUT_MS = 30 * 60_000;
 
 /**
  * Safely extracts a human-readable error string from any error shape.
@@ -152,7 +155,7 @@ export class AIChatTransport implements IChatTransport {
                     chatChannel,
                     thoughtChannel,
                 }),
-                90000,
+                this._chatRequestTimeoutMs(requestWithId),
                 AI_REQUEST_TIMEOUT_MESSAGE,
             );
 
@@ -203,7 +206,7 @@ export class AIChatTransport implements IChatTransport {
                     chatChannel,
                     thoughtChannel,
                 }),
-                90000,
+                this._chatRequestTimeoutMs(requestWithId),
                 AI_REQUEST_TIMEOUT_MESSAGE,
             );
 
@@ -437,6 +440,12 @@ export class AIChatTransport implements IChatTransport {
 
     private _isPayloadForRequest(payload: IStreamChunkEnvelope, requestId: string): boolean {
         return payload.request_id === requestId;
+    }
+
+    private _chatRequestTimeoutMs(request: IChatRequest): number {
+        return isCloudProviderId(request.provider)
+            ? CLOUD_CHAT_REQUEST_TIMEOUT_MS
+            : LOCAL_CHAT_REQUEST_TIMEOUT_MS;
     }
 
     public destroy(): void {
