@@ -23,6 +23,7 @@ type CreateChatImageGenerationMessageDeps = {
     isDestroyed: () => boolean;
     tracer: { error: (message: string, error?: unknown) => void };
     scrollToBottom: (sticky?: boolean) => void;
+    isNearBottom: () => boolean;
     appendRow: (row: HTMLElement) => void;
     createMessageBubble: (opts: Record<string, unknown>) => HTMLElement;
     appendMessageActions: (
@@ -105,12 +106,17 @@ export function createChatImageGenerationMessage(
     image.decoding = 'async';
     media.appendChild(image);
 
+    let keepPinnedAfterImageLoad = false;
+
     const syncMediaSizeToImage = (): void => {
         const naturalWidth = image.naturalWidth;
         const naturalHeight = image.naturalHeight;
         if (naturalWidth <= 0 || naturalHeight <= 0) return;
 
         media.style.aspectRatio = `${String(naturalWidth)} / ${String(naturalHeight)}`;
+        if (keepPinnedAfterImageLoad) {
+            deps.scrollToBottom();
+        }
     };
     image.addEventListener('load', syncMediaSizeToImage);
 
@@ -178,11 +184,13 @@ export function createChatImageGenerationMessage(
     const showPreview = (dataUrl: string): void => {
         if (dataUrl.trim() === '') return;
         if (image.src === dataUrl) return;
+        const shouldKeepPinned = deps.isNearBottom();
+        keepPinnedAfterImageLoad = shouldKeepPinned;
         detachMediaFromBubble();
         image.src = dataUrl;
         syncMediaSizeToImage();
         media.classList.remove('hidden');
-        deps.scrollToBottom(true);
+        deps.scrollToBottom(!shouldKeepPinned);
     };
 
     const hideProgress = (): void => {

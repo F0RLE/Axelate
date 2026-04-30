@@ -28,19 +28,24 @@ export class ChatViewportController {
             return;
         }
 
-        if (sticky) {
-            const threshold = 150;
-            const isAtBottom =
-                messagesContainer.scrollHeight -
-                    messagesContainer.scrollTop -
-                    messagesContainer.clientHeight <
-                threshold;
-
-            if (!isAtBottom) {
-                return;
-            }
+        if (sticky && !this.isNearBottom(messagesContainer)) {
+            return;
         }
 
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    public isNearBottom(messagesContainer: HTMLElement | null): boolean {
+        if (messagesContainer === null) {
+            return false;
+        }
+
+        const threshold = 150;
+        return (
+            messagesContainer.scrollHeight -
+                messagesContainer.scrollTop -
+                messagesContainer.clientHeight <
+            threshold
+        );
     }
 }

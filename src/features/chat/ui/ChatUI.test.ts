@@ -458,6 +458,46 @@ describe('ChatUI lifecycle', () => {
         ).toBe(true);
     });
 
+    it('should keep generated image preview pinned when the chat was already at bottom', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+        const messages = document.getElementById('chat-messages') as HTMLDivElement;
+
+        Object.defineProperty(messages, 'clientHeight', { configurable: true, value: 400 });
+        Object.defineProperty(messages, 'scrollHeight', {
+            configurable: true,
+            get: () =>
+                document.querySelector('.chat-generated-media:not(.hidden)') === null ? 1000 : 2000,
+        });
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage();
+        expect(messages.scrollTop).toBe(1000);
+
+        handle.setPreview('data:image/png;base64,dGVzdA==');
+
+        expect(messages.scrollTop).toBe(2000);
+    });
+
+    it('should not force generated image preview to bottom when the user scrolled up', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+        const messages = document.getElementById('chat-messages') as HTMLDivElement;
+
+        Object.defineProperty(messages, 'clientHeight', { configurable: true, value: 400 });
+        Object.defineProperty(messages, 'scrollHeight', {
+            configurable: true,
+            get: () =>
+                document.querySelector('.chat-generated-media:not(.hidden)') === null ? 1000 : 2000,
+        });
+
+        ui = createChatUI();
+        const handle = ui.createImageGenerationMessage();
+        messages.scrollTop = 100;
+
+        handle.setPreview('data:image/png;base64,dGVzdA==');
+
+        expect(messages.scrollTop).toBe(100);
+    });
+
     it('should scroll chat history to the bottom after restore', () => {
         vi.useFakeTimers();
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
