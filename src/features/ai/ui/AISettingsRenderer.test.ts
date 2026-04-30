@@ -275,15 +275,21 @@ describe('AISettingsRenderer', () => {
         vi.advanceTimersByTime(3000);
         expect(button.disabled).toBe(false);
 
+        button.classList.add('success');
+        button.innerHTML = '<check>';
         input.value = '';
         input.dispatchEvent(new Event('input', { bubbles: true }));
-        await aiSettingsRenderer.checkKey('gpt');
+        await Promise.resolve();
+        await Promise.resolve();
         expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
         expect(showToast).toHaveBeenCalledWith(
             'ui.settings.key_removed:API key removed',
             'success',
         );
-        vi.advanceTimersByTime(3000);
+        expect(input.value).toBe('');
+        expect(input.dataset['storedMasked']).toBeUndefined();
+        expect(button.classList.contains('success')).toBe(false);
+        expect(button.textContent).toBe('ui.gpt.key_check_btn:Check');
 
         input.value = 'bad-key';
         input.dispatchEvent(new Event('input', { bubbles: true }));

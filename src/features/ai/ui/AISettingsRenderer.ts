@@ -35,6 +35,11 @@ type AISettingsActiveRenderTarget = {
     container: HTMLElement;
     app: IApp;
 };
+type KeyInput = HTMLInputElement | HTMLTextAreaElement;
+
+function isKeyInput(value: EventTarget | null): value is KeyInput {
+    return value instanceof HTMLInputElement || value instanceof HTMLTextAreaElement;
+}
 
 // IAISettingsGlobal removed as it's no longer used for strictness reasons
 
@@ -224,7 +229,18 @@ class AISettingsRenderer extends BaseComponent {
             container,
             signal: renderSignal,
             normalizeKeyInput: (event) => {
+                const target = event.target;
+                if (!isKeyInput(target)) {
+                    return;
+                }
+
+                const hadStoredKey =
+                    target.dataset['storedMasked'] === 'true' ||
+                    target.dataset['storedRevealed'] === 'true';
                 this._keyController.normalizeInput(event);
+                if (hadStoredKey) {
+                    void this._removeClearedStoredKey(target, keyProviderId, appId);
+                }
             },
             maybeClearStoredMask: (event) => {
                 this._keyController.maybeClearStoredMask(event);
@@ -277,6 +293,17 @@ class AISettingsRenderer extends BaseComponent {
         );
         const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-check-btn`);
         await this._keyController.checkKey(input, btn, this._getKeyProviderId(appId));
+    }
+
+    private async _removeClearedStoredKey(
+        input: KeyInput,
+        keyProviderId: string,
+        appId: string,
+    ): Promise<void> {
+        await this._keyController.removeClearedStoredKey(input, keyProviderId);
+        if (input.value.trim() === '') {
+            this._resetKeyCheckButton(appId);
+        }
     }
 
     /**
@@ -494,6 +521,24 @@ class AISettingsRenderer extends BaseComponent {
         }, 3000);
 
         this._buttonResetTimers.set(btn, timer);
+    }
+
+    private _resetKeyCheckButton(appId: string): void {
+        const button = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-check-btn`);
+        if (button === null) {
+            return;
+        }
+
+        const existingTimer = this._buttonResetTimers.get(button);
+        if (existingTimer !== undefined) {
+            clearTimeout(existingTimer);
+            this._buttonResetTimers.delete(button);
+        }
+
+        this._keyController.resetButtonState(
+            button,
+            this._getTranslator()('ui.gpt.key_check_btn', 'Check'),
+        );
     }
 
     private _cleanupRenderScope(): void {
