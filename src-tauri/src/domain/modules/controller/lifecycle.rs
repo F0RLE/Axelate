@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 const MODULE_CHILD_EXIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
-static MODULE_START_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+static MODULE_LIFECYCLE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 fn build_command(cmd: CommandDefinition) -> Command {
     match cmd {
@@ -60,7 +60,7 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Safely starts a module with the given manifest
     pub async fn start(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
-        let _start_guard = MODULE_START_LOCK.lock().await;
+        let _lifecycle_guard = MODULE_LIFECYCLE_LOCK.lock().await;
 
         // 1. Guard against double-start
         // Check registry first (atomic-ish)
@@ -316,6 +316,7 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Gracefully stops a module with escalation
     pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
+        let _lifecycle_guard = MODULE_LIFECYCLE_LOCK.lock().await;
         tracing::info!("Stopping module: {}", self.module_id);
 
         // 1. Run stop script if exists

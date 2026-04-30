@@ -10,6 +10,7 @@ import {
 function createTextController() {
     const transport = {
         send: vi.fn().mockResolvedValue({ ok: true, text: 'done' }),
+        sendSilent: vi.fn().mockResolvedValue({ ok: true, text: 'prepared' }),
         generateImage: vi.fn(),
     };
     const events = {
@@ -49,6 +50,7 @@ function createTextController() {
         },
     };
     const showToast = vi.fn();
+    const onActivity = vi.fn();
 
     const controller = new AIBridgeMessageController({
         getContext: () => context as never,
@@ -59,18 +61,19 @@ function createTextController() {
         tracer: { error: vi.fn() },
         translate: (_key, fallback) => fallback,
         showToast,
-        onActivity: vi.fn(),
+        onActivity,
         onLongActivityStart: vi.fn(),
         onLongActivityEnd: vi.fn(),
         onSuccessfulResponse: vi.fn(),
     });
 
-    return { controller, transport, events, manager, context, showToast };
+    return { controller, transport, events, manager, context, showToast, onActivity };
 }
 
 function createImageController() {
     const transport = {
         send: vi.fn(),
+        sendSilent: vi.fn(),
         generateImage: vi
             .fn()
             .mockResolvedValue({ ok: true, images: ['data:image/png;base64,abc'] }),
@@ -328,5 +331,15 @@ describe('AIBridgeMessageController custom providers', () => {
         expect(response).toEqual({ ok: false, error: 'API key missing' });
         expect(showToast).toHaveBeenCalledWith('API key missing', 'error');
         expect(events.broadcastResponse).not.toHaveBeenCalled();
+    });
+
+    it('marks silent image prompt preparation as provider activity', async () => {
+        const { controller, transport, onActivity } = createTextController();
+
+        const response = await controller.prepareImagePrompt('rewrite image prompt');
+
+        expect(response).toEqual({ ok: true, text: 'prepared' });
+        expect(onActivity).toHaveBeenCalledOnce();
+        expect(transport.sendSilent).toHaveBeenCalledOnce();
     });
 });

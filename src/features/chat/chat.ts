@@ -495,12 +495,16 @@ export class ChatController {
     }
 
     private async _checkRestoredImageGeneration(): Promise<void> {
-        if (this._state.isDestroyed || !this._state.isSending) {
+        if (this._shouldSkipRestoredImageGeneration()) {
             return;
         }
 
         try {
             const preview = await this._aiBridge.getImageGenerationPreview();
+            if (this._shouldSkipRestoredImageGeneration()) {
+                return;
+            }
+
             if (preview !== null) {
                 this._scheduleRestoredImageGenerationCheck();
                 return;
@@ -618,7 +622,11 @@ export class ChatController {
         this._activationCoordinator.clearInactiveAiErrorTimeout();
         this._clearRestoredImageGenerationTimer();
         if (this._state.isSending) {
-            await this._sendController.cancelActiveSend();
+            try {
+                await this._sendController.cancelActiveSend();
+            } catch (error: unknown) {
+                this._tracer.warn('[Chat] Failed to cancel active send during clear:', error);
+            }
         }
         this._generationController.stopImagePreviewPolling();
         this._state.isSending = false;
