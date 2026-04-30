@@ -295,6 +295,15 @@ export class TauriProvider implements IBridge {
         }
     }
 
+    public async removeSecureKey(service: string): Promise<void> {
+        try {
+            await this.invoke('remove_secure_key', { service });
+        } catch (e) {
+            this._tracer.error(`[TauriProvider] Secure remove failed for ${service}: ${String(e)}`);
+            throw e;
+        }
+    }
+
     /**
      * Check whether a non-empty key exists in secure storage.
      */

@@ -21,6 +21,7 @@ describe('AISettingsRenderer', () => {
         getSecureKeyMeta: vi.fn(),
         getSecureKey: vi.fn(),
         saveSecureKey: vi.fn(),
+        removeSecureKey: vi.fn(),
         hasSecureKey: vi.fn(),
         validateApiKey: vi.fn(),
         validateStoredApiKey: vi.fn(),
@@ -86,6 +87,7 @@ describe('AISettingsRenderer', () => {
         settingsService.getSecureKeyMeta.mockResolvedValue({ exists: true, length: 16 });
         settingsService.getSecureKey.mockResolvedValue('stored-secret');
         settingsService.saveSecureKey.mockResolvedValue(undefined);
+        settingsService.removeSecureKey.mockResolvedValue(undefined);
         settingsService.hasSecureKey.mockResolvedValue(true);
         settingsService.validateApiKey.mockResolvedValue(true);
         settingsService.validateStoredApiKey.mockResolvedValue(true);
@@ -272,6 +274,16 @@ describe('AISettingsRenderer', () => {
 
         vi.advanceTimersByTime(3000);
         expect(button.disabled).toBe(false);
+
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await aiSettingsRenderer.checkKey('gpt');
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_removed:API key removed',
+            'success',
+        );
+        vi.advanceTimersByTime(3000);
 
         input.value = 'bad-key';
         input.dispatchEvent(new Event('input', { bubbles: true }));

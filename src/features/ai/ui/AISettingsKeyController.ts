@@ -113,12 +113,19 @@ export class AISettingsKeyController {
             const isStoredMask = input.dataset['storedMasked'] === 'true';
             const isDirtyReplacement = input.dataset['keyDirty'] === 'true';
             const key = input.value.trim();
+            const shouldRemoveStoredKey = isDirtyReplacement && key === '';
             const shouldValidateTypedKey =
                 (isDirtyReplacement && key !== '') || (!isStoredMask && key !== '');
             const shouldValidateStoredKey = !isDirtyReplacement && isStoredMask && key !== '';
 
             let isValid = false;
-            if (shouldValidateTypedKey) {
+            if (shouldRemoveStoredKey) {
+                await this._options.getSettingsService()?.removeSecureKey(providerId);
+                this.clearStoredKeyMask(input);
+                this.updateButtonState(button, 'success', this._options.icons.check);
+                this._showToast(t('ui.settings.key_removed', 'API key removed'), 'success');
+                return;
+            } else if (shouldValidateTypedKey) {
                 isValid = await this._validateKey(providerId, key);
             } else if (shouldValidateStoredKey) {
                 isValid = Boolean(

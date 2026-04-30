@@ -351,6 +351,26 @@ describe('TauriProvider', () => {
         });
     });
 
+    describe('removeSecureKey', () => {
+        it('should call remove_secure_key with correct args', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(undefined);
+
+            await provider.removeSecureKey('openai_api');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('remove_secure_key', {
+                service: 'openai_api',
+            });
+        });
+
+        it('should rethrow remove errors', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockRejectedValueOnce(
+                new Error('Storage failure'),
+            );
+
+            await expect(provider.removeSecureKey('openai_api')).rejects.toThrow('Storage failure');
+        });
+    });
+
     // ---------------------------------------------------------- hasSecureKey
     describe('hasSecureKey', () => {
         it('should return key presence when invoke succeeds', async () => {

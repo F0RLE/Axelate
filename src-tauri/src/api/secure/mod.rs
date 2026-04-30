@@ -41,7 +41,19 @@ fn ensure_frontend_managed_secret(service: &str) -> Result<String, AppError> {
 /// Saves anAPI key securely to system credential storage
 pub async fn save_secure_key(service: String, key: String) -> Result<(), AppError> {
     let service = ensure_frontend_managed_secret(&service)?;
+    if key.trim().is_empty() {
+        return SecureStorage::remove_key_async(service).await;
+    }
+
     SecureStorage::save_key_async(service, key).await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Removes a frontend-managed secret from system credential storage
+pub async fn remove_secure_key(service: String) -> Result<(), AppError> {
+    let service = ensure_frontend_managed_secret(&service)?;
+    SecureStorage::remove_key_async(service).await
 }
 
 #[tauri::command]
@@ -118,6 +130,18 @@ mod tests {
     #[tokio::test]
     async fn has_secure_key_rejects_non_frontend_secret_names() {
         let err = has_secure_key("license_data".to_string())
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            AppError::Validation(message) if message.contains("frontend secure API")
+        ));
+    }
+
+    #[tokio::test]
+    async fn remove_secure_key_rejects_non_frontend_secret_names() {
+        let err = remove_secure_key("license_data".to_string())
             .await
             .unwrap_err();
 
