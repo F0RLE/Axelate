@@ -97,6 +97,7 @@ type ChatControllerTestAccess = {
     sendChat: () => Promise<void>;
     clearChat: () => Promise<void>;
     destroy: () => void;
+    toggleAttachMenu: () => void;
 };
 
 describe('ChatController', () => {
@@ -214,6 +215,25 @@ describe('ChatController', () => {
         controller.destroy();
 
         expect(mockChatFileHandlerInstances[0]?.clearUpdateCallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('should remove attach menu listeners on destroy', () => {
+        vi.useFakeTimers();
+        const removeEventListener = vi.spyOn(document, 'removeEventListener');
+        document.body.innerHTML = `
+            <div id="chat-compose">
+                <button id="chat-attach-btn"></button>
+            </div>
+        `;
+        const controller = createController();
+
+        controller.toggleAttachMenu();
+        vi.runOnlyPendingTimers();
+        controller.destroy();
+
+        expect(document.querySelector('.chat-attach-menu')).toBeNull();
+        expect(removeEventListener).toHaveBeenCalledWith('mousedown', expect.any(Function), true);
+        vi.useRealTimers();
     });
 
     it('should restore multimodal history without flattening stored content', async () => {

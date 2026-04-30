@@ -91,6 +91,7 @@ type ChatSendFactoryDeps = {
     fileHandler: ChatFileHandler;
     service: ChatService;
     getHistory: () => IChatMessage[];
+    estimateTokens: (text: string) => Promise<number>;
     pushUserMessage: (content: IChatMessage['content']) => void;
     createStreamingHandle: (typingId: string) => {
         setStatus: (text: string) => void;
@@ -263,6 +264,7 @@ export class ChatControllerFactory {
             fileHandler: deps.fileHandler,
             service: deps.service,
             getHistory: () => deps.getHistory(),
+            estimateTokens: async (text) => await deps.estimateTokens(text),
             pushUserMessage: (content) => {
                 deps.pushUserMessage(content);
             },

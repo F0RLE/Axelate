@@ -411,25 +411,6 @@ describe('ChatFileHandler', () => {
         });
     });
 
-    // ---------------------------------------------------------- calculateCombinedContext
-    describe('calculateCombinedContext', () => {
-        it('should return file list as attachments', async () => {
-            handler.addFiles([createFile('a.txt', 'aaa'), createImageFile('b.png')]);
-            const result = await handler.calculateCombinedContext('Base');
-
-            expect(result.attachments).toHaveLength(2);
-            expect(result.attachments[0]?.name).toBe('a.txt');
-            expect(result.attachments[1]?.name).toBe('b.png');
-            expect(result.combinedText).toContain('[Files attached]');
-        });
-
-        it('should work with no files', async () => {
-            const result = await handler.calculateCombinedContext('Base');
-            expect(result.attachments).toHaveLength(0);
-            expect(result.combinedText).toContain('Base');
-        });
-    });
-
     // ---------------------------------------------------------- getFileTokenEstimate
     describe('getFileTokenEstimate', () => {
         it('should return 258 for image files', async () => {

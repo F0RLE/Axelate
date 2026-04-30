@@ -79,6 +79,8 @@ export class ChatController {
     private readonly _sendController: ChatSendController;
     private readonly _state = new ChatControllerState();
     private _restoredImageGenerationTimer: ReturnType<typeof setTimeout> | null = null;
+    private _attachMenuOpenTimer: ReturnType<typeof setTimeout> | null = null;
+    private _attachMenuCloseHandler: ((event: MouseEvent) => void) | null = null;
     private _forceImageGeneration = false;
     private _contextTokenTotal = 0;
     private _contextTokenVersion = 0;
@@ -309,6 +311,7 @@ export class ChatController {
             fileHandler: this._fileHandler,
             service: this._service,
             getHistory: () => this._state.history,
+            estimateTokens: async (text) => await deps.estimateTokens(text),
             pushUserMessage: (content) => {
                 this._state.pushHistoryMessage({ role: 'user', content });
             },
@@ -432,6 +435,7 @@ export class ChatController {
         this._lifecycleHelper.stop();
         this._viewHelper.unbindEvents();
         this._generationController.stopImagePreviewPolling();
+        this._closeAttachMenu();
         this._uiStateHelper.dispose();
         this._sendController.destroy();
         this._historyController.destroy();
@@ -518,6 +522,18 @@ export class ChatController {
         this._restoredImageGenerationTimer = null;
     }
 
+    private _closeAttachMenu(): void {
+        if (this._attachMenuOpenTimer !== null) {
+            globalThis.clearTimeout(this._attachMenuOpenTimer);
+            this._attachMenuOpenTimer = null;
+        }
+        if (this._attachMenuCloseHandler !== null) {
+            document.removeEventListener('mousedown', this._attachMenuCloseHandler, true);
+            this._attachMenuCloseHandler = null;
+        }
+        document.querySelector('.chat-attach-menu')?.remove();
+    }
+
     // --- Public Actions ---
 
     public async pickChatFiles(): Promise<void> {
@@ -527,9 +543,11 @@ export class ChatController {
     public toggleAttachMenu(): void {
         const existing = document.querySelector('.chat-attach-menu');
         if (existing instanceof HTMLElement) {
-            existing.remove();
+            this._closeAttachMenu();
             return;
         }
+
+        this._closeAttachMenu();
 
         const button = document.getElementById('chat-attach-btn');
         const compose = document.getElementById('chat-compose');
@@ -562,19 +580,25 @@ export class ChatController {
             if (event.target instanceof Node && button.contains(event.target)) {
                 return;
             }
-            menu.remove();
-            document.removeEventListener('mousedown', close, true);
+            this._closeAttachMenu();
         };
-        setTimeout(() => document.addEventListener('mousedown', close, true), 0);
+        this._attachMenuCloseHandler = close;
+        this._attachMenuOpenTimer = globalThis.setTimeout(() => {
+            this._attachMenuOpenTimer = null;
+            if (this._state.isDestroyed || !menu.isConnected) {
+                return;
+            }
+            document.addEventListener('mousedown', close, true);
+        }, 0);
     }
 
     public async pickChatFilesFromMenu(): Promise<void> {
-        document.querySelector('.chat-attach-menu')?.remove();
+        this._closeAttachMenu();
         await this.pickChatFiles();
     }
 
     public async sendImageGenerationFromMenu(): Promise<void> {
-        document.querySelector('.chat-attach-menu')?.remove();
+        this._closeAttachMenu();
         this._forceImageGeneration = true;
         await this.sendChat();
     }
