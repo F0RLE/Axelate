@@ -141,6 +141,9 @@ export class ModalManager {
         this._currentApps = apps;
         this._currentSelectedAppId = selectedAppId ?? null;
 
+        const container = document.querySelector('.models-container');
+        if (container !== null) container.classList.add('content-hidden');
+
         // Derive filter from compound category — do NOT blindly reset to 'text'
         // so that reopening after removing an image-slot app stays on the image tab.
         if (category === CategoryKey.AI_IMAGE) {
@@ -178,10 +181,6 @@ export class ModalManager {
             }, 0);
         });
 
-        // Add smooth hiding for main content
-        const container = document.querySelector('.models-container');
-        if (container !== null) container.classList.add('content-hidden');
-
         // Register back action for mouse/keyboard global navigation
         this._navigation.pushBackAction(
             'app-selection-modal',
@@ -218,6 +217,40 @@ export class ModalManager {
         // Restore main content visibility
         const container = document.querySelector('.models-container');
         if (container !== null) container.classList.remove('content-hidden');
+    }
+
+    public suspendAppSelection(): boolean {
+        if (!this.isAppSelectionOpen()) {
+            return false;
+        }
+
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
+        if (modal === null) {
+            return false;
+        }
+
+        this._filterTransitionController.cancelPending();
+        this._detachOverlayCloseHandler();
+        modal.classList.add('app-selection-suspended');
+        modal.style.visibility = 'hidden';
+        return true;
+    }
+
+    public resumeAppSelection(): void {
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
+        if (modal === null || !modal.open || modal.classList.contains('hidden')) {
+            return;
+        }
+
+        modal.classList.remove('app-selection-suspended');
+        modal.style.removeProperty('visibility');
+        this._overlayClickModal = modal;
+        this._focusTrap.attach(modal);
+        requestAnimationFrame(() => {
+            if (this._overlayClickModal === modal && this.isAppSelectionOpen()) {
+                this._focusTrap.focusFirstElement(modal);
+            }
+        });
     }
 
     public isAppSelectionOpen(): boolean {

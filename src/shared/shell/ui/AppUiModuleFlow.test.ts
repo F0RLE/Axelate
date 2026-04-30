@@ -16,6 +16,8 @@ describe('AppUiModuleFlow', () => {
         isAppSelectionOpen: vi.fn(),
         isViewingCategory: vi.fn(),
         closeAppSelection: vi.fn(),
+        suspendAppSelection: vi.fn(),
+        resumeAppSelection: vi.fn(),
         openAppSelection: vi.fn(),
         refreshCurrentSelection: vi.fn(),
     };

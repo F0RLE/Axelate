@@ -8,6 +8,8 @@ type ModalBridge = {
     isAppSelectionOpen(): boolean;
     isViewingCategory(category: string): boolean;
     closeAppSelection(): void;
+    suspendAppSelection(): boolean;
+    resumeAppSelection(): void;
     openAppSelection(category: string, apps: IApp[], selectedId?: string): void;
     refreshCurrentSelection(apps?: IApp[], selectedId?: string | null): void;
 };
@@ -92,9 +94,9 @@ export class AppUiModuleFlow {
         }
 
         const shouldRestoreSelection = this._deps.modalManager.isAppSelectionOpen();
-        if (shouldRestoreSelection) {
-            this._deps.modalManager.closeAppSelection();
-        }
+        const suspendedSelection = shouldRestoreSelection
+            ? this._deps.modalManager.suspendAppSelection()
+            : false;
 
         try {
             return await openDownloadSelectionDialog({
@@ -103,7 +105,9 @@ export class AppUiModuleFlow {
                 translate: this._deps.translate,
             });
         } finally {
-            if (shouldRestoreSelection) {
+            if (suspendedSelection) {
+                this._deps.modalManager.resumeAppSelection();
+            } else if (shouldRestoreSelection) {
                 this._restoreAppSelection(category);
             }
         }
