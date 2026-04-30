@@ -144,7 +144,7 @@ describe('AIChatTransport', () => {
             expect(result).toEqual({ ok: false, error: 'string error' });
         });
 
-        it('should timeout after 90 seconds', async () => {
+        it('should timeout cloud requests after 90 seconds', async () => {
             let requestId = '';
             mockCore.tauriProvider.invoke.mockImplementation(
                 (command: string, args: Record<string, unknown>) => {
@@ -166,6 +166,35 @@ describe('AIChatTransport', () => {
             expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
                 requestId,
             });
+        });
+
+        it('should keep local text requests alive past the cloud timeout', async () => {
+            let resolveInvoke: (
+                response: Awaited<ReturnType<typeof mockCore.tauriProvider.invoke>>,
+            ) => void = () => {
+                throw new Error('invoke promise was not started');
+            };
+            mockCore.tauriProvider.invoke.mockImplementation((command: string) =>
+                command === 'send_chat_message'
+                    ? new Promise((resolve) => {
+                          resolveInvoke = resolve;
+                      })
+                    : Promise.resolve(true),
+            );
+
+            const sendPromise = transport.send(
+                makeRequest({ provider: 'llamacpp', model: 'model.gguf' }),
+            );
+            vi.advanceTimersByTime(90_001);
+            await Promise.resolve();
+
+            expect(mockCore.tauriProvider.invoke).not.toHaveBeenCalledWith(
+                'cancel_chat_generation',
+                expect.anything(),
+            );
+
+            resolveInvoke({ ok: true, reply: { text: 'local done' } });
+            await expect(sendPromise).resolves.toEqual({ ok: true, text: 'local done' });
         });
 
         it('should extract message from plain error objects', async () => {
@@ -283,7 +312,7 @@ describe('AIChatTransport', () => {
             await firstSend;
         });
 
-        it('should cancel a timed-out silent request before clearing active state', async () => {
+        it('should cancel a timed-out silent cloud request before clearing active state', async () => {
             let requestId = '';
             mockCore.tauriProvider.invoke.mockImplementation(
                 (command: string, args: Record<string, unknown>) => {
@@ -308,6 +337,35 @@ describe('AIChatTransport', () => {
             });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             expect((transport as any)._activeChatRequestId).toBeNull();
+        });
+
+        it('should use the local timeout for silent local prompt preparation', async () => {
+            let resolveInvoke: (
+                response: Awaited<ReturnType<typeof mockCore.tauriProvider.invoke>>,
+            ) => void = () => {
+                throw new Error('invoke promise was not started');
+            };
+            mockCore.tauriProvider.invoke.mockImplementation((command: string) =>
+                command === 'send_chat_message'
+                    ? new Promise((resolve) => {
+                          resolveInvoke = resolve;
+                      })
+                    : Promise.resolve(true),
+            );
+
+            const sendPromise = transport.sendSilent(
+                makeRequest({ provider: 'llamacpp', model: 'model.gguf' }),
+            );
+            vi.advanceTimersByTime(90_001);
+            await Promise.resolve();
+
+            expect(mockCore.tauriProvider.invoke).not.toHaveBeenCalledWith(
+                'cancel_chat_generation',
+                expect.anything(),
+            );
+
+            resolveInvoke({ ok: true, reply: { text: 'prepared' } });
+            await expect(sendPromise).resolves.toEqual({ ok: true, text: 'prepared' });
         });
     });
 

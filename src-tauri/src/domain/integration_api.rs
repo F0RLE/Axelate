@@ -953,13 +953,24 @@ fn is_loopback_peer(peer_addr: Option<SocketAddr>) -> bool {
 }
 
 fn is_authorized(headers: &HashMap<String, String>) -> bool {
-    let bearer = format!("Bearer {}", api_token());
     headers
         .get("authorization")
-        .is_some_and(|value| value.trim() == bearer)
+        .is_some_and(|value| is_authorized_bearer(value))
         || headers
             .get("x-axelate-token")
             .is_some_and(|value| value.trim() == api_token())
+}
+
+fn is_authorized_bearer(value: &str) -> bool {
+    let mut parts = value.split_whitespace();
+    let Some(scheme) = parts.next() else {
+        return false;
+    };
+    let Some(token) = parts.next() else {
+        return false;
+    };
+
+    parts.next().is_none() && scheme.eq_ignore_ascii_case("bearer") && token == api_token()
 }
 
 const fn json_response(status: u16, body: serde_json::Value) -> HttpResponse {
@@ -1064,12 +1075,34 @@ mod tests {
         );
         assert!(is_authorized(&headers));
 
+        headers.insert(
+            "authorization".to_string(),
+            format!("bearer {}", super::api_token()),
+        );
+        assert!(is_authorized(&headers));
+
         headers.clear();
         headers.insert(
             "x-axelate-token".to_string(),
             super::api_token().to_string(),
         );
         assert!(is_authorized(&headers));
+    }
+
+    #[test]
+    fn authorization_rejects_malformed_bearer_values() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "authorization".to_string(),
+            format!("Bearer {} extra", super::api_token()),
+        );
+        assert!(!is_authorized(&headers));
+
+        headers.insert(
+            "authorization".to_string(),
+            format!("Token {}", super::api_token()),
+        );
+        assert!(!is_authorized(&headers));
     }
 
     #[test]

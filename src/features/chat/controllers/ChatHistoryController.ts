@@ -106,11 +106,11 @@ export class ChatHistoryController {
     }
 
     public getLocalHistorySnapshot(): IChatMessage[] {
-        return this._options.getHistory().map((message) => ({ ...message }));
+        return this._cloneHistory(this._options.getHistory());
     }
 
     public restoreLocalHistorySnapshot(history: IChatMessage[]): void {
-        this._options.setHistory(history.map((message) => ({ ...message })));
+        this._options.setHistory(this._cloneHistory(history));
         this._options.renderHistory(this._options.getHistory());
     }
 
@@ -150,10 +150,10 @@ export class ChatHistoryController {
                 ? history
                       .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
                       .map((msg) => {
-                          const historyMessage: IChatMessage = {
+                          const historyMessage = this._cloneMessage({
                               role: msg.role as 'user' | 'assistant',
                               content: msg.content,
-                          };
+                          });
                           if (msg.thought_signature !== undefined) {
                               historyMessage.thought_signature = msg.thought_signature;
                           }
@@ -213,6 +213,37 @@ export class ChatHistoryController {
             content.includes('Stable Diffusion') &&
             content.includes('Return only the final prompt text')
         );
+    }
+
+    private _cloneHistory(history: IChatMessage[]): IChatMessage[] {
+        return history.map((message) => this._cloneMessage(message));
+    }
+
+    private _cloneMessage(message: IChatMessage): IChatMessage {
+        const clone: IChatMessage = {
+            role: message.role,
+            content: this._cloneContent(message.content),
+        };
+        if (message.thought_signature !== undefined) {
+            clone.thought_signature = message.thought_signature;
+        }
+        return clone;
+    }
+
+    private _cloneContent(content: IChatMessage['content']): IChatMessage['content'] {
+        if (typeof content === 'string') {
+            return content;
+        }
+
+        return content.map((part) => {
+            if (part.type === 'image_url') {
+                return {
+                    ...part,
+                    image_url: { ...part.image_url },
+                };
+            }
+            return { ...part };
+        });
     }
 
     public scheduleRevealLatestMessage(): void {

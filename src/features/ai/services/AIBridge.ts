@@ -400,7 +400,11 @@ export class AIBridge implements IAIBridge {
 
     private _cleanupTransportState(): void {
         this._unlisteners.forEach((fn) => {
-            fn();
+            try {
+                fn();
+            } catch (error: unknown) {
+                this._tracer.warn('[AIBridge] Stream cleanup listener failed:', error);
+            }
         });
         this._unlisteners.length = 0;
         this._transport.destroy();

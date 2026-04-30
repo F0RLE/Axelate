@@ -210,12 +210,18 @@ impl ChatSessionManager {
             });
 
         let overlap = find_history_overlap(&entry.history, incoming_messages);
-        if let Some(new_messages) = incoming_messages.get(overlap..) {
+        let mut appended_messages = false;
+        if let Some(new_messages) = incoming_messages.get(overlap..)
+            && !new_messages.is_empty()
+        {
             entry.history.extend_from_slice(new_messages);
+            entry.last_updated = Self::current_timestamp();
+            appended_messages = true;
         }
-        entry.last_updated = Self::current_timestamp();
         drop(entry);
-        self.mark_dirty();
+        if appended_messages {
+            self.mark_dirty();
+        }
 
         incoming_messages.to_vec()
     }
@@ -910,6 +916,39 @@ mod tests {
         assert_eq!(
             persisted[2].content,
             serde_json::Value::String("next".to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_request_messages_does_not_mark_dirty_for_full_overlap() {
+        let manager = test_manager();
+
+        let existing = vec![
+            ChatMessage {
+                id: "msg-1".to_string(),
+                role: "user".to_string(),
+                content: serde_json::Value::String("hello".to_string()),
+                thought_signature: None,
+            },
+            ChatMessage {
+                id: "msg-2".to_string(),
+                role: "assistant".to_string(),
+                content: serde_json::Value::String("hi".to_string()),
+                thought_signature: None,
+            },
+        ];
+
+        manager.merge_request_messages("session-1", &existing);
+        manager.dirty.store(false, Ordering::Relaxed);
+
+        let runtime_context = manager.merge_request_messages("session-1", &existing);
+        let persisted = manager.get_chat_history("session-1");
+
+        assert_eq!(runtime_context.len(), 2);
+        assert_eq!(persisted.len(), 2);
+        assert!(
+            !manager.dirty.load(Ordering::Relaxed),
+            "fully overlapped request should not schedule a redundant save"
         );
     }
 
