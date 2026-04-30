@@ -27,7 +27,7 @@ export interface IAIBridge {
     clearHistory(): Promise<void>;
     getHistory(): Promise<IChatMessage[]>;
     cancelTextGeneration(): Promise<boolean>;
-    cancelImageGeneration(): Promise<void>;
+    cancelImageGeneration(providerId?: string | null): Promise<void>;
     getImageGenerationPreview(): Promise<IImageGenerationPreview | null>;
     rewindLastTurn(): Promise<string | null>;
     getState(): { activeProviderId: string | null; isRunning: boolean };

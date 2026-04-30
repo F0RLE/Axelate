@@ -487,6 +487,7 @@ pub async fn send_chat_message(
 ) -> Result<ChatResponse, AppError> {
     let mut request = request;
     let request_id = ensure_request_id(&mut request);
+    let assistant_message_id = request_id.clone();
     let model = request.model.clone();
     let cancellation = cancellation_registry.register(&request_id);
     if let Err(error) = fill_chat_request_api_key(&mut request, &config_service).await {
@@ -509,7 +510,7 @@ pub async fn send_chat_message(
         _ = cancellation => {
             tracing::info!(request_id = %request_id, "AI request cancelled by frontend");
             cancel_sink.emit(StreamEvent::Done {
-                message_id: request_id.clone(),
+                message_id: assistant_message_id.clone(),
                 usage: None,
             });
             Ok(ChatResponse {
@@ -700,7 +701,7 @@ pub async fn get_image_generation_preview(
         preview.total = total;
         preview.speed.clone_from(&speed);
         preview.eta_relative = None;
-    } else if has_status {
+    } else if has_status || has_active_job {
         preview = Some(ImageGenerationPreview {
             data_url: String::new(),
             updated_at_ms: log_progress
