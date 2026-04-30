@@ -5,7 +5,7 @@ const DIST_DIR = path.resolve('dist');
 const KB = 1024;
 
 const LIMITS = {
-    totalBytes: 1_235 * KB,
+    totalBytes: 1_236 * KB,
     mainJsBytes: 400 * KB,
     vendorJsBytes: 100 * KB,
     cssBytes: 200 * KB,

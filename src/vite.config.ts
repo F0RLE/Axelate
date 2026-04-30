@@ -95,9 +95,14 @@ export default defineConfig({
 
         minify: process.env['TAURI_DEBUG'] ? false : 'terser',
         terserOptions: {
+            module: true,
             compress: {
                 drop_console: true,
                 drop_debugger: true,
+                keep_fargs: false,
+                passes: 3,
+                pure_getters: true,
+                unsafe_arrows: true,
             },
             mangle: {
                 toplevel: true,
