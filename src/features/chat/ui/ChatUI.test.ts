@@ -183,6 +183,25 @@ describe('ChatUI lifecycle', () => {
         expect(unlisten).toHaveBeenCalledTimes(1);
     });
 
+    it('should unsubscribe retry status listener when init resolves after destroy', async () => {
+        const unlisten = vi.fn();
+        let resolveListen: (unlisten: () => void) => void = () => {};
+        vi.mocked(listen).mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    resolveListen = resolve;
+                }),
+        );
+
+        ui = createChatUI();
+        const init = ui.init();
+        ui.destroy();
+        resolveListen(unlisten);
+        await init;
+
+        expect(unlisten).toHaveBeenCalledTimes(1);
+    });
+
     it('should refresh localized titles for existing chat action buttons', () => {
         document.body.innerHTML = `
             <div id="chat-messages">
@@ -338,6 +357,23 @@ describe('ChatUI lifecycle', () => {
 
         expect(document.querySelector('.chat-streaming-state')).toBeNull();
         expect(document.querySelector('.markdown-body')?.textContent).toBe('hello');
+    });
+
+    it('should not force cancelled partial streaming text to bottom when the user scrolled up', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+        const messages = document.getElementById('chat-messages') as HTMLDivElement;
+        Object.defineProperty(messages, 'clientHeight', { configurable: true, value: 400 });
+        Object.defineProperty(messages, 'scrollHeight', { configurable: true, value: 1200 });
+
+        ui = createChatUI();
+        const handle = ui.createStreamingMessage('assistant');
+        handle.update('partial answer');
+        messages.scrollTop = 100;
+
+        handle.cancel();
+
+        expect(messages.scrollTop).toBe(100);
+        expect(document.querySelector('.chat-row')).not.toBeNull();
     });
 
     it('should finalize generated images without regenerate controls', () => {

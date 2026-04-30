@@ -137,6 +137,12 @@ export class ChatHistoryController {
         try {
             const sessionId = this._options.aiBridge.getSessionId();
             const history = await this._options.aiBridge.getHistory();
+            if (
+                this._options.isDestroyed() ||
+                this._options.aiBridge.getSessionId() !== sessionId
+            ) {
+                return;
+            }
             this._historyLoaded = true;
             this._loadedSessionId = sessionId;
 
