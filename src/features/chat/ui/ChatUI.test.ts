@@ -400,6 +400,28 @@ describe('ChatUI lifecycle', () => {
         ).toBe(true);
     });
 
+    it('should render attachment file names as text only', () => {
+        document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
+
+        ui = createChatUI();
+        ui.appendMessage('user', 'uploaded', {
+            attachments: [
+                {
+                    name: '<img src=x>.txt',
+                    type: 'text/plain',
+                    size: 4,
+                    data_base64: '',
+                    tokens: 3,
+                },
+            ],
+            skipAnimation: true,
+        });
+
+        const name = document.querySelector('.media-name');
+        expect(name?.textContent).toBe('<img src=x>.txt');
+        expect(name?.querySelector('img')).toBeNull();
+    });
+
     it('should render image progress percent and speed separately from status text', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 

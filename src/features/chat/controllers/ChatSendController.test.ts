@@ -43,6 +43,7 @@ describe('ChatSendController', () => {
                 sendMessage,
             } as never,
             getHistory: vi.fn(() => []),
+            estimateTokens: vi.fn((text: string) => Promise.resolve(Math.ceil(text.length / 4))),
             pushUserMessage: vi.fn(),
             createStreamingHandle: vi.fn(() => streamingHandle),
             createImageHandle: vi.fn(() => imageHandle),
@@ -126,6 +127,51 @@ describe('ChatSendController', () => {
 
         expect(options.createStreamingHandle).toHaveBeenCalledOnce();
         expect(streamingHandle.update).toHaveBeenCalledWith('hi');
+    });
+
+    it('adds user text tokens to the context count', async () => {
+        const { controller, options } = createController();
+        const input = document.createElement('textarea');
+        input.value = 'hello world';
+
+        await controller.sendChat(input);
+
+        expect(options.addContextTokens).toHaveBeenCalledWith(3);
+    });
+
+    it('counts image attachment tokens without double-counting text attachments', async () => {
+        const { controller, options } = createController();
+        const processForSend = (
+            options.fileHandler as unknown as {
+                processForSend: ReturnType<typeof vi.fn>;
+            }
+        ).processForSend;
+        processForSend.mockResolvedValueOnce({
+            combinedText: 'hello extracted file content',
+            attachments: [
+                {
+                    name: 'doc.txt',
+                    type: 'text/plain',
+                    size: 4,
+                    data_base64: '',
+                    tokens: 50,
+                },
+                {
+                    name: 'photo.png',
+                    type: 'image/png',
+                    size: 4,
+                    data_base64: 'base64',
+                    tokens: 258,
+                },
+            ],
+        });
+        vi.mocked(options.estimateTokens).mockResolvedValueOnce(7);
+        const input = document.createElement('textarea');
+        input.value = 'hello';
+
+        await controller.sendChat(input);
+
+        expect(options.addContextTokens).toHaveBeenCalledWith(265);
     });
 
     it('cleans active stream listeners when destroyed during a send', async () => {

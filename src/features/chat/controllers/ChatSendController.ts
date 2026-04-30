@@ -40,6 +40,7 @@ type ChatSendControllerOptions = {
     fileHandler: Pick<ChatFileHandler, 'hasFiles' | 'processForSend'>;
     service: ChatService;
     getHistory: () => IChatMessage[];
+    estimateTokens: (text: string) => Promise<number>;
     pushUserMessage: (content: IChatMessage['content']) => void;
     createStreamingHandle: (typingId: string) => StreamingMessageHandle;
     createImageHandle: () => ImageGenerationHandle;
@@ -105,6 +106,7 @@ export class ChatSendController {
         this._sendFlow = new ChatSendFlow({
             fileHandler: _options.fileHandler,
             getHistory: _options.getHistory,
+            estimateTokens: _options.estimateTokens,
         });
     }
 
