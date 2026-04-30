@@ -130,13 +130,15 @@ pub(super) async fn clone_repository_into(
     });
 
     let git_dir = extraction_path.join(".git");
-    if git_dir.exists() {
-        tokio::fs::remove_dir_all(&git_dir).await.map_err(|error| {
-            AppError::Io(format!(
+    match tokio::fs::remove_dir_all(&git_dir).await {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(AppError::Io(format!(
                 "Failed to remove git metadata directory '{}': {error}",
                 git_dir.display()
-            ))
-        })?;
+            )));
+        }
     }
 
     Ok(())
