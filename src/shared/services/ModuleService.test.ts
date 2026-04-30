@@ -5,6 +5,7 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 // TYPES
 type ProgressHandler = ((_: Record<string, unknown>) => void) | undefined;
+type DownloadProgressEvent = CustomEvent<Record<string, unknown>>;
 
 // HOISTED MOCKS
 const mocks = vi.hoisted(() => {
@@ -198,15 +199,33 @@ describe('ModuleService', () => {
         });
 
         it('should update state on error', async () => {
+            const progressSpy = vi.fn<(event: DownloadProgressEvent) => void>();
+            const progressListener: EventListener = (event) => {
+                progressSpy(event as DownloadProgressEvent);
+            };
+            globalThis.addEventListener('download-progress-update', progressListener);
             mocks.invokeSafe.mockResolvedValueOnce({
                 status: 'error',
                 error: { message: 'Download failed' },
             });
 
-            await expect(moduleService.downloadModule('test-module', 'url')).rejects.toThrow();
+            try {
+                await expect(moduleService.downloadModule('test-module', 'url')).rejects.toThrow();
 
-            const state = moduleService.getDownloadState('test-module');
-            expect(state?.status).toBe('error');
+                const state = moduleService.getDownloadState('test-module');
+                expect(state?.status).toBe('error');
+                expect(state?.error).toBe('Download failed');
+                expect(progressSpy).toHaveBeenCalledOnce();
+                const event = progressSpy.mock.calls[0]?.[0];
+                expect(event?.detail).toMatchObject({
+                    module_id: 'test-module',
+                    status: 'error',
+                    message: 'Download failed',
+                    error: 'Download failed',
+                });
+            } finally {
+                globalThis.removeEventListener('download-progress-update', progressListener);
+            }
         });
 
         it('should return paused outcome without marking it as error', async () => {
@@ -351,27 +370,42 @@ describe('ModuleService', () => {
         });
 
         it('should process progress payload correctly', async () => {
+            const progressSpy = vi.fn<(event: DownloadProgressEvent) => void>();
+            const progressListener: EventListener = (event) => {
+                progressSpy(event as DownloadProgressEvent);
+            };
+            globalThis.addEventListener('download-progress-update', progressListener);
             // Use ref pattern with module-level helper
             const handlerRef: { current: ProgressHandler } = { current: undefined };
             mocks.tauriProvider.listen.mockImplementation(createListenCapture(handlerRef));
 
-            await moduleService.init();
+            try {
+                await moduleService.init();
 
-            // Call handler with test data
-            handlerRef.current?.({
-                module_id: 'test-module',
-                status: 'downloading',
-                progress: 0.5,
-                message: 'Downloading...',
-                downloaded: 50,
-                total: 100,
-                speed: 4096,
-            });
+                // Call handler with test data
+                handlerRef.current?.({
+                    module_id: 'test-module',
+                    status: 'downloading',
+                    progress: 0.5,
+                    message: 'Downloading...',
+                    downloaded: 50,
+                    total: 100,
+                    speed: 4096,
+                });
 
-            const state = moduleService.getDownloadState('test-module');
-            expect(state?.status).toBe('downloading');
-            expect(state?.progress).toBe(0.5);
-            expect(state?.speed).toBe(4096);
+                const state = moduleService.getDownloadState('test-module');
+                expect(state?.status).toBe('downloading');
+                expect(state?.progress).toBe(0.5);
+                expect(state?.speed).toBe(4096);
+                expect(progressSpy).toHaveBeenCalledOnce();
+                const event = progressSpy.mock.calls[0]?.[0];
+                expect(event?.detail).toMatchObject({
+                    module_id: 'test-module',
+                    status: 'downloading',
+                });
+            } finally {
+                globalThis.removeEventListener('download-progress-update', progressListener);
+            }
         });
 
         it('should set progress to 1 on complete', async () => {

@@ -3,6 +3,7 @@ import { ModuleCardRenderer } from './ModuleCardRenderer';
 import type { ModuleCardDownloadAction } from './ModuleCardActions';
 import type { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { getAiSlotForCapability, isAiCategory } from '../../utils/moduleCategoryPolicy';
+import { escapeCssSelectorValue } from '../../utils/cssSelectors';
 
 type DownloadProgressPayload = {
     module_id: string;
@@ -60,9 +61,8 @@ export function createModalDownloadProgressHandler(): ProgressEventHandler {
             return;
         }
 
-        const card = list.querySelector<HTMLElement>(
-            `.app-card[data-app-id="${payload.module_id}"]`,
-        );
+        const escapedModuleId = escapeCssSelectorValue(payload.module_id);
+        const card = list.querySelector<HTMLElement>(`.app-card[data-app-id="${escapedModuleId}"]`);
         if (card === null) {
             return;
         }

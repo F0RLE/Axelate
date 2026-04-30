@@ -46,32 +46,7 @@ export class ModuleService {
                 speed: number;
             }>('download_progress', (payload) => {
                 this._logDownloadPhase(payload);
-
-                this._downloadState[payload.module_id] = {
-                    status: payload.status as
-                        | 'init'
-                        | 'pending'
-                        | 'connecting'
-                        | 'downloading'
-                        | 'verifying'
-                        | 'extracting'
-                        | 'paused'
-                        | 'complete'
-                        | 'error'
-                        | 'cancelled',
-                    progress: payload.progress,
-                    message: payload.message,
-                    downloaded: payload.downloaded,
-                    total: payload.total,
-                    speed: payload.speed,
-                };
-
-                if (payload.status === 'complete') {
-                    (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
-                }
-                // Dispatch custom event for UI components that don't use this service directly
-                const event = new CustomEvent('download-progress-update', { detail: payload });
-                globalThis.dispatchEvent(event);
+                this._publishDownloadProgress(payload);
             });
             this._initialized = true;
         } catch (error) {
@@ -187,7 +162,16 @@ export class ModuleService {
                 return interrupted;
             }
             this._tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
-            this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
+            this._publishDownloadProgress({
+                module_id: moduleId,
+                status: 'error',
+                progress: 0,
+                message: errorMessage,
+                downloaded: 0,
+                total: 0,
+                speed: 0,
+                error: errorMessage,
+            });
             throw err;
         }
     }
@@ -377,5 +361,30 @@ export class ModuleService {
         ) {
             this._lastLoggedDownloadPhase.delete(payload.module_id);
         }
+    }
+
+    private _publishDownloadProgress(payload: {
+        module_id: string;
+        status: string;
+        progress: number;
+        message?: string;
+        downloaded?: number;
+        total?: number;
+        speed?: number;
+        error?: unknown;
+    }): void {
+        const state: IModuleDownloadState = {
+            status: payload.status as IModuleDownloadState['status'],
+            progress: payload.status === 'complete' ? 1 : payload.progress,
+        };
+        if (payload.message !== undefined) state.message = payload.message;
+        if (payload.downloaded !== undefined) state.downloaded = payload.downloaded;
+        if (payload.total !== undefined) state.total = payload.total;
+        if (payload.speed !== undefined) state.speed = payload.speed;
+        if (payload.error !== undefined) state.error = payload.error;
+
+        this._downloadState[payload.module_id] = state;
+
+        globalThis.dispatchEvent(new CustomEvent('download-progress-update', { detail: payload }));
     }
 }

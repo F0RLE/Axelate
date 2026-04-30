@@ -1,5 +1,6 @@
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { EngineStatusContext } from './AIBridgeContext';
+import { escapeCssSelectorValue } from '@/shared/utils/cssSelectors';
 
 type EngineStatusLogger = Pick<LoggerService, 'debug' | 'info' | 'error'>;
 
@@ -170,7 +171,7 @@ export class EngineStatusService {
 
     /** Updates all cards matching `engineId` with the given state class. */
     private _setCardState(engineId: string, state: EngineState): void {
-        const escapedEngineId = this._escapeSelectorValue(engineId);
+        const escapedEngineId = escapeCssSelectorValue(engineId);
         const cards = document.querySelectorAll<HTMLElement>(`[data-app-id="${escapedEngineId}"]`);
 
         cards.forEach((card) => {
@@ -184,7 +185,7 @@ export class EngineStatusService {
     }
 
     private _setDashboardCardState(engineId: string, state: EngineState): void {
-        const escapedEngineId = this._escapeSelectorValue(engineId);
+        const escapedEngineId = escapeCssSelectorValue(engineId);
         const cards = document.querySelectorAll<HTMLElement>(
             `[data-current-module="${escapedEngineId}"]`,
         );
@@ -378,15 +379,6 @@ export class EngineStatusService {
                 card.dataset['runtimeStatus'] = 'idle';
             }
         });
-    }
-
-    private _escapeSelectorValue(value: string): string {
-        const cssApi = (globalThis as { CSS?: { escape?: (selector: string) => string } }).CSS;
-        if (typeof cssApi?.escape === 'function') {
-            return cssApi.escape(value);
-        }
-
-        return value.replace(/["\\]/gu, '\\$&');
     }
 
     private _resetCardClasses(card: HTMLElement): void {

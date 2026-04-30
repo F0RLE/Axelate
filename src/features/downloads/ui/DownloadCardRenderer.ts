@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 
 import type { IModuleDownloadState as ModuleDownloadState } from '@/shared/types/coreTypes';
+import { escapeCssSelectorValue } from '@/shared/utils/cssSelectors';
 
 type DownloadCardTranslate = (key: string, fallback: string) => string;
 
@@ -37,8 +38,9 @@ export class DownloadCardRenderer {
         }
 
         for (const [moduleId, state] of activeDownloads) {
+            const escapedModuleId = escapeCssSelectorValue(moduleId);
             const existing = list.querySelector<HTMLElement>(
-                `.download-item-card[data-module-id="${moduleId}"]`,
+                `.download-item-card[data-module-id="${escapedModuleId}"]`,
             );
             if (existing !== null) {
                 this.patchCard(existing, state);

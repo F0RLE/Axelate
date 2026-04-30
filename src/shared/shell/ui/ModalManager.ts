@@ -23,6 +23,7 @@ import {
     isAiCategory,
     resolveModalSidebarCategory,
 } from '../../utils/moduleCategoryPolicy';
+import { escapeCssSelectorValue } from '../../utils/cssSelectors';
 
 /**
  * @class ModalManager
@@ -380,7 +381,8 @@ export class ModalManager {
         }
 
         const list = document.getElementById('app-modal-list');
-        const card = list?.querySelector<HTMLElement>(`.app-card[data-app-id="${app.id}"]`);
+        const escapedAppId = escapeCssSelectorValue(app.id);
+        const card = list?.querySelector<HTMLElement>(`.app-card[data-app-id="${escapedAppId}"]`);
         const btn = card?.querySelector<HTMLButtonElement>('.download-btn');
 
         if (btn?.classList.contains('downloading') === true) {

@@ -13,7 +13,7 @@ describe('EngineStatusService', () => {
         listeners = {};
         document.body.innerHTML = '';
         (globalThis as unknown as { CSS: { escape: (value: string) => string } }).CSS = {
-            escape: (value: string) => value,
+            escape: (value: string) => value.replace(/["\\]/gu, '\\$&'),
         };
 
         core = {
@@ -122,6 +122,27 @@ describe('EngineStatusService', () => {
         expect(card?.classList.contains('module-running')).toBe(false);
         expect(card?.classList.contains('module-stopped')).toBe(true);
         expect((card as HTMLElement | null)?.dataset['runtimeStatus']).toBe('idle');
+    });
+
+    it('updates cards for engine ids that need selector escaping', () => {
+        const engineId = 'engine"quoted\\id';
+        const appCard = document.createElement('div');
+        appCard.className = 'app-card selected';
+        appCard.dataset['appId'] = engineId;
+        appCard.innerHTML =
+            '<div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>';
+        const dashboardCard = document.createElement('div');
+        dashboardCard.className = 'module-slot-card selected';
+        dashboardCard.dataset['currentModule'] = engineId;
+        document.body.append(appCard, dashboardCard);
+
+        service.init();
+        listeners['ai:engine:ready']?.({ engine_id: engineId, endpoint: '/engine' });
+
+        expect(appCard.classList.contains('engine-ready')).toBe(true);
+        expect(appCard.querySelector('button')?.textContent).toBe('Remove');
+        expect(dashboardCard.classList.contains('module-running')).toBe(true);
+        expect(dashboardCard.dataset['runtimeStatus']).toBe('running');
     });
 
     it('falls back to untranslated labels and handles cards without modal buttons', () => {
