@@ -118,6 +118,7 @@ export function createChatImageGenerationMessage(
         media.style.aspectRatio = `${String(naturalWidth)} / ${String(naturalHeight)}`;
         if (keepPinnedAfterImageLoad) {
             deps.scrollToBottom();
+            keepPinnedAfterImageLoad = false;
         }
     };
     image.addEventListener('load', syncMediaSizeToImage);
@@ -190,6 +191,9 @@ export function createChatImageGenerationMessage(
         const shouldKeepPinned = deps.isNearBottom();
         keepPinnedAfterImageLoad = shouldKeepPinned;
         detachMediaFromBubble();
+        if (media.style.aspectRatio === '') {
+            media.style.aspectRatio = '1 / 1';
+        }
         image.src = dataUrl;
         syncMediaSizeToImage();
         media.classList.remove('hidden');

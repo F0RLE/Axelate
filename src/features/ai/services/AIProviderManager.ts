@@ -29,10 +29,16 @@ export class AIProviderManager {
     }
 
     public async init(): Promise<void> {
-        // Initialize Session ID using Secure Storage
+        // Initialize Session ID using Secure Storage with UI state as a recovery fallback.
         let sid = await this._getSecureVal('ai_session_id');
-        if (sid === null || sid === '') {
+        if (!this._isValidSessionId(sid)) {
+            sid = this._context?.aiSettings.getAiSessionId() ?? null;
+        }
+        if (!this._isValidSessionId(sid)) {
             sid = crypto.randomUUID();
+        }
+
+        if ((await this._getSecureVal('ai_session_id')) !== sid) {
             await this._saveSecureVal('ai_session_id', sid);
         }
 
@@ -248,7 +254,15 @@ export class AIProviderManager {
 
     private async _saveSecureVal(key: string, value: string): Promise<void> {
         if (this._context?.tauriProvider.saveSecureKey) {
-            await this._context.tauriProvider.saveSecureKey(key, value);
+            try {
+                await this._context.tauriProvider.saveSecureKey(key, value);
+            } catch (error: unknown) {
+                this._tracer.error(`[AIProviderManager] Failed to persist ${key}:`, error);
+            }
         }
+    }
+
+    private _isValidSessionId(value: string | null): value is string {
+        return typeof value === 'string' && value.trim() !== '';
     }
 }

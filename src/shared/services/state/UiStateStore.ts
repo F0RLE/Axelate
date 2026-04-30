@@ -105,7 +105,7 @@ export class UiStateStore {
     }
 
     public updateState(updates: Partial<IUIState>, markDirty = true): void {
-        this._state = { ...this._state, ...updates };
+        this._state = this._normalizeState({ ...this._state, ...updates });
         if (markDirty) {
             this._isDirty = true;
             this._revision += 1;
@@ -119,7 +119,7 @@ export class UiStateStore {
         value: unknown,
         markDirty = true,
     ): void {
-        const target = this._state[key] as Record<string, unknown>;
+        const target = this._getRecordTarget(key);
         target[nestedKey] = value;
         if (markDirty) {
             this._isDirty = true;
@@ -133,7 +133,7 @@ export class UiStateStore {
         nestedKey: string,
         markDirty = true,
     ): void {
-        const target = this._state[key] as Record<string, unknown>;
+        const target = this._getRecordTarget(key);
         delete target[nestedKey];
         if (markDirty) {
             this._isDirty = true;
@@ -220,20 +220,129 @@ export class UiStateStore {
     }
 
     private _normalizeState(state: IUIState): IUIState {
+        const resolutionZoom = this._normalizeNumberRecord(
+            state.resolution_zoom,
+            DEFAULT_UI_STATE.resolution_zoom,
+        );
+
         return {
             ...state,
-            zoom_level: this._clampZoom(state.zoom_level),
-            resolution_zoom: Object.fromEntries(
-                Object.entries(state.resolution_zoom).map(([key, zoom]) => [
-                    key,
-                    this._clampZoom(zoom),
-                ]),
+            hidden_nav_items: this._normalizeStringArray(
+                state.hidden_nav_items,
+                DEFAULT_UI_STATE.hidden_nav_items,
             ),
+            hidden_monitors: this._normalizeStringArray(
+                state.hidden_monitors,
+                DEFAULT_UI_STATE.hidden_monitors,
+            ),
+            card_widths: this._normalizeStringRecord(state.card_widths),
+            selected_modules: this._normalizeObjectRecord(state.selected_modules),
+            selected_ai_models: this._normalizeStringRecord(state.selected_ai_models),
+            resolution_zoom: Object.fromEntries(
+                Object.entries(resolutionZoom).map(([key, zoom]) => [key, this._clampZoom(zoom)]),
+            ),
+            ai_thinking_level: this._normalizeThinkingLevelRecord(state.ai_thinking_level),
+            ai_web_search_enabled: this._normalizeBooleanRecord(state.ai_web_search_enabled),
+            local_max_output_tokens: this._normalizeNumberRecord(
+                state.local_max_output_tokens,
+                DEFAULT_UI_STATE.local_max_output_tokens,
+            ),
+            zoom_level: this._clampZoom(state.zoom_level),
         };
+    }
+
+    private _normalizeStringArray(value: unknown, fallback: string[]): string[] {
+        if (!Array.isArray(value)) {
+            return [...fallback];
+        }
+
+        return value.filter((item): item is string => typeof item === 'string');
+    }
+
+    private _normalizeObjectRecord(value: unknown): Record<string, Partial<IApp>> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return value as Record<string, Partial<IApp>>;
+    }
+
+    private _normalizeStringRecord(value: unknown): Record<string, string> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, string] => {
+                    const [, item] = entry;
+                    return typeof item === 'string';
+                },
+            ),
+        );
+    }
+
+    private _normalizeBooleanRecord(value: unknown): Record<string, boolean> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, boolean] => {
+                    const [, item] = entry;
+                    return typeof item === 'boolean';
+                },
+            ),
+        );
+    }
+
+    private _normalizeThinkingLevelRecord(value: unknown): Record<string, ThinkingLevel> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, ThinkingLevel] => {
+                    const [, item] = entry;
+                    return item === 'off' || item === 'low' || item === 'medium' || item === 'high';
+                },
+            ),
+        );
+    }
+
+    private _normalizeNumberRecord(
+        value: unknown,
+        fallback: Record<string, number> = {},
+    ): Record<string, number> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return { ...fallback };
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, number] => {
+                    const [, item] = entry;
+                    return typeof item === 'number' && Number.isFinite(item);
+                },
+            ),
+        );
     }
 
     private _snapshotState(): IUIState {
         return structuredClone(this._state);
+    }
+
+    private _getRecordTarget<K extends keyof IUIState>(key: K): Record<string, unknown> {
+        const target = this._state[key];
+        if (target !== null && typeof target === 'object' && !Array.isArray(target)) {
+            return target as Record<string, unknown>;
+        }
+
+        const replacement: Record<string, unknown> = {};
+        (this._state as Record<keyof IUIState, unknown>)[key] = replacement;
+        return replacement;
     }
 
     private _clampZoom(zoom: number): number {

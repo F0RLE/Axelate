@@ -466,6 +466,7 @@
 .chat-generated-media {
     position: relative;
     width: auto;
+    aspect-ratio: 1 / 1;
     max-width: min(100%, 32rem);
     max-height: min(70vh, 42rem);
     display: inline-flex;
