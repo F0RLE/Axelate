@@ -96,8 +96,31 @@ describe('ChatHistoryController', () => {
         await Promise.all([firstLoad, secondLoad]);
 
         expect(aiBridge.getHistory).toHaveBeenCalledTimes(2);
+        expect(deps.renderHistory).not.toHaveBeenCalledWith(firstHistory);
         expect(deps.setHistory).toHaveBeenLastCalledWith(secondHistory);
         expect(deps.renderHistory).toHaveBeenLastCalledWith(secondHistory);
+    });
+
+    it('should ignore an in-flight history restore after destroy', async () => {
+        const restoredHistory: IChatMessage[] = [{ role: 'user', content: 'late' }];
+        let destroyed = false;
+        let resolveLoad: (history: IChatMessage[]) => void = () => {};
+        const { controller, deps, aiBridge } = createController();
+        deps.isDestroyed.mockImplementation(() => destroyed);
+        aiBridge.getHistory.mockImplementationOnce(
+            () =>
+                new Promise<IChatMessage[]>((resolve) => {
+                    resolveLoad = resolve;
+                }),
+        );
+
+        const load = controller.ensureHistoryLoaded();
+        destroyed = true;
+        resolveLoad(restoredHistory);
+        await load;
+
+        expect(deps.setHistory).not.toHaveBeenCalled();
+        expect(deps.renderHistory).not.toHaveBeenCalled();
     });
 
     it('should clear rendered chat when the current session has no persisted history', async () => {
