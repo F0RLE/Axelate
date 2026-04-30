@@ -2,20 +2,14 @@ import type { SecureKeyMeta, TauriProvider } from '@/infrastructure/tauri/TauriP
 import type { IApp } from '@/shared/types/coreTypes';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { AppSettings } from '@/shared/types/bindings';
+import type { AppSettings, GpuInfo } from '@/shared/types/bindings';
 import { commands } from '@/shared/types/bindings';
 import { invokeSafe } from '@/shared/api/invoke';
 export type ISettings = AppSettings;
 export type SettingsValue = string | number | boolean;
 type SettingsLogger = Pick<LoggerService, 'error'>;
 
-export interface IGpuInfo {
-    detected: boolean;
-    name?: string;
-    cuda?: boolean;
-    backend?: string;
-    memory?: number;
-}
+export type IGpuInfo = Partial<GpuInfo> & Pick<GpuInfo, 'detected'>;
 
 export interface ICustomModel {
     id: string;

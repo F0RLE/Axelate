@@ -10,21 +10,26 @@
 
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type {
+    EngineConfig as BindingEngineConfig,
+    EngineSettingsPayload as BindingEngineSettingsPayload,
+} from '@/shared/types/bindings';
 
 type EngineConfigLogger = Pick<LoggerService, 'error'>;
 
-/** Subset of EngineConfig that the frontend can read and write. */
-export interface EngineConfig {
-    engine_id: string;
-    compute_mode: 'gpu' | 'cpu';
+/**
+ * Backend returns a fully merged config, while Specta marks serde-defaulted fields
+ * optional for request compatibility. UI code can rely on these fields after reads.
+ */
+export type EngineConfig = BindingEngineConfig & {
+    compute_mode: NonNullable<BindingEngineConfig['compute_mode']>;
     context_size: number;
-    model_path: string | null;
     extra_args: string[];
-}
+};
 
-export interface EngineSettingsPayload {
+export type EngineSettingsPayload = Omit<BindingEngineSettingsPayload, 'config'> & {
     config: EngineConfig;
-}
+};
 
 export class EngineConfigService {
     constructor(

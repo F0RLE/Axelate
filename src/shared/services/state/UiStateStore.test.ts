@@ -68,6 +68,23 @@ describe('UiStateStore', () => {
             expect(store.getState().zoom_level).toBe(2);
         });
 
+        it('should normalize direct updates before future nested writes', () => {
+            store.updateState(
+                {
+                    zoom_level: Number.NaN,
+                    resolution_zoom: null as unknown as Record<string, number>,
+                },
+                false,
+            );
+
+            expect(store.getState().zoom_level).toBe(1);
+            expect(store.getState().resolution_zoom).toEqual({});
+
+            store.updateNestedState('resolution_zoom', '1920x1080', 1.4, false);
+
+            expect(store.getState().resolution_zoom).toEqual({ '1920x1080': 1.4 });
+        });
+
         it('should update nested state', () => {
             store.updateNestedState('card_widths', 'card-1', '300px');
             expect(store.getState().card_widths['card-1']).toBe('300px');
@@ -123,6 +140,41 @@ describe('UiStateStore', () => {
             expect(result.zoom_level).toBe(2.6);
             expect(result.resolution_zoom['1920x1080']).toBe(2.6);
             expect(result.resolution_zoom['2560x1440']).toBe(2.4);
+        });
+
+        it('should keep legacy partial state instead of dropping it when map fields are missing', async () => {
+            storageState['axelate_ui_state'] = JSON.stringify({
+                sidebar_width: 360,
+                zoom_level: 1.25,
+            });
+            store = new UiStateStore(bridge, tracer, storage);
+
+            const result = await store.loadState();
+
+            expect(result.sidebar_width).toBe(360);
+            expect(result.zoom_level).toBe(1.25);
+            expect(result.resolution_zoom).toEqual({});
+            expect(result.local_max_output_tokens).toEqual({});
+            expect(tracer.warn).not.toHaveBeenCalled();
+        });
+
+        it('should normalize malformed map fields while preserving valid entries', async () => {
+            storageState['axelate_ui_state'] = JSON.stringify({
+                resolution_zoom: null,
+                selected_ai_models: { gpt: 'gpt-5.5', bad: 42 },
+                ai_thinking_level: { gpt: 'high', bad: 'fast' },
+                ai_web_search_enabled: { gpt: true, bad: 'yes' },
+                local_max_output_tokens: { llamacpp: 8192, bad: 'many' },
+            });
+            store = new UiStateStore(bridge, tracer, storage);
+
+            const result = await store.loadState();
+
+            expect(result.resolution_zoom).toEqual({});
+            expect(result.selected_ai_models).toEqual({ gpt: 'gpt-5.5' });
+            expect(result.ai_thinking_level).toEqual({ gpt: 'high' });
+            expect(result.ai_web_search_enabled).toEqual({ gpt: true });
+            expect(result.local_max_output_tokens).toEqual({ llamacpp: 8192 });
         });
 
         it('should use defaults when localStorage is null (L67)', async () => {

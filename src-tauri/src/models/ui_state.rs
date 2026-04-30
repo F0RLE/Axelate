@@ -62,6 +62,9 @@ pub struct UIState {
     /// Enables provider-side internet search by AI provider
     #[serde(default)]
     pub ai_web_search_enabled: std::collections::HashMap<String, bool>,
+    /// Per-provider local model output token limits.
+    #[serde(default)]
+    pub local_max_output_tokens: std::collections::HashMap<String, u32>,
     /// Current persistent AI session identifier
     #[serde(default)]
     pub ai_session_id: Option<String>,
@@ -92,6 +95,7 @@ impl Default for UIState {
             sound_enabled: true,
             ai_thinking_level: std::collections::HashMap::new(),
             ai_web_search_enabled: std::collections::HashMap::new(),
+            local_max_output_tokens: std::collections::HashMap::new(),
             ai_session_id: None,
             preferred_language: None,
             pending_chat_reveal: false,

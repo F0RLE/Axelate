@@ -34,6 +34,7 @@ function createMockCore(
             getCatalog: vi.fn().mockReturnValue({ ai: [], services: [] }),
         },
         aiSettings: {
+            getAiSessionId: vi.fn().mockReturnValue(null),
             setAiSessionId: vi.fn(),
             setSelectedAIModel: vi.fn(),
             getSelectedAIModel: vi.fn().mockReturnValue(null),
@@ -82,6 +83,36 @@ describe('AIProviderManager', () => {
 
             expect(mockCore.tauriProvider.saveSecureKey).not.toHaveBeenCalled();
             expect(manager.sessionId).toBe('existing-session-abc');
+        });
+
+        it('should recover session ID from UI state when secure storage is empty', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(null));
+            vi.mocked(mockCore.aiSettings.getAiSessionId).mockReturnValue('ui-session-abc');
+            manager.setCore(mockCore);
+
+            await manager.init();
+
+            expect(manager.sessionId).toBe('ui-session-abc');
+            expect(mockCore.tauriProvider.saveSecureKey).toHaveBeenCalledWith(
+                'ai_session_id',
+                'ui-session-abc',
+            );
+            expect(mockCore.aiSettings.setAiSessionId).toHaveBeenCalledWith('ui-session-abc');
+        });
+
+        it('should continue with UI session ID when secure persistence fails', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(null));
+            vi.mocked(mockCore.aiSettings.getAiSessionId).mockReturnValue('ui-session-abc');
+            vi.mocked(mockCore.tauriProvider.saveSecureKey ?? vi.fn()).mockRejectedValueOnce(
+                new Error('secure unavailable'),
+            );
+            manager.setCore(mockCore);
+
+            await expect(manager.init()).resolves.toBeUndefined();
+
+            expect(manager.sessionId).toBe('ui-session-abc');
+            expect(mockCore.aiSettings.setAiSessionId).toHaveBeenCalledWith('ui-session-abc');
+            expect(tracer.error).toHaveBeenCalled();
         });
 
         it('should work without core set (generates UUID session)', async () => {

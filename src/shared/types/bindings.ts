@@ -1292,6 +1292,8 @@ export type UIState = {
 	ai_thinking_level?: { [key in string]: string },
 	// Enables provider-side internet search by AI provider
 	ai_web_search_enabled?: { [key in string]: boolean },
+	// Per-provider local model output token limits.
+	local_max_output_tokens?: { [key in string]: number },
 	// Current persistent AI session identifier
 	ai_session_id?: string | null,
 	// Preferred launcher interface language
