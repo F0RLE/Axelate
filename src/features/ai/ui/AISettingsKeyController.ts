@@ -38,7 +38,43 @@ export class AISettingsKeyController {
             target.value = normalizedValue;
         }
         delete target.dataset['storedMasked'];
+        delete target.dataset['storedRevealed'];
         target.dataset['keyDirty'] = 'true';
+    }
+
+    public async removeClearedStoredKey(input: KeyInput, providerId: string): Promise<void> {
+        if (input.value.trim() !== '') {
+            return;
+        }
+
+        if (input.dataset['keyRemoveInFlight'] === 'true') {
+            return;
+        }
+
+        input.dataset['keyRemoveInFlight'] = 'true';
+        try {
+            await this._options.getSettingsService()?.removeSecureKey(providerId);
+            this.clearStoredKeyMask(input);
+            this._showToast(
+                this._options.getTranslator()('ui.settings.key_removed', 'API key removed'),
+                'success',
+            );
+        } catch (error: unknown) {
+            this._options.tracer.error('[AISettingsKeyController] Key removal failed:', error);
+            this._showToast(
+                this._options.getTranslator()('ui.settings.key_remove_error', 'Key remove error'),
+                'error',
+            );
+        } finally {
+            delete input.dataset['keyRemoveInFlight'];
+        }
+    }
+
+    public resetButtonState(button: KeyButton, label: string): void {
+        button.disabled = false;
+        button.style.width = '';
+        button.classList.remove('success', 'error', 'checking');
+        button.textContent = label;
     }
 
     public maybeClearStoredMask(event: Event): void {
@@ -180,6 +216,7 @@ export class AISettingsKeyController {
     public clearStoredKeyMask(input: KeyInput): void {
         delete input.dataset['storedMasked'];
         delete input.dataset['storedRevealed'];
+        delete input.dataset['keyDirty'];
         input.value = '';
         input.classList.add('is-masked');
         input.placeholder = this._options.getTranslator()(

@@ -15,6 +15,7 @@ describe('AISettingsKeyController', () => {
     };
 
     const getTranslator = () => (key: string, fallback: string) => `${key}:${fallback}`;
+    const showToast = vi.fn();
     const scheduleButtonReset = vi.fn((_button: HTMLButtonElement, callback: () => void) =>
         callback(),
     );
@@ -23,7 +24,7 @@ describe('AISettingsKeyController', () => {
         getSettingsService: () => settingsService as never,
         getTranslator,
         scheduleButtonReset,
-        showToast: vi.fn(),
+        showToast,
         icons: {
             visible: '<visible>',
             hidden: '<hidden>',
@@ -94,5 +95,40 @@ describe('AISettingsKeyController', () => {
         expect(input.dataset['storedMasked']).toBeUndefined();
         expect(input.value).toBe('');
         expect(button.disabled).toBe(false);
+    });
+
+    it('should remove cleared stored keys immediately', async () => {
+        const input = document.createElement('input');
+        input.dataset['storedMasked'] = 'true';
+        input.value = '';
+        settingsService.removeSecureKey.mockResolvedValue(undefined);
+
+        await controller.removeClearedStoredKey(input, 'openrouter');
+
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(input.dataset['storedMasked']).toBeUndefined();
+        expect(input.dataset['storedRevealed']).toBeUndefined();
+        expect(input.dataset['keyDirty']).toBeUndefined();
+        expect(input.value).toBe('');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_removed:API key removed',
+            'success',
+        );
+    });
+
+    it('should reset key check buttons to their idle state', () => {
+        const button = document.createElement('button');
+        button.disabled = true;
+        button.style.width = '48px';
+        button.classList.add('success', 'checking');
+        button.innerHTML = '<check>';
+
+        controller.resetButtonState(button, 'Check');
+
+        expect(button.disabled).toBe(false);
+        expect(button.style.width).toBe('');
+        expect(button.classList.contains('success')).toBe(false);
+        expect(button.classList.contains('checking')).toBe(false);
+        expect(button.textContent).toBe('Check');
     });
 });
