@@ -658,7 +658,7 @@ impl EngineManager {
                             error = %error,
                             "Engine process status check failed; attempting to stop before pruning"
                         );
-                        errored.push(*capability);
+                        errored.push((*capability, engine.definition.id.clone()));
                     }
                     Ok(None) => {}
                 }
@@ -669,8 +669,16 @@ impl EngineManager {
             }
         }
 
-        for capability in errored {
-            let engine = self.slots.lock().await.remove(&capability);
+        for (capability, failed_engine_id) in errored {
+            let engine = {
+                let mut slots = self.slots.lock().await;
+                match slots.get(&capability) {
+                    Some(current) if current.definition.id == failed_engine_id => {
+                        slots.remove(&capability)
+                    }
+                    _ => None,
+                }
+            };
             let Some(engine) = engine else {
                 continue;
             };

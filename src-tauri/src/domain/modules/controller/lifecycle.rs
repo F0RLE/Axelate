@@ -7,11 +7,14 @@ use crate::models::ControlResponse;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::process::{Child, Command};
+use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 const MODULE_CHILD_EXIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
+static MODULE_START_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 fn build_command(cmd: CommandDefinition) -> Command {
     match cmd {
@@ -57,6 +60,8 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Safely starts a module with the given manifest
     pub async fn start(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
+        let _start_guard = MODULE_START_LOCK.lock().await;
+
         // 1. Guard against double-start
         // Check registry first (atomic-ish)
         if self.controller.registry.contains_key(&self.module_id) {
@@ -79,7 +84,7 @@ impl<'a> LifecycleExecutor<'a> {
             });
         }
 
-        if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
+        if let Some(entry_path) = self.resolve_script_entry_path(manifest)? {
             if let Some(existing_pid) = self
                 .reconcile_existing_script_processes(&entry_path)
                 .await?
@@ -295,7 +300,7 @@ impl<'a> LifecycleExecutor<'a> {
     /// Gracefully stops a module with escalation
     pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
         tracing::info!("Stopping module: {}", self.module_id);
-        let script_entry_path = self.resolve_script_entry_path(manifest);
+        let script_entry_path = self.resolve_script_entry_path(manifest)?;
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
@@ -323,16 +328,31 @@ impl<'a> LifecycleExecutor<'a> {
                 }
             }
 
-            // Wait with timeout
-            if timeout(Duration::from_secs(5), child.wait()).await.is_err() {
-                tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
-                if let Err(error) = child.kill().await {
+            match timeout(Duration::from_secs(5), child.wait()).await {
+                Ok(Ok(_status)) => {}
+                Ok(Err(error)) => {
                     tracing::warn!(
                         module_id = %self.module_id,
-                        "Failed to force-kill registered module process: {error}"
+                        "Failed to wait registered module process during stop: {error}"
                     );
+                    if let Err(kill_error) = child.kill().await {
+                        tracing::warn!(
+                            module_id = %self.module_id,
+                            "Failed to force-kill registered module process after wait error: {kill_error}"
+                        );
+                    }
+                    Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
                 }
-                Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
+                Err(_) => {
+                    tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
+                    if let Err(error) = child.kill().await {
+                        tracing::warn!(
+                            module_id = %self.module_id,
+                            "Failed to force-kill registered module process: {error}"
+                        );
+                    }
+                    Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
+                }
             }
         }
 
@@ -408,8 +428,15 @@ impl<'a> LifecycleExecutor<'a> {
         })
     }
 
-    fn resolve_script_entry_path(&self, manifest: &ModuleManifest) -> Option<std::path::PathBuf> {
-        script_runtime::resolve_entry_path(self.module_path, manifest).ok()
+    fn resolve_script_entry_path(
+        &self,
+        manifest: &ModuleManifest,
+    ) -> Result<Option<PathBuf>, AppError> {
+        if !script_runtime::supports_manifest(manifest) {
+            return Ok(None);
+        }
+
+        script_runtime::resolve_entry_path(self.module_path, manifest).map(Some)
     }
 
     async fn reconcile_existing_script_processes(

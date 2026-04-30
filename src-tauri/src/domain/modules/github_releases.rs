@@ -375,7 +375,7 @@ fn release_download_version(
         return None;
     }
 
-    let recommended = if gpu.is_some() {
+    let recommended = if gpu.is_some() && has_real_gpu_accelerator(hardware) {
         ReleaseComputeTarget::Gpu
     } else {
         ReleaseComputeTarget::Cpu
@@ -467,6 +467,14 @@ fn is_cpu_asset_name(name: &str) -> bool {
         || lower.contains("avx")
         || lower.contains("noavx")
         || !is_gpu_asset_name_lower(&lower)
+}
+
+const fn has_real_gpu_accelerator(hardware: HardwareProfile) -> bool {
+    !matches!(
+        hardware.accelerator,
+        crate::domain::system::hardware_probe::AcceleratorClass::CpuOnly
+            | crate::domain::system::hardware_probe::AcceleratorClass::Unknown
+    )
 }
 
 const fn hardware_for_target(
@@ -1126,7 +1134,7 @@ mod tests {
 
         assert_eq!(versions.len(), 1);
         let version = versions.first().expect("expected sdcpp options");
-        assert_eq!(version.recommended, ReleaseComputeTarget::Gpu);
+        assert_eq!(version.recommended, ReleaseComputeTarget::Cpu);
         assert_eq!(
             version.cpu.as_ref().and_then(|cpu| cpu.assets.first()),
             Some(&"sd-master-3d6064b-bin-win-avx2-x64.zip".to_string())
@@ -1170,7 +1178,7 @@ mod tests {
 
         assert_eq!(versions.len(), 1);
         let version = versions.first().expect("expected llama.cpp options");
-        assert_eq!(version.recommended, ReleaseComputeTarget::Gpu);
+        assert_eq!(version.recommended, ReleaseComputeTarget::Cpu);
         assert_eq!(
             version.cpu.as_ref().and_then(|cpu| cpu.assets.first()),
             Some(&"llama-b8981-bin-win-cpu-x64.zip".to_string())

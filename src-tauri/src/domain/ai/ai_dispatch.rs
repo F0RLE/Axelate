@@ -294,10 +294,13 @@ async fn prepend_local_system_prompt(
     }
 
     let settings = settings_service.get_settings().await?;
-    let key = format!("{provider}_system_prompt");
+    let canonical_provider = canonical_engine_id(provider);
+    let canonical_key = format!("{canonical_provider}_system_prompt");
+    let raw_key = format!("{provider}_system_prompt");
     let prompt = settings
         .extra_settings
-        .get(&key)
+        .get(&canonical_key)
+        .or_else(|| settings.extra_settings.get(&raw_key))
         .map(String::as_str)
         .unwrap_or_default()
         .trim();

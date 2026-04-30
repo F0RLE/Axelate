@@ -97,6 +97,10 @@ export class EventHandler {
         if (pageId === undefined) return false;
 
         e.preventDefault();
+        if (document.body.classList.contains('download-selection-open')) {
+            return true;
+        }
+
         this._core.tracer.debug(`[EventHandler] Navigating to: ${pageId}`);
         await this._core.navigationUI.showPage(pageId, navBtn);
         return true;

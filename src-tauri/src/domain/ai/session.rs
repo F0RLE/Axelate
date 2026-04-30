@@ -148,14 +148,26 @@ impl ChatSessionManager {
         self.ensure_persistence_available()?;
         let save_lock = Arc::clone(&self.save_lock);
         let sessions = Arc::clone(&self.sessions);
-        tokio::task::spawn_blocking(move || Self::flush_sessions_locked(&save_lock, &sessions))
-            .await
-            .map_err(|e| crate::errors::AppError::Internal {
-                request_id: None,
-                message: format!("Blocking task failed: {e}"),
-            })??;
-        self.dirty.store(false, Ordering::Relaxed);
-        Ok(())
+        self.dirty.store(false, Ordering::Release);
+
+        match tokio::task::spawn_blocking(move || {
+            Self::flush_sessions_locked(&save_lock, &sessions)
+        })
+        .await
+        {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(error)) => {
+                self.dirty.store(true, Ordering::Release);
+                Err(error)
+            }
+            Err(error) => {
+                self.dirty.store(true, Ordering::Release);
+                Err(crate::errors::AppError::Internal {
+                    request_id: None,
+                    message: format!("Blocking task failed: {error}"),
+                })
+            }
+        }
     }
 
     /// Synchronous save — intended for use in Tauri shutdown hooks (called from a blocking context).
@@ -491,12 +503,19 @@ impl SessionPersistence {
             }
 
             if let Err(second_error) = std::fs::rename(&tmp_path, path) {
-                if had_original {
-                    let _ = std::fs::rename(&backup_path, path);
-                }
+                let restore_message = if had_original {
+                    match std::fs::rename(&backup_path, path) {
+                        Ok(()) => "backup restore succeeded".to_string(),
+                        Err(restore_error) => {
+                            format!("backup restore failed: {restore_error}")
+                        }
+                    }
+                } else {
+                    "no original file to restore".to_string()
+                };
                 let _ = std::fs::remove_file(&tmp_path);
                 return Err(crate::errors::AppError::Io(format!(
-                    "Failed to publish chat history '{}': first rename failed: {error}; second rename failed: {second_error}",
+                    "Failed to publish chat history '{}': first rename failed: {error}; second rename failed: {second_error}; {restore_message}",
                     path.display()
                 )));
             }

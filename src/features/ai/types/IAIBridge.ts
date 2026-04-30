@@ -26,6 +26,7 @@ export interface IAIBridge {
     stopEngineSlot(capability: 'text' | 'image' | 'vision'): Promise<void>;
     clearHistory(): Promise<void>;
     getHistory(): Promise<IChatMessage[]>;
+    prepareImagePrompt(text: string): Promise<IBridgeResponse>;
     cancelTextGeneration(): Promise<boolean>;
     cancelImageGeneration(providerId?: string | null): Promise<void>;
     getImageGenerationPreview(): Promise<IImageGenerationPreview | null>;

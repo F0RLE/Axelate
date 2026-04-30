@@ -273,7 +273,11 @@ export class AIChatTransport implements IChatTransport {
             return await this._context.tauriProvider
                 .invoke<IImageGenerationResponse>('generate_image', { request })
                 .then((response) => {
-                    if (response.ok && response.images.length > 0) {
+                    if (
+                        response.ok &&
+                        Array.isArray(response.images) &&
+                        response.images.length > 0
+                    ) {
                         return { ok: true, images: response.images };
                     }
                     return { ok: false, error: response.error ?? 'Failed to generate image' };

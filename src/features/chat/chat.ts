@@ -447,7 +447,7 @@ export class ChatController {
     }
 
     private async _restoreActiveImageGeneration(): Promise<void> {
-        if (this._state.isDestroyed || this._state.isSending) {
+        if (this._isDestroyed() || this._state.isSending) {
             return;
         }
 
@@ -465,6 +465,9 @@ export class ChatController {
             preview = await previewProvider.getImageGenerationPreview();
         } catch (error: unknown) {
             this._tracer.error('[Chat] Failed to restore active image generation:', error);
+            return;
+        }
+        if (this._isDestroyed()) {
             return;
         }
         if (preview === null) {
@@ -522,6 +525,10 @@ export class ChatController {
 
         globalThis.clearTimeout(this._restoredImageGenerationTimer);
         this._restoredImageGenerationTimer = null;
+    }
+
+    private _isDestroyed(): boolean {
+        return this._state.isDestroyed;
     }
 
     private _closeAttachMenu(): void {
@@ -609,7 +616,10 @@ export class ChatController {
 
     public async clearChat(): Promise<void> {
         this._activationCoordinator.clearInactiveAiErrorTimeout();
+        this._clearRestoredImageGenerationTimer();
         this._generationController.stopImagePreviewPolling();
+        this._state.isSending = false;
+        this._state.currentGenerationProviderId = null;
         this._state.clearHistory();
         this._contextTokenTotal = 0;
         this._contextTokenVersion += 1;

@@ -2,6 +2,7 @@ import '@/styles/app.css';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { createCoreAssembly, type CoreAssembly } from './CoreAssembly';
 import { bindCoreEntry } from './CoreEntry';
+import type { CoreServices } from './CoreContainer';
 
 export class Core {
     private readonly _assembly: CoreAssembly;
@@ -59,6 +60,18 @@ export class Core {
 
     private async _runInit(): Promise<void> {
         await this._assembly.lifecycleController.runInit();
+    }
+
+    public get aiBridge(): CoreServices['aiBridge'] {
+        return this._assembly.services.aiBridge;
+    }
+
+    public get moduleService(): CoreServices['moduleService'] {
+        return this._assembly.services.moduleService;
+    }
+
+    public get tauriProvider(): CoreServices['tauriProvider'] {
+        return this._assembly.services.tauriProvider;
     }
 
     public async destroy(): Promise<void> {

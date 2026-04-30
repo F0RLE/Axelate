@@ -67,12 +67,19 @@ impl LocalFileService {
             }
 
             if let Err(second_error) = fs::rename(&tmp, path).await {
-                if had_original {
-                    let _ = fs::rename(&backup, path).await;
-                }
+                let restore_message = if had_original {
+                    match fs::rename(&backup, path).await {
+                        Ok(()) => "backup restore succeeded".to_string(),
+                        Err(restore_error) => {
+                            format!("backup restore failed: {restore_error}")
+                        }
+                    }
+                } else {
+                    "no original file to restore".to_string()
+                };
                 let _ = fs::remove_file(&tmp).await;
                 return Err(AppError::Io(format!(
-                    "Failed to publish atomic write to '{}': first rename failed: {first_error}; second rename failed: {second_error}",
+                    "Failed to publish atomic write to '{}': first rename failed: {first_error}; second rename failed: {second_error}; {restore_message}",
                     path.display()
                 )));
             }

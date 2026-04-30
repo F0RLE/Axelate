@@ -560,7 +560,7 @@ async fn handle_text_request(
             "Text request requires a prompt or messages".to_string(),
         ));
     }
-    if messages.is_empty() || !prompt.trim().is_empty() {
+    if messages.is_empty() && !prompt.trim().is_empty() {
         messages.push(ChatMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role: "user".to_string(),
@@ -571,11 +571,11 @@ async fn handle_text_request(
 
     let thinking_level = match payload.thinking_level {
         Some(value) => Some(value),
-        None => selected_thinking_level(&context.ui_state_service, &ui_provider).await?,
+        None => selected_thinking_level(&context.ui_state_service, &ui_provider, &provider).await?,
     };
     let web_search = match payload.web_search {
         Some(value) => Some(value),
-        None => selected_web_search(&context.ui_state_service, &ui_provider).await?,
+        None => selected_web_search(&context.ui_state_service, &ui_provider, &provider).await?,
     };
 
     let mut chat_request = ChatRequest {
@@ -822,26 +822,28 @@ async fn resolve_session_id(
 
 async fn selected_thinking_level(
     ui_state_service: &UiStateService,
-    provider: &str,
+    primary_provider: &str,
+    fallback_provider: &str,
 ) -> Result<Option<String>, AppError> {
-    Ok(ui_state_service
-        .get_ui_state()
-        .await?
+    let state = ui_state_service.get_ui_state().await?;
+    Ok(state
         .ai_thinking_level
-        .get(provider)
+        .get(primary_provider)
+        .or_else(|| state.ai_thinking_level.get(fallback_provider))
         .cloned()
         .filter(|value| !value.trim().is_empty()))
 }
 
 async fn selected_web_search(
     ui_state_service: &UiStateService,
-    provider: &str,
+    primary_provider: &str,
+    fallback_provider: &str,
 ) -> Result<Option<WebSearchOptions>, AppError> {
-    let enabled = ui_state_service
-        .get_ui_state()
-        .await?
+    let state = ui_state_service.get_ui_state().await?;
+    let enabled = state
         .ai_web_search_enabled
-        .get(provider)
+        .get(primary_provider)
+        .or_else(|| state.ai_web_search_enabled.get(fallback_provider))
         .copied()
         .unwrap_or(false);
 
