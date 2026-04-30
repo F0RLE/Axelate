@@ -100,6 +100,25 @@ describe('AIProviderManager', () => {
             expect(mockCore.aiSettings.setAiSessionId).toHaveBeenCalledWith('ui-session-abc');
         });
 
+        it('should recover session ID from UI state when secure read fails', async () => {
+            const mockCore = createMockCore(() => Promise.reject(new Error('secure read failed')));
+            vi.mocked(mockCore.aiSettings.getAiSessionId).mockReturnValue('ui-session-abc');
+            manager.setCore(mockCore);
+
+            await manager.init();
+
+            expect(mockCore.tauriProvider.getSecureKey).toHaveBeenCalledTimes(1);
+            expect(manager.sessionId).toBe('ui-session-abc');
+            expect(mockCore.tauriProvider.saveSecureKey).toHaveBeenCalledWith(
+                'ai_session_id',
+                'ui-session-abc',
+            );
+            expect(tracer.error).toHaveBeenCalledWith(
+                '[AIProviderManager] Failed to read ai_session_id:',
+                expect.any(Error),
+            );
+        });
+
         it('should continue with UI session ID when secure persistence fails', async () => {
             const mockCore = createMockCore(() => Promise.resolve(null));
             vi.mocked(mockCore.aiSettings.getAiSessionId).mockReturnValue('ui-session-abc');
