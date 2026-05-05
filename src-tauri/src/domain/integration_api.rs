@@ -1053,12 +1053,17 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{
-        IntegrationTextRequest, backend_provider_id, find_header_end, is_authorized, model_api_id,
-        parse_header_line, parse_header_lines, parse_json_body, read_http_request,
-        status_for_app_error, status_text, tier_rank,
+        IntegrationTextRequest, backend_provider_id, find_header_end, is_authorized,
+        is_loopback_peer, json_error, json_response, model_api_id, parse_header_line,
+        parse_header_lines, parse_json_body, parse_module_action, read_http_request,
+        selected_module_from_api_provider, selected_module_from_catalog_item, status_for_app_error,
+        status_text, tier_rank,
     };
+    use crate::domain::modules::controller::ModuleAction;
     use crate::errors::AppError;
-    use crate::models::{AiModel, ApiModelConfig, ModelStats, ModelTier};
+    use crate::models::{
+        AiModel, ApiModelConfig, ModelStats, ModelTier, ModuleItem, ProviderType, SelectedModule,
+    };
     use std::collections::HashMap;
     use std::io::Write;
     use std::net::{Shutdown, TcpListener, TcpStream};
@@ -1189,6 +1194,120 @@ mod tests {
     fn ranks_model_tiers_for_default_selection() {
         assert!(tier_rank(&ModelTier::Strong) > tier_rank(&ModelTier::Medium));
         assert_eq!(status_text(404), "Not Found");
+    }
+
+    #[test]
+    fn module_action_parser_accepts_integration_routes_only() {
+        assert_eq!(
+            parse_module_action("start").expect("start"),
+            ModuleAction::Start
+        );
+        assert_eq!(
+            parse_module_action("stop").expect("stop"),
+            ModuleAction::Stop
+        );
+        assert_eq!(
+            parse_module_action("restart").expect("restart"),
+            ModuleAction::Restart
+        );
+        assert!(matches!(
+            parse_module_action("install"),
+            Err(AppError::Validation(_))
+        ));
+    }
+
+    #[test]
+    fn loopback_guard_rejects_missing_or_remote_peers() {
+        assert!(is_loopback_peer(Some(
+            "127.0.0.1:3000".parse().expect("loopback socket")
+        )));
+        assert!(is_loopback_peer(Some(
+            "[::1]:3000".parse().expect("ipv6 loopback socket")
+        )));
+        assert!(!is_loopback_peer(None));
+        assert!(!is_loopback_peer(Some(
+            "192.168.1.10:3000".parse().expect("remote socket")
+        )));
+    }
+
+    #[test]
+    fn json_response_helpers_preserve_status_and_error_shape() {
+        let ok = json_response(200, serde_json::json!({ "ok": true }));
+        let error = json_error(401, "denied");
+
+        assert_eq!(ok.status, 200);
+        assert_eq!(
+            ok.body.get("ok").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(error.status, 401);
+        assert_eq!(
+            error.body.get("error").and_then(serde_json::Value::as_str),
+            Some("denied")
+        );
+    }
+
+    #[test]
+    fn selected_module_from_catalog_preserves_localized_metadata() {
+        let module = ModuleItem {
+            id: "llamacpp".to_string(),
+            name_key: "ui.module.llamacpp".to_string(),
+            desc_key: "ui.module.llamacpp.desc".to_string(),
+            name: "llama.cpp".to_string(),
+            desc: "Local text engine".to_string(),
+            icon: "cpu".to_string(),
+            preview: None,
+            type_name: "local".to_string(),
+            dl_type: None,
+            capabilities: vec!["text".to_string()],
+            binary: Some("llama-server".to_string()),
+            repo_url: None,
+            expected_hash: None,
+            coming_soon: false,
+            managed_externally: false,
+            version: "1.0.0".to_string(),
+            installed: true,
+            raw_config_schema: None,
+            config_schema: None,
+        };
+
+        let selected = selected_module_from_catalog_item(&module);
+
+        assert_eq!(selected.id, "llamacpp");
+        assert_eq!(selected.name_key.as_deref(), Some("ui.module.llamacpp"));
+        assert_eq!(
+            selected.desc_key.as_deref(),
+            Some("ui.module.llamacpp.desc")
+        );
+        assert_eq!(selected.type_, "local");
+    }
+
+    #[test]
+    fn selected_module_from_api_provider_maps_provider_type() {
+        let provider = crate::models::ApiProvider {
+            id: "cloud".to_string(),
+            name: "Cloud".to_string(),
+            desc_key: Some("ui.module.cloud.desc".to_string()),
+            description: Some("Cloud provider".to_string()),
+            icon: Some("cloud".to_string()),
+            provider_type: Some(ProviderType::Openai),
+            base_url: Some("https://api.example.test/v1".to_string()),
+            api_key_env: None,
+            models: None,
+            capabilities: None,
+            model_aliases: None,
+        };
+        let local = crate::models::ApiProvider {
+            provider_type: Some(ProviderType::Local),
+            ..provider.clone()
+        };
+
+        let selected_cloud: SelectedModule = selected_module_from_api_provider(&provider);
+        let selected_local = selected_module_from_api_provider(&local);
+
+        assert_eq!(selected_cloud.type_, "api");
+        assert_eq!(selected_cloud.desc, "Cloud provider");
+        assert_eq!(selected_local.type_, "local");
     }
 
     #[test]
