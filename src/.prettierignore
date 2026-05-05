@@ -1,4 +1,5 @@
 dist
 coverage
+.axelate
 shared/types/bindings.ts
 .axelate

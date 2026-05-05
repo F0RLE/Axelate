@@ -15,6 +15,26 @@ impl LocalFileService {
         Self
     }
 
+    #[cfg(not(target_os = "windows"))]
+    async fn sync_parent_dir(path: &Path) -> Result<(), AppError> {
+        let Some(parent) = path.parent() else {
+            return Ok(());
+        };
+
+        let dir = fs::File::open(parent)
+            .await
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        dir.sync_all()
+            .await
+            .map_err(|e| AppError::Io(e.to_string()))
+    }
+
+    #[cfg(target_os = "windows")]
+    #[allow(clippy::unused_async)]
+    async fn sync_parent_dir(_path: &Path) -> Result<(), AppError> {
+        Ok(())
+    }
+
     async fn write_atomic(path: &Path, content: &[u8]) -> Result<(), AppError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -90,6 +110,7 @@ impl LocalFileService {
                 let _ = fs::remove_file(&backup).await;
             }
         }
+        Self::sync_parent_dir(path).await?;
 
         Ok(())
     }

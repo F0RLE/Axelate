@@ -53,7 +53,11 @@ export class AISettingsKeyController {
 
         input.dataset['keyRemoveInFlight'] = 'true';
         try {
-            await this._options.getSettingsService()?.removeSecureKey(providerId);
+            const settingsService = this._options.getSettingsService();
+            if (settingsService === null) {
+                throw new Error();
+            }
+            await settingsService.removeSecureKey(providerId);
             this.clearStoredKeyMask(input);
             this._showToast(
                 this._options.getTranslator()('ui.settings.key_removed', 'API key removed'),
@@ -158,7 +162,11 @@ export class AISettingsKeyController {
 
             let isValid = false;
             if (shouldRemoveStoredKey) {
-                await this._options.getSettingsService()?.removeSecureKey(providerId);
+                const settingsService = this._options.getSettingsService();
+                if (settingsService === null) {
+                    throw new Error();
+                }
+                await settingsService.removeSecureKey(providerId);
                 this.clearStoredKeyMask(input);
                 this.updateButtonState(button, 'success', this._options.icons.check);
                 this._showToast(t('ui.settings.key_removed', 'API key removed'), 'success');
