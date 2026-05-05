@@ -792,6 +792,7 @@ Tasks:
   test:coverage:all  Run frontend and Rust coverage
   rust:test:coverage  Run Rust tests with coverage summary
   rust:test:coverage:lcov  Generate Rust LCOV report at src-tauri/lcov.info
+    Note: Rust coverage passthrough args go directly to cargo-llvm-cov; include explicit "--" before cargo test filters.
   test:watch     Run frontend tests in watch mode
   typecheck      Run frontend type checks
   verify         Run the full local verification pipeline

@@ -414,6 +414,28 @@ mod tests {
     }
 
     #[test]
+    fn custom_models_loader_parses_valid_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let path = temp_dir.path().join("custom_models.json");
+        std::fs::write(
+            &path,
+            r#"{"models":[{"id":"custom-1","name":"Custom One","provider_id":"gpt","base_model_id":"gpt-4.1","created_at":1712345678.0}]}"#,
+        )
+        .expect("valid custom models fixture");
+
+        let config = FileConfigRepository::load_custom_models_from_path(&path)
+            .expect("valid custom models should parse");
+
+        let model = config.models.first().expect("written custom model");
+        assert_eq!(config.models.len(), 1);
+        assert_eq!(model.id, "custom-1");
+        assert_eq!(model.name, "Custom One");
+        assert_eq!(model.provider_id, "gpt");
+        assert_eq!(model.base_model_id, "gpt-4.1");
+        assert!((model.created_at - 1_712_345_678.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn custom_models_loader_reports_invalid_json() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let path = temp_dir.path().join("custom_models.json");
