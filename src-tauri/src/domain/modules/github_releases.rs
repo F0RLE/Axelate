@@ -91,7 +91,8 @@ pub struct ReleaseDownloadVariant {
 
 const RELEASES_PER_PAGE: u8 = 100;
 const MAX_RELEASE_DOWNLOAD_OPTIONS: usize = 50;
-const GITHUB_API_USER_AGENT: &str = "Axelate";
+const MAX_RELEASE_PAGES: u32 = 10;
+const GITHUB_API_USER_AGENT: &str = concat!("Axelate/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Clone, Debug, Deserialize)]
 struct Release {
@@ -160,7 +161,7 @@ pub async fn fetch_release_bundle(
     );
     let mut page = 1_u32;
 
-    loop {
+    while page <= MAX_RELEASE_PAGES {
         let releases = fetch_release_page(client, &repo_ref, module_id, page).await?;
         if releases.is_empty() {
             break;
@@ -202,7 +203,7 @@ pub async fn fetch_release_download_options(
     let mut page = 1_u32;
     let mut versions = Vec::new();
 
-    loop {
+    while page <= MAX_RELEASE_PAGES {
         let releases = fetch_release_page(client, &repo_ref, module_id, page).await?;
         if releases.is_empty() {
             break;
@@ -481,10 +482,9 @@ fn is_gpu_asset_name_lower(lower: &str) -> bool {
 
 fn is_cpu_asset_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    let has_explicit_cpu_token = release_asset_tokens(&lower).any(|token| {
+    release_asset_tokens(&lower).any(|token| {
         token == "cpu" || token == "avx" || token == "avx2" || token == "avx512" || token == "noavx"
-    });
-    has_explicit_cpu_token || !is_gpu_asset_name_lower(&lower)
+    })
 }
 
 fn release_asset_tokens(name: &str) -> impl Iterator<Item = &str> {
@@ -644,8 +644,16 @@ mod tests {
     #[test]
     fn asset_classification_does_not_treat_amd64_as_amd_gpu() {
         assert!(!is_gpu_asset_name("llama-b8981-bin-win-amd64.zip"));
-        assert!(is_cpu_asset_name("llama-b8981-bin-win-amd64.zip"));
+        assert!(!is_cpu_asset_name("llama-b8981-bin-win-amd64.zip"));
         assert!(is_gpu_asset_name("llama-b8981-bin-win-hip-radeon-x64.zip"));
+    }
+
+    #[test]
+    fn unknown_accelerator_tokens_are_not_classified_as_cpu() {
+        assert!(!is_cpu_asset_name("llama-b8981-bin-win-metal-x64.zip"));
+        assert!(!is_cpu_asset_name("llama-b8981-bin-win-npu-x64.zip"));
+        assert!(!is_cpu_asset_name("llama-b8981-bin-win-xpu-x64.zip"));
+        assert!(!is_cpu_asset_name("llama-b8981-bin-win-rtx5090-x64.zip"));
     }
 
     #[test]
