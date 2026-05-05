@@ -96,6 +96,7 @@ describe('EventHandler', () => {
         const core = createCoreEvents();
         const handler = new EventHandler(core, runtime);
         handler.init();
+        handler.init();
 
         const navButton = document.querySelector<HTMLButtonElement>('[data-page]');
         if (navButton === null) {
@@ -105,7 +106,10 @@ describe('EventHandler', () => {
         await flushAsyncNavigation();
 
         expect(core.navigationUI.showPage).toHaveBeenCalledOnce();
+        expect(runtime.addWindowListener).toHaveBeenCalledOnce();
         handler.destroy();
+        handler.destroy();
+        expect(runtime.removeWindowListener).toHaveBeenCalledOnce();
     });
 
     it('delegates language menu and language selection clicks', async () => {

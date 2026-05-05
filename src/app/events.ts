@@ -46,6 +46,7 @@ function createDefaultEventHandlerRuntime(): EventHandlerRuntime {
 export class EventHandler {
     private readonly _core: ICoreEvents;
     private _unsubscribers: (() => void)[] = [];
+    private _initialized = false;
 
     constructor(
         core: ICoreEvents,
@@ -58,6 +59,11 @@ export class EventHandler {
      * Initializes all global event listeners.
      */
     public init(): void {
+        if (this._initialized) {
+            return;
+        }
+        this._initialized = true;
+
         this._initGlobalDelegation();
         this._initWindowControls();
 
@@ -191,10 +197,15 @@ export class EventHandler {
      * Cleans up all event listeners.
      */
     public destroy(): void {
+        if (!this._initialized) {
+            return;
+        }
+
         this._unsubscribers.forEach((fn) => {
             fn();
         });
         this._unsubscribers = [];
+        this._initialized = false;
         this._core.tracer.debug('[EventHandler] Destroyed and listeners removed.');
     }
 
