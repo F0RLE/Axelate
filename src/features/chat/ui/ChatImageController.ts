@@ -1,7 +1,8 @@
 import DOMPurify from 'dompurify';
-import { invoke } from '@tauri-apps/api/core';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import { invokeSafe } from '@/shared/api/invoke';
+import { commands, type SavedChatImage as SavedChatImageResult } from '@/shared/types/bindings';
 import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
 
 type ChatImageLogger = Pick<LoggerService, 'error'>;
@@ -161,23 +162,20 @@ export class ChatImageController {
     }
 
     private async _performSaveImage(b64: string, mime: string): Promise<SavedChatImage | null> {
-        const result = await invoke<{ file_path: string; folder_path: string }>(
-            'save_chat_image_default',
-            {
-                base64Data: b64,
-                mimeType: mime,
-            },
+        const saved = await this._invokeCommand<SavedChatImageResult>(
+            commands.saveChatImageDefault(b64, mime),
+            'saveChatImageDefault',
         );
 
         if (
-            typeof result.file_path === 'string' &&
-            result.file_path.length > 0 &&
-            typeof result.folder_path === 'string' &&
-            result.folder_path.length > 0
+            typeof saved.file_path === 'string' &&
+            saved.file_path.length > 0 &&
+            typeof saved.folder_path === 'string' &&
+            saved.folder_path.length > 0
         ) {
             return {
-                filePath: result.file_path,
-                folderPath: result.folder_path,
+                filePath: saved.file_path,
+                folderPath: saved.folder_path,
             };
         }
 
@@ -498,7 +496,10 @@ export class ChatImageController {
         const animationDelay = new Promise((resolve) => {
             globalThis.setTimeout(resolve, ChatImageController._imageResetDelayMs);
         });
-        const deleteRequest = invoke('delete_chat_image', { filePath });
+        const deleteRequest = this._invokeCommand(
+            commands.deleteChatImage(filePath),
+            'deleteChatImage',
+        );
 
         try {
             await Promise.all([deleteRequest, animationDelay]);
@@ -521,11 +522,6 @@ export class ChatImageController {
     ): Promise<void> {
         const handleMissing = async (): Promise<void> => {
             this._restoreFolderButtonToSave(saveBtn);
-            try {
-                await invoke('open_chat_image_location', { filePath: folderPath, folderPath });
-            } catch {
-                /* ignore fallback folder-open errors */
-            }
             this._deps.showToast(
                 this._deps.translate(
                     'ui.chat.image_missing_resave',
@@ -533,10 +529,15 @@ export class ChatImageController {
                 ),
                 'warning',
             );
+            try {
+                await this._openSavedImageLocation(folderPath, folderPath);
+            } catch {
+                /* ignore fallback folder-open errors */
+            }
         };
 
         try {
-            await invoke('open_chat_image_location', { filePath, folderPath });
+            await this._openSavedImageLocation(filePath, folderPath);
         } catch (error) {
             const message = this._deps.extractErrorMessage(error);
             const normalized = message.toLowerCase();
@@ -559,5 +560,24 @@ export class ChatImageController {
                 'error',
             );
         }
+    }
+
+    private async _openSavedImageLocation(filePath: string, folderPath: string): Promise<void> {
+        await this._invokeCommand(
+            commands.openChatImageLocation(filePath, folderPath),
+            'openChatImageLocation',
+        );
+    }
+
+    private async _invokeCommand<T>(
+        command: Promise<{ status: 'ok'; data: T } | { status: 'error'; error: unknown }>,
+        label: string,
+    ): Promise<T> {
+        const result = await invokeSafe<T>(command);
+        if (result.status === 'ok') {
+            return result.data;
+        }
+
+        throw new Error(`${label} failed: ${result.error.message}`);
     }
 }

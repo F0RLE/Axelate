@@ -122,7 +122,7 @@ async function saveGeneratedImage(saveButton: HTMLButtonElement): Promise<void> 
         folder_path: savedImageFolderPath,
     });
     saveButton.click();
-    await flushPromises(2);
+    await flushPromises(3);
 }
 
 async function convertSaveButtonToFolderAction(saveButton: HTMLButtonElement): Promise<void> {
@@ -707,7 +707,7 @@ describe('ChatUI lifecycle', () => {
 
         vi.mocked(invoke).mockRejectedValueOnce(new TypeError('Saved image does not exist'));
         saveButton.click();
-        await flushPromises(2);
+        await flushPromises(6);
 
         expect(saveButton.classList.contains('chat-save-image-btn')).toBe(true);
         expect(saveButton.classList.contains('chat-open-image-folder-btn')).toBe(false);
@@ -738,7 +738,7 @@ describe('ChatUI lifecycle', () => {
         expect(saveButton.classList.contains('is-trash-state')).toBe(true);
 
         vi.advanceTimersByTime(300);
-        await flushPromises(2);
+        await flushPromises(4);
 
         expect(invoke).toHaveBeenLastCalledWith('delete_chat_image', {
             filePath: savedImageFilePath,
