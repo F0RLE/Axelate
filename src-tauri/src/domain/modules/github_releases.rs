@@ -614,6 +614,23 @@ mod tests {
     }
 
     #[test]
+    fn x86_selection_does_not_treat_x86_64_assets_as_32_bit() {
+        let platform = Platform {
+            os: PlatformOs::Linux,
+            arch: PlatformArch::X86,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::CpuOnly,
+            cpu_tier: CpuInstructionTier::Baseline,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let assets = vec![asset("llama-b9028-bin-linux-x86_64.tar.gz")];
+
+        assert!(select_release_assets("llamacpp", platform, hardware, &assets).is_none());
+    }
+
+    #[test]
     fn uppercase_sha256_digest_is_accepted() {
         let platform = Platform {
             os: PlatformOs::Windows,
