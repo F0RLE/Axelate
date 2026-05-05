@@ -27,6 +27,7 @@ export interface StatePersistenceTarget {
 
 export class StateManager {
     private readonly _targets = new Map<string, StatePersistenceTarget>();
+    private _isInitialized = false;
     private _isDestroyed = false;
 
     constructor(private readonly _tracer: StateManagerLogger) {}
@@ -126,6 +127,11 @@ export class StateManager {
      * Call once during app bootstrap.
      */
     init(): void {
+        if (this._isDestroyed || this._isInitialized) {
+            return;
+        }
+
+        this._isInitialized = true;
         document.addEventListener('visibilitychange', this._boundVisibilityChange);
         globalThis.addEventListener('beforeunload', this._boundBeforeUnload);
         this._tracer.debug('[StateManager] Global listeners registered');
@@ -145,6 +151,7 @@ export class StateManager {
         globalThis.removeEventListener('beforeunload', this._boundBeforeUnload);
 
         this._targets.clear();
+        this._isInitialized = false;
         this._tracer.info('[StateManager] Destroyed');
     }
 }

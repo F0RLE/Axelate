@@ -130,6 +130,41 @@ describe('StateManager', () => {
         await manager.destroy();
     });
 
+    it('does not register duplicate global listeners on repeated init', async () => {
+        const manager = new StateManager(tracer);
+        const target = createTarget();
+        manager.register(target);
+        manager.init();
+        manager.init();
+
+        Object.defineProperty(document, 'hidden', {
+            configurable: true,
+            value: true,
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(target.saveAsync).toHaveBeenCalledOnce();
+        expect(tracer.debug).toHaveBeenCalledWith('[StateManager] Global listeners registered');
+        expect(tracer.debug).toHaveBeenCalledTimes(2);
+
+        await manager.destroy();
+    });
+
+    it('does not bind global listeners after destroy', async () => {
+        const manager = new StateManager(tracer);
+        const target = createTarget();
+        manager.register(target);
+        await manager.destroy();
+
+        manager.init();
+        globalThis.dispatchEvent(new Event('beforeunload'));
+        await Promise.resolve();
+
+        expect(target.saveImmediate).toHaveBeenCalledOnce();
+    });
+
     it('does not save on visibility visible and removes listeners on destroy', async () => {
         const manager = new StateManager(tracer);
         const target = createTarget();
