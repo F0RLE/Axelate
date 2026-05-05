@@ -68,6 +68,38 @@ pub async fn get_release_download_options(
 
 #[tauri::command]
 #[specta::specta]
+/// Imports an integration from a local folder containing `axelate-module.toml`.
+pub async fn import_integration_folder(path: String) -> Result<String, AppError> {
+    downloader::import_integration_folder(&std::path::PathBuf::from(path))
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Imports an integration from a local `.zip`, `.tar.gz`, `.tgz`, or `.7z` archive.
+pub async fn import_integration_archive(app: AppHandle, path: String) -> Result<String, AppError> {
+    downloader::import_integration_archive(app, std::path::PathBuf::from(path)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Imports an integration from a local folder or archive, auto-detected by path type.
+pub async fn import_integration_path(app: AppHandle, path: String) -> Result<String, AppError> {
+    downloader::import_integration_path(app, std::path::PathBuf::from(path)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Downloads and imports an integration from a repository or archive URL.
+pub async fn import_integration_url(
+    app: AppHandle,
+    downloader: tauri::State<'_, downloader::DownloaderService>,
+    source_url: String,
+) -> Result<String, AppError> {
+    downloader::import_integration_url(app, &downloader, source_url).await
+}
+
+#[tauri::command]
+#[specta::specta]
 /// Resumes a paused module download using backend-owned request metadata.
 pub async fn resume_download(
     app: AppHandle,

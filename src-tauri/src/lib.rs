@@ -110,6 +110,10 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         logs::log_batch,
         downloader::download_module,
         downloader::get_release_download_options,
+        downloader::import_integration_folder,
+        downloader::import_integration_archive,
+        downloader::import_integration_path,
+        downloader::import_integration_url,
         downloader::resume_download,
         downloader::check_module_installed,
         downloader::get_module_path,
@@ -316,6 +320,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
         ),
     );
     monitor_service.start_monitoring(monitor_emitter, DEFAULT_MONITORING_INTERVAL_MS);
+    crate::domain::modules::integration_watcher::start(app.handle().clone());
 
     #[cfg(desktop)]
     setup_global_shortcut(app)?;
