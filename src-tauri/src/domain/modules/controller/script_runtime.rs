@@ -138,7 +138,7 @@ async fn spawn_python_process(
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONUTF8", "1");
 
-    spawn_runtime_command(module_id, &runtime_root, command, "Python").await
+    spawn_runtime_command(module_id, module_path, &runtime_root, command, "Python").await
 }
 
 async fn spawn_node_process(
@@ -175,7 +175,7 @@ async fn spawn_node_process(
         .env("NODE_PATH", env_dir.join("node_modules"))
         .env("AXELATE_NODE_ENV_DIR", env_dir);
 
-    spawn_runtime_command(module_id, &runtime_root, command, "Node").await
+    spawn_runtime_command(module_id, module_path, &runtime_root, command, "Node").await
 }
 
 async fn spawn_bun_process(
@@ -211,11 +211,12 @@ async fn spawn_bun_process(
         .env("NODE_PATH", env_dir.join("node_modules"))
         .env("AXELATE_BUN_ENV_DIR", env_dir);
 
-    spawn_runtime_command(module_id, &runtime_root, command, "Bun").await
+    spawn_runtime_command(module_id, module_path, &runtime_root, command, "Bun").await
 }
 
 async fn spawn_runtime_command(
     module_id: &str,
+    module_path: &Path,
     language_runtime_root: &Path,
     mut command: Command,
     runtime_name: &str,
@@ -239,6 +240,7 @@ async fn spawn_runtime_command(
 
     command
         .env("BOT_CONFIG_DIR", CONFIG_DIR.as_os_str())
+        .env("AXELATE_SDK_VERSION", "1")
         .env("AXELATE_CONFIG_DIR", CONFIG_DIR.as_os_str())
         .env("AXELATE_RUNTIME_DIR", RUNTIME_DIR.as_os_str())
         .env(
@@ -249,6 +251,8 @@ async fn spawn_runtime_command(
             "AXELATE_MODULE_RUNTIME_DIR",
             module_runtime_root.as_os_str(),
         )
+        .env("AXELATE_MODULE_DIR", module_path.as_os_str())
+        .env("AXELATE_MODULE_LOG_DIR", module_log_dir.as_os_str())
         .env("AXELATE_MODULE_ID", module_id)
         .stdout(Stdio::from(log_file.try_clone().map_err(|e| {
             AppError::Io(format!("Failed to clone runtime log file: {e}"))
