@@ -8,6 +8,14 @@ async function flushAsyncNavigation(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function clickRequiredElement<T extends HTMLElement>(selector: string): void {
+    const element = document.querySelector<T>(selector);
+    if (element === null) {
+        throw new Error(`Required test element not found: ${selector}`);
+    }
+    element.click();
+}
+
 function createCoreEvents(): ICoreEvents {
     return {
         appUI: {
@@ -109,8 +117,8 @@ describe('EventHandler', () => {
         const handler = new EventHandler(core, runtime);
         handler.init();
 
-        document.querySelector<HTMLButtonElement>('#current-lang-trigger')?.click();
-        document.querySelector<HTMLButtonElement>('.lang-btn')?.click();
+        clickRequiredElement<HTMLButtonElement>('#current-lang-trigger');
+        clickRequiredElement<HTMLButtonElement>('.lang-btn');
         await flushAsyncNavigation();
 
         expect(core.i18nUI.toggleMenu).toHaveBeenCalledOnce();
@@ -128,9 +136,9 @@ describe('EventHandler', () => {
         const handler = new EventHandler(core, runtime);
         handler.init();
 
-        document.querySelector<HTMLButtonElement>('#ai-module-add-btn')?.click();
-        document.querySelector<HTMLElement>('#services-module-card')?.click();
-        document.querySelector<HTMLButtonElement>('.module-settings-btn')?.click();
+        clickRequiredElement<HTMLButtonElement>('#ai-module-add-btn');
+        clickRequiredElement<HTMLElement>('#services-module-card');
+        clickRequiredElement<HTMLButtonElement>('.module-settings-btn');
         await flushAsyncNavigation();
 
         expect(core.appUI.openAppSelection).toHaveBeenNthCalledWith(1, 'ai');
@@ -154,12 +162,12 @@ describe('EventHandler', () => {
         const handler = new EventHandler(core, runtime);
         handler.init();
 
-        document.querySelector<HTMLButtonElement>('#clear-chat-btn')?.click();
-        document.querySelector<HTMLButtonElement>('[data-chat-attach-action="file"]')?.click();
-        document.querySelector<HTMLButtonElement>('[data-chat-attach-action="image"]')?.click();
-        document.querySelector<HTMLButtonElement>('#chat-attach-btn')?.click();
-        document.querySelector<HTMLButtonElement>('#chat-voice-btn')?.click();
-        document.querySelector<HTMLButtonElement>('#chat-send-btn')?.click();
+        clickRequiredElement<HTMLButtonElement>('#clear-chat-btn');
+        clickRequiredElement<HTMLButtonElement>('[data-chat-attach-action="file"]');
+        clickRequiredElement<HTMLButtonElement>('[data-chat-attach-action="image"]');
+        clickRequiredElement<HTMLButtonElement>('#chat-attach-btn');
+        clickRequiredElement<HTMLButtonElement>('#chat-voice-btn');
+        clickRequiredElement<HTMLButtonElement>('#chat-send-btn');
         await flushAsyncNavigation();
 
         expect(core.chatController.clearChat).toHaveBeenCalledOnce();
@@ -192,11 +200,11 @@ describe('EventHandler', () => {
         const handler = new EventHandler(core, localRuntime);
         handler.init();
 
-        document.querySelector<HTMLButtonElement>('#close-app-selection-btn')?.click();
-        document.querySelector<HTMLButtonElement>('#close-app-selection-btn-alt')?.click();
-        document.querySelector<HTMLButtonElement>('.lang-modal-btn')?.click();
-        document.querySelector<HTMLButtonElement>('#confirm-lang-btn')?.click();
-        document.querySelector<HTMLButtonElement>('#close-module-settings-btn')?.click();
+        clickRequiredElement<HTMLButtonElement>('#close-app-selection-btn');
+        clickRequiredElement<HTMLButtonElement>('#close-app-selection-btn-alt');
+        clickRequiredElement<HTMLButtonElement>('.lang-modal-btn');
+        clickRequiredElement<HTMLButtonElement>('#confirm-lang-btn');
+        clickRequiredElement<HTMLButtonElement>('#close-module-settings-btn');
         await flushAsyncNavigation();
 
         expect(core.appUI.closeAppSelection).toHaveBeenCalledTimes(2);
