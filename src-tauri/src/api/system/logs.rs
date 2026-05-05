@@ -604,3 +604,263 @@ impl ConsoleLabelFormatter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::{
+        ConsoleLabelFormatter, ConsoleOverviewBuilder, ConsoleRuntimeStatus,
+        canonical_console_view_id, canonical_engine_id, clear_all_console_log_files,
+        clear_console_log_target, resolve_console_log_target,
+    };
+    use crate::domain::engine::types::{Capability, EngineState, EngineStatus, SlotStatus};
+    use crate::infrastructure::logging::LogEntry;
+    use crate::models::{SelectedModule, UIState};
+    use std::collections::HashMap;
+    use std::fs;
+
+    fn selected_module(id: &str, name: &str, type_: &str) -> SelectedModule {
+        SelectedModule {
+            id: id.to_string(),
+            name: name.to_string(),
+            name_key: None,
+            icon: "box".to_string(),
+            type_: type_.to_string(),
+            desc_key: None,
+            desc: String::new(),
+        }
+    }
+
+    fn log_entry(module_id: Option<&str>) -> LogEntry {
+        LogEntry {
+            timestamp: 1.0,
+            source: "test".to_string(),
+            level: "info".to_string(),
+            message: "message".to_string(),
+            module_id: module_id.map(str::to_string),
+            display_time: None,
+            normalized_level: None,
+            scope: None,
+            summary_message: None,
+            source_label: None,
+            source_class: None,
+            page: None,
+            action: None,
+            expected: None,
+        }
+    }
+
+    #[test]
+    fn canonicalizes_engine_ids_and_console_view_ids() {
+        assert_eq!(canonical_engine_id(" Stable_Diffusion.cpp "), "sdcpp");
+        assert_eq!(canonical_engine_id("llama cpp"), "llama-cpp");
+        assert_eq!(
+            canonical_console_view_id("engine:Stable Diffusion.cpp"),
+            "engine:sdcpp"
+        );
+        assert_eq!(
+            canonical_console_view_id(" module:example "),
+            "module:example"
+        );
+    }
+
+    #[test]
+    fn formats_console_labels_and_capabilities() {
+        assert_eq!(
+            ConsoleLabelFormatter::format_module_label("axelate-open-webui"),
+            "Open Webui"
+        );
+        assert_eq!(ConsoleLabelFormatter::format_module_label("--"), "");
+        assert_eq!(
+            ConsoleLabelFormatter::format_capability(Capability::Text),
+            "text"
+        );
+        assert_eq!(
+            ConsoleLabelFormatter::format_capability(Capability::Image),
+            "image"
+        );
+        assert_eq!(
+            ConsoleLabelFormatter::format_capability(Capability::Vision),
+            "vision"
+        );
+    }
+
+    #[test]
+    fn resolves_console_log_targets_by_view_kind() {
+        let engine_target = resolve_console_log_target("engine:Stable Diffusion.cpp");
+        let module_target = resolve_console_log_target("module:comfyui");
+        let general_target = resolve_console_log_target("general");
+
+        assert!(engine_target.ends_with("sdcpp"));
+        assert!(module_target.ends_with("comfyui"));
+        assert_ne!(general_target, module_target);
+    }
+
+    #[test]
+    fn clears_general_and_nested_console_logs_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let general = root.join("axelate.log");
+        let nested_dir = root.join("nested");
+        let nested_log = nested_dir.join("module.log");
+        let nested_txt = nested_dir.join("keep.txt");
+        fs::create_dir_all(&nested_dir).unwrap();
+        fs::write(&general, "general").unwrap();
+        fs::write(&nested_log, "module").unwrap();
+        fs::write(&nested_txt, "text").unwrap();
+
+        clear_console_log_target("general", root).unwrap();
+        assert_eq!(fs::read_to_string(&general).unwrap(), "");
+        assert_eq!(fs::read_to_string(&nested_log).unwrap(), "module");
+
+        clear_all_console_log_files(root).unwrap();
+        assert_eq!(fs::read_to_string(&nested_log).unwrap(), "");
+        assert_eq!(fs::read_to_string(&nested_txt).unwrap(), "text");
+    }
+
+    #[test]
+    fn clear_console_log_target_ignores_missing_targets_and_non_log_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("missing");
+        let target = temp.path().join("target");
+        let text_file = target.join("keep.txt");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(&text_file, "keep").unwrap();
+
+        clear_console_log_target("module:missing", &missing).unwrap();
+        clear_console_log_target("module:target", &target).unwrap();
+
+        assert_eq!(fs::read_to_string(text_file).unwrap(), "keep");
+    }
+
+    #[tokio::test]
+    async fn console_overview_deduplicates_views_and_reports_engine_states() {
+        let mut ui_state = UIState::default();
+        ui_state.selected_modules.insert(
+            "services".to_string(),
+            selected_module("comfyui", "ComfyUI", "service"),
+        );
+        ui_state.selected_modules.insert(
+            "ai_text".to_string(),
+            selected_module("stable diffusion.cpp", "Stable Diffusion.cpp", "local"),
+        );
+        ui_state.selected_modules.insert(
+            "ai_image".to_string(),
+            selected_module("cloud", "Cloud", "api"),
+        );
+        let logs = vec![log_entry(Some("comfyui")), log_entry(Some("unknown"))];
+        let engine = EngineStatus {
+            id: "stable_diffusion.cpp".to_string(),
+            name: "Stable Diffusion.cpp".to_string(),
+            capabilities: vec![Capability::Image],
+            endpoint: "http://127.0.0.1:7860".to_string(),
+            healthy: true,
+        };
+        let state = EngineState::Ready {
+            slots: vec![
+                SlotStatus {
+                    capability: Capability::Image,
+                    engine: engine.clone(),
+                },
+                SlotStatus {
+                    capability: Capability::Vision,
+                    engine,
+                },
+            ],
+        };
+
+        let overview = ConsoleOverviewBuilder::build(&state, &ui_state, &logs).await;
+        let views = overview
+            .views
+            .iter()
+            .map(|view| view.id.as_str())
+            .collect::<Vec<_>>();
+        let engine_status = overview
+            .status_items
+            .iter()
+            .find(|item| item.id == "engine:sdcpp")
+            .unwrap();
+
+        assert_eq!(views, vec!["general", "engine:sdcpp", "module:comfyui"]);
+        assert!(matches!(
+            engine_status.status,
+            ConsoleRuntimeStatus::Running
+        ));
+        assert_eq!(engine_status.detail, "image, vision");
+    }
+
+    #[tokio::test]
+    async fn console_overview_builds_status_rows_for_non_ready_states() {
+        let cases = [
+            (
+                EngineState::Idle,
+                "engine:idle",
+                ConsoleRuntimeStatus::Stopped,
+                "No active engines",
+            ),
+            (
+                EngineState::Starting {
+                    engine_id: "llama-cpp".to_string(),
+                },
+                "engine:llama-cpp",
+                ConsoleRuntimeStatus::Starting,
+                "Starting…",
+            ),
+            (
+                EngineState::Swapping {
+                    from: "old".to_string(),
+                    to: "new".to_string(),
+                },
+                "engine:new",
+                ConsoleRuntimeStatus::Starting,
+                "Switching from old",
+            ),
+            (
+                EngineState::Error {
+                    engine_id: "bad".to_string(),
+                    message: "boom".to_string(),
+                },
+                "engine:bad",
+                ConsoleRuntimeStatus::Failed,
+                "boom",
+            ),
+        ];
+
+        for (state, expected_id, expected_status, expected_detail) in cases {
+            let overview =
+                ConsoleOverviewBuilder::build(&state, &UIState::default(), &Vec::<LogEntry>::new())
+                    .await;
+            let item = overview.status_items.first().unwrap();
+            assert_eq!(item.id, expected_id);
+            assert!(
+                std::mem::discriminant(&item.status) == std::mem::discriminant(&expected_status)
+            );
+            assert_eq!(item.detail, expected_detail);
+        }
+    }
+
+    #[test]
+    fn module_label_collection_excludes_api_modules() {
+        let mut modules = HashMap::new();
+        modules.insert(
+            "services".to_string(),
+            selected_module("service-module", "Service Module", "service"),
+        );
+        modules.insert(
+            "ai_text".to_string(),
+            selected_module("local-engine", "Local Engine", "local"),
+        );
+        modules.insert(
+            "ai_image".to_string(),
+            selected_module("api-engine", "API Engine", "api"),
+        );
+
+        let module_labels = ConsoleOverviewBuilder::collect_module_labels(&modules);
+        let engine_labels = ConsoleOverviewBuilder::collect_selected_engine_labels(&modules);
+
+        assert!(module_labels.contains_key("service-module"));
+        assert!(engine_labels.contains_key("local-engine"));
+        assert!(!engine_labels.contains_key("api-engine"));
+    }
+}

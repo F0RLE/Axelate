@@ -76,3 +76,17 @@ pub async fn save_module_settings(
 pub fn get_system_language() -> Result<String, AppError> {
     Ok(settings::get_language_sync())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::get_system_language;
+
+    #[test]
+    fn get_system_language_returns_supported_code() {
+        let result = get_system_language();
+        assert!(result.is_ok());
+        let lang = result.ok().unwrap_or_default();
+
+        assert!(matches!(lang.as_str(), "en" | "ru" | "zh"));
+    }
+}
