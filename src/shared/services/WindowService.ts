@@ -64,6 +64,8 @@ type WindowRuntime = {
     setAppZoomCss: (zoom: string) => void;
 };
 
+type MonitoringPauseReason = 'window-inactive' | 'monitor-hidden' | 'manual';
+
 function createDefaultWindowRuntime(): WindowRuntime {
     return {
         addEventListener: globalThis.addEventListener.bind(globalThis),
@@ -115,6 +117,8 @@ export class WindowService {
     private readonly _policyService: WindowServicePolicy;
     private readonly _zoomService: WindowServiceZoom;
     private _activePageId = 'home';
+    private readonly _monitoringPauseReasons = new Map<MonitoringPauseReason, boolean>();
+    private _lastAppliedMonitoringPaused: boolean | null = null;
     private readonly _boundWindowResize = () => {
         this._persistence.scheduleSave();
     };
@@ -338,7 +342,27 @@ export class WindowService {
      * Notifies the backend of a change in system monitoring state.
      */
     public async setMonitoringPaused(paused: boolean): Promise<void> {
-        await this._actions.setMonitoringPaused(paused);
+        await this.setMonitoringPauseReason('manual', paused);
+    }
+
+    public async setMonitoringPauseReason(
+        reason: MonitoringPauseReason,
+        paused: boolean,
+    ): Promise<void> {
+        const previousReasonPaused = this._monitoringPauseReasons.get(reason);
+        if (previousReasonPaused !== paused) {
+            this._monitoringPauseReasons.set(reason, paused);
+        }
+
+        const aggregatePaused = Array.from(this._monitoringPauseReasons.values()).some(Boolean);
+        if (this._lastAppliedMonitoringPaused === aggregatePaused) {
+            return;
+        }
+
+        const applied = await this._actions.setMonitoringPaused(aggregatePaused);
+        if (applied) {
+            this._lastAppliedMonitoringPaused = aggregatePaused;
+        }
     }
 
     // --- Small Screen Helpers ---

@@ -37,6 +37,7 @@ describe('SidebarUI', () => {
         getZoom: vi.fn(() => 1),
         getMaxSafeZoom: vi.fn(() => Number.POSITIVE_INFINITY),
         setMonitoringPaused: vi.fn().mockResolvedValue(undefined),
+        setMonitoringPauseReason: vi.fn().mockResolvedValue(undefined),
     };
     const tracer = {
         info: vi.fn(),
@@ -88,6 +89,7 @@ describe('SidebarUI', () => {
         windowService.getZoom.mockReturnValue(1);
         windowService.getMaxSafeZoom.mockReturnValue(Number.POSITIVE_INFINITY);
         windowService.setMonitoringPaused.mockResolvedValue(undefined);
+        windowService.setMonitoringPauseReason.mockResolvedValue(undefined);
         vi.clearAllMocks();
     });
 
@@ -183,7 +185,7 @@ describe('SidebarUI', () => {
             document.getElementById('system-monitor')?.classList.contains('adaptive-hidden'),
         ).toBe(true);
         expect(sidebar.classList.contains('monitor-hidden')).toBe(true);
-        expect(windowService.setMonitoringPaused).toHaveBeenCalledWith(true);
+        expect(windowService.setMonitoringPauseReason).toHaveBeenCalledWith('monitor-hidden', true);
     });
 
     it('resumes monitoring when adaptive monitor is visible', async () => {
@@ -199,7 +201,10 @@ describe('SidebarUI', () => {
         expect(
             document.getElementById('system-monitor')?.classList.contains('adaptive-hidden'),
         ).toBe(false);
-        expect(windowService.setMonitoringPaused).toHaveBeenCalledWith(false);
+        expect(windowService.setMonitoringPauseReason).toHaveBeenCalledWith(
+            'monitor-hidden',
+            false,
+        );
     });
 
     it('enables auto compact when zoom threshold is reached', async () => {
@@ -338,7 +343,7 @@ describe('SidebarUI', () => {
         const monitor = document.getElementById('system-monitor') as HTMLElement;
 
         expect(monitor.classList.contains('adaptive-hidden')).toBe(true);
-        expect(windowService.setMonitoringPaused).toHaveBeenCalledWith(true);
+        expect(windowService.setMonitoringPauseReason).toHaveBeenCalledWith('monitor-hidden', true);
         expect(sidebar.classList.contains('auto-compact')).toBe(false);
         expect(sidebar.style.width).toBe('280px');
 

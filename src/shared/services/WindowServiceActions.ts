@@ -84,15 +84,17 @@ export class WindowServiceActions {
         );
     }
 
-    public async setMonitoringPaused(paused: boolean): Promise<void> {
+    public async setMonitoringPaused(paused: boolean): Promise<boolean> {
         if (!this._deps.bridge.isTauri()) {
-            return;
+            return true;
         }
 
         try {
             await this._deps.bridge.invoke('set_monitoring_paused', { paused });
+            return true;
         } catch {
             this._deps.tracer.error('[WindowService] Failed to set monitoring state');
+            return false;
         }
     }
 }
