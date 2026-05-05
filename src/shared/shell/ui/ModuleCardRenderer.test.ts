@@ -161,7 +161,7 @@ describe('ModuleCardRenderer', () => {
             false,
             onClick,
         );
-        expect(selectCard.textContent).toContain('Select');
+        expect(selectCard.textContent).toContain('Launch');
 
         (selectCard.querySelector('.modal-btn-primary') as HTMLButtonElement).click();
         expect(onClick).toHaveBeenCalled();
@@ -234,7 +234,7 @@ describe('ModuleCardRenderer', () => {
         );
 
         expect(card.querySelector('.download-btn')).toBeNull();
-        expect(card.querySelector('.modal-btn-primary')?.textContent).toContain('Select');
+        expect(card.querySelector('.modal-btn-primary')?.textContent).toContain('Launch');
     });
 
     it('renders delete badge emoji for installed local modules', () => {

@@ -45,7 +45,7 @@ export class ModalSelectionPolicy {
             return {
                 className: 'modal-btn modal-btn-primary',
                 key: 'ui.launcher.modules.modal.btn_select',
-                defaultLabel: 'Select',
+                defaultLabel: 'Launch',
             };
         }
 
