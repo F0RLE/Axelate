@@ -110,6 +110,9 @@ export class ModuleSettingsUI {
             showSaveIndicator: () => {
                 this._showSaveIndicator();
             },
+            showSaveErrorIndicator: () => {
+                this._showSaveErrorIndicator();
+            },
             hideSaveIndicator: () => {
                 this._hideSaveIndicator();
             },
@@ -469,6 +472,10 @@ export class ModuleSettingsUI {
 
     private _showSaveIndicator(): void {
         this._getAutosaveController().showPending();
+    }
+
+    private _showSaveErrorIndicator(): void {
+        this._getAutosaveController().showError();
     }
 
     private _hideSaveIndicator(): void {
