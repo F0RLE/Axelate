@@ -11,9 +11,14 @@ use super::downloader_transfer::{
     download_file, resolve_download_url,
 };
 use super::github_releases::ReleaseDownloadSelection;
+use super::lifecycle::{ManifestLoader, ModuleManifest};
 use crate::errors::AppError;
+use crate::utils::paths::{INTEGRATIONS_DIR, TEMP_DIR};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
+
+const IMPORT_FILE_COUNT_LIMIT: usize = 20_000;
+const IMPORT_TOTAL_SIZE_LIMIT: u64 = 3 * 1024 * 1024 * 1024;
 
 pub use super::downloader_service::{DownloadRequest, DownloaderService};
 
@@ -82,6 +87,115 @@ pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
     } else {
         Err(AppError::NotFound("Module not found".to_string()))
     }
+}
+
+/// Imports an integration from an existing local folder.
+pub fn import_integration_folder(path: &Path) -> Result<String, AppError> {
+    ensure_source_directory(path)?;
+    let manifest = ManifestLoader::load(path)?;
+    let module_id = validate_integration_manifest(&manifest)?;
+    let staging_path = ArchiveExtractor::prepare_staging(&module_id)?;
+
+    let result = (|| {
+        copy_directory_contents_secure(path, &staging_path)?;
+        finalize_imported_integration(&staging_path, Some("local-folder"))
+    })();
+
+    cleanup_staging_on_error(&result, &staging_path);
+    result
+}
+
+/// Imports an integration from a local path, auto-detecting folder or archive sources.
+pub async fn import_integration_path(app: AppHandle, path: PathBuf) -> Result<String, AppError> {
+    let metadata = std::fs::metadata(&path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to read integration source '{}': {error}",
+            path.display()
+        ))
+    })?;
+
+    if metadata.is_dir() {
+        return import_integration_folder(&path);
+    }
+
+    if metadata.is_file() {
+        return import_integration_archive(app, path).await;
+    }
+
+    Err(AppError::Validation(
+        "Selected integration source must be a folder or archive file".to_string(),
+    ))
+}
+
+/// Imports an integration from a local archive file.
+pub async fn import_integration_archive(app: AppHandle, path: PathBuf) -> Result<String, AppError> {
+    ensure_source_file(&path)?;
+    let import_id = build_import_id();
+    let staging_path = ArchiveExtractor::prepare_staging(&import_id)?;
+
+    let result = async {
+        ArchiveExtractor::extract_into(&app, &path, &import_id, &staging_path, None).await?;
+        finalize_imported_integration(&staging_path, Some("local-archive"))
+    }
+    .await;
+
+    cleanup_staging_on_error(&result, &staging_path);
+    result
+}
+
+/// Downloads and imports an integration from a repository or archive URL.
+pub async fn import_integration_url(
+    app: AppHandle,
+    downloader: &DownloaderService,
+    source_url: String,
+) -> Result<String, AppError> {
+    let source_url = validate_import_url(&source_url)?;
+    let import_id = build_import_id();
+    let staging_path = ArchiveExtractor::prepare_staging(&import_id)?;
+    let archive_path = build_import_archive_path(&import_id, &source_url);
+    let control = downloader.request_control(&import_id);
+
+    let result = async {
+        let client = build_public_client()?;
+        let final_url = resolve_download_url(&client, &source_url).await?;
+        let download_result = download_file(
+            DownloadTask {
+                app: &app,
+                downloader,
+                client: &client,
+                url: &final_url,
+                dest_path: &archive_path,
+                module_id: &import_id,
+                control: &control,
+            },
+            None,
+        )
+        .await?;
+
+        if let Some(interruption) = download_result.interruption {
+            return Err(AppError::External {
+                request_id: None,
+                message: interruption.as_error_message().to_string(),
+            });
+        }
+
+        ArchiveExtractor::extract_into(
+            &app,
+            &archive_path,
+            &import_id,
+            &staging_path,
+            Some(download_result.snapshot),
+        )
+        .await?;
+
+        finalize_imported_integration(&staging_path, Some(&source_url))
+    }
+    .await;
+
+    downloader.remove_control(&import_id);
+    cleanup_staging_on_error(&result, &staging_path);
+    cleanup_import_archive(&archive_path).await;
+    result
 }
 
 /// Downloads and extracts a module from a remote repository
@@ -361,6 +475,286 @@ pub async fn download_module(
     downloader.remove_request(&module_id);
 
     Ok("completed".to_string())
+}
+
+fn validate_integration_manifest(manifest: &ModuleManifest) -> Result<String, AppError> {
+    validate_module_id(&manifest.id)?;
+
+    if let Some(category) = manifest.category.as_deref() {
+        let normalized = category.trim().to_ascii_lowercase();
+        if !matches!(
+            normalized.as_str(),
+            "service" | "services" | "integration" | "integrations"
+        ) {
+            return Err(AppError::Validation(
+                "Custom integration manifest must use type = \"service\"".to_string(),
+            ));
+        }
+    }
+
+    Ok(manifest.id.clone())
+}
+
+fn finalize_imported_integration(
+    extraction_path: &Path,
+    source: Option<&str>,
+) -> Result<String, AppError> {
+    let manifest = ManifestLoader::load(extraction_path)?;
+    let module_id = validate_integration_manifest(&manifest)?;
+    let final_path = INTEGRATIONS_DIR.join(&module_id);
+
+    std::fs::create_dir_all(&*INTEGRATIONS_DIR).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to create integrations directory '{}': {error}",
+            INTEGRATIONS_DIR.display()
+        ))
+    })?;
+
+    let metadata = serde_json::json!({
+        "module_id": module_id,
+        "installed_at": chrono::Local::now().to_rfc3339(),
+        "archive_hash": null,
+        "status": "complete",
+        "version": manifest.version,
+        "source": source,
+    });
+    let metadata_path = extraction_path.join("metadata.json");
+    let metadata_file = std::fs::File::create(&metadata_path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to create install metadata {}: {error}",
+            metadata_path.display()
+        ))
+    })?;
+    serde_json::to_writer_pretty(metadata_file, &metadata).map_err(|error| {
+        AppError::Serialization(format!(
+            "Failed to write install metadata {}: {error}",
+            metadata_path.display()
+        ))
+    })?;
+
+    let backup_path = TEMP_DIR.join(format!(
+        "{}_integration_backup_{}",
+        module_id,
+        uuid::Uuid::new_v4().simple()
+    ));
+
+    if final_path.exists() {
+        std::fs::rename(&final_path, &backup_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to move old integration version to backup: {error}"
+            ))
+        })?;
+    }
+
+    if let Err(error) = std::fs::rename(extraction_path, &final_path) {
+        if backup_path.exists()
+            && let Err(restore_error) = std::fs::rename(&backup_path, &final_path)
+        {
+            tracing::error!(
+                module_id,
+                backup = %backup_path.display(),
+                target = %final_path.display(),
+                "Failed to restore previous integration after import failure: {restore_error}"
+            );
+        }
+
+        return Err(AppError::Io(format!(
+            "Atomic integration import failed during move: {error}"
+        )));
+    }
+
+    if backup_path.exists() {
+        std::fs::remove_dir_all(&backup_path).map_err(|error| {
+            AppError::Io(format!("Failed to remove old integration backup: {error}"))
+        })?;
+    }
+
+    crate::infrastructure::logging::logger::add_log(
+        &format!("Integration {module_id} imported successfully"),
+        "Downloader",
+        "info",
+    );
+
+    Ok(module_id)
+}
+
+fn copy_directory_contents_secure(source: &Path, destination: &Path) -> Result<(), AppError> {
+    let mut state = ImportCopyState::default();
+    copy_directory_contents_secure_inner(source, destination, &mut state)
+}
+
+#[derive(Default)]
+struct ImportCopyState {
+    file_count: usize,
+    total_size: u64,
+}
+
+fn copy_directory_contents_secure_inner(
+    source: &Path,
+    destination: &Path,
+    state: &mut ImportCopyState,
+) -> Result<(), AppError> {
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let metadata = std::fs::symlink_metadata(&source_path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(AppError::Validation(format!(
+                "Symlinks are not supported in integration imports: {}",
+                source_path.display()
+            )));
+        }
+
+        let destination_path = destination.join(entry.file_name());
+        if metadata.is_dir() {
+            std::fs::create_dir_all(&destination_path)?;
+            copy_directory_contents_secure_inner(&source_path, &destination_path, state)?;
+            continue;
+        }
+
+        if !metadata.is_file() {
+            return Err(AppError::Validation(format!(
+                "Unsupported filesystem entry in integration import: {}",
+                source_path.display()
+            )));
+        }
+
+        state.file_count += 1;
+        if state.file_count > IMPORT_FILE_COUNT_LIMIT {
+            return Err(AppError::Validation(format!(
+                "Integration folder contains too many files. Limit is {IMPORT_FILE_COUNT_LIMIT}."
+            )));
+        }
+
+        state.total_size = state
+            .total_size
+            .checked_add(metadata.len())
+            .ok_or_else(|| AppError::Validation("Integration folder size overflow".to_string()))?;
+        if state.total_size > IMPORT_TOTAL_SIZE_LIMIT {
+            return Err(AppError::Validation(
+                "Integration folder is too large to import".to_string(),
+            ));
+        }
+
+        if let Some(parent) = destination_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&source_path, &destination_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to copy '{}' to '{}': {error}",
+                source_path.display(),
+                destination_path.display()
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+fn ensure_source_directory(path: &Path) -> Result<(), AppError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to read integration folder '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if !metadata.is_dir() {
+        return Err(AppError::Validation(
+            "Selected integration source is not a folder".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn ensure_source_file(path: &Path) -> Result<(), AppError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to read integration archive '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if !metadata.is_file() {
+        return Err(AppError::Validation(
+            "Selected integration source is not an archive file".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_import_url(source_url: &str) -> Result<String, AppError> {
+    let source_url = source_url.trim();
+    if source_url.is_empty() {
+        return Err(AppError::Validation(
+            "Integration URL cannot be empty".to_string(),
+        ));
+    }
+    if !source_url.starts_with("https://") && !source_url.starts_with("http://") {
+        return Err(AppError::Validation(
+            "Integration URL must start with http:// or https://".to_string(),
+        ));
+    }
+
+    Ok(source_url.to_string())
+}
+
+fn build_import_id() -> String {
+    format!("integration-import-{}", uuid::Uuid::new_v4().simple())
+}
+
+fn build_import_archive_path(import_id: &str, source_url: &str) -> PathBuf {
+    let normalized = source_url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(source_url)
+        .to_ascii_lowercase();
+    let extension = if normalized.ends_with(".tar.gz") {
+        "tar.gz"
+    } else {
+        match Path::new(&normalized)
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
+            Some(extension) if extension.eq_ignore_ascii_case("tgz") => "tgz",
+            Some(extension) if extension.eq_ignore_ascii_case("7z") => "7z",
+            _ => "zip",
+        }
+    };
+
+    TEMP_DIR.join(format!("{import_id}.{extension}"))
+}
+
+fn cleanup_staging_on_error(result: &Result<String, AppError>, staging_path: &Path) {
+    if result.is_ok() || !staging_path.exists() {
+        return;
+    }
+
+    if let Err(error) = std::fs::remove_dir_all(staging_path) {
+        tracing::warn!(
+            path = %staging_path.display(),
+            "Failed to clean integration import staging directory: {error}"
+        );
+    }
+}
+
+async fn cleanup_import_archive(archive_path: &Path) {
+    if let Err(error) = remove_partial_metadata(archive_path).await {
+        tracing::warn!(
+            path = %archive_path.display(),
+            "Failed to remove integration import partial metadata: {error}"
+        );
+    }
+    match tokio::fs::remove_file(archive_path).await {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            tracing::warn!(
+                path = %archive_path.display(),
+                "Failed to remove temporary integration archive: {error}"
+            );
+        }
+    }
 }
 
 fn is_github_repo_url(repo_url: &str) -> bool {

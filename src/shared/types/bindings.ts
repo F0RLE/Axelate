@@ -54,6 +54,14 @@ export const commands = {
 } | null) => typedError<string, AppError>(__TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash, dlType, releaseSelection })),
 	// Lists compatible release versions and CPU/GPU package choices for a module.
 	getReleaseDownloadOptions: (moduleId: string, repoUrl: string) => typedError<ReleaseDownloadOptions, AppError>(__TAURI_INVOKE("get_release_download_options", { moduleId, repoUrl })),
+	// Imports an integration from a local folder containing `axelate-module.toml`.
+	importIntegrationFolder: (path: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_folder", { path })),
+	// Imports an integration from a local `.zip`, `.tar.gz`, `.tgz`, or `.7z` archive.
+	importIntegrationArchive: (path: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_archive", { path })),
+	// Imports an integration from a local folder or archive, auto-detected by path type.
+	importIntegrationPath: (path: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_path", { path })),
+	// Downloads and imports an integration from a repository or archive URL.
+	importIntegrationUrl: (sourceUrl: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_url", { sourceUrl })),
 	// Resumes a paused module download using backend-owned request metadata.
 	resumeDownload: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("resume_download", { moduleId })),
 	// Checks if a module is already installed locally

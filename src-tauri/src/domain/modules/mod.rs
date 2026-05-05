@@ -11,6 +11,8 @@ mod downloader_transfer;
 mod github_release_selection;
 /// Open-Source engine GitHub releases parsing
 pub mod github_releases;
+/// Filesystem watcher for externally changed integrations.
+pub mod integration_watcher;
 /// Module lifecycle management
 pub mod lifecycle;
 /// Module-scoped filesystem paths
