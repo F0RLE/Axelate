@@ -21,6 +21,12 @@ struct LocalEngineResolution {
     messages_context: Vec<ChatMessage>,
 }
 
+pub(super) fn normalize_session_id(value: Option<&str>) -> Option<&str> {
+    value
+        .map(str::trim)
+        .filter(|session_id| !session_id.is_empty())
+}
+
 pub(super) async fn prepare_chat_dispatch(
     request: &ChatRequest,
     sessions: &ChatSessionManager,
@@ -30,7 +36,7 @@ pub(super) async fn prepare_chat_dispatch(
     local_engine_access: LocalEngineAccess,
 ) -> Result<PreparedChatDispatch, crate::errors::AppError> {
     let mut messages_context = request.messages.clone();
-    if let Some(session_id) = &request.session_id {
+    if let Some(session_id) = normalize_session_id(request.session_id.as_deref()) {
         messages_context = sessions.merge_request_messages(session_id, &request.messages);
         if !request.messages.is_empty() {
             if let Err(error) = sessions.force_save().await {
@@ -95,7 +101,7 @@ pub(super) async fn persist_successful_response(
     if let Ok(response) = response
         && response.ok
         && let Some(reply) = &response.reply
-        && let Some(session_id) = session_id
+        && let Some(session_id) = normalize_session_id(session_id)
     {
         sessions.append_response(
             session_id,
@@ -219,7 +225,7 @@ async fn resolve_local_engine_request(
             let status = engine_manager.start(config).await?;
             let mut messages_context = prepared_messages_context.to_vec();
 
-            if let Some(session_id) = &request.session_id {
+            if let Some(session_id) = normalize_session_id(request.session_id.as_deref()) {
                 messages_context = sessions.build_local_context(
                     session_id,
                     local_context_size,
@@ -395,5 +401,22 @@ fn clamp_max_tokens(request_limit: Option<u32>, model_limit: Option<u32>) -> Opt
         (Some(request_limit), Some(model_limit)) => Some(std::cmp::min(request_limit, model_limit)),
         (None, Some(model_limit)) => Some(model_limit),
         (request_limit, None) => request_limit,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_session_id;
+
+    #[test]
+    fn normalize_session_id_rejects_blank_values() {
+        assert_eq!(normalize_session_id(None), None);
+        assert_eq!(normalize_session_id(Some("")), None);
+        assert_eq!(normalize_session_id(Some("   ")), None);
+    }
+
+    #[test]
+    fn normalize_session_id_trims_valid_values() {
+        assert_eq!(normalize_session_id(Some(" session-1 ")), Some("session-1"));
     }
 }

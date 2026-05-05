@@ -1,4 +1,4 @@
-use super::ai_dispatch::LocalEngineAccess;
+use super::ai_dispatch::{LocalEngineAccess, normalize_session_id};
 use super::ai_service::stop_conflicting_local_engine;
 use super::image_cloud::{is_cloud_image_provider, process_cloud_image_request};
 use super::image_comfyui::process_comfyui_request;
@@ -80,7 +80,7 @@ async fn process_image_request_with_local_engine_access(
         }
     };
 
-    if let Some(session_id) = request.session_id.as_deref()
+    if let Some(session_id) = normalize_session_id(request.session_id.as_deref())
         && !images.is_empty()
     {
         let user_message = ChatMessage {

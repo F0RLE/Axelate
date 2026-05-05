@@ -8,7 +8,8 @@
 use std::sync::Arc;
 
 use super::ai_dispatch::{
-    LocalEngineAccess, PreparedChatDispatch, persist_successful_response, prepare_chat_dispatch,
+    LocalEngineAccess, PreparedChatDispatch, normalize_session_id, persist_successful_response,
+    prepare_chat_dispatch,
 };
 use super::session::ChatSessionManager;
 use super::streaming::{AiProvider, OpenAiCompatibleProvider, StreamEvent, StreamSink};
@@ -206,7 +207,7 @@ async fn process_chat_request_with_local_engine_access(
     execute_prepared_request(
         execution,
         sessions,
-        session_id.as_deref(),
+        normalize_session_id(session_id.as_deref()),
         move |execution| async move {
             execution
                 .provider
@@ -257,7 +258,7 @@ async fn process_chat_request_non_stream_with_local_engine_access(
     execute_prepared_request(
         execution,
         sessions,
-        session_id.as_deref(),
+        normalize_session_id(session_id.as_deref()),
         |execution| async move {
             execution
                 .provider
