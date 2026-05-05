@@ -3,7 +3,6 @@ import type { AIBridgeContext } from './AIBridgeContext';
 import type { AIBridgeEvents } from './AIBridgeEvents';
 import type { IChatTransport } from './AIChatTransport';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import { resolveCustomProviderBackendId } from '@/shared/utils/customProviderSupport';
 
 type AIBridgeRuntimeLogger = Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
@@ -178,12 +177,9 @@ export class AIBridgeRuntime {
             return [];
         }
 
-        return await (context.tauriProvider as unknown as TauriProvider).invoke(
-            'get_chat_history',
-            {
-                sessionId,
-            },
-        );
+        return await context.tauriProvider.invoke('get_chat_history', {
+            sessionId,
+        });
     }
 
     public async clearHistory(context: AIBridgeContext | null, sessionId: string): Promise<void> {
@@ -191,7 +187,7 @@ export class AIBridgeRuntime {
             return;
         }
 
-        await (context.tauriProvider as unknown as TauriProvider).invoke('clear_chat_history', {
+        await context.tauriProvider.invoke('clear_chat_history', {
             sessionId,
         });
     }
@@ -229,11 +225,8 @@ export class AIBridgeRuntime {
             return null;
         }
 
-        return await (context.tauriProvider as unknown as TauriProvider).invoke(
-            'rewind_last_turn',
-            {
-                sessionId,
-            },
-        );
+        return await context.tauriProvider.invoke('rewind_last_turn', {
+            sessionId,
+        });
     }
 }

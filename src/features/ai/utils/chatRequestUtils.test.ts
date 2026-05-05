@@ -164,5 +164,16 @@ describe('chatRequestUtils', () => {
                 enabled: true,
             });
         });
+
+        it('should omit blank session ids for non-persistent utility requests', () => {
+            const request = constructChatRequest([], mockMessage, [], {
+                providerId: 'gpt',
+                model: 'gpt-5.5',
+                apiKey: null,
+                sessionId: '   ',
+            });
+
+            expect(request.session_id).toBeUndefined();
+        });
     });
 });
