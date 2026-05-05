@@ -524,6 +524,13 @@ fn parse_repo(repo_url: &str) -> Result<RepoRef, AppError> {
     {
         return Err(invalid_repo_url(repo_url));
     }
+    let matched_github_prefix = trimmed.starts_with("https://github.com/")
+        || trimmed.starts_with("http://github.com/")
+        || trimmed.starts_with("https://www.github.com/")
+        || trimmed.starts_with("http://www.github.com/")
+        || trimmed.starts_with("github.com/")
+        || trimmed.starts_with("www.github.com/")
+        || trimmed.starts_with("git@github.com:");
     let path = trimmed
         .strip_prefix("https://github.com/")
         .or_else(|| trimmed.strip_prefix("http://github.com/"))
@@ -534,6 +541,14 @@ fn parse_repo(repo_url: &str) -> Result<RepoRef, AppError> {
         .or_else(|| trimmed.strip_prefix("git@github.com:"))
         .unwrap_or(trimmed);
     let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    if !matched_github_prefix
+        && (parts.len() != 2
+            || parts.first().is_some_and(|owner| {
+                owner.contains('.') || owner.contains('@') || owner.contains(':')
+            }))
+    {
+        return Err(invalid_repo_url(repo_url));
+    }
 
     let owner = parts
         .first()
@@ -594,6 +609,13 @@ mod tests {
         let parsed = parse_repo("https://example.com/ggml-org/llama.cpp");
 
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn parse_repo_rejects_non_github_host_like_shorthands() {
+        assert!(parse_repo("gitlab.com/org/repo").is_err());
+        assert!(parse_repo("git@gitlab.com:org/repo.git").is_err());
+        assert!(parse_repo("www.gitlab.com/org/repo").is_err());
     }
 
     #[test]
