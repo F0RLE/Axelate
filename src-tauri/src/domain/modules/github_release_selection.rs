@@ -251,9 +251,18 @@ fn arch_matches(module_id: &str, arch: PlatformArch, lower_name: &str) -> bool {
                     && !lower_name.contains("_x86"))
         }
         PlatformArch::Arm64 => lower_name.contains("arm64") || lower_name.contains("aarch64"),
-        PlatformArch::X86 => lower_name.contains("-x86") || lower_name.contains("_x86"),
+        PlatformArch::X86 => is_x86_asset_name(lower_name),
         PlatformArch::Other => true,
     }
+}
+
+fn is_x86_asset_name(lower_name: &str) -> bool {
+    (lower_name.contains("-x86") || lower_name.contains("_x86"))
+        && !lower_name.contains("x86_64")
+        && !lower_name.contains("x64")
+        && !lower_name.contains("amd64")
+        && !lower_name.contains("arm64")
+        && !lower_name.contains("aarch64")
 }
 
 fn main_score(module_id: &str, name: &str, hardware: HardwareProfile) -> i32 {
