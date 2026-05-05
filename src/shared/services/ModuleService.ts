@@ -197,6 +197,58 @@ export class ModuleService {
         }
     }
 
+    public async importIntegrationFolder(path: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationFolder(path));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        this._deletedModules.delete(result.data);
+        return result.data;
+    }
+
+    public async importIntegrationArchive(path: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationArchive(path));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        this._deletedModules.delete(result.data);
+        return result.data;
+    }
+
+    public async importIntegrationPath(path: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationPath(path));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        this._deletedModules.delete(result.data);
+        return result.data;
+    }
+
+    public async importIntegrationUrl(sourceUrl: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationUrl(sourceUrl));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        this._deletedModules.delete(result.data);
+        return result.data;
+    }
+
     private _normalizeDownloadOutcome(value: unknown): DownloadModuleOutcome {
         if (value === 'paused' || value === 'cancelled' || value === 'completed') {
             return value;

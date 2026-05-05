@@ -84,7 +84,10 @@ describe('ModalManager lifecycle', () => {
         vi.useRealTimers();
     });
 
-    function createManager(onFilterChange?: (capability: 'text' | 'image') => string | null) {
+    function createManager(
+        onFilterChange?: (capability: 'text' | 'image') => string | null,
+        onIntegrationImport?: (action: 'local' | 'url' | 'guide') => void,
+    ) {
         return new ModalManager(
             new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
             interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
@@ -94,6 +97,9 @@ describe('ModalManager lifecycle', () => {
             (_key, fallback) => fallback,
             tracer,
             navigation,
+            undefined,
+            undefined,
+            onIntegrationImport,
         );
     }
 
@@ -111,6 +117,56 @@ describe('ModalManager lifecycle', () => {
         modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
         expect(closeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should render integration import actions for empty services lists', () => {
+        const importSpy = vi.fn();
+        modalManager = createManager(undefined, importSpy);
+
+        modalManager.openAppSelection('services', []);
+
+        const importCard = document.querySelector<HTMLElement>('.integration-import-card');
+        expect(importCard).not.toBeNull();
+        if (importCard === null) throw new Error('integration import card missing');
+        expect(document.querySelector('.app-modal-empty-state')).toBeNull();
+
+        const actionButtons = document.querySelectorAll<HTMLButtonElement>(
+            '.integration-import-action-btn',
+        );
+        expect(actionButtons).toHaveLength(2);
+        const [openButton, linkButton] = Array.from(actionButtons);
+        if (openButton === undefined || linkButton === undefined) {
+            throw new Error('integration import buttons missing');
+        }
+
+        openButton.click();
+        linkButton.click();
+        const helpBadge = document.querySelector<HTMLButtonElement>('.integration-help-badge');
+        expect(helpBadge).not.toBeNull();
+        if (helpBadge === null) throw new Error('integration help badge missing');
+        expect(helpBadge.querySelector('.badge-icon')?.textContent).toBe('?');
+        helpBadge.click();
+        importCard.click();
+
+        expect(importSpy).toHaveBeenNthCalledWith(1, 'local');
+        expect(importSpy).toHaveBeenNthCalledWith(2, 'url');
+        expect(importSpy).toHaveBeenNthCalledWith(3, 'guide');
+        expect(importSpy).toHaveBeenNthCalledWith(4, 'local');
+    });
+
+    it('should rerender services selection when refresh receives an empty app list', () => {
+        modalManager = createManager();
+
+        modalManager.openAppSelection('services', [
+            { id: 'parser', name: 'Parser', installed: true } as IApp,
+        ]);
+        expect(document.querySelector('[data-app-id="parser"]')).not.toBeNull();
+
+        modalManager.refreshCurrentSelection([], null);
+
+        expect(document.querySelector('[data-app-id="parser"]')).toBeNull();
+        expect(document.querySelector('.integration-import-card')).not.toBeNull();
+        expect(document.querySelector('.app-modal-empty-state')).toBeNull();
     });
 
     it('should switch filters without leaving transient list styles', () => {
@@ -194,11 +250,15 @@ describe('ModalManager lifecycle', () => {
             'svc-b',
         );
 
-        expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
         expect(
-            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
-                'appId'
-            ],
+            document.querySelectorAll('#app-modal-list .app-card:not(.integration-import-card)'),
+        ).toHaveLength(1);
+        expect(
+            (
+                document.querySelector(
+                    '#app-modal-list .app-card:not(.integration-import-card)',
+                ) as HTMLElement | null
+            )?.dataset['appId'],
         ).toBe('svc-b');
         expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Remove');
     });

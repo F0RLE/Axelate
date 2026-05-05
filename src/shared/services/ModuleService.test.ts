@@ -20,6 +20,10 @@ const mocks = vi.hoisted(() => {
             pauseDownload: vi.fn().mockResolvedValue(true),
             resumeDownload: vi.fn(),
             cancelDownload: vi.fn().mockResolvedValue(true),
+            importIntegrationFolder: vi.fn(),
+            importIntegrationArchive: vi.fn(),
+            importIntegrationPath: vi.fn(),
+            importIntegrationUrl: vi.fn(),
         },
         tauriProvider: {
             isTauri: vi.fn().mockReturnValue(true),
@@ -68,6 +72,10 @@ describe('ModuleService', () => {
         mocks.commands.getModuleStatus.mockResolvedValue({ status: 'ok', data: 'running' });
         mocks.commands.downloadModule.mockResolvedValue({ status: 'ok', data: null });
         mocks.commands.deleteModule.mockResolvedValue({ status: 'ok', data: null });
+        mocks.commands.importIntegrationFolder.mockReturnValue('import-folder-promise');
+        mocks.commands.importIntegrationArchive.mockReturnValue('import-archive-promise');
+        mocks.commands.importIntegrationPath.mockReturnValue('import-path-promise');
+        mocks.commands.importIntegrationUrl.mockReturnValue('import-url-promise');
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
         moduleService = new ModuleService(mocks.tauriProvider as any, mocks.tracer);
@@ -280,6 +288,94 @@ describe('ModuleService', () => {
             const result = await moduleService.deleteModule('test-module');
 
             expect(result).toBe(false);
+        });
+    });
+
+    describe('integration imports', () => {
+        it('should invoke integration folder import command', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'folder-module' });
+
+            await expect(
+                moduleService.importIntegrationFolder('C:\\Integrations\\Parser'),
+            ).resolves.toBe('folder-module');
+
+            expect(mocks.commands.importIntegrationFolder).toHaveBeenCalledWith(
+                'C:\\Integrations\\Parser',
+            );
+            expect(mocks.invokeSafe).toHaveBeenCalledWith('import-folder-promise');
+        });
+
+        it('should invoke integration archive import command', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'archive-module' });
+
+            await expect(
+                moduleService.importIntegrationArchive('C:\\Downloads\\Parser.zip'),
+            ).resolves.toBe('archive-module');
+
+            expect(mocks.commands.importIntegrationArchive).toHaveBeenCalledWith(
+                'C:\\Downloads\\Parser.zip',
+            );
+            expect(mocks.invokeSafe).toHaveBeenCalledWith('import-archive-promise');
+        });
+
+        it('should invoke auto-detected integration path import command', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'path-module' });
+
+            await expect(
+                moduleService.importIntegrationPath('C:\\Downloads\\Parser'),
+            ).resolves.toBe('path-module');
+
+            expect(mocks.commands.importIntegrationPath).toHaveBeenCalledWith(
+                'C:\\Downloads\\Parser',
+            );
+            expect(mocks.invokeSafe).toHaveBeenCalledWith('import-path-promise');
+        });
+
+        it('should invoke integration URL import command', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'url-module' });
+
+            await expect(
+                moduleService.importIntegrationUrl(
+                    'https://github.com/F0RLE/Axelate-telegram-parser',
+                ),
+            ).resolves.toBe('url-module');
+
+            expect(mocks.commands.importIntegrationUrl).toHaveBeenCalledWith(
+                'https://github.com/F0RLE/Axelate-telegram-parser',
+            );
+            expect(mocks.invokeSafe).toHaveBeenCalledWith('import-url-promise');
+        });
+
+        it('should throw integration import errors', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'bad integration' },
+            });
+
+            await expect(moduleService.importIntegrationPath('C:\\Broken')).rejects.toThrow(
+                'bad integration',
+            );
+        });
+
+        it('should throw integration imports in web mode', async () => {
+            mocks.tauriProvider.isTauri.mockReturnValueOnce(false);
+
+            await expect(
+                moduleService.importIntegrationUrl('https://example.com/mod.zip'),
+            ).rejects.toThrow('Import available only in desktop app');
+        });
+
+        it('should clear deleted-module cache after importing the same module id', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: null });
+            await moduleService.deleteModule('restored-module');
+
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: 'restored-module' });
+            await moduleService.importIntegrationPath('C:\\Restored');
+
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: true });
+            await expect(moduleService.checkInstalled('restored-module')).resolves.toBe(true);
+
+            expect(mocks.commands.checkModuleInstalled).toHaveBeenCalledWith('restored-module');
         });
     });
 

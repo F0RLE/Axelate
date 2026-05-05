@@ -29,7 +29,7 @@ import type {
     ModuleSettingsUiController,
 } from './CoreUiContracts';
 import { LazyMonitoringUiAdapter } from './LazyUiAdapters';
-import { createModuleSettingsGateway } from './CoreUiBridgeHelpers';
+import { createExternalUrlOpener, createModuleSettingsGateway } from './CoreUiBridgeHelpers';
 import { createConsoleUI, createModuleSettingsUI, createSettingsUI } from './CoreDeferredUiFactory';
 import { createChatController } from './CoreChatFactory';
 
@@ -63,6 +63,7 @@ type CreateAppUIDeps = {
         openModuleSettings: (app: IApp) => Promise<void>;
     };
     aiBridge: AIBridge;
+    tauriProvider: TauriProvider;
 };
 
 type CreateCoreUiBundleDeps = {
@@ -126,6 +127,10 @@ export function createAppUI(deps: CreateAppUIDeps): AppUI {
             stopAiProvider: () => {
                 deps.aiBridge.stopProvider();
             },
+            reloadCatalog: async () => {
+                await deps.catalog.loadCatalog();
+            },
+            openExternalUrl: createExternalUrlOpener(deps.tauriProvider),
         },
     );
 }
@@ -164,6 +169,7 @@ export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
         bridge: deps.bridge,
         moduleSettingsUI: moduleSettingsGateway,
         aiBridge: deps.aiBridge,
+        tauriProvider: deps.tauriProvider,
     });
     const windowUI = new WindowUI(
         deps.windowService,

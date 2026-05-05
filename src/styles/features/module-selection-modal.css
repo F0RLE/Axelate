@@ -683,6 +683,175 @@ body.snapping .modal-backdrop {
     filter: none !important;
 }
 
+.integration-import-card {
+    cursor: pointer !important;
+}
+
+.integration-import-card::before {
+    background: rgba(var(--primary-raw), 0.22);
+}
+
+.integration-import-icon svg {
+    width: 42px;
+    height: 42px;
+    color: var(--text-primary);
+}
+
+.integration-import-card .module-selection-card-description {
+    max-width: 22ch;
+}
+
+.integration-import-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    height: 48px;
+    bottom: 24px;
+}
+
+.integration-import-actions .integration-import-action-btn {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0.6rem 0.85rem !important;
+    font-size: 0.95rem !important;
+    line-height: 1;
+    background: var(--premium-purple-bg) !important;
+    border: 1px solid var(--premium-purple-border) !important;
+    color: var(--premium-purple-text) !important;
+    box-shadow: var(--premium-purple-shadow) !important;
+}
+
+.integration-import-actions .integration-import-action-btn:hover {
+    background: var(--premium-purple-bg-hover) !important;
+    border-color: var(--premium-purple-border-strong) !important;
+    color: var(--premium-purple-text) !important;
+    box-shadow: var(--premium-purple-shadow) !important;
+}
+
+.integration-help-badge {
+    border: 0;
+    background: transparent;
+    color: #ff4d4d;
+    z-index: 45;
+}
+
+.integration-help-badge .badge-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ff4d4d;
+    font-family: var(--app-font-family);
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1;
+    text-shadow: 0 2px 8px rgba(255, 64, 64, 0.28);
+}
+
+.integration-help-badge .badge-text {
+    display: none !important;
+}
+
+.integration-help-badge:hover,
+.integration-help-badge:focus-visible {
+    color: #ff6868;
+    background: transparent;
+    border-color: transparent;
+    min-width: 32px;
+}
+
+.integration-import-dialog-view {
+    position: fixed;
+    top: var(--header-height, 60px);
+    right: 0;
+    bottom: 0;
+    left: var(--sidebar-width, 280px);
+    z-index: 1900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+    background: transparent;
+    color: var(--text-primary);
+    pointer-events: auto;
+}
+
+.integration-import-dialog-view:focus,
+.integration-import-dialog-view:focus-visible {
+    outline: none;
+}
+
+.integration-import-dialog-panel {
+    width: min(480px, calc(100% - 32px));
+    display: grid;
+    gap: 0.8rem;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    background: rgb(18, 17, 24);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 20px 54px rgba(0, 0, 0, 0.42);
+}
+
+.integration-import-dialog-panel h3,
+.integration-import-dialog-panel p {
+    margin: 0;
+}
+
+.integration-import-dialog-panel h3 {
+    font-size: 1rem;
+}
+
+.integration-import-dialog-panel p {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.integration-import-url-input {
+    min-height: 46px;
+    padding: 0 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text-primary);
+    font: 0.86rem var(--app-font-family);
+}
+
+.integration-import-url-input:focus,
+.integration-import-url-input:focus-visible {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+}
+
+.integration-import-dialog-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: 0.55rem;
+}
+
+.integration-import-dialog-actions button {
+    min-height: 44px;
+    border-radius: var(--module-button-radius);
+    color: var(--module-button-text);
+    font-family: var(--app-font-family);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.integration-import-dialog-cancel {
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.integration-import-dialog-confirm {
+    border: 1px solid var(--premium-purple-border);
+    background: var(--premium-purple-bg);
+}
+
 .module-selection-card-actions .modal-btn-secondary {
     background: linear-gradient(
         90deg,
@@ -818,7 +987,8 @@ body.snapping .modal-backdrop {
 
 body.app-selection-open #main-area,
 body.settings-modal-open #main-area,
-body.download-selection-open #main-area {
+body.download-selection-open #main-area,
+body.integration-import-open #main-area {
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
