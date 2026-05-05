@@ -16,6 +16,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   check-frontend:
@@ -38,7 +39,7 @@ jobs:
           toolchain: 1.94.1
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
+        uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b # node24
         with:
           workspaces: "src-tauri -> target"
 
@@ -88,7 +89,7 @@ jobs:
           components: clippy, llvm-tools-preview
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
+        uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b # node24
         with:
           workspaces: "src-tauri -> target"
 
