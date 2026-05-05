@@ -375,11 +375,7 @@ fn release_download_version(
         return None;
     }
 
-    let recommended = if gpu.is_some() && has_real_gpu_accelerator(hardware) {
-        ReleaseComputeTarget::Gpu
-    } else {
-        ReleaseComputeTarget::Cpu
-    };
+    let recommended = recommended_release_target(cpu.as_ref(), gpu.as_ref(), hardware);
 
     Some(ReleaseDownloadVersion {
         tag_name: release.tag_name,
@@ -425,6 +421,23 @@ fn release_download_variant(
     })
 }
 
+const fn recommended_release_target(
+    cpu: Option<&ReleaseDownloadVariant>,
+    gpu: Option<&ReleaseDownloadVariant>,
+    hardware: HardwareProfile,
+) -> ReleaseComputeTarget {
+    if gpu.is_some() && has_real_gpu_accelerator(hardware) {
+        return ReleaseComputeTarget::Gpu;
+    }
+    if cpu.is_some() {
+        return ReleaseComputeTarget::Cpu;
+    }
+    if gpu.is_some() {
+        return ReleaseComputeTarget::Gpu;
+    }
+    ReleaseComputeTarget::Cpu
+}
+
 fn release_assets_match_target(assets: &[ReleaseAsset], target: ReleaseComputeTarget) -> bool {
     match target {
         ReleaseComputeTarget::Auto => true,
@@ -449,24 +462,34 @@ fn is_gpu_asset_name(name: &str) -> bool {
 }
 
 fn is_gpu_asset_name_lower(lower: &str) -> bool {
-    lower.contains("cuda")
-        || lower.contains("cu12")
-        || lower.contains("cu13")
-        || lower.contains("vulkan")
-        || lower.contains("hip")
-        || lower.contains("rocm")
-        || lower.contains("sycl")
-        || lower.contains("openvino")
-        || lower.contains("nvidia")
-        || lower.contains("amd")
+    release_asset_tokens(lower).any(|token| {
+        token == "cuda"
+            || token.starts_with("cuda12")
+            || token.starts_with("cuda13")
+            || token.starts_with("cu12")
+            || token.starts_with("cu13")
+            || token == "vulkan"
+            || token == "hip"
+            || token == "rocm"
+            || token == "sycl"
+            || token == "openvino"
+            || token == "nvidia"
+            || token == "amd"
+            || token == "radeon"
+    })
 }
 
 fn is_cpu_asset_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower.contains("cpu")
-        || lower.contains("avx")
-        || lower.contains("noavx")
-        || !is_gpu_asset_name_lower(&lower)
+    let has_explicit_cpu_token = release_asset_tokens(&lower).any(|token| {
+        token == "cpu" || token == "avx" || token == "avx2" || token == "avx512" || token == "noavx"
+    });
+    has_explicit_cpu_token || !is_gpu_asset_name_lower(&lower)
+}
+
+fn release_asset_tokens(name: &str) -> impl Iterator<Item = &str> {
+    name.split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
 }
 
 const fn has_real_gpu_accelerator(hardware: HardwareProfile) -> bool {
@@ -616,6 +639,13 @@ mod tests {
         assert!(parse_repo("gitlab.com/org/repo").is_err());
         assert!(parse_repo("git@gitlab.com:org/repo.git").is_err());
         assert!(parse_repo("www.gitlab.com/org/repo").is_err());
+    }
+
+    #[test]
+    fn asset_classification_does_not_treat_amd64_as_amd_gpu() {
+        assert!(!is_gpu_asset_name("llama-b8981-bin-win-amd64.zip"));
+        assert!(is_cpu_asset_name("llama-b8981-bin-win-amd64.zip"));
+        assert!(is_gpu_asset_name("llama-b8981-bin-win-hip-radeon-x64.zip"));
     }
 
     #[test]
@@ -962,6 +992,35 @@ mod tests {
                 .and_then(|version| version.cpu.as_ref())
                 .is_some()
         );
+    }
+
+    #[test]
+    fn release_download_version_recommends_available_gpu_when_cpu_variant_is_missing() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::Unknown,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let releases = vec![Release {
+            tag_name: "gpu-only".to_string(),
+            published_at: Some("2026-04-29T10:00:00Z".to_string()),
+            draft: false,
+            prerelease: false,
+            assets: vec![asset("llama-gpu-only-bin-win-vulkan-x64.zip")],
+        }];
+
+        let versions = release_download_versions("llamacpp", platform, hardware, releases);
+
+        assert_eq!(versions.len(), 1);
+        let version = versions.first().expect("expected gpu-only option");
+        assert!(version.cpu.is_none());
+        assert!(version.gpu.is_some());
+        assert_eq!(version.recommended, ReleaseComputeTarget::Gpu);
     }
 
     #[test]

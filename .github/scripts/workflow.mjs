@@ -32,6 +32,7 @@ const passthroughArgs = rawArgs.filter((arg, index) => {
 
 let cachedEnv;
 const webView2RuntimeClientId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+const cargoLlvmCovVersion = '0.8.5';
 const sleepSignal = new Int32Array(new SharedArrayBuffer(4));
 
 function cleanupTargets() {
@@ -191,8 +192,10 @@ function ensureCargoLlvmCov() {
         return;
     }
 
-    log('cargo-llvm-cov not found; installing with cargo install --locked');
-    run('cargo', ['install', 'cargo-llvm-cov', '--locked']);
+    log(
+        `cargo-llvm-cov not found; installing version ${cargoLlvmCovVersion} with cargo install --locked`,
+    );
+    run('cargo', ['install', 'cargo-llvm-cov', '--locked', '--version', cargoLlvmCovVersion]);
     ensureLlvmTools();
 }
 

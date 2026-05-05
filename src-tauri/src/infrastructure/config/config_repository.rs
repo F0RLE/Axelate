@@ -73,16 +73,18 @@ impl FileConfigRepository {
     }
 
     fn load_custom_models_from_path(path: &Path) -> Result<CustomModelConfig, AppError> {
-        if !path.exists() {
-            return Ok(CustomModelConfig::default());
-        }
-
-        let content = std::fs::read_to_string(path).map_err(|error| {
-            AppError::Io(format!(
-                "Failed to read custom models config at {}: {error}",
-                path.display()
-            ))
-        })?;
+        let content = match std::fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(CustomModelConfig::default());
+            }
+            Err(error) => {
+                return Err(AppError::Io(format!(
+                    "Failed to read custom models config at {}: {error}",
+                    path.display()
+                )));
+            }
+        };
 
         serde_json::from_str(&content).map_err(|error| {
             AppError::Serialization(format!(
