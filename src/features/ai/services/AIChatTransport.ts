@@ -7,6 +7,7 @@ import type {
     IImageGenerationResponse,
 } from '../types/aiTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { StreamChunkPayload } from '@/shared/types/bindings';
 import type { AITransportContext } from './AIBridgeContext';
 import { isCloudProviderId } from '@/shared/utils/providerSupport';
 
@@ -30,13 +31,6 @@ function extractError(error: unknown): string {
         if (typeof obj['message'] === 'string') return obj['message'];
     }
     return JSON.stringify(error);
-}
-
-interface IStreamChunkEnvelope {
-    request_id: string;
-    message_id: string;
-    kind: 'chat_chunk' | 'thought_chunk' | 'done';
-    content: string;
 }
 
 export interface IChatTransport {
@@ -112,7 +106,7 @@ export class AIChatTransport implements IChatTransport {
                 resolve();
             };
         });
-        const chatChannel = new Channel<IStreamChunkEnvelope>();
+        const chatChannel = new Channel<StreamChunkPayload>();
         chatChannel.onmessage = (payload) => {
             if (!this._isPayloadForRequest(payload, requestId)) {
                 return;
@@ -130,7 +124,7 @@ export class AIChatTransport implements IChatTransport {
             this._emitListeners(this._streamListeners, payload.content);
         };
 
-        const thoughtChannel = new Channel<IStreamChunkEnvelope>();
+        const thoughtChannel = new Channel<StreamChunkPayload>();
         thoughtChannel.onmessage = (payload) => {
             if (!this._isPayloadForRequest(payload, requestId)) {
                 return;
@@ -196,8 +190,8 @@ export class AIChatTransport implements IChatTransport {
             request_id: requestId,
         };
         this._activeChatRequestId = requestId;
-        const chatChannel = new Channel<IStreamChunkEnvelope>();
-        const thoughtChannel = new Channel<IStreamChunkEnvelope>();
+        const chatChannel = new Channel<StreamChunkPayload>();
+        const thoughtChannel = new Channel<StreamChunkPayload>();
 
         try {
             const response = await this._runWithTimeout(
@@ -438,7 +432,7 @@ export class AIChatTransport implements IChatTransport {
         });
     }
 
-    private _isPayloadForRequest(payload: IStreamChunkEnvelope, requestId: string): boolean {
+    private _isPayloadForRequest(payload: StreamChunkPayload, requestId: string): boolean {
         return payload.request_id === requestId;
     }
 
