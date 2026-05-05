@@ -68,12 +68,12 @@ describe('EngineConfigService', () => {
         expect(tauri.invoke).not.toHaveBeenCalled();
     });
 
-    it('saves config and swallows backend errors', async () => {
+    it('saves config and propagates backend errors', async () => {
         vi.mocked(tauri.invoke).mockResolvedValue(undefined);
         await expect(service.setConfig(config)).resolves.toBeUndefined();
         expect(tauri.invoke).toHaveBeenCalledWith('set_engine_config', { config });
 
         vi.mocked(tauri.invoke).mockRejectedValueOnce(new Error('save failed'));
-        await expect(service.setConfig(config)).resolves.toBeUndefined();
+        await expect(service.setConfig(config)).rejects.toThrow('save failed');
     });
 });

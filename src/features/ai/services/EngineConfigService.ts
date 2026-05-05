@@ -70,7 +70,7 @@ export class EngineConfigService {
 
     /**
      * Persists the user's engine configuration.
-     * Fires-and-forgets the Tauri command; errors are logged but not re-thrown.
+     * Save failures are re-thrown so the settings UI can show a failed state.
      */
     public async setConfig(config: EngineConfig): Promise<void> {
         if (!this._tauri.isTauri()) return;
@@ -78,6 +78,7 @@ export class EngineConfigService {
             await this._tauri.invoke<void>('set_engine_config', { config });
         } catch (e) {
             this._tracer.error('[EngineConfigService] Failed to save engine config:', e);
+            throw e;
         }
     }
 }

@@ -121,6 +121,7 @@ type ModuleSettingsEngineRendererDeps = {
     debouncedSave: (key: string, value: string | number | boolean | null) => void;
     notifySettingsChanged: () => void;
     showSaveIndicator: () => void;
+    showSaveErrorIndicator: () => void;
     tracer: Pick<LoggerService, 'error'>;
 };
 
@@ -199,6 +200,9 @@ export class ModuleSettingsEngineRenderer {
             },
             showSaveIndicator: () => {
                 this._deps.showSaveIndicator();
+            },
+            showSaveErrorIndicator: () => {
+                this._deps.showSaveErrorIndicator();
             },
             translate: (key, fallback) => this._translate(key, fallback),
             getModelFileName: (modelPath) => this._getModelFileName(modelPath),
@@ -674,6 +678,7 @@ export class ModuleSettingsEngineRenderer {
             })
             .catch((error: unknown) => {
                 this._deps.tracer.error('[ModuleSettingsUI] Failed to apply model profile', error);
+                this._deps.showSaveErrorIndicator();
             });
 
         const root = card.closest('.local-engine-config');

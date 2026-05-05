@@ -51,6 +51,7 @@ function createRendererHarness(options?: {
     const debouncedSave = vi.fn();
     const notifySettingsChanged = vi.fn();
     const showSaveIndicator = vi.fn();
+    const showSaveErrorIndicator = vi.fn();
     const setConfig = vi.fn().mockResolvedValue(undefined);
     let animationTime = 0;
     const runtime = {
@@ -86,6 +87,7 @@ function createRendererHarness(options?: {
         debouncedSave,
         notifySettingsChanged,
         showSaveIndicator,
+        showSaveErrorIndicator,
         tracer: {
             error: vi.fn(),
         },
@@ -100,6 +102,7 @@ function createRendererHarness(options?: {
         debouncedSave,
         notifySettingsChanged,
         showSaveIndicator,
+        showSaveErrorIndicator,
         setConfig,
         runtime,
     };
@@ -109,12 +112,14 @@ function createFieldControllerHarness() {
     const setConfig = vi.fn();
     const debouncedSave = vi.fn();
     const showSaveIndicator = vi.fn();
+    const showSaveErrorIndicator = vi.fn();
     const error = vi.fn();
     const fieldController = new ModuleSettingsEngineFieldController({
         getSettings: () => ({}),
         setConfig,
         debouncedSave,
         showSaveIndicator,
+        showSaveErrorIndicator,
         translate: (key, fallback) => `t:${key}:${fallback}`,
         getModelFileName: (modelPath) =>
             getEngineModelFileName(
@@ -125,7 +130,14 @@ function createFieldControllerHarness() {
         tracer: { error },
     });
 
-    return { fieldController, setConfig, debouncedSave, showSaveIndicator, error };
+    return {
+        fieldController,
+        setConfig,
+        debouncedSave,
+        showSaveIndicator,
+        showSaveErrorIndicator,
+        error,
+    };
 }
 
 describe('ModuleSettingsEngineRenderer', () => {
@@ -417,11 +429,13 @@ describe('ModuleSettingsEngineRenderer', () => {
     it('should save engine field values', async () => {
         const setConfig = vi.fn();
         const showSaveIndicator = vi.fn();
+        const showSaveErrorIndicator = vi.fn();
         const fieldController = new ModuleSettingsEngineFieldController({
             getSettings: () => ({}),
             setConfig,
             debouncedSave: vi.fn(),
             showSaveIndicator,
+            showSaveErrorIndicator,
             translate: (_key, fallback) => fallback,
             getModelFileName: (modelPath) => modelPath,
             getModelFileFilters: getEngineModelFileFilters,

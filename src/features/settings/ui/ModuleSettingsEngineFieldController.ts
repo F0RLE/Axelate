@@ -17,6 +17,7 @@ type ModuleSettingsEngineFieldControllerDeps = {
     setConfig: (config: EngineConfig) => Promise<void>;
     debouncedSave: (key: string, value: string | number | boolean | null) => void;
     showSaveIndicator: () => void;
+    showSaveErrorIndicator: () => void;
     translate: (key: string, fallback: string) => string;
     getModelFileName: (modelPath: string) => string;
     getModelFileFilters: (
@@ -168,8 +169,13 @@ export class ModuleSettingsEngineFieldController {
             (options.config as unknown as Record<string, string | number | string[] | null>)[
                 options.key
             ] = formatEngineFieldSaveValue(options.key, value);
-            await this._deps.setConfig(options.config);
-            this._deps.showSaveIndicator();
+            try {
+                await this._deps.setConfig(options.config);
+                this._deps.showSaveIndicator();
+            } catch (error: unknown) {
+                this._deps.tracer.error('[ModuleSettingsUI] Failed to save engine setting', error);
+                this._deps.showSaveErrorIndicator();
+            }
         }
     }
 }
