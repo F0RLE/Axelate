@@ -11,6 +11,7 @@ use crate::domain::ai::types::{
 use crate::domain::ai::{ChatSessionManager, ImageGenerationState};
 use crate::domain::engine::manager::EngineManager;
 use crate::domain::modules::controller::{self as module_controller, ModuleAction};
+use crate::domain::modules::paths as module_paths;
 use crate::domain::system::config_service::ConfigService;
 use crate::domain::system::ports::{LAUNCHER_LOCAL_PORT_RANGE, LocalPortPurpose};
 use crate::errors::AppError;
@@ -28,6 +29,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 const DEFAULT_API_BASE_URL: &str = "http://127.0.0.1:3000";
+const SDK_API_VERSION: &str = "1";
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 const CUSTOM_TEXT_PROVIDER_ID: &str = "openrouter-custom-text";
 const CUSTOM_IMAGE_PROVIDER_ID: &str = "openrouter-custom-image";
@@ -239,6 +241,19 @@ struct ImageApiResponse {
     provider: String,
     model: String,
     response: ImageGenerationResponse,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModuleContextApiResponse {
+    ok: bool,
+    api_version: &'static str,
+    module_id: String,
+    module_dir: String,
+    runtime_dir: String,
+    module_runtime_dir: String,
+    module_log_dir: String,
+    http_api_base: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -492,6 +507,18 @@ async fn route_authorized_request(
                 json!({ "ok": true, "moduleId": module_id, "status": status }),
             ))
         }
+        ("GET", ["v1", "modules", module_id, "context"]) => {
+            handle_module_context_request(module_id)
+        }
+        ("GET", ["v1", "modules", module_id, "settings"]) => {
+            handle_get_module_settings_request(&context, module_id).await
+        }
+        ("PUT", ["v1", "modules", module_id, "settings"]) => {
+            handle_put_module_settings_request(request, &context, module_id).await
+        }
+        ("PATCH", ["v1", "modules", module_id, "settings"]) => {
+            handle_patch_module_settings_request(request, &context, module_id).await
+        }
         ("POST", ["v1", "modules", module_id, "stage"]) => {
             handle_module_stage_request(request, &context, module_id)
         }
@@ -507,6 +534,95 @@ async fn route_authorized_request(
         ("POST", ["v1", "ai", "text"]) => handle_text_request(request, context).await,
         ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context).await,
         _ => Ok(json_error(404, "Unknown launcher API route")),
+    }
+}
+
+fn handle_module_context_request(module_id: &str) -> Result<HttpResponse, AppError> {
+    ensure_installed_module_id(module_id)?;
+    let module_dir = crate::domain::modules::downloader::get_module_path(module_id);
+    let module_runtime_dir = module_paths::runtime_root(module_id);
+    let module_log_dir = module_paths::log_dir(module_id);
+
+    Ok(json_response(
+        200,
+        json!(ModuleContextApiResponse {
+            ok: true,
+            api_version: SDK_API_VERSION,
+            module_id: module_id.to_string(),
+            module_dir: module_dir.display().to_string(),
+            runtime_dir: crate::utils::paths::RUNTIME_DIR.display().to_string(),
+            module_runtime_dir: module_runtime_dir.display().to_string(),
+            module_log_dir: module_log_dir.display().to_string(),
+            http_api_base: api_base_url().to_string(),
+        }),
+    ))
+}
+
+async fn handle_get_module_settings_request(
+    context: &LauncherHttpApiContext,
+    module_id: &str,
+) -> Result<HttpResponse, AppError> {
+    ensure_installed_module_id(module_id)?;
+    let settings = context
+        .settings_service
+        .get_module_settings(module_id)
+        .await?;
+
+    Ok(json_response(
+        200,
+        json!({ "ok": true, "moduleId": module_id, "settings": settings }),
+    ))
+}
+
+async fn handle_put_module_settings_request(
+    request: &HttpRequest,
+    context: &LauncherHttpApiContext,
+    module_id: &str,
+) -> Result<HttpResponse, AppError> {
+    ensure_installed_module_id(module_id)?;
+    let settings: HashMap<String, serde_json::Value> = parse_json_body(request)?;
+    context
+        .settings_service
+        .save_module_settings(module_id, &settings)
+        .await?;
+
+    Ok(json_response(
+        200,
+        json!({ "ok": true, "moduleId": module_id, "settings": settings }),
+    ))
+}
+
+async fn handle_patch_module_settings_request(
+    request: &HttpRequest,
+    context: &LauncherHttpApiContext,
+    module_id: &str,
+) -> Result<HttpResponse, AppError> {
+    ensure_installed_module_id(module_id)?;
+    let updates: HashMap<String, serde_json::Value> = parse_json_body(request)?;
+    let mut settings = context
+        .settings_service
+        .get_module_settings(module_id)
+        .await?;
+    settings.extend(updates);
+    context
+        .settings_service
+        .save_module_settings(module_id, &settings)
+        .await?;
+
+    Ok(json_response(
+        200,
+        json!({ "ok": true, "moduleId": module_id, "settings": settings }),
+    ))
+}
+
+fn ensure_installed_module_id(module_id: &str) -> Result<(), AppError> {
+    crate::domain::modules::downloader::validate_module_id(module_id)?;
+    if crate::domain::modules::downloader::is_module_installed(module_id) {
+        Ok(())
+    } else {
+        Err(AppError::NotFound(format!(
+            "Module {module_id} is not installed"
+        )))
     }
 }
 
@@ -1053,11 +1169,11 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{
-        IntegrationTextRequest, backend_provider_id, find_header_end, is_authorized,
-        is_loopback_peer, json_error, json_response, model_api_id, parse_header_line,
-        parse_header_lines, parse_json_body, parse_module_action, read_http_request,
-        selected_module_from_api_provider, selected_module_from_catalog_item, status_for_app_error,
-        status_text, tier_rank,
+        IntegrationTextRequest, ModuleContextApiResponse, backend_provider_id, find_header_end,
+        is_authorized, is_loopback_peer, json_error, json_response, model_api_id,
+        parse_header_line, parse_header_lines, parse_json_body, parse_module_action,
+        read_http_request, selected_module_from_api_provider, selected_module_from_catalog_item,
+        status_for_app_error, status_text, tier_rank,
     };
     use crate::domain::modules::controller::ModuleAction;
     use crate::errors::AppError;
@@ -1188,6 +1304,83 @@ mod tests {
 
         assert!(payload.prompt.is_none());
         assert_eq!(payload.messages.expect("messages").len(), 1);
+    }
+
+    #[test]
+    fn parses_module_settings_request_as_json_object() {
+        let request = super::HttpRequest {
+            method: "PUT".to_string(),
+            path: "/v1/modules/sample/settings".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"enabled":true,"threshold":3}"#.to_vec(),
+        };
+
+        let settings: HashMap<String, serde_json::Value> =
+            parse_json_body(&request).expect("settings object");
+
+        assert_eq!(
+            settings.get("enabled").and_then(serde_json::Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            settings
+                .get("threshold")
+                .and_then(serde_json::Value::as_i64),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn rejects_module_settings_request_when_body_is_not_object() {
+        let request = super::HttpRequest {
+            method: "PUT".to_string(),
+            path: "/v1/modules/sample/settings".to_string(),
+            headers: HashMap::new(),
+            body: br#"["not","an","object"]"#.to_vec(),
+        };
+
+        let error =
+            parse_json_body::<HashMap<String, serde_json::Value>>(&request).expect_err("array");
+
+        assert!(matches!(error, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn module_context_response_uses_public_camel_case_contract() {
+        let response = serde_json::to_value(ModuleContextApiResponse {
+            ok: true,
+            api_version: "1",
+            module_id: "sample".to_string(),
+            module_dir: "module".to_string(),
+            runtime_dir: "runtime".to_string(),
+            module_runtime_dir: "module-runtime".to_string(),
+            module_log_dir: "logs".to_string(),
+            http_api_base: "http://127.0.0.1:3000".to_string(),
+        })
+        .expect("context response");
+
+        assert_eq!(
+            response
+                .get("apiVersion")
+                .and_then(serde_json::Value::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            response.get("moduleId").and_then(serde_json::Value::as_str),
+            Some("sample")
+        );
+        assert_eq!(
+            response
+                .get("moduleRuntimeDir")
+                .and_then(serde_json::Value::as_str),
+            Some("module-runtime")
+        );
+        assert_eq!(
+            response
+                .get("httpApiBase")
+                .and_then(serde_json::Value::as_str),
+            Some("http://127.0.0.1:3000")
+        );
     }
 
     #[test]

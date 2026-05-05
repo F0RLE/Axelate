@@ -12,10 +12,13 @@ server is available only on the local machine and requires a per-process token.
 
 Launcher-managed integration processes receive these environment variables:
 
+- `AXELATE_SDK_VERSION`: local launcher integration API version, currently `1`
 - `AXELATE_HTTP_API_BASE`: local base URL, for example `http://127.0.0.1:3000`
 - `AXELATE_HTTP_API_TOKEN`: bearer token for the current launcher process
 - `AXELATE_RUNTIME_DIR`: shared launcher runtime directory
+- `AXELATE_MODULE_DIR`: read-only integration installation directory
 - `AXELATE_MODULE_RUNTIME_DIR`: writable runtime directory reserved for the integration
+- `AXELATE_MODULE_LOG_DIR`: writable log directory reserved for the integration
 - `AXELATE_MODULE_ID`: current integration id
 
 External tools that are not launched by Axelate need the same two values from
@@ -58,6 +61,10 @@ Prefer `Authorization: Bearer ...` for new clients.
 - Do not store the token permanently. It changes between launcher processes.
 - Send and receive JSON.
 - Use `/v1` endpoints only; unversioned endpoints are not public API.
+- Read and save integration settings through `/v1/modules/{moduleId}/settings`.
+  Do not read or write Axelate's internal `module_settings.json` directly.
+- Write temporary files, caches, and generated state to `AXELATE_MODULE_RUNTIME_DIR`.
+  Write logs to `AXELATE_MODULE_LOG_DIR`.
 - If a request specifies an AI `provider`, the launcher updates the matching UI
   card selection before running the request.
 
@@ -95,6 +102,7 @@ Invoke-RestMethod `
 ```js
 const baseUrl = process.env.AXELATE_HTTP_API_BASE;
 const token = process.env.AXELATE_HTTP_API_TOKEN;
+const moduleId = process.env.AXELATE_MODULE_ID;
 
 const response = await fetch(`${baseUrl}/v1/ai/text`, {
   method: "POST",
@@ -109,6 +117,11 @@ const response = await fetch(`${baseUrl}/v1/ai/text`, {
 });
 
 const result = await response.json();
+
+const settingsResponse = await fetch(`${baseUrl}/v1/modules/${moduleId}/settings`, {
+  headers: { Authorization: `Bearer ${token}` },
+});
+const { settings } = await settingsResponse.json();
 ```
 
 ### Python
@@ -119,10 +132,12 @@ import requests
 
 base_url = os.environ["AXELATE_HTTP_API_BASE"]
 token = os.environ["AXELATE_HTTP_API_TOKEN"]
+module_id = os.environ["AXELATE_MODULE_ID"]
+headers = {"Authorization": f"Bearer {token}"}
 
 response = requests.post(
     f"{base_url}/v1/ai/text",
-    headers={"Authorization": f"Bearer {token}"},
+    headers=headers,
     json={
         "provider": "llamacpp",
         "prompt": "Write a short status update",
@@ -130,6 +145,12 @@ response = requests.post(
     timeout=120,
 )
 result = response.json()
+
+settings = requests.get(
+    f"{base_url}/v1/modules/{module_id}/settings",
+    headers=headers,
+    timeout=30,
+).json()["settings"]
 ```
 
 ## Endpoints
@@ -150,6 +171,45 @@ state, and metadata.
 `GET /v1/modules/{moduleId}/status`
 
 Returns one integration status.
+
+`GET /v1/modules/{moduleId}/context`
+
+Returns the stable runtime context for an installed integration.
+
+```json
+{
+  "ok": true,
+  "apiVersion": "1",
+  "moduleId": "my-integration",
+  "moduleDir": "C:\\Users\\...\\AxelateData\\System\\Integrations\\my-integration",
+  "runtimeDir": "C:\\Users\\...\\AxelateData\\System\\Runtime",
+  "moduleRuntimeDir": "C:\\Users\\...\\AxelateData\\System\\Runtime\\Integrations\\my-integration",
+  "moduleLogDir": "C:\\Users\\...\\AxelateData\\System\\Logs\\Integrations\\my-integration",
+  "httpApiBase": "http://127.0.0.1:3000"
+}
+```
+
+`moduleDir` is for reading shipped integration files. Runtime output belongs in
+`moduleRuntimeDir`, not in the integration folder.
+
+`GET /v1/modules/{moduleId}/settings`
+
+Returns the JSON settings object owned by the integration.
+
+`PUT /v1/modules/{moduleId}/settings`
+
+Replaces the integration settings object.
+
+```json
+{
+  "chatId": "12345",
+  "enabled": true
+}
+```
+
+`PATCH /v1/modules/{moduleId}/settings`
+
+Merges the request JSON object into the existing integration settings object.
 
 `POST /v1/modules/{moduleId}/stage`
 
