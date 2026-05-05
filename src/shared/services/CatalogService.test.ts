@@ -197,6 +197,25 @@ describe('CatalogService', () => {
             const catalog = service.getCatalog();
             expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
         });
+
+        it('should fallback when bridge returns malformed catalog shape', async () => {
+            setupBridgeMocks(
+                mockBridge,
+                createMockAppConfig({
+                    catalog: { ai: null, services: undefined },
+                    apiProviders: null,
+                }),
+            );
+
+            await service.loadCatalog();
+
+            const catalog = service.getCatalog();
+            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+            expect(catalog.services.length).toBe(FALLBACK_CONFIG.catalog.services.length);
+            expect(globalThis.dispatchEvent).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'catalog-loaded' }),
+            );
+        });
     });
 
     // ---------------------------------------------------------- _ensureValidConfig null config (lines 278-279)

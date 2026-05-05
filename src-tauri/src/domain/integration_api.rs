@@ -340,10 +340,17 @@ fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
         .next()
         .ok_or_else(|| "HTTP path is missing".to_string())?
         .to_string();
+    let version = request_parts
+        .next()
+        .ok_or_else(|| "HTTP version is missing".to_string())?;
+    if request_parts.next().is_some() {
+        return Err("HTTP request line has too many parts".to_string());
+    }
+    if !version.starts_with("HTTP/") {
+        return Err(format!("Unsupported HTTP version: {version}"));
+    }
 
-    let headers = lines
-        .filter_map(parse_header_line)
-        .collect::<HashMap<_, _>>();
+    let headers = parse_header_lines(lines)?;
     let content_length = headers.get("content-length").map_or(Ok(0_usize), |value| {
         value
             .parse::<usize>()
@@ -392,6 +399,34 @@ fn find_header_end(buffer: &[u8]) -> Option<usize> {
 fn parse_header_line(line: &str) -> Option<(String, String)> {
     let (name, value) = line.split_once(':')?;
     Some((name.trim().to_ascii_lowercase(), value.trim().to_string()))
+}
+
+fn parse_header_lines<'a>(
+    lines: impl Iterator<Item = &'a str>,
+) -> Result<HashMap<String, String>, String> {
+    let mut headers = HashMap::new();
+
+    for line in lines {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let Some((name, value)) = parse_header_line(line) else {
+            return Err(format!("Malformed HTTP header line: {line}"));
+        };
+
+        if name.is_empty() {
+            return Err("HTTP header name is empty".to_string());
+        }
+
+        if name == "content-length" && headers.contains_key("content-length") {
+            return Err("Duplicate content-length header".to_string());
+        }
+
+        headers.insert(name, value);
+    }
+
+    Ok(headers)
 }
 
 async fn dispatch_http_request(
@@ -1019,8 +1054,8 @@ mod tests {
 
     use super::{
         IntegrationTextRequest, backend_provider_id, find_header_end, is_authorized, model_api_id,
-        parse_header_line, parse_json_body, read_http_request, status_for_app_error, status_text,
-        tier_rank,
+        parse_header_line, parse_header_lines, parse_json_body, read_http_request,
+        status_for_app_error, status_text, tier_rank,
     };
     use crate::errors::AppError;
     use crate::models::{AiModel, ApiModelConfig, ModelStats, ModelTier};
@@ -1059,6 +1094,22 @@ mod tests {
         let (key, value) = parse_header_line("Authorization: Bearer abc").expect("header");
         assert_eq!(key, "authorization");
         assert_eq!(value, "Bearer abc");
+    }
+
+    #[test]
+    fn rejects_malformed_http_header_lines() {
+        let error = parse_header_lines(["Host: localhost", "broken header"].into_iter())
+            .expect_err("malformed header must fail");
+
+        assert!(error.contains("Malformed HTTP header line"));
+    }
+
+    #[test]
+    fn rejects_duplicate_content_length_headers() {
+        let error = parse_header_lines(["Content-Length: 1", "content-length: 2"].into_iter())
+            .expect_err("duplicate content-length must fail");
+
+        assert_eq!(error, "Duplicate content-length header");
     }
 
     #[test]
@@ -1195,5 +1246,24 @@ mod tests {
         client.join().expect("client thread");
 
         assert!(error.contains("expected 8 bytes, got 3"));
+    }
+
+    #[test]
+    fn rejects_malformed_http_request_line() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+        let addr = listener.local_addr().expect("local addr");
+        let client = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(addr).expect("connect test listener");
+            stream
+                .write_all(b"GET /v1/health HTTP/1.1 extra\r\n\r\n")
+                .expect("write request");
+            stream.shutdown(Shutdown::Write).expect("shutdown write");
+        });
+
+        let (mut stream, _) = listener.accept().expect("accept test client");
+        let error = read_http_request(&mut stream).expect_err("bad request line must fail");
+        client.join().expect("client thread");
+
+        assert_eq!(error, "HTTP request line has too many parts");
     }
 }

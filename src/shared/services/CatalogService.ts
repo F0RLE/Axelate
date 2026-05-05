@@ -296,6 +296,11 @@ export class CatalogService {
             return fallback;
         }
 
+        if (!this._hasCatalogArrays(config)) {
+            this._tracer.warn('[CatalogService] Config shape is invalid. Using FALLBACK_CONFIG.');
+            return fallback;
+        }
+
         if (config.catalog.ai.length === 0 && config.catalog.services.length === 0) {
             const aiLen = config.catalog.ai.length;
             const srvLen = config.catalog.services.length;
@@ -305,5 +310,21 @@ export class CatalogService {
             return fallback;
         }
         return config;
+    }
+
+    private _hasCatalogArrays(config: AppConfig): boolean {
+        const candidate = config as unknown as {
+            catalog?: {
+                ai?: unknown;
+                services?: unknown;
+            };
+            apiProviders?: unknown;
+        };
+
+        return (
+            Array.isArray(candidate.catalog?.ai) &&
+            Array.isArray(candidate.catalog.services) &&
+            Array.isArray(candidate.apiProviders)
+        );
     }
 }
