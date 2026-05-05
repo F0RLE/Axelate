@@ -476,6 +476,45 @@ describe('WindowService', () => {
             await service.setMonitoringPaused(true);
             expect(mockBridge.invoke).not.toHaveBeenCalled();
         });
+
+        it('should skip duplicate monitoring pause states', async () => {
+            await service.setMonitoringPauseReason('window-inactive', true);
+            await service.setMonitoringPauseReason('window-inactive', true);
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(1);
+            expect(mockBridge.invoke).toHaveBeenCalledWith('set_monitoring_paused', {
+                paused: true,
+            });
+        });
+
+        it('should aggregate monitoring pause reasons before resuming', async () => {
+            await service.setMonitoringPauseReason('window-inactive', true);
+            await service.setMonitoringPauseReason('monitor-hidden', true);
+            await service.setMonitoringPauseReason('window-inactive', false);
+            await service.setMonitoringPauseReason('monitor-hidden', false);
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(2);
+            expect(mockBridge.invoke).toHaveBeenNthCalledWith(1, 'set_monitoring_paused', {
+                paused: true,
+            });
+            expect(mockBridge.invoke).toHaveBeenNthCalledWith(2, 'set_monitoring_paused', {
+                paused: false,
+            });
+        });
+
+        it('should retry the same monitoring state after a failed apply', async () => {
+            mockBridge.invoke
+                .mockRejectedValueOnce(new Error('temporary failure'))
+                .mockResolvedValueOnce(undefined);
+
+            await service.setMonitoringPauseReason('window-inactive', true);
+            await service.setMonitoringPauseReason('window-inactive', true);
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(2);
+            expect(mockTracer.error).toHaveBeenCalledWith(
+                '[WindowService] Failed to set monitoring state',
+            );
+        });
     });
 
     // ---------------------------------------------------------- checkPolicy

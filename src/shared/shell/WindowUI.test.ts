@@ -55,6 +55,7 @@ describe('WindowUI lifecycle', () => {
         const service = {
             checkPolicy: vi.fn().mockResolvedValue({ isSmallScreen: false, showWarning: false }),
             setMonitoringPaused: vi.fn().mockResolvedValue(undefined),
+            setMonitoringPauseReason: vi.fn().mockResolvedValue(undefined),
             checkResolutionChange: vi.fn(),
             isMaximized: vi.fn().mockResolvedValue(false),
             toggleMaximize: vi.fn().mockResolvedValue(undefined),
@@ -388,7 +389,7 @@ describe('WindowUI lifecycle', () => {
 
         ui = createWindowUI();
         const service = (ui as unknown as { _service: WindowService })._service as unknown as {
-            setMonitoringPaused: ReturnType<typeof vi.fn>;
+            setMonitoringPauseReason: ReturnType<typeof vi.fn>;
             changeZoom: ReturnType<typeof vi.fn>;
             persistZoom: ReturnType<typeof vi.fn>;
         };
@@ -415,12 +416,12 @@ describe('WindowUI lifecycle', () => {
         const focusSpy = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
         document.dispatchEvent(new Event('visibilitychange'));
         globalThis.dispatchEvent(new Event('blur'));
-        expect(service.setMonitoringPaused).toHaveBeenCalledWith(true);
+        expect(service.setMonitoringPauseReason).toHaveBeenCalledWith('window-inactive', true);
 
         focusSpy.mockReturnValue(true);
         Object.defineProperty(document, 'hidden', { configurable: true, value: false });
         globalThis.dispatchEvent(new Event('focus'));
-        expect(service.setMonitoringPaused).toHaveBeenCalledWith(false);
+        expect(service.setMonitoringPauseReason).toHaveBeenCalledWith('window-inactive', false);
 
         document.dispatchEvent(
             new WheelEvent('wheel', {
