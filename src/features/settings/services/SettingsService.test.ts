@@ -226,10 +226,18 @@ describe('SettingsService', () => {
     });
 
     describe('saveSecureKey', () => {
-        it('should invoke save_secure_key with correct args', async () => {
+        it('should store cloud provider keys in the shared OpenRouter slot', async () => {
             await service.saveSecureKey('gemini', 'my-api-key');
             expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
-                service: 'gemini_api_key',
+                service: 'openrouter_api_key',
+                key: 'my-api-key',
+            });
+        });
+
+        it('should keep legacy provider-specific slots for unknown providers', async () => {
+            await service.saveSecureKey('unknown-provider', 'my-api-key');
+            expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
+                service: 'unknown-provider_api_key',
                 key: 'my-api-key',
             });
         });
@@ -244,7 +252,7 @@ describe('SettingsService', () => {
         it('should remove secure key through tauri provider helper', async () => {
             await service.removeSecureKey('gemini');
 
-            expect(tauri.removeSecureKey).toHaveBeenCalledWith('gemini_api_key');
+            expect(tauri.removeSecureKey).toHaveBeenCalledWith('openrouter_api_key');
             expect(tauri.invoke).not.toHaveBeenCalledWith('remove_secure_key', expect.anything());
         });
 
@@ -254,7 +262,7 @@ describe('SettingsService', () => {
             await service.removeSecureKey('gemini');
 
             expect(tauri.invoke).toHaveBeenCalledWith('remove_secure_key', {
-                service: 'gemini_api_key',
+                service: 'openrouter_api_key',
             });
         });
 
@@ -289,7 +297,7 @@ describe('SettingsService', () => {
 
             expect(result).toBe(true);
             expect(tauri.invoke).toHaveBeenCalledWith('has_secure_key', {
-                service: 'gemini_api_key',
+                service: 'openrouter_api_key',
             });
         });
 
@@ -310,7 +318,7 @@ describe('SettingsService', () => {
             const result = await service.getSecureKeyMeta('gemini');
 
             expect(result).toEqual(meta);
-            expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('gemini_api_key');
+            expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('openrouter_api_key');
         });
 
         it('should return empty metadata on error', async () => {
@@ -331,7 +339,7 @@ describe('SettingsService', () => {
             const result = await service.getSecureKey('gemini');
 
             expect(result).toBe('secret');
-            expect(tauri.getSecureKey).toHaveBeenCalledWith('gemini_api_key');
+            expect(tauri.getSecureKey).toHaveBeenCalledWith('openrouter_api_key');
         });
 
         it('should return null on error', async () => {
