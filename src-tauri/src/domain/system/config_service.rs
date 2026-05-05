@@ -127,3 +127,207 @@ impl ConfigService {
         self.repo.load_custom_models()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::ConfigService;
+    use crate::domain::system::config_repository::ConfigRepository;
+    use crate::errors::AppError;
+    use crate::models::config::{ApiProvider, AppMeta, ConfigCatalog, ModuleItem, ProviderType};
+    use crate::models::custom_models::{CustomModel, CustomModelConfig};
+    use serde_json::json;
+
+    #[derive(Debug)]
+    struct FakeConfigRepository {
+        providers: Vec<ApiProvider>,
+        local_modules: Vec<ModuleItem>,
+        custom_models: CustomModelConfig,
+    }
+
+    impl ConfigRepository for FakeConfigRepository {
+        fn load_app_meta(&self) -> Result<AppMeta, AppError> {
+            Ok(AppMeta {
+                version: "9.9.9".to_string(),
+            })
+        }
+
+        fn load_api_providers(&self) -> Result<Vec<ApiProvider>, AppError> {
+            Ok(self.providers.clone())
+        }
+
+        fn load_local_modules(&self) -> Result<Vec<ModuleItem>, AppError> {
+            Ok(self.local_modules.clone())
+        }
+
+        fn load_custom_models(&self) -> Result<CustomModelConfig, AppError> {
+            Ok(self.custom_models.clone())
+        }
+    }
+
+    fn provider(
+        id: &str,
+        provider_type: Option<ProviderType>,
+        base_url: Option<&str>,
+        capabilities: Option<Vec<&str>>,
+    ) -> ApiProvider {
+        ApiProvider {
+            id: id.to_string(),
+            name: format!("{id} Provider"),
+            desc_key: None,
+            description: None,
+            icon: None,
+            provider_type,
+            base_url: base_url.map(str::to_string),
+            api_key_env: None,
+            models: None,
+            capabilities: capabilities.map(|items| items.into_iter().map(str::to_string).collect()),
+            model_aliases: None,
+        }
+    }
+
+    fn module(value: serde_json::Value) -> ModuleItem {
+        serde_json::from_value(value).unwrap()
+    }
+
+    fn service(repo: FakeConfigRepository) -> ConfigService {
+        ConfigService::new(Box::new(repo))
+    }
+
+    #[test]
+    fn load_full_config_hydrates_api_provider_modules() {
+        let service = service(FakeConfigRepository {
+            providers: vec![
+                provider(
+                    "openai-compatible",
+                    Some(ProviderType::OpenaiCompatible),
+                    Some("https://example.test/v1"),
+                    None,
+                ),
+                provider(
+                    "image-api",
+                    Some(ProviderType::Api),
+                    None,
+                    Some(vec!["image"]),
+                ),
+            ],
+            local_modules: Vec::new(),
+            custom_models: CustomModelConfig::default(),
+        });
+
+        let config = service.load_full_config().unwrap();
+        let compatible = config
+            .catalog
+            .ai
+            .iter()
+            .find(|item| item.id == "openai-compatible")
+            .unwrap();
+        let image_api = config
+            .catalog
+            .ai
+            .iter()
+            .find(|item| item.id == "image-api")
+            .unwrap();
+        let schema = compatible.config_schema.as_ref().unwrap();
+
+        assert_eq!(config.version, "9.9.9");
+        assert!(compatible.installed);
+        assert_eq!(compatible.capabilities, vec!["text"]);
+        assert!(schema.contains_key("apiKey"));
+        assert_eq!(
+            schema
+                .get("endpoint")
+                .and_then(|field| field.default.as_ref()),
+            Some(&json!("https://example.test/v1"))
+        );
+        assert_eq!(image_api.capabilities, vec!["image"]);
+        assert!(
+            image_api
+                .config_schema
+                .as_ref()
+                .unwrap()
+                .contains_key("apiKey")
+        );
+        assert!(
+            !image_api
+                .config_schema
+                .as_ref()
+                .unwrap()
+                .contains_key("endpoint")
+        );
+    }
+
+    #[test]
+    fn load_full_config_routes_local_modules_by_type() {
+        let service = service(FakeConfigRepository {
+            providers: Vec::new(),
+            local_modules: vec![
+                module(json!({
+                    "id": "local-ai",
+                    "nameKey": "ui.module.local_ai",
+                    "descKey": "ui.module.local_ai.desc",
+                    "name": "Local AI",
+                    "desc": "Local model",
+                    "icon": "cpu",
+                    "type": "local",
+                    "repoUrl": null,
+                    "expectedHash": null
+                })),
+                module(json!({
+                    "id": "service-module",
+                    "nameKey": "ui.module.service",
+                    "descKey": "ui.module.service.desc",
+                    "name": "Service",
+                    "desc": "Service module",
+                    "icon": "plug",
+                    "type": "service",
+                    "repoUrl": null,
+                    "expectedHash": null
+                })),
+            ],
+            custom_models: CustomModelConfig::default(),
+        });
+
+        let ConfigCatalog {
+            ai,
+            services,
+            stars,
+        } = service.load_full_config().unwrap().catalog;
+
+        assert_eq!(ai.len(), 1);
+        assert_eq!(ai.first().map(|item| item.id.as_str()), Some("local-ai"));
+        assert_eq!(services.len(), 1);
+        assert_eq!(
+            services.first().map(|item| item.id.as_str()),
+            Some("service-module")
+        );
+        assert!(stars.is_empty());
+    }
+
+    #[test]
+    fn load_custom_models_delegates_to_repository() {
+        let custom_models = CustomModelConfig {
+            models: vec![CustomModel {
+                id: "custom".to_string(),
+                name: "Custom".to_string(),
+                provider_id: "gpt".to_string(),
+                base_model_id: "base".to_string(),
+                created_at: 123.0,
+            }],
+        };
+        let service = service(FakeConfigRepository {
+            providers: Vec::new(),
+            local_modules: Vec::new(),
+            custom_models,
+        });
+
+        let loaded = service.load_custom_models().unwrap();
+
+        assert_eq!(loaded.models.len(), 1);
+        assert_eq!(
+            loaded.models.first().map(|model| model.id.as_str()),
+            Some("custom")
+        );
+    }
+}
