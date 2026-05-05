@@ -14,7 +14,7 @@ use crate::domain::engine::types::{
 };
 use crate::errors::AppError;
 use crate::infrastructure::config::engine_settings::{
-    load_engine_config_map, save_engine_config_map,
+    EngineConfigMap, load_engine_config_map, save_engine_config_map,
 };
 use tauri::State;
 
@@ -23,6 +23,36 @@ use tauri::State;
 pub struct EngineSettingsPayload {
     /// Fully merged engine config for the selected engine.
     pub config: EngineConfig,
+}
+
+fn engine_config_for_definition(def: &EngineDefinition, saved: &EngineConfigMap) -> EngineConfig {
+    saved.get(&def.id).map_or_else(
+        || build_default_engine_config(def),
+        |config| merge_user_engine_config(def, config),
+    )
+}
+
+fn engine_settings_payload_for_definition(
+    def: &EngineDefinition,
+    saved: &EngineConfigMap,
+) -> EngineSettingsPayload {
+    EngineSettingsPayload {
+        config: engine_config_for_definition(def, saved),
+    }
+}
+
+fn normalize_config_for_save(def: &EngineDefinition, mut config: EngineConfig) -> EngineConfig {
+    config.engine_id = canonical_engine_id(&config.engine_id);
+    merge_user_engine_config(def, &normalize_engine_config(config))
+}
+
+fn mark_engine_definitions_installed(
+    defs: &mut [EngineDefinition],
+    mut is_installed: impl FnMut(&EngineDefinition) -> bool,
+) {
+    for def in defs {
+        def.installed = def.managed_externally || is_installed(def);
+    }
 }
 
 #[tauri::command]
@@ -95,13 +125,9 @@ pub async fn get_engine_definitions(
 ) -> Result<Vec<EngineDefinition>, AppError> {
     let mut defs = engine_manager.list_definitions().await;
     // Populate `installed` at request time — no extra round-trip needed from frontend
-    for def in &mut defs {
-        def.installed = if def.managed_externally {
-            true
-        } else {
-            crate::domain::engine::detector::is_engine_installed(&def.id, def.binary.as_deref())
-        };
-    }
+    mark_engine_definitions_installed(&mut defs, |def| {
+        crate::domain::engine::detector::is_engine_installed(&def.id, def.binary.as_deref())
+    });
     Ok(defs)
 }
 
@@ -119,11 +145,7 @@ pub async fn get_engine_config(
         .ok_or_else(|| AppError::Config(format!("Unknown engine: {engine_id}")))?;
 
     let saved = load_engine_config_map().await?;
-    if let Some(config) = saved.get(&engine_id) {
-        return Ok(merge_user_engine_config(&def, config));
-    }
-
-    Ok(build_default_engine_config(&def))
+    Ok(engine_config_for_definition(&def, &saved))
 }
 
 #[tauri::command]
@@ -140,13 +162,7 @@ pub async fn get_engine_settings_payload(
         .ok_or_else(|| AppError::Config(format!("Unknown engine: {engine_id}")))?;
 
     let saved = load_engine_config_map().await?;
-    let config = if let Some(config) = saved.get(&engine_id) {
-        merge_user_engine_config(&def, config)
-    } else {
-        build_default_engine_config(&def)
-    };
-
-    Ok(EngineSettingsPayload { config })
+    Ok(engine_settings_payload_for_definition(&def, &saved))
 }
 
 #[tauri::command]
@@ -164,7 +180,135 @@ pub async fn set_engine_config(
         .ok_or_else(|| AppError::Config(format!("Unknown engine: {}", config.engine_id)))?;
 
     let mut map = load_engine_config_map().await?;
-    let normalized = merge_user_engine_config(&def, &normalize_engine_config(config));
+    let normalized = normalize_config_for_save(&def, config);
     map.insert(normalized.engine_id.clone(), normalized);
     save_engine_config_map(&map).await
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use crate::domain::engine::types::EngineComputeMode;
+
+    fn sample_definition(id: &str) -> EngineDefinition {
+        EngineDefinition {
+            id: id.to_string(),
+            name: format!("{id} engine"),
+            desc: String::new(),
+            icon: String::new(),
+            capabilities: vec![Capability::Text],
+            binary: Some(format!("{id}-server")),
+            repo_url: None,
+            version: "1.0.0".to_string(),
+            default_port: 8081,
+            default_context_size: 8192,
+            config_schema: None,
+            installed: false,
+            managed_externally: false,
+        }
+    }
+
+    fn saved_config(engine_id: &str) -> EngineConfig {
+        EngineConfig {
+            engine_id: engine_id.to_string(),
+            compute_mode: EngineComputeMode::Cpu,
+            context_size: 2048,
+            model_path: Some("C:/models/model.gguf".to_string()),
+            extra_args: vec!["--threads".to_string(), "8".to_string()],
+        }
+    }
+
+    #[test]
+    fn engine_config_for_definition_uses_defaults_when_no_saved_config_exists() {
+        let def = sample_definition("sdcpp");
+        let config = engine_config_for_definition(&def, &EngineConfigMap::default());
+
+        assert_eq!(config.engine_id, "sdcpp");
+        assert_eq!(config.compute_mode, EngineComputeMode::Gpu);
+        assert_eq!(config.context_size, 8192);
+        assert_eq!(config.model_path, None);
+        assert!(config.extra_args.is_empty());
+    }
+
+    #[test]
+    fn engine_config_for_definition_merges_saved_config_and_normalizes_llamacpp() {
+        let def = sample_definition("llamacpp");
+        let mut saved = EngineConfigMap::default();
+        saved.insert(def.id.clone(), saved_config("llamacpp"));
+
+        let config = engine_config_for_definition(&def, &saved);
+
+        assert_eq!(config.compute_mode, EngineComputeMode::Cpu);
+        assert_eq!(config.context_size, 4096);
+        assert_eq!(config.model_path.as_deref(), Some("C:/models/model.gguf"));
+        assert_eq!(config.extra_args, vec!["--threads", "8"]);
+    }
+
+    #[test]
+    fn engine_settings_payload_wraps_the_resolved_config() {
+        let def = sample_definition("sdcpp");
+        let mut saved = EngineConfigMap::default();
+        saved.insert(def.id.clone(), saved_config("sdcpp"));
+
+        let payload = engine_settings_payload_for_definition(&def, &saved);
+
+        assert_eq!(payload.config.engine_id, "sdcpp");
+        assert_eq!(payload.config.compute_mode, EngineComputeMode::Cpu);
+    }
+
+    #[test]
+    fn normalize_config_for_save_canonicalizes_aliases_before_persisting() {
+        let def = sample_definition("sdcpp");
+        let normalized = normalize_config_for_save(&def, saved_config("stable-diffusion"));
+
+        assert_eq!(normalized.engine_id, "sdcpp");
+        assert_eq!(normalized.compute_mode, EngineComputeMode::Cpu);
+        assert_eq!(normalized.context_size, 2048);
+    }
+
+    #[test]
+    fn mark_engine_definitions_installed_keeps_external_engines_available() {
+        let external = EngineDefinition {
+            managed_externally: true,
+            binary: None,
+            ..sample_definition("external")
+        };
+        let mut defs = vec![sample_definition("missing"), external];
+
+        mark_engine_definitions_installed(&mut defs, |def| def.id == "missing");
+
+        assert!(defs.iter().all(|def| def.installed));
+    }
+
+    #[test]
+    fn mark_engine_definitions_installed_marks_missing_local_engines_uninstalled() {
+        let mut defs = vec![sample_definition("missing")];
+
+        mark_engine_definitions_installed(&mut defs, |_| false);
+
+        assert!(defs.iter().all(|def| !def.installed));
+    }
+
+    #[test]
+    fn engine_settings_payload_serializes_as_expected() {
+        let payload = EngineSettingsPayload {
+            config: EngineConfig {
+                engine_id: "cloud".to_string(),
+                compute_mode: EngineComputeMode::Gpu,
+                context_size: 4096,
+                model_path: None,
+                extra_args: vec![],
+            },
+        };
+        let json = serde_json::to_value(&payload).unwrap();
+
+        assert_eq!(
+            json.get("config")
+                .and_then(|config| config.get("engine_id"))
+                .and_then(serde_json::Value::as_str),
+            Some("cloud")
+        );
+    }
 }
