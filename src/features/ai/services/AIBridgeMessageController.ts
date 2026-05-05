@@ -111,7 +111,10 @@ export class AIBridgeMessageController {
                 },
             );
 
-            const response = await this._deps.transport.sendSilent(request);
+            this._deps.onLongActivityStart();
+            const response = await this._deps.transport
+                .sendSilent(request)
+                .finally(this._deps.onLongActivityEnd);
             return this._withModelContext(response, providerId, request.model);
         } catch (error: unknown) {
             const errorMsg =

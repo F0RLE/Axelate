@@ -83,7 +83,15 @@ export class Core {
         if (this._isDestroyed) return;
         this._isDestroyed = true;
         this._isInitialized = false;
+        const pendingInit = this._initPromise;
         this._initPromise = null;
+        if (pendingInit !== null) {
+            try {
+                await pendingInit;
+            } catch {
+                // Init failures are superseded by teardown.
+            }
+        }
         await this._assembly.lifecycleController.destroy();
     }
 }

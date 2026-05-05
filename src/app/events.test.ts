@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventHandler, type ICoreEvents } from './events';
 
+async function flushAsyncNavigation(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function createCoreEvents(): ICoreEvents {
     return {
         appUI: {
@@ -68,9 +74,29 @@ describe('EventHandler', () => {
             throw new Error('Navigation button not found');
         }
         navButton.click();
-        await Promise.resolve();
+        await flushAsyncNavigation();
 
         expect(core.navigationUI.showPage).not.toHaveBeenCalled();
+        handler.destroy();
+    });
+
+    it('allows sidebar navigation when release download selection is closed', async () => {
+        document.body.innerHTML = `<button data-page="integrations">Integrations</button>`;
+        const core = createCoreEvents();
+        const handler = new EventHandler(core, {
+            addWindowListener: vi.fn(),
+            removeWindowListener: vi.fn(),
+        });
+        handler.init();
+
+        const navButton = document.querySelector<HTMLButtonElement>('[data-page]');
+        if (navButton === null) {
+            throw new Error('Navigation button not found');
+        }
+        navButton.click();
+        await flushAsyncNavigation();
+
+        expect(core.navigationUI.showPage).toHaveBeenCalledOnce();
         handler.destroy();
     });
 });

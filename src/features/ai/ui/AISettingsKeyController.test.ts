@@ -137,6 +137,66 @@ describe('AISettingsKeyController', () => {
         );
     });
 
+    it('should not clear local key state when settings service is unavailable', async () => {
+        const input = document.createElement('input');
+        input.dataset['storedMasked'] = 'true';
+        input.value = '';
+        const controllerWithoutSettings = new AISettingsKeyController({
+            getSettingsService: () => null,
+            getTranslator,
+            scheduleButtonReset,
+            showToast,
+            icons: {
+                visible: '<visible>',
+                hidden: '<hidden>',
+                check: '<check>',
+                x: '<x>',
+                spinner: '<spinner>',
+            },
+            tracer,
+        });
+
+        const removed = await controllerWithoutSettings.removeClearedStoredKey(input, 'openrouter');
+
+        expect(removed).toBe(false);
+        expect(input.dataset['storedMasked']).toBe('true');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_remove_error:Key remove error',
+            'error',
+        );
+    });
+
+    it('should report failure when checking a cleared key without settings service', async () => {
+        const input = document.createElement('input');
+        const button = document.createElement('button');
+        button.innerHTML = 'Check';
+        document.body.append(input, button);
+        input.dataset['keyDirty'] = 'true';
+        input.value = '';
+        const controllerWithoutSettings = new AISettingsKeyController({
+            getSettingsService: () => null,
+            getTranslator,
+            scheduleButtonReset,
+            showToast,
+            icons: {
+                visible: '<visible>',
+                hidden: '<hidden>',
+                check: '<check>',
+                x: '<x>',
+                spinner: '<spinner>',
+            },
+            tracer,
+        });
+
+        await controllerWithoutSettings.checkKey(input, button, 'openrouter');
+
+        expect(input.dataset['keyDirty']).toBe('true');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_check_error:Key check error',
+            'error',
+        );
+    });
+
     it('should reset key check buttons to their idle state', () => {
         const button = document.createElement('button');
         button.disabled = true;

@@ -4,17 +4,30 @@ use crate::domain::modules::lifecycle::{CommandDefinition, ModuleManifest};
 use crate::domain::modules::paths as module_paths;
 use crate::errors::AppError;
 use crate::models::ControlResponse;
+use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
+use tokio::fs;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 const MODULE_CHILD_EXIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
-static MODULE_LIFECYCLE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+type ModuleLifecycleLocks = HashMap<String, Arc<Mutex<()>>>;
+static MODULE_LIFECYCLE_LOCKS: LazyLock<Mutex<ModuleLifecycleLocks>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+async fn module_lifecycle_lock(module_id: &str) -> Arc<Mutex<()>> {
+    let mut locks = MODULE_LIFECYCLE_LOCKS.lock().await;
+    Arc::clone(
+        locks
+            .entry(module_id.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(()))),
+    )
+}
 
 fn build_command(cmd: CommandDefinition) -> Command {
     match cmd {
@@ -60,7 +73,8 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Safely starts a module with the given manifest
     pub async fn start(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
-        let _lifecycle_guard = MODULE_LIFECYCLE_LOCK.lock().await;
+        let lifecycle_lock = module_lifecycle_lock(&self.module_id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
 
         // 1. Guard against double-start
         // Check registry first (atomic-ish)
@@ -266,24 +280,26 @@ impl<'a> LifecycleExecutor<'a> {
         }
     }
 
-    fn persist_pid(&self, pid: usize) -> Result<(), AppError> {
+    async fn persist_pid(&self, pid: usize) -> Result<(), AppError> {
         let pid_file = self.module_path.join("module.pid");
         let temp_pid_file = self.module_path.join("module.pid.tmp");
-        std::fs::write(&temp_pid_file, pid.to_string()).map_err(|error| {
-            AppError::Io(format!(
-                "Failed to write module PID temp file '{}': {error}",
-                temp_pid_file.display()
-            ))
-        })?;
+        fs::write(&temp_pid_file, pid.to_string())
+            .await
+            .map_err(|error| {
+                AppError::Io(format!(
+                    "Failed to write module PID temp file '{}': {error}",
+                    temp_pid_file.display()
+                ))
+            })?;
 
-        std::fs::rename(&temp_pid_file, &pid_file).map_err(|error| {
-            let _ = std::fs::remove_file(&temp_pid_file);
-            AppError::Io(format!(
+        if let Err(error) = fs::rename(&temp_pid_file, &pid_file).await {
+            let _ = fs::remove_file(&temp_pid_file).await;
+            return Err(AppError::Io(format!(
                 "Failed to publish module PID file '{}' -> '{}': {error}",
                 temp_pid_file.display(),
                 pid_file.display()
-            ))
-        })?;
+            )));
+        }
 
         Ok(())
     }
@@ -293,7 +309,7 @@ impl<'a> LifecycleExecutor<'a> {
         child: &mut Child,
         pid: usize,
     ) -> Result<(), AppError> {
-        match self.persist_pid(pid) {
+        match self.persist_pid(pid).await {
             Ok(()) => Ok(()),
             Err(error) => {
                 self.kill_unregistered_child(child, "PID publish failure")
@@ -316,7 +332,8 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Gracefully stops a module with escalation
     pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
-        let _lifecycle_guard = MODULE_LIFECYCLE_LOCK.lock().await;
+        let lifecycle_lock = module_lifecycle_lock(&self.module_id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
         tracing::info!("Stopping module: {}", self.module_id);
 
         // 1. Run stop script if exists
@@ -469,7 +486,7 @@ impl<'a> LifecycleExecutor<'a> {
         if let Some(&existing_pid) = matching_pids.first()
             && matching_pids.len() == 1
         {
-            if let Err(error) = self.persist_pid(existing_pid) {
+            if let Err(error) = self.persist_pid(existing_pid).await {
                 self.log_reconciled_pid_publish_failure(&error);
                 return Err(error);
             }

@@ -51,6 +51,8 @@ function createTextController() {
     };
     const showToast = vi.fn();
     const onActivity = vi.fn();
+    const onLongActivityStart = vi.fn();
+    const onLongActivityEnd = vi.fn();
 
     const controller = new AIBridgeMessageController({
         getContext: () => context as never,
@@ -62,12 +64,22 @@ function createTextController() {
         translate: (_key, fallback) => fallback,
         showToast,
         onActivity,
-        onLongActivityStart: vi.fn(),
-        onLongActivityEnd: vi.fn(),
+        onLongActivityStart,
+        onLongActivityEnd,
         onSuccessfulResponse: vi.fn(),
     });
 
-    return { controller, transport, events, manager, context, showToast, onActivity };
+    return {
+        controller,
+        transport,
+        events,
+        manager,
+        context,
+        showToast,
+        onActivity,
+        onLongActivityStart,
+        onLongActivityEnd,
+    };
 }
 
 function createImageController() {
@@ -334,12 +346,15 @@ describe('AIBridgeMessageController custom providers', () => {
     });
 
     it('marks silent image prompt preparation as provider activity', async () => {
-        const { controller, transport, onActivity } = createTextController();
+        const { controller, transport, onActivity, onLongActivityStart, onLongActivityEnd } =
+            createTextController();
 
         const response = await controller.prepareImagePrompt('rewrite image prompt');
 
         expect(response).toEqual({ ok: true, text: 'prepared' });
         expect(onActivity).toHaveBeenCalledOnce();
+        expect(onLongActivityStart).toHaveBeenCalledOnce();
+        expect(onLongActivityEnd).toHaveBeenCalledOnce();
         expect(transport.sendSilent).toHaveBeenCalledOnce();
     });
 });
