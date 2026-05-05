@@ -339,7 +339,7 @@ describe('WindowUI lifecycle', () => {
         expect(dblClick.defaultPrevented).toBe(true);
     });
 
-    it('should block window-level shortcuts while a dialog is open', () => {
+    it('should block window-level shortcuts while a dialog is open but still allow reload', () => {
         document.body.innerHTML = `
             <div id="splash-screen" class="hidden"></div>
             <dialog id="global-width-warning"></dialog>
@@ -373,7 +373,7 @@ describe('WindowUI lifecycle', () => {
         });
         document.dispatchEvent(refreshEvent);
         expect(refreshEvent.defaultPrevented).toBe(true);
-        expect(reloadSpy).not.toHaveBeenCalled();
+        expect(reloadSpy).toHaveBeenCalled();
     });
 
     it('should manage monitoring, wheel zoom, tooltip suppression and maximize icon rebuild', async () => {

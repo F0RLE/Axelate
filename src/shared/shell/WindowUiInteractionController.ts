@@ -176,6 +176,12 @@ export class WindowUiInteractionController {
             return;
         }
 
+        if (this._isReloadShortcut(e)) {
+            e.preventDefault();
+            this._deps.runtime.reload();
+            return;
+        }
+
         if (this._deps.hasOpenDialog() && this._isWindowShortcut(e)) {
             e.preventDefault();
             e.stopPropagation();
@@ -187,12 +193,6 @@ export class WindowUiInteractionController {
             this._deps.toggleMaximize().catch(() => {
                 /* ignore */
             });
-            return;
-        }
-
-        if (this._isReloadShortcut(e)) {
-            e.preventDefault();
-            this._deps.runtime.reload();
             return;
         }
 
