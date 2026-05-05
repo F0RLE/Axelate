@@ -4,7 +4,7 @@ use super::downloader_progress::{
     AggregateDownloadContext, DownloadInterruption, ProgressEvent, ProgressSnapshot,
     compute_progress, emit_progress,
 };
-use super::downloader_service::{DownloadRequest, resolve_existing_module_path};
+use super::downloader_service::resolve_existing_module_path;
 use super::downloader_support::{package_install_dir, remove_partial_metadata};
 use super::downloader_transfer::{
     DownloadTask, ReleaseDownloadAsset, build_client, build_public_client, clone_repository_into,
@@ -15,7 +15,7 @@ use crate::errors::AppError;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
-pub use super::downloader_service::DownloaderService;
+pub use super::downloader_service::{DownloadRequest, DownloaderService};
 
 /// Validates module ID to prevent directory traversal and injection attacks
 pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
