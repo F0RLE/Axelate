@@ -157,7 +157,10 @@ fn main_assets(
 
 fn parse_sha256_digest(digest: Option<&str>) -> Option<String> {
     let value = digest?.trim();
-    let hash = value.strip_prefix("sha256:")?;
+    let (algorithm, hash) = value.split_once(':')?;
+    if !algorithm.eq_ignore_ascii_case("sha256") {
+        return None;
+    }
     if hash.len() != 64 || !hash.chars().all(|ch| ch.is_ascii_hexdigit()) {
         return None;
     }
@@ -220,11 +223,19 @@ fn platform_matches(module_id: &str, platform: Platform, name: &str) -> bool {
 
 fn os_matches(os: PlatformOs, lower_name: &str) -> bool {
     match os {
-        PlatformOs::Windows => lower_name.contains("win"),
+        PlatformOs::Windows => is_windows_asset_name(lower_name),
         PlatformOs::Linux => lower_name.contains("linux") || lower_name.contains("ubuntu"),
         PlatformOs::Macos => lower_name.contains("darwin") || lower_name.contains("macos"),
         PlatformOs::Other => true,
     }
+}
+
+fn is_windows_asset_name(lower_name: &str) -> bool {
+    lower_name.contains("windows")
+        || lower_name.contains("-win-")
+        || lower_name.contains("_win_")
+        || lower_name.contains("-win_")
+        || lower_name.contains("_win-")
 }
 
 fn arch_matches(module_id: &str, arch: PlatformArch, lower_name: &str) -> bool {

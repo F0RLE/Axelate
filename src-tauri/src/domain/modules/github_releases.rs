@@ -519,12 +519,18 @@ fn parse_repo(repo_url: &str) -> Result<RepoRef, AppError> {
     if trimmed.contains("://")
         && !trimmed.starts_with("https://github.com/")
         && !trimmed.starts_with("http://github.com/")
+        && !trimmed.starts_with("https://www.github.com/")
+        && !trimmed.starts_with("http://www.github.com/")
     {
         return Err(invalid_repo_url(repo_url));
     }
     let path = trimmed
         .strip_prefix("https://github.com/")
         .or_else(|| trimmed.strip_prefix("http://github.com/"))
+        .or_else(|| trimmed.strip_prefix("https://www.github.com/"))
+        .or_else(|| trimmed.strip_prefix("http://www.github.com/"))
+        .or_else(|| trimmed.strip_prefix("github.com/"))
+        .or_else(|| trimmed.strip_prefix("www.github.com/"))
         .or_else(|| trimmed.strip_prefix("git@github.com:"))
         .unwrap_or(trimmed);
     let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
@@ -575,10 +581,64 @@ mod tests {
     }
 
     #[test]
+    fn parse_repo_supports_github_host_without_scheme() {
+        let parsed =
+            parse_repo("github.com/ggml-org/llama.cpp").expect("valid host shorthand should parse");
+
+        assert_eq!(parsed.owner, "ggml-org");
+        assert_eq!(parsed.repo, "llama.cpp");
+    }
+
+    #[test]
     fn parse_repo_rejects_non_github_urls() {
         let parsed = parse_repo("https://example.com/ggml-org/llama.cpp");
 
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn windows_selection_does_not_treat_darwin_assets_as_windows() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::CpuOnly,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let assets = vec![asset("llama-b9028-bin-darwin-x64.tar.gz")];
+
+        assert!(select_release_assets("llamacpp", platform, hardware, &assets).is_none());
+    }
+
+    #[test]
+    fn uppercase_sha256_digest_is_accepted() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::CpuOnly,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: None,
+            cuda_driver_minor: None,
+        };
+        let assets = vec![Asset {
+            name: "llama-b9028-bin-win-cpu-x64.zip".to_string(),
+            browser_download_url: "https://example.com/llama.zip".to_string(),
+            size: 1024,
+            digest: Some(format!("SHA256:{}", "A".repeat(64))),
+        }];
+
+        let selected = select_release_assets("llamacpp", platform, hardware, &assets)
+            .expect("uppercase SHA256 prefix should be accepted");
+
+        assert_eq!(
+            selected.first().map(|asset| asset.sha256.as_str()),
+            Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
     }
 
     #[test]
