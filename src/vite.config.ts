@@ -166,6 +166,10 @@ export default defineConfig({
             exclude: [
                 // Pure TypeScript interface — no executable lines, always 0%
                 '**/shared/types/IBridge.ts',
+                // Generated Specta bindings. Coverage belongs to the generator contract, not app tests.
+                '**/shared/types/bindings.ts',
+                '**/*.d.ts',
+                '**/coverage/**',
             ],
             thresholds: {
                 'src/features/**/services/*.ts': {

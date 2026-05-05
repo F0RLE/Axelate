@@ -23,11 +23,17 @@ vi.mock('@/shared/api/invoke', () => ({
 function createMockModuleService(): ModuleService {
     return {
         downloadModule: vi.fn().mockResolvedValue(undefined),
+        getReleaseDownloadOptions: vi.fn().mockResolvedValue({
+            releases: [{ tag_name: 'v1.0.0', name: '1.0.0', assets: [] }],
+        }),
         deleteModule: vi.fn().mockResolvedValue(true),
         control: vi.fn().mockResolvedValue(true),
         pauseDownload: vi.fn().mockResolvedValue(true),
         resumeDownload: vi.fn().mockResolvedValue(true),
         cancelDownload: vi.fn().mockResolvedValue(true),
+        checkInstalled: vi.fn().mockResolvedValue(true),
+        getStatus: vi.fn().mockResolvedValue('running'),
+        getDownloadState: vi.fn().mockReturnValue({ status: 'downloading', progress: 50 }),
     } as unknown as ModuleService;
 }
 
@@ -107,6 +113,31 @@ describe('ModulePlatformService', () => {
         });
     });
 
+    describe('getReleaseDownloadOptions', () => {
+        it('returns null when app has no release source', async () => {
+            await expect(
+                service.getReleaseDownloadOptions(createApp({ dlType: 'archive' })),
+            ).resolves.toBeNull();
+            await expect(
+                service.getReleaseDownloadOptions(createApp({ repoUrl: '', dlType: 'release' })),
+            ).resolves.toBeNull();
+        });
+
+        it('loads release options for release downloads', async () => {
+            const result = await service.getReleaseDownloadOptions(
+                createApp({ dlType: 'release' }),
+            );
+
+            expect(moduleService.getReleaseDownloadOptions).toHaveBeenCalledWith(
+                'test-module',
+                'https://repo.com/module.zip',
+            );
+            expect(result).toEqual({
+                releases: [{ tag_name: 'v1.0.0', name: '1.0.0', assets: [] }],
+            });
+        });
+    });
+
     describe('delete', () => {
         it('should delete a module successfully', async () => {
             const app = createApp();
@@ -130,6 +161,16 @@ describe('ModulePlatformService', () => {
             expect(mocks.deleteEngine).toHaveBeenCalledWith('llamacpp');
             expect(mocks.invokeSafe).toHaveBeenCalledWith('delete-engine-promise');
             expect(moduleService.deleteModule).not.toHaveBeenCalled();
+        });
+
+        it('throws AI engine command errors', async () => {
+            mocks.deleteEngine.mockReturnValue('delete-engine-promise');
+            mocks.invokeSafe.mockResolvedValue({
+                status: 'error',
+                error: { message: 'engine busy' },
+            });
+
+            await expect(service.delete(createApp(), 'ai_image')).rejects.toThrow('engine busy');
         });
 
         it('should skip deleting externally managed AI engines', async () => {
@@ -201,6 +242,39 @@ describe('ModulePlatformService', () => {
             expect(aiBridge.stopProvider).toHaveBeenCalled();
             expect(moduleService.control).not.toHaveBeenCalled();
         });
+
+        it('should skip stopping externally managed local modules', async () => {
+            const app = createApp({
+                id: 'external',
+                type: 'local',
+                managedExternally: true,
+            });
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: undefined,
+                isRunning: false,
+            });
+
+            const result = await service.stop(app);
+
+            expect(result).toBe(true);
+            expect(moduleService.control).not.toHaveBeenCalled();
+        });
+
+        it('should stop AI text and image engine slots by category', async () => {
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: undefined,
+                isRunning: false,
+            });
+
+            await expect(service.stop(createApp({ id: 'llamacpp' }), 'ai_text')).resolves.toBe(
+                true,
+            );
+            await expect(service.stop(createApp({ id: 'sdcpp' }), 'ai_image')).resolves.toBe(true);
+
+            expect(aiBridge.stopEngineSlot).toHaveBeenNthCalledWith(1, 'text');
+            expect(aiBridge.stopEngineSlot).toHaveBeenNthCalledWith(2, 'image');
+            expect(moduleService.control).not.toHaveBeenCalled();
+        });
     });
 
     describe('cancelDownload', () => {
@@ -224,6 +298,59 @@ describe('ModulePlatformService', () => {
             const result = await service.resumeDownload('test-module');
             expect(result).toBe(true);
             expect(moduleService.resumeDownload).toHaveBeenCalledWith('test-module');
+        });
+    });
+
+    describe('status and download state', () => {
+        it('checks local installation through module service', async () => {
+            await expect(service.checkInstalled('llamacpp')).resolves.toBe(true);
+
+            expect(moduleService.checkInstalled).toHaveBeenCalledWith('llamacpp');
+        });
+
+        it('reports active API provider as running', async () => {
+            await expect(service.getStatus(createApp({ type: 'api' }))).resolves.toBe('running');
+        });
+
+        it('reports inactive API provider as stopped without backend calls', async () => {
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: 'other',
+                isRunning: true,
+            });
+
+            await expect(service.getStatus(createApp({ type: 'api' }))).resolves.toBe('stopped');
+
+            expect(moduleService.getStatus).not.toHaveBeenCalled();
+        });
+
+        it('uses app status for externally managed modules', async () => {
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: undefined,
+                isRunning: false,
+            });
+
+            await expect(
+                service.getStatus(createApp({ managedExternally: true, status: 'running' })),
+            ).resolves.toBe('running');
+            await expect(
+                service.getStatus(createApp({ managedExternally: true, status: 'stopped' })),
+            ).resolves.toBe('stopped');
+        });
+
+        it('delegates local module status and download state to module service', async () => {
+            (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
+                activeProviderId: undefined,
+                isRunning: false,
+            });
+
+            await expect(service.getStatus(createApp({ id: 'ollama' }))).resolves.toBe('running');
+            expect(service.getDownloadState('ollama')).toEqual({
+                status: 'downloading',
+                progress: 50,
+            });
+
+            expect(moduleService.getStatus).toHaveBeenCalledWith('ollama');
+            expect(moduleService.getDownloadState).toHaveBeenCalledWith('ollama');
         });
     });
 
