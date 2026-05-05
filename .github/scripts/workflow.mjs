@@ -168,11 +168,43 @@ function withPassthroughArgs(baseArgs) {
     return [...baseArgs, '--', ...passthroughArgs];
 }
 
+function withDirectPassthroughArgs(baseArgs) {
+    if (passthroughArgs.length === 0) {
+        return baseArgs;
+    }
+
+    return [...baseArgs, ...passthroughArgs];
+}
+
 function withEnvOverrides(overrides = {}) {
     return {
         ...toolEnv(),
         ...overrides,
     };
+}
+
+function ensureCargoLlvmCov() {
+    if (commandExists('cargo-llvm-cov', toolEnv())) {
+        ensureLlvmToolsPreview();
+        return;
+    }
+
+    log('cargo-llvm-cov not found; installing with cargo install --locked');
+    run('cargo', ['install', 'cargo-llvm-cov', '--locked']);
+    ensureLlvmToolsPreview();
+}
+
+function ensureLlvmToolsPreview() {
+    if (!commandExists('rustup', toolEnv())) {
+        return;
+    }
+
+    run('rustup', ['component', 'add', 'llvm-tools-preview']);
+}
+
+function runRustCoverage(args = []) {
+    ensureCargoLlvmCov();
+    run('cargo', ['llvm-cov', ...args], { cwd: tauriDir });
 }
 
 function checkCommand(label, command, args = ['--version'], options = {}) {
@@ -753,6 +785,9 @@ Tasks:
   format:check   Check frontend formatting
   test           Run frontend tests
   test:coverage  Run frontend tests with coverage
+  test:coverage:all  Run frontend and Rust coverage
+  rust:test:coverage  Run Rust tests with coverage summary
+  rust:test:coverage:lcov  Generate Rust LCOV report at src-tauri/lcov.info
   test:watch     Run frontend tests in watch mode
   typecheck      Run frontend type checks
   verify         Run the full local verification pipeline
@@ -847,6 +882,26 @@ Tasks:
     },
     'test:coverage'() {
         run('npm', ['--prefix', 'src', 'run', 'test:coverage']);
+    },
+    'test:coverage:all'() {
+        tasks['test:coverage']();
+        tasks['rust:test:coverage']();
+    },
+    'rust:test:coverage'() {
+        runRustCoverage(
+            withDirectPassthroughArgs(['--workspace', '--all-features', '--summary-only']),
+        );
+    },
+    'rust:test:coverage:lcov'() {
+        runRustCoverage(
+            withDirectPassthroughArgs([
+                '--workspace',
+                '--all-features',
+                '--lcov',
+                '--output-path',
+                'lcov.info',
+            ]),
+        );
     },
     'test:watch'() {
         run('npm', ['--prefix', 'src', 'run', 'test:watch']);
