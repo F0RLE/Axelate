@@ -1,6 +1,7 @@
 use crate::domain::system::config_repository::ConfigRepository;
 use crate::errors::AppError;
 use crate::models::config::{AiModel, ApiProvider, AppMeta, ModuleItem};
+use crate::models::custom_models::CustomModelConfig;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
@@ -69,6 +70,26 @@ impl FileConfigRepository {
 
         serde_json::from_str(&content)
             .map_err(|e| AppError::Config(format!("Failed to parse {filename}: {e}")))
+    }
+
+    fn load_custom_models_from_path(path: &Path) -> Result<CustomModelConfig, AppError> {
+        if !path.exists() {
+            return Ok(CustomModelConfig::default());
+        }
+
+        let content = std::fs::read_to_string(path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to read custom models config at {}: {error}",
+                path.display()
+            ))
+        })?;
+
+        serde_json::from_str(&content).map_err(|error| {
+            AppError::Serialization(format!(
+                "Failed to parse custom models config at {}: {error}",
+                path.display()
+            ))
+        })
     }
 
     fn parse_api_providers(content: &str) -> Result<Vec<ApiProvider>, AppError> {
@@ -231,18 +252,9 @@ impl ConfigRepository for FileConfigRepository {
         )
     }
 
-    fn load_custom_models(
-        &self,
-    ) -> Result<crate::models::custom_models::CustomModelConfig, AppError> {
+    fn load_custom_models(&self) -> Result<CustomModelConfig, AppError> {
         let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
-        if custom_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&custom_path) {
-                if let Ok(config) = serde_json::from_str(&content) {
-                    return Ok(config);
-                }
-            }
-        }
-        Ok(crate::models::custom_models::CustomModelConfig::default())
+        Self::load_custom_models_from_path(&custom_path)
     }
 }
 
@@ -251,6 +263,7 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::FileConfigRepository;
+    use crate::errors::AppError;
     use std::path::PathBuf;
 
     #[test]
@@ -385,5 +398,31 @@ mod tests {
                 capabilities.iter().any(|capability| capability == "image")
             })
         }));
+    }
+
+    #[test]
+    fn custom_models_loader_defaults_only_when_file_is_missing() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let missing_path = temp_dir.path().join("custom_models.json");
+
+        let config = FileConfigRepository::load_custom_models_from_path(&missing_path)
+            .expect("missing custom models should default");
+
+        assert!(config.models.is_empty());
+    }
+
+    #[test]
+    fn custom_models_loader_reports_invalid_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let path = temp_dir.path().join("custom_models.json");
+        std::fs::write(&path, "{broken").expect("broken custom models fixture");
+
+        let error = FileConfigRepository::load_custom_models_from_path(&path)
+            .expect_err("invalid custom models should not default");
+
+        assert!(matches!(
+            error,
+            AppError::Serialization(message) if message.contains("custom_models.json")
+        ));
     }
 }

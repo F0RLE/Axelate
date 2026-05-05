@@ -78,6 +78,50 @@ describe('AISettingsKeyController', () => {
         expect(button.innerHTML).toBe('Check');
     });
 
+    it('should not mask typed keys as stored when settings service disappears before save', async () => {
+        const input = document.createElement('input');
+        const button = document.createElement('button');
+        button.innerHTML = 'Check';
+        document.body.append(input, button);
+        const validateOnlyService = {
+            ...settingsService,
+            validateApiKey: vi.fn().mockResolvedValue(true),
+            saveSecureKey: vi.fn(),
+        };
+        const getSettingsService = vi
+            .fn()
+            .mockReturnValueOnce(validateOnlyService)
+            .mockReturnValue(null);
+        const controllerWithDisappearingSettings = new AISettingsKeyController({
+            getSettingsService,
+            getTranslator,
+            scheduleButtonReset,
+            showToast,
+            icons: {
+                visible: '<visible>',
+                hidden: '<hidden>',
+                check: '<check>',
+                x: '<x>',
+                spinner: '<spinner>',
+            },
+            tracer,
+        });
+
+        input.value = 'typed-key';
+        input.dataset['keyDirty'] = 'true';
+
+        await controllerWithDisappearingSettings.checkKey(input, button, 'openrouter');
+
+        expect(validateOnlyService.validateApiKey).toHaveBeenCalledWith('openrouter', 'typed-key');
+        expect(validateOnlyService.saveSecureKey).not.toHaveBeenCalled();
+        expect(input.dataset['storedMasked']).toBeUndefined();
+        expect(input.value).toBe('typed-key');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_check_error:Key check error',
+            'error',
+        );
+    });
+
     it('should remove stored keys when a dirty key input is cleared', async () => {
         const input = document.createElement('input');
         const button = document.createElement('button');
