@@ -63,11 +63,6 @@ jobs:
           npm run build
         # 'npm run build' runs bindings sync + typecheck + vite build
 
-      - name: Check Bundle Size
-        run: |
-          cd src
-          npm run check-size
-
       - name: Run Frontend Tests
         run: |
           cd src

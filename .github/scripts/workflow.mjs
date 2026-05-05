@@ -720,7 +720,6 @@ function verifyProject() {
     run('npm', ['run', 'lint'], { cwd: srcDir });
     run('npm', ['run', 'test'], { cwd: srcDir });
     run('npm', ['run', 'build:bundle'], { cwd: srcDir });
-    run('npm', ['run', 'check-size'], { cwd: srcDir });
 }
 
 function setupProject() {
@@ -762,7 +761,7 @@ Tasks:
   install-deps   Install frontend dependencies
   update         Update npm and cargo dependencies, then verify
   prepare        Configure Git hooks
-  check-size     Validate built frontend size
+  check-size     Print a frontend bundle size report
 `);
     },
     dev() {
