@@ -1,6 +1,36 @@
 use crate::domain::modules::downloader;
+use crate::domain::modules::downloader::DownloadRequest;
 use crate::errors::AppError;
+use std::path::Path;
 use tauri::AppHandle;
+
+fn resume_request_for_module(
+    module_id: &str,
+    request: Option<DownloadRequest>,
+) -> Result<DownloadRequest, AppError> {
+    request
+        .ok_or_else(|| AppError::NotFound(format!("No paused download metadata for {module_id}")))
+}
+
+fn list_regular_file_names(path: &Path) -> Result<Vec<String>, AppError> {
+    if !path.exists() {
+        return Err(AppError::NotFound(
+            "Module directory does not exist".to_string(),
+        ));
+    }
+
+    let entries = std::fs::read_dir(path)?;
+    let mut files = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            files.push(entry.file_name().to_string_lossy().to_string());
+        }
+    }
+    files.sort();
+
+    Ok(files)
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -44,9 +74,7 @@ pub async fn resume_download(
     downloader: tauri::State<'_, downloader::DownloaderService>,
     module_id: String,
 ) -> Result<String, AppError> {
-    let request = downloader.get_request(&module_id).ok_or_else(|| {
-        AppError::NotFound(format!("No paused download metadata for {module_id}"))
-    })?;
+    let request = resume_request_for_module(&module_id, downloader.get_request(&module_id))?;
 
     downloader::download_module(
         app,
@@ -92,24 +120,7 @@ pub async fn list_module_files(module_id: &str) -> Result<Vec<String>, AppError>
     downloader::validate_module_id(module_id)?;
 
     let path = downloader::get_module_path(module_id);
-    if !path.exists() {
-        return Err(AppError::NotFound(
-            "Module directory does not exist".to_string(),
-        ));
-    }
-
-    let entries = std::fs::read_dir(path)?;
-
-    let mut files = Vec::new();
-    for entry in entries.flatten() {
-        if let Ok(file_type) = entry.file_type()
-            && file_type.is_file()
-        {
-            files.push(entry.file_name().to_string_lossy().to_string());
-        }
-    }
-
-    Ok(files)
+    list_regular_file_names(&path)
 }
 
 #[tauri::command]
@@ -144,4 +155,68 @@ pub fn pause_download(
     module_id: String,
 ) -> bool {
     downloader.pause(&module_id)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use crate::domain::modules::github_releases::{ReleaseComputeTarget, ReleaseDownloadSelection};
+
+    fn request() -> DownloadRequest {
+        DownloadRequest {
+            repo_url: "https://github.com/example/module".to_string(),
+            expected_hash: Some("sha256".to_string()),
+            dl_type: Some("release".to_string()),
+            release_selection: Some(ReleaseDownloadSelection {
+                tag_name: Some("v1.0.0".to_string()),
+                compute_target: ReleaseComputeTarget::Cpu,
+            }),
+        }
+    }
+
+    #[test]
+    fn resume_request_for_module_returns_stored_request() {
+        let request = request();
+        let resolved = resume_request_for_module("llamacpp", Some(request.clone())).unwrap();
+
+        assert_eq!(resolved.repo_url, request.repo_url);
+        assert_eq!(resolved.expected_hash, request.expected_hash);
+        assert_eq!(resolved.dl_type, request.dl_type);
+        assert_eq!(
+            resolved
+                .release_selection
+                .map(|selection| selection.tag_name),
+            Some(Some("v1.0.0".to_string()))
+        );
+    }
+
+    #[test]
+    fn resume_request_for_module_reports_missing_metadata() {
+        let error = resume_request_for_module("llamacpp", None).unwrap_err();
+
+        assert!(matches!(error, AppError::NotFound(_)));
+        assert!(error.to_string().contains("llamacpp"));
+    }
+
+    #[test]
+    fn list_regular_file_names_returns_sorted_files_only() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("zeta.toml"), "z").unwrap();
+        std::fs::write(temp.path().join("alpha.toml"), "a").unwrap();
+        std::fs::create_dir(temp.path().join("nested")).unwrap();
+
+        let files = list_regular_file_names(temp.path()).unwrap();
+
+        assert_eq!(files, vec!["alpha.toml", "zeta.toml"]);
+    }
+
+    #[test]
+    fn list_regular_file_names_reports_missing_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let error = list_regular_file_names(&temp.path().join("missing")).unwrap_err();
+
+        assert!(matches!(error, AppError::NotFound(_)));
+    }
 }
