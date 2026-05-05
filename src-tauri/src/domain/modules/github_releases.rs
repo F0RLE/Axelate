@@ -510,20 +510,33 @@ const fn hardware_for_target(
 }
 
 fn parse_repo(repo_url: &str) -> Result<RepoRef, AppError> {
-    let trimmed = repo_url.trim_end_matches(".git").trim_end_matches('/');
-    let parts: Vec<&str> = trimmed.split('/').collect();
-
-    if parts.len() < 2 {
+    let trimmed = repo_url
+        .trim()
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('/');
+    if trimmed.contains("://")
+        && !trimmed.starts_with("https://github.com/")
+        && !trimmed.starts_with("http://github.com/")
+    {
         return Err(invalid_repo_url(repo_url));
     }
+    let path = trimmed
+        .strip_prefix("https://github.com/")
+        .or_else(|| trimmed.strip_prefix("http://github.com/"))
+        .or_else(|| trimmed.strip_prefix("git@github.com:"))
+        .unwrap_or(trimmed);
+    let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
 
-    let repo = parts
-        .last()
+    let owner = parts
+        .first()
         .ok_or_else(|| invalid_repo_url(repo_url))?
         .to_string();
-    let owner = parts
-        .get(parts.len().saturating_sub(2))
+    let repo = parts
+        .get(1)
         .ok_or_else(|| invalid_repo_url(repo_url))?
+        .trim_end_matches(".git")
         .to_string();
 
     if owner.is_empty() || repo.is_empty() {
@@ -543,6 +556,30 @@ mod tests {
     use super::*;
     use crate::domain::modules::github_release_selection::{base_main_score, cpu_feature_score};
     use crate::domain::system::hardware_probe::{AcceleratorClass, CpuInstructionTier};
+
+    #[test]
+    fn parse_repo_uses_owner_and_repo_from_github_urls_with_extra_path() {
+        let parsed = parse_repo("https://github.com/ggml-org/llama.cpp/releases/latest")
+            .expect("valid GitHub URL should parse");
+
+        assert_eq!(parsed.owner, "ggml-org");
+        assert_eq!(parsed.repo, "llama.cpp");
+    }
+
+    #[test]
+    fn parse_repo_supports_git_suffix_and_shorthand() {
+        let parsed = parse_repo("ggml-org/llama.cpp.git").expect("valid shorthand should parse");
+
+        assert_eq!(parsed.owner, "ggml-org");
+        assert_eq!(parsed.repo, "llama.cpp");
+    }
+
+    #[test]
+    fn parse_repo_rejects_non_github_urls() {
+        let parsed = parse_repo("https://example.com/ggml-org/llama.cpp");
+
+        assert!(parsed.is_err());
+    }
 
     #[test]
     fn skips_incomplete_sdcpp_release_and_accepts_complete_previous_bundle() {
