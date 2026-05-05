@@ -3,6 +3,14 @@ import { resolveCatalogCategory } from '../../utils/moduleCategoryPolicy';
 import type { ModulePlatformService } from '../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { openDownloadSelectionDialog } from './DownloadSelectionDialog';
+import { openIntegrationUrlDialog } from './IntegrationImportDialog';
+import type { IntegrationImportAction } from './ModalManagerSupport';
+import { open } from '@tauri-apps/plugin-dialog';
+import { downloadDir } from '@tauri-apps/api/path';
+
+const CUSTOM_INTEGRATION_GUIDE_URL =
+    'https://github.com/F0RLE/Axelate/blob/nightly/docs/en/CUSTOM_INTEGRATIONS.md';
+const INTEGRATION_IMPORT_LAST_DIR_KEY = 'axelate.integrationImport.lastDirectory';
 
 type ModalBridge = {
     isAppSelectionOpen(): boolean;
@@ -24,6 +32,8 @@ type AppUiModuleFlowDeps = {
     markSlotCardAsInstalled: (card: HTMLElement, app: IApp) => void;
     showToast: (message: string, type?: string) => void;
     translate: (key: string, fallback: string) => string;
+    reloadCatalog: () => Promise<void>;
+    openExternalUrl: (url: string) => Promise<void>;
 };
 
 export class AppUiModuleFlow {
@@ -33,6 +43,7 @@ export class AppUiModuleFlow {
         this._deps.tracer.info('[AppUI] Remove module clicked:', app.id);
         try {
             await this._deps.platformService.delete(app, category);
+            await this._deps.reloadCatalog();
             app.installed = false;
 
             const wasSelected = this._deps.getSelectedAppId(category) === app.id;
@@ -195,6 +206,107 @@ export class AppUiModuleFlow {
         );
     }
 
+    public async handleIntegrationImport(action: IntegrationImportAction): Promise<void> {
+        if (action === 'guide') {
+            await this._deps.openExternalUrl(CUSTOM_INTEGRATION_GUIDE_URL);
+            return;
+        }
+
+        try {
+            const moduleId = await this._runIntegrationImportAction(action);
+            if (moduleId === null) {
+                return;
+            }
+
+            await this._deps.reloadCatalog();
+            if (this._deps.modalManager.isViewingCategory('services')) {
+                this._deps.modalManager.refreshCurrentSelection(
+                    this._deps.getCatalogApps('services'),
+                    this._deps.getSelectedAppId('services'),
+                );
+            }
+
+            this._deps.showToast(
+                this._deps.translate(
+                    'ui.launcher.integrations.import.success',
+                    'Integration added',
+                ),
+                'success',
+            );
+        } catch (error) {
+            this._deps.tracer.error('[AppUI] Integration import error:', error);
+            this._deps.showToast(
+                this._getLocalizedError(
+                    error,
+                    'ui.launcher.integrations.import.error',
+                    'Integration import failed',
+                ),
+                'error',
+            );
+        }
+    }
+
+    private async _runIntegrationImportAction(
+        action: Exclude<IntegrationImportAction, 'guide'>,
+    ): Promise<string | null> {
+        if (action === 'local') {
+            const path = await this._openLocalIntegrationSource();
+            return path === null
+                ? null
+                : await this._deps.platformService.importIntegrationPath(path);
+        }
+
+        const url = await this._openIntegrationUrlSource();
+        return url === null ? null : await this._deps.platformService.importIntegrationUrl(url);
+    }
+
+    private async _openIntegrationUrlSource(): Promise<string | null> {
+        const shouldRestoreSelection = this._deps.modalManager.isAppSelectionOpen();
+        const suspendedSelection = shouldRestoreSelection
+            ? this._deps.modalManager.suspendAppSelection()
+            : false;
+
+        try {
+            return await openIntegrationUrlDialog({ translate: this._deps.translate });
+        } finally {
+            if (suspendedSelection) {
+                this._deps.modalManager.resumeAppSelection();
+            }
+        }
+    }
+
+    private async _openLocalIntegrationSource(): Promise<string | null> {
+        const selectedPath = normalizeDialogPath(
+            await open({
+                directory: true,
+                defaultPath: await this._getIntegrationImportDefaultPath(),
+                multiple: false,
+                recursive: true,
+                title: this._deps.translate(
+                    'ui.launcher.integrations.import.folder_title',
+                    'Choose integration folder',
+                ),
+            }),
+        );
+        if (selectedPath !== null) {
+            saveIntegrationImportLastDirectory(selectedPath);
+        }
+        return selectedPath;
+    }
+
+    private async _getIntegrationImportDefaultPath(): Promise<string | undefined> {
+        const savedPath = loadIntegrationImportLastDirectory();
+        if (savedPath !== null) {
+            return savedPath;
+        }
+
+        try {
+            return await downloadDir();
+        } catch {
+            return undefined;
+        }
+    }
+
     private _getLocalizedError(err: unknown, fallbackKey: string, fallbackText: string): string {
         const message = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
         const msg = message.startsWith('ui.') ? message : fallbackKey;
@@ -222,5 +334,32 @@ export class AppUiModuleFlow {
             }
         }
         return null;
+    }
+}
+
+function normalizeDialogPath(value: string | string[] | null): string | null {
+    if (typeof value === 'string') {
+        return value;
+    }
+    if (Array.isArray(value)) {
+        return value[0] ?? null;
+    }
+    return null;
+}
+
+function loadIntegrationImportLastDirectory(): string | null {
+    try {
+        const value = localStorage.getItem(INTEGRATION_IMPORT_LAST_DIR_KEY);
+        return value !== null && value.trim().length > 0 ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+function saveIntegrationImportLastDirectory(path: string): void {
+    try {
+        localStorage.setItem(INTEGRATION_IMPORT_LAST_DIR_KEY, path);
+    } catch {
+        // Dialog still works if storage is unavailable.
     }
 }

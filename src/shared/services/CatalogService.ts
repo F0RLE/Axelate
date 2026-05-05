@@ -14,6 +14,8 @@ type CatalogLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
+    private _integrationWatcherUnlisten: (() => void) | null = null;
+    private _integrationWatcherBinding = false;
 
     constructor(
         private readonly _bridge: IBridge,
@@ -24,6 +26,7 @@ export class CatalogService {
      * Asynchronously loads the application catalog from the Tauri backend.
      */
     public async loadCatalog(): Promise<void> {
+        this._bindIntegrationWatcher();
         const snapshot = await this._loadSnapshot();
 
         try {
@@ -46,6 +49,37 @@ export class CatalogService {
         } catch (e) {
             this._tracer.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
         }
+    }
+
+    public destroy(): void {
+        this._integrationWatcherUnlisten?.();
+        this._integrationWatcherUnlisten = null;
+        this._integrationWatcherBinding = false;
+    }
+
+    private _bindIntegrationWatcher(): void {
+        if (
+            this._integrationWatcherBinding ||
+            this._integrationWatcherUnlisten !== null ||
+            !this._bridge.isTauri()
+        ) {
+            return;
+        }
+
+        this._integrationWatcherBinding = true;
+        void this._bridge
+            .listen('integrations_changed', () => {
+                void this.loadCatalog();
+            })
+            .then((unlisten) => {
+                this._integrationWatcherUnlisten = unlisten;
+            })
+            .catch((error: unknown) => {
+                this._integrationWatcherBinding = false;
+                this._tracer.warn(
+                    `[CatalogService] Failed to subscribe to integrations watcher: ${String(error)}`,
+                );
+            });
     }
 
     private async _loadSnapshot(): Promise<CatalogLoadSnapshot> {

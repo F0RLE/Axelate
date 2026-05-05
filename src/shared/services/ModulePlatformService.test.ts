@@ -34,6 +34,10 @@ function createMockModuleService(): ModuleService {
         checkInstalled: vi.fn().mockResolvedValue(true),
         getStatus: vi.fn().mockResolvedValue('running'),
         getDownloadState: vi.fn().mockReturnValue({ status: 'downloading', progress: 50 }),
+        importIntegrationFolder: vi.fn().mockResolvedValue('folder-module'),
+        importIntegrationArchive: vi.fn().mockResolvedValue('archive-module'),
+        importIntegrationPath: vi.fn().mockResolvedValue('path-module'),
+        importIntegrationUrl: vi.fn().mockResolvedValue('url-module'),
     } as unknown as ModuleService;
 }
 
@@ -184,6 +188,48 @@ describe('ModulePlatformService', () => {
 
             expect(mocks.deleteEngine).not.toHaveBeenCalled();
             expect(moduleService.deleteModule).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('integration imports', () => {
+        it('delegates folder imports to module service', async () => {
+            await expect(service.importIntegrationFolder('C:\\Integrations\\Parser')).resolves.toBe(
+                'folder-module',
+            );
+
+            expect(moduleService.importIntegrationFolder).toHaveBeenCalledWith(
+                'C:\\Integrations\\Parser',
+            );
+        });
+
+        it('delegates archive imports to module service', async () => {
+            await expect(
+                service.importIntegrationArchive('C:\\Downloads\\Parser.zip'),
+            ).resolves.toBe('archive-module');
+
+            expect(moduleService.importIntegrationArchive).toHaveBeenCalledWith(
+                'C:\\Downloads\\Parser.zip',
+            );
+        });
+
+        it('delegates auto-detected path imports to module service', async () => {
+            await expect(service.importIntegrationPath('C:\\Downloads\\Parser')).resolves.toBe(
+                'path-module',
+            );
+
+            expect(moduleService.importIntegrationPath).toHaveBeenCalledWith(
+                'C:\\Downloads\\Parser',
+            );
+        });
+
+        it('delegates URL imports to module service', async () => {
+            await expect(
+                service.importIntegrationUrl('https://github.com/F0RLE/Axelate-telegram-parser'),
+            ).resolves.toBe('url-module');
+
+            expect(moduleService.importIntegrationUrl).toHaveBeenCalledWith(
+                'https://github.com/F0RLE/Axelate-telegram-parser',
+            );
         });
     });
 

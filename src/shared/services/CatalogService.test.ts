@@ -338,6 +338,62 @@ describe('CatalogService', () => {
                 true,
             );
         });
+
+        it('should reload catalog when backend reports integration folder changes', async () => {
+            const config = createMockAppConfig({
+                catalog: {
+                    ai: [],
+                    services: [{ id: 'catalog-anchor', name: 'Catalog Anchor', type: 'local' }],
+                    stars: [],
+                },
+            });
+            const firstModules = [
+                {
+                    id: 'parser',
+                    name: 'Parser',
+                    description: 'Parser integration',
+                    version: '1.0.0',
+                    icon: '🤖',
+                } as unknown as IModule,
+            ];
+            const secondModules: IModule[] = [];
+            const listener = { integrationsChanged: null as null | (() => void) };
+            let moduleListCalls = 0;
+
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.listen.mockImplementation((event: string, callback: () => void) => {
+                if (event === 'integrations_changed') {
+                    listener.integrationsChanged = callback;
+                }
+                return Promise.resolve(() => {});
+            });
+            mockBridge.invoke.mockImplementation((cmd: string) => {
+                if (cmd === 'get_config') return Promise.resolve(config);
+                if (cmd === 'get_engine_definitions') return Promise.resolve([]);
+                if (cmd === 'get_modules') {
+                    moduleListCalls += 1;
+                    return Promise.resolve(moduleListCalls === 1 ? firstModules : secondModules);
+                }
+                return Promise.resolve(undefined);
+            });
+
+            await service.loadCatalog();
+            await Promise.resolve();
+            expect(service.getAppById('parser')).toBeDefined();
+
+            if (listener.integrationsChanged === null) {
+                throw new Error('integrations_changed listener was not registered');
+            }
+            listener.integrationsChanged();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+
+            expect(moduleListCalls).toBe(2);
+            expect(service.getAppById('parser')).toBeUndefined();
+            expect(mockBridge.listen).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('_initGlobalExposures DEV branch (L29)', () => {

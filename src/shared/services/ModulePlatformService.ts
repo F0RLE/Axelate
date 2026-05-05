@@ -63,6 +63,26 @@ export class ModulePlatformService {
         return await this._moduleService.getReleaseDownloadOptions(app.id, app.repoUrl);
     }
 
+    public async importIntegrationFolder(path: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration folder: ${path}`);
+        return await this._moduleService.importIntegrationFolder(path);
+    }
+
+    public async importIntegrationArchive(path: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration archive: ${path}`);
+        return await this._moduleService.importIntegrationArchive(path);
+    }
+
+    public async importIntegrationPath(path: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration path: ${path}`);
+        return await this._moduleService.importIntegrationPath(path);
+    }
+
+    public async importIntegrationUrl(sourceUrl: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration URL: ${sourceUrl}`);
+        return await this._moduleService.importIntegrationUrl(sourceUrl);
+    }
+
     /**
      * Deletes a module.
      * @param app The module to delete.

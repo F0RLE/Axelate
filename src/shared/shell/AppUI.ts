@@ -14,6 +14,7 @@ import { AppUiLifecycleBindings } from './ui/AppUiLifecycleBindings';
 import { AppUiModuleFlow } from './ui/AppUiModuleFlow';
 import { AppUiModuleLifecycle } from './ui/AppUiModuleLifecycle';
 import { AppUiSelectionFlow } from './ui/AppUiSelectionFlow';
+import { closeIntegrationImportDialogs } from './ui/IntegrationImportDialog';
 import { ModalManager } from './ui/ModalManager';
 import { ModuleCardRenderer } from './ui/ModuleCardRenderer';
 import { SkeletonManager } from './ui/SkeletonManager';
@@ -32,6 +33,8 @@ type AppUIDeps = {
     launchApp: (category: string, app: IApp) => Promise<void>;
     openModuleSettings: (app: IApp) => void;
     stopAiProvider: () => void;
+    reloadCatalog: () => Promise<void>;
+    openExternalUrl: (url: string) => Promise<void>;
 };
 
 /**
@@ -123,6 +126,9 @@ export class AppUI {
             async (app) => {
                 await this._platformService.resumeDownload(app.id);
             },
+            (action) => {
+                void this._moduleFlow.handleIntegrationImport(action);
+            },
         );
         this._moduleFlow = new AppUiModuleFlow({
             platformService: this._platformService,
@@ -135,6 +141,12 @@ export class AppUI {
                 this._dashboardSupport.markSlotCardAsInstalled(card, app),
             showToast: (message, type = 'info') => this.showToast(message, type),
             translate: this._translate,
+            reloadCatalog: async () => {
+                await this._deps.reloadCatalog();
+            },
+            openExternalUrl: async (url) => {
+                await this._deps.openExternalUrl(url);
+            },
         });
         this._cardActionFlow = new AppUiCardActionFlow({
             platformService: this._platformService,
@@ -192,11 +204,16 @@ export class AppUI {
         });
         this._lifecycleBindings = new AppUiLifecycleBindings({
             eventBus: this._eventBus,
+            onCatalogLoaded: () => {
+                this._reconcileSelectionsWithCatalog();
+                this._refreshOpenServicesSelection();
+            },
             onLanguageChanged: () => {
                 this._modalManager.refreshCurrentSelection();
             },
             onPageChange: ({ pageId }) => {
                 if (pageId !== 'modules' && pageId !== 'page-modules') {
+                    closeIntegrationImportDialogs();
                     this.closeAppSelection();
                 }
             },
@@ -420,6 +437,51 @@ export class AppUI {
 
     private _resolveModalCatalogApps(category: string): IApp[] {
         return this._getCatalogApps(this._dashboardSupport.resolveCatalogCategory(category));
+    }
+
+    private _refreshOpenServicesSelection(): void {
+        if (!this._modalManager.isViewingCategory('services')) {
+            return;
+        }
+
+        this._modalManager.refreshCurrentSelection(
+            this._getCatalogApps('services'),
+            this._selectionState.get('services')?.id ?? null,
+        );
+    }
+
+    private _reconcileSelectionsWithCatalog(): void {
+        this._clearMissingSelection(CategoryKey.SERVICES);
+    }
+
+    private _clearMissingSelection(category: string): void {
+        const selectedApp = this._selectionState.get(category);
+        if (selectedApp === undefined) {
+            return;
+        }
+
+        const catalogCategory = this._dashboardSupport.resolveCatalogCategory(category);
+        const stillExists = this._getCatalogApps(catalogCategory).some((app) => {
+            return app.id === selectedApp.id;
+        });
+        if (stillExists) {
+            return;
+        }
+
+        this._deps.tracer.warn(
+            `[AppUI] Selected module disappeared from catalog, clearing ${category}: ${selectedApp.id}`,
+        );
+        const card = this._dashboardSupport.getDashboardCard(category);
+        this._dashboardSupport.cancelPendingSwitch();
+        this._moduleLifecycle.bumpLaunchSelectionVersion(category);
+        this._selectionState.delete(category);
+        if (card instanceof HTMLElement) {
+            this._dashboardSupport.resetCardToEmpty(card);
+        }
+        this._deps.uiState.removeSelectedModule(category);
+        if (this._modalManager.isViewingCategory(catalogCategory)) {
+            this._modalManager.updateSelection(null);
+        }
     }
 
     public getPreferredAiCategory(): 'ai_text' | 'ai_image' {

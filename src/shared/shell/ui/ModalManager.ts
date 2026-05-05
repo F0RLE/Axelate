@@ -8,6 +8,7 @@ import { ModalFilterTransitionController } from './ModalFilterTransitionControll
 import {
     cancelModalDownload,
     createModalDownloadProgressHandler,
+    type IntegrationImportAction,
     populateModalAppList,
     transitionSelectionButton,
     updateModalSidebarWidth,
@@ -82,6 +83,7 @@ export class ModalManager {
     private readonly _onCancelDownloadRequest: (app: IApp) => Promise<void>;
     private readonly _onPauseDownloadRequest: (app: IApp) => Promise<void>;
     private readonly _onResumeDownloadRequest: (app: IApp) => Promise<void>;
+    private readonly _onIntegrationImport: (action: IntegrationImportAction) => void;
     private readonly _translate: (key: string, fallback: string) => string;
     private readonly _tracer: LoggerService;
 
@@ -100,6 +102,7 @@ export class ModalManager {
         private readonly _navigation: NavigationService,
         onPauseDownloadRequest?: (app: IApp) => Promise<void>,
         onResumeDownloadRequest?: (app: IApp) => Promise<void>,
+        onIntegrationImport?: (action: IntegrationImportAction) => void,
     ) {
         this._cardRenderer = cardRenderer;
         this._onAppInteraction = onAppInteraction;
@@ -108,6 +111,7 @@ export class ModalManager {
         this._onCancelDownloadRequest = onCancelDownloadRequest;
         this._onPauseDownloadRequest = onPauseDownloadRequest ?? (() => Promise.resolve());
         this._onResumeDownloadRequest = onResumeDownloadRequest ?? (() => Promise.resolve());
+        this._onIntegrationImport = onIntegrationImport ?? (() => {});
         this._translate = translate;
         this._tracer = tracer;
 
@@ -269,7 +273,7 @@ export class ModalManager {
             this._currentSelectedAppId = selectedAppId;
         }
 
-        if (this._currentCategory === null || this._currentApps.length === 0) {
+        if (this._currentCategory === null) {
             return;
         }
 
@@ -367,6 +371,9 @@ export class ModalManager {
             cardRenderer: this._cardRenderer,
             onAppInteraction: this._onAppInteraction,
             onDownload: (app, action) => this._handleDownload(app, action),
+            onIntegrationImport: (action) => {
+                this._onIntegrationImport(action);
+            },
             translate: this._translate,
         });
     }

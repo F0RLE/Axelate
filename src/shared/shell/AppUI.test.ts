@@ -6,6 +6,7 @@ import type { NavigationService } from '@/infrastructure/navigation/NavigationSe
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '../types/coreTypes';
 import { CUSTOM_IMAGE_PROVIDER_ID, CUSTOM_TEXT_PROVIDER_ID } from '../utils/customProviderSupport';
+import { openIntegrationUrlDialog } from './ui/IntegrationImportDialog';
 
 describe('AppUI lifecycle', () => {
     let appUI: AppUI | null = null;
@@ -17,6 +18,7 @@ describe('AppUI lifecycle', () => {
     let launchAppMock: ReturnType<typeof vi.fn>;
     let openModuleSettingsMock: ReturnType<typeof vi.fn>;
     let stopAiProviderMock: ReturnType<typeof vi.fn>;
+    let reloadCatalogMock: ReturnType<typeof vi.fn<() => Promise<void>>>;
     let getCatalogCategoryMock: ReturnType<typeof vi.fn>;
     let tracerMock: LoggerService;
     let platformServiceMock: {
@@ -41,6 +43,7 @@ describe('AppUI lifecycle', () => {
         launchAppMock = vi.fn().mockResolvedValue(undefined);
         openModuleSettingsMock = vi.fn();
         stopAiProviderMock = vi.fn();
+        reloadCatalogMock = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
         getCatalogCategoryMock = vi.fn().mockReturnValue([]);
         tracerMock = {
             info: vi.fn(),
@@ -114,6 +117,10 @@ describe('AppUI lifecycle', () => {
                 stopAiProvider: () => {
                     (stopAiProviderMock as () => void)();
                 },
+                reloadCatalog: async () => {
+                    await reloadCatalogMock();
+                },
+                openExternalUrl: vi.fn().mockResolvedValue(undefined),
             },
         );
     }
@@ -174,6 +181,20 @@ describe('AppUI lifecycle', () => {
         globalThis.dispatchEvent(new Event('language-changed'));
 
         expect(refreshSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should close transient integration dialogs on page change', async () => {
+        appUI = createAppUI();
+        const result = openIntegrationUrlDialog({
+            translate: (_key, fallback) => fallback,
+        });
+
+        expect(document.querySelector('.integration-import-dialog-view')).not.toBeNull();
+
+        testEventBus.emit('page:change', { pageId: 'settings' });
+
+        await expect(result).resolves.toBeNull();
+        expect(document.querySelector('.integration-import-dialog-view')).toBeNull();
     });
 
     it('should cancel pending AI card wheel switch on destroy', () => {
@@ -794,6 +815,52 @@ describe('AppUI lifecycle', () => {
         );
 
         expect(refreshSpy).toHaveBeenCalledWith(refreshedApps, null);
+    });
+
+    it('should refresh an open integrations modal after catalog reload events', () => {
+        appUI = createAppUI();
+        const refreshedApps: IApp[] = [];
+        getCatalogCategoryMock.mockReturnValue(refreshedApps);
+
+        const privateAppUI = appUI as unknown as {
+            _modalManager: {
+                isViewingCategory: (category: string) => boolean;
+                refreshCurrentSelection: (apps?: IApp[], selectedId?: string | null) => void;
+            };
+        };
+        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(true);
+        const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
+
+        globalThis.dispatchEvent(new Event('catalog-loaded'));
+
+        expect(refreshSpy).toHaveBeenCalledWith(refreshedApps, null);
+    });
+
+    it('should clear selected integration without stopping it when it disappears from catalog', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="services-module-card" class="selected">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+        const missingApp = {
+            id: 'axelate-telegram-parser',
+            name: 'Parser',
+            installed: true,
+            type: 'local',
+        } as IApp;
+        appUI.updateModuleCard('services', missingApp);
+        getCatalogCategoryMock.mockReturnValue([]);
+
+        globalThis.dispatchEvent(new Event('catalog-loaded'));
+
+        expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('services');
+        expect(platformServiceMock.stop).not.toHaveBeenCalledWith(missingApp, 'services');
+        expect(document.getElementById('services-module-card')?.classList.contains('empty')).toBe(
+            true,
+        );
     });
 
     it('should resolve app by id from injected catalog resolver', () => {
