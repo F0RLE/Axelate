@@ -34,7 +34,7 @@ describe('ModalSelectionPolicy', () => {
         expect(policy.getButtonState(card, false)).toEqual({
             className: 'modal-btn modal-btn-primary',
             key: 'ui.launcher.modules.modal.btn_select',
-            defaultLabel: 'Select',
+            defaultLabel: 'Launch',
         });
 
         card.classList.add('engine-starting');
