@@ -105,7 +105,9 @@ function removePath(targetPath) {
             }
 
             const delayMs = attempt * 250;
-            log(`retry remove ${path.relative(repoRoot, targetPath) || '.'} in ${String(delayMs)}ms`);
+            log(
+                `retry remove ${path.relative(repoRoot, targetPath) || '.'} in ${String(delayMs)}ms`,
+            );
             sleep(delayMs);
         }
     }
@@ -185,21 +187,21 @@ function withEnvOverrides(overrides = {}) {
 
 function ensureCargoLlvmCov() {
     if (commandExists('cargo-llvm-cov', toolEnv())) {
-        ensureLlvmToolsPreview();
+        ensureLlvmTools();
         return;
     }
 
     log('cargo-llvm-cov not found; installing with cargo install --locked');
     run('cargo', ['install', 'cargo-llvm-cov', '--locked']);
-    ensureLlvmToolsPreview();
+    ensureLlvmTools();
 }
 
-function ensureLlvmToolsPreview() {
+function ensureLlvmTools() {
     if (!commandExists('rustup', toolEnv())) {
         return;
     }
 
-    run('rustup', ['component', 'add', 'llvm-tools-preview']);
+    run('rustup', ['component', 'add', 'llvm-tools']);
 }
 
 function runRustCoverage(args = []) {
@@ -443,13 +445,7 @@ function runDoctor() {
 
     if (isWindows) {
         results.push(checkWindowsWebView2Runtime(env));
-        results.push(
-            checkAvailableCommand(
-                'MSVC compiler',
-                'cl',
-                env,
-            ),
-        );
+        results.push(checkAvailableCommand('MSVC compiler', 'cl', env));
         results.push(checkAvailableCommand('Windows SDK rc.exe', 'rc', env));
     }
 
@@ -576,7 +572,10 @@ function verifyReleaseHardening() {
     const targets = Array.isArray(tauriConfig.bundle?.targets) ? tauriConfig.bundle.targets : [];
 
     assertCondition(releaseProfile.get('lto') === 'true', 'Cargo release profile enables LTO');
-    assertCondition(releaseProfile.get('panic') === '"abort"', 'Cargo release profile aborts on panic');
+    assertCondition(
+        releaseProfile.get('panic') === '"abort"',
+        'Cargo release profile aborts on panic',
+    );
     assertCondition(releaseProfile.get('strip') === 'true', 'Cargo release profile strips symbols');
     assertCondition(
         releaseProfile.get('overflow-checks') === 'true',
@@ -664,13 +663,15 @@ function stopRunningApp() {
     const workspaceExecutables = new Set(
         workspaceAxelateExecutablePaths().map((candidate) => normalizeWindowsPath(candidate)),
     );
-    const runningProcesses = getRunningWindowsProcesses('Axelate.exe', env).filter((processInfo) => {
-        if (!processInfo?.ExecutablePath) {
-            return false;
-        }
+    const runningProcesses = getRunningWindowsProcesses('Axelate.exe', env).filter(
+        (processInfo) => {
+            if (!processInfo?.ExecutablePath) {
+                return false;
+            }
 
-        return workspaceExecutables.has(normalizeWindowsPath(processInfo.ExecutablePath));
-    });
+            return workspaceExecutables.has(normalizeWindowsPath(processInfo.ExecutablePath));
+        },
+    );
 
     for (const processInfo of runningProcesses) {
         stopWindowsProcessTree(processInfo, 'Axelate.exe');
