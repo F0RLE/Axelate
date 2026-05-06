@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const requireFromFrontend = createRequire(path.join(repoRoot, 'src', 'package.json'));
+const { parse: parseToml } = requireFromFrontend('smol-toml');
 
 const FORBIDDEN_ENTRIES = new Set([
     '.axelate',
@@ -47,46 +53,27 @@ function readManifest() {
 }
 
 function parseManifest(source) {
+    const parsed = parseToml(source);
     const values = new Map();
-    let section = '';
-
-    source.split(/\r?\n/u).forEach((rawLine) => {
-        const line = rawLine.replace(/#.*/u, '').trim();
-        if (line.length === 0) {
-            return;
-        }
-
-        const sectionMatch = line.match(/^\[([A-Za-z0-9_.-]+)\]$/u);
-        if (sectionMatch) {
-            section = sectionMatch[1];
-            return;
-        }
-
-        const fieldMatch = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.+)$/u);
-        if (!fieldMatch) {
-            return;
-        }
-
-        const key = section.length > 0 ? `${section}.${fieldMatch[1]}` : fieldMatch[1];
-        values.set(key, normalizeTomlScalar(fieldMatch[2]));
-    });
-
+    flattenToml(parsed, '', values);
     return values;
 }
 
-function normalizeTomlScalar(rawValue) {
-    const trimmed = rawValue.trim();
-    const quoted = trimmed.match(/^"([\s\S]*)"$/u);
-    if (quoted) {
-        return quoted[1].replace(/\\"/gu, '"');
+function flattenToml(value, prefix, values) {
+    if (
+        value === null ||
+        typeof value !== 'object' ||
+        value instanceof Date ||
+        Array.isArray(value)
+    ) {
+        values.set(prefix, value);
+        return;
     }
 
-    const singleQuoted = trimmed.match(/^'([\s\S]*)'$/u);
-    if (singleQuoted) {
-        return singleQuoted[1];
-    }
-
-    return trimmed;
+    Object.entries(value).forEach(([key, child]) => {
+        const childKey = prefix.length === 0 ? key : `${prefix}.${key}`;
+        flattenToml(child, childKey, values);
+    });
 }
 
 function isSafeRelativePath(value) {
@@ -216,9 +203,13 @@ function checkManifest(values) {
 
 const source = readManifest();
 if (source !== null) {
-    const values = parseManifest(source);
-    checkManifest(values);
-    checkFilesystemTree();
+    try {
+        const values = parseManifest(source);
+        checkManifest(values);
+        checkFilesystemTree();
+    } catch (error) {
+        add('error', `Failed to parse axelate-module.toml: ${String(error)}`);
+    }
 }
 
 const errors = findings.filter((finding) => finding.level === 'error');

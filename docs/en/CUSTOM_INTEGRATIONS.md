@@ -35,7 +35,7 @@ settings_ui = "settings-ui/index.html"
 
 [runtime]
 kind = "python"
-version = "3.14"
+version = "3.11"
 entry = "src/main.py"
 dependencies = "requirements.txt"
 ```

@@ -951,6 +951,7 @@ Tasks:
         run('npm', ['ci'], { cwd: srcDir });
     },
     'integration:doctor'() {
+        ensureFrontendDependencies();
         run(
             'node',
             withPassthroughArgs([
@@ -959,6 +960,7 @@ Tasks:
         );
     },
     'integration:new'() {
+        ensureFrontendDependencies();
         run(
             'node',
             withPassthroughArgs([

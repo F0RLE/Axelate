@@ -42,26 +42,29 @@ pub(super) async fn resolve_download_url(
             return Ok(main_url);
         }
 
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            tracing::info!("main branch not found, trying master: {master_url}");
-            let response_master =
-                client
-                    .get(&master_url)
-                    .send()
-                    .await
-                    .map_err(|error| AppError::External {
-                        request_id: None,
-                        message: format!("Failed to connect: {error}"),
-                    })?;
+        let main_status = response.status();
+        tracing::info!("main branch probe returned {main_status}, trying master: {master_url}");
+        let response_master =
+            client
+                .get(&master_url)
+                .send()
+                .await
+                .map_err(|error| AppError::External {
+                    request_id: None,
+                    message: format!("Failed to connect: {error}"),
+                })?;
 
-            if response_master.status().is_success() {
-                return Ok(master_url);
-            }
+        if response_master.status().is_success() {
+            return Ok(master_url);
         }
 
-        return Err(AppError::NotFound(format!(
-            "Module source not found. Tried both 'main' and 'master' branches at {base_url}"
-        )));
+        let master_status = response_master.status();
+        return Err(AppError::External {
+            request_id: None,
+            message: format!(
+                "Module source probes failed at {base_url}: main.zip returned {main_status}, master.zip returned {master_status}"
+            ),
+        });
     }
 
     Ok(download_url.to_string())
@@ -163,21 +166,23 @@ pub(super) async fn clone_repository_into(
 }
 
 pub(super) fn build_client(module_id: &str) -> Result<reqwest::Client, AppError> {
-    let client_builder = reqwest::Client::builder()
-        .user_agent("Axelate/1.0.0 (Tauri; Windows)")
-        .timeout(std::time::Duration::from_secs(600));
-
     tracing::debug!(module_id = module_id, "Building module download client");
-    client_builder.build().map_err(|error| AppError::External {
-        request_id: None,
-        message: format!("Client error: {error}"),
-    })
+    construct_client_builder()
+        .build()
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!("Client error: {error}"),
+        })
+}
+
+fn construct_client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .user_agent(format!("Axelate/1.0.0 (Tauri; {})", std::env::consts::OS))
+        .timeout(std::time::Duration::from_secs(600))
 }
 
 pub(super) fn build_public_client() -> Result<reqwest::Client, AppError> {
-    reqwest::Client::builder()
-        .user_agent("Axelate/1.0.0 (Tauri; Windows)")
-        .timeout(std::time::Duration::from_secs(600))
+    construct_client_builder()
         .build()
         .map_err(|error| AppError::External {
             request_id: None,

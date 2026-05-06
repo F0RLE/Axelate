@@ -158,7 +158,7 @@ impl<'a> LifecycleExecutor<'a> {
                         .map_err(|e| AppError::Io(e.to_string()))?,
                 ))
                 .stderr(Stdio::from(log_file));
-            crate::domain::integration_api::apply_process_env(&mut builder, &self.module_id);
+            crate::domain::integration_api::apply_process_env(&mut builder, &self.module_id)?;
 
             builder.spawn().map_err(|e| AppError::Internal {
                 request_id: None,
@@ -207,6 +207,7 @@ impl<'a> LifecycleExecutor<'a> {
                 match outcome {
                     Ok(Some(_status)) => {
                         controller_registry.remove(&module_id);
+                        crate::domain::integration_api::revoke_module_api_token(&module_id);
                         tracing::info!(
                             "Module {module_id} exited naturally and was cleaned up from registry"
                         );
@@ -220,6 +221,7 @@ impl<'a> LifecycleExecutor<'a> {
                             "Failed to poll child status for module {module_id}: {error}"
                         );
                         if let Some((_, mut child)) = controller_registry.remove(&module_id) {
+                            crate::domain::integration_api::revoke_module_api_token(&module_id);
                             if let Err(kill_error) = child.kill().await {
                                 tracing::warn!(
                                     module_id = %module_id,

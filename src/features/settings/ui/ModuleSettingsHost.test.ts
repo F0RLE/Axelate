@@ -30,9 +30,11 @@ function renderHostShell(): HTMLIFrameElement {
 
     Object.defineProperty(frame, 'contentWindow', {
         configurable: true,
-        value: {
-            postMessage: vi.fn(),
-        },
+        value: window,
+    });
+    Object.defineProperty(window, 'postMessage', {
+        configurable: true,
+        value: vi.fn(),
     });
 
     return frame;
@@ -84,6 +86,8 @@ describe('module settings host', () => {
 
         window.dispatchEvent(
             new MessageEvent('message', {
+                origin: window.location.origin,
+                source: frame.contentWindow,
                 data: {
                     channel: 'axelate:module-settings',
                     type: 'module-ready',

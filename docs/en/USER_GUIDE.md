@@ -7,7 +7,7 @@
 
 Axelate is a Windows-first AI workstation. It can:
 
-- use BYOK cloud AI providers through the launcher UI
+- use BYOK (Bring Your Own Key) cloud AI providers through the launcher UI
 - run chat and image requests
 - manage local AI engines such as `llamacpp` and `sdcpp`
 - import local integrations from folders, archives, or supported URLs

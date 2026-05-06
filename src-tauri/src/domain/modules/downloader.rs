@@ -83,6 +83,7 @@ pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
             "Downloader",
             "info",
         );
+        crate::domain::integration_api::revoke_module_api_token(module_id);
         Ok(())
     } else {
         Err(AppError::NotFound("Module not found".to_string()))
