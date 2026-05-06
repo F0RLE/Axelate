@@ -417,6 +417,7 @@ pub fn run() {
                 );
                 if IS_QUITTING.load(Ordering::Relaxed) {
                     tracing::info!("App Exiting...");
+                    crate::domain::integration_api::revoke_all_module_api_tokens();
                     if let Some(sessions) =
                         app_handle.try_state::<std::sync::Arc<ChatSessionManager>>()
                         && let Err(error) = sessions.save_to_disk()

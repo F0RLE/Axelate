@@ -28,8 +28,8 @@ npm run integration:doctor -- ./my-integration
 - `docs/examples/sdk/browser/axelate-settings-bridge.js` - helper для
   iframe-протокола custom settings UI.
 
-Главный контракт все равно описан в [Launcher SDK](../en/LAUNCHER_SDK.md): это
-локальный HTTP API лаунчера.
+Главный контракт все равно описан в [Launcher SDK](../en/LAUNCHER_SDK.md)
+(англ., в `docs/en/LAUNCHER_SDK.md`): это локальный HTTP API лаунчера.
 
 ## Структура интеграции
 
@@ -129,4 +129,5 @@ console.log(reply);
 ## Правило доверия
 
 Импортированные интеграции - это локальный код, который пользователь сам решил
-запустить. Сейчас это не reviewed, signed или sandboxed packages.
+запустить. Сейчас это не проверенные, не подписанные и не выполняемые в
+песочнице пакеты.

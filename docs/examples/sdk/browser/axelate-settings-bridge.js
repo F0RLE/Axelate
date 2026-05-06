@@ -1,8 +1,9 @@
 const CHANNEL = 'axelate:module-settings';
 
 export class AxelateSettingsBridge {
-    constructor(target = window.parent) {
+    constructor({ target = window.parent, allowedOrigin = window.location.origin } = {}) {
         this.target = target;
+        this.allowedOrigin = allowedOrigin;
         this.pending = new Map();
         this.context = null;
         this.settings = {};
@@ -10,11 +11,11 @@ export class AxelateSettingsBridge {
     }
 
     ready() {
-        this.target.postMessage({ channel: CHANNEL, type: 'module-ready' }, '*');
+        this.target.postMessage({ channel: CHANNEL, type: 'module-ready' }, this.allowedOrigin);
     }
 
     rendered() {
-        this.target.postMessage({ channel: CHANNEL, type: 'module-rendered' }, '*');
+        this.target.postMessage({ channel: CHANNEL, type: 'module-rendered' }, this.allowedOrigin);
     }
 
     waitForHost() {
@@ -52,7 +53,7 @@ export class AxelateSettingsBridge {
                 method,
                 payload,
             },
-            '*',
+            this.allowedOrigin,
         );
 
         return new Promise((resolve, reject) => {
@@ -61,6 +62,10 @@ export class AxelateSettingsBridge {
     }
 
     handleMessage(event) {
+        if (event.origin !== this.allowedOrigin || event.source !== this.target) {
+            return;
+        }
+
         const payload = event.data;
         if (payload?.channel !== CHANNEL) {
             return;

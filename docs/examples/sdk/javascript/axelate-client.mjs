@@ -19,22 +19,30 @@ export class AxelateClient {
             body: payload === undefined ? undefined : JSON.stringify(payload),
         });
 
-        const body = await response.json();
+        const body = await readResponseBody(response);
         if (!response.ok) {
-            throw new Error(body.error ?? `Axelate request failed: ${response.status}`);
+            const message =
+                body && typeof body === 'object' && 'error' in body
+                    ? body.error
+                    : `Axelate request failed: ${response.status}`;
+            throw new Error(String(message));
         }
 
         return body;
     }
 
     settings() {
-        return this.request('GET', `/v1/modules/${this.moduleId}/settings`).then(
+        return this.request('GET', `/v1/modules/${encodeURIComponent(this.moduleId)}/settings`).then(
             (body) => body.settings ?? {},
         );
     }
 
     saveSettings(settings) {
-        return this.request('PUT', `/v1/modules/${this.moduleId}/settings`, settings);
+        return this.request(
+            'PUT',
+            `/v1/modules/${encodeURIComponent(this.moduleId)}/settings`,
+            settings,
+        );
     }
 
     stage(stage, label, progress) {
@@ -42,7 +50,7 @@ export class AxelateClient {
         if (progress !== undefined) {
             payload.progress = progress;
         }
-        return this.request('POST', `/v1/modules/${this.moduleId}/stage`, payload);
+        return this.request('POST', `/v1/modules/${encodeURIComponent(this.moduleId)}/stage`, payload);
     }
 
     aiText(prompt, options = {}) {
@@ -52,4 +60,22 @@ export class AxelateClient {
             ...options,
         });
     }
+}
+
+async function readResponseBody(response) {
+    if (response.status === 204) {
+        return {};
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    const text = await response.text();
+    if (text.length === 0) {
+        return {};
+    }
+
+    if (contentType.includes('application/json')) {
+        return JSON.parse(text);
+    }
+
+    return { text };
 }

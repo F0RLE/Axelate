@@ -381,6 +381,7 @@ pub async fn control(
             }
         }
         downloader::delete_module(module_id).await?;
+        crate::domain::integration_api::revoke_module_api_token(module_id);
         return Ok(ControlResponse {
             success: true,
             message: format!("Module {module_id} uninstalled successfully"),

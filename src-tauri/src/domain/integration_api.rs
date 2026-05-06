@@ -26,6 +26,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
@@ -78,30 +79,60 @@ pub fn api_token() -> &'static str {
 }
 
 /// Adds local launcher API environment variables to a module process.
-pub fn apply_process_env(command: &mut tokio::process::Command, module_id: &str) {
+pub fn apply_process_env(
+    command: &mut tokio::process::Command,
+    module_id: &str,
+) -> Result<(), AppError> {
     let module_dir = crate::domain::modules::downloader::get_module_path(module_id);
     let module_runtime_dir = crate::domain::modules::paths::runtime_root(module_id);
     let module_log_dir = crate::domain::modules::paths::log_dir(module_id);
+    let token = issue_module_api_token(module_id)?;
 
     command
         .env("AXELATE_HTTP_API_BASE", api_base_url())
-        .env("AXELATE_HTTP_API_TOKEN", issue_module_api_token(module_id))
+        .env("AXELATE_HTTP_API_TOKEN", token)
         .env("AXELATE_SDK_VERSION", SDK_API_VERSION)
         .env("AXELATE_MODULE_ID", module_id)
         .env("AXELATE_MODULE_DIR", module_dir)
         .env("AXELATE_RUNTIME_DIR", &*crate::utils::paths::RUNTIME_DIR)
         .env("AXELATE_MODULE_RUNTIME_DIR", module_runtime_dir)
         .env("AXELATE_MODULE_LOG_DIR", module_log_dir);
+
+    Ok(())
 }
 
-fn issue_module_api_token(module_id: &str) -> String {
+fn issue_module_api_token(module_id: &str) -> Result<String, AppError> {
     let token = format!("{module_id}.{}", uuid::Uuid::new_v4().simple());
-    if let Ok(mut tokens) = MODULE_API_TOKENS.lock() {
-        tokens.insert(module_id.to_string(), token.clone());
-    } else {
-        tracing::warn!("Failed to register module API token for {module_id}");
+    let mut tokens = MODULE_API_TOKENS.lock().map_err(|_| AppError::Internal {
+        request_id: None,
+        message: format!("Failed to register module API token for {module_id}"),
+    })?;
+    tokens.insert(module_id.to_string(), token.clone());
+    Ok(token)
+}
+
+/// Revokes the local API token for a module process.
+pub fn revoke_module_api_token(module_id: &str) {
+    match MODULE_API_TOKENS.lock() {
+        Ok(mut tokens) => {
+            tokens.remove(module_id);
+        }
+        Err(error) => {
+            tracing::warn!("Failed to revoke module API token for {module_id}: {error}");
+        }
     }
-    token
+}
+
+/// Revokes all module-scoped local API tokens.
+pub fn revoke_all_module_api_tokens() {
+    match MODULE_API_TOKENS.lock() {
+        Ok(mut tokens) => {
+            tokens.clear();
+        }
+        Err(error) => {
+            tracing::warn!("Failed to revoke module API tokens: {error}");
+        }
+    }
 }
 
 /// Starts the local launcher HTTP API server.
@@ -312,14 +343,25 @@ struct ModuleStageChangedEvent {
 fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiContext) {
     let (sender, receiver) = mpsc::sync_channel(MAX_HTTP_API_QUEUE);
     let receiver = Arc::new(Mutex::new(receiver));
+    let mut started_workers = 0_usize;
     for worker_index in 0..MAX_HTTP_API_WORKERS {
         let worker_receiver = Arc::clone(&receiver);
-        if let Err(error) = std::thread::Builder::new()
+        match std::thread::Builder::new()
             .name(format!("axelate-local-http-worker-{worker_index}"))
             .spawn(move || run_http_api_worker(&worker_receiver))
         {
-            tracing::warn!("Failed to spawn launcher HTTP API worker: {error}");
+            Ok(_) => {
+                started_workers += 1;
+            }
+            Err(error) => {
+                tracing::warn!("Failed to spawn launcher HTTP API worker: {error}");
+            }
         }
+    }
+
+    if started_workers == 0 {
+        tracing::error!("Launcher HTTP API started with zero worker threads");
+        return;
     }
 
     for incoming in listener.incoming() {
@@ -372,14 +414,21 @@ fn run_http_api_worker(receiver: &HttpWorkerReceiver) {
         let job = {
             let Ok(receiver) = receiver.lock() else {
                 tracing::warn!("Launcher HTTP API worker receiver lock is poisoned");
-                return;
+                std::thread::sleep(Duration::from_millis(100));
+                continue;
             };
             receiver.recv()
         };
 
         match job {
             Ok(job) => {
-                handle_validated_request(job.stream, job.request, job.context, job.peer_addr);
+                if std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    handle_validated_request(job.stream, job.request, job.context, job.peer_addr);
+                }))
+                .is_err()
+                {
+                    tracing::error!("Launcher HTTP API worker recovered from request panic");
+                }
             }
             Err(_) => return,
         }
@@ -625,7 +674,7 @@ const fn status_for_app_error(error: &AppError) -> u16 {
     match error {
         AppError::Validation(_) | AppError::Config(_) => 400,
         AppError::NotFound(_) => 404,
-        AppError::PermissionDenied(_) => 403,
+        AppError::PermissionDenied(_) | AppError::FrontendSecretForbidden(_) => 403,
         AppError::Io(_)
         | AppError::Serialization(_)
         | AppError::External { .. }
@@ -1464,7 +1513,7 @@ mod tests {
 
     #[test]
     fn authorization_maps_module_tokens_to_module_owner() {
-        let token = super::issue_module_api_token("sample-module");
+        let token = super::issue_module_api_token("sample-module").expect("module token");
         let mut headers = HashMap::new();
         headers.insert("authorization".to_string(), format!("Bearer {token}"));
 
@@ -1490,8 +1539,8 @@ mod tests {
 
     #[test]
     fn issuing_new_module_token_invalidates_previous_token() {
-        let old_token = super::issue_module_api_token("rotating-module");
-        let new_token = super::issue_module_api_token("rotating-module");
+        let old_token = super::issue_module_api_token("rotating-module").expect("old token");
+        let new_token = super::issue_module_api_token("rotating-module").expect("new token");
         let mut headers = HashMap::new();
 
         headers.insert("authorization".to_string(), format!("Bearer {old_token}"));
@@ -1664,7 +1713,7 @@ mod tests {
     fn apply_process_env_sets_documented_integration_contract() {
         let module_id = "sample";
         let mut command = tokio::process::Command::new("sample-command");
-        super::apply_process_env(&mut command, module_id);
+        super::apply_process_env(&mut command, module_id).expect("process env");
 
         let envs = command
             .as_std()
@@ -1686,7 +1735,14 @@ mod tests {
             Some(module_id)
         );
         assert!(envs.contains_key("AXELATE_HTTP_API_BASE"));
-        assert!(envs.contains_key("AXELATE_HTTP_API_TOKEN"));
+        let token = envs
+            .get("AXELATE_HTTP_API_TOKEN")
+            .expect("module API token");
+        let headers = HashMap::from([("authorization".to_string(), format!("Bearer {token}"))]);
+        assert_eq!(
+            super::authorize_request(&headers),
+            Some(super::AuthorizedClient::Module(module_id.to_string()))
+        );
         assert!(envs.contains_key("AXELATE_MODULE_DIR"));
         assert!(envs.contains_key("AXELATE_RUNTIME_DIR"));
         assert!(envs.contains_key("AXELATE_MODULE_RUNTIME_DIR"));

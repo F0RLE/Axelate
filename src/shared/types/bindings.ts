@@ -320,31 +320,33 @@ export type AppConfig_Serialize = {
 // Application-level errors
 export type AppError =
 // Validation error (invalid input, malformed data)
-({ Validation: string }) & { Config?: never; External?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never } |
+({ Validation: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never } |
 // Resource not found error
-({ NotFound: string }) & { Config?: never; External?: never; Internal?: never; Io?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
+({ NotFound: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
 // Permission denied or unauthorized access
-({ PermissionDenied: string }) & { Config?: never; External?: never; Internal?: never; Io?: never; NotFound?: never; Serialization?: never; Validation?: never } |
+({ PermissionDenied: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; Serialization?: never; Validation?: never } |
+// Frontend tried to access a secret outside the managed allowlist
+({ FrontendSecretForbidden: string }) & { Config?: never; External?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
 // File system I/O error
-({ Io: string }) & { Config?: never; External?: never; Internal?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
+({ Io: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
 // JSON serialization/deserialization error
-({ Serialization: string }) & { Config?: never; External?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Validation?: never } |
+({ Serialization: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Validation?: never } |
 // Configuration loading or parsing error
-({ Config: string }) & { External?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
+({ Config: string }) & { External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
 // External service or API error
 ({ External: {
 	// Unique request identifier for tracing
 	request_id: string | null,
 	// error message
 	message: string,
-} }) & { Config?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
+} }) & { Config?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
 // Internal server error (unexpected failures)
 ({ Internal: {
 	// Unique request identifier for tracing
 	request_id: string | null,
 	// error message
 	message: string,
-} }) & { Config?: never; External?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never };
+} }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never };
 
 // Global application settings
 export type AppSettings = {

@@ -484,7 +484,9 @@ const fn status_for_error(error: &AppError) -> StatusCode {
     match error {
         AppError::Validation(_) => StatusCode::BAD_REQUEST,
         AppError::NotFound(_) => StatusCode::NOT_FOUND,
-        AppError::PermissionDenied(_) => StatusCode::FORBIDDEN,
+        AppError::PermissionDenied(_) | AppError::FrontendSecretForbidden(_) => {
+            StatusCode::FORBIDDEN
+        }
         AppError::Io(_)
         | AppError::Serialization(_)
         | AppError::Config(_)

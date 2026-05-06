@@ -33,10 +33,33 @@ function slugFromName(value) {
     );
 }
 
+function fail(message) {
+    console.error(`[integration:new] ${message}`);
+    process.exit(1);
+}
+
+function validateId(value) {
+    const trimmed = String(value).trim();
+    if (!/^[A-Za-z0-9_-]+$/u.test(trimmed)) {
+        fail('Integration id may contain only letters, numbers, "-" and "_".');
+    }
+
+    return trimmed;
+}
+
+function validateName(value) {
+    const trimmed = String(value).trim().replace(/\s+/gu, ' ');
+    if (!/^[\p{L}\p{N} _-]+$/u.test(trimmed)) {
+        fail('Integration name may contain only letters, numbers, spaces, "-" and "_".');
+    }
+
+    return trimmed;
+}
+
 const target = path.resolve(targetArg);
 const defaultId = slugFromName(path.basename(target));
-const id = optionValue('--id', defaultId);
-const name = optionValue('--name', id.replace(/[-_]+/gu, ' '));
+const id = validateId(optionValue('--id', defaultId));
+const name = validateName(optionValue('--name', id.replace(/[-_]+/gu, ' ')));
 
 if (existsSync(target)) {
     console.error(`Target already exists: ${target}`);
@@ -88,13 +111,22 @@ writeFileSync(
 
 import json
 import os
+import urllib.parse
 import urllib.error
 import urllib.request
 
 
-BASE_URL = os.environ["AXELATE_HTTP_API_BASE"]
+def validate_base_url(value: str) -> str:
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("AXELATE_HTTP_API_BASE must use http or https.")
+    return value.rstrip("/")
+
+
+BASE_URL = validate_base_url(os.environ["AXELATE_HTTP_API_BASE"])
 TOKEN = os.environ["AXELATE_HTTP_API_TOKEN"]
 MODULE_ID = os.environ["AXELATE_MODULE_ID"]
+MODULE_PATH_ID = urllib.parse.quote(MODULE_ID)
 
 
 def request(method: str, path: str, payload: dict | None = None) -> dict:
@@ -113,11 +145,11 @@ def request(method: str, path: str, payload: dict | None = None) -> dict:
 
 
 def main() -> None:
-    settings = request("GET", f"/v1/modules/{MODULE_ID}/settings").get("settings", {})
+    settings = request("GET", f"/v1/modules/{MODULE_PATH_ID}/settings").get("settings", {})
     prompt = settings.get("prompt") or "Write a short status update."
     request(
         "POST",
-        f"/v1/modules/{MODULE_ID}/stage",
+        f"/v1/modules/{MODULE_PATH_ID}/stage",
         {"stage": "ai.request", "label": "Calling Axelate AI", "progress": 0.5},
     )
     result = request("POST", "/v1/ai/text", {"prompt": prompt, "sessionId": MODULE_ID})
@@ -138,8 +170,9 @@ writeFileSync(
     `const CHANNEL = "axelate:module-settings";
 
 export class AxelateSettingsBridge {
-  constructor(target = window.parent) {
+  constructor({ target = window.parent, allowedOrigin = window.location.origin } = {}) {
     this.target = target;
+    this.allowedOrigin = allowedOrigin;
     this.pending = new Map();
     this.context = null;
     this.settings = {};
@@ -147,11 +180,11 @@ export class AxelateSettingsBridge {
   }
 
   ready() {
-    this.target.postMessage({ channel: CHANNEL, type: "module-ready" }, "*");
+    this.target.postMessage({ channel: CHANNEL, type: "module-ready" }, this.allowedOrigin);
   }
 
   rendered() {
-    this.target.postMessage({ channel: CHANNEL, type: "module-rendered" }, "*");
+    this.target.postMessage({ channel: CHANNEL, type: "module-rendered" }, this.allowedOrigin);
   }
 
   waitForHost() {
@@ -174,7 +207,7 @@ export class AxelateSettingsBridge {
 
   request(method, payload) {
     const requestId = crypto.randomUUID();
-    this.target.postMessage({ channel: CHANNEL, requestId, method, payload }, "*");
+    this.target.postMessage({ channel: CHANNEL, requestId, method, payload }, this.allowedOrigin);
 
     return new Promise((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject });
@@ -182,6 +215,10 @@ export class AxelateSettingsBridge {
   }
 
   handleMessage(event) {
+    if (event.origin !== this.allowedOrigin || event.source !== this.target) {
+      return;
+    }
+
     const payload = event.data;
     if (payload?.channel !== CHANNEL) {
       return;

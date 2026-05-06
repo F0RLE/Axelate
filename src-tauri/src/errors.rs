@@ -24,6 +24,10 @@ pub enum AppError {
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
 
+    /// Frontend tried to access a secret outside the managed allowlist
+    #[error("Frontend secret access forbidden: {0}")]
+    FrontendSecretForbidden(String),
+
     /// File system I/O error
     #[error("IO error: {0}")]
     Io(String),
@@ -82,6 +86,7 @@ impl From<AppError> for IpcError {
             AppError::Validation(msg) => ("VALIDATION", msg.clone()),
             AppError::NotFound(msg) => ("NOT_FOUND", msg.clone()),
             AppError::PermissionDenied(msg) => ("PERMISSION_DENIED", msg.clone()),
+            AppError::FrontendSecretForbidden(msg) => ("FRONTEND_SECRET_FORBIDDEN", msg.clone()),
             AppError::Io(msg) => ("IO_ERROR", msg.clone()),
             AppError::Serialization(msg) => ("SERIALIZATION", msg.clone()),
             AppError::Config(msg) => ("CONFIG", msg.clone()),

@@ -28,7 +28,7 @@ fn is_frontend_readable_secret(service: &str) -> bool {
 fn ensure_frontend_managed_secret(service: &str) -> Result<String, AppError> {
     let normalized = normalize_service_name(service);
     if !is_frontend_managed_secret(&normalized) {
-        return Err(AppError::Validation(format!(
+        return Err(AppError::FrontendSecretForbidden(format!(
             "Secret is not allowed through the frontend secure API: {normalized}"
         )));
     }
@@ -135,7 +135,7 @@ mod tests {
 
         assert!(matches!(
             err,
-            AppError::Validation(message) if message.contains("frontend secure API")
+            AppError::FrontendSecretForbidden(message) if message.contains("frontend secure API")
         ));
     }
 
@@ -147,7 +147,7 @@ mod tests {
 
         assert!(matches!(
             err,
-            AppError::Validation(message) if message.contains("frontend secure API")
+            AppError::FrontendSecretForbidden(message) if message.contains("frontend secure API")
         ));
     }
 }
