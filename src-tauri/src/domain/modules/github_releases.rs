@@ -469,6 +469,7 @@ fn is_gpu_asset_name_lower(lower: &str) -> bool {
             || token.starts_with("cuda13")
             || token.starts_with("cu12")
             || token.starts_with("cu13")
+            || token == "metal"
             || token == "vulkan"
             || token == "hip"
             || token == "rocm"
@@ -688,6 +689,13 @@ mod tests {
         assert!(!is_cpu_asset_name("llama-b8981-bin-win-npu-x64.zip"));
         assert!(!is_cpu_asset_name("llama-b8981-bin-win-xpu-x64.zip"));
         assert!(!is_cpu_asset_name("llama-b8981-bin-win-rtx5090-x64.zip"));
+    }
+
+    #[test]
+    fn metal_assets_are_classified_as_gpu() {
+        assert!(is_gpu_asset_name_lower(
+            "llama-b9028-bin-darwin-metal-arm64.zip"
+        ));
     }
 
     #[test]

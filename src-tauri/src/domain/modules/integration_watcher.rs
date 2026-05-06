@@ -49,29 +49,34 @@ pub fn start(app: tauri::AppHandle) {
                 return;
             }
 
-            let mut last_emit = Instant::now()
-                .checked_sub(EVENT_DEBOUNCE)
-                .unwrap_or_else(Instant::now);
-            while let Ok(event) = rx.recv() {
-                match event {
-                    Ok(event) if is_integration_change(event.kind) => {
-                        if last_emit.elapsed() < EVENT_DEBOUNCE {
+            let mut debounce_deadline: Option<Instant> = None;
+            loop {
+                let event = match debounce_deadline {
+                    Some(deadline) => {
+                        let now = Instant::now();
+                        if now >= deadline {
+                            emit_integrations_changed(&app, &path);
+                            debounce_deadline = None;
                             continue;
                         }
-                        last_emit = Instant::now();
-                        if let Err(error) = app.emit(
-                            INTEGRATIONS_CHANGED_EVENT,
-                            IntegrationsChangedPayload {
-                                path: path.to_string_lossy().to_string(),
-                            },
-                        ) {
-                            tracing::warn!("Failed to emit integrations change event: {error}");
-                        }
+                        rx.recv_timeout(deadline.saturating_duration_since(now))
                     }
-                    Ok(_) => {}
-                    Err(error) => {
+                    None => rx.recv().map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+                };
+
+                match event {
+                    Ok(Ok(event)) if is_integration_change(event.kind) => {
+                        debounce_deadline = Some(Instant::now() + EVENT_DEBOUNCE);
+                    }
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error)) => {
                         tracing::warn!("Integrations watcher error: {error}");
                     }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                        emit_integrations_changed(&app, &path);
+                        debounce_deadline = None;
+                    }
+                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 }
             }
         })
@@ -79,6 +84,17 @@ pub fn start(app: tauri::AppHandle) {
             tracing::warn!("Failed to spawn integrations watcher thread: {error}");
         })
         .ok();
+}
+
+fn emit_integrations_changed(app: &tauri::AppHandle, path: &std::path::Path) {
+    if let Err(error) = app.emit(
+        INTEGRATIONS_CHANGED_EVENT,
+        IntegrationsChangedPayload {
+            path: path.to_string_lossy().to_string(),
+        },
+    ) {
+        tracing::warn!("Failed to emit integrations change event: {error}");
+    }
 }
 
 const fn is_integration_change(kind: EventKind) -> bool {
