@@ -100,8 +100,11 @@ For the full release checklist, see [Releases](docs/en/RELEASES.md).
 
 Start here:
 
+- [User Guide](docs/en/USER_GUIDE.md)
 - [Getting Started](docs/en/GETTING_STARTED.md)
 - [Development Workflow](docs/en/DEVELOPMENT_WORKFLOW.md)
+- [Architecture](docs/en/ARCHITECTURE.md)
+- [Integration Development](docs/en/INTEGRATION_DEVELOPMENT.md)
 - [Releases](docs/en/RELEASES.md)
 - [Current State](docs/en/CURRENT_STATE.md)
 - [Contributing](CONTRIBUTING.md)
@@ -109,6 +112,7 @@ Start here:
 Current reference:
 
 - [Trust Model](docs/en/TRUST_MODEL.md)
+- Integration Development: [RU](docs/ru/INTEGRATION_DEVELOPMENT.md) · [ZH](docs/zh/INTEGRATION_DEVELOPMENT.md)
 
 Planning only:
 

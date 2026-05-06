@@ -168,7 +168,9 @@ The current doctor flow checks WebView2 through the Windows registry and resolve
 
 Use these as current truth:
 
+- [User Guide](USER_GUIDE.md)
 - [Getting Started](GETTING_STARTED.md)
+- [Architecture](ARCHITECTURE.md)
 - [Releases](RELEASES.md)
 - [Current State](CURRENT_STATE.md)
 - [Trust Model](TRUST_MODEL.md)

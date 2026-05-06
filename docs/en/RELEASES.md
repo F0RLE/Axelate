@@ -22,7 +22,9 @@
 - pull requests targeting `nightly`
 - manual dispatch from GitHub Actions
 
-The CI gate checks frontend linting, formatting, type/build, bundle size, tests, Rust clippy, Rust check, Rust tests, and audit reporting.
+The CI gate checks frontend linting, formatting, type/build, tests, Rust clippy,
+Rust check, Rust tests, and audit reporting. Frontend size reporting exists as a
+local task, but it is not part of the required release gate.
 
 Additional release-relevant automation:
 
