@@ -22,6 +22,8 @@
 /.history/
 /.playwright-cli/
 /build/
+__pycache__/
+*.py[cod]
 
 # Local app/runtime data
 /AxelateData/

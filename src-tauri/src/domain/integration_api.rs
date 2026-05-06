@@ -79,10 +79,19 @@ pub fn api_token() -> &'static str {
 
 /// Adds local launcher API environment variables to a module process.
 pub fn apply_process_env(command: &mut tokio::process::Command, module_id: &str) {
+    let module_dir = crate::domain::modules::downloader::get_module_path(module_id);
+    let module_runtime_dir = crate::domain::modules::paths::runtime_root(module_id);
+    let module_log_dir = crate::domain::modules::paths::log_dir(module_id);
+
     command
         .env("AXELATE_HTTP_API_BASE", api_base_url())
         .env("AXELATE_HTTP_API_TOKEN", issue_module_api_token(module_id))
-        .env("AXELATE_SDK_VERSION", SDK_API_VERSION);
+        .env("AXELATE_SDK_VERSION", SDK_API_VERSION)
+        .env("AXELATE_MODULE_ID", module_id)
+        .env("AXELATE_MODULE_DIR", module_dir)
+        .env("AXELATE_RUNTIME_DIR", &*crate::utils::paths::RUNTIME_DIR)
+        .env("AXELATE_MODULE_RUNTIME_DIR", module_runtime_dir)
+        .env("AXELATE_MODULE_LOG_DIR", module_log_dir);
 }
 
 fn issue_module_api_token(module_id: &str) -> String {
@@ -1649,6 +1658,39 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("http://127.0.0.1:3000")
         );
+    }
+
+    #[test]
+    fn apply_process_env_sets_documented_integration_contract() {
+        let module_id = "sample";
+        let mut command = tokio::process::Command::new("sample-command");
+        super::apply_process_env(&mut command, module_id);
+
+        let envs = command
+            .as_std()
+            .get_envs()
+            .filter_map(|(key, value)| {
+                Some((
+                    key.to_string_lossy().to_string(),
+                    value?.to_string_lossy().to_string(),
+                ))
+            })
+            .collect::<HashMap<_, _>>();
+
+        assert_eq!(
+            envs.get("AXELATE_SDK_VERSION").map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            envs.get("AXELATE_MODULE_ID").map(String::as_str),
+            Some(module_id)
+        );
+        assert!(envs.contains_key("AXELATE_HTTP_API_BASE"));
+        assert!(envs.contains_key("AXELATE_HTTP_API_TOKEN"));
+        assert!(envs.contains_key("AXELATE_MODULE_DIR"));
+        assert!(envs.contains_key("AXELATE_RUNTIME_DIR"));
+        assert!(envs.contains_key("AXELATE_MODULE_RUNTIME_DIR"));
+        assert!(envs.contains_key("AXELATE_MODULE_LOG_DIR"));
     }
 
     #[test]
