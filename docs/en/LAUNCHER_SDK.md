@@ -1,16 +1,21 @@
 # Launcher SDK
 
-This guide describes the stable contract external integrations use to control
-Axelate. The contract is language-neutral: every integration talks to the
+This guide describes the current versioned contract external integrations use to
+control Axelate. The contract is language-neutral: every integration talks to the
 launcher through a local HTTP API. Language SDKs can wrap this contract later,
 but the HTTP API is the source of truth.
+
+For scaffolding, validation, and examples, start with
+[Integration Development](INTEGRATION_DEVELOPMENT.md).
 
 ## Runtime Contract
 
 Axelate starts a local API server on `127.0.0.1` when the launcher starts. The
-server is available only on the local machine and requires a per-process token.
+server is available only on the local machine and requires a launcher-issued
+runtime token.
 
-Launcher-managed integration processes receive these environment variables:
+Launcher-managed script-runtime integration processes receive these environment
+variables:
 
 - `AXELATE_SDK_VERSION`: local launcher integration API version, currently `1`
 - `AXELATE_HTTP_API_BASE`: local base URL, for example `http://127.0.0.1:3000`
@@ -24,8 +29,9 @@ Launcher-managed integration processes receive these environment variables:
 - `AXELATE_MODULE_LOG_DIR`: writable log directory reserved for the integration
 - `AXELATE_MODULE_ID`: current integration id
 
-External tools that are not launched by Axelate need the same two values from
-the user or from their own launcher integration flow.
+Standalone tools that are not launched by Axelate are not the primary public
+contract yet. They should use a launcher-managed integration flow instead of
+persisting or guessing local API credentials.
 
 Script integrations declare their runtime in `axelate-module.toml`. Legacy top-level
 `entry` and `dependencies` fields are not supported.
@@ -68,8 +74,9 @@ Prefer `Authorization: Bearer ...` for new clients.
   Do not read or write Axelate's internal `module_settings.json` directly.
 - Write temporary files, caches, and generated state to `AXELATE_MODULE_RUNTIME_DIR`.
   Write logs to `AXELATE_MODULE_LOG_DIR`.
-- If a request specifies an AI `provider`, the launcher updates the matching UI
-  card selection before running the request.
+- If a request specifies an AI `provider`, the launcher validates and uses that
+  provider for the request only. It does not change the user's visual card
+  selection. Omit `provider` to use the active launcher selection.
 
 ## Quick Start
 
@@ -168,8 +175,9 @@ Does not require authentication. Returns whether the local API server is alive.
 
 `GET /v1/modules`
 
-Returns known integrations with launcher status, selected state, category, install
-state, and metadata.
+Returns installed integrations with launcher status, category, install state, and
+metadata. A launcher-wide token can see all installed integrations. A
+module-scoped token only sees the integration that received the token.
 
 `GET /v1/modules/{moduleId}/status`
 
@@ -256,8 +264,8 @@ launcher chat.
 ```json
 {
     "prompt": "Summarize this message",
-    "sessionId": "sample-integration",
-    "provider": "openai",
+    "sessionId": "my-integration",
+    "provider": "gpt",
     "model": "gpt-5.5",
     "messages": [{ "role": "user", "content": "Optional chat history" }],
     "thinkingLevel": "medium",
@@ -269,8 +277,8 @@ launcher chat.
 `provider` and `model` are optional. When omitted, the launcher uses the active
 `ai_text` module selection and its selected model.
 
-When `provider` is provided, the launcher also updates the visual `ai_text`
-selection card so the UI matches the integration request.
+When `provider` is provided, the launcher validates that provider and runs this
+request against it without changing the user's active `ai_text` selection.
 
 ### AI Image
 
@@ -281,8 +289,8 @@ Runs image generation through the selected or requested image AI provider.
 ```json
 {
     "prompt": "Pixel art launcher icon",
-    "provider": "openai",
-    "model": "image-model-id",
+    "provider": "gpt-image",
+    "model": "openai/gpt-5-image",
     "width": 1024,
     "height": 1024,
     "steps": 30
@@ -292,5 +300,5 @@ Runs image generation through the selected or requested image AI provider.
 `provider` and `model` are optional. When omitted, the launcher uses the active
 `ai_image` module selection and its selected model.
 
-When `provider` is provided, the launcher also updates the visual `ai_image`
-selection card so the UI matches the integration request.
+When `provider` is provided, the launcher validates that provider and runs this
+request against it without changing the user's active `ai_image` selection.

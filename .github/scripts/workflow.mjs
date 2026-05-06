@@ -820,6 +820,8 @@ Tasks:
   doctor         Check local development prerequisites
   setup          Validate prerequisites, install frontend deps, and configure hooks
   install-deps   Install frontend dependencies
+  integration:doctor  Validate an Axelate integration folder
+  integration:new     Scaffold a minimal Python integration folder
   update         Update npm and cargo dependencies, then verify
   prepare        Configure Git hooks
   check-size     Print a frontend bundle size report
@@ -947,6 +949,22 @@ Tasks:
     },
     'install-deps'() {
         run('npm', ['ci'], { cwd: srcDir });
+    },
+    'integration:doctor'() {
+        run(
+            'node',
+            withPassthroughArgs([
+                path.join(repoRoot, '.github', 'scripts', 'integration', 'doctor.mjs'),
+            ]),
+        );
+    },
+    'integration:new'() {
+        run(
+            'node',
+            withPassthroughArgs([
+                path.join(repoRoot, '.github', 'scripts', 'integration', 'scaffold.mjs'),
+            ]),
+        );
     },
     update() {
         run('npm', ['update'], { cwd: srcDir });
