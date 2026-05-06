@@ -29,7 +29,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 const DEFAULT_API_BASE_URL: &str = "http://127.0.0.1:3000";
-const SDK_API_VERSION: &str = "1";
+/// Public launcher integration SDK contract version exposed to module runtimes.
+pub const SDK_API_VERSION: &str = "1";
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 const CUSTOM_TEXT_PROVIDER_ID: &str = "openrouter-custom-text";
 const CUSTOM_IMAGE_PROVIDER_ID: &str = "openrouter-custom-image";
@@ -74,7 +75,8 @@ pub fn api_token() -> &'static str {
 pub fn apply_process_env(command: &mut tokio::process::Command) {
     command
         .env("AXELATE_HTTP_API_BASE", api_base_url())
-        .env("AXELATE_HTTP_API_TOKEN", api_token());
+        .env("AXELATE_HTTP_API_TOKEN", api_token())
+        .env("AXELATE_SDK_VERSION", SDK_API_VERSION);
 }
 
 /// Starts the local launcher HTTP API server.
@@ -278,11 +280,29 @@ struct ModuleStageChangedEvent {
 fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiContext) {
     for incoming in listener.incoming() {
         match incoming {
-            Ok(stream) => {
+            Ok(mut stream) => {
                 let request_context = context.clone();
+                let peer_addr = stream.peer_addr().ok();
+                let request = match read_http_request(&mut stream) {
+                    Ok(request) => request,
+                    Err(error) => {
+                        let response = HttpResponse {
+                            status: 400,
+                            body: json!({ "ok": false, "error": error }),
+                        };
+                        write_response_or_log(&mut stream, &response);
+                        continue;
+                    }
+                };
+                if let Some(response) = preflight_http_request(&request, peer_addr) {
+                    write_response_or_log(&mut stream, &response);
+                    continue;
+                }
                 if let Err(error) = std::thread::Builder::new()
                     .name("axelate-local-http-request".to_string())
-                    .spawn(move || handle_stream(stream, request_context))
+                    .spawn(move || {
+                        handle_validated_request(stream, request, request_context, peer_addr);
+                    })
                 {
                     tracing::warn!("Failed to spawn launcher HTTP API request handler: {error}");
                 }
@@ -294,19 +314,42 @@ fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiCont
     }
 }
 
-fn handle_stream(mut stream: TcpStream, context: LauncherHttpApiContext) {
-    let peer_addr = stream.peer_addr().ok();
-    let response = match read_http_request(&mut stream) {
-        Ok(request) => {
-            tauri::async_runtime::block_on(dispatch_http_request(request, context, peer_addr))
-        }
-        Err(error) => HttpResponse {
-            status: 400,
-            body: json!({ "ok": false, "error": error }),
-        },
-    };
+fn preflight_http_request(
+    request: &HttpRequest,
+    peer_addr: Option<SocketAddr>,
+) -> Option<HttpResponse> {
+    if !is_loopback_peer(peer_addr) {
+        return Some(json_error(
+            403,
+            "Launcher API only accepts loopback clients",
+        ));
+    }
 
-    if let Err(error) = write_http_response(&mut stream, &response) {
+    let path = request_path(request);
+    if request.method == "GET" && path == "/v1/health" {
+        return None;
+    }
+
+    if !is_authorized(&request.headers) {
+        return Some(json_error(401, "Missing or invalid launcher API token"));
+    }
+
+    None
+}
+
+fn handle_validated_request(
+    mut stream: TcpStream,
+    request: HttpRequest,
+    context: LauncherHttpApiContext,
+    peer_addr: Option<SocketAddr>,
+) {
+    let response =
+        tauri::async_runtime::block_on(dispatch_http_request(request, context, peer_addr));
+    write_response_or_log(&mut stream, &response);
+}
+
+fn write_response_or_log(stream: &mut TcpStream, response: &HttpResponse) {
+    if let Err(error) = write_http_response(stream, response) {
         tracing::warn!("Failed to write launcher HTTP API response: {error}");
     }
 }
@@ -453,7 +496,7 @@ async fn dispatch_http_request(
         return json_error(403, "Launcher API only accepts loopback clients");
     }
 
-    let path = request.path.split('?').next().unwrap_or(&request.path);
+    let path = request_path(&request);
     if request.method == "GET" && path == "/v1/health" {
         return json_response(200, json!({ "ok": true, "service": "axelate-launcher" }));
     }
@@ -466,6 +509,10 @@ async fn dispatch_http_request(
         Ok(response) => response,
         Err(error) => json_error(status_for_app_error(&error), &error.to_string()),
     }
+}
+
+fn request_path(request: &HttpRequest) -> &str {
+    request.path.split('?').next().unwrap_or(&request.path)
 }
 
 const fn status_for_app_error(error: &AppError) -> u16 {
@@ -603,7 +650,7 @@ async fn handle_patch_module_settings_request(
         .settings_service
         .get_module_settings(module_id)
         .await?;
-    settings.extend(updates);
+    merge_json_settings(&mut settings, updates);
     context
         .settings_service
         .save_module_settings(module_id, &settings)
@@ -613,6 +660,38 @@ async fn handle_patch_module_settings_request(
         200,
         json!({ "ok": true, "moduleId": module_id, "settings": settings }),
     ))
+}
+
+fn merge_json_settings(
+    settings: &mut HashMap<String, serde_json::Value>,
+    updates: HashMap<String, serde_json::Value>,
+) {
+    for (key, update) in updates {
+        match settings.get_mut(&key) {
+            Some(existing) => merge_json_value(existing, update),
+            None => {
+                settings.insert(key, update);
+            }
+        }
+    }
+}
+
+fn merge_json_value(target: &mut serde_json::Value, update: serde_json::Value) {
+    match (target, update) {
+        (serde_json::Value::Object(target), serde_json::Value::Object(update)) => {
+            for (key, value) in update {
+                match target.get_mut(&key) {
+                    Some(existing) => merge_json_value(existing, value),
+                    None => {
+                        target.insert(key, value);
+                    }
+                }
+            }
+        }
+        (target, update) => {
+            *target = update;
+        }
+    }
 }
 
 fn ensure_installed_module_id(module_id: &str) -> Result<(), AppError> {
@@ -1343,6 +1422,38 @@ mod tests {
             parse_json_body::<HashMap<String, serde_json::Value>>(&request).expect_err("array");
 
         assert!(matches!(error, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn patch_settings_merge_nested_objects_without_dropping_existing_keys() {
+        let mut settings = HashMap::from([
+            (
+                "notifications".to_string(),
+                serde_json::json!({
+                    "enabled": true,
+                    "channels": { "chat": true, "logs": true }
+                }),
+            ),
+            ("theme".to_string(), serde_json::json!("dark")),
+        ]);
+        let updates = HashMap::from([
+            (
+                "notifications".to_string(),
+                serde_json::json!({ "channels": { "logs": false } }),
+            ),
+            ("theme".to_string(), serde_json::json!("light")),
+        ]);
+
+        super::merge_json_settings(&mut settings, updates);
+
+        assert_eq!(
+            settings.get("notifications"),
+            Some(&serde_json::json!({
+                "enabled": true,
+                "channels": { "chat": true, "logs": false }
+            }))
+        );
+        assert_eq!(settings.get("theme"), Some(&serde_json::json!("light")));
     }
 
     #[test]

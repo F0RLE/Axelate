@@ -70,7 +70,7 @@ pub async fn get_release_download_options(
 #[specta::specta]
 /// Imports an integration from a local folder containing `axelate-module.toml`.
 pub async fn import_integration_folder(path: String) -> Result<String, AppError> {
-    downloader::import_integration_folder(&std::path::PathBuf::from(path))
+    downloader::import_integration_folder(&std::path::PathBuf::from(path)).await
 }
 
 #[tauri::command]

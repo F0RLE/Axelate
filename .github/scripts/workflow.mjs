@@ -188,14 +188,35 @@ function withEnvOverrides(overrides = {}) {
 
 function ensureCargoLlvmCov() {
     if (commandExists('cargo-llvm-cov', toolEnv())) {
-        ensureLlvmTools();
-        return;
+        const invocation = buildCommandInvocation('cargo', ['llvm-cov', '--version'], toolEnv());
+        const result = spawnSync(invocation.command, invocation.args, {
+            cwd: tauriDir,
+            env: toolEnv(),
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            shell: false,
+        });
+        const versionOutput = result.stdout?.trim() || result.stderr?.trim() || '';
+        const installedVersion = versionOutput.match(/\d+\.\d+\.\d+/u)?.[0];
+        if (!result.error && result.status === 0 && installedVersion === cargoLlvmCovVersion) {
+            ensureLlvmTools();
+            return;
+        }
+
+        log(
+            `cargo-llvm-cov version mismatch (installed: ${installedVersion ?? 'unknown'}, expected: ${cargoLlvmCovVersion}); reinstalling`,
+        );
     }
 
-    log(
-        `cargo-llvm-cov not found; installing version ${cargoLlvmCovVersion} with cargo install --locked`,
-    );
-    run('cargo', ['install', 'cargo-llvm-cov', '--locked', '--version', cargoLlvmCovVersion]);
+    log(`installing cargo-llvm-cov version ${cargoLlvmCovVersion} with cargo install --locked`);
+    run('cargo', [
+        'install',
+        'cargo-llvm-cov',
+        '--locked',
+        '--version',
+        cargoLlvmCovVersion,
+        '--force',
+    ]);
     ensureLlvmTools();
 }
 
@@ -792,7 +813,7 @@ Tasks:
   test:coverage:all  Run frontend and Rust coverage
   rust:test:coverage  Run Rust tests with coverage summary
   rust:test:coverage:lcov  Generate Rust LCOV report at src-tauri/lcov.info
-    Note: Rust coverage passthrough args go directly to cargo-llvm-cov; include explicit "--" before cargo test filters.
+    Note: Rust coverage passthrough args go directly to cargo-llvm-cov; bare "--" is stripped, so cargo test filters cannot be forwarded here.
   test:watch     Run frontend tests in watch mode
   typecheck      Run frontend type checks
   verify         Run the full local verification pipeline
@@ -893,9 +914,7 @@ Tasks:
         tasks['rust:test:coverage']();
     },
     'rust:test:coverage'() {
-        runRustCoverage(
-            withDirectPassthroughArgs(['--workspace', '--all-features', '--summary-only']),
-        );
+        runRustCoverage(withDirectPassthroughArgs(['--workspace', '--all-features']));
     },
     'rust:test:coverage:lcov'() {
         runRustCoverage(

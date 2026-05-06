@@ -90,16 +90,23 @@ pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
 }
 
 /// Imports an integration from an existing local folder.
-pub fn import_integration_folder(path: &Path) -> Result<String, AppError> {
+pub async fn import_integration_folder(path: &Path) -> Result<String, AppError> {
     ensure_source_directory(path)?;
     let manifest = ManifestLoader::load(path)?;
     let module_id = validate_integration_manifest(&manifest)?;
     let staging_path = ArchiveExtractor::prepare_staging(&module_id)?;
+    let source_path = path.to_path_buf();
+    let blocking_staging_path = staging_path.clone();
 
-    let result = (|| {
-        copy_directory_contents_secure(path, &staging_path)?;
-        finalize_imported_integration(&staging_path, Some("local-folder"))
-    })();
+    let result = tokio::task::spawn_blocking(move || {
+        copy_directory_contents_secure(&source_path, &blocking_staging_path)?;
+        finalize_imported_integration(&blocking_staging_path, Some("local-folder"))
+    })
+    .await
+    .map_err(|error| AppError::Internal {
+        request_id: None,
+        message: format!("Integration folder import worker failed: {error}"),
+    })?;
 
     cleanup_staging_on_error(&result, &staging_path);
     result
@@ -115,7 +122,7 @@ pub async fn import_integration_path(app: AppHandle, path: PathBuf) -> Result<St
     })?;
 
     if metadata.is_dir() {
-        return import_integration_folder(&path);
+        return import_integration_folder(&path).await;
     }
 
     if metadata.is_file() {
@@ -152,19 +159,21 @@ pub async fn import_integration_url(
     let source_url = validate_import_url(&source_url)?;
     let import_id = build_import_id();
     let staging_path = ArchiveExtractor::prepare_staging(&import_id)?;
-    let archive_path = build_import_archive_path(&import_id, &source_url);
     let control = downloader.request_control(&import_id);
+    let mut archive_path = None;
 
     let result = async {
         let client = build_public_client()?;
         let final_url = resolve_download_url(&client, &source_url).await?;
+        let resolved_archive_path = build_import_archive_path(&import_id, &final_url);
+        archive_path = Some(resolved_archive_path.clone());
         let download_result = download_file(
             DownloadTask {
                 app: &app,
                 downloader,
                 client: &client,
                 url: &final_url,
-                dest_path: &archive_path,
+                dest_path: &resolved_archive_path,
                 module_id: &import_id,
                 control: &control,
             },
@@ -181,7 +190,7 @@ pub async fn import_integration_url(
 
         ArchiveExtractor::extract_into(
             &app,
-            &archive_path,
+            &resolved_archive_path,
             &import_id,
             &staging_path,
             Some(download_result.snapshot),
@@ -194,7 +203,9 @@ pub async fn import_integration_url(
 
     downloader.remove_control(&import_id);
     cleanup_staging_on_error(&result, &staging_path);
-    cleanup_import_archive(&archive_path).await;
+    if let Some(archive_path) = archive_path {
+        cleanup_import_archive(&archive_path).await;
+    }
     result
 }
 
@@ -690,13 +701,30 @@ fn validate_import_url(source_url: &str) -> Result<String, AppError> {
             "Integration URL cannot be empty".to_string(),
         ));
     }
-    if !source_url.starts_with("https://") && !source_url.starts_with("http://") {
-        return Err(AppError::Validation(
-            "Integration URL must start with http:// or https://".to_string(),
-        ));
+
+    let url = reqwest::Url::parse(source_url)
+        .map_err(|error| AppError::Validation(format!("Integration URL is invalid: {error}")))?;
+    match url.scheme() {
+        "https" => {}
+        "http" if is_local_import_host(url.host_str()) => {}
+        "http" => {
+            return Err(AppError::Validation(
+                "Integration URL must use https:// unless it targets localhost development"
+                    .to_string(),
+            ));
+        }
+        _ => {
+            return Err(AppError::Validation(
+                "Integration URL must start with https://".to_string(),
+            ));
+        }
     }
 
     Ok(source_url.to_string())
+}
+
+fn is_local_import_host(host: Option<&str>) -> bool {
+    matches!(host, Some("localhost" | "127.0.0.1" | "::1"))
 }
 
 fn build_import_id() -> String {
@@ -798,6 +826,7 @@ mod tests {
         load_partial_metadata, normalize_archive_relative_path, parse_content_range_total,
         store_partial_metadata,
     };
+    use crate::errors::AppError;
     use sevenz_rust2::{ArchiveReader, Password};
     use std::path::{Path, PathBuf};
 
@@ -821,6 +850,20 @@ mod tests {
         let error = ensure_not_interrupted(&control).expect_err("cancel should interrupt");
 
         assert!(error.to_string().contains("Download cancelled"));
+    }
+
+    #[test]
+    fn validate_import_url_rejects_plain_http_except_localhost() {
+        assert!(
+            super::validate_import_url("https://github.com/F0RLE/demo/archive/main.zip").is_ok()
+        );
+        assert!(super::validate_import_url("http://localhost:4000/integration.zip").is_ok());
+        assert!(super::validate_import_url("http://127.0.0.1:4000/integration.zip").is_ok());
+
+        let error = super::validate_import_url("http://example.com/integration.zip")
+            .expect_err("plain remote http should be rejected");
+
+        assert!(matches!(error, AppError::Validation(_)));
     }
 
     #[test]

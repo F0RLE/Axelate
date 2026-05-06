@@ -1,3 +1,4 @@
+use crate::domain::integration_api::SDK_API_VERSION;
 use crate::domain::modules::lifecycle::{ModuleManifest, ModuleRuntimeKind};
 use crate::domain::modules::paths as module_paths;
 use crate::errors::AppError;
@@ -134,7 +135,6 @@ async fn spawn_python_process(
     let mut command = Command::new(&python_path);
     command
         .arg(&entry_path)
-        .current_dir(module_path)
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONUTF8", "1");
 
@@ -171,7 +171,6 @@ async fn spawn_node_process(
     let mut command = Command::new(node_executable);
     command
         .arg(entry_path)
-        .current_dir(module_path)
         .env("NODE_PATH", env_dir.join("node_modules"))
         .env("AXELATE_NODE_ENV_DIR", env_dir);
 
@@ -207,7 +206,6 @@ async fn spawn_bun_process(
     let mut command = Command::new(bun_executable);
     command
         .arg(entry_path)
-        .current_dir(module_path)
         .env("NODE_PATH", env_dir.join("node_modules"))
         .env("AXELATE_BUN_ENV_DIR", env_dir);
 
@@ -239,8 +237,9 @@ async fn spawn_runtime_command(
         .map_err(|e| AppError::Io(format!("Failed to open runtime log: {e}")))?;
 
     command
+        .current_dir(module_path)
         .env("BOT_CONFIG_DIR", CONFIG_DIR.as_os_str())
-        .env("AXELATE_SDK_VERSION", "1")
+        .env("AXELATE_SDK_VERSION", SDK_API_VERSION)
         .env("AXELATE_CONFIG_DIR", CONFIG_DIR.as_os_str())
         .env("AXELATE_RUNTIME_DIR", RUNTIME_DIR.as_os_str())
         .env(
