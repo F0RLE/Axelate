@@ -151,13 +151,14 @@ impl<'a> LifecycleExecutor<'a> {
             let mut builder = build_command(start_cmd);
             builder
                 .current_dir(self.module_path)
+                .env("AXELATE_MODULE_ID", &self.module_id)
                 .stdout(Stdio::from(
                     log_file
                         .try_clone()
                         .map_err(|e| AppError::Io(e.to_string()))?,
                 ))
                 .stderr(Stdio::from(log_file));
-            crate::domain::integration_api::apply_process_env(&mut builder);
+            crate::domain::integration_api::apply_process_env(&mut builder, &self.module_id);
 
             builder.spawn().map_err(|e| AppError::Internal {
                 request_id: None,

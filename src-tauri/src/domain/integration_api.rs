@@ -21,10 +21,11 @@ use crate::models::{AiModel, ApiProvider, ModelTier, ModuleItem, ProviderType, S
 use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
@@ -32,6 +33,8 @@ const DEFAULT_API_BASE_URL: &str = "http://127.0.0.1:3000";
 /// Public launcher integration SDK contract version exposed to module runtimes.
 pub const SDK_API_VERSION: &str = "1";
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
+const MAX_HTTP_API_WORKERS: usize = 8;
+const MAX_HTTP_API_QUEUE: usize = 32;
 const CUSTOM_TEXT_PROVIDER_ID: &str = "openrouter-custom-text";
 const CUSTOM_IMAGE_PROVIDER_ID: &str = "openrouter-custom-image";
 const CUSTOM_TEXT_BACKEND_PROVIDER_ID: &str = "gpt";
@@ -72,11 +75,16 @@ pub fn api_token() -> &'static str {
 }
 
 /// Adds local launcher API environment variables to a module process.
-pub fn apply_process_env(command: &mut tokio::process::Command) {
+pub fn apply_process_env(command: &mut tokio::process::Command, module_id: &str) {
     command
         .env("AXELATE_HTTP_API_BASE", api_base_url())
-        .env("AXELATE_HTTP_API_TOKEN", api_token())
+        .env("AXELATE_HTTP_API_TOKEN", module_api_token(module_id))
         .env("AXELATE_SDK_VERSION", SDK_API_VERSION);
+}
+
+fn module_api_token(module_id: &str) -> String {
+    let digest = Sha256::digest(format!("{}:{module_id}", api_token()).as_bytes());
+    format!("{module_id}.{}", hex::encode(digest))
 }
 
 /// Starts the local launcher HTTP API server.
@@ -183,6 +191,21 @@ struct HttpResponse {
     body: serde_json::Value,
 }
 
+struct ValidatedHttpRequest {
+    stream: TcpStream,
+    request: HttpRequest,
+    context: LauncherHttpApiContext,
+    peer_addr: Option<SocketAddr>,
+}
+
+type HttpWorkerReceiver = Arc<Mutex<mpsc::Receiver<ValidatedHttpRequest>>>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AuthorizedClient {
+    Launcher,
+    Module(String),
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct IntegrationTextRequest {
@@ -278,6 +301,18 @@ struct ModuleStageChangedEvent {
 }
 
 fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiContext) {
+    let (sender, receiver) = mpsc::sync_channel(MAX_HTTP_API_QUEUE);
+    let receiver = Arc::new(Mutex::new(receiver));
+    for worker_index in 0..MAX_HTTP_API_WORKERS {
+        let worker_receiver = Arc::clone(&receiver);
+        if let Err(error) = std::thread::Builder::new()
+            .name(format!("axelate-local-http-worker-{worker_index}"))
+            .spawn(move || run_http_api_worker(&worker_receiver))
+        {
+            tracing::warn!("Failed to spawn launcher HTTP API worker: {error}");
+        }
+    }
+
     for incoming in listener.incoming() {
         match incoming {
             Ok(mut stream) => {
@@ -298,18 +333,46 @@ fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiCont
                     write_response_or_log(&mut stream, &response);
                     continue;
                 }
-                if let Err(error) = std::thread::Builder::new()
-                    .name("axelate-local-http-request".to_string())
-                    .spawn(move || {
-                        handle_validated_request(stream, request, request_context, peer_addr);
-                    })
-                {
-                    tracing::warn!("Failed to spawn launcher HTTP API request handler: {error}");
+                let job = ValidatedHttpRequest {
+                    stream,
+                    request,
+                    context: request_context,
+                    peer_addr,
+                };
+                match sender.try_send(job) {
+                    Ok(()) => {}
+                    Err(mpsc::TrySendError::Full(mut job)) => {
+                        let response = json_error(503, "Launcher API request queue is full");
+                        write_response_or_log(&mut job.stream, &response);
+                    }
+                    Err(mpsc::TrySendError::Disconnected(mut job)) => {
+                        let response = json_error(500, "Launcher API workers are unavailable");
+                        write_response_or_log(&mut job.stream, &response);
+                    }
                 }
             }
             Err(error) => {
                 tracing::warn!("Launcher HTTP API accept failed: {error}");
             }
+        }
+    }
+}
+
+fn run_http_api_worker(receiver: &HttpWorkerReceiver) {
+    loop {
+        let job = {
+            let Ok(receiver) = receiver.lock() else {
+                tracing::warn!("Launcher HTTP API worker receiver lock is poisoned");
+                return;
+            };
+            receiver.recv()
+        };
+
+        match job {
+            Ok(job) => {
+                handle_validated_request(job.stream, job.request, job.context, job.peer_addr);
+            }
+            Err(_) => return,
         }
     }
 }
@@ -501,11 +564,11 @@ async fn dispatch_http_request(
         return json_response(200, json!({ "ok": true, "service": "axelate-launcher" }));
     }
 
-    if !is_authorized(&request.headers) {
+    let Some(client) = authorize_request(&request.headers) else {
         return json_error(401, "Missing or invalid launcher API token");
-    }
+    };
 
-    match route_authorized_request(path, &request, context).await {
+    match route_authorized_request(path, &request, context, &client).await {
         Ok(response) => response,
         Err(error) => json_error(status_for_app_error(&error), &error.to_string()),
     }
@@ -531,6 +594,7 @@ async fn route_authorized_request(
     path: &str,
     request: &HttpRequest,
     context: LauncherHttpApiContext,
+    client: &AuthorizedClient,
 ) -> Result<HttpResponse, AppError> {
     let segments = path
         .trim_matches('/')
@@ -547,6 +611,7 @@ async fn route_authorized_request(
             ))
         }
         ("GET", ["v1", "modules", module_id, "status"]) => {
+            ensure_module_route_owner(client, module_id)?;
             crate::domain::modules::downloader::validate_module_id(module_id)?;
             let status = module_controller::get_module_status(module_id).await;
             Ok(json_response(
@@ -555,21 +620,27 @@ async fn route_authorized_request(
             ))
         }
         ("GET", ["v1", "modules", module_id, "context"]) => {
+            ensure_module_route_owner(client, module_id)?;
             handle_module_context_request(module_id)
         }
         ("GET", ["v1", "modules", module_id, "settings"]) => {
+            ensure_module_route_owner(client, module_id)?;
             handle_get_module_settings_request(&context, module_id).await
         }
         ("PUT", ["v1", "modules", module_id, "settings"]) => {
+            ensure_module_route_owner(client, module_id)?;
             handle_put_module_settings_request(request, &context, module_id).await
         }
         ("PATCH", ["v1", "modules", module_id, "settings"]) => {
+            ensure_module_route_owner(client, module_id)?;
             handle_patch_module_settings_request(request, &context, module_id).await
         }
         ("POST", ["v1", "modules", module_id, "stage"]) => {
+            ensure_module_route_owner(client, module_id)?;
             handle_module_stage_request(request, &context, module_id)
         }
         ("POST", ["v1", "modules", module_id, action]) => {
+            ensure_module_route_owner(client, module_id)?;
             crate::domain::modules::downloader::validate_module_id(module_id)?;
             let action = parse_module_action(action)?;
             let response = module_controller::control(context.app, module_id, action).await?;
@@ -702,6 +773,16 @@ fn ensure_installed_module_id(module_id: &str) -> Result<(), AppError> {
         Err(AppError::NotFound(format!(
             "Module {module_id} is not installed"
         )))
+    }
+}
+
+fn ensure_module_route_owner(client: &AuthorizedClient, module_id: &str) -> Result<(), AppError> {
+    match client {
+        AuthorizedClient::Launcher => Ok(()),
+        AuthorizedClient::Module(owner_id) if owner_id == module_id => Ok(()),
+        AuthorizedClient::Module(_) => Err(AppError::PermissionDenied(
+            "Integration token cannot access another integration".to_string(),
+        )),
     }
 }
 
@@ -1183,24 +1264,44 @@ fn is_loopback_peer(peer_addr: Option<SocketAddr>) -> bool {
 }
 
 fn is_authorized(headers: &HashMap<String, String>) -> bool {
-    headers
-        .get("authorization")
-        .is_some_and(|value| is_authorized_bearer(value))
-        || headers
-            .get("x-axelate-token")
-            .is_some_and(|value| value.trim() == api_token())
+    authorize_request(headers).is_some()
 }
 
-fn is_authorized_bearer(value: &str) -> bool {
-    let mut parts = value.split_whitespace();
-    let Some(scheme) = parts.next() else {
-        return false;
-    };
-    let Some(token) = parts.next() else {
-        return false;
-    };
+fn authorize_request(headers: &HashMap<String, String>) -> Option<AuthorizedClient> {
+    headers
+        .get("authorization")
+        .and_then(|value| authorized_bearer_client(value))
+        .or_else(|| {
+            headers
+                .get("x-axelate-token")
+                .and_then(|value| authorized_token_client(value.trim()))
+        })
+}
 
-    parts.next().is_none() && scheme.eq_ignore_ascii_case("bearer") && token == api_token()
+fn authorized_bearer_client(value: &str) -> Option<AuthorizedClient> {
+    let mut parts = value.split_whitespace();
+    let scheme = parts.next()?;
+    let token = parts.next()?;
+    if parts.next().is_some() || !scheme.eq_ignore_ascii_case("bearer") {
+        return None;
+    }
+
+    authorized_token_client(token)
+}
+
+fn authorized_token_client(token: &str) -> Option<AuthorizedClient> {
+    if token == api_token() {
+        return Some(AuthorizedClient::Launcher);
+    }
+
+    let (module_id, digest) = token.split_once('.')?;
+    crate::domain::modules::downloader::validate_module_id(module_id).ok()?;
+    let expected = module_api_token(module_id);
+    if token == expected && !digest.is_empty() {
+        Some(AuthorizedClient::Module(module_id.to_string()))
+    } else {
+        None
+    }
 }
 
 const fn json_response(status: u16, body: serde_json::Value) -> HttpResponse {
@@ -1239,6 +1340,7 @@ const fn status_text(status: u16) -> &'static str {
         403 => "Forbidden",
         404 => "Not Found",
         500 => "Internal Server Error",
+        503 => "Service Unavailable",
         _ => "Unknown",
     }
 }
@@ -1338,6 +1440,34 @@ mod tests {
             super::api_token().to_string(),
         );
         assert!(is_authorized(&headers));
+    }
+
+    #[test]
+    fn authorization_maps_module_tokens_to_module_owner() {
+        let mut headers = HashMap::new();
+        headers.insert(
+            "authorization".to_string(),
+            format!("Bearer {}", super::module_api_token("sample-module")),
+        );
+
+        assert_eq!(
+            super::authorize_request(&headers),
+            Some(super::AuthorizedClient::Module("sample-module".to_string()))
+        );
+        assert!(
+            super::ensure_module_route_owner(
+                &super::AuthorizedClient::Module("sample-module".to_string()),
+                "sample-module"
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            super::ensure_module_route_owner(
+                &super::AuthorizedClient::Module("sample-module".to_string()),
+                "other-module"
+            ),
+            Err(AppError::PermissionDenied(_))
+        ));
     }
 
     #[test]
