@@ -17,11 +17,12 @@ use crate::domain::system::ports::{LAUNCHER_LOCAL_PORT_RANGE, LocalPortPurpose};
 use crate::errors::AppError;
 use crate::infrastructure::config::settings::SettingsService;
 use crate::infrastructure::config::ui_state::UiStateService;
-use crate::models::{AiModel, ApiProvider, ModelTier, ModuleItem, ProviderType, SelectedModule};
+use crate::models::{
+    AiModel, ApiProvider, ModelTier, Module, ModuleItem, ProviderType, SelectedModule,
+};
 use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -48,6 +49,8 @@ static API_TOKEN: Lazy<String> = Lazy::new(|| {
         uuid::Uuid::new_v4().simple()
     )
 });
+static MODULE_API_TOKENS: Lazy<Mutex<HashMap<String, String>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Handle for the running launcher HTTP API server.
 #[derive(Debug, Clone)]
@@ -78,13 +81,18 @@ pub fn api_token() -> &'static str {
 pub fn apply_process_env(command: &mut tokio::process::Command, module_id: &str) {
     command
         .env("AXELATE_HTTP_API_BASE", api_base_url())
-        .env("AXELATE_HTTP_API_TOKEN", module_api_token(module_id))
+        .env("AXELATE_HTTP_API_TOKEN", issue_module_api_token(module_id))
         .env("AXELATE_SDK_VERSION", SDK_API_VERSION);
 }
 
-fn module_api_token(module_id: &str) -> String {
-    let digest = Sha256::digest(format!("{}:{module_id}", api_token()).as_bytes());
-    format!("{module_id}.{}", hex::encode(digest))
+fn issue_module_api_token(module_id: &str) -> String {
+    let token = format!("{module_id}.{}", uuid::Uuid::new_v4().simple());
+    if let Ok(mut tokens) = MODULE_API_TOKENS.lock() {
+        tokens.insert(module_id.to_string(), token.clone());
+    } else {
+        tracing::warn!("Failed to register module API token for {module_id}");
+    }
+    token
 }
 
 /// Starts the local launcher HTTP API server.
@@ -283,14 +291,6 @@ struct ModuleContextApiResponse {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SelectedModuleChangedEvent {
-    category: String,
-    module: SelectedModule,
-    source: &'static str,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 struct ModuleStageChangedEvent {
     module_id: String,
     stage: String,
@@ -318,7 +318,7 @@ fn serve_launcher_http_api(listener: &TcpListener, context: &LauncherHttpApiCont
             Ok(mut stream) => {
                 let request_context = context.clone();
                 let peer_addr = stream.peer_addr().ok();
-                let request = match read_http_request(&mut stream) {
+                let request = match read_http_request_head(&mut stream) {
                     Ok(request) => request,
                     Err(error) => {
                         let response = HttpResponse {
@@ -406,8 +406,15 @@ fn handle_validated_request(
     context: LauncherHttpApiContext,
     peer_addr: Option<SocketAddr>,
 ) {
-    let response =
-        tauri::async_runtime::block_on(dispatch_http_request(request, context, peer_addr));
+    let response = match complete_http_request_body(&mut stream, request) {
+        Ok(request) => {
+            tauri::async_runtime::block_on(dispatch_http_request(request, context, peer_addr))
+        }
+        Err(error) => HttpResponse {
+            status: 400,
+            body: json!({ "ok": false, "error": error }),
+        },
+    };
     write_response_or_log(&mut stream, &response);
 }
 
@@ -417,7 +424,13 @@ fn write_response_or_log(stream: &mut TcpStream, response: &HttpResponse) {
     }
 }
 
+#[cfg(test)]
 fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
+    let request = read_http_request_head(stream)?;
+    complete_http_request_body(stream, request)
+}
+
+fn read_http_request_head(stream: &mut TcpStream) -> Result<HttpRequest, String> {
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|error| format!("Failed to configure read timeout: {error}"))?;
@@ -485,24 +498,6 @@ fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
         .checked_add(4)
         .ok_or_else(|| "Internal HTTP body offset overflowed".to_string())?;
     let mut body = buffer.get(body_start..).unwrap_or_default().to_vec();
-    while body.len() < content_length {
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|error| format!("Failed to read request body: {error}"))?;
-        if read == 0 {
-            return Err(format!(
-                "HTTP request body ended before content-length was reached: expected {content_length} bytes, got {}",
-                body.len()
-            ));
-        }
-        let read_chunk = chunk
-            .get(..read)
-            .ok_or_else(|| "Internal HTTP body buffer range is invalid".to_string())?;
-        body.extend_from_slice(read_chunk);
-        if body.len() > MAX_REQUEST_BYTES {
-            return Err("HTTP request body is too large".to_string());
-        }
-    }
     body.truncate(content_length);
 
     Ok(HttpRequest {
@@ -511,6 +506,45 @@ fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
         headers,
         body,
     })
+}
+
+fn complete_http_request_body(
+    stream: &mut TcpStream,
+    mut request: HttpRequest,
+) -> Result<HttpRequest, String> {
+    let content_length = request
+        .headers
+        .get("content-length")
+        .map_or(Ok(0_usize), |value| {
+            value
+                .parse::<usize>()
+                .map_err(|error| format!("Invalid content-length: {error}"))
+        })?;
+    if content_length > MAX_REQUEST_BYTES {
+        return Err("HTTP request body is too large".to_string());
+    }
+    let mut chunk = [0_u8; 4096];
+    while request.body.len() < content_length {
+        let read = stream
+            .read(&mut chunk)
+            .map_err(|error| format!("Failed to read request body: {error}"))?;
+        if read == 0 {
+            return Err(format!(
+                "HTTP request body ended before content-length was reached: expected {content_length} bytes, got {}",
+                request.body.len()
+            ));
+        }
+        let read_chunk = chunk
+            .get(..read)
+            .ok_or_else(|| "Internal HTTP body buffer range is invalid".to_string())?;
+        request.body.extend_from_slice(read_chunk);
+        if request.body.len() > MAX_REQUEST_BYTES {
+            return Err("HTTP request body is too large".to_string());
+        }
+    }
+    request.body.truncate(content_length);
+
+    Ok(request)
 }
 
 fn find_header_end(buffer: &[u8]) -> Option<usize> {
@@ -604,7 +638,8 @@ async fn route_authorized_request(
 
     match (request.method.as_str(), segments.as_slice()) {
         ("GET", ["v1", "modules"]) => {
-            let modules = module_controller::get_all_modules().await;
+            let modules =
+                modules_visible_to_client(module_controller::get_all_modules().await, client);
             Ok(json_response(
                 200,
                 json!({ "ok": true, "modules": modules }),
@@ -653,6 +688,13 @@ async fn route_authorized_request(
         ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context).await,
         _ => Ok(json_error(404, "Unknown launcher API route")),
     }
+}
+
+fn modules_visible_to_client(mut modules: Vec<Module>, client: &AuthorizedClient) -> Vec<Module> {
+    if let AuthorizedClient::Module(module_id) = client {
+        modules.retain(|module| module.id == *module_id);
+    }
+    modules
 }
 
 fn handle_module_context_request(module_id: &str) -> Result<HttpResponse, AppError> {
@@ -851,7 +893,7 @@ async fn handle_text_request(
             .ok_or_else(|| AppError::Validation("No selected text AI provider".to_string()))?,
     };
     if requested_provider.is_some() {
-        select_provider_for_category(&context, "ai_text", &ui_provider).await?;
+        resolve_selected_provider_module(&context.config_service, &ui_provider)?;
     }
     let provider = backend_provider_id(&ui_provider).to_string();
     let model = resolve_model_id(
@@ -940,7 +982,7 @@ async fn handle_image_request(
             .ok_or_else(|| AppError::Validation("No selected image AI provider".to_string()))?,
     };
     if requested_provider.is_some() {
-        select_provider_for_category(&context, "ai_image", &ui_provider).await?;
+        resolve_selected_provider_module(&context.config_service, &ui_provider)?;
     }
     let provider = backend_provider_id(&ui_provider).to_string();
     let model = resolve_model_id(
@@ -998,42 +1040,6 @@ async fn handle_image_request(
 fn parse_json_body<T: for<'de> Deserialize<'de>>(request: &HttpRequest) -> Result<T, AppError> {
     serde_json::from_slice(&request.body)
         .map_err(|error| AppError::Validation(format!("Invalid JSON request body: {error}")))
-}
-
-async fn select_provider_for_category(
-    context: &LauncherHttpApiContext,
-    category: &str,
-    provider_id: &str,
-) -> Result<(), AppError> {
-    let selected_module = resolve_selected_provider_module(&context.config_service, provider_id)?;
-    let mut state = context.ui_state_service.get_ui_state().await?;
-    let previous_id = state
-        .selected_modules
-        .get(category)
-        .map(|module| module.id.as_str());
-
-    if previous_id == Some(selected_module.id.as_str()) {
-        return Ok(());
-    }
-
-    state
-        .selected_modules
-        .insert(category.to_string(), selected_module.clone());
-    context.ui_state_service.save_ui_state(&state).await?;
-
-    let payload = SelectedModuleChangedEvent {
-        category: category.to_string(),
-        module: selected_module,
-        source: "integration-api",
-    };
-    if let Err(error) = context
-        .app
-        .emit("ui-state:selected-module-changed", payload)
-    {
-        tracing::warn!("Failed to emit selected module change: {error}");
-    }
-
-    Ok(())
 }
 
 fn resolve_selected_provider_module(
@@ -1296,12 +1302,15 @@ fn authorized_token_client(token: &str) -> Option<AuthorizedClient> {
 
     let (module_id, digest) = token.split_once('.')?;
     crate::domain::modules::downloader::validate_module_id(module_id).ok()?;
-    let expected = module_api_token(module_id);
-    if token == expected && !digest.is_empty() {
-        Some(AuthorizedClient::Module(module_id.to_string()))
-    } else {
-        None
+    if digest.is_empty() {
+        return None;
     }
+    MODULE_API_TOKENS
+        .lock()
+        .ok()
+        .and_then(|tokens| tokens.get(module_id).cloned())
+        .filter(|expected| expected == token)
+        .map(|_| AuthorizedClient::Module(module_id.to_string()))
 }
 
 const fn json_response(status: u16, body: serde_json::Value) -> HttpResponse {
@@ -1352,18 +1361,20 @@ mod tests {
     use super::{
         IntegrationTextRequest, ModuleContextApiResponse, backend_provider_id, find_header_end,
         is_authorized, is_loopback_peer, json_error, json_response, model_api_id,
-        parse_header_line, parse_header_lines, parse_json_body, parse_module_action,
-        read_http_request, selected_module_from_api_provider, selected_module_from_catalog_item,
-        status_for_app_error, status_text, tier_rank,
+        modules_visible_to_client, parse_header_line, parse_header_lines, parse_json_body,
+        parse_module_action, read_http_request, selected_module_from_api_provider,
+        selected_module_from_catalog_item, status_for_app_error, status_text, tier_rank,
     };
     use crate::domain::modules::controller::ModuleAction;
     use crate::errors::AppError;
     use crate::models::{
-        AiModel, ApiModelConfig, ModelStats, ModelTier, ModuleItem, ProviderType, SelectedModule,
+        AiModel, ApiModelConfig, ModelStats, ModelTier, Module, ModuleItem, ProviderType,
+        SelectedModule,
     };
     use std::collections::HashMap;
     use std::io::Write;
     use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::time::Duration;
 
     fn model_with_api_ids() -> AiModel {
         AiModel {
@@ -1444,11 +1455,9 @@ mod tests {
 
     #[test]
     fn authorization_maps_module_tokens_to_module_owner() {
+        let token = super::issue_module_api_token("sample-module");
         let mut headers = HashMap::new();
-        headers.insert(
-            "authorization".to_string(),
-            format!("Bearer {}", super::module_api_token("sample-module")),
-        );
+        headers.insert("authorization".to_string(), format!("Bearer {token}"));
 
         assert_eq!(
             super::authorize_request(&headers),
@@ -1468,6 +1477,24 @@ mod tests {
             ),
             Err(AppError::PermissionDenied(_))
         ));
+    }
+
+    #[test]
+    fn issuing_new_module_token_invalidates_previous_token() {
+        let old_token = super::issue_module_api_token("rotating-module");
+        let new_token = super::issue_module_api_token("rotating-module");
+        let mut headers = HashMap::new();
+
+        headers.insert("authorization".to_string(), format!("Bearer {old_token}"));
+        assert_eq!(super::authorize_request(&headers), None);
+
+        headers.insert("authorization".to_string(), format!("Bearer {new_token}"));
+        assert_eq!(
+            super::authorize_request(&headers),
+            Some(super::AuthorizedClient::Module(
+                "rotating-module".to_string()
+            ))
+        );
     }
 
     #[test]
@@ -1717,6 +1744,42 @@ mod tests {
     }
 
     #[test]
+    fn module_tokens_only_see_their_own_module_in_list_route() {
+        fn module(id: &str) -> Module {
+            Module {
+                id: id.to_string(),
+                name: id.to_string(),
+                description: String::new(),
+                version: String::new(),
+                author: String::new(),
+                category: "service".to_string(),
+                icon: String::new(),
+                preview: None,
+                path: String::new(),
+                installed: true,
+                local: true,
+                enabled: false,
+                status: None,
+                is_deletable: true,
+                config: HashMap::new(),
+                config_schema: None,
+                settings_ui: None,
+            }
+        }
+
+        let visible = modules_visible_to_client(
+            vec![module("owned-module"), module("other-module")],
+            &super::AuthorizedClient::Module("owned-module".to_string()),
+        );
+
+        assert_eq!(visible.len(), 1);
+        assert_eq!(
+            visible.first().map(|module| module.id.as_str()),
+            Some("owned-module")
+        );
+    }
+
+    #[test]
     fn selected_module_from_api_provider_maps_provider_type() {
         let provider = crate::models::ApiProvider {
             id: "cloud".to_string(),
@@ -1780,6 +1843,30 @@ mod tests {
         client.join().expect("client thread");
 
         assert_eq!(error, "HTTP request body is too large");
+    }
+
+    #[test]
+    fn reads_headers_without_waiting_for_full_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+        let addr = listener.local_addr().expect("local addr");
+        let client = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(addr).expect("connect test listener");
+            stream
+                .write_all(b"POST /v1/ai/text HTTP/1.1\r\nContent-Length: 8\r\n\r\nabc")
+                .expect("write partial request");
+            std::thread::sleep(Duration::from_millis(200));
+            stream.shutdown(Shutdown::Write).expect("shutdown write");
+        });
+
+        let (mut stream, _) = listener.accept().expect("accept test client");
+        let request = super::read_http_request_head(&mut stream).expect("request head");
+
+        assert_eq!(request.path, "/v1/ai/text");
+        assert_eq!(request.body, b"abc");
+        let error = super::complete_http_request_body(&mut stream, request)
+            .expect_err("remaining body should still be required");
+        client.join().expect("client thread");
+        assert!(error.contains("expected 8 bytes, got 3"));
     }
 
     #[test]
