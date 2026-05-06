@@ -6,8 +6,6 @@ pub mod engine;
 pub mod filesystem;
 /// Local HTTP API for launcher integrations
 pub mod integration_api;
-/// License domain logic
-pub mod license;
 /// Module domain logic
 pub mod modules;
 /// Monitoring domain logic

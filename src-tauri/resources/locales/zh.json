@@ -249,7 +249,6 @@
     "ui.launcher.web.information": "信息",
     "ui.launcher.web.logs_general": "平台",
     "ui.launcher.web.main_menu": "主菜单",
-    "ui.launcher.web.marketplace": "市场",
     "ui.connectivity.offline_title": "网络连接不可用",
     "ui.connectivity.offline_text": "本地模块仍可继续工作。云 AI、下载和外部页面暂时不可用。",
     "ui.launcher.web.models_title": "AI 引擎与集成",

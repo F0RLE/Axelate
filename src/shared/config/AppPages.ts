@@ -30,13 +30,6 @@ export const APP_PAGES: IAppPage[] = [
         inSettings: true,
     },
     {
-        id: 'marketplace',
-        icon: '#icon-marketplace',
-        i18nKey: 'ui.launcher.web.marketplace',
-        defaultLabel: 'Market',
-        inSettings: true,
-    },
-    {
         id: 'settings',
         icon: '#icon-settings',
         i18nKey: 'ui.launcher.web.settings',

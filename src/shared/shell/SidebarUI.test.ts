@@ -110,7 +110,7 @@ describe('SidebarUI', () => {
 
         await sidebarUi.init();
 
-        expect(document.querySelectorAll('.main-menu .nav-btn')).toHaveLength(6);
+        expect(document.querySelectorAll('.main-menu .nav-btn')).toHaveLength(5);
         expect(document.querySelectorAll('.bottom-menu .nav-btn')).toHaveLength(1);
         expect(document.querySelector('.console-trigger')?.getAttribute('data-page')).toBe(
             'console',

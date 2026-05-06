@@ -163,37 +163,11 @@ pub(super) async fn clone_repository_into(
 }
 
 pub(super) fn build_client(module_id: &str) -> Result<reqwest::Client, AppError> {
-    let mut client_builder = reqwest::Client::builder()
+    let client_builder = reqwest::Client::builder()
         .user_agent("Axelate/1.0.0 (Tauri; Windows)")
         .timeout(std::time::Duration::from_secs(600));
 
-    let loaded_license = match crate::domain::license::storage::load_license() {
-        Ok(license) => license,
-        Err(error) => {
-            tracing::warn!(
-                module_id = module_id,
-                "Failed to load license for download headers: {error}"
-            );
-            None
-        }
-    };
-
-    if let Some(license) = loaded_license
-        && !license.key.is_empty()
-    {
-        tracing::info!("Injecting license key for module download: {module_id}");
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Ok(auth_val) =
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", license.key))
-        {
-            headers.insert(reqwest::header::AUTHORIZATION, auth_val);
-        }
-        if let Ok(lic_val) = reqwest::header::HeaderValue::from_str(&license.key) {
-            headers.insert("X-Axelate-License", lic_val);
-        }
-        client_builder = client_builder.default_headers(headers);
-    }
-
+    tracing::debug!(module_id = module_id, "Building module download client");
     client_builder.build().map_err(|error| AppError::External {
         request_id: None,
         message: format!("Client error: {error}"),

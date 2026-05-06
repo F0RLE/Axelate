@@ -71,7 +71,6 @@ const INITIAL_TEMPLATE_TARGETS = [
     ['pages/home', 'page-home'],
     ['pages/chat', 'page-chat'],
     ['pages/modules', 'page-modules'],
-    ['pages/marketplace', 'page-marketplace'],
     ['pages/downloads', 'page-downloads'],
     ['pages/console', 'page-console'],
     ['pages/settings', 'page-settings'],
