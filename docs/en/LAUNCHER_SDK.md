@@ -105,21 +105,21 @@ const token = process.env.AXELATE_HTTP_API_TOKEN;
 const moduleId = process.env.AXELATE_MODULE_ID;
 
 const response = await fetch(`${baseUrl}/v1/ai/text`, {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    provider: "llamacpp",
-    prompt: "Write a short status update",
-  }),
+    method: 'POST',
+    headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        provider: 'llamacpp',
+        prompt: 'Write a short status update',
+    }),
 });
 
 const result = await response.json();
 
 const settingsResponse = await fetch(`${baseUrl}/v1/modules/${moduleId}/settings`, {
-  headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}` },
 });
 const { settings } = await settingsResponse.json();
 ```
@@ -178,19 +178,21 @@ Returns the stable runtime context for an installed integration.
 
 ```json
 {
-  "ok": true,
-  "apiVersion": "1",
-  "moduleId": "my-integration",
-  "moduleDir": "C:\\Users\\...\\AxelateData\\System\\Integrations\\my-integration",
-  "runtimeDir": "C:\\Users\\...\\AxelateData\\System\\Runtime",
-  "moduleRuntimeDir": "C:\\Users\\...\\AxelateData\\System\\Runtime\\Integrations\\my-integration",
-  "moduleLogDir": "C:\\Users\\...\\AxelateData\\System\\Logs\\Integrations\\my-integration",
-  "httpApiBase": "http://127.0.0.1:3000"
+    "ok": true,
+    "apiVersion": "1",
+    "moduleId": "my-integration",
+    "moduleDir": "{AXELATE_DATA_DIR}/System/Integrations/my-integration",
+    "runtimeDir": "{AXELATE_DATA_DIR}/System/Runtime",
+    "moduleRuntimeDir": "{AXELATE_DATA_DIR}/System/Runtime/Integrations/my-integration",
+    "moduleLogDir": "{AXELATE_DATA_DIR}/System/Logs/Integrations/my-integration",
+    "httpApiBase": "http://127.0.0.1:3000"
 }
 ```
 
 `moduleDir` is for reading shipped integration files. Runtime output belongs in
-`moduleRuntimeDir`, not in the integration folder.
+`moduleRuntimeDir`, not in the integration folder. Treat these paths as
+platform-specific strings and use path utilities such as `path.join` and
+`path.sep` instead of hardcoded separators.
 
 `GET /v1/modules/{moduleId}/settings`
 
@@ -202,8 +204,8 @@ Replaces the integration settings object.
 
 ```json
 {
-  "chatId": "12345",
-  "enabled": true
+    "chatId": "12345",
+    "enabled": true
 }
 ```
 
@@ -218,10 +220,10 @@ emits `module-stage-changed` for UI surfaces and writes the stage to logs.
 
 ```json
 {
-  "stage": "parser.fetch",
-  "label": "Fetching external data",
-  "details": { "topics": 3 },
-  "progress": 0.35
+    "stage": "parser.fetch",
+    "label": "Fetching external data",
+    "details": { "topics": 3 },
+    "progress": 0.35
 }
 ```
 
@@ -250,14 +252,14 @@ launcher chat.
 
 ```json
 {
-  "prompt": "Summarize this message",
-  "sessionId": "sample-integration",
-  "provider": "openai",
-  "model": "gpt-5.5",
-  "messages": [{ "role": "user", "content": "Optional chat history" }],
-  "thinkingLevel": "medium",
-  "maxTokens": 1024,
-  "webSearch": { "enabled": false }
+    "prompt": "Summarize this message",
+    "sessionId": "sample-integration",
+    "provider": "openai",
+    "model": "gpt-5.5",
+    "messages": [{ "role": "user", "content": "Optional chat history" }],
+    "thinkingLevel": "medium",
+    "maxTokens": 1024,
+    "webSearch": { "enabled": false }
 }
 ```
 
@@ -275,12 +277,12 @@ Runs image generation through the selected or requested image AI provider.
 
 ```json
 {
-  "prompt": "Pixel art launcher icon",
-  "provider": "openai",
-  "model": "image-model-id",
-  "width": 1024,
-  "height": 1024,
-  "steps": 30
+    "prompt": "Pixel art launcher icon",
+    "provider": "openai",
+    "model": "image-model-id",
+    "width": 1024,
+    "height": 1024,
+    "steps": 30
 }
 ```
 

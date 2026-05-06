@@ -482,9 +482,43 @@ fn is_gpu_asset_name_lower(lower: &str) -> bool {
 
 fn is_cpu_asset_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    release_asset_tokens(&lower).any(|token| {
-        token == "cpu" || token == "avx" || token == "avx2" || token == "avx512" || token == "noavx"
-    })
+    let mut has_cpu_token = false;
+    let mut has_os_or_arch_token = false;
+    let mut has_unknown_accelerator_token = false;
+    for token in release_asset_tokens(&lower) {
+        if token == "cpu"
+            || token == "avx"
+            || token == "avx2"
+            || token == "avx512"
+            || token == "noavx"
+        {
+            has_cpu_token = true;
+        }
+        if matches!(
+            token,
+            "linux"
+                | "windows"
+                | "win"
+                | "darwin"
+                | "macos"
+                | "osx"
+                | "x86"
+                | "x86_64"
+                | "x64"
+                | "amd64"
+                | "arm64"
+                | "aarch64"
+        ) {
+            has_os_or_arch_token = true;
+        }
+        if token == "metal" || token == "npu" || token == "xpu" || token.starts_with("rtx") {
+            has_unknown_accelerator_token = true;
+        }
+    }
+
+    (has_cpu_token || has_os_or_arch_token)
+        && !has_unknown_accelerator_token
+        && !is_gpu_asset_name_lower(&lower)
 }
 
 fn release_asset_tokens(name: &str) -> impl Iterator<Item = &str> {
@@ -644,7 +678,7 @@ mod tests {
     #[test]
     fn asset_classification_does_not_treat_amd64_as_amd_gpu() {
         assert!(!is_gpu_asset_name("llama-b8981-bin-win-amd64.zip"));
-        assert!(!is_cpu_asset_name("llama-b8981-bin-win-amd64.zip"));
+        assert!(is_cpu_asset_name("llama-b8981-bin-win-amd64.zip"));
         assert!(is_gpu_asset_name("llama-b8981-bin-win-hip-radeon-x64.zip"));
     }
 
