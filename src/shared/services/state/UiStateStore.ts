@@ -42,7 +42,7 @@ const DEFAULT_UI_STATE: IUIState = {
     sidebar_collapsed: false,
     sidebar_manual_override: false,
     sidebar_width: 280,
-    hidden_nav_items: ['marketplace'],
+    hidden_nav_items: [],
     hidden_monitors: [],
     card_widths: {},
     download_limit_enabled: false,

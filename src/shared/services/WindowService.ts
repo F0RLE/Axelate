@@ -49,7 +49,6 @@ const PAGE_ZOOM_PROFILES: Record<string, PageZoomProfile> = {
     home: { minWidth: 800, minHeight: 600 },
     chat: { minWidth: 920, minHeight: 640 },
     modules: { minWidth: 1024, minHeight: 650 },
-    marketplace: { minWidth: 1024, minHeight: 650 },
     downloads: { minWidth: 900, minHeight: 600 },
     console: { minWidth: 1080, minHeight: 650 },
     settings: { minWidth: 980, minHeight: 680 },

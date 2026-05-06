@@ -2,8 +2,6 @@
 pub mod ai;
 /// Engine lifecycle commands (start, stop, status)
 pub mod engine;
-/// License management commands
-pub mod license;
 /// Module management commands (download, control)
 pub mod modules;
 /// Secure storage commands

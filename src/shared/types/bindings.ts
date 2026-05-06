@@ -104,14 +104,6 @@ export const commands = {
 	hideWindow: () => typedError<null, AppError>(__TAURI_INVOKE("hide_window")),
 	// Retrieves translation strings for the specified language
 	getTranslations: (lang: string) => typedError<"Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never }, AppError>(__TAURI_INVOKE("get_translations", { lang })),
-	// Retrieves current license activation status
-	getLicenseStatus: () => typedError<LicenseStatusResponse, AppError>(__TAURI_INVOKE("get_license_status")),
-	// Activates a license key with optional email
-	activateLicense: (key: string, email: string | null) => typedError<LicenseStatus, AppError>(__TAURI_INVOKE("activate_license", { key, email })),
-	// Deactivates the current license
-	deactivateLicense: () => typedError<null, AppError>(__TAURI_INVOKE("deactivate_license")),
-	// Checks if a specific feature is enabled by the current license
-	checkFeature: (feature: string) => typedError<boolean, AppError>(__TAURI_INVOKE("check_feature", { feature })),
 	// Retrieves current theme color palette
 	getThemeColors: () => typedError<{ [key in string]: string }, AppError>(__TAURI_INVOKE("get_theme_colors")),
 	// Retrieves persisted window settings (size, position, maximized state)
@@ -815,27 +807,6 @@ export type ImageGenerationResponse = {
 	ok: boolean,
 	// Error message if failed
 	error: string | null,
-};
-
-// License tier status
-export type LicenseStatus =
-// Free tier
-"Free" |
-// Pro tier
-"Pro" |
-// Enterprise tier
-"Enterprise" |
-// Expired license
-"Expired" |
-// Invalid license key
-"Invalid";
-
-// License activation status response
-export type LicenseStatusResponse = {
-	// Current license activation status
-	status: LicenseStatus,
-	// Email address associated with the license
-	email: string | null,
 };
 
 // Log entry for frontend display

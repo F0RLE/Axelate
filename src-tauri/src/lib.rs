@@ -45,7 +45,7 @@ mod tests;
 
 // Re-export API modules to match the flat structure expected by collect_commands!
 use api::{
-    ai, engine, license,
+    ai, engine,
     modules::{self, downloader},
     secure,
     settings::{self, theme, translations, ui_state, window_settings},
@@ -135,10 +135,6 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         window::show_window,
         window::hide_window,
         translations::get_translations,
-        license::get_license_status,
-        license::activate_license,
-        license::deactivate_license,
-        license::check_feature,
         theme::get_theme_colors,
         window_settings::get_window_settings,
         window_settings::save_window_size,

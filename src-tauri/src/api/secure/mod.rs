@@ -110,14 +110,14 @@ mod tests {
     fn frontend_secret_policy_allows_only_expected_service_names() {
         assert!(is_frontend_managed_secret("openrouter_api_key"));
         assert!(is_frontend_managed_secret("ai_session_id"));
-        assert!(!is_frontend_managed_secret("license_data"));
+        assert!(!is_frontend_managed_secret("internal_service_token"));
         assert!(is_frontend_readable_secret("ai_session_id"));
         assert!(is_frontend_readable_secret("openrouter_api_key"));
     }
 
     #[tokio::test]
     async fn get_secure_key_rejects_non_frontend_secret_reads() {
-        let err = get_secure_key("license_data".to_string())
+        let err = get_secure_key("internal_service_token".to_string())
             .await
             .unwrap_err();
 
@@ -129,7 +129,7 @@ mod tests {
 
     #[tokio::test]
     async fn has_secure_key_rejects_non_frontend_secret_names() {
-        let err = has_secure_key("license_data".to_string())
+        let err = has_secure_key("internal_service_token".to_string())
             .await
             .unwrap_err();
 
@@ -141,7 +141,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_secure_key_rejects_non_frontend_secret_names() {
-        let err = remove_secure_key("license_data".to_string())
+        let err = remove_secure_key("internal_service_token".to_string())
             .await
             .unwrap_err();
 

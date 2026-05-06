@@ -137,7 +137,7 @@ describe('CoreBootstrapRunner', () => {
             bootstrap.templateLoader.loadAndInject.mock.invocationCallOrder[0] ??
                 Number.POSITIVE_INFINITY,
         );
-        expect(bootstrap.templateLoader.loadAndInject).toHaveBeenCalledTimes(8);
+        expect(bootstrap.templateLoader.loadAndInject).toHaveBeenCalledTimes(7);
         expect(immediateUi.sidebarUI.init.mock.invocationCallOrder[0]).toBeLessThan(
             immediateUi.navigationUI.init.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
         );
