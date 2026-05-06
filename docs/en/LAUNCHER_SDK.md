@@ -14,7 +14,10 @@ Launcher-managed integration processes receive these environment variables:
 
 - `AXELATE_SDK_VERSION`: local launcher integration API version, currently `1`
 - `AXELATE_HTTP_API_BASE`: local base URL, for example `http://127.0.0.1:3000`
-- `AXELATE_HTTP_API_TOKEN`: bearer token for the current launcher process
+- `AXELATE_HTTP_API_TOKEN`: bearer token issued by `apply_process_env` through
+  `issue_module_api_token` and scoped to this integration. It authorizes shared
+  endpoints and only this integration's own `/v1/modules/{moduleId}/...` routes;
+  `ensure_module_route_owner` rejects other module routes with `403`.
 - `AXELATE_RUNTIME_DIR`: shared launcher runtime directory
 - `AXELATE_MODULE_DIR`: read-only integration installation directory
 - `AXELATE_MODULE_RUNTIME_DIR`: writable runtime directory reserved for the integration
