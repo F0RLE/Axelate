@@ -134,7 +134,7 @@ That gate includes:
 - prerequisite check
 - Rust format, clippy, check, and tests
 - frontend dependency presence check
-- frontend bindings check, format check, typecheck, lint, tests, build, and size budget
+- frontend bindings check, format check, typecheck, lint, tests, and bundle build
 
 If `verify` is red, the repository is not ready for release work.
 
@@ -164,7 +164,9 @@ npm run clear
 
 ## Related Docs
 
+- [User Guide](USER_GUIDE.md)
 - [Development Workflow](DEVELOPMENT_WORKFLOW.md)
+- [Architecture](ARCHITECTURE.md)
 - [Releases](RELEASES.md)
 - [Current State](CURRENT_STATE.md)
 - [Trust Model](TRUST_MODEL.md)

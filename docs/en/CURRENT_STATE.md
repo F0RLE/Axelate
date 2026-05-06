@@ -1,6 +1,6 @@
 # Axelate Current State
 
-> Repository-grounded snapshot as of 2026-04-29.
+> Repository-grounded snapshot as of 2026-05-06.
 > This document describes what exists now, not what the future product aspires to become.
 
 For setup and contributor workflow, use [Getting Started](GETTING_STARTED.md) and [Development Workflow](DEVELOPMENT_WORKFLOW.md).
@@ -20,11 +20,11 @@ Today the repository is closest to:
 
 Today the repository is not yet:
 
-- a real creator marketplace
+- a reviewed package distribution layer
 - a full package distribution platform
 - a managed runtime platform
 - a mature MCP-first workstation
-- a finished public product with a stable long-term business model
+- a finished public product with stable distribution and operations
 
 ## Current Stack
 
@@ -68,10 +68,9 @@ Current frontend feature areas:
 - `chat/`
 - `console/`
 - `downloads/`
-- `home-overview/`
 - `monitoring/`
 - `settings/`
-- shared shell and app composition layers
+- shared shell, templates, and app composition layers
 
 ## Current User-Facing Surfaces
 
@@ -83,13 +82,13 @@ The repository clearly contains code for these surfaces:
 - downloads
 - console logs
 - monitoring
-- home overview placeholder
+- home page placeholder in the shared shell/templates
 - shared shell, sidebar, window, modal flow
 
 Important nuance:
 
 - the shell has carried marketplace ambitions and related wording
-- the current frontend feature set is still centered on workstation behavior, not marketplace commerce
+- the current frontend feature set is still centered on workstation behavior, not public package distribution
 - the home overview is still a placeholder surface, not a finished dashboard
 
 ## Current AI Layer
@@ -173,10 +172,19 @@ Important current interpretation:
 - it is not a stable cornerstone of the current product definition
 - it should be treated as placeholder or future integration, not as core value today
 
-### 4. `sample-integration`
+### 4. Imported custom integrations
 
-- type: script
+- source: user-imported folder, archive, or supported GitHub URL
+- manifest: `axelate-module.toml`
+- runtime: `python`, `node`, `bun`, or `binary`
 - role: external workflow integration
+
+Important current interpretation:
+
+- there is no bundled `sample-integration` entry in the current resource catalog
+- imported integrations are discovered from the user's integrations directory
+- imported integrations are local code chosen by the user, not reviewed
+  marketplace packages
 
 ### Confirmed Runtime Responsibilities
 
@@ -206,7 +214,8 @@ Current limitation:
 
 - the repository now moves to `Apache-2.0` for the desktop open core
 - the legal and packaging split between open core and closed platform is still incomplete
-- the commercial backend, signing, billing, entitlements, and managed execution layers are not separated in this repository yet
+- package signing, ownership sync, verified distribution, and managed execution
+  layers are not separated in this repository yet
 
 ## Current Strengths
 
@@ -251,24 +260,23 @@ OpenRouter is a strong accelerator for the current stage, but it also means:
 
 The repository still contains surfaces or ideas that are ahead of the stable product:
 
-- marketplace ambitions without actual commerce backend
 - home overview placeholder
 - ComfyUI presence without product-ready positioning
 - legacy wording and shell assumptions carried from earlier product framing
 
-### 4. Incomplete Commercial Foundation
+### 4. Incomplete Package Trust Foundation
 
 What does not exist yet as a finished system:
 
 - package signing service
-- entitlement service
-- billing
-- payouts
-- creator onboarding
+- verified package distribution
 - managed runtime orchestration
 - trust and review pipeline for third-party packages
+- permission prompts for package capabilities
+- signed update and rollback flow
 
-Without these, Axelate cannot honestly claim to be a creator marketplace today.
+Without these, Axelate cannot honestly claim to be a trusted package platform
+today.
 
 ### 5. Incomplete Trust Story On The Surface
 
@@ -295,7 +303,8 @@ Based on the repository and current capabilities, Axelate should currently be de
 - weaker than a finished platform business
 
 It already has enough substance to become a serious product if scope stays narrow.
-It does not yet have enough commercial infrastructure to expand safely into a public creator marketplace.
+It does not yet have enough trust infrastructure to expand safely into public
+package distribution.
 
 ## What The Project Should Mean Right Now
 
@@ -307,7 +316,7 @@ That is the current truth.
 
 The project should not yet describe itself as:
 
-- a mature creator marketplace
+- a mature package distribution platform
 - a fully open ecosystem
 - a trusted managed execution platform
 - a finished MCP operating layer
@@ -347,6 +356,6 @@ The correct interpretation is:
 
 - keep building the workstation core
 - remove identity confusion
-- treat package commerce as phase two
+- treat public package distribution as phase two
 - treat managed execution as phase three
 - do not reopen scope until the desktop core is reliable and coherent
