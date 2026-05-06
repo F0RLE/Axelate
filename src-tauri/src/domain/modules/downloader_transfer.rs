@@ -23,11 +23,7 @@ pub(super) async fn resolve_download_url(
     client: &reqwest::Client,
     download_url: &str,
 ) -> Result<String, AppError> {
-    if download_url.contains("github.com")
-        && !Path::new(download_url)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
-    {
+    if is_github_repository_reference(download_url) {
         let base_url = download_url.trim_end_matches(".git").trim_end_matches('/');
         let main_url = format!("{base_url}/archive/refs/heads/main.zip");
         let master_url = format!("{base_url}/archive/refs/heads/master.zip");
@@ -69,6 +65,28 @@ pub(super) async fn resolve_download_url(
     }
 
     Ok(download_url.to_string())
+}
+
+fn is_github_repository_reference(download_url: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(download_url.trim()) else {
+        return false;
+    };
+    if !matches!(url.host_str(), Some("github.com" | "www.github.com")) {
+        return false;
+    }
+
+    let Some(segments) = url.path_segments() else {
+        return false;
+    };
+    let segments = segments
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    let [owner, repo] = segments.as_slice() else {
+        return false;
+    };
+
+    let repo = repo.trim_end_matches(".git");
+    !owner.is_empty() && !repo.is_empty()
 }
 
 pub(super) async fn clone_repository_into(
@@ -409,4 +427,32 @@ pub(super) async fn download_file(
         snapshot,
         interruption: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_github_repository_reference;
+
+    #[test]
+    fn github_repository_reference_accepts_repo_roots_only() {
+        assert!(is_github_repository_reference(
+            "https://github.com/F0RLE/Axelate-telegram-parser"
+        ));
+        assert!(is_github_repository_reference(
+            "https://github.com/F0RLE/Axelate-telegram-parser.git"
+        ));
+    }
+
+    #[test]
+    fn github_repository_reference_rejects_direct_assets_and_archive_urls() {
+        for url in [
+            "https://github.com/F0RLE/Axelate-telegram-parser/archive/refs/heads/main.zip",
+            "https://github.com/F0RLE/Axelate-telegram-parser/releases/download/v1/parser.7z",
+            "https://github.com/F0RLE/Axelate-telegram-parser/releases/download/v1/parser.tar.gz",
+            "https://github.com/F0RLE/Axelate-telegram-parser/raw/main/parser.zip",
+            "https://example.com/F0RLE/Axelate-telegram-parser",
+        ] {
+            assert!(!is_github_repository_reference(url), "{url}");
+        }
+    }
 }
