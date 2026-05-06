@@ -63,15 +63,19 @@ function runCommitMsg() {
         fail('commit-msg hook requires a path to the commit message file');
     }
 
-    run('npm', [
-        'exec',
-        '--',
-        'commitlint',
-        '--config',
-        path.join(repoRoot, '.github', 'commitlint.config.js'),
-        '--edit',
-        commitMessageFile,
-    ], srcDir);
+    run(
+        'npm',
+        [
+            'exec',
+            '--',
+            'commitlint',
+            '--config',
+            path.join(repoRoot, '.github', 'commitlint.config.js'),
+            '--edit',
+            commitMessageFile,
+        ],
+        srcDir,
+    );
 }
 
 const hooks = {
