@@ -26,8 +26,8 @@ export function createToastBridge(
     id?: string | null,
     onClick?: (() => void) | null,
 ) => void {
-    return (message, type, duration, title, id, onClick) => {
-        appUI.showToast(message, type, duration, title, id, onClick);
+    return (message, type, duration, title, id) => {
+        appUI.showToast(message, type, duration, title, id);
     };
 }
 
@@ -84,7 +84,7 @@ export function createTokenEstimator(
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    let timeoutId: ReturnType<typeof setTimeout>;
+    let timeoutId!: ReturnType<typeof setTimeout>;
     const timeout = new Promise<never>((_, reject) => {
         timeoutId = globalThis.setTimeout(() => {
             reject(new Error(`Timed out after ${String(timeoutMs)}ms`));
