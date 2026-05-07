@@ -42,6 +42,21 @@ pub enum ReleaseComputeTarget {
     Gpu,
     /// Prefer a CPU package.
     Cpu,
+    /// Download both CPU and GPU packages when both are compatible.
+    Both,
+}
+
+impl ReleaseComputeTarget {
+    /// Stable string stored in install metadata.
+    #[must_use]
+    pub const fn as_metadata_value(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Gpu => "gpu",
+            Self::Cpu => "cpu",
+            Self::Both => "both",
+        }
+    }
 }
 
 /// Explicit release package selection passed from the frontend.
@@ -330,15 +345,18 @@ fn find_compatible_release_bundle(
     let selected_target = selection.map_or(ReleaseComputeTarget::Auto, |selection| {
         selection.compute_target
     });
-    let selected_hardware = hardware_for_target(hardware, selected_target);
-
     releases
         .into_iter()
         .filter(|release| !release.draft && !release.prerelease)
         .filter(|release| selected_tag.is_none_or(|tag| release.tag_name == tag))
         .find_map(|release| {
-            let assets =
-                select_release_assets(module_id, platform, selected_hardware, &release.assets)?;
+            let assets = select_assets_for_target(
+                module_id,
+                platform,
+                hardware,
+                selected_target,
+                &release.assets,
+            )?;
             if selected_target != ReleaseComputeTarget::Auto
                 && !release_assets_match_target(&assets, selected_target)
             {
@@ -442,6 +460,10 @@ const fn recommended_release_target(
 fn release_assets_match_target(assets: &[ReleaseAsset], target: ReleaseComputeTarget) -> bool {
     match target {
         ReleaseComputeTarget::Auto => true,
+        ReleaseComputeTarget::Both => {
+            release_assets_match_target(assets, ReleaseComputeTarget::Gpu)
+                && release_assets_match_target(assets, ReleaseComputeTarget::Cpu)
+        }
         ReleaseComputeTarget::Gpu => assets
             .iter()
             .filter(|asset| !is_runtime_asset_name(&asset.name))
@@ -540,7 +562,7 @@ const fn hardware_for_target(
     target: ReleaseComputeTarget,
 ) -> HardwareProfile {
     match target {
-        ReleaseComputeTarget::Auto => hardware,
+        ReleaseComputeTarget::Auto | ReleaseComputeTarget::Both => hardware,
         ReleaseComputeTarget::Gpu => {
             if matches!(
                 hardware.accelerator,
@@ -565,6 +587,47 @@ const fn hardware_for_target(
             cuda_driver_minor: None,
         },
     }
+}
+
+fn select_assets_for_target(
+    module_id: &str,
+    platform: Platform,
+    hardware: HardwareProfile,
+    target: ReleaseComputeTarget,
+    assets: &[Asset],
+) -> Option<Vec<ReleaseAsset>> {
+    if target != ReleaseComputeTarget::Both {
+        return select_release_assets(
+            module_id,
+            platform,
+            hardware_for_target(hardware, target),
+            assets,
+        );
+    }
+
+    let mut selected = select_release_assets(
+        module_id,
+        platform,
+        hardware_for_target(hardware, ReleaseComputeTarget::Gpu),
+        assets,
+    )?;
+    let cpu_assets = select_release_assets(
+        module_id,
+        platform,
+        hardware_for_target(hardware, ReleaseComputeTarget::Cpu),
+        assets,
+    )?;
+
+    for asset in cpu_assets {
+        if selected.iter().any(|existing| {
+            existing.download_url == asset.download_url || existing.name == asset.name
+        }) {
+            continue;
+        }
+        selected.push(asset);
+    }
+
+    Some(selected)
 }
 
 fn parse_repo(repo_url: &str) -> Result<RepoRef, AppError> {
@@ -990,6 +1053,58 @@ mod tests {
         assert_eq!(
             bundle.assets.get(1).map(|asset| asset.name.as_str()),
             Some("llama-b8971-bin-win-cuda-13.1-x64.zip")
+        );
+    }
+
+    #[test]
+    fn explicit_release_selection_can_download_both_targets() {
+        let platform = Platform {
+            os: PlatformOs::Windows,
+            arch: PlatformArch::X64,
+        };
+        let hardware = HardwareProfile {
+            accelerator: AcceleratorClass::NvidiaCuda,
+            cpu_tier: CpuInstructionTier::Avx2,
+            cuda_driver_major: Some(580),
+            cuda_driver_minor: Some(0),
+        };
+        let releases = vec![Release {
+            tag_name: "b8971".to_string(),
+            published_at: Some("2026-04-29T10:00:00Z".to_string()),
+            draft: false,
+            prerelease: false,
+            assets: vec![
+                asset("cudart-llama-bin-win-cuda-13.1-x64.zip"),
+                asset("llama-b8971-bin-win-cuda-13.1-x64.zip"),
+                asset("llama-b8971-bin-win-cpu-x64.zip"),
+            ],
+        }];
+        let selection = ReleaseDownloadSelection {
+            tag_name: Some("b8971".to_string()),
+            compute_target: ReleaseComputeTarget::Both,
+        };
+
+        let bundle = find_compatible_release_bundle(
+            "llamacpp",
+            platform,
+            hardware,
+            releases,
+            Some(&selection),
+        )
+        .expect("expected combined CPU and GPU release bundle");
+
+        let asset_names = bundle
+            .assets
+            .iter()
+            .map(|asset| asset.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            asset_names,
+            vec![
+                "cudart-llama-bin-win-cuda-13.1-x64.zip",
+                "llama-b8971-bin-win-cuda-13.1-x64.zip",
+                "llama-b8971-bin-win-cpu-x64.zip",
+            ]
         );
     }
 

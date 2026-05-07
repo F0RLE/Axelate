@@ -162,11 +162,7 @@ pub(super) async fn build_engine_config(
     ))
 }
 
-pub(super) fn resolve_local_text_model_id(
-    request_model: &str,
-    model_path: Option<&str>,
-    provider: &str,
-) -> String {
+pub(super) fn resolve_local_text_model_id(request_model: &str, model_path: Option<&str>) -> String {
     let requested = request_model.trim();
     if !requested.is_empty() && requested != "default" {
         return requested.to_string();
@@ -179,7 +175,7 @@ pub(super) fn resolve_local_text_model_id(
         }
     }
 
-    provider.to_string()
+    "default".to_string()
 }
 
 async fn resolve_local_engine_request(
@@ -212,15 +208,9 @@ async fn resolve_local_engine_request(
             }
 
             let local_context_size = usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
-            let local_model_for_context = config
-                .model_path
-                .clone()
-                .unwrap_or_else(|| request.model.clone());
-            let effective_model = resolve_local_text_model_id(
-                &request.model,
-                config.model_path.as_deref(),
-                &request.provider,
-            );
+            let effective_model =
+                resolve_local_text_model_id(&request.model, config.model_path.as_deref());
+            let local_model_for_context = effective_model.clone();
 
             super::ai_service::stop_conflicting_local_engine(
                 engine_manager,
@@ -262,8 +252,7 @@ async fn resolve_local_engine_request(
             )
             .await?;
             let base_url = format!("{}/v1", status.endpoint);
-            let effective_model =
-                resolve_local_text_model_id(&request.model, None, &request.provider);
+            let effective_model = resolve_local_text_model_id(&request.model, None);
 
             tracing::info!(
                 engine = %status.id,
@@ -308,11 +297,9 @@ async fn prepend_local_system_prompt(
     let settings = settings_service.get_settings().await?;
     let canonical_provider = canonical_engine_id(provider);
     let canonical_key = format!("{canonical_provider}_system_prompt");
-    let raw_key = format!("{provider}_system_prompt");
     let prompt = settings
         .extra_settings
         .get(&canonical_key)
-        .or_else(|| settings.extra_settings.get(&raw_key))
         .map(String::as_str)
         .unwrap_or_default()
         .trim();
@@ -460,7 +447,6 @@ mod tests {
                 release_date: None,
                 context_window: Some(128_000),
                 max_output_tokens: Some(16_384),
-                deprecated: None,
                 pricing: None,
                 stats: ModelStats {
                     speed: 8,
@@ -496,11 +482,7 @@ mod tests {
     #[test]
     fn resolve_local_text_model_id_prefers_explicit_model() {
         assert_eq!(
-            resolve_local_text_model_id(
-                "custom-model.gguf",
-                Some("C:/models/default.gguf"),
-                "llamacpp"
-            ),
+            resolve_local_text_model_id("custom-model.gguf", Some("C:/models/default.gguf")),
             "custom-model.gguf"
         );
     }
@@ -508,18 +490,15 @@ mod tests {
     #[test]
     fn resolve_local_text_model_id_uses_model_file_name_for_default_request() {
         assert_eq!(
-            resolve_local_text_model_id("default", Some("C:/models/chat-model.gguf"), "llamacpp"),
+            resolve_local_text_model_id("default", Some("C:/models/chat-model.gguf")),
             "chat-model.gguf"
         );
     }
 
     #[test]
-    fn resolve_local_text_model_id_falls_back_to_provider() {
-        assert_eq!(
-            resolve_local_text_model_id("default", None, "llamacpp"),
-            "llamacpp"
-        );
-        assert_eq!(resolve_local_text_model_id("   ", None, "sdcpp"), "sdcpp");
+    fn resolve_local_text_model_id_uses_default_when_model_is_not_known() {
+        assert_eq!(resolve_local_text_model_id("default", None), "default");
+        assert_eq!(resolve_local_text_model_id("   ", None), "default");
     }
 
     #[test]

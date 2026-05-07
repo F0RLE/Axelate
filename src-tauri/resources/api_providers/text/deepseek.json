@@ -16,8 +16,8 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "pricing": {
-        "input_per_1m": 1.74,
-        "output_per_1m": 3.48,
+        "input": 1.74,
+        "output": 3.48,
         "currency": "USD"
       },
       "stats": {
@@ -44,8 +44,8 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "pricing": {
-        "input_per_1m": 0.14,
-        "output_per_1m": 0.28,
+        "input": 0.14,
+        "output": 0.28,
         "currency": "USD"
       },
       "stats": {

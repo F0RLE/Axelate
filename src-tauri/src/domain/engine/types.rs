@@ -85,6 +85,11 @@ pub struct EngineDefinition {
     /// Whether the engine binary is currently installed (populated at runtime, not from JSON)
     #[serde(default)]
     pub installed: bool,
+    /// Compute modes present in the Axelate-managed install metadata.
+    ///
+    /// Empty means unknown, usually a system PATH install or an older install without metadata.
+    #[serde(default)]
+    pub installed_compute_modes: Vec<EngineComputeMode>,
     /// True when the launcher connects to a user-managed external engine instead of installing it
     #[serde(default)]
     pub managed_externally: bool,

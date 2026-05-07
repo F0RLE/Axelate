@@ -5,7 +5,7 @@
 
 use crate::domain::engine::types::{EngineComputeMode, EngineConfig, EngineDefinition};
 
-const MIN_LLAMACPP_CONTEXT_SIZE: u32 = 4096;
+use super::engine_profile::minimum_context_size;
 
 /// Builds a runtime engine config from engine definition defaults.
 #[must_use]
@@ -39,8 +39,8 @@ pub fn merge_user_engine_config(def: &EngineDefinition, saved: &EngineConfig) ->
 /// Normalizes launcher-managed engine settings.
 #[must_use]
 pub fn normalize_engine_config(mut config: EngineConfig) -> EngineConfig {
-    if config.engine_id == "llamacpp" && config.context_size < MIN_LLAMACPP_CONTEXT_SIZE {
-        config.context_size = MIN_LLAMACPP_CONTEXT_SIZE;
+    if let Some(min_context_size) = minimum_context_size(&config.engine_id) {
+        config.context_size = config.context_size.max(min_context_size);
     }
 
     config
@@ -64,6 +64,7 @@ mod tests {
             default_context_size: 4096,
             config_schema: None,
             installed: false,
+            installed_compute_modes: Vec::new(),
             managed_externally: false,
         }
     }

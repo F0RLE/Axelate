@@ -67,6 +67,7 @@ fn convert_module_to_definition(item: &ModuleItem) -> EngineDefinition {
         default_context_size,
         config_schema: item.raw_config_schema.clone(),
         installed: false, // populated at request time by get_engine_definitions
+        installed_compute_modes: Vec::new(),
         managed_externally: item.managed_externally,
     }
 }

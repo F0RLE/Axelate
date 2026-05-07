@@ -17,7 +17,7 @@ use tracing::{error, info, warn};
 
 use crate::errors::AppError;
 
-use super::engine_args::{build_llamacpp_args, build_sdcpp_args, sdcpp_preview_enabled};
+use super::engine_args::{build_engine_args, sdcpp_preview_enabled};
 use super::engine_runtime::{
     diagnose_engine_start_failure, find_available_local_port, is_endpoint_healthy,
     spawn_log_reader, wait_for_health,
@@ -194,7 +194,7 @@ impl EngineManager {
     pub async fn active_image_preview_path(&self) -> Option<PathBuf> {
         let slots = self.slots.lock().await;
         let engine = slots.get(&Capability::Image)?;
-        if engine.definition.id != "sdcpp" && engine.definition.id != "stable-diffusion" {
+        if engine.definition.id != "sdcpp" {
             return None;
         }
 
@@ -370,30 +370,7 @@ impl EngineManager {
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
 
-        if config.engine_id == "llamacpp" {
-            cmd.args(build_llamacpp_args(&config, selected_port));
-        } else if config.engine_id == "sdcpp" {
-            cmd.args(build_sdcpp_args(&config, selected_port));
-        } else {
-            // Default fallback for other engines
-            cmd.arg("--port").arg(selected_port.to_string());
-        }
-
-        if config.engine_id != "sdcpp" && config.engine_id != "llamacpp" {
-            if let Some(ref model) = config.model_path {
-                cmd.arg("--model").arg(model);
-            }
-
-            for arg in &config.extra_args {
-                cmd.arg(arg);
-            }
-        }
-
-        if config.engine_id == "llamacpp" {
-            if let Some(ref model) = config.model_path {
-                cmd.arg("--model").arg(model);
-            }
-        }
+        cmd.args(build_engine_args(&config, selected_port));
 
         // Pipe engine stdout/stderr to files in logs directory
         let log_dir =
@@ -714,24 +691,19 @@ impl EngineManager {
     }
 }
 
-/// Returns the registry id used internally for known engine aliases.
+/// Returns the normalized engine registry id.
 pub fn canonical_engine_id(engine_id: &str) -> String {
-    let mut normalized = engine_id
+    let normalized = engine_id
         .trim()
         .to_ascii_lowercase()
-        .replace(['.', '_'], "-");
-    if let Some(stripped) = normalized.strip_suffix("-cpp") {
-        normalized = stripped.to_string();
-    }
+        .replace([' ', '.', '_'], "-");
+
+    let mut normalized = normalized;
     while normalized.contains("--") {
         normalized = normalized.replace("--", "-");
     }
 
-    if normalized == "stable-diffusion" || normalized.starts_with("stable-diffusion-") {
-        "sdcpp".to_string()
-    } else {
-        normalized
-    }
+    normalized
 }
 
 fn canonical_engine_log_id(engine_id: &str) -> String {
@@ -744,7 +716,6 @@ mod tests {
 
     use super::*;
     use crate::domain::engine::engine_runtime::classify_engine_start_failure;
-    use crate::domain::engine::events::NoopEmitter;
     use crate::domain::engine::types::EngineComputeMode;
     use crate::domain::system::ports::ENGINE_LOCAL_PORT_RANGE;
     use std::net::TcpListener;
@@ -772,10 +743,20 @@ mod tests {
 
     #[test]
     fn builds_single_slot_llamacpp_args_by_default() {
-        let args = build_llamacpp_args(&sample_config(None), 8081);
+        let args = build_engine_args(&sample_config(None), 8081);
         assert!(args.windows(2).any(|w| w == ["-ngl", "all"]));
         assert!(!args.contains(&"--parallel".to_string()));
         assert!(!args.contains(&"--reasoning".to_string()));
+    }
+
+    #[test]
+    fn builds_llamacpp_model_args_from_config() {
+        let args = build_engine_args(&sample_config(Some("C:/models/chat.gguf")), 8081);
+
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--model", "C:/models/chat.gguf"])
+        );
     }
 
     #[test]
@@ -783,7 +764,7 @@ mod tests {
         let mut config = sample_config(None);
         config.compute_mode = EngineComputeMode::Cpu;
 
-        let args = build_llamacpp_args(&config, 8081);
+        let args = build_engine_args(&config, 8081);
 
         assert!(args.windows(2).any(|w| w == ["--device", "none"]));
         assert!(args.windows(2).any(|w| w == ["-ngl", "0"]));
@@ -794,7 +775,7 @@ mod tests {
         let mut config = sample_config(None);
         config.context_size = 1024;
 
-        let args = build_llamacpp_args(&config, 8081);
+        let args = build_engine_args(&config, 8081);
         assert!(args.windows(2).any(|w| w == ["--ctx-size", "4096"]));
     }
 
@@ -850,7 +831,7 @@ mod tests {
 
     #[test]
     fn builds_plain_sdcpp_model_args() {
-        let args = build_sdcpp_args(
+        let args = build_engine_args(
             &sample_sdcpp_config(Some("C:/models/sd15.safetensors")),
             8082,
         );
@@ -867,45 +848,10 @@ mod tests {
         let mut config = sample_sdcpp_config(Some("C:/models/sd15.safetensors"));
         config.compute_mode = EngineComputeMode::Cpu;
 
-        let args = build_sdcpp_args(&config, 8082);
+        let args = build_engine_args(&config, 8082);
 
         assert!(args.contains(&"--clip-on-cpu".to_string()));
         assert!(args.contains(&"--vae-on-cpu".to_string()));
-    }
-
-    #[test]
-    fn canonicalizes_stable_diffusion_variants_to_sdcpp() {
-        assert_eq!(canonical_engine_id("stable-diffusion"), "sdcpp");
-        assert_eq!(canonical_engine_id("Stable_Diffusion.cpp"), "sdcpp");
-        assert_eq!(canonical_engine_id("stable.diffusion.cpp"), "sdcpp");
-    }
-
-    #[tokio::test]
-    async fn resolves_stable_diffusion_alias_to_sdcpp_definition() {
-        let manager = EngineManager::new(Arc::new(NoopEmitter));
-        manager
-            .register_definitions(vec![EngineDefinition {
-                id: "sdcpp".to_string(),
-                name: "Stable Diffusion.cpp".to_string(),
-                desc: String::new(),
-                icon: String::new(),
-                capabilities: vec![Capability::Image],
-                binary: Some("sd-server".to_string()),
-                repo_url: None,
-                version: "1.0.0".to_string(),
-                default_port: 8082,
-                default_context_size: 4096,
-                config_schema: None,
-                installed: false,
-                managed_externally: false,
-            }])
-            .await;
-
-        let Some(resolved) = manager.get_definition("stable-diffusion").await else {
-            panic!("stable-diffusion alias should resolve to sdcpp");
-        };
-
-        assert_eq!(resolved.id, "sdcpp");
     }
 
     #[test]
@@ -918,7 +864,7 @@ mod tests {
             "--mmap".to_string(),
         ];
 
-        let args = build_sdcpp_args(&config, 8082);
+        let args = build_engine_args(&config, 8082);
 
         assert!(args.contains(&"--offload-to-cpu".to_string()));
         assert!(args.contains(&"--clip-on-cpu".to_string()));
@@ -937,7 +883,7 @@ mod tests {
             "--preview-interval=1".to_string(),
         ];
 
-        let args = build_sdcpp_args(&config, 8082);
+        let args = build_engine_args(&config, 8082);
 
         assert!(!args.contains(&"--preview".to_string()));
         assert!(!args.contains(&"--preview-path".to_string()));
@@ -957,7 +903,7 @@ mod tests {
             "C:/tmp/preview.png".to_string(),
         ];
 
-        let args = build_sdcpp_args(&config, 8082);
+        let args = build_engine_args(&config, 8082);
 
         assert!(!args.contains(&"--vae-on-gpu".to_string()));
         assert!(!args.contains(&"1".to_string()));
@@ -975,7 +921,7 @@ mod tests {
             "--mmap".to_string(),
         ];
 
-        let args = build_sdcpp_args(&config, 8082);
+        let args = build_engine_args(&config, 8082);
 
         assert_eq!(
             resolve_sdcpp_preview_path(&config.extra_args),
@@ -993,5 +939,14 @@ mod tests {
 
         assert!(sdcpp_preview_enabled(&extra_args));
         assert!(resolve_sdcpp_preview_path(&extra_args).is_none());
+    }
+
+    #[test]
+    fn canonical_engine_id_normalizes_without_remapping_cpp_engines() {
+        assert_eq!(canonical_engine_id(" sdcpp "), "sdcpp");
+        assert_eq!(canonical_engine_id("llama cpp"), "llama-cpp");
+        assert_eq!(canonical_engine_id("llama_cpp"), "llama-cpp");
+        assert_eq!(canonical_engine_id("llama.cpp"), "llama-cpp");
+        assert_eq!(canonical_engine_id("sd.cpp"), "sd-cpp");
     }
 }

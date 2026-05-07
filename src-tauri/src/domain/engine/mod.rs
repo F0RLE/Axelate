@@ -8,6 +8,7 @@ pub mod config;
 /// Engine binary detection (installed check + path resolution)
 pub mod detector;
 mod engine_args;
+mod engine_profile;
 mod engine_runtime;
 /// Engine event emission trait
 pub mod events;

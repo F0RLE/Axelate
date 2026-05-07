@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use crate::domain::engine::types::EngineComputeMode;
 use crate::errors::AppError;
 use crate::utils::paths::ENGINES_DIR;
 
@@ -62,6 +63,33 @@ pub fn is_engine_installed(engine_id: &str, binary_name: Option<&str>) -> bool {
     }
 
     false
+}
+
+/// Reads Axelate install metadata and returns the compute modes present on disk.
+///
+/// Empty means the install source is unknown or predates metadata tracking.
+pub fn installed_compute_modes(engine_id: &str) -> Vec<EngineComputeMode> {
+    if !is_safe_id(engine_id) {
+        return Vec::new();
+    }
+
+    let metadata_path = installed_engine_dir(engine_id).join("metadata.json");
+    let Ok(source) = std::fs::read_to_string(metadata_path) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&source) else {
+        return Vec::new();
+    };
+
+    match value
+        .get("compute_target")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some("gpu") => vec![EngineComputeMode::Gpu],
+        Some("cpu") => vec![EngineComputeMode::Cpu],
+        Some("both") => vec![EngineComputeMode::Gpu, EngineComputeMode::Cpu],
+        _ => Vec::new(),
+    }
 }
 
 /// Returns the absolute path to an engine binary if found.

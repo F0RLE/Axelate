@@ -122,7 +122,7 @@ mod tests {
         );
         assert!(
             state_result.is_ok(),
-            "legacy UI state should remain readable"
+            "UI state with omitted optional maps should remain readable"
         );
         if let Ok(state) = state_result {
             assert!(state.local_max_output_tokens.is_empty());

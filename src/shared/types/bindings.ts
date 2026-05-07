@@ -248,9 +248,7 @@ export type AiModel = {
 	contextWindow: number | null,
 	// Maximum output tokens allowed
 	maxOutputTokens: number | null,
-	// Whether the model is deprecated
-	deprecated: boolean | null,
-	// Pricing configuration (New Object Format)
+	// Pricing configuration
 	pricing: PricingConfig | null,
 	// Performance statistics
 	stats: ModelStats,
@@ -660,6 +658,12 @@ export type EngineDefinition = {
 	config_schema?: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } | null,
 	// Whether the engine binary is currently installed (populated at runtime, not from JSON)
 	installed?: boolean,
+	/**
+	 *  Compute modes present in the Axelate-managed install metadata.
+	 *
+	 *  Empty means unknown, usually a system PATH install or an older install without metadata.
+	 */
+	installed_compute_modes?: EngineComputeMode[],
 	// True when the launcher connects to a user-managed external engine instead of installing it
 	managed_externally?: boolean,
 };
@@ -1031,10 +1035,10 @@ export type NetworkStats = {
 
 // Pricing configuration for a model
 export type PricingConfig = {
-	// Cost per 1M input tokens
-	input_per_1m: number | null,
-	// Cost per 1M output tokens
-	output_per_1m: number | null,
+	// Input-side cost or score shown in the launcher UI
+	input: number | null,
+	// Output-side cost or score shown in the launcher UI
+	output: number | null,
 	// Currency code
 	currency: string | null,
 	// Additional notes
@@ -1089,7 +1093,9 @@ export type ReleaseComputeTarget =
 // Prefer a GPU package, for example CUDA, Vulkan, HIP, or SYCL.
 "gpu" |
 // Prefer a CPU package.
-"cpu";
+"cpu" |
+// Download both CPU and GPU packages when both are compatible.
+"both";
 
 // User-visible release download options for a single module.
 export type ReleaseDownloadOptions = {
@@ -1277,8 +1283,8 @@ export type UIState = {
 	ai_web_search_enabled?: { [key in string]: boolean },
 	// Per-provider local model output token limits.
 	local_max_output_tokens?: { [key in string]: number },
-	// Current persistent AI session identifier
-	ai_session_id?: string | null,
+	// Last directory used by the custom integration import dialog.
+	integration_import_last_directory?: string | null,
 	// Preferred launcher interface language
 	preferred_language?: string | null,
 	// Request to reopen the chat and reveal the latest message after background work.

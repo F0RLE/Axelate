@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use super::engine_profile::minimum_context_size;
 use super::types::{EngineComputeMode, EngineConfig};
 
 const SDCPP_UNSUPPORTED_FLAGS: [&str; 4] = [
@@ -111,7 +112,25 @@ pub(super) fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
         })
 }
 
-pub(super) fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
+fn build_generic_engine_args(config: &EngineConfig, port: u16) -> Vec<String> {
+    let mut args = vec!["--port".to_string(), port.to_string()];
+    if let Some(model_path) = config.model_path.as_deref() {
+        args.push("--model".to_string());
+        args.push(model_path.to_string());
+    }
+    args.extend(config.extra_args.clone());
+    args
+}
+
+pub(super) fn build_engine_args(config: &EngineConfig, port: u16) -> Vec<String> {
+    match config.engine_id.as_str() {
+        "llamacpp" => build_llamacpp_args(config, port),
+        "sdcpp" => build_sdcpp_args(config, port),
+        _ => build_generic_engine_args(config, port),
+    }
+}
+
+fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
     let mut args = vec!["--listen-port".to_string(), port.to_string()];
     let extra_args = sdcpp_extra_args(config);
     push_sdcpp_compute_args(&mut args, config);
@@ -125,8 +144,11 @@ pub(super) fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Vec<String> 
     args
 }
 
-pub(super) fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
-    let effective_context_size = config.context_size.max(4096);
+fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
+    let effective_context_size = minimum_context_size(&config.engine_id)
+        .map_or(config.context_size, |min_context_size| {
+            config.context_size.max(min_context_size)
+        });
     let mut args = vec![
         "--port".to_string(),
         port.to_string(),
@@ -134,6 +156,10 @@ pub(super) fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<Strin
         effective_context_size.to_string(),
     ];
     push_llamacpp_compute_args(&mut args, config);
+    if let Some(model_path) = config.model_path.as_deref() {
+        args.push("--model".to_string());
+        args.push(model_path.to_string());
+    }
     args.extend(config.extra_args.clone());
     args
 }

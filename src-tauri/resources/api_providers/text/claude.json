@@ -16,8 +16,8 @@
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
       "pricing": {
-        "input_per_1m": 5,
-        "output_per_1m": 25,
+        "input": 5,
+        "output": 25,
         "currency": "USD"
       },
       "stats": {
@@ -44,8 +44,8 @@
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
       "pricing": {
-        "input_per_1m": 3,
-        "output_per_1m": 15,
+        "input": 3,
+        "output": 15,
         "currency": "USD"
       },
       "stats": {
@@ -72,8 +72,8 @@
       "contextWindow": 200000,
       "maxOutputTokens": 64000,
       "pricing": {
-        "input_per_1m": 1,
-        "output_per_1m": 5,
+        "input": 1,
+        "output": 5,
         "currency": "USD"
       },
       "stats": {

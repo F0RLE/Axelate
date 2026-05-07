@@ -12,6 +12,37 @@ enum CudaTrack {
     Cuda13,
 }
 
+#[derive(Clone, Copy)]
+struct ModuleReleaseNaming {
+    runtime_prefix: &'static str,
+    main_prefix: &'static str,
+    main_requires_bin_marker: bool,
+}
+
+const DEFAULT_RELEASE_NAMING: ModuleReleaseNaming = ModuleReleaseNaming {
+    runtime_prefix: "cudart-",
+    main_prefix: "",
+    main_requires_bin_marker: false,
+};
+
+const SDCPP_RELEASE_NAMING: ModuleReleaseNaming = ModuleReleaseNaming {
+    runtime_prefix: "cudart-sd-",
+    main_prefix: "sd-",
+    main_requires_bin_marker: true,
+};
+
+const LLAMACPP_RELEASE_NAMING: ModuleReleaseNaming = ModuleReleaseNaming {
+    runtime_prefix: "cudart-llama-",
+    main_prefix: "llama-",
+    main_requires_bin_marker: true,
+};
+
+const COMFYUI_RELEASE_NAMING: ModuleReleaseNaming = ModuleReleaseNaming {
+    runtime_prefix: "cudart-",
+    main_prefix: "comfyui_windows_portable_",
+    main_requires_bin_marker: false,
+};
+
 impl CudaTrack {
     const fn min_driver_major(self) -> u32 {
         match self {
@@ -183,11 +214,7 @@ fn is_runtime_asset(module_id: &str, name: &str) -> bool {
         return false;
     }
 
-    match module_id {
-        "sdcpp" => lower.starts_with("cudart-sd-"),
-        "llamacpp" => lower.starts_with("cudart-llama-"),
-        _ => lower.starts_with("cudart-"),
-    }
+    lower.starts_with(release_naming(module_id).runtime_prefix)
 }
 
 fn is_main_asset(module_id: &str, name: &str) -> bool {
@@ -196,11 +223,21 @@ fn is_main_asset(module_id: &str, name: &str) -> bool {
         return false;
     }
 
+    let naming = release_naming(module_id);
+    if naming.main_prefix.is_empty() {
+        return !lower.starts_with(naming.runtime_prefix);
+    }
+
+    lower.starts_with(naming.main_prefix)
+        && (!naming.main_requires_bin_marker || lower.contains("-bin-"))
+}
+
+fn release_naming(module_id: &str) -> ModuleReleaseNaming {
     match module_id {
-        "sdcpp" => lower.starts_with("sd-") && lower.contains("-bin-"),
-        "llamacpp" => lower.starts_with("llama-") && lower.contains("-bin-"),
-        "comfyui" => lower.starts_with("comfyui_windows_portable_"),
-        _ => !lower.starts_with("cudart-"),
+        "sdcpp" => SDCPP_RELEASE_NAMING,
+        "llamacpp" => LLAMACPP_RELEASE_NAMING,
+        "comfyui" => COMFYUI_RELEASE_NAMING,
+        _ => DEFAULT_RELEASE_NAMING,
     }
 }
 

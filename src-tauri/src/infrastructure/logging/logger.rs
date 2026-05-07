@@ -1,3 +1,4 @@
+use crate::domain::engine::manager::canonical_engine_id as normalize_engine_id;
 use chrono::TimeZone;
 use serde::Serialize;
 use std::cmp::Ordering;
@@ -544,15 +545,8 @@ fn sanitize_module_id(raw: &str) -> Option<String> {
 
 fn infer_runtime_log_source(namespace: RuntimeLogNamespace, runtime_id: &str) -> String {
     match namespace {
-        RuntimeLogNamespace::Engine => canonical_engine_id(runtime_id).to_string(),
+        RuntimeLogNamespace::Engine => normalize_engine_id(runtime_id),
         RuntimeLogNamespace::Module => format!("module:{runtime_id}"),
-    }
-}
-
-fn canonical_engine_id(engine_id: &str) -> &str {
-    match engine_id {
-        "stable-diffusion" => "sdcpp",
-        value => value,
     }
 }
 
@@ -618,7 +612,7 @@ fn is_entry_in_console_view(entry: &LogEntry, view_id: &str) -> bool {
     }
 
     if let Some(engine_id) = view_id.strip_prefix("engine:") {
-        return canonical_engine_id(&entry.source) == canonical_engine_id(engine_id);
+        return normalize_engine_id(&entry.source) == normalize_engine_id(engine_id);
     }
 
     false
@@ -680,10 +674,10 @@ fn clear_startup_log_files(log_dir: &Path) -> std::io::Result<()> {
 
 impl RuntimeLogCollector {
     fn is_known_engine_source(source: &str) -> bool {
-        let source = canonical_engine_id(source);
+        let source = normalize_engine_id(source);
         Self::runtime_ids(&crate::utils::paths::ENGINE_LOGS_DIR)
             .into_iter()
-            .any(|runtime_id| canonical_engine_id(&runtime_id) == source)
+            .any(|runtime_id| normalize_engine_id(&runtime_id) == source)
     }
 
     fn runtime_ids(root: &Path) -> Vec<String> {
@@ -890,6 +884,21 @@ mod tests {
         assert_eq!(entry.source, "llamacpp");
         assert_eq!(entry.module_id, None);
         assert_eq!(entry.source_label.as_deref(), Some("Llamacpp"));
+        Ok(())
+    }
+
+    #[test]
+    fn engine_runtime_log_line_uses_shared_engine_id_normalization() -> Result<(), String> {
+        let entry = parse_runtime_log_line(
+            RuntimeLogNamespace::Engine,
+            "llama.cpp",
+            "2026-04-24 07:00:00 [INFO] model loaded",
+            0,
+            0.0,
+        )
+        .ok_or_else(|| "engine runtime log entry".to_string())?;
+
+        assert_eq!(entry.source, "llama-cpp");
         Ok(())
     }
 }

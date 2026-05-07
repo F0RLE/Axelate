@@ -65,9 +65,9 @@ pub struct UIState {
     /// Per-provider local model output token limits.
     #[serde(default)]
     pub local_max_output_tokens: std::collections::HashMap<String, u32>,
-    /// Current persistent AI session identifier
+    /// Last directory used by the custom integration import dialog.
     #[serde(default)]
-    pub ai_session_id: Option<String>,
+    pub integration_import_last_directory: Option<String>,
     /// Preferred launcher interface language
     #[serde(default)]
     pub preferred_language: Option<String>,
@@ -96,7 +96,7 @@ impl Default for UIState {
             ai_thinking_level: std::collections::HashMap::new(),
             ai_web_search_enabled: std::collections::HashMap::new(),
             local_max_output_tokens: std::collections::HashMap::new(),
-            ai_session_id: None,
+            integration_import_last_directory: None,
             preferred_language: None,
             pending_chat_reveal: false,
         }

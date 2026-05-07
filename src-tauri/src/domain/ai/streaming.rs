@@ -109,9 +109,6 @@ pub struct OpenAiCompatibleProvider {
     client: Client,
 }
 
-/// Backward-compatible alias for the legacy provider name.
-pub type OpenRouterProvider = OpenAiCompatibleProvider;
-
 struct RequestExecution {
     endpoint: String,
     api_key: String,
@@ -696,7 +693,9 @@ mod tests {
     fn local_base_url_detection_matches_local_endpoints() {
         assert!(is_local_base_url("http://localhost:8081/v1"));
         assert!(is_local_base_url("http://127.0.0.1:8081/v1"));
+        assert!(is_local_base_url("http://[::1]:8081/v1"));
         assert!(!is_local_base_url("https://openrouter.ai/api/v1"));
+        assert!(!is_local_base_url("https://localhost.example.com/v1"));
     }
 
     #[test]
@@ -732,6 +731,26 @@ mod tests {
         assert_eq!(payload.get("session_id"), Some(&json!("session-1")));
         assert!(payload.get("max_tokens").is_none());
         assert_eq!(payload.get("reasoning"), Some(&json!({ "effort": "high" })));
+    }
+
+    #[test]
+    fn build_request_payload_maps_off_reasoning_to_openrouter_none() {
+        let mut request = sample_request();
+        request.thinking_level = Some("off".to_string());
+
+        let payload = provider_payload::build_chat_completion_payload(&request, true, false);
+
+        assert_eq!(payload.get("reasoning"), Some(&json!({ "effort": "none" })));
+    }
+
+    #[test]
+    fn build_request_payload_keeps_explicit_none_reasoning() {
+        let mut request = sample_request();
+        request.thinking_level = Some("none".to_string());
+
+        let payload = provider_payload::build_chat_completion_payload(&request, true, false);
+
+        assert_eq!(payload.get("reasoning"), Some(&json!({ "effort": "none" })));
     }
 
     #[test]
