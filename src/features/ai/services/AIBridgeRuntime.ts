@@ -74,10 +74,12 @@ export const buildImageGenerationProgressChunk = (line: string): string | null =
     return `${fields.join(' ')}\n`;
 };
 
-const LOCAL_IMAGE_ENGINE_IDS = new Set(['sdcpp', 'stable-diffusion']);
-
-export const isActiveEngineLog = (activeProviderId: string | null, engineId: string): boolean => {
-    if (LOCAL_IMAGE_ENGINE_IDS.has(engineId)) {
+export const isActiveEngineLog = (
+    activeProviderId: string | null,
+    engineId: string,
+    selectedImageProviderId: string | null = null,
+): boolean => {
+    if (selectedImageProviderId !== null && selectedImageProviderId === engineId) {
         return true;
     }
 
@@ -90,7 +92,7 @@ export const isActiveEngineLog = (activeProviderId: string | null, engineId: str
         return true;
     }
 
-    return LOCAL_IMAGE_ENGINE_IDS.has(activeBackendId) && LOCAL_IMAGE_ENGINE_IDS.has(engineId);
+    return false;
 };
 
 export class AIBridgeRuntime {
@@ -98,7 +100,7 @@ export class AIBridgeRuntime {
 
     public async initializeStreaming(args: InitializeStreamingArgs): Promise<(() => void)[]> {
         if (!args.context.tauriProvider.isTauri()) {
-            this._tracer.info('[AIBridge] Web mode active (Mocks)');
+            this._tracer.info('[AIBridge] Tauri IPC unavailable; streaming disabled');
             return [];
         }
 
@@ -109,7 +111,15 @@ export class AIBridgeRuntime {
                 line: string;
             }>('ai:engine:log', (payload) => {
                 const line = payload.line;
-                if (!isActiveEngineLog(args.getActiveProviderId(), payload.engine_id)) {
+                const selectedImageProviderId =
+                    args.context.stateStore.getSelectedModule('ai_image')?.id ?? null;
+                if (
+                    !isActiveEngineLog(
+                        args.getActiveProviderId(),
+                        payload.engine_id,
+                        selectedImageProviderId,
+                    )
+                ) {
                     return;
                 }
 

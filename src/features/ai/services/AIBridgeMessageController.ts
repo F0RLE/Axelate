@@ -89,6 +89,10 @@ export class AIBridgeMessageController {
 
             const providerId = this._deps.manager.activeProviderId;
             const backendProviderId = resolveCustomProviderBackendId(providerId);
+            const requestModel = this._resolveRequestModel(providerId);
+            if (requestModel === null) {
+                return this._handleMissingModel();
+            }
             const requestOptions = this._deps.providerPolicy.buildRequestOptions({
                 hasApiKey: this._deps.manager.apiKey !== null,
                 maxOutputTokens: Math.min(this._deps.manager.maxOutputTokens ?? 320, 420),
@@ -104,7 +108,7 @@ export class AIBridgeMessageController {
                 [],
                 {
                     providerId: backendProviderId,
-                    model: this._deps.manager.model || 'default',
+                    model: requestModel,
                     apiKey: null,
                     sessionId: '',
                     ...requestOptions,
@@ -215,6 +219,10 @@ export class AIBridgeMessageController {
         const backendProviderId = resolveCustomProviderBackendId(providerId);
         const requestHistory = isLocalTextProvider ? this._toTextOnlyMessages(history) : history;
         const requestAttachments = isLocalTextProvider ? [] : attachments;
+        const requestModel = this._resolveRequestModel(providerId);
+        if (requestModel === null) {
+            return this._handleMissingModel();
+        }
         const requestOptions = this._deps.providerPolicy.buildRequestOptions({
             hasApiKey: this._deps.manager.apiKey !== null,
             maxOutputTokens: this._deps.manager.maxOutputTokens,
@@ -223,7 +231,7 @@ export class AIBridgeMessageController {
         });
         const request = constructChatRequest(requestHistory, newMessage, requestAttachments, {
             providerId: backendProviderId,
-            model: this._deps.manager.model || 'default',
+            model: requestModel,
             apiKey: null,
             sessionId: this._deps.manager.sessionId,
             ...requestOptions,
@@ -277,6 +285,15 @@ export class AIBridgeMessageController {
         return part.name !== undefined ? `[File attached: ${part.name}]` : '[File attached]';
     }
 
+    private _resolveRequestModel(providerId: string): string | null {
+        const model = this._deps.manager.model.trim();
+        if (model !== '') {
+            return model;
+        }
+
+        return this._deps.providerPolicy.isLocalTextProvider(providerId) ? 'default' : null;
+    }
+
     private _withModelContext(
         response: IBridgeResponse,
         providerId: string,
@@ -306,6 +323,12 @@ export class AIBridgeMessageController {
 
     private _handleMissingProvider(_source: MessageSource): IBridgeResponse {
         const msg = this._deps.translate('ui.ai.no_provider', 'No engine found');
+        this._deps.showToast(msg, 'error');
+        return { ok: false, error: msg };
+    }
+
+    private _handleMissingModel(): IBridgeResponse {
+        const msg = this._deps.translate('ui.ai.no_model_selected', 'No AI model selected');
         this._deps.showToast(msg, 'error');
         return { ok: false, error: msg };
     }

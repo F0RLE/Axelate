@@ -140,7 +140,7 @@ describe('I18nService', () => {
     });
 
     describe('loadTranslations', () => {
-        it('should dispatch legacy DOM events and event bus notifications when translations load', async () => {
+        it('should dispatch DOM events and event bus notifications when translations load', async () => {
             const fetchMock = vi.fn().mockResolvedValue({
                 ok: true,
                 json: () => Promise.resolve({ greeting: 'Hello' }),
@@ -148,7 +148,6 @@ describe('I18nService', () => {
             vi.stubGlobal('fetch', fetchMock);
 
             const languageChangedHandler = vi.fn();
-            const legacyLangChangedHandler = vi.fn();
             const languageBusHandler = vi.fn();
             const translationsLoadedHandler = vi.fn();
 
@@ -156,7 +155,6 @@ describe('I18nService', () => {
                 'language-changed',
                 languageChangedHandler as EventListener,
             );
-            globalThis.addEventListener('lang:changed', legacyLangChangedHandler as EventListener);
             testEventBus.on('i18n:language:change', languageBusHandler);
             testEventBus.on('i18n:translations:loaded', translationsLoadedHandler);
 
@@ -168,20 +166,12 @@ describe('I18nService', () => {
             expect(
                 (languageChangedHandler.mock.calls[0]?.[0] as CustomEvent<{ lang: string }>).detail,
             ).toEqual({ lang: 'ru' });
-            expect(legacyLangChangedHandler).toHaveBeenCalledTimes(1);
-            expect(
-                (legacyLangChangedHandler.mock.calls[0]?.[0] as CustomEvent<string>).detail,
-            ).toBe('ru');
             expect(languageBusHandler).toHaveBeenCalledWith({ lang: 'ru', previousLang: 'en' });
             expect(translationsLoadedHandler).toHaveBeenCalledWith({ lang: 'ru' });
 
             globalThis.removeEventListener(
                 'language-changed',
                 languageChangedHandler as EventListener,
-            );
-            globalThis.removeEventListener(
-                'lang:changed',
-                legacyLangChangedHandler as EventListener,
             );
         });
 

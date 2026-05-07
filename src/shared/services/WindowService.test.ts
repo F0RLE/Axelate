@@ -6,6 +6,23 @@ import { WindowService, type IWindowConfig } from './WindowService';
 import type { IBridge } from '@/shared/types/IBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
+vi.mock('@tauri-apps/api/window', () => ({
+    getCurrentWindow: () => {
+        const windowApi = (
+            globalThis as unknown as {
+                __AXELATE_TEST_WINDOW__?: { getCurrentWindow?: () => unknown };
+            }
+        ).__AXELATE_TEST_WINDOW__;
+        return windowApi?.getCurrentWindow?.();
+    },
+    LogicalSize: class {
+        public constructor(
+            public readonly width: number,
+            public readonly height: number,
+        ) {}
+    },
+}));
+
 describe('WindowService', () => {
     let mockBridge: {
         isTauri: ReturnType<typeof vi.fn>;
@@ -23,7 +40,6 @@ describe('WindowService', () => {
     let mockRuntime: {
         addEventListener: ReturnType<typeof vi.fn>;
         removeEventListener: ReturnType<typeof vi.fn>;
-        close: ReturnType<typeof vi.fn>;
         getScreenSize: ReturnType<typeof vi.fn>;
         getInnerSize: ReturnType<typeof vi.fn>;
         setAppZoomCss: ReturnType<typeof vi.fn>;
@@ -74,7 +90,6 @@ describe('WindowService', () => {
                     nativeRemoveEventListener(...args);
                 },
             ),
-            close: vi.fn(),
             getScreenSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
             getInnerSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
             setAppZoomCss: vi.fn(),
@@ -205,9 +220,12 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('minimize_window');
         });
 
-        it('should log in web mode for minimize', async () => {
+        it('should skip native minimize outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.minimize(); // should not throw
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native minimize unavailable outside Tauri',
+            );
         });
 
         it('should call maximize_window via bridge', async () => {
@@ -215,9 +233,12 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('maximize_window');
         });
 
-        it('should log in web mode for toggleMaximize', async () => {
+        it('should skip native maximize outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.toggleMaximize();
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native maximize unavailable outside Tauri',
+            );
         });
 
         it('should call close_window via bridge', async () => {
@@ -241,10 +262,12 @@ describe('WindowService', () => {
             expect(calls).toEqual(['save', 'close']);
         });
 
-        it('should call globalThis.close in web mode', async () => {
+        it('should skip native close outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.close();
-            expect(mockRuntime.close).toHaveBeenCalled();
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native close unavailable outside Tauri',
+            );
         });
     });
 
@@ -266,9 +289,12 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('minimize_window');
         });
 
-        it('should log in web mode', async () => {
+        it('should skip native hide-to-tray outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.hideToTray(); // should not throw
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native hide-to-tray unavailable outside Tauri',
+            );
         });
     });
 
@@ -590,14 +616,12 @@ describe('WindowService', () => {
             const mockCenter = vi.fn().mockResolvedValue(undefined);
             const mockLogicalSize = vi.fn();
 
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        setSize: mockSetSize,
-                        center: mockCenter,
-                    }),
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    setSize: mockSetSize,
+                    center: mockCenter,
                     LogicalSize: mockLogicalSize,
-                },
+                }),
             });
 
             await service.setSize(800, 600);
@@ -607,14 +631,12 @@ describe('WindowService', () => {
         });
 
         it('should handle error gracefully', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        setSize: vi.fn().mockRejectedValue(new Error('fail')),
-                        center: vi.fn(),
-                    }),
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    setSize: vi.fn().mockRejectedValue(new Error('fail')),
+                    center: vi.fn(),
                     LogicalSize: vi.fn(),
-                },
+                }),
             });
 
             await service.setSize(800, 600); // should not throw
@@ -625,8 +647,8 @@ describe('WindowService', () => {
             await service.setSize(800, 600); // no throw, no calls
         });
 
-        it('should skip if __TAURI__.window is missing', async () => {
-            vi.stubGlobal('__TAURI__', {});
+        it('should skip if the Tauri window handle is missing', async () => {
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {});
             await service.setSize(800, 600); // should not throw
         });
     });
@@ -634,12 +656,10 @@ describe('WindowService', () => {
     // ---------------------------------------------------------- isMaximized
     describe('isMaximized', () => {
         it('should return true when Tauri window is maximized', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: vi.fn().mockResolvedValue(true),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: vi.fn().mockResolvedValue(true),
+                }),
             });
 
             const result = await service.isMaximized();
@@ -647,12 +667,10 @@ describe('WindowService', () => {
         });
 
         it('should return false when Tauri window is not maximized', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: vi.fn().mockResolvedValue(false),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: vi.fn().mockResolvedValue(false),
+                }),
             });
 
             const result = await service.isMaximized();
@@ -660,20 +678,18 @@ describe('WindowService', () => {
         });
 
         it('should return false on error', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: vi.fn().mockRejectedValue(new Error('fail')),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: vi.fn().mockRejectedValue(new Error('fail')),
+                }),
             });
 
             const result = await service.isMaximized();
             expect(result).toBe(false);
         });
 
-        it('should return false if __TAURI__.window is missing', async () => {
-            vi.stubGlobal('__TAURI__', {});
+        it('should return false if the Tauri window handle is missing', async () => {
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {});
             const result = await service.isMaximized();
             expect(result).toBe(false);
         });
@@ -706,14 +722,12 @@ describe('WindowService', () => {
 
         it('should save window state (maximized) when Tauri window resolves', async () => {
             const mockIsMaximized = vi.fn().mockResolvedValue(true);
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: mockIsMaximized,
-                        innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
-                        outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                    outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                }),
             });
 
             await service.init(mockWindowConfig, 1);
@@ -732,14 +746,12 @@ describe('WindowService', () => {
             const mockInnerSize = vi.fn().mockResolvedValue({ width: 1000, height: 600 });
             const mockOuterPos = vi.fn().mockResolvedValue({ x: 100, y: 50 });
 
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: mockIsMaximized,
-                        innerSize: mockInnerSize,
-                        outerPosition: mockOuterPos,
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: mockInnerSize,
+                    outerPosition: mockOuterPos,
+                }),
             });
 
             await service.init(mockWindowConfig, 1);
@@ -762,14 +774,12 @@ describe('WindowService', () => {
 
         it('should await immediate window state save', async () => {
             const mockIsMaximized = vi.fn().mockResolvedValue(true);
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: mockIsMaximized,
-                        innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
-                        outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                    outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                }),
             });
 
             await service.saveImmediate();
@@ -781,14 +791,12 @@ describe('WindowService', () => {
 
         it('should cancel pending debounced save when saving immediately', async () => {
             const mockIsMaximized = vi.fn().mockResolvedValue(true);
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: mockIsMaximized,
-                        innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
-                        outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                    outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                }),
             });
 
             service.scheduleSave();
@@ -818,14 +826,12 @@ describe('WindowService', () => {
             const mockInnerSize = vi.fn().mockResolvedValue({ width: 1000, height: 600 });
             const mockOuterPos = vi.fn().mockResolvedValue({ x: 100, y: 50 });
 
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: mockIsMaximized,
-                        innerSize: mockInnerSize,
-                        outerPosition: mockOuterPos,
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: mockInnerSize,
+                    outerPosition: mockOuterPos,
+                }),
             });
 
             const first = service.saveImmediate();

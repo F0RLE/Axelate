@@ -31,12 +31,10 @@ export interface IUIState {
     ai_thinking_level: Record<string, ThinkingLevel>;
     ai_web_search_enabled: Record<string, boolean>;
     local_max_output_tokens: Record<string, number>;
-    ai_session_id: string | null;
+    integration_import_last_directory: string | null;
     preferred_language?: string | null;
     pending_chat_reveal: boolean;
 }
-
-type UiStateStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 const DEFAULT_UI_STATE: IUIState = {
     sidebar_collapsed: false,
@@ -55,7 +53,7 @@ const DEFAULT_UI_STATE: IUIState = {
     ai_thinking_level: {},
     ai_web_search_enabled: {},
     local_max_output_tokens: {},
-    ai_session_id: null,
+    integration_import_last_directory: null,
     preferred_language: null,
     pending_chat_reveal: false,
 };
@@ -68,13 +66,11 @@ export class UiStateStore {
     private _isDirty = false;
     private _revision = 0;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-    private readonly _STORAGE_KEY = 'axelate_ui_state';
     private _isDestroyed = false;
 
     constructor(
         private readonly _bridge: IBridge,
         private readonly _tracer: UiStateStoreLogger,
-        private readonly _storage: UiStateStorage | null = globalThis.localStorage,
     ) {}
 
     public async loadState(): Promise<IUIState> {
@@ -83,12 +79,6 @@ export class UiStateStore {
                 const loaded = await this._bridge.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
                 this._tracer.info('[UiStateStore] Loaded from backend');
-            } else {
-                const stored = this._storage?.getItem(this._STORAGE_KEY) ?? null;
-                if (stored !== null) {
-                    this.setState(JSON.parse(stored) as Partial<IUIState>);
-                    this._tracer.info('[UiStateStore] Loaded from browser storage');
-                }
             }
         } catch (e) {
             this._tracer.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
@@ -160,6 +150,15 @@ export class UiStateStore {
         this.removeNestedState('selected_modules', category);
     }
 
+    public getIntegrationImportLastDirectory(): string | null {
+        return this._state.integration_import_last_directory;
+    }
+
+    public setIntegrationImportLastDirectory(path: string | null): void {
+        const normalized = typeof path === 'string' ? path.trim() : '';
+        this.updateState({ integration_import_last_directory: normalized || null });
+    }
+
     private _debouncedSave(): void {
         if (this._autoSaveTimer !== null) {
             globalThis.clearTimeout(this._autoSaveTimer);
@@ -176,8 +175,6 @@ export class UiStateStore {
         try {
             if (this._bridge.isTauri()) {
                 await this._bridge.invoke('save_ui_state', { state });
-            } else {
-                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(state));
             }
             if (this._revision === revision) {
                 this._isDirty = false;
@@ -194,11 +191,6 @@ export class UiStateStore {
         try {
             if (this._bridge.isTauri()) {
                 await this._bridge.invoke('save_ui_state', { state });
-                if (this._revision === revision) {
-                    this._isDirty = false;
-                }
-            } else {
-                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(state));
                 if (this._revision === revision) {
                     this._isDirty = false;
                 }
@@ -247,6 +239,9 @@ export class UiStateStore {
                 state.local_max_output_tokens,
                 DEFAULT_UI_STATE.local_max_output_tokens,
             ),
+            integration_import_last_directory: this._normalizeNullableString(
+                state.integration_import_last_directory,
+            ),
             zoom_level: this._clampZoom(state.zoom_level),
         };
     }
@@ -280,6 +275,15 @@ export class UiStateStore {
                 },
             ),
         );
+    }
+
+    private _normalizeNullableString(value: unknown): string | null {
+        if (typeof value !== 'string') {
+            return null;
+        }
+
+        const trimmed = value.trim();
+        return trimmed === '' ? null : trimmed;
     }
 
     private _normalizeBooleanRecord(value: unknown): Record<string, boolean> {

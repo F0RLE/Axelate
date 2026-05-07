@@ -311,6 +311,9 @@ describe('ChatSendController', () => {
         const { controller, options, aiBridge } = createController();
         aiBridge.getState.mockReturnValue({ activeProviderId: 'sdcpp', isRunning: true });
         options.isImageProvider.mockReturnValue(true);
+        options.getSelectedModule.mockImplementation((category: 'ai_text' | 'ai_image') =>
+            category === 'ai_image' ? { id: 'sdcpp', type: 'local' } : undefined,
+        );
         const input = document.createElement('textarea');
         input.value = 'draw image';
 
@@ -325,6 +328,9 @@ describe('ChatSendController', () => {
         const { controller, options, aiBridge, sendMessage } = createController();
         aiBridge.getState.mockReturnValue({ activeProviderId: 'sdcpp', isRunning: true });
         options.isImageProvider.mockReturnValue(true);
+        options.getSelectedModule.mockImplementation((category: 'ai_text' | 'ai_image') =>
+            category === 'ai_image' ? { id: 'sdcpp', type: 'local' } : undefined,
+        );
         sendMessage.mockRejectedValueOnce(new Error('generation failed'));
         const input = document.createElement('textarea');
         input.value = 'draw image';

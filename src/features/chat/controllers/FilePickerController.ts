@@ -1,6 +1,6 @@
 /**
  * @module chat/controllers/FilePickerController
- * @description Handles file picking (native + web), token counting, and file-to-File conversion.
+ * @description Handles file picking, token counting, and file-to-File conversion.
  * Extracted from ChatController for SRP compliance.
  */
 
@@ -9,7 +9,6 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { ChatUI } from '../ui/ChatUI';
 
-// Tauri imports — only used at runtime if in Tauri context
 import { desktopDir, dirname } from '@tauri-apps/api/path';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
@@ -34,12 +33,12 @@ export class FilePickerController {
     ) {}
 
     /**
-     * Entry point for picking files (Native or Web fallback).
+     * Entry point for picking files.
      */
     public async pick(): Promise<void> {
         if (this._isNativeRuntime()) {
-            const success = await this._pickNative();
-            if (success) return;
+            await this._pickNative();
+            return;
         }
 
         const input = document.getElementById('chat-file-input') as HTMLInputElement | null;
@@ -100,7 +99,7 @@ export class FilePickerController {
 
     // --- Private helpers ---
 
-    private async _pickNative(): Promise<boolean> {
+    private async _pickNative(): Promise<void> {
         try {
             const defaultPath = await this._resolveInitialDirectory();
             const dialogOptions: {
@@ -135,10 +134,8 @@ export class FilePickerController {
                     void this.updateTokenCount();
                 }
             }
-            return true;
         } catch (err) {
             this._tracer.error('[FilePickerController] Native file picker failed:', err);
-            return false;
         }
     }
 

@@ -92,17 +92,17 @@ export class ChatService {
                 return result;
             }
 
+            const reply: NonNullable<IChatResponse['reply']> = {
+                text: response.text ?? '',
+                type: 'markdown',
+            };
             const result: IChatResponse = {
                 ok: true,
-                message: response.text ?? '',
+                reply,
             };
             const generatedImages = parseGeneratedImages(response.images);
             if (generatedImages !== undefined) {
-                result.reply = {
-                    text: response.text ?? '',
-                    type: 'markdown',
-                    images: generatedImages,
-                };
+                reply.images = generatedImages;
             }
             if (response.thought_signature !== undefined) {
                 result.thought_signature = response.thought_signature;

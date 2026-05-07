@@ -730,10 +730,13 @@ describe('DownloadUI', () => {
             );
 
             const list = document.getElementById('downloads-dynamic-list');
-            const cancelBtn = list?.querySelector('.download-cancel-btn');
+            const cancelBtn =
+                list?.querySelector<HTMLButtonElement>('.download-cancel-btn') ?? null;
             expect(cancelBtn).not.toBeNull();
+            expect(cancelBtn?.type).toBe('button');
+            expect(cancelBtn?.querySelector('use')?.getAttribute('href')).toBe('#icon-trash');
 
-            if (cancelBtn !== null) (cancelBtn as HTMLElement).click();
+            if (cancelBtn !== null) cancelBtn.click();
             expect(cancelFn).toHaveBeenCalledWith('mod-cancel');
         });
 
@@ -753,10 +756,12 @@ describe('DownloadUI', () => {
             );
 
             const list = document.getElementById('downloads-dynamic-list');
-            const pauseBtn = list?.querySelector('.download-pause-btn');
+            const pauseBtn = list?.querySelector<HTMLButtonElement>('.download-pause-btn') ?? null;
             expect(pauseBtn).not.toBeNull();
+            expect(pauseBtn?.type).toBe('button');
+            expect(pauseBtn?.querySelector('use')?.getAttribute('href')).toBe('#icon-pause');
 
-            if (pauseBtn !== null) (pauseBtn as HTMLElement).click();
+            if (pauseBtn !== null) pauseBtn.click();
             expect(pauseFn).toHaveBeenCalledWith('mod-pause');
         });
 

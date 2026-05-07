@@ -179,9 +179,9 @@ describe('ChatFileHandler', () => {
         });
     });
 
-    // ---------------------------------------------------------- processForSend (web fallback)
-    describe('processForSend (web)', () => {
-        it('should process text files via web fallback', async () => {
+    // ---------------------------------------------------------- processForSend (File API)
+    describe('processForSend (File API)', () => {
+        it('should process text files via File API', async () => {
             (isTextFile as unknown as Mock).mockReturnValue(true);
             (readFileAsText as unknown as Mock).mockResolvedValue('hello world');
 
@@ -196,7 +196,7 @@ describe('ChatFileHandler', () => {
             expect(handler.getCount()).toBe(0);
         });
 
-        it('should process image files via web fallback', async () => {
+        it('should process image files via File API', async () => {
             (isTextFile as unknown as Mock).mockReturnValue(false);
             (readFileAsBase64 as unknown as Mock).mockResolvedValue('imgbase64==');
 
@@ -370,8 +370,8 @@ describe('ChatFileHandler', () => {
             expect(result.attachments).toHaveLength(1);
         });
 
-        it('should process text file with empty type via web fallback (L232)', async () => {
-            // Force web fallback
+        it('should process text file with empty type via File API (L232)', async () => {
+            // Force the File API path.
             mockBridge.isTauri.mockReturnValue(false);
             // Override isTextFile mock — real impl checks extension, not MIME type
             (isTextFile as Mock).mockReturnValueOnce(true);

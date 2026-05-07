@@ -141,7 +141,7 @@ export class ChatController {
         );
         this._filePicker = this._createFilePicker(_i18n, deps);
         this._historyController = this._createHistoryController(deps);
-        this._generationController = this._createGenerationController(_aiBridge, _i18n);
+        this._generationController = this._createGenerationController(_aiBridge, _i18n, deps);
         this._sendController = this._createSendController(_aiBridge, deps);
         this._activationCoordinator = this._createActivationCoordinator(_aiBridge);
     }
@@ -269,6 +269,7 @@ export class ChatController {
     private _createGenerationController(
         aiBridge: AIBridge,
         i18n: I18nService,
+        deps: ChatControllerDeps,
     ): ChatGenerationController {
         return this._factory.createGenerationController({
             aiBridge,
@@ -297,6 +298,8 @@ export class ChatController {
             },
             isDestroyed: () => this._state.isDestroyed,
             isSending: () => this._state.isSending,
+            isImageProvider: (providerId) =>
+                providerId !== null && deps.getSelectedModule('ai_image')?.id === providerId,
             tracer: this._tracer,
         });
     }

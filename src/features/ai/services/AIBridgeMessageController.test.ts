@@ -7,6 +7,16 @@ import {
     CUSTOM_TEXT_PROVIDER_ID,
 } from '@/shared/utils/customProviderSupport';
 
+function createProviderPolicy(): AIBridgeProviderPolicy {
+    return new AIBridgeProviderPolicy(() => ({
+        ai: [
+            { id: CUSTOM_TEXT_PROVIDER_ID, capability: 'text' },
+            { id: CUSTOM_IMAGE_PROVIDER_ID, capability: 'image' },
+            { id: 'llamacpp', capability: 'text' },
+        ],
+    }));
+}
+
 function createTextController() {
     const transport = {
         send: vi.fn().mockResolvedValue({ ok: true, text: 'done' }),
@@ -59,7 +69,7 @@ function createTextController() {
         transport: transport as never,
         manager: manager as never,
         events: events as never,
-        providerPolicy: new AIBridgeProviderPolicy(),
+        providerPolicy: createProviderPolicy(),
         tracer: { error: vi.fn() },
         translate: (_key, fallback) => fallback,
         showToast,
@@ -126,7 +136,7 @@ function createImageController() {
         transport: transport as never,
         manager: manager as never,
         events: events as never,
-        providerPolicy: new AIBridgeProviderPolicy(),
+        providerPolicy: createProviderPolicy(),
         tracer: { error: vi.fn() },
         translate: (_key, fallback) => fallback,
         showToast: vi.fn(),
@@ -158,6 +168,26 @@ describe('AIBridgeMessageController custom providers', () => {
                 provider: 'gpt',
                 model: 'deepseek/deepseek-r1-0528',
                 thinking_level: 'high',
+            }),
+        );
+    });
+
+    it('uses custom text provider settings for thinking and internet access', async () => {
+        const { controller, transport, context } = createTextController();
+        context.aiSettings.getThinkingLevel.mockReturnValue('off');
+        context.aiSettings.getInternetAccessEnabled.mockReturnValue(true);
+
+        await controller.sendMessage('What is the latest OpenAI news today?', 'chat', [], []);
+
+        expect(context.aiSettings.getThinkingLevel).toHaveBeenCalledWith(CUSTOM_TEXT_PROVIDER_ID);
+        expect(context.aiSettings.getInternetAccessEnabled).toHaveBeenCalledWith(
+            CUSTOM_TEXT_PROVIDER_ID,
+        );
+        expect(transport.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                provider: 'gpt',
+                thinking_level: 'none',
+                web_search: { enabled: true },
             }),
         );
     });
@@ -206,7 +236,7 @@ describe('AIBridgeMessageController custom providers', () => {
                 broadcastResponse: vi.fn(),
                 broadcastReplaceChunk: vi.fn(),
             } as never,
-            providerPolicy: new AIBridgeProviderPolicy(),
+            providerPolicy: createProviderPolicy(),
             tracer: { error: vi.fn() },
             translate: (_key, fallback) => fallback,
             showToast: vi.fn(),
@@ -343,6 +373,29 @@ describe('AIBridgeMessageController custom providers', () => {
         expect(response).toEqual({ ok: false, error: 'API key missing' });
         expect(showToast).toHaveBeenCalledWith('API key missing', 'error');
         expect(events.broadcastResponse).not.toHaveBeenCalled();
+    });
+
+    it('rejects cloud text messages when no model is selected', async () => {
+        const { controller, transport, events, manager, showToast } = createTextController();
+        manager.model = '';
+
+        const response = await controller.sendMessage('hello', 'chat', [], []);
+
+        expect(response).toEqual({ ok: false, error: 'No AI model selected' });
+        expect(showToast).toHaveBeenCalledWith('No AI model selected', 'error');
+        expect(transport.send).not.toHaveBeenCalled();
+        expect(events.broadcastResponse).not.toHaveBeenCalled();
+    });
+
+    it('rejects silent cloud prompt preparation when no model is selected', async () => {
+        const { controller, transport, manager, showToast } = createTextController();
+        manager.model = '';
+
+        const response = await controller.prepareImagePrompt('rewrite image prompt');
+
+        expect(response).toEqual({ ok: false, error: 'No AI model selected' });
+        expect(showToast).toHaveBeenCalledWith('No AI model selected', 'error');
+        expect(transport.sendSilent).not.toHaveBeenCalled();
     });
 
     it('marks silent image prompt preparation as provider activity', async () => {

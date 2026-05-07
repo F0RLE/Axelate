@@ -148,19 +148,11 @@ export class ModuleService {
             );
 
             if (result.status === 'error') {
-                const interrupted = this._downloadOutcomeFromError(result.error.message);
-                if (interrupted !== null) {
-                    return interrupted;
-                }
                 throw new Error(result.error.message);
             }
             return this._normalizeDownloadOutcome(result.data);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            const interrupted = this._downloadOutcomeFromError(errorMessage);
-            if (interrupted !== null) {
-                return interrupted;
-            }
             this._tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
             this._publishDownloadProgress({
                 module_id: moduleId,
@@ -254,17 +246,6 @@ export class ModuleService {
             return value;
         }
         return 'completed';
-    }
-
-    private _downloadOutcomeFromError(message: string): DownloadModuleOutcome | null {
-        const normalized = message.toLowerCase();
-        if (normalized.includes('download paused')) {
-            return 'paused';
-        }
-        if (normalized.includes('download cancelled')) {
-            return 'cancelled';
-        }
-        return null;
     }
 
     /**

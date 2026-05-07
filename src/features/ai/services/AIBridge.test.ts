@@ -17,14 +17,6 @@ const mockListen = vi.fn().mockResolvedValue(() => {
 });
 const mockEmit = vi.fn();
 
-const tauriMock = {
-    core: { invoke: mockInvoke },
-    event: { listen: mockListen, emit: mockEmit },
-};
-
-// Set before import
-(globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
-
 // Mock Core dependency
 const mockCore = {
     tauriProvider: {
@@ -44,7 +36,6 @@ const mockCore = {
         }),
     },
     aiSettings: {
-        setAiSessionId: vi.fn(),
         setSelectedAIModel: vi.fn(),
         getSelectedAIModel: vi.fn(),
         getThinkingLevel: vi.fn().mockReturnValue('high'),
@@ -68,6 +59,19 @@ const mockCore = {
     },
     stateStore: {
         getSelectedModule: vi.fn().mockReturnValue(undefined),
+    },
+    catalog: {
+        getCatalog: vi.fn().mockReturnValue({
+            ai: [
+                { id: 'gpt', capability: 'text' },
+                { id: 'gemini', capability: 'text' },
+                { id: 'llamacpp', capability: 'text' },
+                { id: 'sdcpp', capability: 'image' },
+                { id: 'gpt-image', capability: 'image' },
+                { id: 'seedream-image', capability: 'image' },
+            ],
+            services: [],
+        }),
     },
     state: {
         get: vi.fn((key: string) => {
@@ -129,7 +133,7 @@ describe('AIBridge', () => {
         mockCore.tauriProvider.isTauri.mockReset();
         mockCore.tauriProvider.isTauri.mockReturnValue(true);
         mockCore.aiSettings.getSelectedAIModel.mockReset();
-        mockCore.aiSettings.getSelectedAIModel.mockReturnValue(undefined);
+        mockCore.aiSettings.getSelectedAIModel.mockReturnValue('gpt-4');
         mockCore.aiSettings.getThinkingLevel.mockReset();
         mockCore.aiSettings.getThinkingLevel.mockReturnValue('high');
         mockCore.aiSettings.getInternetAccessEnabled.mockReset();
@@ -143,7 +147,7 @@ describe('AIBridge', () => {
         mockCore.settingsService.getSettings.mockReturnValue({});
         mockCore.stateStore.getSelectedModule.mockClear();
         mockCore.stateStore.getSelectedModule.mockReturnValue(undefined);
-        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
+        mockCore.catalog.getCatalog.mockClear();
         localStorage.clear();
         aiBridge = new AIBridge(mockTracer);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
@@ -805,7 +809,7 @@ describe('AIBridge', () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
-            await bridge2.init(); // should not throw, logs web mode active (line 81)
+            await bridge2.init(); // should not throw when IPC streaming is unavailable
 
             bridge2.stopProvider();
             mockCore.tauriProvider.isTauri.mockReturnValue(true);
@@ -964,11 +968,11 @@ describe('AIBridge', () => {
             (import.meta.env as any).DEV = orgDev;
         });
 
-        it('should handle sendMessage when _core is null (Line 175)', async () => {
+        it('should reject sendMessage when _core is null and no model can be resolved', async () => {
             const tempBridge = new AIBridge(mockTracer);
             // Do NOT call setCore here to leave _core as null
 
-            // Bypass API key checks logic just to test the core check
+            // Bypass API key checks logic just to test missing core/model resolution.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             Object.defineProperty((tempBridge as any)._manager, 'activeProviderId', {
                 get: () => 'gemini',
@@ -986,8 +990,9 @@ describe('AIBridge', () => {
                 text: 'hi',
             });
 
-            const res = await tempBridge.sendMessage('test message');
-            expect(res.ok).toBe(true);
+            const result = await tempBridge.sendMessage('test message');
+            expect(result.ok).toBe(false);
+            expect(result.error).toBe('No AI model selected');
         });
 
         it('should handle an empty error string in backend mismatch logic (Line 218)', async () => {

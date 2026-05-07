@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+import type { ChatTranslateFunction } from './ChatUiTypes';
 import {
     buildSafeImageDataUrl,
     normalizeImagePayload,
@@ -13,7 +13,7 @@ type ChatMessageRendererLogger = Pick<LoggerService, 'error' | 'debug'>;
 
 type ChatMessageRendererDeps = {
     onImageLoad: () => void;
-    translate: TTranslateFunction;
+    translate: ChatTranslateFunction;
     tracer: ChatMessageRendererLogger;
 };
 

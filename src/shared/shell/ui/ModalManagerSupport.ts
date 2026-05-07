@@ -15,7 +15,7 @@ type AppInteractionHandler = (event: MouseEvent, app: IApp, category: string) =>
 type DownloadHandler = (app: IApp, action: ModuleCardDownloadAction) => void;
 type ProgressEventHandler = (event: Event) => void;
 type TranslateFunc = (key: string, fallback: string) => string;
-export type IntegrationImportAction = 'local' | 'url' | 'guide';
+export type IntegrationImportAction = 'local' | 'archive' | 'url' | 'guide';
 
 export async function cancelModalDownload(options: {
     app: IApp;
@@ -248,7 +248,7 @@ function createIntegrationImportCard(
         translate('ui.launcher.integrations.import.card_title', 'Add integration'),
     );
     card.addEventListener('click', () => {
-        onIntegrationImport?.('local');
+        onIntegrationImport?.('archive');
     });
     card.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') {
@@ -256,7 +256,7 @@ function createIntegrationImportCard(
         }
 
         event.preventDefault();
-        onIntegrationImport?.('local');
+        onIntegrationImport?.('archive');
     });
 
     const help = createIntegrationHelpBadge(translate, onIntegrationImport);
@@ -280,7 +280,7 @@ function createIntegrationImportCard(
     actions.append(
         createIntegrationImportButton(
             'local',
-            translate('ui.launcher.integrations.import.open', 'Open'),
+            translate('ui.launcher.integrations.import.folder', 'Folder'),
             onIntegrationImport,
         ),
         createIntegrationImportButton(

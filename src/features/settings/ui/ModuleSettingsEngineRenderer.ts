@@ -282,7 +282,8 @@ export class ModuleSettingsEngineRenderer {
             getTextFields: (translate) => this._fieldCatalog.buildTextEngineFields(translate),
             getCoreModelField: (translate, modelPlaceholder, isImage) =>
                 this._fieldCatalog.buildCoreModelField(translate, modelPlaceholder, isImage),
-            getComputeModeField: (translate) => this._fieldCatalog.buildComputeModeField(translate),
+            getComputeModeField: (translate, availableModes) =>
+                this._fieldCatalog.buildComputeModeField(translate, availableModes),
             getImageExtraArgsField: (translate) =>
                 this._fieldCatalog.buildImageExtraArgsField(translate),
         });
@@ -376,10 +377,14 @@ export class ModuleSettingsEngineRenderer {
 
         const buttons = new Map<string, HTMLButtonElement>();
         const syncDisplay = () => {
-            const currentValue =
+            let currentValue =
                 hiddenInput.value === ''
                     ? String(options.defaultValue ?? 'gpu')
                     : hiddenInput.value;
+            if (!buttons.has(currentValue)) {
+                currentValue = options.options?.[0] ?? String(options.defaultValue ?? 'gpu');
+                hiddenInput.value = currentValue;
+            }
             buttons.forEach((button, value) => {
                 const selected = value === currentValue;
                 button.classList.toggle('selected', selected);

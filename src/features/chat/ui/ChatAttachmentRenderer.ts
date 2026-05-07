@@ -3,13 +3,13 @@ import DOMPurify from 'dompurify';
 import type { ChatFileHandler } from '../services/ChatFileHandler';
 import type { IChatAttachment } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
-import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+import type { ChatTranslateFunction } from './ChatUiTypes';
 
 type ChatAttachmentRendererDeps = {
     fileHandler: Pick<ChatFileHandler, 'getFileTokenEstimate'>;
     isDestroyed: () => boolean;
     getRenderVersion: () => number;
-    translate: TTranslateFunction;
+    translate: ChatTranslateFunction;
 };
 
 export class ChatAttachmentRenderer {

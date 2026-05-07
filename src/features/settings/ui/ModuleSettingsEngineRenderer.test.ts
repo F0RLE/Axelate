@@ -222,7 +222,7 @@ describe('ModuleSettingsEngineRenderer', () => {
             type: 'select',
             isEngineConfig: false,
             options: ['Euler', 'DDIM'],
-            appId: 'stable-diffusion',
+            appId: 'sdcpp',
             config: null,
         });
 

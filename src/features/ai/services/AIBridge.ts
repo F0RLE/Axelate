@@ -38,7 +38,9 @@ export class AIBridge implements IAIBridge {
     private readonly _transport: IChatTransport;
     private readonly _manager: AIProviderManager;
     private readonly _engineStatus: EngineStatusService;
-    private readonly _providerPolicy = new AIBridgeProviderPolicy();
+    private readonly _providerPolicy = new AIBridgeProviderPolicy(() =>
+        this._context?.catalog.getCatalog(),
+    );
     private readonly _runtime: AIBridgeRuntime;
     private readonly _inactivityController: AIBridgeInactivityController;
     private readonly _messageController: AIBridgeMessageController;

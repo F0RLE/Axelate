@@ -50,6 +50,41 @@ describe('ConsoleLogService', () => {
         expect(service.getLogsForView('general')).toEqual([]);
     });
 
+    it('normalizes plain backend timestamp level lines', async () => {
+        setupTauri(bridge, true);
+        vi.mocked(bridge.invoke).mockResolvedValue([
+            {
+                timestamp: 100,
+                source: 'backend',
+                level: 'INFO',
+                message: '2026-05-05 19:21:40 ERROR [ModuleService] Control failed',
+            },
+            {
+                timestamp: 101,
+                source: 'backend',
+                level: 'INFO',
+                message: '2026-05-05 19:21:40 WARN [GlobalBridge] Failed to start local module',
+            },
+        ] satisfies ILogEntry[]);
+
+        const logs = await service.fetchLogs('general');
+
+        expect(logs).toEqual([
+            expect.objectContaining({
+                display_time: '19:21:40',
+                normalized_level: 'ERROR',
+                scope: 'ModuleService',
+                message: 'Control failed',
+            }),
+            expect.objectContaining({
+                display_time: '19:21:40',
+                normalized_level: 'WARN',
+                scope: 'GlobalBridge',
+                message: 'Failed to start local module',
+            }),
+        ]);
+    });
+
     it('tracks timestamps per view without cross-view filtering', async () => {
         setupTauri(bridge, true);
         vi.mocked(bridge.invoke)
@@ -120,11 +155,11 @@ describe('ConsoleLogService', () => {
         expect(service.getLogsForView('general')).toEqual([]);
     });
 
-    it('opens canonical engine log folders', async () => {
+    it('opens engine log folders', async () => {
         setupTauri(bridge, true);
         vi.mocked(bridge.invoke).mockResolvedValue(undefined);
 
-        await expect(service.openLogsFolder('engine:stable-diffusion')).resolves.toBe(true);
+        await expect(service.openLogsFolder('engine:sdcpp')).resolves.toBe(true);
 
         expect(bridge.invoke).toHaveBeenCalledWith('open_console_log_target', {
             viewId: 'engine:sdcpp',

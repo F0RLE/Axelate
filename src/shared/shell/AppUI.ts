@@ -25,6 +25,8 @@ import { type NavigationService } from '@/infrastructure/navigation/NavigationSe
 type AppUIStateDeps = {
     removeSelectedModule: (category: string) => void;
     setSelectedModule: (category: string, moduleData: Partial<IApp>) => void;
+    getIntegrationImportLastDirectory: () => string | null;
+    setIntegrationImportLastDirectory: (path: string | null) => void;
 };
 
 type AppUIDeps = {
@@ -136,6 +138,10 @@ export class AppUI {
             modalManager: this._modalManager,
             getCatalogApps: (category) => this._getCatalogApps(category),
             getSelectedAppId: (category) => this._selectionState.get(category)?.id ?? null,
+            getIntegrationImportLastDirectory: () =>
+                this._deps.uiState.getIntegrationImportLastDirectory(),
+            setIntegrationImportLastDirectory: (path) =>
+                this._deps.uiState.setIntegrationImportLastDirectory(path),
             clearModuleCard: (category) => this.clearModuleCard(category),
             markSlotCardAsInstalled: (card, app) =>
                 this._dashboardSupport.markSlotCardAsInstalled(card, app),

@@ -1,37 +1,20 @@
 import type { IBridge } from '@/shared/types/IBridge';
+import { getCurrentWindow, LogicalSize } from '@tauri-apps/api/window';
 
-type WindowSize = { width: number; height: number };
-type WindowPosition = { x: number; y: number };
-
-type TauriWindowHandle = {
-    setSize: (size: unknown) => Promise<void>;
-    center: () => Promise<void>;
-    isMaximized: () => Promise<boolean>;
-    innerSize: () => Promise<WindowSize>;
-    outerPosition: () => Promise<WindowPosition>;
-};
-
-type TauriWindowApi = {
-    getCurrentWindow: () => TauriWindowHandle;
-    LogicalSize: new (w: number, h: number) => unknown;
-};
-
-type TauriWindowGlobal = {
-    __TAURI__?: {
-        window?: TauriWindowApi;
-    };
-};
+type TauriWindowHandle = ReturnType<typeof getCurrentWindow>;
 
 type WindowNativeRuntime = {
-    getWindowApi: () => TauriWindowApi | null;
+    getCurrentWindow: () => TauriWindowHandle;
+    createLogicalSize: (
+        width: number,
+        height: number,
+    ) => Parameters<TauriWindowHandle['setSize']>[0];
 };
 
 function createDefaultWindowNativeRuntime(): WindowNativeRuntime {
     return {
-        getWindowApi: () => {
-            const globalWindow = globalThis as unknown as TauriWindowGlobal;
-            return globalWindow.__TAURI__?.window ?? null;
-        },
+        getCurrentWindow,
+        createLogicalSize: (width, height) => new LogicalSize(width, height),
     };
 }
 
@@ -42,35 +25,34 @@ export class WindowNativeBridgeHelper {
     ) {}
 
     public isAvailable(): boolean {
-        return this._getWindowApi() !== null;
+        return this._bridge.isTauri();
     }
 
     public async setSizeAndCenter(width: number, height: number): Promise<void> {
-        const windowApi = this._getWindowApi();
-        if (windowApi === null) {
+        if (!this.isAvailable()) {
             return;
         }
 
-        const appWindow = windowApi.getCurrentWindow();
-        await appWindow.setSize(new windowApi.LogicalSize(width, height));
+        const appWindow = this._runtime.getCurrentWindow();
+        await appWindow.setSize(this._runtime.createLogicalSize(width, height));
         await appWindow.center();
     }
 
     public async isMaximized(): Promise<boolean> {
-        const appWindow = this._getCurrentWindow();
-        if (appWindow === null) {
+        if (!this.isAvailable()) {
             return false;
         }
 
+        const appWindow = this._runtime.getCurrentWindow();
         return await appWindow.isMaximized();
     }
 
     public async saveWindowState(): Promise<void> {
-        const appWindow = this._getCurrentWindow();
-        if (appWindow === null) {
+        if (!this.isAvailable()) {
             return;
         }
 
+        const appWindow = this._runtime.getCurrentWindow();
         const maximized = await appWindow.isMaximized();
         await this._bridge.invoke('save_maximized_state', { maximized });
 
@@ -89,18 +71,5 @@ export class WindowNativeBridgeHelper {
             x: position.x,
             y: position.y,
         });
-    }
-
-    private _getCurrentWindow(): TauriWindowHandle | null {
-        const windowApi = this._getWindowApi();
-        if (windowApi === null) {
-            return null;
-        }
-
-        return windowApi.getCurrentWindow();
-    }
-
-    private _getWindowApi(): TauriWindowApi | null {
-        return this._runtime.getWindowApi();
     }
 }

@@ -13,6 +13,7 @@ interface IToggleItem {
     id: string;
     label: string;
     icon: string;
+    labelKey?: string;
 }
 
 interface IToggleGroupConfig {
@@ -118,6 +119,7 @@ export class GeneralSettingsRenderer {
         const navItems = APP_PAGES.filter((page) => page.inSettings === true).map((page) => ({
             id: page.id,
             label: page.defaultLabel,
+            labelKey: page.i18nKey,
             icon: page.icon,
         }));
 
@@ -128,7 +130,7 @@ export class GeneralSettingsRenderer {
                 dataKey: 'pageId',
                 hiddenItems,
                 items: navItems,
-                getLabelKey: (item) => `ui.launcher.settings.toggle_${item.id}`,
+                getLabelKey: (item) => item.labelKey ?? `ui.launcher.settings.toggle_${item.id}`,
                 onToggle: (pageId, enabled) => {
                     this.toggleNavItem(pageId, enabled);
                 },

@@ -28,7 +28,7 @@ export class LoggerService {
     // Flag to prevent recursive logging loops during interception
     private _isInternalLog = false;
     private _initialized = false;
-    /** Injected after TauriProvider is ready — avoids direct __TAURI__ access. */
+    /** Injected after TauriProvider is ready. */
     private _transport: ((logs: { level: string; message: string }[]) => Promise<void>) | null =
         null;
     /** Optional early-boot transport used before the main transport is wired. */
@@ -47,7 +47,7 @@ export class LoggerService {
 
     /**
      * Injects the Tauri transport after TauriProvider is initialized.
-     * Decouples LoggerService from direct __TAURI__ access (§4.1).
+     * Decouples LoggerService from the concrete IPC implementation.
      */
     public setTransport(fn: (logs: { level: string; message: string }[]) => Promise<void>): void {
         this._transport = fn;

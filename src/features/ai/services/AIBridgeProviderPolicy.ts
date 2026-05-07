@@ -1,8 +1,5 @@
-import {
-    isCloudProviderId,
-    isImageProviderId,
-    isManagedLocalImageProviderId,
-} from '@/shared/utils/providerSupport';
+import { isCloudProviderId } from '@/shared/utils/providerSupport';
+import type { IApp } from '@/shared/types/coreTypes';
 
 type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
 type CloudReasoningEffort = 'none' | Exclude<ThinkingLevel, 'off'>;
@@ -20,17 +17,21 @@ type RequestOptionInput = {
     webSearchEnabled: boolean | undefined;
 };
 
+type ProviderCatalogGetter = () => { ai?: unknown[] } | null | undefined;
+
 export class AIBridgeProviderPolicy {
+    public constructor(private readonly _getCatalog?: ProviderCatalogGetter) {}
+
     public isCloudProvider(providerId: string): boolean {
         return isCloudProviderId(providerId);
     }
 
     public isImageProvider(providerId: string): boolean {
-        return isImageProviderId(providerId);
+        return this._catalogCapability(providerId) === 'image';
     }
 
     public isManagedLocalImageEngine(providerId: string): boolean {
-        return isManagedLocalImageProviderId(providerId);
+        return !this.isCloudProvider(providerId) && this.isImageProvider(providerId);
     }
 
     public isLocalTextProvider(providerId: string): boolean {
@@ -63,5 +64,23 @@ export class AIBridgeProviderPolicy {
         }
 
         return requestOptions;
+    }
+
+    private _catalogCapability(providerId: string): IApp['capability'] | null {
+        const catalog = this._getCatalog?.();
+        const ai = catalog?.ai;
+        if (!Array.isArray(ai)) {
+            return null;
+        }
+
+        const provider = ai.find((entry): entry is Partial<IApp> => {
+            return (
+                typeof entry === 'object' &&
+                entry !== null &&
+                (entry as Partial<IApp>).id === providerId
+            );
+        });
+        const capability = provider?.capability;
+        return capability === 'image' || capability === 'text' ? capability : null;
     }
 }

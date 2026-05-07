@@ -102,6 +102,8 @@ describe('AppUI lifecycle', () => {
                             ) => void
                         )(category, moduleData);
                     },
+                    getIntegrationImportLastDirectory: () => null,
+                    setIntegrationImportLastDirectory: vi.fn(),
                 },
                 launchApp: async (category: string, app: IApp) => {
                     await (

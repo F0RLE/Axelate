@@ -29,15 +29,12 @@ export class AIProviderManager {
     }
 
     public async init(): Promise<void> {
-        // Initialize Session ID using Secure Storage with UI state as a recovery fallback.
+        // Initialize Session ID from secure storage.
         const secureSid = await this._getSecureVal('ai_session_id').catch((error: unknown) => {
             this._tracer.error('[AIProviderManager] Failed to read ai_session_id:', error);
             return null;
         });
         let sid = secureSid;
-        if (!this._isValidSessionId(sid)) {
-            sid = this._context?.aiSettings.getAiSessionId() ?? null;
-        }
         if (!this._isValidSessionId(sid)) {
             sid = crypto.randomUUID();
         }
@@ -47,11 +44,6 @@ export class AIProviderManager {
         }
 
         this._sessionId = sid;
-
-        // Sync UI state
-        if (this._context) {
-            this._context.aiSettings.setAiSessionId(sid);
-        }
     }
 
     public async startProvider(providerId: string): Promise<boolean> {
@@ -159,11 +151,8 @@ export class AIProviderManager {
             return customDisplayName;
         }
 
-        const providers: Record<string, string> = {
-            gpt: 'OpenAI GPT',
-            gemini: 'Google Gemini',
-        };
-        return providers[id] ?? id;
+        const catalogProvider = this._getAiCatalogApps().find((provider) => provider.id === id);
+        return catalogProvider?.name ?? id;
     }
 
     /**
@@ -220,16 +209,11 @@ export class AIProviderManager {
             return catalogModel;
         }
 
-        const fallbacks: Record<string, string> = {
-            gpt: 'gpt-5.5',
-            gemini: 'gemini-3-pro',
-            local: 'llama-4-maverick',
-        };
         if (this._isLocalProvider(providerId)) {
             return 'default';
         }
 
-        return fallbacks[providerId] ?? 'default';
+        return '';
     }
 
     private _resolveModel(providerId: string): string {

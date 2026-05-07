@@ -170,8 +170,8 @@ class AISettingsRenderer extends BaseComponent {
             showCustomModelComposer: isCustomProviderId(appId),
             translate: t,
             viewPolicy: this._viewPolicy,
-            supportsInternetAccess: this._viewPolicy.supportsInternetAccess(appId),
-            supportsThinking: this._viewPolicy.supportsThinking(appId),
+            supportsInternetAccess: this._viewPolicy.supportsInternetAccess(appId, app.capability),
+            supportsThinking: this._viewPolicy.supportsThinking(appId, models),
             thinkingLevel: this._selectionController.getThinkingLevel(appId, this._aiSettings),
             internetAccessEnabled: this._selectionController.getInternetAccessEnabled(
                 appId,

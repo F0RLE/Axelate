@@ -141,7 +141,10 @@ export class ConsoleFilterControlHelper<Level extends string> {
     }
 
     private _hasMultiSelectModifier(event: Event): boolean {
-        return event instanceof MouseEvent && (event.ctrlKey === true || event.metaKey === true);
+        return (
+            event instanceof MouseEvent &&
+            (event.ctrlKey === true || event.metaKey === true || event.shiftKey === true)
+        );
     }
 
     private _handleClearButton(button: HTMLButtonElement): void {

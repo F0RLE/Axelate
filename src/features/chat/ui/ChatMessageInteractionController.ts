@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify';
 
 import type { ChatImageController } from './ChatImageController';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+import type { ChatTranslateFunction } from './ChatUiTypes';
 
 type ChatMessageInteractionLogger = Pick<LoggerService, 'error'>;
 
@@ -25,7 +25,7 @@ type ChatMessageInteractionControllerDeps = {
     getRegenerateMessageHandler: () => (() => void | Promise<void>) | null;
     setLastEditableUserActionBar: (actionBar: HTMLElement) => void;
     setLastRegeneratableAssistantActionBar: (actionBar: HTMLElement) => void;
-    translate: TTranslateFunction;
+    translate: ChatTranslateFunction;
     tracer: ChatMessageInteractionLogger;
 };
 

@@ -26,13 +26,17 @@ export type ImageEngineFieldGroups = {
 };
 
 export class ModuleSettingsEngineFieldCatalog {
-    public buildComputeModeField(t: TranslateFn): EngineFieldDefinition {
+    public buildComputeModeField(
+        t: TranslateFn,
+        availableModes: Array<'gpu' | 'cpu'> = ['gpu', 'cpu'],
+    ): EngineFieldDefinition {
+        const options = availableModes.length > 0 ? availableModes : ['gpu', 'cpu'];
         return {
             label: t('ui.settings.engine.compute_mode', 'Compute Device'),
             key: 'compute_mode',
             type: 'select',
             isEngineConfig: true,
-            options: ['gpu', 'cpu'],
+            options,
             optionLabels: {
                 gpu: t('ui.settings.engine.compute_gpu', 'GPU'),
                 cpu: t('ui.settings.engine.compute_cpu', 'CPU'),

@@ -6,7 +6,6 @@ import type { IChatMessage, IChatAttachment } from '../types/chatTypes';
 import type { IApp } from '@/shared/types/coreTypes';
 import { ChatAutoStartHelper } from '../services/ChatAutoStartHelper';
 import { ChatSendFlow } from '../services/ChatSendFlow';
-import { AIBridgeProviderPolicy } from '@/features/ai/services/AIBridgeProviderPolicy';
 
 type ChatSendLogger = Pick<LoggerService, 'info'>;
 
@@ -108,7 +107,6 @@ export class ChatSendController {
     private _cancelRequested = false;
     private _activeProviderId: string | null = null;
     private _sendSequence = 0;
-    private readonly _providerPolicy = new AIBridgeProviderPolicy();
 
     constructor(private readonly _options: ChatSendControllerOptions) {
         this._autoStartHelper = new ChatAutoStartHelper({
@@ -229,7 +227,7 @@ export class ChatSendController {
             if (isImageProvider) {
                 shouldStopImageEngine =
                     activeProviderId !== null &&
-                    this._providerPolicy.isManagedLocalImageEngine(activeProviderId);
+                    this._isSelectedLocalImageProvider(activeProviderId);
                 imageHandle = this._options.createImageHandle();
                 this._options.startImagePreviewPolling(imageHandle);
             } else {
@@ -328,13 +326,8 @@ export class ChatSendController {
         return prepared === '' ? prompt : this._stripPromptEnvelope(prepared);
     }
 
-    private _extractPreparedPrompt(response: {
-        ok: boolean;
-        text?: string;
-        message?: string;
-        reply?: { text?: string };
-    }): string {
-        return (response.text ?? response.message ?? response.reply?.text ?? '').trim();
+    private _extractPreparedPrompt(response: { ok: boolean; text?: string }): string {
+        return (response.text ?? '').trim();
     }
 
     private _buildImagePromptRewriteRequest(prompt: string): string {
@@ -353,6 +346,11 @@ export class ChatSendController {
         const module = this._options.getSelectedModule(category);
         const id = module?.id;
         return typeof id === 'string' && id.trim() !== '' ? id : null;
+    }
+
+    private _isSelectedLocalImageProvider(providerId: string): boolean {
+        const module = this._options.getSelectedModule('ai_image');
+        return module?.id === providerId && module.type !== 'api';
     }
 
     private _wasDestroyed(): boolean {
