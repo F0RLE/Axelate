@@ -24,6 +24,7 @@ class AxelateClient:
         self.base_url = validate_base_url(required_env("AXELATE_HTTP_API_BASE")).rstrip("/")
         self.token = required_env("AXELATE_HTTP_API_TOKEN")
         self.module_id = required_env("AXELATE_MODULE_ID")
+        self.encoded_module_id = urllib.parse.quote(self.module_id, safe="")
 
     def request(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         data = None if payload is None else json.dumps(payload).encode("utf-8")
@@ -53,7 +54,7 @@ class AxelateClient:
             raise AxelateApiError(method, path, None, "", str(error.reason)) from error
 
     def settings(self) -> dict[str, Any]:
-        payload = self.request("GET", f"/v1/modules/{urllib.parse.quote(self.module_id)}/settings")
+        payload = self.request("GET", f"/v1/modules/{self.encoded_module_id}/settings")
         if "error" in payload:
             raise AxelateApiError("GET", "/settings", None, json.dumps(payload), str(payload["error"]))
         return payload.get("settings", {})
@@ -61,7 +62,7 @@ class AxelateClient:
     def save_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
         return self.request(
             "PUT",
-            f"/v1/modules/{urllib.parse.quote(self.module_id)}/settings",
+            f"/v1/modules/{self.encoded_module_id}/settings",
             settings,
         )
 
@@ -69,7 +70,7 @@ class AxelateClient:
         payload: dict[str, Any] = {"stage": stage, "label": label}
         if progress is not None:
             payload["progress"] = progress
-        return self.request("POST", f"/v1/modules/{urllib.parse.quote(self.module_id)}/stage", payload)
+        return self.request("POST", f"/v1/modules/{self.encoded_module_id}/stage", payload)
 
     def ai_text(self, prompt: str, **options: Any) -> dict[str, Any]:
         """Run text generation. sessionId defaults to module_id and can be overridden."""

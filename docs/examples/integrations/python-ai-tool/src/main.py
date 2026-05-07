@@ -17,7 +17,7 @@ def validate_base_url(value: str) -> str:
 BASE_URL = validate_base_url(os.environ["AXELATE_HTTP_API_BASE"])
 TOKEN = os.environ["AXELATE_HTTP_API_TOKEN"]
 MODULE_ID = os.environ["AXELATE_MODULE_ID"]
-MODULE_PATH_ID = urllib.parse.quote(MODULE_ID)
+MODULE_PATH_ID = urllib.parse.quote(MODULE_ID, safe="")
 
 
 def request(method: str, path: str, payload: dict | None = None) -> dict:

@@ -25,7 +25,7 @@ npm run integration:doctor -- ./my-integration
 - `docs/examples/sdk/browser/axelate-settings-bridge.js` 是 custom settings
   UI iframe 消息协议的可复制 helper。
 
-真正的运行时契约仍然是 [Launcher SDK](../en/LAUNCHER_SDK.md) 中描述的本地
+真正的运行时契约仍然是 [Integration API](../en/INTEGRATION_API.md) 中描述的本地
 HTTP API。
 
 ## 集成结构
@@ -47,7 +47,7 @@ api_version = "1"
 id = "my-integration"
 name = "My Integration"
 version = "0.1.0"
-type = "service"
+category = "service"
 settings_ui = "settings-ui/index.html"
 
 [runtime]
@@ -62,7 +62,7 @@ entry = "src/main.py"
 
 Axelate 启动 script-runtime 集成时会设置：
 
-- `AXELATE_SDK_VERSION`
+- `AXELATE_INTEGRATION_API_VERSION`
 - `AXELATE_HTTP_API_BASE`
 - `AXELATE_HTTP_API_TOKEN`
 - `AXELATE_MODULE_ID`
