@@ -180,7 +180,6 @@ export class TauriProvider implements IBridge {
         return Promise.reject(new Error(String(e)));
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
     public async listen<T>(event: string, callback: (payload: T) => void): Promise<() => void> {
         if (this.isTauri()) {
             // Using imported listen for robust IPC

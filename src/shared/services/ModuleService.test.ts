@@ -77,7 +77,6 @@ describe('ModuleService', () => {
         mocks.commands.importIntegrationPath.mockReturnValue('import-path-promise');
         mocks.commands.importIntegrationUrl.mockReturnValue('import-url-promise');
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
         moduleService = new ModuleService(mocks.tauriProvider as any, mocks.tracer);
     });
 

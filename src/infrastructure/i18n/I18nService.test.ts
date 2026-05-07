@@ -277,7 +277,6 @@ describe('I18nService', () => {
                     .mockResolvedValue({ ok: true, json: () => Promise.resolve({ hello: 'Hi' }) }), // mock translations
             );
             // Force the method to reject to hit the `.catch` block
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const syncSpy = vi
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 .spyOn(i18n as any, '_syncToBackend')

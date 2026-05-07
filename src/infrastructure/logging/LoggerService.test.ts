@@ -375,7 +375,6 @@ describe('LoggerService', () => {
         });
 
         it('should use [Unstringifiable Object] when fallbackStringify inner catch fires', () => {
-            // eslint-disable-next-line prefer-arrow-callback
             const fnObj = Object.assign(function noop() {
                 /* poisoned getter test */
             }, {});

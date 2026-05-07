@@ -21,7 +21,7 @@ export default [
     },
     {
         linterOptions: {
-            reportUnusedDisableDirectives: 'off',
+            reportUnusedDisableDirectives: 'error',
         },
     },
     js.configs.recommended,
