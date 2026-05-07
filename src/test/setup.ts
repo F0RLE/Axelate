@@ -1,5 +1,11 @@
 import { beforeEach, vi } from 'vitest';
 
+type TauriInternalsMock = {
+    invoke: (cmd?: string, args?: unknown) => Promise<unknown>;
+    transformCallback: () => number;
+    eventListen: (event?: string, callback?: (payload: unknown) => void) => Promise<() => void>;
+};
+
 // Mock localStorage for JSDOM
 const localStorageMock = (() => {
     let store: Record<string, string> = {};
@@ -25,22 +31,31 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
 
 function installDefaultTauriGlobals(): void {
     const win = globalThis as unknown as Record<string, unknown>;
-    win['__TAURI_INTERNALS__'] = {
-        invoke: async () => {},
+    const internals: TauriInternalsMock = {
+        invoke: () => Promise.resolve(),
         transformCallback: () => 0,
-        eventListen: async () => () => {},
+        eventListen: () => Promise.resolve(() => {}),
     };
+    win['__TAURI_INTERNALS__'] = internals;
     win['t'] = vi.fn((key: string, fallback?: string) => fallback ?? key);
+}
+
+function getTauriInternals(): Partial<TauriInternalsMock> | null {
+    const win = globalThis as unknown as Record<string, unknown>;
+    const internals = win['__TAURI_INTERNALS__'];
+    if (internals === null || typeof internals !== 'object') {
+        return null;
+    }
+    return internals as Partial<TauriInternalsMock>;
 }
 
 // Mock Tauri APIs
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: vi.fn().mockImplementation((cmd: string, args?: unknown) => {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const internals = win['__TAURI_INTERNALS__'] as Record<string, any> | undefined;
+        const internals = getTauriInternals();
 
-        if (typeof internals?.['invoke'] === 'function') {
-            return internals['invoke'](cmd, args);
+        if (typeof internals?.invoke === 'function') {
+            return internals.invoke(cmd, args);
         }
         return Promise.resolve();
     }),
@@ -48,12 +63,11 @@ vi.mock('@tauri-apps/api/core', () => ({
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
-    listen: vi.fn().mockImplementation((event: string, callback: (payload: any) => void) => {
-        const win = globalThis as unknown as Record<string, unknown>;
-        const internals = win['__TAURI_INTERNALS__'] as Record<string, any> | undefined;
+    listen: vi.fn().mockImplementation((event: string, callback: (payload: unknown) => void) => {
+        const internals = getTauriInternals();
 
-        if (typeof internals?.['eventListen'] === 'function') {
-            return internals['eventListen'](event, callback);
+        if (typeof internals?.eventListen === 'function') {
+            return internals.eventListen(event, callback);
         }
         return Promise.resolve(() => {});
     }),

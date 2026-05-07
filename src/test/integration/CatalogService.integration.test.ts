@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CatalogService } from '@/shared/services/CatalogService';
+import type { CatalogService } from '@/shared/services/CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
 import {
     createCatalogHarness,
