@@ -1,5 +1,16 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 reviews:
+  review_status: false
+  path_filters:
+    - "!src/dist/**"
+    - "!src/coverage/**"
+    - "!src/node_modules/**"
+    - "!src-tauri/target/**"
+    - "!src-tauri/gen/**"
+    - "!src/shared/types/bindings.ts"
+    - "!docs/localization/**"
+    - "!**/*.lock"
+    - "!**/package-lock.json"
   auto_review:
     enabled: true
     drafts: true
