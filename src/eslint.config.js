@@ -103,11 +103,14 @@ export default [
         },
     },
     {
-        files: ['scripts/**/*.{js,mjs}'],
+        files: ['scripts/**/*.{js,mjs}', '../.github/**/*.{js,mjs}', '.github/**/*.{js,mjs}'],
         languageOptions: {
             globals: {
                 ...globals.node,
             },
+        },
+        rules: {
+            'no-console': 'off',
         },
     },
     eslintConfigPrettier,

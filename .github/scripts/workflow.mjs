@@ -774,9 +774,25 @@ function verifyProject() {
     ensureFrontendDependencies();
     run('npm', ['run', 'format:check'], { cwd: srcDir });
     run('npm', ['run', 'typecheck'], { cwd: srcDir });
-    run('npm', ['run', 'lint'], { cwd: srcDir });
+    lintProject();
     run('npm', ['run', 'test'], { cwd: srcDir });
     run('npm', ['run', 'build:bundle'], { cwd: srcDir });
+}
+
+function lintProject() {
+    run('npm', ['--prefix', 'src', 'run', 'lint']);
+    run('npm', [
+        '--prefix',
+        'src',
+        'exec',
+        '--',
+        'eslint',
+        '--config',
+        'src/eslint.config.js',
+        '.github/scripts',
+        '.github/commitlint.config.js',
+        '--no-ignore',
+    ]);
 }
 
 function setupProject() {
@@ -805,7 +821,7 @@ Tasks:
   release:checksums  Generate SHA256 checksums for release bundles
   release:verify-hardening  Validate release hardening settings
   run            Launch the built app artifact
-  lint           Run frontend lint checks
+  lint           Run frontend and repository tooling lint checks
   format         Format frontend files
   format:check   Check frontend formatting
   test           Run frontend tests
@@ -897,7 +913,7 @@ Tasks:
         runReleaseBinary();
     },
     lint() {
-        run('npm', ['--prefix', 'src', 'run', 'lint']);
+        lintProject();
     },
     format() {
         run('npm', ['--prefix', 'src', 'run', 'format']);
