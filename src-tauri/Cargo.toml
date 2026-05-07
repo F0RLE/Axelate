@@ -32,7 +32,7 @@ path = "src/main.rs"
 
 # --- Tauri Ecosystem (UI & Runtime) ---
 [dependencies.tauri]
-version  = "~2.10"
+version  = "~2.11"
 features = ["image-ico", "image-png", "tray-icon", "unstable"]
 
 [dependencies]
@@ -52,7 +52,7 @@ serde_json       = "1.0.149"
 toml             = "1.1"
 
 # --- Async Core & Networking ---
-tokio        = { version = "1.52.1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
+tokio        = { version = "1.52.2", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
 reqwest      = { version = "0.13.3", features = ["json", "stream", "native-tls", "gzip"], default-features = false }
 futures-util = "0.3.32"
 scraper      = "0.26.0"
@@ -118,7 +118,7 @@ windows = { version = "0.62.2", features = [
 
 # --- Build Time ---
 [build-dependencies]
-tauri-build = { version = "~2.5", features = [] }
+tauri-build = { version = "~2.6", features = [] }
 
 # ==============================================================================
 #  OPTIMIZATION PROFILES (The 0.7 MB Magic)
