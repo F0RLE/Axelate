@@ -150,7 +150,7 @@ describe('AIBridge', () => {
         mockCore.catalog.getCatalog.mockClear();
         localStorage.clear();
         aiBridge = new AIBridge(mockTracer);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         aiBridge.setCore(mockCore as any);
 
         // Mock session ID for init
@@ -191,7 +191,7 @@ describe('AIBridge', () => {
 
         it('should clean up transport state when initialization fails', async () => {
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const transportDestroySpy = vi.spyOn((bridge2 as any)._transport, 'destroy');
@@ -207,7 +207,7 @@ describe('AIBridge', () => {
 
         it('should broadcast chunks and thoughts via transport callbacks', async () => {
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
 
@@ -806,7 +806,7 @@ describe('AIBridge', () => {
             mockCore.tauriProvider.isTauri.mockReturnValue(false);
 
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
             await bridge2.init(); // should not throw when IPC streaming is unavailable
@@ -818,7 +818,7 @@ describe('AIBridge', () => {
         it('should handle IPC initialization failure gracefully (line 86)', async () => {
             // Make onStream throw to trigger the catch block
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((bridge2 as any)._transport, 'onStream').mockImplementation(() => {
@@ -948,7 +948,7 @@ describe('AIBridge', () => {
             const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (tempBridge as any)._transport = { setCore: vi.fn() };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             tempBridge.setCore(mockCore as any);
             // Should not throw and Should not call setCore on the plain object since it fails instanceof
         });
@@ -959,7 +959,7 @@ describe('AIBridge', () => {
             (import.meta.env as any).DEV = false;
 
             const tempBridge = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             tempBridge.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session');
             await tempBridge.init();

@@ -319,7 +319,6 @@ export class ModuleService {
             }
 
             this._deletedModules.add(moduleId);
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {

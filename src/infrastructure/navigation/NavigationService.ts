@@ -148,7 +148,6 @@ export class NavigationService {
     public popBackAction(): boolean {
         if (this._actionStack.length > 0) {
             const actionInfo = this._actionStack.pop();
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (actionInfo) {
                 this._tracer.debug(`[NavigationService] Executing back action: ${actionInfo.id}`);
 
