@@ -12,11 +12,7 @@ export default [
             '*.config.js',
             '*.config.ts',
             'vite.config.ts',
-            'test/**',
-            '**/test/**',
             '**/bindings.ts',
-            'scripts/**',
-            '**/scripts/**',
         ],
     },
     {
@@ -107,7 +103,7 @@ export default [
         },
     },
     {
-        files: ['scripts/**/*.js'],
+        files: ['scripts/**/*.{js,mjs}'],
         languageOptions: {
             globals: {
                 ...globals.node,
