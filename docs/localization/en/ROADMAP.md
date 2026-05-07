@@ -133,7 +133,7 @@ Difficulty: `1/10`
 Work:
 
 - keep `CURRENT_STATE.md`, `ROADMAP.md`, `TRUST_MODEL.md`, and
-  `LAUNCHER_SDK.md` aligned with actual behavior
+  `INTEGRATION_API.md` aligned with actual behavior
 - remove stale claims when backend behavior changes
 - document the exact local API, environment variables, runtime directories, and
   settings ownership rules
@@ -213,7 +213,7 @@ Work:
 - helpers for chat, image, settings, stage reporting, and module control
 - typed errors
 - examples that match the integration template
-- version compatibility checks using `AXELATE_SDK_VERSION`
+- version compatibility checks using `AXELATE_INTEGRATION_API_VERSION`
 
 Exit criteria:
 
@@ -327,7 +327,7 @@ Remove identity confusion and define one honest product direction.
 - consolidate documentation into English canonical docs
 - define the product as a Windows AI workstation, not a generic chat client
 - define future platform boundaries before adding new layers
-- remove or demote legacy positioning that implies distribution features already
+- remove or demote old positioning that implies distribution features already
   exist
 
 ### Exit Criteria

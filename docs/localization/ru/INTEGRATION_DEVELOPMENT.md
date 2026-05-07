@@ -28,8 +28,8 @@ npm run integration:doctor -- ./my-integration
 - `docs/examples/sdk/browser/axelate-settings-bridge.js` - helper для
   iframe-протокола custom settings UI.
 
-Главный контракт все равно описан в [Launcher SDK](../en/LAUNCHER_SDK.md)
-(англ., в `docs/en/LAUNCHER_SDK.md`): это локальный HTTP API лаунчера.
+Главный контракт все равно описан в [Integration API](../en/INTEGRATION_API.md)
+(англ., в `docs/en/INTEGRATION_API.md`): это локальный HTTP API лаунчера.
 
 ## Структура интеграции
 
@@ -50,7 +50,7 @@ api_version = "1"
 id = "my-integration"
 name = "My Integration"
 version = "0.1.0"
-type = "service"
+category = "service"
 settings_ui = "settings-ui/index.html"
 
 [runtime]
@@ -65,7 +65,7 @@ entry = "src/main.py"
 
 Когда Axelate запускает script-runtime интеграцию, он передает:
 
-- `AXELATE_SDK_VERSION`
+- `AXELATE_INTEGRATION_API_VERSION`
 - `AXELATE_HTTP_API_BASE`
 - `AXELATE_HTTP_API_TOKEN`
 - `AXELATE_MODULE_ID`

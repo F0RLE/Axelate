@@ -1,8 +1,8 @@
-# Launcher SDK
+# Integration API
 
 This guide describes the current versioned contract external integrations use to
 control Axelate. The contract is language-neutral: every integration talks to the
-launcher through a local HTTP API. Language SDKs can wrap this contract later,
+launcher through a local HTTP API. Language clients can wrap this contract later,
 but the HTTP API is the source of truth.
 
 For scaffolding, validation, and examples, start with
@@ -17,7 +17,8 @@ runtime token.
 Launcher-managed script-runtime integration processes receive these environment
 variables:
 
-- `AXELATE_SDK_VERSION`: local launcher integration API version, currently `1`
+- `AXELATE_INTEGRATION_API_VERSION`: local launcher integration API version,
+  currently `1`
 - `AXELATE_HTTP_API_BASE`: local base URL, for example `http://127.0.0.1:3000`
 - `AXELATE_HTTP_API_TOKEN`: bearer token issued by `apply_process_env` through
   `issue_module_api_token` and scoped to this integration. It authorizes shared
@@ -33,13 +34,12 @@ Standalone tools that are not launched by Axelate are not the primary public
 contract yet. They should use a launcher-managed integration flow instead of
 persisting or guessing local API credentials.
 
-Script integrations declare their runtime in `axelate-module.toml`. Legacy top-level
-`entry` and `dependencies` fields are not supported.
+Script integrations declare their runtime in `axelate-module.toml`.
 
 ```toml
 [runtime]
 kind = "python" # python | node | bun | binary
-version = "3.14"
+version = "3.11"
 entry = "src/main.py"
 dependencies = "requirements.txt"
 ```
@@ -53,14 +53,11 @@ dependencies inside the integration directory.
 
 ## Authentication
 
-Every endpoint except `GET /v1/health` requires one of these headers:
+Every endpoint except `GET /v1/health` requires bearer-token authentication:
 
 ```http
 Authorization: Bearer <AXELATE_HTTP_API_TOKEN>
-X-Axelate-Token: <AXELATE_HTTP_API_TOKEN>
 ```
-
-Prefer `Authorization: Bearer ...` for new clients.
 
 ## Client Rules
 

@@ -28,7 +28,7 @@ name = "My Integration"
 version = "0.1.0"
 description = "Connects my product to Axelate."
 author = "Your Name"
-type = "service"
+category = "service"
 icon = "⚙"
 readme = "README.md"
 settings_ui = "settings-ui/index.html"
@@ -52,7 +52,7 @@ Rules:
 
 Launcher-managed script-runtime integrations receive:
 
-- `AXELATE_SDK_VERSION`
+- `AXELATE_INTEGRATION_API_VERSION`
 - `AXELATE_HTTP_API_BASE`
 - `AXELATE_HTTP_API_TOKEN`
 - `AXELATE_RUNTIME_DIR`
@@ -61,7 +61,7 @@ Launcher-managed script-runtime integrations receive:
 - `AXELATE_MODULE_LOG_DIR`
 - `AXELATE_MODULE_ID`
 
-Use the local HTTP API from [LAUNCHER_SDK.md](./LAUNCHER_SDK.md) to call AI,
+Use the local HTTP API from [INTEGRATION_API.md](./INTEGRATION_API.md) to call AI,
 read and save integration settings, report stages, and control integration
 status. Store integration-owned runtime files under `AXELATE_MODULE_RUNTIME_DIR`
 and logs under `AXELATE_MODULE_LOG_DIR`; do not write generated files into the

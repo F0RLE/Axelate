@@ -28,7 +28,7 @@ Then import the folder in the launcher integrations screen and launch it.
   helper for custom settings UI iframe messaging.
 
 These helpers are developer tools. The runtime contract is still the local HTTP
-API documented in [Launcher SDK](LAUNCHER_SDK.md).
+API documented in [Integration API](INTEGRATION_API.md).
 
 ## Integration Layout
 
@@ -49,7 +49,7 @@ api_version = "1"
 id = "my-integration"
 name = "My Integration"
 version = "0.1.0"
-type = "service"
+category = "service"
 settings_ui = "settings-ui/index.html"
 
 [runtime]
@@ -64,7 +64,7 @@ Supported runtime kinds are `python`, `node`, `bun`, and `binary`.
 
 When Axelate launches a script-runtime integration it sets:
 
-- `AXELATE_SDK_VERSION`
+- `AXELATE_INTEGRATION_API_VERSION`
 - `AXELATE_HTTP_API_BASE`
 - `AXELATE_HTTP_API_TOKEN`
 - `AXELATE_MODULE_ID`

@@ -156,7 +156,7 @@ The local module catalog currently includes these known entries.
 
 - type: local
 - capability: image
-- engine: `stable-diffusion.cpp`
+- engine: `sdcpp`
 - role: lightweight local image generation
 
 ### 3. `comfyui`
@@ -256,13 +256,13 @@ OpenRouter is a strong accelerator for the current stage, but it also means:
 - provider abstraction is not yet the main product story
 - business differentiation cannot come from model catalog alone
 
-### 3. Placeholder and Legacy Surfaces
+### 3. Placeholder and Unfinished Surfaces
 
 The repository still contains surfaces or ideas that are ahead of the stable product:
 
 - home overview placeholder
 - ComfyUI presence without product-ready positioning
-- legacy wording and shell assumptions carried from earlier product framing
+- old wording and shell assumptions carried from earlier product framing
 
 ### 4. Incomplete Package Trust Foundation
 

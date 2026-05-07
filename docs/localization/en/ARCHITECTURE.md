@@ -103,7 +103,7 @@ viable:
 - [Getting Started](GETTING_STARTED.md)
 - [User Guide](USER_GUIDE.md)
 - [Development Workflow](DEVELOPMENT_WORKFLOW.md)
-- [Launcher SDK](LAUNCHER_SDK.md)
+- [Integration API](INTEGRATION_API.md)
 - [Integration Development](INTEGRATION_DEVELOPMENT.md)
 - [Custom Integrations](CUSTOM_INTEGRATIONS.md)
 - [Trust Model](TRUST_MODEL.md)
