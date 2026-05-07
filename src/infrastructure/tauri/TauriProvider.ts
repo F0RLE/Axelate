@@ -1,6 +1,5 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
-import type * as Bindings from '@/shared/types/bindings';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IBridge } from '@/shared/types/IBridge';
 
@@ -55,7 +54,7 @@ export class TauriProvider implements IBridge {
             this._tracer.warn(
                 this._isTauriDetected
                     ? '[TauriProvider] Handshake failed, keeping Tauri IPC because runtime globals are present'
-                    : '[TauriProvider] Handshake failed, operating in Mock mode',
+                    : '[TauriProvider] Handshake failed, Tauri runtime is unavailable',
             );
         }
     }
@@ -86,7 +85,7 @@ export class TauriProvider implements IBridge {
         args: A = {} as A,
     ): Promise<T> {
         if (!this.isTauri()) {
-            return this._mockInvoke(cmd, args);
+            return Promise.reject(new Error(`Tauri IPC unavailable for command: ${cmd}`));
         }
 
         try {
@@ -149,7 +148,7 @@ export class TauriProvider implements IBridge {
     }
 
     /**
-     * Internal execution of Tauri IPC with multiple fallback strategies.
+     * Internal execution of Tauri IPC.
      */
     private async _performInvoke<T>(cmd: string, args: unknown): Promise<T> {
         return await tauriInvoke(cmd, args as Record<string, unknown>);
@@ -190,7 +189,7 @@ export class TauriProvider implements IBridge {
             });
             return unlisten;
         } else {
-            this._tracer.info(`[TauriProvider] Mock Listen: ${event}`);
+            this._tracer.info(`[TauriProvider] Listen skipped outside Tauri: ${event}`);
             return () => {
                 /* no-op */
             };
@@ -203,12 +202,8 @@ export class TauriProvider implements IBridge {
                 await this.invoke('plugin:clipboard-manager|write_text', { text });
                 return;
             } catch (error) {
-                try {
-                    if (await this._writeBrowserClipboard(text)) {
-                        return;
-                    }
-                } catch {
-                    /* Preserve the original Tauri clipboard error. */
+                if (await this._writeBrowserClipboard(text)) {
+                    return;
                 }
                 throw error;
             }
@@ -327,64 +322,6 @@ export class TauriProvider implements IBridge {
             );
             return { exists: false, length: 0 };
         }
-    }
-
-    private _mockInvoke<T>(cmd: string, args: unknown): Promise<T> {
-        this._tracer.debug(`[Mock Invoke] ${cmd} ${JSON.stringify(args)}`);
-
-        const saneDefaults: Record<string, unknown> = {
-            get_settings: {
-                language: 'en',
-                theme: 'dark',
-                use_gpu: true,
-                debug_mode: false,
-            } as Bindings.AppSettings,
-            get_ui_state: {},
-            get_module_settings: {},
-            get_translations: {},
-            get_system_language: 'en',
-            get_config: {
-                version: '1.0.0',
-                catalog: { ai: [], services: [], stars: [] },
-                apiProviders: [],
-            } as Bindings.AppConfig,
-            get_modules: [] satisfies Bindings.Module[],
-            get_logs: [],
-            get_app_bootstrap_data: null,
-            get_system_stats: {
-                cpu: { percent: 0, cores: 0, name: 'Mock CPU' },
-                ram: { percent: 0, usedGb: 0, totalGb: 16, availableGb: 16 },
-                gpu: { usage: 0, memoryUsed: 0, memoryTotal: 0, temp: 0, name: 'Mock GPU' },
-                vram: { percent: 0, usedGb: 0, totalGb: 8 },
-                disk: {
-                    readRate: 0,
-                    writeRate: 0,
-                    utilization: 0,
-                    totalGb: 500,
-                    usedGb: 0,
-                    activityPercent: 0,
-                },
-                network: {
-                    downloadRate: 0,
-                    uploadRate: 0,
-                    totalReceived: 0,
-                    totalSent: 0,
-                    utilization: 0,
-                    activityPercent: 0,
-                },
-                pid: 1234,
-                appCpu: 0,
-                appMemory: 0,
-            } satisfies Bindings.SystemStats,
-            validate_api_key: true,
-            has_secure_key: false,
-            get_secure_key_meta: { exists: false, length: 0 } satisfies SecureKeyMeta,
-            clear_logs: null,
-            save_ui_state: null,
-            save_setting: true,
-        };
-
-        return Promise.resolve((saneDefaults[cmd] ?? {}) as unknown as T);
     }
 }
 

@@ -25,14 +25,10 @@ Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
 
 function installDefaultTauriGlobals(): void {
     const win = globalThis as unknown as Record<string, unknown>;
-    win['__TAURI__'] = {
-        invoke: async () => {},
-        core: { invoke: async () => {} },
-        event: { listen: async () => () => {} },
-    };
     win['__TAURI_INTERNALS__'] = {
         invoke: async () => {},
         transformCallback: () => 0,
+        eventListen: async () => () => {},
     };
     win['t'] = vi.fn((key: string, fallback?: string) => fallback ?? key);
 }
@@ -41,13 +37,10 @@ function installDefaultTauriGlobals(): void {
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: vi.fn().mockImplementation((cmd: string, args?: unknown) => {
         const win = globalThis as unknown as Record<string, unknown>;
-        const tauri = win['__TAURI__'] as Record<string, any> | undefined;
+        const internals = win['__TAURI_INTERNALS__'] as Record<string, any> | undefined;
 
-        if (tauri && typeof tauri['invoke'] === 'function') {
-            return tauri['invoke'](cmd, args);
-        }
-        if (typeof tauri?.['core']?.['invoke'] === 'function') {
-            return tauri['core']['invoke'](cmd, args);
+        if (typeof internals?.['invoke'] === 'function') {
+            return internals['invoke'](cmd, args);
         }
         return Promise.resolve();
     }),
@@ -57,10 +50,10 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@tauri-apps/api/event', () => ({
     listen: vi.fn().mockImplementation((event: string, callback: (payload: any) => void) => {
         const win = globalThis as unknown as Record<string, unknown>;
-        const tauri = win['__TAURI__'] as Record<string, any> | undefined;
+        const internals = win['__TAURI_INTERNALS__'] as Record<string, any> | undefined;
 
-        if (typeof tauri?.['event']?.['listen'] === 'function') {
-            return tauri['event']['listen'](event, callback);
+        if (typeof internals?.['eventListen'] === 'function') {
+            return internals['eventListen'](event, callback);
         }
         return Promise.resolve(() => {});
     }),

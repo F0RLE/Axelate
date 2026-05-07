@@ -946,6 +946,7 @@
 
 #chat-messages::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
 }
 
 #chat-messages::-webkit-scrollbar-track {
@@ -953,25 +954,19 @@
 }
 
 #chat-messages::-webkit-scrollbar-thumb {
-    background: transparent;
+    background: transparent !important;
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
 }
 
-#chat-messages:hover,
-#chat-messages:focus-within {
+#chat-container.has-messages:hover #chat-messages {
+    scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }
 
-#chat-messages:hover::-webkit-scrollbar,
-#chat-messages:focus-within::-webkit-scrollbar {
-    width: 8px;
-}
-
-#chat-messages:hover::-webkit-scrollbar-thumb,
-#chat-messages:focus-within::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.14);
+#chat-container.has-messages:hover #chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14) !important;
 }
 
 #chat-messages.has-messages {

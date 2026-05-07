@@ -122,6 +122,12 @@ describe('GeneralSettingsRenderer', () => {
         expect(
             document.querySelector('#sidebar .nav-btn[data-page="chat"]')?.getAttribute('tabindex'),
         ).toBe('-1');
+        expect(chatButton.querySelector<HTMLElement>('.toggle-label')?.dataset['i18n']).toBe(
+            'ui.launcher.web.chat',
+        );
+        expect(chatButton.querySelector<HTMLElement>('.toggle-label')?.textContent).toBe(
+            't:ui.launcher.web.chat:Chat',
+        );
 
         const gpuMonitor = document.querySelector(
             '#monitor-toggles .monitor-toggle-btn[data-monitor-id="gpu"]',

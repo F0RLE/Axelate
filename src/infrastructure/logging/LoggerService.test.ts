@@ -658,7 +658,7 @@ describe('LoggerService', () => {
         });
 
         it('should skip flush fallback if no transports are configured', async () => {
-            tracer.error('test no __TAURI__');
+            tracer.error('test no Tauri internals');
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (tracer as any)._transport = null;
             (tracer as unknown as { _fallbackTransport: null })._fallbackTransport = null;

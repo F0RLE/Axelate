@@ -9,10 +9,6 @@ describe('Testing Setup', () => {
 
     it('should have mocked Tauri invoke', () => {
         const win = globalThis as unknown as Record<string, unknown>;
-        expect(win['__TAURI__']).toBeDefined();
-        expect(typeof (win['__TAURI__'] as { core: { invoke: unknown } }).core.invoke).toBe(
-            'function',
-        );
         expect(typeof (win['__TAURI_INTERNALS__'] as { invoke: unknown }).invoke).toBe('function');
     });
 

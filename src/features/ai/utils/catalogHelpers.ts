@@ -58,8 +58,8 @@ export function getModelsFromProvider(
 }
 
 export function getModelPriceRank(model: IAIModelData): number {
-    const inputPrice = model.pricing?.input_per_1m ?? 0;
-    const outputPrice = model.pricing?.output_per_1m ?? 0;
+    const inputPrice = model.pricing?.input ?? 0;
+    const outputPrice = model.pricing?.output ?? 0;
     return inputPrice + outputPrice;
 }
 

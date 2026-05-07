@@ -7,13 +7,9 @@ import type { AISettingsViewPolicy } from './AISettingsViewPolicy';
 type TranslateFunc = (key: string, fallback: string) => string;
 
 interface IAIModelPricing {
-    input_per_1m?: number;
-    output_per_1m?: number;
+    input?: number;
+    output?: number;
     currency?: string;
-    tier?: string;
-    note?: string;
-    in?: number;
-    out?: number;
 }
 
 const PURIFY_CONFIG = {
@@ -223,10 +219,6 @@ export function renderModelStats(modelData: IAIModelData | null, translate: Tran
 function renderPricing(pricing: unknown, translate: TranslateFunc): string {
     if (pricing === null || pricing === undefined) return '';
 
-    if (Array.isArray(pricing)) {
-        return renderLegacyPricing(pricing as IAIModelPricing[]);
-    }
-
     if (typeof pricing === 'object') {
         return renderNewPricing(pricing as IAIModelPricing, translate);
     }
@@ -250,27 +242,14 @@ function renderContextWindow(
     `;
 }
 
-function renderLegacyPricing(pricing: IAIModelPricing[]): string {
-    return pricing
-        .map(
-            (price) => `
-        <div class="price-row">
-            <span>${price.tier ?? ''}</span>
-            <span>${price.note ?? `${String(price.in ?? 0)} / ${String(price.out ?? 0)}`}</span>
-        </div>
-    `,
-        )
-        .join('');
-}
-
 function renderNewPricing(pricing: IAIModelPricing, translate: TranslateFunc): string {
     let html = '';
     const currency = pricing.currency ?? '$';
     const displayCurrency = currency === 'USD' ? '$' : currency;
     const separator = displayCurrency.length > 1 ? ' ' : '';
 
-    const inputCost = pricing.input_per_1m ?? 0;
-    const outputCost = pricing.output_per_1m ?? 0;
+    const inputCost = pricing.input ?? 0;
+    const outputCost = pricing.output ?? 0;
     const isFree = inputCost === 0 && outputCost === 0;
 
     if (isFree) {
@@ -281,20 +260,20 @@ function renderNewPricing(pricing: IAIModelPricing, translate: TranslateFunc): s
         `;
     } else {
         const inPrice =
-            pricing.input_per_1m === undefined
+            pricing.input === undefined
                 ? null
-                : `${displayCurrency}${separator}${String(pricing.input_per_1m)}`;
+                : `${displayCurrency}${separator}${String(pricing.input)}`;
 
         const outPrice =
-            pricing.output_per_1m === undefined
+            pricing.output === undefined
                 ? null
-                : `${displayCurrency}${separator}${String(pricing.output_per_1m)}`;
+                : `${displayCurrency}${separator}${String(pricing.output)}`;
 
         if (inPrice !== null && outPrice !== null) {
             html += `
             <div class="price-row">
-                <span class="price-tag">${translate('ui.settings.price_input', 'In')}: ${inPrice}</span>
-                <span class="price-tag">${translate('ui.settings.price_output', 'Out')}: ${outPrice}</span>
+                <span class="price-tag">${translate('ui.settings.price_input', 'Input')}: ${inPrice}</span>
+                <span class="price-tag">${translate('ui.settings.price_output', 'Output')}: ${outPrice}</span>
             </div>
         `;
         }

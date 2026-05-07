@@ -15,7 +15,7 @@ type DownloadSelectionDialogOptions = {
     translate: TranslateFn;
 };
 
-const TARGETS: Array<Exclude<ReleaseComputeTarget, 'auto'>> = ['gpu', 'cpu'];
+const TARGETS: Array<Exclude<ReleaseComputeTarget, 'auto'>> = ['gpu', 'cpu', 'both'];
 
 export function openDownloadSelectionDialog({
     app,
@@ -177,7 +177,7 @@ export function openDownloadSelectionDialog({
                     button.addEventListener('click', () => {
                         const target = button.dataset['downloadTarget'];
                         if (selectedVersion === null) return;
-                        if (target !== 'gpu' && target !== 'cpu') return;
+                        if (target !== 'gpu' && target !== 'cpu' && target !== 'both') return;
                         if (getVariant(selectedVersion, target) === null) return;
                         selectedTarget = target;
                         render();
@@ -252,7 +252,9 @@ function renderTargetButton(
     const label =
         target === 'gpu'
             ? translate('ui.download.gpu_package', 'GPU')
-            : translate('ui.download.cpu_package', 'CPU');
+            : target === 'cpu'
+              ? translate('ui.download.cpu_package', 'CPU')
+              : translate('ui.download.both_packages', 'CPU + GPU');
     const meta =
         variant === null
             ? translate('ui.download.unavailable', 'Unavailable')
@@ -298,6 +300,15 @@ function normalizeTarget(
     version: ReleaseDownloadVersion,
 ): Exclude<ReleaseComputeTarget, 'auto'> {
     if (
+        target === 'both' &&
+        version.gpu !== null &&
+        version.gpu !== undefined &&
+        version.cpu !== null &&
+        version.cpu !== undefined
+    ) {
+        return 'both';
+    }
+    if (
         (target === 'gpu' || target === 'auto') &&
         version.gpu !== null &&
         version.gpu !== undefined
@@ -316,7 +327,26 @@ function getVariant(
 ): ReleaseDownloadVariant | null {
     if (target === 'cpu') return version.cpu ?? null;
     if (target === 'gpu') return version.gpu ?? null;
+    if (target === 'both') return getCombinedVariant(version);
     return version.gpu ?? version.cpu ?? null;
+}
+
+function getCombinedVariant(version: ReleaseDownloadVersion): ReleaseDownloadVariant | null {
+    if (version.cpu === null || version.cpu === undefined) return null;
+    if (version.gpu === null || version.gpu === undefined) return null;
+
+    const assets = [...version.gpu.assets];
+    version.cpu.assets.forEach((asset) => {
+        if (!assets.includes(asset)) {
+            assets.push(asset);
+        }
+    });
+
+    return {
+        compute_target: 'both',
+        assets,
+        total_size: version.cpu.total_size + version.gpu.total_size,
+    };
 }
 
 function formatBytes(bytes: number): string {

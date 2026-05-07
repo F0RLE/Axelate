@@ -1,7 +1,7 @@
 /**
  * @module test/integration/CoreContainer.test.ts
  * @description Integration tests for CoreContainer — verifies service registration,
- * backward compat with globalThis, and container lifecycle.
+ * catalog access, and container lifecycle.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';

@@ -1,5 +1,4 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import { AIBridgeProviderPolicy } from '@/features/ai/services/AIBridgeProviderPolicy';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage, IChatResponse } from '../types/chatTypes';
@@ -43,6 +42,7 @@ type ChatGenerationControllerOptions = {
     handleError: (errorMsg: unknown, model?: string) => void;
     isDestroyed: () => boolean;
     isSending: () => boolean;
+    isImageProvider: (providerId: string | null) => boolean;
     tracer: ChatGenerationLogger;
 };
 
@@ -55,7 +55,6 @@ export class ChatGenerationController {
     private _lastImagePreviewUpdatedAtMs = 0;
     private _imageGenerationStartedAtMs = 0;
     private _lastConcreteImageProgressAtMs = 0;
-    private readonly _providerPolicy = new AIBridgeProviderPolicy();
 
     constructor(private readonly _options: ChatGenerationControllerOptions) {}
 
@@ -68,7 +67,7 @@ export class ChatGenerationController {
     }
 
     public isImageProvider(providerId: string | null): boolean {
-        return providerId !== null && this._providerPolicy.isImageProvider(providerId);
+        return this._options.isImageProvider(providerId);
     }
 
     public startImagePreviewPolling(handle: ImageGenerationHandle): void {
@@ -234,7 +233,7 @@ export class ChatGenerationController {
         streamingHandle?: StreamingMessageHandle | null,
         imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
-        const rawReply = response.message ?? response.reply?.text ?? '';
+        const rawReply = response.reply?.text ?? '';
         const replyText = this._options.extractText(rawReply);
         const generatedImages = response.reply?.images ?? [];
 

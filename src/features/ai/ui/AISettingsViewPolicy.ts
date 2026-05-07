@@ -3,38 +3,28 @@ import {
     isCustomProviderId,
     isCustomImageProviderId,
 } from '@/shared/utils/customProviderSupport';
+import type { IAIModelData } from '../types/aiTypes';
 
 export class AISettingsViewPolicy {
     private static readonly _cleanAppIds = new Set(['axelate', 'axelate-platform']);
-    private static readonly _thinkingProviders = new Set(['gemini', 'claude', 'gpt', 'deepseek']);
-    private static readonly _imageOnlyProviders = new Set([
-        'gemini-image',
-        'gpt-image',
-        'seedream-image',
-    ]);
 
     public isCleanApp(appId: string): boolean {
         return AISettingsViewPolicy._cleanAppIds.has(appId);
     }
 
-    public supportsInternetAccess(appId: string): boolean {
+    public supportsInternetAccess(appId: string, capability?: 'text' | 'image'): boolean {
+        return !this.isCleanApp(appId) && capability !== 'image' && !isCustomImageProviderId(appId);
+    }
+
+    public supportsThinking(appId: string, models: readonly IAIModelData[] = []): boolean {
         return (
-            !this.isCleanApp(appId) &&
-            !AISettingsViewPolicy._imageOnlyProviders.has(appId) &&
-            !isCustomImageProviderId(appId)
+            models.some((model) => model.capabilities?.reasoning === true) ||
+            appId === CUSTOM_TEXT_PROVIDER_ID
         );
     }
 
-    public supportsThinking(appId: string): boolean {
-        return (
-            AISettingsViewPolicy._thinkingProviders.has(appId) || appId === CUSTOM_TEXT_PROVIDER_ID
-        );
-    }
-
-    public isImageOnlyProvider(appId: string): boolean {
-        return (
-            AISettingsViewPolicy._imageOnlyProviders.has(appId) || isCustomImageProviderId(appId)
-        );
+    public isImageOnlyProvider(appId: string, capability?: 'text' | 'image'): boolean {
+        return capability === 'image' || isCustomImageProviderId(appId);
     }
 
     public shouldShowModelStats(appId: string): boolean {

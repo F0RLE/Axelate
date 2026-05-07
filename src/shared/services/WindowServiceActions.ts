@@ -6,13 +6,8 @@ type WindowActionsLogger = {
     error: (message: string) => void;
 };
 
-type WindowActionsRuntime = {
-    close: () => void;
-};
-
 type WindowServiceActionsDeps = {
     bridge: IBridge;
-    runtime: WindowActionsRuntime;
     tracer: WindowActionsLogger;
     beforeClose: () => (() => Promise<void>) | null;
 };
@@ -24,7 +19,7 @@ export class WindowServiceActions {
         if (this._deps.bridge.isTauri()) {
             await this._deps.bridge.invoke('minimize_window');
         } else {
-            this._deps.tracer.info('[WindowService] minimize (mock)');
+            this._deps.tracer.info('[WindowService] Native minimize unavailable outside Tauri');
         }
     }
 
@@ -32,7 +27,7 @@ export class WindowServiceActions {
         if (this._deps.bridge.isTauri()) {
             await this._deps.bridge.invoke('maximize_window');
         } else {
-            this._deps.tracer.info('[WindowService] toggleMaximize (mock)');
+            this._deps.tracer.info('[WindowService] Native maximize unavailable outside Tauri');
         }
     }
 
@@ -42,7 +37,7 @@ export class WindowServiceActions {
             await beforeClose?.();
             await this._deps.bridge.invoke('close_window');
         } else {
-            this._deps.runtime.close();
+            this._deps.tracer.info('[WindowService] Native close unavailable outside Tauri');
         }
     }
 
@@ -54,7 +49,7 @@ export class WindowServiceActions {
                 await minimizeFallback();
             }
         } else {
-            this._deps.tracer.info('[WindowService] hideToTray (mock)');
+            this._deps.tracer.info('[WindowService] Native hide-to-tray unavailable outside Tauri');
         }
     }
 

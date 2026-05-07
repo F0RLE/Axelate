@@ -10,7 +10,6 @@ import { downloadDir } from '@tauri-apps/api/path';
 
 const CUSTOM_INTEGRATION_GUIDE_URL =
     'https://github.com/F0RLE/Axelate/blob/nightly/docs/en/CUSTOM_INTEGRATIONS.md';
-const INTEGRATION_IMPORT_LAST_DIR_KEY = 'axelate.integrationImport.lastDirectory';
 
 type ModalBridge = {
     isAppSelectionOpen(): boolean;
@@ -28,6 +27,8 @@ type AppUiModuleFlowDeps = {
     modalManager: ModalBridge;
     getCatalogApps: (category: string) => IApp[];
     getSelectedAppId: (category: string) => string | null;
+    getIntegrationImportLastDirectory: () => string | null;
+    setIntegrationImportLastDirectory: (path: string | null) => void;
     clearModuleCard: (category: string) => void;
     markSlotCardAsInstalled: (card: HTMLElement, app: IApp) => void;
     showToast: (message: string, type?: string) => void;
@@ -256,6 +257,13 @@ export class AppUiModuleFlow {
                 : await this._deps.platformService.importIntegrationPath(path);
         }
 
+        if (action === 'archive') {
+            const path = await this._openArchiveIntegrationSource();
+            return path === null
+                ? null
+                : await this._deps.platformService.importIntegrationPath(path);
+        }
+
         const url = await this._openIntegrationUrlSource();
         return url === null ? null : await this._deps.platformService.importIntegrationUrl(url);
     }
@@ -289,13 +297,42 @@ export class AppUiModuleFlow {
             }),
         );
         if (selectedPath !== null) {
-            saveIntegrationImportLastDirectory(selectedPath);
+            this._deps.setIntegrationImportLastDirectory(selectedPath);
+        }
+        return selectedPath;
+    }
+
+    private async _openArchiveIntegrationSource(): Promise<string | null> {
+        const selectedPath = normalizeDialogPath(
+            await open({
+                directory: false,
+                defaultPath: await this._getIntegrationImportDefaultPath(),
+                multiple: false,
+                title: this._deps.translate(
+                    'ui.launcher.integrations.import.archive_title',
+                    'Choose integration archive',
+                ),
+                filters: [
+                    {
+                        name: this._deps.translate(
+                            'ui.launcher.integrations.import.archive',
+                            'Archive',
+                        ),
+                        extensions: ['zip', 'tar', 'gz', 'tgz', 'xz', 'txz', '7z'],
+                    },
+                ],
+            }),
+        );
+        if (selectedPath !== null) {
+            this._deps.setIntegrationImportLastDirectory(
+                getParentDirectory(selectedPath) ?? selectedPath,
+            );
         }
         return selectedPath;
     }
 
     private async _getIntegrationImportDefaultPath(): Promise<string | undefined> {
-        const savedPath = loadIntegrationImportLastDirectory();
+        const savedPath = this._deps.getIntegrationImportLastDirectory();
         if (savedPath !== null) {
             return savedPath;
         }
@@ -347,19 +384,13 @@ function normalizeDialogPath(value: string | string[] | null): string | null {
     return null;
 }
 
-function loadIntegrationImportLastDirectory(): string | null {
-    try {
-        const value = localStorage.getItem(INTEGRATION_IMPORT_LAST_DIR_KEY);
-        return value !== null && value.trim().length > 0 ? value : null;
-    } catch {
+function getParentDirectory(path: string): string | null {
+    const normalized = path.replace(/\\/gu, '/');
+    const lastSeparator = normalized.lastIndexOf('/');
+    if (lastSeparator <= 0) {
         return null;
     }
-}
 
-function saveIntegrationImportLastDirectory(path: string): void {
-    try {
-        localStorage.setItem(INTEGRATION_IMPORT_LAST_DIR_KEY, path);
-    } catch {
-        // Dialog still works if storage is unavailable.
-    }
+    const parent = path.slice(0, lastSeparator);
+    return parent.trim().length === 0 ? null : parent;
 }

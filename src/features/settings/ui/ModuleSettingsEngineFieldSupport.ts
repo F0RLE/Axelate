@@ -444,7 +444,7 @@ export function getEngineExtraArgDocs(
     appId: string,
     translate: ExtraArgsTranslate = (_key, fallback) => fallback,
 ): EngineExtraArgDocs {
-    if (appId === 'sdcpp' || appId === 'stable-diffusion') {
+    if (appId === 'sdcpp') {
         return {
             title: translate('ui.settings.engine.sdcpp_flags.title', 'Manual sd.cpp flags'),
             subtitle: translate(
@@ -498,7 +498,7 @@ export function getEngineRecommendedExtraArgs(
     appId: string,
     context: EngineRecommendedExtraArgsContext = {},
 ): string[] {
-    if (appId !== 'sdcpp' && appId !== 'stable-diffusion') {
+    if (appId !== 'sdcpp') {
         return ['--flash-attn'];
     }
 

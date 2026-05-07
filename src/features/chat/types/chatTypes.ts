@@ -53,8 +53,6 @@ export interface IChatResponse {
         /** Optional generated images */
         images?: { mime: string; data_base64: string }[];
     };
-    /** Legacy or fallback message field */
-    message?: string;
     /** Error message if ok is false */
     error?: string;
     /** Model identifier used for response */

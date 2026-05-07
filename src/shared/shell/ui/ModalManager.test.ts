@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModalManager } from './ModalManager';
 import { ModuleCardRenderer } from './ModuleCardRenderer';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
+import type { IntegrationImportAction } from './ModalManagerSupport';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { IApp } from '../../types/coreTypes';
@@ -86,7 +87,7 @@ describe('ModalManager lifecycle', () => {
 
     function createManager(
         onFilterChange?: (capability: 'text' | 'image') => string | null,
-        onIntegrationImport?: (action: 'local' | 'url' | 'guide') => void,
+        onIntegrationImport?: (action: IntegrationImportAction) => void,
     ) {
         return new ModalManager(
             new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
@@ -151,7 +152,7 @@ describe('ModalManager lifecycle', () => {
         expect(importSpy).toHaveBeenNthCalledWith(1, 'local');
         expect(importSpy).toHaveBeenNthCalledWith(2, 'url');
         expect(importSpy).toHaveBeenNthCalledWith(3, 'guide');
-        expect(importSpy).toHaveBeenNthCalledWith(4, 'local');
+        expect(importSpy).toHaveBeenNthCalledWith(4, 'archive');
     });
 
     it('should rerender services selection when refresh receives an empty app list', () => {

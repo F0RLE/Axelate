@@ -34,9 +34,12 @@ describe('AIBridgeRuntime', () => {
         expect(buildImageGenerationProgressChunk('server ready')).toBeNull();
     });
 
-    it('accepts local image engine logs even when active provider alias differs', () => {
-        expect(isActiveEngineLog('custom_sd', 'sdcpp')).toBe(true);
-        expect(isActiveEngineLog(null, 'sdcpp')).toBe(true);
+    it('accepts selected image engine logs for image progress regardless of active text provider', () => {
+        expect(isActiveEngineLog('custom_text', 'local-image-engine', 'local-image-engine')).toBe(
+            true,
+        );
+        expect(isActiveEngineLog(null, 'local-image-engine', 'local-image-engine')).toBe(true);
+        expect(isActiveEngineLog(null, 'local-image-engine', null)).toBe(false);
         expect(isActiveEngineLog('llamacpp', 'llamacpp')).toBe(true);
         expect(isActiveEngineLog('llamacpp', 'other')).toBe(false);
     });

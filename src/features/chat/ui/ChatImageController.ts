@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { invokeSafe } from '@/shared/api/invoke';
 import { commands, type SavedChatImage as SavedChatImageResult } from '@/shared/types/bindings';
-import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+import type { ChatTranslateFunction } from './ChatUiTypes';
 
 type ChatImageLogger = Pick<LoggerService, 'error'>;
 
@@ -26,7 +26,7 @@ type ChatImageControllerDeps = {
         type?: 'success' | 'error' | 'warning' | 'info',
         duration?: number,
     ) => void;
-    translate: TTranslateFunction;
+    translate: ChatTranslateFunction;
     tracer: ChatImageLogger;
 };
 

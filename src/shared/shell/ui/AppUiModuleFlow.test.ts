@@ -52,12 +52,14 @@ describe('AppUiModuleFlow', () => {
     const translate = vi.fn((_key: string, fallback: string) => fallback);
     const reloadCatalog = vi.fn().mockResolvedValue(undefined);
     const openExternalUrl = vi.fn().mockResolvedValue(undefined);
+    const getIntegrationImportLastDirectory = vi.fn<() => string | null>();
+    const setIntegrationImportLastDirectory = vi.fn();
 
     let flow: AppUiModuleFlow;
 
     beforeEach(() => {
         vi.clearAllMocks();
-        localStorage.clear();
+        getIntegrationImportLastDirectory.mockReturnValue(null);
         document.body.innerHTML = '';
         flow = new AppUiModuleFlow({
             platformService: platformService as never,
@@ -70,6 +72,8 @@ describe('AppUiModuleFlow', () => {
             modalManager,
             getCatalogApps,
             getSelectedAppId,
+            getIntegrationImportLastDirectory,
+            setIntegrationImportLastDirectory,
             clearModuleCard,
             markSlotCardAsInstalled,
             showToast,
@@ -226,10 +230,11 @@ describe('AppUiModuleFlow', () => {
         expect(platformService.importIntegrationPath).toHaveBeenCalledWith(
             'C:\\Users\\FORLE\\Downloads\\Parser',
         );
-        expect(localStorage.getItem('axelate.integrationImport.lastDirectory')).toBe(
+        expect(setIntegrationImportLastDirectory).toHaveBeenCalledWith(
             'C:\\Users\\FORLE\\Downloads\\Parser',
         );
 
+        getIntegrationImportLastDirectory.mockReturnValue('C:\\Users\\FORLE\\Downloads\\Parser');
         vi.mocked(open).mockResolvedValue(null);
         await flow.handleIntegrationImport('local');
 
@@ -249,6 +254,33 @@ describe('AppUiModuleFlow', () => {
         expect(platformService.importIntegrationPath).not.toHaveBeenCalled();
         expect(reloadCatalog).not.toHaveBeenCalled();
         expect(showToast).not.toHaveBeenCalled();
+    });
+
+    it('imports integration archives with archive filters and remembers the archive folder', async () => {
+        vi.mocked(downloadDir).mockResolvedValue('C:\\Users\\FORLE\\Downloads');
+        vi.mocked(open).mockResolvedValue('C:\\Users\\FORLE\\Downloads\\Parser.zip');
+        platformService.importIntegrationPath.mockResolvedValue('telegram-parser');
+
+        await flow.handleIntegrationImport('archive');
+
+        expect(open).toHaveBeenCalledWith(
+            expect.objectContaining({
+                directory: false,
+                defaultPath: 'C:\\Users\\FORLE\\Downloads',
+                filters: [
+                    {
+                        name: 'Archive',
+                        extensions: ['zip', 'tar', 'gz', 'tgz', 'xz', 'txz', '7z'],
+                    },
+                ],
+            }),
+        );
+        expect(platformService.importIntegrationPath).toHaveBeenCalledWith(
+            'C:\\Users\\FORLE\\Downloads\\Parser.zip',
+        );
+        expect(setIntegrationImportLastDirectory).toHaveBeenCalledWith(
+            'C:\\Users\\FORLE\\Downloads',
+        );
     });
 
     it('refreshes the open integrations modal after local integration import', async () => {

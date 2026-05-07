@@ -288,15 +288,7 @@ export class ConsoleLogService {
             .trim()
             .toLowerCase()
             .replaceAll(/[\s_]+/gu, '-');
-        switch (key) {
-            case 'stable-diffusion':
-            case 'stable-diffusion.cpp':
-            case 'stable-diffusion-cpp':
-            case 'stable.diffusion.cpp':
-                return 'sdcpp';
-            default:
-                return key;
-        }
+        return key;
     }
 
     private _dedupeKey(entry: ILogEntry): string {

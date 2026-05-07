@@ -57,7 +57,6 @@ const PAGE_ZOOM_PROFILES: Record<string, PageZoomProfile> = {
 type WindowRuntime = {
     addEventListener: typeof globalThis.addEventListener;
     removeEventListener: typeof globalThis.removeEventListener;
-    close: () => void;
     getScreenSize: () => { width: number; height: number };
     getInnerSize: () => { width: number; height: number };
     setAppZoomCss: (zoom: string) => void;
@@ -69,9 +68,6 @@ function createDefaultWindowRuntime(): WindowRuntime {
     return {
         addEventListener: globalThis.addEventListener.bind(globalThis),
         removeEventListener: globalThis.removeEventListener.bind(globalThis),
-        close: () => {
-            globalThis.close();
-        },
         getScreenSize: () => ({
             width: globalThis.screen.width,
             height: globalThis.screen.height,
@@ -130,7 +126,6 @@ export class WindowService {
         this._nativeHelper = new WindowNativeBridgeHelper(_bridge);
         this._actions = new WindowServiceActions({
             bridge: _bridge,
-            runtime: _runtime,
             tracer: this._tracer,
             beforeClose: () => this._beforeClose,
         });
@@ -199,7 +194,7 @@ export class WindowService {
             // Initialize persistence listeners
             this._persistence.initWindowListeners();
         } else {
-            // Web Fallback: Load from localStorage or default to 1
+            // Non-native test/runtime path: apply the injected/default zoom without persistence.
             this._currentZoom = fallbackZoom;
             this._runtime.setAppZoomCss(this._currentZoom.toFixed(3));
         }
@@ -227,7 +222,7 @@ export class WindowService {
     }
 
     /**
-     * Closes the application window or browser tab.
+     * Closes the native application window.
      */
     public async close(): Promise<void> {
         await this._actions.close();

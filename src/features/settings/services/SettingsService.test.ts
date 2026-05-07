@@ -234,7 +234,7 @@ describe('SettingsService', () => {
             });
         });
 
-        it('should keep legacy provider-specific slots for unknown providers', async () => {
+        it('should keep provider-specific slots for unknown providers', async () => {
             await service.saveSecureKey('unknown-provider', 'my-api-key');
             expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
                 service: 'unknown-provider_api_key',

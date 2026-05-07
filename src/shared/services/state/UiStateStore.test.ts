@@ -15,8 +15,6 @@ describe('UiStateStore', () => {
     let bridge: IBridge;
     let store: UiStateStore;
     let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
-    let storage: Pick<Storage, 'getItem' | 'setItem'>;
-    let storageState: Record<string, string>;
 
     beforeEach(() => {
         vi.useFakeTimers();
@@ -26,14 +24,7 @@ describe('UiStateStore', () => {
             warn: vi.fn(),
             error: vi.fn(),
         };
-        storageState = {};
-        storage = {
-            getItem: vi.fn((key: string) => storageState[key] ?? null),
-            setItem: vi.fn((key: string, value: string) => {
-                storageState[key] = value;
-            }),
-        };
-        store = new UiStateStore(bridge, tracer, storage);
+        store = new UiStateStore(bridge, tracer);
     });
 
     afterEach(() => {
@@ -48,7 +39,6 @@ describe('UiStateStore', () => {
             expect(state.sidebar_width).toBe(280);
             expect(state.zoom_level).toBe(1);
             expect(state.sound_enabled).toBe(true);
-            expect(state.ai_session_id).toBeNull();
         });
 
         it('should merge state via setState', () => {
@@ -114,42 +104,38 @@ describe('UiStateStore', () => {
             (bridge.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({
                 sidebar_width: 500,
             });
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
 
             const result = await store.loadState();
             expect(bridge.invoke).toHaveBeenCalledWith('get_ui_state');
             expect(result.sidebar_width).toBe(500);
         });
 
-        it('should load from localStorage in non-Tauri environment', async () => {
-            storageState['axelate_ui_state'] = JSON.stringify({ sidebar_width: 350 });
-            store = new UiStateStore(bridge, tracer, storage);
-
+        it('should keep defaults in non-Tauri environment', async () => {
             const result = await store.loadState();
-            expect(result.sidebar_width).toBe(350);
+            expect(result.sidebar_width).toBe(280);
+            expect(bridge.invoke).not.toHaveBeenCalled();
         });
 
-        it('should clamp legacy zoom values when loading state', async () => {
-            storageState['axelate_ui_state'] = JSON.stringify({
+        it('should clamp out-of-range zoom values when setting state', () => {
+            store.setState({
                 zoom_level: 3,
                 resolution_zoom: { '1920x1080': 3.2, '2560x1440': 2.4 },
             });
-            store = new UiStateStore(bridge, tracer, storage);
 
-            const result = await store.loadState();
+            const result = store.getState();
             expect(result.zoom_level).toBe(2.6);
             expect(result.resolution_zoom['1920x1080']).toBe(2.6);
             expect(result.resolution_zoom['2560x1440']).toBe(2.4);
         });
 
-        it('should keep legacy partial state instead of dropping it when map fields are missing', async () => {
-            storageState['axelate_ui_state'] = JSON.stringify({
+        it('should keep partial state instead of dropping it when map fields are missing', () => {
+            store.setState({
                 sidebar_width: 360,
                 zoom_level: 1.25,
             });
-            store = new UiStateStore(bridge, tracer, storage);
 
-            const result = await store.loadState();
+            const result = store.getState();
 
             expect(result.sidebar_width).toBe(360);
             expect(result.zoom_level).toBe(1.25);
@@ -158,17 +144,28 @@ describe('UiStateStore', () => {
             expect(tracer.warn).not.toHaveBeenCalled();
         });
 
-        it('should normalize malformed map fields while preserving valid entries', async () => {
-            storageState['axelate_ui_state'] = JSON.stringify({
-                resolution_zoom: null,
-                selected_ai_models: { gpt: 'gpt-5.5', bad: 42 },
-                ai_thinking_level: { gpt: 'high', bad: 'fast' },
-                ai_web_search_enabled: { gpt: true, bad: 'yes' },
-                local_max_output_tokens: { llamacpp: 8192, bad: 'many' },
+        it('should normalize malformed map fields while preserving valid entries', () => {
+            store.setState({
+                resolution_zoom: null as unknown as Record<string, number>,
+                selected_ai_models: { gpt: 'gpt-5.5', bad: 42 } as unknown as Record<
+                    string,
+                    string
+                >,
+                ai_thinking_level: { gpt: 'high', bad: 'fast' } as unknown as Record<
+                    string,
+                    'off' | 'low' | 'medium' | 'high'
+                >,
+                ai_web_search_enabled: { gpt: true, bad: 'yes' } as unknown as Record<
+                    string,
+                    boolean
+                >,
+                local_max_output_tokens: { llamacpp: 8192, bad: 'many' } as unknown as Record<
+                    string,
+                    number
+                >,
             });
-            store = new UiStateStore(bridge, tracer, storage);
 
-            const result = await store.loadState();
+            const result = store.getState();
 
             expect(result.resolution_zoom).toEqual({});
             expect(result.selected_ai_models).toEqual({ gpt: 'gpt-5.5' });
@@ -177,20 +174,12 @@ describe('UiStateStore', () => {
             expect(result.local_max_output_tokens).toEqual({ llamacpp: 8192 });
         });
 
-        it('should use defaults when localStorage is null (L67)', async () => {
-            delete storageState['axelate_ui_state'];
-            store = new UiStateStore(bridge, tracer, storage);
-
-            const result = await store.loadState();
-            expect(result.sidebar_width).toBe(280); // default
-        });
-
         it('should handle load errors and return defaults', async () => {
             bridge = createMockBridge(true);
             (bridge.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(
                 new Error('Backend fail'),
             );
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
 
             const result = await store.loadState();
             // Should fall back to defaults without throwing
@@ -201,7 +190,7 @@ describe('UiStateStore', () => {
     describe('saveAsync', () => {
         it('should save to backend in Tauri environment when dirty', async () => {
             bridge = createMockBridge(true);
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 999 });
 
             await store.saveAsync();
@@ -210,15 +199,11 @@ describe('UiStateStore', () => {
             });
         });
 
-        it('should save to localStorage in non-Tauri environment when dirty', async () => {
+        it('should not persist in non-Tauri environment', async () => {
             store.updateState({ sidebar_width: 450 });
             await store.saveAsync();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
-                string,
-                unknown
-            >;
-            expect(stored['sidebar_width']).toBe(450);
+            expect(bridge.invoke).not.toHaveBeenCalled();
         });
 
         it('should not save when not dirty', async () => {
@@ -229,7 +214,7 @@ describe('UiStateStore', () => {
         it('should handle save errors gracefully', async () => {
             bridge = createMockBridge(true);
             (bridge.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Save fail'));
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 123 });
 
             // Should not throw
@@ -247,7 +232,7 @@ describe('UiStateStore', () => {
                         }),
                 )
                 .mockResolvedValue(undefined);
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 111 });
 
             const firstSave = store.saveAsync();
@@ -264,25 +249,21 @@ describe('UiStateStore', () => {
     });
 
     describe('saveImmediate', () => {
-        it('should save synchronously to localStorage when dirty', async () => {
+        it('should not persist synchronously in non-Tauri environment', async () => {
             store.updateState({ zoom_level: 1.5 });
             await store.saveImmediate();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
-                string,
-                unknown
-            >;
-            expect(stored['zoom_level']).toBe(1.5);
+            expect(bridge.invoke).not.toHaveBeenCalled();
         });
 
         it('should not save when not dirty', async () => {
             await store.saveImmediate();
-            expect(storageState['axelate_ui_state']).toBeUndefined();
+            expect(bridge.invoke).not.toHaveBeenCalled();
         });
 
         it('should save to backend in Tauri environment', async () => {
             bridge = createMockBridge(true);
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 777 });
             await store.saveImmediate();
             expect(bridge.invoke).toHaveBeenCalledWith('save_ui_state', {
@@ -295,7 +276,7 @@ describe('UiStateStore', () => {
             (bridge.invoke as ReturnType<typeof vi.fn>)
                 .mockRejectedValueOnce(new Error('Save failed'))
                 .mockResolvedValue(undefined);
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 888 });
 
             await expect(store.saveImmediate()).rejects.toThrow('Save failed');
@@ -311,7 +292,7 @@ describe('UiStateStore', () => {
     describe('Debounced auto-save', () => {
         it('should debounce saves on updateState', async () => {
             bridge = createMockBridge(true);
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
 
             store.updateState({ sidebar_width: 100 });
             store.updateState({ sidebar_width: 200 });
@@ -337,7 +318,7 @@ describe('UiStateStore', () => {
             (bridge.invoke as ReturnType<typeof vi.fn>).mockImplementation(() => {
                 throw new Error('Invoke crashed');
             });
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 123 });
 
             await expect(store.saveImmediate()).rejects.toThrow('Invoke crashed');
@@ -347,7 +328,7 @@ describe('UiStateStore', () => {
     describe('Auto-save events', () => {
         it('should save on visibilitychange when hidden', () => {
             bridge = createMockBridge(true);
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 400 });
 
             // Simulate document becoming hidden
@@ -364,7 +345,7 @@ describe('UiStateStore', () => {
 
         it('should not save on visibilitychange when NOT hidden (L160)', () => {
             bridge = createMockBridge(true);
-            store = new UiStateStore(bridge, tracer, storage);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 400 });
 
             // Simulate document becoming visible (not hidden)
@@ -380,23 +361,21 @@ describe('UiStateStore', () => {
         });
 
         it('should saveImmediate synchronously', async () => {
-            bridge = createMockBridge();
-            store = new UiStateStore(bridge, tracer, storage);
+            bridge = createMockBridge(true);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 500 });
 
             // beforeunload is now handled by StateManager; test saveImmediate directly
             await store.saveImmediate();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
-                string,
-                unknown
-            >;
-            expect(stored['sidebar_width']).toBe(500);
+            expect(bridge.invoke).toHaveBeenCalledWith('save_ui_state', {
+                state: expect.objectContaining({ sidebar_width: 500 }) as unknown,
+            });
         });
 
         it('should remove auto-save timer on destroy', async () => {
-            bridge = createMockBridge();
-            store = new UiStateStore(bridge, tracer, storage);
+            bridge = createMockBridge(true);
+            store = new UiStateStore(bridge, tracer);
             store.updateState({ sidebar_width: 640 });
 
             store.destroy();
@@ -404,11 +383,9 @@ describe('UiStateStore', () => {
             // saveImmediate should still work (no event listeners to remove)
             await store.saveImmediate();
 
-            const stored = JSON.parse(storageState['axelate_ui_state'] ?? '{}') as Record<
-                string,
-                unknown
-            >;
-            expect(stored['sidebar_width']).toBe(640);
+            expect(bridge.invoke).toHaveBeenCalledWith('save_ui_state', {
+                state: expect.objectContaining({ sidebar_width: 640 }) as unknown,
+            });
         });
     });
 });

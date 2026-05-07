@@ -117,6 +117,11 @@ export function createAppUI(deps: CreateAppUIDeps): AppUI {
                 setSelectedModule: (category, moduleData) => {
                     deps.stateStore.setSelectedModule(category, moduleData);
                 },
+                getIntegrationImportLastDirectory: () =>
+                    deps.stateStore.getIntegrationImportLastDirectory(),
+                setIntegrationImportLastDirectory: (path) => {
+                    deps.stateStore.setIntegrationImportLastDirectory(path);
+                },
             },
             launchApp: async (category, app) => {
                 await deps.bridge.launchApp(category, app);

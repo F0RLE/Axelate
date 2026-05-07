@@ -246,17 +246,20 @@ describe('ModuleService', () => {
             expect(moduleService.getDownloadState('test-module')?.status).not.toBe('error');
         });
 
-        it('should treat legacy paused errors as interrupted downloads', async () => {
+        it('should surface unexpected paused errors as failed downloads', async () => {
             mocks.invokeSafe.mockResolvedValueOnce({
                 status: 'error',
                 error: { message: 'Download paused' },
             });
 
-            const result = await moduleService.downloadModule('test-module', 'url');
+            await expect(moduleService.downloadModule('test-module', 'url')).rejects.toThrow(
+                'Download paused',
+            );
 
-            expect(result).toBe('paused');
-            expect(mocks.tracer.error).not.toHaveBeenCalled();
-            expect(moduleService.getDownloadState('test-module')?.status).not.toBe('error');
+            expect(mocks.tracer.error).toHaveBeenCalledWith(
+                '[ModuleService] Download error for test-module: Download paused',
+            );
+            expect(moduleService.getDownloadState('test-module')?.status).toBe('error');
         });
     });
 

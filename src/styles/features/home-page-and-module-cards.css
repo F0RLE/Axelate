@@ -652,7 +652,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .app-delete-badge:hover .badge-text {
     opacity: 1;
-    max-width: 100px;
+    max-width: 10rem;
+    padding-left: 6px;
     padding-right: 10px;
 }
 
@@ -809,7 +810,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .module-action-badge:hover .badge-text {
     opacity: 1;
-    max-width: 100px;
+    max-width: 10rem;
+    padding-left: 6px;
     padding-right: 10px;
 }
 
@@ -829,7 +831,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .module-action-badge.right:hover .badge-text {
     padding-left: 10px;
-    padding-right: 0;
+    padding-right: 6px;
 }
 
 /* Settings variant */

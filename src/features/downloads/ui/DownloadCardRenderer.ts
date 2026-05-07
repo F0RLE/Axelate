@@ -22,7 +22,7 @@ type DownloadCardRendererDeps = {
 export class DownloadCardRenderer {
     private static readonly _purifyConfig = {
         ALLOWED_TAGS: ['div', 'span', 'button', 'svg', 'use'],
-        ALLOWED_ATTR: ['aria-label', 'class', 'href', 'style', 'title'],
+        ALLOWED_ATTR: ['aria-label', 'class', 'href', 'style', 'title', 'type'],
         ALLOW_DATA_ATTR: false,
     };
 
@@ -225,7 +225,7 @@ export class DownloadCardRenderer {
         }
         if (this._deps.isCancellableStatus(status)) {
             buttons.push(
-                this.renderActionButton('download-cancel-btn cancel', cancelTitle, '#icon-stop'),
+                this.renderActionButton('download-cancel-btn cancel', cancelTitle, '#icon-trash'),
             );
         }
 
@@ -242,7 +242,7 @@ export class DownloadCardRenderer {
 
     private renderActionButton(className: string, title: string, iconHref: string): string {
         return `
-            <button class="downloads-action-btn ${className}" title="${title}" aria-label="${title}">
+            <button type="button" class="downloads-action-btn ${className}" title="${title}" aria-label="${title}">
                 <svg class="icon downloads-action-icon"><use href="${iconHref}"></use></svg>
             </button>
         `;

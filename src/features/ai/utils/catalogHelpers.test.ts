@@ -78,11 +78,11 @@ describe('catalogHelpers', () => {
                 createAppMock('gpt', [
                     {
                         id: 'gpt-5.5',
-                        pricing: { input_per_1m: 5, output_per_1m: 30 },
+                        pricing: { input: 5, output: 30 },
                     },
                     {
                         id: 'gpt-5.5-pro',
-                        pricing: { input_per_1m: 30, output_per_1m: 180 },
+                        pricing: { input: 30, output: 180 },
                     },
                 ]),
             ];
@@ -94,8 +94,8 @@ describe('catalogHelpers', () => {
         it('sorts models by total token price descending', () => {
             const models = [
                 { id: 'free' },
-                { id: 'regular', pricing: { input_per_1m: 5, output_per_1m: 30 } },
-                { id: 'pro', pricing: { input_per_1m: 30, output_per_1m: 180 } },
+                { id: 'regular', pricing: { input: 5, output: 30 } },
+                { id: 'pro', pricing: { input: 30, output: 180 } },
             ];
 
             expect(sortModelsByPrice(models as never).map((model) => model.id)).toEqual([

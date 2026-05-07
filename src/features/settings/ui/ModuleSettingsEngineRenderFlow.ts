@@ -51,7 +51,10 @@ type ModuleSettingsEngineRenderOptions = {
         modelPlaceholder: string,
         isImage: boolean,
     ) => EngineFieldDefinition;
-    getComputeModeField: (translate: TranslateFn) => EngineFieldDefinition;
+    getComputeModeField: (
+        translate: TranslateFn,
+        availableModes?: Array<'gpu' | 'cpu'>,
+    ) => EngineFieldDefinition;
     getImageExtraArgsField: (translate: TranslateFn) => EngineFieldDefinition;
 };
 
@@ -81,6 +84,9 @@ export class ModuleSettingsEngineRenderFlow {
             translate: options.translate,
             getCoreModelField: options.getCoreModelField,
             getComputeModeField: options.getComputeModeField,
+            ...(app.installedComputeModes !== undefined
+                ? { availableComputeModes: app.installedComputeModes }
+                : {}),
             getImageExtraArgsField: options.getImageExtraArgsField,
             getTextFields: options.getTextFields,
         });
@@ -106,6 +112,7 @@ export class ModuleSettingsEngineRenderFlow {
         isImage: boolean;
         modelPlaceholder: string;
         translate: TranslateFn;
+        availableComputeModes?: Array<'gpu' | 'cpu'>;
         getCoreModelField: ModuleSettingsEngineRenderOptions['getCoreModelField'];
         getComputeModeField: ModuleSettingsEngineRenderOptions['getComputeModeField'];
         getImageExtraArgsField: ModuleSettingsEngineRenderOptions['getImageExtraArgsField'];
@@ -116,7 +123,10 @@ export class ModuleSettingsEngineRenderFlow {
             options.modelPlaceholder,
             options.isImage,
         );
-        const computeField = options.getComputeModeField(options.translate);
+        const computeField = options.getComputeModeField(
+            options.translate,
+            options.availableComputeModes,
+        );
 
         this._deps.renderFieldRow(options.container, {
             ...coreField,

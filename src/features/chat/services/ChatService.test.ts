@@ -89,7 +89,7 @@ describe('ChatService', () => {
 
         const result = await chatService.sendMessage('Hi', [], []);
         expect(result.ok).toBe(true);
-        expect(result.message).toBe('Hello there');
+        expect(result.reply?.text).toBe('Hello there');
     });
 
     it('should return error if AIBridge throws', async () => {
@@ -116,7 +116,7 @@ describe('ChatService', () => {
 
         const result = await chatService.sendMessage('Hello', [], []);
         expect(result.ok).toBe(true);
-        expect(result.message).toBe('');
+        expect(result.reply?.text).toBe('');
     });
 
     it('should handle non-Error throw in sendMessage (L52)', async () => {

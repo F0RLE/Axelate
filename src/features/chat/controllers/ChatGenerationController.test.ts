@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatGenerationController } from './ChatGenerationController';
-import { CUSTOM_IMAGE_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
 
 describe('ChatGenerationController', () => {
     const aiBridge = {
@@ -26,6 +25,7 @@ describe('ChatGenerationController', () => {
         handleError: vi.fn(),
         isDestroyed: vi.fn().mockReturnValue(false),
         isSending: vi.fn().mockReturnValue(true),
+        isImageProvider: vi.fn((providerId: string | null) => providerId === 'selected-image'),
         tracer: {
             debug: vi.fn(),
         },
@@ -165,12 +165,10 @@ describe('ChatGenerationController', () => {
         vi.useRealTimers();
     });
 
-    it('treats cloud and custom image providers as image flows', () => {
+    it('uses the injected image-provider resolver', () => {
         const controller = new ChatGenerationController(baseOptions as never);
 
-        expect(controller.isImageProvider('gpt-image')).toBe(true);
-        expect(controller.isImageProvider('seedream-image')).toBe(true);
-        expect(controller.isImageProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
+        expect(controller.isImageProvider('selected-image')).toBe(true);
         expect(controller.isImageProvider('gpt')).toBe(false);
         expect(controller.isImageProvider(null)).toBe(false);
     });
@@ -223,7 +221,7 @@ describe('ChatGenerationController', () => {
         await controller.handleChatResponse(
             {
                 ok: true,
-                message: 'answer',
+                reply: { text: 'answer' },
                 usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
             } as never,
             null,
@@ -238,7 +236,7 @@ describe('ChatGenerationController', () => {
         const controller = new ChatGenerationController(baseOptions as never);
 
         await controller.handleChatResponse(
-            { ok: true, message: 'answer', thought_signature: 'sig-1' } as never,
+            { ok: true, reply: { text: 'answer' }, thought_signature: 'sig-1' } as never,
             null,
             null,
         );

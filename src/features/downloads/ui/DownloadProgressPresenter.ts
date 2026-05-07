@@ -131,15 +131,13 @@ export class DownloadProgressPresenter {
     }
 
     public displayModuleName(moduleId: string): string {
-        const knownNames: Record<string, string> = {
-            llamacpp: 'llama.cpp',
-            sdcpp: 'stable-diffusion.cpp',
-        };
-
-        const known = knownNames[moduleId.toLowerCase()];
-        if (known !== undefined) return known;
-
-        return moduleId.replaceAll(/[_-]+/g, ' ').trim();
+        return moduleId
+            .replaceAll(/[_-]+/g, ' ')
+            .trim()
+            .split(/\s+/u)
+            .filter((part) => part !== '')
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ');
     }
 
     public isActiveStatus(status: string): boolean {

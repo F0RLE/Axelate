@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { CatalogService } from './CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
-import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import {
     createCatalogHarness,
     createMockAppConfig,
@@ -78,7 +77,7 @@ describe('CatalogService', () => {
             expect(app?.type).toBe('local');
         });
 
-        it('should fallback to FALLBACK_CONFIG if config is empty or invalid', async () => {
+        it('should keep an explicitly empty catalog empty', async () => {
             const invalidConfig = createMockAppConfig();
 
             setupBridgeMocks(mockBridge, invalidConfig);
@@ -87,9 +86,8 @@ describe('CatalogService', () => {
 
             const catalog = service.getCatalog();
 
-            // Should be hydrated from fallback source
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
-            expect(catalog.ai[0]?.id).toBe(FALLBACK_CONFIG.catalog.ai[0]?.id);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
         });
 
         it('should inject apiProviderData for API modules', async () => {
@@ -133,8 +131,7 @@ describe('CatalogService', () => {
         });
     });
 
-    // ---------------------------------------------------------- getCatalogCategory fallback (lines 39-40)
-    describe('getCatalogCategory fallback', () => {
+    describe('getCatalogCategory defaults', () => {
         it('should return empty array for unknown category', () => {
             // getCatalogCategory is now on GlobalBridge, not CatalogService
             // Test service-level method instead
@@ -161,8 +158,7 @@ describe('CatalogService', () => {
         });
     });
 
-    // ---------------------------------------------------------- invoke fallback
-    describe('bridge fallback', () => {
+    describe('bridge failure handling', () => {
         it('should load config through bridge even when isTauri=false', async () => {
             const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'fetched-ai', name: 'Fetched AI' }], services: [] },
@@ -178,27 +174,29 @@ describe('CatalogService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('get_config');
         });
 
-        it('should fallback to FALLBACK_CONFIG when bridge returns null config', async () => {
+        it('should use an empty catalog when bridge returns null config', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             setupBridgeMocks(mockBridge, null);
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
         });
 
-        it('should fallback when bridge throws', async () => {
+        it('should use an empty catalog when bridge throws', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             mockBridge.invoke.mockRejectedValue(new Error('Bridge error'));
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
         });
 
-        it('should fallback when bridge returns malformed catalog shape', async () => {
+        it('should use an empty catalog when bridge returns malformed catalog shape', async () => {
             setupBridgeMocks(
                 mockBridge,
                 createMockAppConfig({
@@ -210,23 +208,23 @@ describe('CatalogService', () => {
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
-            expect(catalog.services.length).toBe(FALLBACK_CONFIG.catalog.services.length);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
             expect(globalThis.dispatchEvent).toHaveBeenCalledWith(
                 expect.objectContaining({ type: 'catalog-loaded' }),
             );
         });
     });
 
-    // ---------------------------------------------------------- _ensureValidConfig null config (lines 278-279)
     describe('_ensureValidConfig null config', () => {
-        it('should use FALLBACK_CONFIG when bridge invoke returns null', async () => {
+        it('should use an empty catalog when bridge invoke returns null', async () => {
             setupBridgeMocks(mockBridge, null);
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
         });
     });
 
@@ -251,8 +249,7 @@ describe('CatalogService', () => {
         });
     });
 
-    // ---------------------------------------------------------- _ensureFallbacks api-type (L193)
-    describe('_ensureFallbacks api-type branch (L193)', () => {
+    describe('catalog hydration', () => {
         it('should mark api-type apps as installed=true', async () => {
             const config = createMockAppConfig({
                 catalog: {

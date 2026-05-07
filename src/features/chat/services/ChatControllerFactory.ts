@@ -83,6 +83,7 @@ type ChatGenerationFactoryDeps = {
     handleError: (errorMsg: unknown, model?: string) => void;
     isDestroyed: () => boolean;
     isSending: () => boolean;
+    isImageProvider: (providerId: string | null) => boolean;
     tracer: ChatTracer;
 };
 
@@ -254,6 +255,7 @@ export class ChatControllerFactory {
             },
             isDestroyed: () => deps.isDestroyed(),
             isSending: () => deps.isSending(),
+            isImageProvider: (providerId) => deps.isImageProvider(providerId),
             tracer: deps.tracer,
         });
     }

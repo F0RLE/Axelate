@@ -175,7 +175,6 @@ export class SidebarUI extends BaseComponent {
                 this._isCollapsed = !this._isCollapsed;
                 this._hasManualSidebarOverride = false;
             }
-            this._startSnappingAnimation();
             this._updateAutoCompactState();
             this._applySidebarWidth();
             this._persistSidebarPreferenceState();
