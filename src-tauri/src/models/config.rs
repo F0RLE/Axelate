@@ -18,10 +18,10 @@ pub struct ApiModelConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Type)]
 #[serde(rename_all = "snake_case")]
 pub struct PricingConfig {
-    /// Cost per 1M input tokens
-    pub input_per_1m: Option<f64>,
-    /// Cost per 1M output tokens
-    pub output_per_1m: Option<f64>,
+    /// Input-side cost or score shown in the launcher UI
+    pub input: Option<f64>,
+    /// Output-side cost or score shown in the launcher UI
+    pub output: Option<f64>,
     /// Currency code
     pub currency: Option<String>,
     /// Additional notes
@@ -150,10 +150,7 @@ pub struct AiModel {
     pub context_window: Option<u32>,
     /// Maximum output tokens allowed
     pub max_output_tokens: Option<u32>,
-    /// Whether the model is deprecated
-    pub deprecated: Option<bool>,
-
-    /// Pricing configuration (New Object Format)
+    /// Pricing configuration
     pub pricing: Option<PricingConfig>,
 
     /// Performance statistics

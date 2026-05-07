@@ -7,31 +7,6 @@ import type { IUIState } from '../services/state/UiStateStore';
 import type { IWindowConfig } from '../services/WindowService';
 
 /**
- * Interface for the Tauri host instance.
- */
-export interface ITauriInstance {
-    core: {
-        invoke: <T = unknown>(_cmd: string, _args?: Record<string, unknown>) => Promise<T>;
-    };
-    window: {
-        getCurrentWindow: () => {
-            isMaximized: () => Promise<boolean>;
-            setSize: (_size: { width: number; height: number }) => Promise<void>;
-            center: () => Promise<void>;
-            innerSize: () => Promise<{ width: number; height: number }>;
-            outerPosition: () => Promise<{ x: number; y: number }>;
-        };
-        LogicalSize: new (_width: number, _height: number) => { width: number; height: number };
-    };
-    event: {
-        listen: (
-            _event: string,
-            _handler: (_event: { payload: unknown }) => void,
-        ) => Promise<() => void>;
-    };
-}
-
-/**
  * Application/Module metadata from the catalog.
  */
 export interface IApp {
@@ -51,6 +26,7 @@ export interface IApp {
     type?: 'api' | 'local';
     capability?: 'text' | 'image'; // AI output capability; used for modal filter tabs
     installed?: boolean;
+    installedComputeModes?: Array<'gpu' | 'cpu'>;
     repoUrl?: string;
     expectedHash?: string;
     dlType?: string;
@@ -124,7 +100,7 @@ export interface IModuleDownloadState {
     error?: unknown;
 }
 
-export type ReleaseComputeTarget = 'auto' | 'gpu' | 'cpu';
+export type ReleaseComputeTarget = 'auto' | 'gpu' | 'cpu' | 'both';
 
 export interface ReleaseDownloadSelection {
     tag_name: string | null;

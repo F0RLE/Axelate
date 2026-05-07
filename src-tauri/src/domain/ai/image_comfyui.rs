@@ -121,7 +121,6 @@ async fn build_comfyui_request_context(
         resolve_string_setting(
             &settings_context.settings,
             &settings_context.settings_key,
-            &request.provider,
             "base_url",
         )
         .as_deref()
@@ -163,9 +162,7 @@ async fn resolve_comfyui_checkpoint(
         return Ok(normalize_comfyui_checkpoint(&request.model));
     }
 
-    if let Some(saved_checkpoint) =
-        resolve_string_setting(settings, settings_key, &request.provider, "checkpoint")
-    {
+    if let Some(saved_checkpoint) = resolve_string_setting(settings, settings_key, "checkpoint") {
         return Ok(normalize_comfyui_checkpoint(&saved_checkpoint));
     }
 

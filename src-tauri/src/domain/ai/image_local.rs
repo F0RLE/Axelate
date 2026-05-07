@@ -7,6 +7,7 @@ use super::ai_dispatch::{LocalEngineAccess, active_local_engine_status, build_en
 use super::ai_service::stop_conflicting_local_engine;
 use super::image_http::{build_image_client, parse_image_response_body};
 use super::image_payload::{build_local_image_payload, build_sdcpp_native_image_payload};
+use super::image_provider_adapter::{LocalImageProtocol, local_image_protocol};
 use super::image_response::{
     ImageResponseFormat, parse_generated_images, parse_sdcpp_generated_images,
     summarize_image_response_shape,
@@ -20,15 +21,9 @@ use crate::errors::AppError;
 struct PreparedImageDispatch {
     base_url: String,
     request_url: String,
-    api: LocalImageApi,
+    protocol: LocalImageProtocol,
     response_format: ImageResponseFormat,
     preview_path: Option<PathBuf>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum LocalImageApi {
-    SdcppNative,
-    OpenAiCompatible,
 }
 
 pub(super) async fn process_local_image_request(
@@ -72,25 +67,22 @@ async fn prepare_local_image_dispatch(
     let (base_url, preview_path) =
         resolve_local_image_endpoint(request, engine_manager, local_engine_access, &definition)
             .await?;
-    let api = local_image_api(&request.provider);
-    let response_format = image_response_format(api);
-    let request_url = build_image_generation_url(&base_url, api);
+    let protocol = local_image_protocol(&request.provider).ok_or_else(|| {
+        AppError::Validation(format!(
+            "Provider {} is not a local image engine",
+            request.provider
+        ))
+    })?;
+    let response_format = image_response_format(protocol);
+    let request_url = build_image_generation_url(&base_url, protocol);
 
     Ok(PreparedImageDispatch {
         base_url,
         request_url,
-        api,
+        protocol,
         response_format,
         preview_path,
     })
-}
-
-fn local_image_api(provider: &str) -> LocalImageApi {
-    if matches!(provider, "sdcpp" | "stable-diffusion") {
-        LocalImageApi::SdcppNative
-    } else {
-        LocalImageApi::OpenAiCompatible
-    }
 }
 
 async fn resolve_local_image_endpoint(
@@ -127,17 +119,17 @@ async fn resolve_local_image_endpoint(
     }
 }
 
-const fn image_response_format(api: LocalImageApi) -> ImageResponseFormat {
-    match api {
-        LocalImageApi::SdcppNative => ImageResponseFormat::SdApi,
-        LocalImageApi::OpenAiCompatible => ImageResponseFormat::OpenAiCompatible,
+const fn image_response_format(protocol: LocalImageProtocol) -> ImageResponseFormat {
+    match protocol {
+        LocalImageProtocol::SdcppNative => ImageResponseFormat::SdApi,
+        LocalImageProtocol::OpenAiCompatible => ImageResponseFormat::OpenAiCompatible,
     }
 }
 
-fn build_image_generation_url(base_url: &str, api: LocalImageApi) -> String {
-    match api {
-        LocalImageApi::SdcppNative => format!("{base_url}/sdcpp/v1/img_gen"),
-        LocalImageApi::OpenAiCompatible => format!("{base_url}/v1/images/generations"),
+fn build_image_generation_url(base_url: &str, protocol: LocalImageProtocol) -> String {
+    match protocol {
+        LocalImageProtocol::SdcppNative => format!("{base_url}/sdcpp/v1/img_gen"),
+        LocalImageProtocol::OpenAiCompatible => format!("{base_url}/v1/images/generations"),
     }
 }
 
@@ -153,7 +145,7 @@ async fn execute_local_image_request(
         clear_preview_file(preview_path).await;
     }
 
-    if dispatch.api == LocalImageApi::SdcppNative {
+    if dispatch.protocol == LocalImageProtocol::SdcppNative {
         return execute_sdcpp_native_image_request(
             request,
             &dispatch,

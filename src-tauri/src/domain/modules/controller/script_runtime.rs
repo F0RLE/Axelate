@@ -238,8 +238,7 @@ async fn spawn_runtime_command(
 
     command
         .current_dir(module_path)
-        .env("BOT_CONFIG_DIR", CONFIG_DIR.as_os_str())
-        .env("AXELATE_SDK_VERSION", SDK_API_VERSION)
+        .env("AXELATE_INTEGRATION_API_VERSION", SDK_API_VERSION)
         .env("AXELATE_CONFIG_DIR", CONFIG_DIR.as_os_str())
         .env("AXELATE_RUNTIME_DIR", RUNTIME_DIR.as_os_str())
         .env(

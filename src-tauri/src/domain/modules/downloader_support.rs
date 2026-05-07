@@ -6,6 +6,7 @@ const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE: u64 = 3 * 1024 * 1024 * 1024;
 const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE: u64 = 12 * 1024 * 1024 * 1024;
 const MAX_ARCHIVE_FILE_COUNT: usize = 10000;
 const MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE: usize = 100_000;
+const LARGE_ARCHIVE_MODULE_IDS: [&str; 1] = ["comfyui"];
 
 pub(super) fn is_engine_package(package_id: &str) -> bool {
     serde_json::from_str::<Vec<crate::models::config::ModuleItem>>(include_str!(
@@ -228,7 +229,7 @@ pub(super) fn strip_archive_root(path: &Path, root_to_skip: Option<&str>) -> Pat
 }
 
 pub(super) fn archive_file_count_limit(module_id: &str) -> usize {
-    if module_id == "comfyui" {
+    if uses_large_archive_limits(module_id) {
         return MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE;
     }
 
@@ -236,9 +237,13 @@ pub(super) fn archive_file_count_limit(module_id: &str) -> usize {
 }
 
 pub(super) fn archive_total_uncompressed_size_limit(module_id: &str) -> u64 {
-    if module_id == "comfyui" {
+    if uses_large_archive_limits(module_id) {
         return MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE;
     }
 
     MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE
+}
+
+fn uses_large_archive_limits(module_id: &str) -> bool {
+    LARGE_ARCHIVE_MODULE_IDS.contains(&module_id)
 }

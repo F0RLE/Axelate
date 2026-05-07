@@ -19,8 +19,8 @@
       "contextWindow": 4096,
       "maxOutputTokens": 4096,
       "pricing": {
-        "input_per_1m": 0.04,
-        "output_per_1m": 0,
+        "input": 0.04,
+        "output": 0,
         "currency": "USD",
         "notes": "$0.04 / image"
       },

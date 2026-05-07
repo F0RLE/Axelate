@@ -10,7 +10,7 @@ use crate::domain::engine::config::{
 use crate::domain::engine::manager::EngineManager;
 use crate::domain::engine::manager::canonical_engine_id;
 use crate::domain::engine::types::{
-    Capability, EngineConfig, EngineDefinition, EngineState, EngineStatus,
+    Capability, EngineComputeMode, EngineConfig, EngineDefinition, EngineState, EngineStatus,
 };
 use crate::errors::AppError;
 use crate::infrastructure::config::engine_settings::{
@@ -26,10 +26,17 @@ pub struct EngineSettingsPayload {
 }
 
 fn engine_config_for_definition(def: &EngineDefinition, saved: &EngineConfigMap) -> EngineConfig {
-    saved.get(&def.id).map_or_else(
+    let mut config = saved.get(&def.id).map_or_else(
         || build_default_engine_config(def),
         |config| merge_user_engine_config(def, config),
-    )
+    );
+    let installed_modes = crate::domain::engine::detector::installed_compute_modes(&def.id);
+    if installed_modes.len() == 1
+        && let Some(mode) = installed_modes.first().copied()
+    {
+        config.compute_mode = mode;
+    }
+    config
 }
 
 fn engine_settings_payload_for_definition(
@@ -49,9 +56,15 @@ fn normalize_config_for_save(def: &EngineDefinition, mut config: EngineConfig) -
 fn mark_engine_definitions_installed(
     defs: &mut [EngineDefinition],
     mut is_installed: impl FnMut(&EngineDefinition) -> bool,
+    mut installed_compute_modes: impl FnMut(&EngineDefinition) -> Vec<EngineComputeMode>,
 ) {
     for def in defs {
         def.installed = def.managed_externally || is_installed(def);
+        def.installed_compute_modes = if def.installed && !def.managed_externally {
+            installed_compute_modes(def)
+        } else {
+            Vec::new()
+        };
     }
 }
 
@@ -125,9 +138,11 @@ pub async fn get_engine_definitions(
 ) -> Result<Vec<EngineDefinition>, AppError> {
     let mut defs = engine_manager.list_definitions().await;
     // Populate `installed` at request time — no extra round-trip needed from frontend
-    mark_engine_definitions_installed(&mut defs, |def| {
-        crate::domain::engine::detector::is_engine_installed(&def.id, def.binary.as_deref())
-    });
+    mark_engine_definitions_installed(
+        &mut defs,
+        |def| crate::domain::engine::detector::is_engine_installed(&def.id, def.binary.as_deref()),
+        |def| crate::domain::engine::detector::installed_compute_modes(&def.id),
+    );
     Ok(defs)
 }
 
@@ -206,6 +221,7 @@ mod tests {
             default_context_size: 8192,
             config_schema: None,
             installed: false,
+            installed_compute_modes: Vec::new(),
             managed_externally: false,
         }
     }
@@ -259,9 +275,9 @@ mod tests {
     }
 
     #[test]
-    fn normalize_config_for_save_canonicalizes_aliases_before_persisting() {
+    fn normalize_config_for_save_uses_definition_id_before_persisting() {
         let def = sample_definition("sdcpp");
-        let normalized = normalize_config_for_save(&def, saved_config("stable-diffusion"));
+        let normalized = normalize_config_for_save(&def, saved_config("sdcpp"));
 
         assert_eq!(normalized.engine_id, "sdcpp");
         assert_eq!(normalized.compute_mode, EngineComputeMode::Cpu);
@@ -277,7 +293,7 @@ mod tests {
         };
         let mut defs = vec![sample_definition("missing"), external];
 
-        mark_engine_definitions_installed(&mut defs, |def| def.id == "missing");
+        mark_engine_definitions_installed(&mut defs, |def| def.id == "missing", |_| Vec::new());
 
         assert!(defs.iter().all(|def| def.installed));
     }
@@ -286,7 +302,7 @@ mod tests {
     fn mark_engine_definitions_installed_marks_missing_local_engines_uninstalled() {
         let mut defs = vec![sample_definition("missing")];
 
-        mark_engine_definitions_installed(&mut defs, |_| false);
+        mark_engine_definitions_installed(&mut defs, |_| false, |_| Vec::new());
 
         assert!(defs.iter().all(|def| !def.installed));
     }

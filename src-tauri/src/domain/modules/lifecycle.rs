@@ -64,7 +64,7 @@ pub struct ModuleManifest {
     #[serde(default)]
     pub author: Option<String>,
     /// Module category used by the launcher UI.
-    #[serde(default, alias = "type")]
+    #[serde(default)]
     pub category: Option<String>,
     /// Module icon shown in the launcher UI.
     #[serde(default)]
@@ -75,18 +75,18 @@ pub struct ModuleManifest {
     /// Human-readable module documentation file.
     #[serde(default)]
     pub readme: Option<String>,
-    /// Legacy launcher-owned schema file path for richer forms.
-    #[serde(default, alias = "settingsSchema")]
+    /// Launcher-owned schema file path for richer forms.
+    #[serde(default)]
     pub settings_schema: Option<String>,
     /// Module-owned custom settings UI entry point.
-    #[serde(default, alias = "settingsUi")]
+    #[serde(default)]
     pub settings_ui: Option<String>,
     /// Launcher-managed module runtime.
     pub runtime: ModuleRuntime,
     /// Lifecycle scripts
     pub lifecycle: Option<LifecycleScripts>,
     /// Configuration schema
-    #[serde(default, alias = "configSchema")]
+    #[serde(default)]
     pub config_schema: Option<HashMap<String, ConfigField>>,
 }
 
@@ -262,7 +262,7 @@ name = "Demo Module"
 version = "1.2.3"
 description = "Example manifest"
 author = "Axelate"
-type = "service"
+category = "service"
 icon = "🤖"
 settings_ui = "settings-ui/index.html"
 
@@ -302,7 +302,7 @@ start = { program = "uv", args = ["run", "src/main.py"] }
     }
 
     #[test]
-    fn rejects_non_toml_manifest_files() {
+    fn rejects_json_manifest_files() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let manifest_path = temp_dir.path().join("module.json");
 
@@ -310,10 +310,10 @@ start = { program = "uv", args = ["run", "src/main.py"] }
             &manifest_path,
             r#"{
   "api_version": "1",
-  "id": "legacy-demo",
-  "name": "Legacy Demo",
+  "id": "json-demo",
+  "name": "JSON Demo",
   "version": "0.1.0",
-  "description": "Legacy manifest",
+  "description": "JSON manifest",
   "dependencies": []
 }"#,
         )
@@ -358,8 +358,8 @@ entry = "src/main.py"
             temp_dir.path().join(PRIMARY_MANIFEST_FILE),
             r#"
 api_version = "1"
-id = "legacy"
-name = "Legacy"
+id = "missing-runtime"
+name = "Invalid Runtime"
 version = "1.0.0"
 entry = "src/main.py"
 dependencies = ["python"]

@@ -7,10 +7,6 @@ use tokio::sync::Mutex;
 
 fn provider_matches(active: &str, candidate: &str) -> bool {
     active == candidate
-        || matches!(
-            (active, candidate),
-            ("sdcpp", "stable-diffusion") | ("stable-diffusion", "sdcpp")
-        )
 }
 
 /// Latest progress parsed from a local image engine log line.
@@ -89,6 +85,11 @@ impl ImageGenerationState {
         }
 
         None
+    }
+
+    /// Returns the currently active image job, when one exists.
+    pub async fn active_job(&self) -> Option<ActiveImageJob> {
+        self.inner.lock().await.clone()
     }
 
     /// Returns whether a matching provider currently has an active image job.

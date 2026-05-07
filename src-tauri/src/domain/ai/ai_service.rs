@@ -460,7 +460,6 @@ pub async fn validate_api_key(
         return Ok(!data.is_empty());
     }
 
-    // Legacy Gemini fallback
     if body.get("models").is_some() {
         return Ok(true);
     }
@@ -666,7 +665,7 @@ mod tests {
         extra_settings.insert("custom_sd_steps".to_string(), "30".to_string());
         extra_settings.insert("sdcpp_steps".to_string(), "20".to_string());
         extra_settings.insert(
-            "custom_sd_positiveprompt".to_string(),
+            "custom_sd_positive_prompt".to_string(),
             "portrait".to_string(),
         );
 
@@ -676,17 +675,17 @@ mod tests {
         };
 
         assert_eq!(
-            resolve_u32_setting(&settings, "custom_sd", "sdcpp", "steps"),
+            resolve_u32_setting(&settings, "custom_sd", "steps"),
             Some(30)
         );
         assert_eq!(
-            resolve_string_setting(&settings, "custom_sd", "sdcpp", "positive_prompt"),
+            resolve_string_setting(&settings, "custom_sd", "positive_prompt"),
             Some("portrait".to_string())
         );
     }
 
     #[test]
-    fn test_resolve_image_setting_falls_back_to_provider_id() {
+    fn test_resolve_image_setting_does_not_read_provider_key_when_settings_key_differs() {
         let mut extra_settings = HashMap::new();
         extra_settings.insert("sdcpp_cfg_scale".to_string(), "8.5".to_string());
         extra_settings.insert("sdcpp_negative_prompt".to_string(), "blurry".to_string());
@@ -697,12 +696,12 @@ mod tests {
         };
 
         assert_eq!(
-            resolve_f32_setting(&settings, "custom_sd", "sdcpp", "cfg_scale"),
-            Some(8.5)
+            resolve_f32_setting(&settings, "custom_sd", "cfg_scale"),
+            None
         );
         assert_eq!(
-            resolve_string_setting(&settings, "custom_sd", "sdcpp", "negative_prompt"),
-            Some("blurry".to_string())
+            resolve_string_setting(&settings, "custom_sd", "negative_prompt"),
+            None
         );
     }
 

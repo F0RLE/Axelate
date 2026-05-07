@@ -94,23 +94,6 @@ impl FileConfigRepository {
         })
     }
 
-    fn parse_api_providers(content: &str) -> Result<Vec<ApiProvider>, AppError> {
-        let raw: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| AppError::Config(format!("Failed to parse api_providers.json: {e}")))?;
-        let providers = raw.as_array().ok_or_else(|| {
-            AppError::Config("Failed to parse api_providers.json: expected array".to_string())
-        })?;
-
-        let mut parsed_providers = Vec::with_capacity(providers.len());
-        for (index, provider) in providers.iter().cloned().enumerate() {
-            if let Some(parsed) = Self::parse_api_provider(provider, index) {
-                parsed_providers.push(parsed);
-            }
-        }
-
-        Ok(parsed_providers)
-    }
-
     fn load_api_provider_directory(root: &Path) -> Result<Vec<ApiProvider>, AppError> {
         let mut providers = Vec::new();
 
@@ -236,15 +219,15 @@ impl ConfigRepository for FileConfigRepository {
                 return Ok(providers);
             }
 
-            tracing::warn!(
-                "No API providers loaded from {}, trying legacy api_providers.json",
+            return Err(AppError::Config(format!(
+                "No API providers loaded from {}",
                 root.display()
-            );
+            )));
         }
 
-        let content = Self::load_file_content("api_providers.json", "[]");
-
-        Self::parse_api_providers(&content)
+        Err(AppError::Config(
+            "API provider directory not found".to_string(),
+        ))
     }
 
     fn load_local_modules(&self) -> Result<Vec<ModuleItem>, AppError> {
@@ -270,59 +253,88 @@ mod tests {
 
     #[test]
     fn api_provider_parser_skips_invalid_models_without_dropping_catalog() -> Result<(), String> {
-        let providers = FileConfigRepository::parse_api_providers(
+        let provider = FileConfigRepository::parse_api_provider_file(
             r#"
-            [
-                {
-                    "id": "broken-provider",
-                    "name": "Broken Provider",
-                    "type": "api",
-                    "models": [
-                        {
-                            "id": "good-model",
-                            "name": "Good Model",
-                            "desc": "Valid model",
-                            "tier": "medium",
-                            "stats": { "speed": 8, "logic": 8, "creative": 6 }
-                        },
-                        {
-                            "id": "bad-model",
-                            "name": "Bad Model",
-                            "desc": "Invalid tier should not break the catalog",
-                            "tier": "invalid",
-                            "stats": { "speed": 8, "logic": 8, "creative": 6 }
-                        }
-                    ]
-                },
-                {
-                    "id": "healthy-provider",
-                    "name": "Healthy Provider",
-                    "type": "api",
-                    "models": []
-                }
-            ]
+            {
+                "id": "broken-provider",
+                "name": "Broken Provider",
+                "type": "api",
+                "models": [
+                    {
+                        "id": "good-model",
+                        "name": "Good Model",
+                        "desc": "Valid model",
+                        "tier": "medium",
+                        "stats": { "speed": 8, "logic": 8, "creative": 6 }
+                    },
+                    {
+                        "id": "bad-model",
+                        "name": "Bad Model",
+                        "desc": "Invalid tier should not break the catalog",
+                        "tier": "invalid",
+                        "stats": { "speed": 8, "logic": 8, "creative": 6 }
+                    }
+                ]
+            }
             "#,
+            PathBuf::from("broken-provider.json").as_path(),
         )
-        .expect("provider list should parse");
+        .ok_or_else(|| "provider should parse".to_string())?;
 
-        assert_eq!(providers.len(), 2);
-        let broken_provider = providers
-            .first()
-            .ok_or_else(|| "broken provider".to_string())?;
-        assert_eq!(broken_provider.id, "broken-provider");
-        let models = broken_provider
+        assert_eq!(provider.id, "broken-provider");
+        let models = provider
             .models
             .as_ref()
             .ok_or_else(|| "models".to_string())?;
         assert_eq!(models.len(), 1);
         let model = models.first().ok_or_else(|| "model".to_string())?;
         assert_eq!(model.id, "good-model");
-
-        let healthy_provider = providers
-            .get(1)
-            .ok_or_else(|| "healthy provider".to_string())?;
-        assert_eq!(healthy_provider.id, "healthy-provider");
         Ok(())
+    }
+
+    #[test]
+    fn api_provider_directory_loads_multiple_provider_files() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let text_dir = temp.path().join("text");
+        let image_dir = temp.path().join("image");
+        std::fs::create_dir_all(&text_dir).expect("text dir");
+        std::fs::create_dir_all(&image_dir).expect("image dir");
+
+        std::fs::write(
+            text_dir.join("first.json"),
+            r#"{
+                "id": "first-provider",
+                "name": "First Provider",
+                "type": "api",
+                "models": []
+            }"#,
+        )
+        .expect("first provider");
+        std::fs::write(
+            image_dir.join("second.json"),
+            r#"{
+                "id": "second-provider",
+                "name": "Second Provider",
+                "type": "api",
+                "models": []
+            }"#,
+        )
+        .expect("second provider");
+
+        let providers =
+            FileConfigRepository::load_api_provider_directory(temp.path()).expect("providers");
+
+        assert_eq!(providers.len(), 2);
+        assert!(
+            providers
+                .iter()
+                .any(|provider| provider.id == "first-provider")
+        );
+        assert!(
+            providers
+                .iter()
+                .any(|provider| provider.id == "second-provider")
+        );
     }
 
     #[test]

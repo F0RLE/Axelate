@@ -7,7 +7,22 @@
 use super::types::{ChatRequest, WebSearchOptions};
 
 pub(super) fn is_local_base_url(base_url: &str) -> bool {
-    base_url.contains("localhost") || base_url.contains("127.0.0.1")
+    let Ok(url) = reqwest::Url::parse(base_url.trim()) else {
+        return false;
+    };
+
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+
+    host.trim_start_matches('[')
+        .trim_end_matches(']')
+        .parse::<std::net::IpAddr>()
+        .is_ok_and(|address| address.is_loopback())
 }
 
 pub(super) fn build_chat_completion_payload(
@@ -44,8 +59,7 @@ pub(super) fn build_chat_completion_payload(
         );
     }
 
-    if let Some(level) = &req.thinking_level
-        && level != "off"
+    if let Some(level) = normalized_reasoning_effort(req.thinking_level.as_deref())
         && !is_local
     {
         payload.insert(
@@ -86,6 +100,19 @@ pub(super) fn build_chat_completion_payload(
     }
 
     payload
+}
+
+fn normalized_reasoning_effort(level: Option<&str>) -> Option<String> {
+    let level = level?.trim().to_ascii_lowercase();
+    if level.is_empty() {
+        return None;
+    }
+
+    Some(if level == "off" {
+        "none".to_string()
+    } else {
+        level
+    })
 }
 
 pub(super) fn should_attach_web_search(req: &ChatRequest) -> bool {

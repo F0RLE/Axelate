@@ -4,13 +4,14 @@ use std::time::Duration;
 
 use super::image_http::{build_image_client, parse_image_response_body};
 use super::image_payload::build_cloud_image_payload;
+use super::image_provider_adapter;
 use super::image_response::parse_openrouter_generated_images;
 use super::types::ImageGenerationRequest;
 use crate::errors::AppError;
 use crate::infrastructure::crypto::secure_storage::SecureStorage;
 
 pub(super) fn is_cloud_image_provider(provider: &str) -> bool {
-    matches!(provider, "gemini-image" | "gpt-image" | "seedream-image")
+    image_provider_adapter::is_cloud_image_provider(provider)
 }
 
 pub(super) async fn process_cloud_image_request(

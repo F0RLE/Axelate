@@ -91,7 +91,7 @@ pub fn apply_process_env(
     command
         .env("AXELATE_HTTP_API_BASE", api_base_url())
         .env("AXELATE_HTTP_API_TOKEN", token)
-        .env("AXELATE_SDK_VERSION", SDK_API_VERSION)
+        .env("AXELATE_INTEGRATION_API_VERSION", SDK_API_VERSION)
         .env("AXELATE_MODULE_ID", module_id)
         .env("AXELATE_MODULE_DIR", module_dir)
         .env("AXELATE_RUNTIME_DIR", &*crate::utils::paths::RUNTIME_DIR)
@@ -742,8 +742,8 @@ async fn route_authorized_request(
                 json!({ "ok": response.success, "response": response }),
             ))
         }
-        ("POST", ["v1", "ai", "text"]) => handle_text_request(request, context).await,
-        ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context).await,
+        ("POST", ["v1", "ai", "text"]) => handle_text_request(request, context, client).await,
+        ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context, client).await,
         _ => Ok(json_error(404, "Unknown launcher API route")),
     }
 }
@@ -940,6 +940,7 @@ fn parse_module_action(action: &str) -> Result<ModuleAction, AppError> {
 async fn handle_text_request(
     request: &HttpRequest,
     context: LauncherHttpApiContext,
+    client: &AuthorizedClient,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationTextRequest = parse_json_body(request)?;
     let prompt = payload.prompt.as_deref().unwrap_or("");
@@ -963,8 +964,7 @@ async fn handle_text_request(
         "text",
     )
     .await?;
-    let session_id =
-        resolve_session_id(&context.ui_state_service, payload.session_id.as_deref()).await;
+    let session_id = resolve_session_id(payload.session_id.as_deref(), client);
     let mut messages = payload.messages.unwrap_or_default();
     if messages.is_empty() && prompt.trim().is_empty() {
         return Err(AppError::Validation(
@@ -982,11 +982,11 @@ async fn handle_text_request(
 
     let thinking_level = match payload.thinking_level {
         Some(value) => Some(value),
-        None => selected_thinking_level(&context.ui_state_service, &ui_provider, &provider).await?,
+        None => selected_thinking_level(&context.ui_state_service, &ui_provider).await?,
     };
     let web_search = match payload.web_search {
         Some(value) => Some(value),
-        None => selected_web_search(&context.ui_state_service, &ui_provider, &provider).await?,
+        None => selected_web_search(&context.ui_state_service, &ui_provider).await?,
     };
 
     let mut chat_request = ChatRequest {
@@ -1025,6 +1025,7 @@ async fn handle_text_request(
 async fn handle_image_request(
     request: &HttpRequest,
     context: LauncherHttpApiContext,
+    client: &AuthorizedClient,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationImageRequest = parse_json_body(request)?;
     if payload.prompt.trim().is_empty() {
@@ -1052,8 +1053,7 @@ async fn handle_image_request(
         "image",
     )
     .await?;
-    let session_id =
-        resolve_session_id(&context.ui_state_service, payload.session_id.as_deref()).await;
+    let session_id = resolve_session_id(payload.session_id.as_deref(), client);
     let image_request = ImageGenerationRequest {
         provider: provider.clone(),
         prompt: payload.prompt.clone(),
@@ -1179,46 +1179,37 @@ async fn selected_module_id(
         .filter(|value| !value.is_empty()))
 }
 
-async fn resolve_session_id(
-    ui_state_service: &UiStateService,
-    requested: Option<&str>,
-) -> Option<String> {
+fn resolve_session_id(requested: Option<&str>, client: &AuthorizedClient) -> Option<String> {
     if let Some(session_id) = requested.map(str::trim).filter(|value| !value.is_empty()) {
         return Some(session_id.to_string());
     }
 
-    ui_state_service
-        .get_ui_state()
-        .await
-        .ok()
-        .and_then(|state| state.ai_session_id)
-        .filter(|value| !value.trim().is_empty())
+    match client {
+        AuthorizedClient::Module(module_id) => Some(format!("integration:{module_id}")),
+        AuthorizedClient::Launcher => None,
+    }
 }
 
 async fn selected_thinking_level(
     ui_state_service: &UiStateService,
-    primary_provider: &str,
-    fallback_provider: &str,
+    provider_id: &str,
 ) -> Result<Option<String>, AppError> {
     let state = ui_state_service.get_ui_state().await?;
     Ok(state
         .ai_thinking_level
-        .get(primary_provider)
-        .or_else(|| state.ai_thinking_level.get(fallback_provider))
+        .get(provider_id)
         .cloned()
         .filter(|value| !value.trim().is_empty()))
 }
 
 async fn selected_web_search(
     ui_state_service: &UiStateService,
-    primary_provider: &str,
-    fallback_provider: &str,
+    provider_id: &str,
 ) -> Result<Option<WebSearchOptions>, AppError> {
     let state = ui_state_service.get_ui_state().await?;
     let enabled = state
         .ai_web_search_enabled
-        .get(primary_provider)
-        .or_else(|| state.ai_web_search_enabled.get(fallback_provider))
+        .get(provider_id)
         .copied()
         .unwrap_or(false);
 
@@ -1244,12 +1235,11 @@ async fn resolve_model_id(
     }
 
     let state = ui_state_service.get_ui_state().await?;
-    let selected_model = {
-        ui_provider_id
-            .and_then(|id| state.selected_ai_models.get(id))
-            .or_else(|| state.selected_ai_models.get(provider_id))
-            .cloned()
-    };
+    let selected_model = match ui_provider_id {
+        Some(id) => state.selected_ai_models.get(id),
+        None => state.selected_ai_models.get(provider_id),
+    }
+    .cloned();
     let config = config_service.load_full_config()?;
     let provider = config
         .api_providers
@@ -1295,7 +1285,6 @@ fn strongest_provider_model(provider: &ApiProvider, capability: &str) -> Option<
     let models = provider.models.as_ref()?;
     models
         .iter()
-        .filter(|model| model.deprecated != Some(true))
         .max_by_key(|model| {
             (
                 tier_rank(&model.tier),
@@ -1335,11 +1324,6 @@ fn authorize_request(headers: &HashMap<String, String>) -> Option<AuthorizedClie
     headers
         .get("authorization")
         .and_then(|value| authorized_bearer_client(value))
-        .or_else(|| {
-            headers
-                .get("x-axelate-token")
-                .and_then(|value| authorized_token_client(value.trim()))
-        })
 }
 
 fn authorized_bearer_client(value: &str) -> Option<AuthorizedClient> {
@@ -1445,7 +1429,6 @@ mod tests {
             release_date: None,
             context_window: None,
             max_output_tokens: None,
-            deprecated: None,
             pricing: None,
             stats: ModelStats {
                 speed: 1,
@@ -1489,7 +1472,7 @@ mod tests {
     }
 
     #[test]
-    fn authorization_accepts_bearer_or_header_token() {
+    fn authorization_accepts_bearer_token() {
         let mut headers = HashMap::new();
         headers.insert(
             "authorization".to_string(),
@@ -1502,13 +1485,17 @@ mod tests {
             format!("bearer {}", super::api_token()),
         );
         assert!(is_authorized(&headers));
+    }
 
-        headers.clear();
+    #[test]
+    fn authorization_rejects_old_header_token() {
+        let mut headers = HashMap::new();
         headers.insert(
             "x-axelate-token".to_string(),
             super::api_token().to_string(),
         );
-        assert!(is_authorized(&headers));
+
+        assert!(!is_authorized(&headers));
     }
 
     #[test]
@@ -1552,6 +1539,32 @@ mod tests {
             Some(super::AuthorizedClient::Module(
                 "rotating-module".to_string()
             ))
+        );
+    }
+
+    #[test]
+    fn module_requests_default_to_module_scoped_session() {
+        assert_eq!(
+            super::resolve_session_id(
+                None,
+                &super::AuthorizedClient::Module("sample-module".to_string())
+            ),
+            Some("integration:sample-module".to_string())
+        );
+        assert_eq!(
+            super::resolve_session_id(
+                Some(" explicit-session "),
+                &super::AuthorizedClient::Module("sample-module".to_string())
+            ),
+            Some("explicit-session".to_string())
+        );
+    }
+
+    #[test]
+    fn launcher_requests_without_session_do_not_use_ui_state() {
+        assert_eq!(
+            super::resolve_session_id(None, &super::AuthorizedClient::Launcher),
+            None
         );
     }
 
@@ -1727,7 +1740,8 @@ mod tests {
             .collect::<HashMap<_, _>>();
 
         assert_eq!(
-            envs.get("AXELATE_SDK_VERSION").map(String::as_str),
+            envs.get("AXELATE_INTEGRATION_API_VERSION")
+                .map(String::as_str),
             Some("1")
         );
         assert_eq!(

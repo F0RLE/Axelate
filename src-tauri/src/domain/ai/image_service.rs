@@ -3,6 +3,7 @@ use super::ai_service::stop_conflicting_local_engine;
 use super::image_cloud::{is_cloud_image_provider, process_cloud_image_request};
 use super::image_comfyui::process_comfyui_request;
 use super::image_local::process_local_image_request;
+use super::image_provider_adapter::{ImageProviderRoute, route_for_image_provider};
 use super::image_settings::apply_image_request_defaults;
 use super::session::ChatSessionManager;
 use super::types::{ChatMessage, ChatReply, ImageGenerationRequest, ImageGenerationResponse};
@@ -64,19 +65,21 @@ async fn process_image_request_with_local_engine_access(
             Some(engine_manager.acquire_local_workload().await)
         };
 
-        if request.provider == "comfyui" {
-            stop_conflicting_local_engine(engine_manager, Capability::Image).await?;
-            process_comfyui_request(&request, image_generation_state, settings_service).await?
-        } else if is_cloud_image_provider(&request.provider) {
-            process_cloud_image_request(&request).await?
-        } else {
-            process_local_image_request(
-                &request,
-                engine_manager,
-                image_generation_state,
-                local_engine_access,
-            )
-            .await?
+        match route_for_image_provider(&request.provider) {
+            ImageProviderRoute::ComfyUi => {
+                stop_conflicting_local_engine(engine_manager, Capability::Image).await?;
+                process_comfyui_request(&request, image_generation_state, settings_service).await?
+            }
+            ImageProviderRoute::CloudOpenRouter => process_cloud_image_request(&request).await?,
+            ImageProviderRoute::Local(_) => {
+                process_local_image_request(
+                    &request,
+                    engine_manager,
+                    image_generation_state,
+                    local_engine_access,
+                )
+                .await?
+            }
         }
     };
 

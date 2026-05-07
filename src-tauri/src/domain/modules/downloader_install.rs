@@ -702,6 +702,7 @@ impl ArchiveExtractor {
         extraction_path: &Path,
         expected_hash: Option<&String>,
         release_tag: Option<&str>,
+        release_compute_target: Option<&str>,
     ) -> Result<(), AppError> {
         let final_path = package_install_dir(module_id);
 
@@ -714,6 +715,7 @@ impl ArchiveExtractor {
             "archive_hash": expected_hash.cloned(),
             "status": "complete",
             "version": release_tag.unwrap_or("unknown"),
+            "compute_target": release_compute_target,
         });
         let manifest_path = extraction_path.join("metadata.json");
         let manifest_file = fs::File::create(&manifest_path).map_err(|error| {

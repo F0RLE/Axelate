@@ -372,11 +372,16 @@ pub async fn download_module(
         final_progress_snapshot = latest_progress_snapshot;
 
         ensure_not_interrupted(&control)?;
+        let release_compute_target = release_selection
+            .as_ref()
+            .map(|selection| selection.compute_target.as_metadata_value());
+
         ArchiveExtractor::finalize(
             &module_id,
             &extraction_path,
             expected_hash.as_ref(),
             release_tag.as_deref(),
+            release_compute_target,
         )?;
 
         Ok::<(), AppError>(())
@@ -499,7 +504,7 @@ fn validate_integration_manifest(manifest: &ModuleManifest) -> Result<String, Ap
             "service" | "services" | "integration" | "integrations"
         ) {
             return Err(AppError::Validation(
-                "Custom integration manifest must use type = \"service\"".to_string(),
+                "Custom integration manifest must use category = \"service\"".to_string(),
             ));
         }
     }

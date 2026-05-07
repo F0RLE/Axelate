@@ -4,7 +4,6 @@ use crate::domain::ai::{
 };
 use crate::domain::ai::{StreamEvent, StreamSink};
 use crate::domain::engine::manager::EngineManager;
-use crate::domain::engine::types::Capability;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
 use crate::infrastructure::crypto::secure_storage::SecureStorage;
@@ -232,15 +231,7 @@ fn configured_provider_secret_service(
         ));
     }
 
-    default_secret_service_for_provider(provider)
-}
-
-fn default_secret_service_for_provider(provider: &str) -> Option<String> {
-    if is_local_provider(provider) {
-        return None;
-    }
-
-    Some("openrouter_api_key".to_string())
+    None
 }
 
 async fn load_stored_provider_api_key(
@@ -265,62 +256,6 @@ pub(crate) async fn fill_chat_request_api_key(
         .is_none_or(|value| value.trim().is_empty())
     {
         request.api_key = load_stored_provider_api_key(config_service, &request.provider).await?;
-    }
-
-    Ok(())
-}
-
-async fn cancel_comfyui_job(
-    provider: &str,
-    image_generation_state: &crate::domain::ai::ImageGenerationState,
-) -> Result<(), AppError> {
-    if let Some(job) = image_generation_state.cancel(provider).await {
-        let client = reqwest::Client::new();
-        let response = client
-            .post(format!("{}/interrupt", job.base_url.trim_end_matches('/')))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(AppError::External {
-                request_id: None,
-                message: format!("Failed to interrupt ComfyUI job: {body}"),
-            });
-        }
-    }
-
-    Ok(())
-}
-
-async fn cancel_sdcpp_job(
-    provider: &str,
-    engine_manager: &EngineManager,
-    image_generation_state: &crate::domain::ai::ImageGenerationState,
-) -> Result<(), AppError> {
-    let mut should_stop_engine = true;
-
-    if let Some(job) = image_generation_state.cancel(provider).await
-        && let Some(job_id) = job.prompt_id
-    {
-        let client = reqwest::Client::new();
-        let response = client
-            .post(format!(
-                "{}/sdcpp/v1/jobs/{job_id}/cancel",
-                job.base_url.trim_end_matches('/')
-            ))
-            .send()
-            .await?;
-
-        should_stop_engine = !response.status().is_success();
-        if should_stop_engine && response.status().as_u16() != 409 {
-            let body = response.text().await.unwrap_or_default();
-            tracing::warn!("Failed to cancel stable-diffusion.cpp job via native API: {body}");
-        }
-    }
-
-    if should_stop_engine {
-        engine_manager.stop_slot(Capability::Image).await?;
     }
 
     Ok(())
@@ -642,14 +577,7 @@ pub async fn cancel_image_generation(
     engine_manager: State<'_, Arc<EngineManager>>,
     image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
 ) -> Result<(), AppError> {
-    if provider == "comfyui" {
-        return cancel_comfyui_job(&provider, &image_generation_state).await;
-    }
-    if matches!(provider.as_str(), "sdcpp" | "stable-diffusion") {
-        return cancel_sdcpp_job(&provider, &engine_manager, &image_generation_state).await;
-    }
-
-    engine_manager.stop_slot(Capability::Image).await
+    ai::cancel_image_provider_generation(&provider, &engine_manager, &image_generation_state).await
 }
 
 #[tauri::command]
@@ -659,7 +587,8 @@ pub async fn get_image_generation_preview(
     engine_manager: State<'_, Arc<EngineManager>>,
     image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
 ) -> Result<Option<ImageGenerationPreview>, AppError> {
-    let log_progress = image_generation_state.latest_progress("sdcpp").await;
+    let active_job = image_generation_state.active_job().await;
+    let log_progress = active_job.as_ref().and_then(|job| job.progress.clone());
     let merged_progress = log_progress.as_ref().and_then(|snapshot| snapshot.progress);
     let step = log_progress.as_ref().and_then(|snapshot| snapshot.step);
     let total = log_progress.as_ref().and_then(|snapshot| snapshot.total);
@@ -668,7 +597,7 @@ pub async fn get_image_generation_preview(
         .and_then(|snapshot| snapshot.speed.clone());
     let has_status =
         merged_progress.is_some() || step.is_some() || total.is_some() || speed.is_some();
-    let has_active_job = image_generation_state.is_active("sdcpp").await;
+    let has_active_job = active_job.as_ref().is_some_and(|job| !job.cancelled);
 
     let Some(path) = engine_manager.active_image_preview_path().await else {
         return Ok(if has_status || has_active_job {
@@ -944,23 +873,6 @@ fn create_stream_sink(
         chat_channel,
         thought_channel,
     })
-}
-
-fn is_local_provider(provider: &str) -> bool {
-    !matches!(
-        provider,
-        "gpt"
-            | "gemini"
-            | "gemini-image"
-            | "gpt-image"
-            | "seedream-image"
-            | "openai"
-            | "openrouter"
-            | "anthropic"
-            | "mistral"
-            | "claude"
-            | "deepseek"
-    )
 }
 
 #[cfg(test)]
