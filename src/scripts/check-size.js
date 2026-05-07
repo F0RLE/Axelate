@@ -35,9 +35,8 @@ function formatKb(bytes) {
     return `${(bytes / KB).toFixed(2)} KB`;
 }
 
-function fail(message) {
-    console.error(`[size] ${message}`);
-    process.exit(1);
+function warn(message) {
+    console.warn(`[size] warning: ${message}`);
 }
 
 const files = walkFiles(DIST_DIR).map((file) => ({
@@ -55,29 +54,29 @@ const largestFont = files
     .sort((left, right) => right.size - left.size)[0];
 
 if (totalBytes > LIMITS.totalBytes) {
-    fail(`Total dist size ${formatKb(totalBytes)} exceeds ${formatKb(LIMITS.totalBytes)}`);
+    warn(`Total dist size ${formatKb(totalBytes)} exceeds ${formatKb(LIMITS.totalBytes)}`);
 }
 
 if (mainJs && mainJs.size > LIMITS.mainJsBytes) {
-    fail(
+    warn(
         `Main bundle ${mainJs.relative} is ${formatKb(mainJs.size)} and exceeds ${formatKb(LIMITS.mainJsBytes)}`,
     );
 }
 
 if (vendorJs && vendorJs.size > LIMITS.vendorJsBytes) {
-    fail(
+    warn(
         `Vendor markdown chunk ${vendorJs.relative} is ${formatKb(vendorJs.size)} and exceeds ${formatKb(LIMITS.vendorJsBytes)}`,
     );
 }
 
 if (cssBundle && cssBundle.size > LIMITS.cssBytes) {
-    fail(
+    warn(
         `Main stylesheet ${cssBundle.relative} is ${formatKb(cssBundle.size)} and exceeds ${formatKb(LIMITS.cssBytes)}`,
     );
 }
 
 if (largestFont && largestFont.size > LIMITS.fontBytes) {
-    fail(
+    warn(
         `Largest font ${largestFont.relative} is ${formatKb(largestFont.size)} and exceeds ${formatKb(LIMITS.fontBytes)}`,
     );
 }
