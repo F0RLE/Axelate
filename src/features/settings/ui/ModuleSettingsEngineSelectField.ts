@@ -161,6 +161,9 @@ export function createEngineCustomSelectField(
     const syncDisplay = () => {
         const currentValue =
             hiddenInput.value === '' ? (options.options?.[0] ?? '') : hiddenInput.value;
+        if (hiddenInput.value === '' && currentValue !== '') {
+            hiddenInput.value = currentValue;
+        }
         valueEl.textContent = options.optionLabels?.[currentValue] ?? currentValue;
         menu.querySelectorAll('.local-engine-select-option').forEach((node) => {
             if (node instanceof HTMLButtonElement) {

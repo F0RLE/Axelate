@@ -23,9 +23,6 @@ export async function runCoreBootstrap(args: RunCoreBootstrapArgs): Promise<Core
     const { bootstrap } = args;
     bootstrap.tracer.debug('[Core] Init sequence started.');
     applyPlatformTheme();
-    bootstrap.bridge.init();
-    bootstrap.eventHandler.init();
-    await bootstrap.aiBridge.init();
 
     const safetyTimeout = createBootstrapSafetyRevealTimer({
         tracer: bootstrap.tracer,
@@ -34,6 +31,10 @@ export async function runCoreBootstrap(args: RunCoreBootstrapArgs): Promise<Core
     });
 
     try {
+        bootstrap.bridge.init();
+        bootstrap.eventHandler.init();
+        await bootstrap.aiBridge.init();
+
         const bootstrapData = await fetchBootstrapData(bootstrap.tauriProvider, bootstrap.tracer);
         await hydrateCriticalServices({
             bootstrapData,
@@ -54,6 +55,11 @@ export async function runCoreBootstrap(args: RunCoreBootstrapArgs): Promise<Core
         });
         await bootstrap.windowService.show();
         await initializeImmediateUi(args.immediateUi);
+        args.registerGlobalShortcuts();
+
+        bootstrap.tracer.debug('[Core] App Ready. Hiding splash...');
+        await waitForNextPaintCycle();
+        bootstrap.windowUI.hideSplashScreen();
     } catch (e) {
         bootstrap.tracer.error(`[Core] Critical bootstrap failure: ${String(e)}`);
         void bootstrap.windowService.show().catch(() => {
@@ -64,12 +70,6 @@ export async function runCoreBootstrap(args: RunCoreBootstrapArgs): Promise<Core
     } finally {
         clearTimeout(safetyTimeout);
     }
-
-    args.registerGlobalShortcuts();
-
-    bootstrap.tracer.debug('[Core] App Ready. Hiding splash...');
-    await waitForNextPaintCycle();
-    bootstrap.windowUI.hideSplashScreen();
 
     return {
         currentPage: bootstrap.navigation.getCurrentPage() ?? null,

@@ -49,6 +49,7 @@ const CHAT_INPUT_CONTEXT_MENU_ITEMS: ChatInputContextMenuItem[] = [
 ];
 
 export class ChatInputContextMenu {
+    private _openRequestId = 0;
     private _menu: HTMLDivElement | null = null;
     private _input: HTMLTextAreaElement | null = null;
     private _target: HTMLElement | null = null;
@@ -98,6 +99,7 @@ export class ChatInputContextMenu {
     }
 
     public close(): void {
+        this._openRequestId += 1;
         this._menu?.remove();
         this._menu = null;
         this._clipboardText = null;
@@ -137,15 +139,20 @@ export class ChatInputContextMenu {
 
     private _open(input: HTMLTextAreaElement, clientX: number, clientY: number): void {
         this.close();
-        void this._openWithClipboardState(input, clientX, clientY);
+        const openRequestId = this._openRequestId;
+        void this._openWithClipboardState(input, clientX, clientY, openRequestId);
     }
 
     private async _openWithClipboardState(
         input: HTMLTextAreaElement,
         clientX: number,
         clientY: number,
+        openRequestId: number,
     ): Promise<void> {
         this._clipboardText = await this._readClipboardForMenu();
+        if (openRequestId !== this._openRequestId || this._input !== input) {
+            return;
+        }
 
         const menu = document.createElement('div');
         menu.className = 'chat-input-context-menu';

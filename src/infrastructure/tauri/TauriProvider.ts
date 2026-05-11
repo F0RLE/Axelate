@@ -184,8 +184,12 @@ export class TauriProvider implements IBridge {
                 await this.invoke('plugin:clipboard-manager|write_text', { text });
                 return;
             } catch (error) {
-                if (await this._writeBrowserClipboard(text)) {
-                    return;
+                try {
+                    if (await this._writeBrowserClipboard(text)) {
+                        return;
+                    }
+                } catch {
+                    /* Preserve the original Tauri clipboard error. */
                 }
                 throw error;
             }

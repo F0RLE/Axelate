@@ -230,6 +230,23 @@ async fn resolve_local_engine_request(
             let base_url = format!("{}/v1", status.endpoint);
             let effective_model =
                 resolve_local_text_model_id(&request.model, None, &request.provider);
+            let config = build_engine_config(&definition).await?;
+            let local_context_size = usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
+            let local_model_for_context = config
+                .model_path
+                .clone()
+                .unwrap_or_else(|| request.model.clone());
+            let mut messages_context = request.messages.clone();
+
+            if let Some(session_id) = &request.session_id {
+                messages_context = sessions.build_local_context(
+                    session_id,
+                    local_context_size,
+                    &local_model_for_context,
+                );
+            }
+            prepend_local_system_prompt(&mut messages_context, settings_service, &request.provider)
+                .await?;
 
             tracing::info!(
                 engine = %status.id,
@@ -240,26 +257,12 @@ async fn resolve_local_engine_request(
             LocalEngineResolution {
                 base_url,
                 effective_model,
-                messages_context: local_messages_with_system_prompt(
-                    request.messages.clone(),
-                    settings_service,
-                    &request.provider,
-                )
-                .await?,
+                messages_context,
             }
         }
     };
 
     Ok(Some(resolution))
-}
-
-async fn local_messages_with_system_prompt(
-    mut messages: Vec<ChatMessage>,
-    settings_service: &crate::infrastructure::config::settings::SettingsService,
-    provider: &str,
-) -> Result<Vec<ChatMessage>, crate::errors::AppError> {
-    prepend_local_system_prompt(&mut messages, settings_service, provider).await?;
-    Ok(messages)
 }
 
 async fn prepend_local_system_prompt(

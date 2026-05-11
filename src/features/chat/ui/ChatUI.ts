@@ -106,7 +106,9 @@ export class ChatUI {
             translate: this._translate,
             copyText: (text) => deps.copyText(text),
             readClipboardText: () => deps.readClipboardText(),
-            canPaste: () => deps.isTauriRuntime(),
+            canPaste: () =>
+                deps.isTauriRuntime() ||
+                typeof globalThis.navigator.clipboard.readText === 'function',
             tracer: deps.tracer,
         });
         this._attachmentRenderer = new ChatAttachmentRenderer({

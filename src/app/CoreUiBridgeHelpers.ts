@@ -26,8 +26,8 @@ export function createToastBridge(
     id?: string | null,
     onClick?: (() => void) | null,
 ) => void {
-    return (message, type, duration, title, id) => {
-        appUI.showToast(message, type, duration, title, id);
+    return (message, type, duration, title, id, onClick) => {
+        appUI.showToast(message, type, duration, title, id, onClick);
     };
 }
 

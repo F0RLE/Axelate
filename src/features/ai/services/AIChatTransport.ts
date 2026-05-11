@@ -142,7 +142,10 @@ export class AIChatTransport implements IChatTransport {
                 'AI request timed out',
             );
 
-            if (response.ok && this._streamListeners.size > 0) {
+            if (
+                response.ok &&
+                (this._streamListeners.size > 0 || this._thoughtListeners.size > 0)
+            ) {
                 await this._waitForStreamFinalization(streamDone);
             }
 
