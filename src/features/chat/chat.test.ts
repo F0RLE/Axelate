@@ -93,7 +93,7 @@ import { ChatUiStateHelper } from './services/ChatUiStateHelper';
 import { EventBus } from '@/shared/services/EventBus';
 
 type ChatControllerTestAccess = {
-    init: () => void;
+    init: () => Promise<void>;
     sendChat: () => Promise<void>;
     clearChat: () => Promise<void>;
     destroy: () => void;
@@ -233,7 +233,7 @@ describe('ChatController', () => {
 
         const controller = createController();
 
-        controller.init();
+        await controller.init();
         await vi.waitFor(() => {
             expect(mockChatUiInstances[0]?.renderHistory).toHaveBeenCalled();
         });
@@ -402,11 +402,11 @@ describe('ChatController', () => {
         );
     });
 
-    it('should initialize only once', () => {
+    it('should initialize only once', async () => {
         const controller = createController();
 
-        void controller.init();
-        void controller.init();
+        await controller.init();
+        await controller.init();
 
         expect(mockChatFileHandlerInstances[0]?.setUpdateCallback).toHaveBeenCalledTimes(1);
     });
@@ -492,7 +492,7 @@ describe('ChatController', () => {
         expect(input.style.overflowY).toBe('hidden');
     });
 
-    it('should send chat on Enter from the textarea', () => {
+    it('should send chat on Enter from the textarea', async () => {
         document.body.innerHTML = `
             <input id="chat-file-input" />
             <textarea id="chat-input">hello</textarea>
@@ -507,7 +507,7 @@ describe('ChatController', () => {
         };
         const sendSpy = vi.spyOn(controller, 'sendChat').mockResolvedValue(undefined);
 
-        controller.init();
+        await controller.init();
 
         const input = document.getElementById('chat-input') as HTMLTextAreaElement;
         input.dispatchEvent(

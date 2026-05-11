@@ -197,7 +197,7 @@ export class CoreLifecycleController {
                 return;
             }
 
-            this._deps.bootstrap.chatController.init();
+            void this._deps.bootstrap.chatController.init();
         }, 0);
     }
 

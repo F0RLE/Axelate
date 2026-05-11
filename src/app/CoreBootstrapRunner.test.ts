@@ -129,9 +129,13 @@ describe('CoreBootstrapRunner', () => {
         });
 
         expect(result.currentPage).toBe('settings');
+        expect(bootstrap.bridge.init).toHaveBeenCalled();
+        expect(bootstrap.eventHandler.init).toHaveBeenCalled();
         expect(bootstrap.bridge.init.mock.invocationCallOrder[0]).toBeLessThan(
             bootstrap.eventHandler.init.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
         );
+        expect(bootstrap.aiBridge.init).toHaveBeenCalled();
+        expect(bootstrap.templateLoader.loadAndInject).toHaveBeenCalled();
         expect(bootstrap.aiBridge.init.mock.invocationCallOrder[0]).toBeLessThan(
             bootstrap.templateLoader.loadAndInject.mock.invocationCallOrder[0] ??
                 Number.POSITIVE_INFINITY,
@@ -145,9 +149,13 @@ describe('CoreBootstrapRunner', () => {
                 ['pages/settings', 'page-settings'],
             ]),
         );
+        expect(immediateUi.sidebarUI.init).toHaveBeenCalled();
+        expect(immediateUi.navigationUI.init).toHaveBeenCalled();
         expect(immediateUi.sidebarUI.init.mock.invocationCallOrder[0]).toBeLessThan(
             immediateUi.navigationUI.init.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
         );
+        expect(registerGlobalShortcuts).toHaveBeenCalled();
+        expect(bootstrap.windowUI.hideSplashScreen).toHaveBeenCalled();
         expect(registerGlobalShortcuts.mock.invocationCallOrder[0]).toBeLessThan(
             bootstrap.windowUI.hideSplashScreen.mock.invocationCallOrder[0] ??
                 Number.POSITIVE_INFINITY,

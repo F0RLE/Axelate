@@ -401,13 +401,13 @@ export class ChatController {
 
     // --- Lifecycle ---
 
-    public init(): void {
+    public async init(): Promise<void> {
         if (this._state.isInitialized) return;
         this._state.isInitialized = true;
         this._state.isDestroyed = false;
 
         this._tracer.info('[Chat] Initializing TS Controller...');
-        void this._ui.init().catch((err: unknown) => {
+        await this._ui.init().catch((err: unknown) => {
             this._tracer.error(`[Chat] UI init failed: ${String(err)}`);
         });
         this._ui.setEditMessageHandler(async (text) => {

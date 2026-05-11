@@ -147,7 +147,7 @@ export async function showInitialPage(args: ShowInitialPageArgs): Promise<void> 
     await args.navigationUI.showPage(pageId, null, true, true);
 
     if (pageId === 'chat') {
-        args.chatController.init();
+        await args.chatController.init();
     }
 }
 
