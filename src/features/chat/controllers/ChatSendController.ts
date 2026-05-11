@@ -168,7 +168,7 @@ export class ChatSendController {
                 handle.setStatus(this._options.translate('ui.chat.thinking', 'Thinking...'));
 
                 this._options.aiBridge.onChunk(listenerId, (chunk) => {
-                    if (streamingHandle === null && String(chunk).trim() === '') {
+                    if (String(chunk).trim() === '') {
                         return;
                     }
 

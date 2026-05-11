@@ -2,6 +2,9 @@ import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 type ChatViewHelperDeps = {
     i18n: I18nService;
+    tracer?: {
+        warn: (message: string, ...args: unknown[]) => void;
+    };
     onFileInputChange: (event: Event) => void;
     onChatInputKeydown: (event: KeyboardEvent) => void;
     onChatInputInput: () => void;
@@ -24,9 +27,19 @@ export class ChatViewHelper {
         const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
 
-        fileInput?.[method]('change', this._deps.onFileInputChange);
-        chatInput?.[method]('keydown', this._deps.onChatInputKeydown as EventListener);
-        chatInput?.[method]('input', this._deps.onChatInputInput);
+        if (fileInput === null) {
+            this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-file-input during bind.');
+        } else {
+            fileInput[method]('change', this._deps.onFileInputChange);
+        }
+
+        if (chatInput === null) {
+            this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-input during bind.');
+        } else {
+            chatInput[method]('keydown', this._deps.onChatInputKeydown as EventListener);
+            chatInput[method]('input', this._deps.onChatInputInput);
+        }
+
         globalThis[method]('resize', this._deps.onViewportResize);
     }
 

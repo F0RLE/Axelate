@@ -30,6 +30,7 @@ describe('VoiceInputService', () => {
     let invokeMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
+        document.body.dataset['platform'] = 'windows';
         tracer = {
             info: vi.fn(),
             error: vi.fn(),

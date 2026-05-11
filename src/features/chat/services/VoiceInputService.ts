@@ -43,10 +43,10 @@ export class VoiceInputService {
     ) {}
 
     /**
-     * Native voice input is available only in the Tauri host.
+     * Native voice input is currently available only in the Windows Tauri host.
      */
     public isSupported(): boolean {
-        return this._hostBridge.isTauri();
+        return this._hostBridge.isTauri() && document.body.dataset['platform'] === 'windows';
     }
 
     /**

@@ -6,10 +6,10 @@ type EngineStatusLogger = Pick<LoggerService, 'info' | 'error'>;
 type EngineState = 'idle' | 'starting' | 'swapping' | 'ready' | 'error';
 type BackendEngineState =
     | 'idle'
-    | { starting?: { engine_id: string } }
-    | { swapping?: { from: string; to: string } }
-    | { ready?: { slots: Array<{ engine: BackendEngineStatus }> } }
-    | { error?: EngineErrorPayload };
+    | { starting: { engine_id: string } }
+    | { swapping: { from: string; to: string } }
+    | { ready: { slots: Array<{ engine: BackendEngineStatus }> } }
+    | { error: EngineErrorPayload };
 type BackendEngineStatus = {
     id: string;
     endpoint: string;

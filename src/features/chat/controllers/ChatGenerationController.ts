@@ -244,7 +244,7 @@ export class ChatGenerationController {
         }
 
         if (replyText !== '') {
-            this.handleTextReply(response, replyText, streamingHandle);
+            await this.handleTextReply(response, replyText, streamingHandle);
             return;
         }
 
@@ -278,12 +278,14 @@ export class ChatGenerationController {
         );
     }
 
-    private handleTextReply(
+    private async handleTextReply(
         response: IChatResponse,
         replyText: string,
         streamingHandle?: StreamingMessageHandle | null,
-    ): void {
-        const tokens = this._resolveBackendCompletionTokens(response);
+    ): Promise<void> {
+        const tokens =
+            this._resolveBackendCompletionTokens(response) ??
+            (await this._options.estimateReplyTokens(replyText));
         if (tokens > 0) {
             this._options.addContextTokens(tokens);
         }
@@ -297,10 +299,10 @@ export class ChatGenerationController {
         this._options.pushAssistantMessage(replyText, response.thought_signature);
     }
 
-    private _resolveBackendCompletionTokens(response: IChatResponse): number {
+    private _resolveBackendCompletionTokens(response: IChatResponse): number | null {
         const completionTokens = response.usage?.completion_tokens;
         if (typeof completionTokens !== 'number' || !Number.isFinite(completionTokens)) {
-            return 0;
+            return null;
         }
 
         return Math.max(0, Math.trunc(completionTokens));
