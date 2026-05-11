@@ -281,7 +281,6 @@ describe('AIProviderManager', () => {
             await manager.startProvider('gemini');
 
             expect(manager.model).toBe('catalog-best-model');
-            vi.mocked(getMostPowerfulModel).mockReturnValue(null as unknown as string);
         });
 
         it('should return null from _getPersistedModel when core is not set (L143 true branch)', async () => {

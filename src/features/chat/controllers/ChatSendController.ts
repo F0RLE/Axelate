@@ -143,6 +143,9 @@ export class ChatSendController {
         this._options.setSending(true);
         this._activeStreamingStates.set(listenerId, { listenerId, typingId });
 
+        let streamingHandle: StreamingMessageHandle | null = null;
+        let imageHandle: ImageGenerationHandle | null = null;
+
         try {
             const sendPlan = await this._sendFlow.prepare(text);
             if (this._wasDestroyed()) return false;
@@ -151,9 +154,6 @@ export class ChatSendController {
             this._options.addContextTokens(sendPlan.tokenCount);
             this._options.appendUserMessage(text, sendPlan.attachments, sendPlan.tokenCount);
             this._options.pushUserMessage(sendPlan.userContent);
-
-            let streamingHandle: StreamingMessageHandle | null = null;
-            let imageHandle: ImageGenerationHandle | null = null;
 
             const ensureStreamingHandle = (): StreamingMessageHandle => {
                 streamingHandle ??= this._options.createStreamingHandle(typingId);
@@ -191,7 +191,7 @@ export class ChatSendController {
             this._cleanupStreamingState(listenerId, typingId);
             if (this._wasDestroyed()) return false;
             if (this._isCancelRequested()) {
-                this._cancelStreamingHandle(streamingHandle as StreamingMessageHandle | null);
+                this._cancelStreamingHandle(streamingHandle);
                 imageHandle?.cancel();
                 return false;
             }
@@ -201,13 +201,21 @@ export class ChatSendController {
         } catch (error: unknown) {
             this._cleanupStreamingState(listenerId, typingId);
             if (this._isCancelRequested()) {
+                this._cancelStreamingHandle(streamingHandle);
+                imageHandle?.cancel();
                 return false;
             }
             if (!this._wasDestroyed()) {
                 this._options.handleError(error);
+            } else {
+                this._cancelStreamingHandle(streamingHandle);
+                imageHandle?.cancel();
             }
             return false;
         } finally {
+            if (imageHandle !== null) {
+                this._options.stopImagePreviewPolling();
+            }
             if (!this._wasDestroyed()) {
                 this._options.unlockUi(uiElements);
             }

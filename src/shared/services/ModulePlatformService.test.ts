@@ -101,6 +101,7 @@ describe('ModulePlatformService', () => {
             });
             (aiBridge.getState as ReturnType<typeof vi.fn>).mockReturnValue({
                 activeProviderId: 'custom-provider',
+                isRunning: true,
             });
             const result = await service.stop(app);
             expect(result).toBe(true);

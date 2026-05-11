@@ -128,6 +128,7 @@ export type CoreLifecycleDeps = {
 export class CoreLifecycleController {
     private _deferredChatInitTimer: ReturnType<typeof setTimeout> | null = null;
     private _selectedModuleChangedUnlisten: (() => void) | null = null;
+    private _activeGlobalShortcutKeydown: ((e: KeyboardEvent) => void) | null = null;
 
     constructor(private readonly _deps: CoreLifecycleDeps) {}
 
@@ -166,7 +167,10 @@ export class CoreLifecycleController {
     }
 
     public destroy(): void {
-        globalThis.removeEventListener('keydown', this._deps.globalShortcutKeydown);
+        if (this._activeGlobalShortcutKeydown !== null) {
+            globalThis.removeEventListener('keydown', this._activeGlobalShortcutKeydown);
+            this._activeGlobalShortcutKeydown = null;
+        }
         this._selectedModuleChangedUnlisten?.();
         this._selectedModuleChangedUnlisten = null;
         destroyCoreResources({
@@ -177,10 +181,9 @@ export class CoreLifecycleController {
     }
 
     public initGlobalShortcuts(globalShortcutKeydown?: (e: KeyboardEvent) => void): void {
-        globalThis.addEventListener(
-            'keydown',
-            globalShortcutKeydown ?? this._deps.globalShortcutKeydown,
-        );
+        const keydownHandler = globalShortcutKeydown ?? this._deps.globalShortcutKeydown;
+        this._activeGlobalShortcutKeydown = keydownHandler;
+        globalThis.addEventListener('keydown', keydownHandler);
     }
 
     public scheduleDeferredChatInit(): void {

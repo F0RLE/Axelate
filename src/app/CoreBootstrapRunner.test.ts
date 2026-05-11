@@ -136,7 +136,15 @@ describe('CoreBootstrapRunner', () => {
             bootstrap.templateLoader.loadAndInject.mock.invocationCallOrder[0] ??
                 Number.POSITIVE_INFINITY,
         );
-        expect(bootstrap.templateLoader.loadAndInject).toHaveBeenCalledTimes(8);
+        expect(bootstrap.templateLoader.loadAndInject.mock.calls).toEqual(
+            expect.arrayContaining([
+                ['components/sidebar', 'sidebar'],
+                ['pages/home', 'page-home'],
+                ['pages/chat', 'page-chat'],
+                ['pages/modules', 'page-modules'],
+                ['pages/settings', 'page-settings'],
+            ]),
+        );
         expect(immediateUi.sidebarUI.init.mock.invocationCallOrder[0]).toBeLessThan(
             immediateUi.navigationUI.init.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
         );

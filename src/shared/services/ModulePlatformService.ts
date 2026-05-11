@@ -56,9 +56,9 @@ export class ModulePlatformService {
      */
     public async stop(app: IApp): Promise<boolean> {
         const isApi = this._isApiModule(app);
-        const activeProviderId = this._aiBridge.getState().activeProviderId;
+        const { activeProviderId, isRunning } = this._aiBridge.getState();
 
-        if (activeProviderId === app.id) {
+        if (activeProviderId === app.id && isRunning) {
             this._aiBridge.stopProvider();
             return true;
         }

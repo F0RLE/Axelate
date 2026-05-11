@@ -228,10 +228,14 @@ export class ModuleSettingsEngineRenderFlow {
 
         options.getTextFields(options.translate).forEach((field) => {
             const targetSelector = fieldTargets[field.key];
-            const target =
-                targetSelector === undefined
-                    ? null
-                    : options.container.querySelector(targetSelector);
+            if (targetSelector === undefined) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                    `[ModuleSettingsEngineRenderFlow] Missing target for text field "${field.key}" in ${options.appId}`,
+                );
+                return;
+            }
+            const target = options.container.querySelector(targetSelector);
             if (!(target instanceof HTMLElement)) {
                 return;
             }

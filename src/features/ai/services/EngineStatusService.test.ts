@@ -22,6 +22,7 @@ describe('EngineStatusService', () => {
             },
             tauriProvider: {
                 isTauri: vi.fn().mockReturnValue(true),
+                invoke: vi.fn().mockResolvedValue('idle'),
                 listen: vi
                     .fn()
                     .mockImplementation((event: string, cb: (payload: unknown) => void) => {

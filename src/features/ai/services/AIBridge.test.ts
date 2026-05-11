@@ -996,8 +996,14 @@ describe('AIBridge', () => {
             events.onThought('repeat', handler);
             events.onThought('repeat', handler);
 
-            expect(events.chunkListeners.get('repeat')?.length).toBe(2);
-            expect(events.thoughtListeners.get('repeat')?.length).toBe(2);
+            events.broadcastChunk('chunk');
+            events.broadcastThought('thought');
+
+            expect(handler).toHaveBeenCalledTimes(4);
+            expect(handler).toHaveBeenNthCalledWith(1, 'chunk');
+            expect(handler).toHaveBeenNthCalledWith(2, 'chunk');
+            expect(handler).toHaveBeenNthCalledWith(3, 'thought');
+            expect(handler).toHaveBeenNthCalledWith(4, 'thought');
         });
 
         it('should forward full local history and let backend handle context compaction', async () => {

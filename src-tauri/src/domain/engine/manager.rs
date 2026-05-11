@@ -487,6 +487,7 @@ mod tests {
 
         assert!(args.windows(2).any(|w| w == ["--device", "none"]));
         assert!(args.windows(2).any(|w| w == ["-ngl", "0"]));
+        assert!(!args.windows(2).any(|w| w == ["-ngl", "all"]));
     }
 
     #[test]

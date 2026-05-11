@@ -234,8 +234,9 @@ describe('ChatController', () => {
         const controller = createController();
 
         controller.init();
-        await Promise.resolve();
-        await Promise.resolve();
+        await vi.waitFor(() => {
+            expect(mockChatUiInstances[0]?.renderHistory).toHaveBeenCalled();
+        });
 
         expect(mockChatUiInstances[0]?.renderHistory).toHaveBeenCalledWith([
             {

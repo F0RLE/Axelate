@@ -48,6 +48,7 @@ export class EngineStatusService {
     private _context: EngineStatusContext | null = null;
     private readonly _unlisteners: (() => void)[] = [];
     private _domObserver: MutationObserver | null = null;
+    private _domSyncFrame: number | null = null;
     private _initialized = false;
 
     public constructor(private readonly _tracer: EngineStatusLogger) {}
@@ -110,6 +111,10 @@ export class EngineStatusService {
         this._unlisteners.length = 0;
         this._domObserver?.disconnect();
         this._domObserver = null;
+        if (this._domSyncFrame !== null) {
+            cancelAnimationFrame(this._domSyncFrame);
+            this._domSyncFrame = null;
+        }
         this._activeSlots.clear();
         this._initialized = false;
     }
@@ -200,13 +205,28 @@ export class EngineStatusService {
     private _startDomSyncObserver(): void {
         this._domObserver?.disconnect();
         this._domObserver = new MutationObserver(() => {
-            this._applyActiveStatesToDom();
+            this._scheduleDomSync();
         });
-        this._domObserver.observe(document.body, {
+        const target =
+            document.querySelector<HTMLElement>('.models-grid') ??
+            document.querySelector<HTMLElement>('#page-modules') ??
+            document.body;
+        this._domObserver.observe(target, {
             childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ['data-app-id', 'data-current-module'],
+        });
+    }
+
+    private _scheduleDomSync(): void {
+        if (this._domSyncFrame !== null) {
+            return;
+        }
+
+        this._domSyncFrame = requestAnimationFrame(() => {
+            this._domSyncFrame = null;
+            this._applyActiveStatesToDom();
         });
     }
 

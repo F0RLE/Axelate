@@ -953,9 +953,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 /* Final normalization for main Modules page cards.
    Mirror the selectable modal cards, not the modal shell itself. */
 .models-grid .module-slot-card,
-.models-grid .module-slot-card,
 .models-grid .module-slot-card.empty,
-.models-grid .module-slot-card.selected,
 .models-grid .module-slot-card.selected {
     background: rgba(255, 255, 255, 0.007) !important;
     border: none !important;
@@ -963,7 +961,6 @@ input[type='password']::-webkit-credentials-auto-fill-button {
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03) !important;
 }
 
-.models-grid .module-slot-card:hover,
 .models-grid .module-slot-card:hover,
 .models-grid .module-slot-card.empty:hover,
 .models-grid .module-slot-card.selected:hover {

@@ -187,14 +187,7 @@ impl<'a> LifecycleExecutor<'a> {
             }
         });
 
-        // 6. Write PID file (atomic write)
-        let pid_file = self.module_path.join("module.pid");
-        let temp_pid_file = self.module_path.join("module.pid.tmp");
-        if let Err(e) = std::fs::write(&temp_pid_file, pid.to_string()) {
-            tracing::error!("Failed to write temp PID file: {e}");
-        } else {
-            let _ = std::fs::rename(temp_pid_file, pid_file);
-        }
+        self.persist_pid(pid as usize);
 
         ControlResponse {
             success: true,

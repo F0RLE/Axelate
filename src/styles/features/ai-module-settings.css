@@ -845,14 +845,15 @@
     grid-column: 1 / -1;
 }
 
-.local-engine-api-control .local-engine-label-row,
 .local-engine-api-control .local-engine-field-row--compute-mode .local-engine-label-row,
 .local-engine-api-control .local-engine-field-row--context-size .local-engine-label-row,
 .local-engine-api-control .local-engine-field-row--llamacpp-system-prompt .local-engine-label-row {
     display: none;
 }
 
-.local-engine-api-control .local-engine-field-row {
+.local-engine-api-control .local-engine-field-row--compute-mode,
+.local-engine-api-control .local-engine-field-row--context-size,
+.local-engine-api-control .local-engine-field-row--llamacpp-system-prompt {
     gap: 0;
 }
 
@@ -1457,7 +1458,9 @@
     width: 100%;
 }
 
-.local-engine-api-control .local-engine-input-row,
+.local-engine-api-control .local-engine-field-row--compute-mode .local-engine-input-row,
+.local-engine-api-control .local-engine-field-row--context-size .local-engine-input-row,
+.local-engine-api-control .local-engine-field-row--llamacpp-system-prompt .local-engine-input-row,
 .local-engine-input-row:has(.local-engine-segmented-control) {
     padding: 0;
     gap: 0;
