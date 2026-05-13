@@ -146,13 +146,16 @@ impl<'a> LifecycleExecutor<'a> {
             })?
         };
 
-        self.register_spawned_child(child)
+        self.register_spawned_child(child).await
     }
 
-    fn register_spawned_child(&self, mut child: Child) -> Result<ControlResponse, AppError> {
-        let pid = child.id().unwrap_or(0);
+    async fn register_spawned_child(&self, mut child: Child) -> Result<ControlResponse, AppError> {
+        let pid = child.id().ok_or_else(|| AppError::Internal {
+            request_id: None,
+            message: format!("Spawned process for {} has no PID", self.module_id),
+        })?;
         if let Err(error) = self.persist_pid(pid as usize) {
-            let _ = child.start_kill();
+            let _ = child.kill().await;
             return Err(error);
         }
 

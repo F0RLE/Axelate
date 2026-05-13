@@ -297,7 +297,16 @@ async fn prepare_request_execution(
         .request_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let message_id = message_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let message_id = message_id
+        .and_then(|id| {
+            let trimmed = id.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     tracing::info!(
         "[AI] Starting request {} (msg {}) for model {}",
         request_id,

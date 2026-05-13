@@ -115,7 +115,18 @@ export class ChatMessageInteractionController {
 
             const handler = this._deps.getRegenerateMessageHandler();
             if (handler !== null) {
-                await handler();
+                try {
+                    await handler();
+                } catch (error) {
+                    this._deps.tracer.error('[ChatUI] Regenerate failed:', error);
+                    this._deps.showToast(
+                        this._deps.translate(
+                            'ui.chat.regenerate_failed',
+                            'Failed to regenerate response',
+                        ),
+                        'error',
+                    );
+                }
             }
             return;
         }
