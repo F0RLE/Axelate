@@ -1,8 +1,0 @@
-/* Preferences Panel Placeholder Styles */
-.preferences-panel-root {
-    padding: var(--spacing-lg);
-}
-
-.preferences-panel-container {
-    animation: fadeIn var(--transition-normal) ease-out;
-}

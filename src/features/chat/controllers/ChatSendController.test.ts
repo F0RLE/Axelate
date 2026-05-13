@@ -5,8 +5,10 @@ import { ChatSendController } from './ChatSendController';
 describe('ChatSendController', () => {
     const createController = () => {
         const streamingHandle = {
+            setStatus: vi.fn(),
             update: vi.fn(),
             replace: vi.fn(),
+            cancel: vi.fn(),
             discard: vi.fn(),
             finalize: vi.fn(),
         };
@@ -27,7 +29,6 @@ describe('ChatSendController', () => {
             aiBridge: aiBridge as never,
             fileHandler: {
                 hasFiles: vi.fn(() => false),
-                getTotalTokenEstimate: vi.fn(() => Promise.resolve(0)),
                 processForSend: vi.fn((text: string) =>
                     Promise.resolve({
                         attachments: [],
@@ -42,6 +43,7 @@ describe('ChatSendController', () => {
             pushUserMessage: vi.fn(),
             createStreamingHandle: vi.fn(() => streamingHandle),
             createImageHandle: vi.fn(() => imageHandle),
+            translate: vi.fn((key: string, fallback: string) => `t:${key}:${fallback}`),
             showTyping: vi.fn(),
             registerReplaceChunk: vi.fn(),
             clearInput: vi.fn(),
@@ -53,6 +55,7 @@ describe('ChatSendController', () => {
             cleanupStreamingState: vi.fn(),
             stopImagePreviewPolling: vi.fn(),
             startImagePreviewPolling: vi.fn(),
+            cancelTextGeneration: vi.fn().mockResolvedValue(true),
             isImageProvider: vi.fn(() => false),
             lockUi: vi.fn(() => ({
                 input: null,
@@ -81,7 +84,7 @@ describe('ChatSendController', () => {
         vi.clearAllMocks();
     });
 
-    it('creates a streaming handle immediately for text responses', async () => {
+    it('shows a pending response state until the first text chunk', async () => {
         const { controller, options, aiBridge, streamingHandle } = createController();
         const input = document.createElement('textarea');
         input.value = 'hello';
@@ -91,14 +94,18 @@ describe('ChatSendController', () => {
         expect(result).toBe(true);
         expect(options.handleError).not.toHaveBeenCalled();
         expect(options.createStreamingHandle).toHaveBeenCalledOnce();
+        expect(streamingHandle.setStatus).toHaveBeenCalledWith('t:ui.chat.thinking:Thinking...');
         expect(options.showTyping).not.toHaveBeenCalled();
         expect(aiBridge.onChunk).toHaveBeenCalledOnce();
 
         const onChunkHandler = aiBridge.onChunk.mock.calls[0]?.[1] as
             | ((chunk: string) => void)
             | undefined;
+        onChunkHandler?.('   ');
+
         onChunkHandler?.('hi');
 
+        expect(options.createStreamingHandle).toHaveBeenCalledOnce();
         expect(streamingHandle.update).toHaveBeenCalledWith('hi');
     });
 
@@ -134,5 +141,34 @@ describe('ChatSendController', () => {
 
         expect(options.cleanupStreamingState).toHaveBeenCalledTimes(1);
         expect(options.handleResponse).not.toHaveBeenCalled();
+    });
+
+    it('cancels the active text request without rendering an error', async () => {
+        let resolveSend: (value: { ok: false; error: string }) => void = () => {
+            throw new Error('sendMessage promise was not started');
+        };
+        const { controller, options, sendMessage, streamingHandle } = createController();
+        sendMessage.mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    resolveSend = resolve;
+                }),
+        );
+        const input = document.createElement('textarea');
+        input.value = 'hello';
+
+        const sendPromise = controller.sendChat(input);
+        for (let index = 0; index < 10 && sendMessage.mock.calls.length === 0; index += 1) {
+            await Promise.resolve();
+        }
+
+        await controller.cancelActiveSend();
+        resolveSend({ ok: false, error: 'AI request cancelled' });
+        await sendPromise;
+
+        expect(options.cancelTextGeneration).toHaveBeenCalledOnce();
+        expect(streamingHandle.cancel).toHaveBeenCalledOnce();
+        expect(options.handleResponse).not.toHaveBeenCalled();
+        expect(options.handleError).not.toHaveBeenCalled();
     });
 });

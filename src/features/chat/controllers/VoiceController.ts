@@ -8,11 +8,24 @@ import type { VoiceInputService } from '../services/VoiceInputService';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { SoundService } from '@/shared/services/SoundService';
 
+type VoiceToast = (
+    message: string,
+    type?: 'success' | 'error' | 'warning' | 'info',
+    duration?: number,
+    title?: string | null,
+    id?: string | null,
+    onClick?: (() => void) | null,
+) => void;
+
+type VoiceSettingsOpener = () => Promise<void>;
+
 export class VoiceController {
     constructor(
         private readonly _i18n: I18nService,
         private readonly _soundService: SoundService,
         private readonly _voiceInputService: VoiceInputService,
+        private readonly _showToast: VoiceToast,
+        private readonly _openVoiceSettings: VoiceSettingsOpener,
     ) {}
 
     /**
@@ -26,12 +39,29 @@ export class VoiceController {
         }
 
         if (!this._voiceInputService.isSupported()) {
+            this._showToast(
+                this._i18n.t(
+                    'ui.chat.voice.unsupported',
+                    'Voice input is available only in the desktop app.',
+                ),
+                'warning',
+                2600,
+            );
             return;
         }
 
-        this._voiceInputService.start((text) => onResult(text), {
+        const didStart = this._voiceInputService.start((text) => onResult(text), {
             onStateChange: ({ state }) => this._onStateChange(state),
+            onError: (error) => this._onError(error),
         });
+
+        if (!didStart) {
+            this._showToast(
+                this._i18n.t('ui.chat.voice.start_failed', 'Could not start voice input.'),
+                'error',
+                3200,
+            );
+        }
     }
 
     public stop(): void {
@@ -62,5 +92,48 @@ export class VoiceController {
         input.placeholder = isRecording
             ? this._i18n.t('ui.launcher.web.voice_listening', 'Listening...')
             : this._i18n.t('ui.launcher.web.chat_placeholder_ask', 'Ask anything...');
+    }
+
+    private _onError(error: { code: string; message?: string }): void {
+        if (this._shouldOpenWindowsSpeechSettings(error)) {
+            this._showToast(
+                this._i18n.t(
+                    'ui.chat.voice.open_speech_settings',
+                    'Windows speech privacy is disabled. Click to open Speech settings.',
+                ),
+                'warning',
+                9000,
+                null,
+                'voice-privacy-settings',
+                () => {
+                    void this._openVoiceSettings().catch(() => {
+                        this._showToast(
+                            this._i18n.t(
+                                'ui.chat.voice.open_settings_failed',
+                                'Open Windows Settings > Privacy & security > Speech and enable Online speech recognition.',
+                            ),
+                            'warning',
+                            5200,
+                        );
+                    });
+                },
+            );
+            return;
+        }
+
+        const trimmedMessage = error.message?.trim();
+        const fallback =
+            trimmedMessage !== undefined && trimmedMessage !== ''
+                ? trimmedMessage
+                : this._i18n.t('ui.chat.voice.failed', 'Voice recognition failed.');
+
+        this._showToast(fallback, error.code === 'PERMISSION_DENIED' ? 'warning' : 'error', 4200);
+    }
+
+    private _shouldOpenWindowsSpeechSettings(error: { code: string; message?: string }): boolean {
+        return (
+            error.code === 'PERMISSION_DENIED' &&
+            (error.message ?? '').toLowerCase().includes('speech privacy')
+        );
     }
 }

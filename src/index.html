@@ -9,7 +9,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Axelate (Beta)</title>
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-        <link rel="stylesheet" href="styles/base/fonts.css" />
+        <link rel="stylesheet" href="styles/base/inter-font-faces.css" />
         <link
             rel="preload"
             href="assets/fonts/Monocraft.woff2"
@@ -18,7 +18,7 @@
             crossorigin
         />
 
-        <link rel="stylesheet" href="styles/base/splash.css" />
+        <link rel="stylesheet" href="styles/base/startup-critical.css" />
     </head>
 
     <body class="app-body no-overflow">
@@ -141,7 +141,13 @@
                         aria-label="Maximize"
                         title="Maximize"
                     >
-                        <svg class="icon" id="maximize-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <svg
+                            class="icon"
+                            id="maximize-icon"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                            focusable="false"
+                        >
                             <use href="#icon-maximize"></use>
                         </svg>
                     </button>
@@ -178,7 +184,6 @@
                 <div id="page-downloads" class="page"></div>
                 <div id="page-console" class="page"></div>
                 <div id="page-settings" class="page"></div>
-
             </main>
 
             <dialog id="lang-modal" class="modal-overlay hidden">
@@ -329,10 +334,7 @@
                     <div class="app-modal-body">
                         <div id="module-settings-content" class="module-settings-content">
                             <!-- Dynamic settings will be injected here -->
-                            <div
-                                id="module-config-modal-active"
-                                class="module-config-modal-active"
-                            >
+                            <div id="module-config-modal-active" class="module-config-modal-active">
                                 <div class="module-settings-empty">
                                     <span data-i18n="ui.launcher.module.no_settings"
                                         >No settings available for this module</span

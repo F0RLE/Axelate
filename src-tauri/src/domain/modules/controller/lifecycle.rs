@@ -57,17 +57,6 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Safely starts a module with the given manifest
     pub async fn start(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
-        if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
-            if let Some(existing_pid) = self.reconcile_existing_script_processes(&entry_path).await
-            {
-                return Ok(ControlResponse {
-                    success: true,
-                    message: format!("Module already running with PID {existing_pid}"),
-                    status: Some("running".to_string()),
-                });
-            }
-        }
-
         // 1. Guard against double-start
         // Check registry first (atomic-ish)
         if self.controller.registry.contains_key(&self.module_id) {
@@ -88,6 +77,19 @@ impl<'a> LifecycleExecutor<'a> {
                 message: "Module is already running (PID file)".to_string(),
                 status: Some("running".to_string()),
             });
+        }
+
+        if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
+            if let Some(existing_pid) = self
+                .reconcile_existing_script_processes(&entry_path)
+                .await?
+            {
+                return Ok(ControlResponse {
+                    success: true,
+                    message: format!("Module already running with PID {existing_pid}"),
+                    status: Some("running".to_string()),
+                });
+            }
         }
 
         // 4. Spawn process
@@ -144,11 +146,19 @@ impl<'a> LifecycleExecutor<'a> {
             })?
         };
 
-        Ok(self.register_spawned_child(child))
+        self.register_spawned_child(child).await
     }
 
-    fn register_spawned_child(&self, child: Child) -> ControlResponse {
-        let pid = child.id().unwrap_or(0);
+    async fn register_spawned_child(&self, mut child: Child) -> Result<ControlResponse, AppError> {
+        let pid = child.id().ok_or_else(|| AppError::Internal {
+            request_id: None,
+            message: format!("Spawned process for {} has no PID", self.module_id),
+        })?;
+        if let Err(error) = self.persist_pid(pid as usize) {
+            let _ = child.kill().await;
+            return Err(error);
+        }
+
         let module_id = self.module_id.clone();
         let controller_registry = self.controller.registry; // Pass registry reference to the task
 
@@ -187,35 +197,36 @@ impl<'a> LifecycleExecutor<'a> {
             }
         });
 
-        // 6. Write PID file (atomic write)
-        let pid_file = self.module_path.join("module.pid");
-        let temp_pid_file = self.module_path.join("module.pid.tmp");
-        if let Err(e) = std::fs::write(&temp_pid_file, pid.to_string()) {
-            tracing::error!("Failed to write temp PID file: {e}");
-        } else {
-            let _ = std::fs::rename(temp_pid_file, pid_file);
-        }
-
-        ControlResponse {
+        Ok(ControlResponse {
             success: true,
             message: format!("Started process with PID {pid}"),
             status: Some("running".to_string()),
-        }
+        })
     }
 
     fn module_log_path(&self) -> PathBuf {
         module_paths::runtime_log_path(&self.module_id)
     }
 
-    fn persist_pid(&self, pid: usize) {
+    fn persist_pid(&self, pid: usize) -> Result<(), AppError> {
         let pid_file = self.module_path.join("module.pid");
         let temp_pid_file = self.module_path.join("module.pid.tmp");
-        if let Err(error) = std::fs::write(&temp_pid_file, pid.to_string()) {
-            tracing::error!("Failed to write temp PID file: {error}");
-            return;
-        }
+        std::fs::write(&temp_pid_file, pid.to_string()).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to write temp PID file {}: {error}",
+                temp_pid_file.display()
+            ))
+        })?;
 
-        let _ = std::fs::rename(temp_pid_file, pid_file);
+        std::fs::rename(&temp_pid_file, &pid_file).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to move temp PID file {} to {}: {error}",
+                temp_pid_file.display(),
+                pid_file.display()
+            ))
+        })?;
+
+        Ok(())
     }
 
     /// Gracefully stops a module with escalation
@@ -251,8 +262,15 @@ impl<'a> LifecycleExecutor<'a> {
             }
         }
 
-        if let Some(entry_path) = script_entry_path.as_ref() {
-            self.kill_matching_script_processes(entry_path);
+        let mut process_scan_error = None;
+        if let Some(entry_path) = script_entry_path.as_ref()
+            && let Err(error) = self.kill_matching_script_processes(entry_path).await
+        {
+            tracing::warn!(
+                "Failed to scan matching script processes for {} during stop: {error}",
+                self.module_id
+            );
+            process_scan_error = Some(error);
         }
 
         // 3. Escalation check (fallback for orphans or if still running)
@@ -289,8 +307,16 @@ impl<'a> LifecycleExecutor<'a> {
         let _ = std::fs::remove_file(self.module_path.join("module.pid"));
 
         ControlResponse {
-            success: true,
-            message: format!("Module {} stopped", self.module_id),
+            success: process_scan_error.is_none(),
+            message: process_scan_error.map_or_else(
+                || format!("Module {} stopped", self.module_id),
+                |error| {
+                    format!(
+                        "Module {} stopped; process scan failed: {error}",
+                        self.module_id
+                    )
+                },
+            ),
             status: Some("stopped".to_string()),
         }
     }
@@ -299,17 +325,20 @@ impl<'a> LifecycleExecutor<'a> {
         script_runtime::resolve_entry_path(self.module_path, manifest).ok()
     }
 
-    async fn reconcile_existing_script_processes(&self, entry_path: &Path) -> Option<usize> {
-        let matching_pids = process::find_script_module_processes(self.module_path, entry_path);
+    async fn reconcile_existing_script_processes(
+        &self,
+        entry_path: &Path,
+    ) -> Result<Option<usize>, AppError> {
+        let matching_pids = self.find_matching_script_processes(entry_path).await?;
         if matching_pids.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         if let Some(&existing_pid) = matching_pids.first()
             && matching_pids.len() == 1
         {
-            self.persist_pid(existing_pid);
-            return Some(existing_pid);
+            self.persist_pid(existing_pid)?;
+            return Ok(Some(existing_pid));
         }
 
         tracing::warn!(
@@ -328,12 +357,36 @@ impl<'a> LifecycleExecutor<'a> {
         }
 
         let _ = std::fs::remove_file(self.module_path.join("module.pid"));
-        None
+        Ok(None)
     }
 
-    fn kill_matching_script_processes(&self, entry_path: &Path) {
-        for pid in process::find_script_module_processes(self.module_path, entry_path) {
+    async fn kill_matching_script_processes(&self, entry_path: &Path) -> Result<(), AppError> {
+        for pid in self.find_matching_script_processes(entry_path).await? {
             let _ = process::kill_orphan(pid);
+        }
+        Ok(())
+    }
+
+    async fn find_matching_script_processes(
+        &self,
+        entry_path: &Path,
+    ) -> Result<Vec<usize>, AppError> {
+        let module_path = self.module_path.to_path_buf();
+        let entry_path = entry_path.to_path_buf();
+
+        match tokio::task::spawn_blocking(move || {
+            process::find_script_module_processes(&module_path, &entry_path)
+        })
+        .await
+        {
+            Ok(pids) => Ok(pids),
+            Err(error) => Err(AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to scan matching script module processes for {}: {error}",
+                    self.module_id
+                ),
+            }),
         }
     }
 

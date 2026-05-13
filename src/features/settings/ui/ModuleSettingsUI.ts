@@ -39,6 +39,7 @@ type ModuleSettingsUIDeps = {
     showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
     reopenModuleSettings: (app: IApp) => void;
     closeAppSelection: () => void;
+    onModuleSettingsChanged: (app: IApp) => void;
 };
 
 type ModuleSettingsModalElements = {
@@ -102,6 +103,9 @@ export class ModuleSettingsUI {
             },
             debouncedSave: (key, value) => {
                 this._debouncedSave(key, value);
+            },
+            notifySettingsChanged: () => {
+                this._notifyCurrentModuleSettingsChanged();
             },
             showSaveIndicator: () => {
                 this._showSaveIndicator();
@@ -446,7 +450,17 @@ export class ModuleSettingsUI {
     }
 
     private _debouncedSave(key: string, value: string | number | boolean | null): void {
+        this._notifyCurrentModuleSettingsChanged();
         this._getAutosaveController().debouncedSave(key, value);
+    }
+
+    private _notifyCurrentModuleSettingsChanged(): void {
+        const currentModule = this._context.currentModule;
+        if (currentModule === undefined) {
+            return;
+        }
+
+        this._deps.onModuleSettingsChanged(currentModule);
     }
 
     private _resetAutosaveState(): void {

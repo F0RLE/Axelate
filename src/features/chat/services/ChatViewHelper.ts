@@ -2,6 +2,9 @@ import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 type ChatViewHelperDeps = {
     i18n: I18nService;
+    tracer?: {
+        warn: (message: string, ...args: unknown[]) => void;
+    };
     onFileInputChange: (event: Event) => void;
     onChatInputKeydown: (event: KeyboardEvent) => void;
     onChatInputInput: () => void;
@@ -12,23 +15,48 @@ export class ChatViewHelper {
     public constructor(private readonly _deps: ChatViewHelperDeps) {}
 
     public bindEvents(): void {
-        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
-        fileInput?.addEventListener('change', this._deps.onFileInputChange);
-
-        const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        chatInput?.addEventListener('keydown', this._deps.onChatInputKeydown);
-        chatInput?.addEventListener('input', this._deps.onChatInputInput);
-        globalThis.addEventListener('resize', this._deps.onViewportResize);
+        this._setEventBindings('add');
     }
 
     public unbindEvents(): void {
-        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
-        fileInput?.removeEventListener('change', this._deps.onFileInputChange);
+        this._setEventBindings('remove');
+    }
 
+    private _setEventBindings(mode: 'add' | 'remove'): void {
+        const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
-        chatInput?.removeEventListener('keydown', this._deps.onChatInputKeydown);
-        chatInput?.removeEventListener('input', this._deps.onChatInputInput);
-        globalThis.removeEventListener('resize', this._deps.onViewportResize);
+
+        if (fileInput === null) {
+            if (mode === 'add') {
+                this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-file-input during bind.');
+            }
+        } else {
+            if (mode === 'add') {
+                fileInput.addEventListener('change', this._deps.onFileInputChange);
+            } else {
+                fileInput.removeEventListener('change', this._deps.onFileInputChange);
+            }
+        }
+
+        if (chatInput === null) {
+            if (mode === 'add') {
+                this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-input during bind.');
+            }
+        } else {
+            if (mode === 'add') {
+                chatInput.addEventListener('keydown', this._deps.onChatInputKeydown);
+                chatInput.addEventListener('input', this._deps.onChatInputInput);
+            } else {
+                chatInput.removeEventListener('keydown', this._deps.onChatInputKeydown);
+                chatInput.removeEventListener('input', this._deps.onChatInputInput);
+            }
+        }
+
+        if (mode === 'add') {
+            globalThis.addEventListener('resize', this._deps.onViewportResize);
+        } else {
+            globalThis.removeEventListener('resize', this._deps.onViewportResize);
+        }
     }
 
     public randomizeGreeting(currentGreetingIndex: number, forceIndex?: number): number {

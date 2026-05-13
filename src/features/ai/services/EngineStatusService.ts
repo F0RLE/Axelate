@@ -4,6 +4,17 @@ import type { EngineStatusContext } from './AIBridgeContext';
 type EngineStatusLogger = Pick<LoggerService, 'info' | 'error'>;
 
 type EngineState = 'idle' | 'starting' | 'swapping' | 'ready' | 'error';
+type BackendEngineState =
+    | 'idle'
+    | { starting: { engine_id: string } }
+    | { swapping: { from: string; to: string } }
+    | { ready: { slots: Array<{ engine: BackendEngineStatus }> } }
+    | { error: EngineErrorPayload };
+type BackendEngineStatus = {
+    id: string;
+    endpoint: string;
+    healthy: boolean;
+};
 
 interface EngineSwappingPayload {
     from: string;
@@ -36,6 +47,8 @@ interface EngineStartingPayload {
 export class EngineStatusService {
     private _context: EngineStatusContext | null = null;
     private readonly _unlisteners: (() => void)[] = [];
+    private _domObserver: MutationObserver | null = null;
+    private _domSyncFrame: number | null = null;
     private _initialized = false;
 
     public constructor(private readonly _tracer: EngineStatusLogger) {}
@@ -89,11 +102,19 @@ export class EngineStatusService {
 
         this._tracer.info('[EngineStatusService] Listening for engine events');
         this._initialized = true;
+        this._startDomSyncObserver();
+        void this.refreshFromBackend();
     }
 
     public destroy(): void {
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.length = 0;
+        this._domObserver?.disconnect();
+        this._domObserver = null;
+        if (this._domSyncFrame !== null) {
+            cancelAnimationFrame(this._domSyncFrame);
+            this._domSyncFrame = null;
+        }
         this._activeSlots.clear();
         this._initialized = false;
     }
@@ -125,6 +146,20 @@ export class EngineStatusService {
 
         this._setCardState(engineId, state);
         this._setDashboardCardState(engineId, state);
+    }
+
+    public async refreshFromBackend(): Promise<void> {
+        if (this._context?.tauriProvider.isTauri() !== true) {
+            return;
+        }
+
+        try {
+            const state =
+                await this._context.tauriProvider.invoke<BackendEngineState>('get_engine_state');
+            this._applyBackendState(state);
+        } catch (error) {
+            this._tracer.error('[EngineStatusService] Failed to refresh engine state:', error);
+        }
     }
 
     /**
@@ -159,9 +194,180 @@ export class EngineStatusService {
 
         cards.forEach((card) => {
             const isRunning = state === 'ready';
+            this._resetCardClasses(card);
+            card.classList.add(`engine-${state}`);
             card.dataset['runtimeStatus'] = isRunning ? 'running' : state;
             card.classList.toggle('module-running', isRunning);
             card.classList.toggle('module-stopped', !isRunning);
+        });
+    }
+
+    private _startDomSyncObserver(): void {
+        this._domObserver?.disconnect();
+        this._domObserver = new MutationObserver((records) => {
+            if (this._retargetDomSyncObserver(records)) {
+                this._scheduleDomSync();
+                return;
+            }
+
+            if (this._hasRelevantDomSyncMutation(records)) {
+                this._scheduleDomSync();
+            }
+        });
+        const target = this._getDomSyncTarget();
+        this._domObserver.observe(target, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-app-id', 'data-current-module'],
+        });
+    }
+
+    private _getDomSyncTarget(): HTMLElement {
+        return (
+            document.querySelector<HTMLElement>('.models-grid') ??
+            document.querySelector<HTMLElement>('#page-modules') ??
+            document.body
+        );
+    }
+
+    private _retargetDomSyncObserver(records: MutationRecord[]): boolean {
+        const preferredTarget =
+            document.querySelector<HTMLElement>('.models-grid') ??
+            document.querySelector<HTMLElement>('#page-modules');
+        if (
+            preferredTarget === null ||
+            records.every((record) => record.target === preferredTarget)
+        ) {
+            return false;
+        }
+
+        const appearedInMutation = records.some((record) =>
+            Array.from(record.addedNodes).some((node) =>
+                this._nodeMatchesDomSyncTarget(node, '.models-grid, #page-modules'),
+            ),
+        );
+        if (!appearedInMutation) {
+            return false;
+        }
+
+        this._domObserver?.disconnect();
+        this._domObserver?.observe(preferredTarget, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-app-id', 'data-current-module'],
+        });
+        return true;
+    }
+
+    private _hasRelevantDomSyncMutation(records: MutationRecord[]): boolean {
+        return records.some((record) => {
+            if (
+                record.type === 'attributes' &&
+                record.target instanceof Element &&
+                this._elementMatchesEngineCard(record.target)
+            ) {
+                return true;
+            }
+
+            return Array.from(record.addedNodes).some((node) =>
+                this._nodeMatchesDomSyncTarget(node, '[data-app-id], [data-current-module]'),
+            );
+        });
+    }
+
+    private _nodeMatchesDomSyncTarget(node: Node, selector: string): boolean {
+        if (!(node instanceof Element)) {
+            return false;
+        }
+
+        return node.matches(selector) || node.querySelector(selector) !== null;
+    }
+
+    private _elementMatchesEngineCard(element: Element): boolean {
+        return element.hasAttribute('data-app-id') || element.hasAttribute('data-current-module');
+    }
+
+    private _scheduleDomSync(): void {
+        if (this._domSyncFrame !== null) {
+            return;
+        }
+
+        this._domSyncFrame = requestAnimationFrame(() => {
+            this._domSyncFrame = null;
+            this._applyActiveStatesToDom();
+        });
+    }
+
+    private _applyActiveStatesToDom(): void {
+        this._activeSlots.forEach((_endpoint, engineId) => {
+            this._setCardState(engineId, 'ready');
+            this._setDashboardCardState(engineId, 'ready');
+        });
+    }
+
+    private _applyBackendState(state: BackendEngineState): void {
+        if (state === 'idle') {
+            this._clearActiveEngineStates();
+            return;
+        }
+
+        if ('ready' in state) {
+            this._syncReadySlots(state.ready.slots);
+            return;
+        }
+
+        if ('starting' in state) {
+            this.setEngineState(state.starting.engine_id, 'starting');
+            return;
+        }
+
+        if ('swapping' in state) {
+            this.setEngineState(state.swapping.from, 'idle');
+            this.setEngineState(state.swapping.to, 'swapping');
+            return;
+        }
+
+        if ('error' in state) {
+            this.setEngineState(state.error.engine_id, 'error');
+        }
+    }
+
+    private _syncReadySlots(slots: Array<{ engine: BackendEngineStatus }>): void {
+        const previousActive = new Set(this._activeSlots.keys());
+        this._activeSlots.clear();
+
+        slots.forEach((slot) => {
+            if (!slot.engine.healthy) {
+                previousActive.delete(slot.engine.id);
+                this.setEngineState(slot.engine.id, 'error');
+                return;
+            }
+            this._activeSlots.set(slot.engine.id, slot.engine.endpoint);
+            previousActive.delete(slot.engine.id);
+            this.setEngineState(slot.engine.id, 'ready');
+        });
+
+        previousActive.forEach((engineId) => {
+            this.setEngineState(engineId, 'idle');
+        });
+    }
+
+    private _clearActiveEngineStates(): void {
+        const activeIds = Array.from(this._activeSlots.keys());
+        this._activeSlots.clear();
+        activeIds.forEach((engineId) => {
+            this.setEngineState(engineId, 'idle');
+        });
+        document.querySelectorAll<HTMLElement>('.app-card, .module-slot-card').forEach((card) => {
+            this._resetCardClasses(card);
+            card.classList.add('engine-idle');
+            card.classList.remove('module-running');
+            if (card.classList.contains('module-slot-card')) {
+                card.classList.add('module-stopped');
+                card.dataset['runtimeStatus'] = 'idle';
+            }
         });
     }
 

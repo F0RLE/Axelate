@@ -14,7 +14,7 @@ describe('EngineConfigService', () => {
 
     const config: EngineConfig = {
         engine_id: 'llamacpp',
-        gpu_layers: 33,
+        compute_mode: 'gpu',
         context_size: 8192,
         model_path: 'C:/models/model.gguf',
         extra_args: ['--flash-attn'],

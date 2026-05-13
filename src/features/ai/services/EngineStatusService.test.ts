@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineStatusService } from './EngineStatusService';
-import type { Core } from '@/app/init';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { EngineStatusContext } from './AIBridgeContext';
 
 describe('EngineStatusService', () => {
     let service: EngineStatusService;
     let listeners: Record<string, (payload: unknown) => void>;
-    let core: Core;
+    let core: EngineStatusContext;
     let tracer: Pick<LoggerService, 'info' | 'error'>;
 
     beforeEach(() => {
@@ -22,6 +22,7 @@ describe('EngineStatusService', () => {
             },
             tauriProvider: {
                 isTauri: vi.fn().mockReturnValue(true),
+                invoke: vi.fn().mockResolvedValue('idle'),
                 listen: vi
                     .fn()
                     .mockImplementation((event: string, cb: (payload: unknown) => void) => {
@@ -29,7 +30,7 @@ describe('EngineStatusService', () => {
                         return Promise.resolve(vi.fn());
                     }),
             },
-        } as unknown as Core;
+        } as unknown as EngineStatusContext;
 
         tracer = {
             info: vi.fn(),
@@ -45,7 +46,7 @@ describe('EngineStatusService', () => {
                 isTauri: vi.fn().mockReturnValue(false),
                 listen: vi.fn(),
             },
-        } as unknown as Core;
+        } as unknown as EngineStatusContext;
         service.setCore(webCore);
         service.init();
         expect(webCore.tauriProvider.listen).not.toHaveBeenCalled();
@@ -172,7 +173,7 @@ describe('EngineStatusService', () => {
                 isTauri: vi.fn().mockReturnValue(false),
                 listen: vi.fn(),
             },
-        } as unknown as Core;
+        } as unknown as EngineStatusContext;
         service.setCore(webCore);
         const noop = (
             service as unknown as {

@@ -3,6 +3,8 @@ type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaEle
 type EngineFieldValue = string | number | string[] | null | undefined;
 type ExtraArgsTranslate = (key: string, fallback: string) => string;
 type PerformanceTranslate = (key: string, fallback: string) => string;
+export type EngineModelFileKind = 'model' | 'vae' | 'llm';
+export type EngineModelFileFilter = { name: string; extensions: string[] };
 
 type EngineFieldInitialOptions = {
     key: string;
@@ -56,7 +58,7 @@ export type EngineExtraArgDocs = {
 
 export type EngineRecommendedExtraArgsContext = {
     config?: {
-        gpu_layers?: number;
+        compute_mode?: 'gpu' | 'cpu';
         extra_args?: string[];
     } | null;
     currentGroups?: string[];
@@ -227,6 +229,38 @@ export function renderEnginePerformanceModeField(
     container.appendChild(row);
 }
 
+export function getEngineModelFileName(modelPath: string, notSelectedLabel: string): string {
+    if (modelPath.trim() === '') {
+        return notSelectedLabel;
+    }
+
+    const normalized = modelPath.replaceAll('\\', '/');
+    return normalized.split('/').pop() ?? modelPath;
+}
+
+export function getEngineModelFileFilters(
+    fileKind: EngineModelFileKind,
+    isImage: boolean,
+): EngineModelFileFilter[] {
+    if (fileKind === 'vae') {
+        return [{ name: 'SafeTensors', extensions: ['safetensors'] }];
+    }
+
+    if (fileKind === 'llm') {
+        return [{ name: 'GGUF Models', extensions: ['gguf'] }];
+    }
+
+    if (isImage) {
+        return [
+            { name: 'SD Models', extensions: ['gguf', 'safetensors'] },
+            { name: 'GGUF Models', extensions: ['gguf'] },
+            { name: 'SafeTensors', extensions: ['safetensors'] },
+        ];
+    }
+
+    return [{ name: 'GGUF Models', extensions: ['gguf'] }];
+}
+
 export function createEngineExtraArgsField(translate: ExtraArgsTranslate): EngineExtraArgsControl {
     const root = document.createElement('div');
     root.className = 'local-engine-tags-editor';
@@ -374,7 +408,7 @@ export function getEngineExtraArgDocs(appId: string): EngineExtraArgDocs {
     return {
         title: 'Manual llama.cpp flags',
         subtitle:
-            'These are appended to llama-server startup. Context window and GPU layers are already managed by the launcher UI.',
+            'These are appended to llama-server startup. Context window and compute device are already managed by the launcher UI.',
         items: [
             { flag: '--flash-attn', description: 'Enable flash attention if supported.' },
             { flag: '--threads 8', description: 'Set explicit CPU thread count.' },
@@ -399,7 +433,8 @@ export function getEngineRecommendedExtraArgs(
     ]);
     const cpuPreferenceFlags = ['--offload-to-cpu', '--clip-on-cpu', '--vae-on-cpu'];
     const prefersCpuOrLowVram =
-        context.config?.gpu_layers === 0 || cpuPreferenceFlags.some((flag) => existing.has(flag));
+        context.config?.compute_mode === 'cpu' ||
+        cpuPreferenceFlags.some((flag) => existing.has(flag));
 
     if (prefersCpuOrLowVram) {
         return ['--mmap', '--vae-tiling', '--offload-to-cpu', '--clip-on-cpu', '--vae-on-cpu'];

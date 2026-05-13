@@ -10,6 +10,7 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { AITransportContext } from './AIBridgeContext';
 
 type AIChatTransportLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+const STALE_REQUEST_CANCEL_TIMEOUT_MS = 750;
 
 /**
  * Safely extracts a human-readable error string from any error shape.
@@ -30,12 +31,14 @@ function extractError(error: unknown): string {
 interface IStreamChunkEnvelope {
     request_id: string;
     message_id: string;
+    kind: 'chat_chunk' | 'thought_chunk' | 'done';
     content: string;
 }
 
 export interface IChatTransport {
     init(): Promise<void>;
     send(request: IChatRequest): Promise<IBridgeResponse>;
+    cancelActiveChatRequest(): Promise<boolean>;
     generateImage(request: IImageGenerationRequest): Promise<IBridgeResponse>;
     generateImageBackground(request: IImageGenerationRequest): Promise<IBridgeResponse>;
     onStream(listener: (chunk: string) => void): () => void;
@@ -54,6 +57,7 @@ export class AIChatTransport implements IChatTransport {
     private _requestCounter = 0;
     private readonly _streamListeners = new Set<(chunk: string) => void>();
     private readonly _thoughtListeners = new Set<(chunk: string) => void>();
+    private _activeChatRequestId: string | null = null;
 
     public constructor(private readonly _tracer: AIChatTransportLogger) {}
 
@@ -83,37 +87,116 @@ export class AIChatTransport implements IChatTransport {
             return { ok: false, error: 'IPC host unavailable' };
         }
 
+        if (this._activeChatRequestId !== null) {
+            await this._cancelStaleActiveRequest(this._activeChatRequestId);
+        }
+
         const requestId = this._generateRequestId();
         const requestWithId: IChatRequest = {
             ...request,
             request_id: requestId,
         };
+        this._activeChatRequestId = requestId;
+        let resolveStreamDone: (() => void) | null = null;
+        const streamDone = new Promise<void>((resolve) => {
+            resolveStreamDone = resolve;
+        });
         const chatChannel = new Channel<IStreamChunkEnvelope>();
         chatChannel.onmessage = (payload) => {
+            if (!this._isPayloadForRequest(payload, requestId)) {
+                return;
+            }
+
+            if (payload.kind === 'done') {
+                resolveStreamDone?.();
+                return;
+            }
+
+            if (payload.kind !== 'chat_chunk') {
+                return;
+            }
+
             this._emitListeners(this._streamListeners, payload.content);
         };
 
         const thoughtChannel = new Channel<IStreamChunkEnvelope>();
         thoughtChannel.onmessage = (payload) => {
+            if (
+                !this._isPayloadForRequest(payload, requestId) ||
+                payload.kind !== 'thought_chunk'
+            ) {
+                return;
+            }
+
             this._emitListeners(this._thoughtListeners, payload.content);
         };
 
         try {
-            return await this._runWithTimeout(
-                this._context.tauriProvider
-                    .invoke<IChatResponse>('send_chat_message', {
-                        request: requestWithId,
-                        chatChannel,
-                        thoughtChannel,
-                    })
-                    .then((response) => this._normalizeResponse(response)),
+            const response = await this._runWithTimeout(
+                this._context.tauriProvider.invoke<IChatResponse>('send_chat_message', {
+                    request: requestWithId,
+                    chatChannel,
+                    thoughtChannel,
+                }),
                 90000,
                 'AI request timed out',
             );
+
+            if (
+                response.ok &&
+                (this._streamListeners.size > 0 || this._thoughtListeners.size > 0)
+            ) {
+                await this._waitForStreamFinalization(streamDone);
+            }
+
+            return this._normalizeResponse(response);
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] IPC error:', error);
             return { ok: false, error: errorMsg };
+        } finally {
+            if (this._activeChatRequestId === requestId) {
+                this._activeChatRequestId = null;
+            }
+        }
+    }
+
+    private async _cancelStaleActiveRequest(requestId: string): Promise<void> {
+        try {
+            await this._runWithTimeout(
+                this._context?.tauriProvider.invoke<boolean>('cancel_chat_generation', {
+                    requestId,
+                }) ?? Promise.resolve(false),
+                STALE_REQUEST_CANCEL_TIMEOUT_MS,
+                'Stale AI request cancel timed out',
+            );
+            this._tracer.info('[AIChatTransport] Cancelled stale active request before restart');
+        } catch (error: unknown) {
+            this._tracer.warn('[AIChatTransport] Failed to cancel stale active request:', error);
+        } finally {
+            if (this._activeChatRequestId === requestId) {
+                this._activeChatRequestId = null;
+            }
+        }
+    }
+
+    public async cancelActiveChatRequest(): Promise<boolean> {
+        if (this._context?.tauriProvider.isTauri() !== true) {
+            return false;
+        }
+
+        const requestId = this._activeChatRequestId;
+        if (requestId === null) {
+            return false;
+        }
+
+        try {
+            return await this._context.tauriProvider.invoke<boolean>('cancel_chat_generation', {
+                requestId,
+            });
+        } catch (error: unknown) {
+            this._tracer.error('[AIChatTransport] IPC cancel error:', error);
+            return false;
         }
     }
 
@@ -213,6 +296,24 @@ export class AIChatTransport implements IChatTransport {
         }
     }
 
+    private async _waitForStreamFinalization(streamDone: Promise<void>): Promise<void> {
+        let timeoutId!: ReturnType<typeof setTimeout>;
+        const timeout = new Promise<'timeout'>((resolve) => {
+            timeoutId = setTimeout(() => {
+                resolve('timeout');
+            }, 1500);
+        });
+
+        try {
+            const result = await Promise.race([streamDone.then(() => 'done' as const), timeout]);
+            if (result === 'timeout') {
+                this._tracer.warn('[AIChatTransport] Stream finalization marker was not received');
+            }
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
     private _normalizeResponse(response: IChatResponse): IBridgeResponse {
         if (response.ok && response.reply) {
             const normalized: IBridgeResponse = {
@@ -224,6 +325,9 @@ export class AIChatTransport implements IChatTransport {
             }
             if (response.model !== undefined) {
                 normalized.model = response.model;
+            }
+            if (response.usage !== undefined) {
+                normalized.usage = response.usage;
             }
             return normalized;
         }
@@ -262,10 +366,16 @@ export class AIChatTransport implements IChatTransport {
         });
     }
 
+    private _isPayloadForRequest(payload: IStreamChunkEnvelope, requestId: string): boolean {
+        return payload.request_id === requestId;
+    }
+
     public destroy(): void {
+        void this.cancelActiveChatRequest();
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.clear();
         this._streamListeners.clear();
         this._thoughtListeners.clear();
+        this._activeChatRequestId = null;
     }
 }

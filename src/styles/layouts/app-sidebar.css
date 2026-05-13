@@ -68,25 +68,6 @@
     transform: scale(0.96);
 }
 
-.status-under-icon {
-    font-size: 0.68rem;
-    color: var(--text-muted);
-    margin-top: 0.35rem;
-    margin-left: 0;
-    -webkit-app-region: no-drag;
-}
-
-.status-under-icon .status-indicator {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-    background: var(--success);
-    box-shadow: 0 0 4px rgba(96, 215, 120, 0.24);
-    animation: pulse 2.8s infinite;
-}
-
 @keyframes pulse {
     0%,
     100% {
@@ -100,37 +81,10 @@
     }
 }
 
-.launcher-status-badge {
-    background: var(--bg-light);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 8px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.75rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.launcher-status-badge .status-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 8px var(--success);
-    animation: pulse 2s infinite;
-}
-
 #app-viewport > #sidebar {
     grid-column: 1;
     grid-row: 1 / span 2;
     height: 100%;
-}
-
-.launcher-status-badge.offline .status-dot {
-    background: var(--text-muted);
-    box-shadow: none;
-    animation: none;
 }
 
 /* Launcher Icon (Hidden by default, shown when collapsed) */
@@ -285,15 +239,10 @@
 }
 
 /* Strict layout removal for hidden components in compact mode */
-#sidebar.collapsed .status-under-icon,
-#sidebar.collapsed .nav-section-title,
 #sidebar.collapsed .sysmon-label-text,
 #sidebar.collapsed .sysmon-value,
 #sidebar.collapsed .sysmon-track,
-#sidebar.collapsed .sidebar-lang-switcher .lang-menu-items,
-#sidebar.collapsed #system-monitor,
-#sidebar.collapsed .sysmon-spacer,
-#sidebar.collapsed #sidebar-footer {
+#sidebar.collapsed #system-monitor {
     display: none !important;
 }
 
@@ -366,21 +315,6 @@
     border: none !important;
 }
 
-#sidebar.collapsed .sidebar-lang-switcher {
-    justify-content: center;
-    margin-bottom: 1rem;
-}
-
-/* Language Switcher in Sidebar */
-.sidebar-lang-switcher {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    margin-bottom: 1rem;
-    padding: 0 0.5rem;
-}
-
 /* Sidebar Lang Menu (Popup) */
 #sidebar-lang-menu {
     position: absolute;
@@ -419,11 +353,6 @@
     }
 }
 
-.app-subtitle {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
 /* Bottom Menu Handling */
 .nav-section.bottom-menu {
     border-top: none;
@@ -453,15 +382,6 @@
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important; /* Ensure the section wrapper doesn't add space */
-}
-
-.sysmon-spacer {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    flex-grow: 1;
-    margin: 0 !important;
-    padding: 0 !important;
 }
 
 .nav-section {
@@ -644,21 +564,7 @@ body.snapping #sidebar.collapsed .nav-btn span {
 
 /* Dragging visibility overrides removed */
 
-.modules-title-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, var(--primary), var(--primary-light));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    box-shadow: 0 8px 24px rgba(138, 43, 226, 0.3);
-    animation: none;
-    /* Removed pulse animation */
-}
-
-/* --- SERVICE & SYSTEM CARDS --- */
+/* --- SYSTEM CARDS --- */
 .card {
     background: var(--bg-med);
     border: none;
@@ -666,130 +572,4 @@ body.snapping #sidebar.collapsed .nav-btn span {
     padding: 12px;
     font-family: var(--app-font-family);
     box-shadow: none;
-}
-
-/* Duplicates removed and merged above */
-
-.service-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.85rem; /* Increased from 11px */
-    transition: background 0.2s;
-    border-radius: 8px;
-    margin-bottom: 0.25rem;
-    font-family: var(--app-font-family);
-    -webkit-app-region: no-drag;
-}
-
-.service-row:hover {
-    background: rgba(138, 43, 226, 0.1);
-}
-
-.service-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-    min-width: 0;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--text-muted);
-    transition: all 0.3s;
-    flex-shrink: 0;
-}
-
-.status-dot.running {
-    background: var(--success);
-    box-shadow: 0 0 8px #28a74580;
-}
-
-.status-dot.starting {
-    background: var(--warning);
-    animation: pulse 1.5s infinite;
-}
-
-.status-dot.stopping {
-    background: var(--warning);
-    opacity: 0.8;
-}
-
-.status-dot.error {
-    background: var(--danger);
-    box-shadow: 0 0 10px rgba(220, 53, 69, 0.55);
-    animation: pulse 1.2s infinite;
-}
-
-.service-name {
-    font-weight: 500;
-    flex: 1;
-    color: #e0e0e0 !important; /* Higher contrast light gray */
-    font-size: 13px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.btn-toggle-service {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: var(--text-primary);
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    transition:
-        background-color 0.2s ease,
-        border-color 0.2s ease,
-        color 0.2s ease,
-        opacity 0.2s ease,
-        box-shadow 0.2s ease;
-    flex-shrink: 0;
-    -webkit-app-region: no-drag;
-}
-
-.btn-toggle-service:hover {
-    background: var(--primary);
-    color: white;
-    border: none;
-}
-
-.btn-toggle-service:active {
-    opacity: 0.85;
-}
-
-.btn-toggle-service.stop:hover {
-    background: var(--danger);
-    border-color: var(--danger);
-}
-
-.btn-toggle-service.restart {
-    background: rgba(255, 165, 0, 0.2);
-    border-color: rgba(255, 165, 0, 0.3);
-    opacity: 0.8;
-}
-
-.btn-toggle-service.restart:hover {
-    background: var(--warning);
-    border-color: var(--warning);
-    opacity: 1;
-}
-
-.btn-toggle-service .icon {
-    width: 14px;
-    height: 14px;
-}
-
-#sidebar-footer {
-    margin-top: auto;
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    text-align: center;
 }

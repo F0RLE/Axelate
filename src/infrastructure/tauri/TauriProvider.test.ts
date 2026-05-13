@@ -408,6 +408,33 @@ describe('TauriProvider', () => {
         });
     });
 
+    describe('readClipboardText', () => {
+        it('should call clipboard plugin in Tauri during approved UI flow', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce('clipboard text');
+
+            await expect(
+                provider.withClipboardReadAccess(async () => await provider.readClipboardText()),
+            ).resolves.toBe('clipboard text');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith(
+                'plugin:clipboard-manager|read_text',
+                {},
+            );
+        });
+
+        it('should block Tauri clipboard reads outside approved UI flow', async () => {
+            await expect(provider.readClipboardText()).resolves.toBeNull();
+
+            expect(mockedTauriInvoke).not.toHaveBeenCalled();
+        });
+
+        it('should not use browser clipboard reads in web mode', async () => {
+            const { provider: webProvider } = setupWebMode();
+
+            await expect(webProvider.readClipboardText()).resolves.toBeNull();
+        });
+    });
+
     // ---------------------------------------------------------- openUrl
     describe('openUrl', () => {
         it('should call shell plugin in Tauri', async () => {

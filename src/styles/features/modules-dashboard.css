@@ -179,12 +179,6 @@
     transition: color 0.3s ease;
 }
 
-.footer-link {
-    color: #bbb;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
 .module-slot-card:hover svg,
 .module-slot-card:hover svg {
     color: #fff;
@@ -340,24 +334,9 @@
     box-shadow: none;
 }
 
-.shortcut-key {
-    background: #ffffff;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-family: var(--app-font-family);
-    color: #000000 !important;
-    font-weight: 700;
-}
-
 .module-slot-card .module-slot-card-action.active-module-btn.stop-btn:hover {
     background: #d32f2f !important;
     border-color: #d32f2f !important;
-    color: #ffffff !important;
-}
-
-.btn-stop-module:hover {
-    background: #b71c1c !important;
-    border-color: #b71c1c !important;
     color: #ffffff !important;
 }
 
@@ -486,14 +465,6 @@
     color: var(--text-primary);
     font-variant-numeric: tabular-nums;
     min-width: 3ch;
-}
-
-.stop-square-icon {
-    width: 14px;
-    height: 14px;
-    background-color: currentColor;
-    border-radius: 2px;
-    display: inline-block;
 }
 
 /* Specific card icon accent backgrounds removed to keep launcher cards clean */

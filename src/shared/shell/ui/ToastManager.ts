@@ -62,6 +62,7 @@ export class ToastManager {
      * @param {number} [duration=3000] - Duration in milliseconds.
      * @param {string|null} [title=null] - Optional toast title.
      * @param {string|null} [id=null] - Optional unique ID to prevent duplicates.
+     * @param {Function|null} [onClick=null] - Optional click handler.
      */
     public show(
         message: string,
@@ -69,6 +70,7 @@ export class ToastManager {
         duration = 3000,
         title: string | null = null,
         id: string | null = null,
+        onClick: (() => void) | null = null,
     ): void {
         const normalizedMessage = message.trim();
         const normalizedTitle = title?.trim() ?? null;
@@ -87,11 +89,20 @@ export class ToastManager {
                 type,
                 normalizedTitle,
                 duration,
+                onClick,
             );
             return;
         }
 
-        this._createToast(container, normalizedMessage, type, duration, normalizedTitle, id);
+        this._createToast(
+            container,
+            normalizedMessage,
+            type,
+            duration,
+            normalizedTitle,
+            id,
+            onClick,
+        );
     }
 
     private _normalizeHiddenDialogs(): void {
@@ -151,6 +162,7 @@ export class ToastManager {
         type: ToastType,
         title: string | null,
         duration: number,
+        onClick: (() => void) | null,
     ): void {
         const contentElement = toast.querySelector('.toast-content');
         if (contentElement instanceof HTMLElement) {
@@ -158,6 +170,7 @@ export class ToastManager {
         }
 
         toast.className = `toast ${type}`;
+        this._bindToastClick(toast, onClick);
         toast.classList.remove('leaving');
         this._clearToastTimers(toast);
         this._scheduleToastRemoval(toast, duration);
@@ -170,9 +183,11 @@ export class ToastManager {
         duration: number,
         title: string | null,
         id: string | null,
+        onClick: (() => void) | null,
     ): void {
         const toast = document.createElement('div') as ToastElement;
         toast.className = `toast ${type}`;
+        this._bindToastClick(toast, onClick);
 
         if (id !== null) {
             toast.id = `toast-${id}`;
@@ -187,6 +202,32 @@ export class ToastManager {
 
         container.appendChild(toast);
         this._scheduleToastRemoval(toast, duration);
+    }
+
+    private _bindToastClick(toast: ToastElement, onClick: (() => void) | null): void {
+        if (onClick === null) {
+            toast.classList.remove('toast--actionable');
+            toast.removeAttribute('role');
+            toast.removeAttribute('tabindex');
+            toast.onclick = null;
+            toast.onkeydown = null;
+            return;
+        }
+
+        toast.classList.add('toast--actionable');
+        toast.setAttribute('role', 'button');
+        toast.tabIndex = 0;
+        toast.onclick = onClick;
+        toast.onkeydown = (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
+            }
+
+            if (event.key === ' ') {
+                event.preventDefault();
+            }
+            onClick();
+        };
     }
 
     private _renderToastContent(message: string, title: string | null): string {

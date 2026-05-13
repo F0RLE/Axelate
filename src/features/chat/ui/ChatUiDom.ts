@@ -22,9 +22,13 @@ export class ChatUiDom {
         return document.getElementById('chat-attachments');
     }
 
+    public get chatInput(): HTMLTextAreaElement | null {
+        return document.getElementById('chat-input') as HTMLTextAreaElement | null;
+    }
+
     public getTranslationTargets(): ChatTranslationTargets {
         return {
-            chatInput: document.getElementById('chat-input') as HTMLTextAreaElement | null,
+            chatInput: this.chatInput,
             chatInputPlaceholder: document.getElementById('chat-input-placeholder'),
             clearBtn: document.getElementById('clear-chat-btn'),
             attachBtn: document.getElementById('chat-attach-btn'),

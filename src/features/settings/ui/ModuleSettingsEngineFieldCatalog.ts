@@ -8,6 +8,7 @@ export type EngineFieldDefinition = {
     placeholder?: string;
     defaultValue?: number | string;
     options?: string[];
+    optionLabels?: Record<string, string>;
     min?: number;
     max?: number;
     fullWidth?: boolean;
@@ -58,14 +59,16 @@ export class ModuleSettingsEngineFieldCatalog {
     public buildTextEngineFields(t: TranslateFn): EngineFieldDefinition[] {
         return [
             {
-                label: t('ui.settings.engine.gpu_layers', 'GPU Layers'),
-                key: 'gpu_layers',
-                type: 'number',
+                label: t('ui.settings.engine.compute_mode', 'Compute Device'),
+                key: 'compute_mode',
+                type: 'select',
                 isEngineConfig: true,
-                placeholder: 'e.g. -1',
-                defaultValue: -1,
-                min: -1,
-                max: 999,
+                options: ['gpu', 'cpu'],
+                optionLabels: {
+                    gpu: t('ui.settings.engine.compute_mode_gpu', 'GPU'),
+                    cpu: t('ui.settings.engine.compute_mode_cpu', 'CPU'),
+                },
+                defaultValue: 'gpu',
             },
             {
                 label: t('ui.settings.engine.context_size', 'Context Window'),
@@ -76,6 +79,18 @@ export class ModuleSettingsEngineFieldCatalog {
                 defaultValue: 4096,
                 min: 512,
                 max: 128000,
+            },
+            {
+                label: t('ui.settings.engine.system_prompt', 'System Prompt'),
+                key: 'llamacpp_system_prompt',
+                type: 'textarea',
+                isEngineConfig: false,
+                placeholder: t(
+                    'ui.settings.engine.system_prompt_placeholder',
+                    'Optional instructions applied before each local chat.',
+                ),
+                defaultValue: '',
+                fullWidth: true,
             },
         ];
     }

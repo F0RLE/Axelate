@@ -91,12 +91,13 @@ export class ModuleSettingsEngineRenderFlow {
             return;
         }
 
-        this._deps.renderFieldDefinitions(
-            corePrimary,
-            options.getTextFields(options.translate),
-            app.id,
+        this._renderTextFields({
+            container,
+            appId: app.id,
             config,
-        );
+            translate: options.translate,
+            getTextFields: options.getTextFields,
+        });
     }
 
     private _renderCoreFields(options: {
@@ -210,5 +211,40 @@ export class ModuleSettingsEngineRenderFlow {
             options.appId,
             options.config,
         );
+    }
+
+    private _renderTextFields(options: {
+        container: HTMLElement;
+        appId: string;
+        config: EngineConfig | null;
+        translate: TranslateFn;
+        getTextFields: ModuleSettingsEngineRenderOptions['getTextFields'];
+    }): void {
+        const fieldTargets: Record<string, string> = {
+            compute_mode: `#local-engine-compute-${options.appId}`,
+            context_size: `#local-engine-context-${options.appId}`,
+            llamacpp_system_prompt: `#local-engine-system-prompt-${options.appId}`,
+        };
+
+        options.getTextFields(options.translate).forEach((field) => {
+            const targetSelector = fieldTargets[field.key];
+            if (targetSelector === undefined) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                    `[ModuleSettingsEngineRenderFlow] Missing target for text field "${field.key}" in ${options.appId}`,
+                );
+                return;
+            }
+            const target = options.container.querySelector(targetSelector);
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+
+            this._deps.renderFieldRow(target, {
+                ...field,
+                appId: options.appId,
+                config: options.config,
+            });
+        });
     }
 }

@@ -1,8 +1,0 @@
-/* Release Check Placeholder Styles */
-.release-check-root {
-    padding: var(--spacing-lg);
-}
-
-.release-check-container {
-    animation: fadeIn var(--transition-normal) ease-out;
-}

@@ -16,7 +16,7 @@ type EngineConfigLogger = Pick<LoggerService, 'error'>;
 /** Subset of EngineConfig that the frontend can read and write. */
 export interface EngineConfig {
     engine_id: string;
-    gpu_layers: number;
+    compute_mode: 'gpu' | 'cpu';
     context_size: number;
     model_path: string | null;
     extra_args: string[];

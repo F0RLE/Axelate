@@ -24,6 +24,12 @@ struct PreparedRequestExecution {
     request_id: String,
     message_id: String,
 }
+
+struct ChatStreamExecutionOptions {
+    local_engine_access: LocalEngineAccess,
+    message_id: Option<String>,
+}
+
 const fn conflicting_local_capability(
     capability: crate::domain::engine::types::Capability,
 ) -> Option<crate::domain::engine::types::Capability> {
@@ -59,6 +65,7 @@ pub async fn process_chat_request(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
     sink: Arc<dyn StreamSink>,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     process_chat_request_with_local_engine_access(
@@ -66,8 +73,37 @@ pub async fn process_chat_request(
         sessions,
         config_service,
         engine_manager,
+        settings_service,
         sink,
-        LocalEngineAccess::AutoStart,
+        ChatStreamExecutionOptions {
+            local_engine_access: LocalEngineAccess::AutoStart,
+            message_id: None,
+        },
+    )
+    .await
+}
+
+/// Dispatches a chat request using a caller-provided assistant message id for stream events.
+pub async fn process_chat_request_with_message_id(
+    request: ChatRequest,
+    sessions: &ChatSessionManager,
+    config_service: &crate::domain::system::config_service::ConfigService,
+    engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
+    sink: Arc<dyn StreamSink>,
+    message_id: String,
+) -> Result<ChatResponse, crate::errors::AppError> {
+    process_chat_request_with_local_engine_access(
+        request,
+        sessions,
+        config_service,
+        engine_manager,
+        settings_service,
+        sink,
+        ChatStreamExecutionOptions {
+            local_engine_access: LocalEngineAccess::AutoStart,
+            message_id: Some(message_id),
+        },
     )
     .await
 }
@@ -79,6 +115,7 @@ pub async fn process_chat_request_without_engine_autostart(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
     sink: Arc<dyn StreamSink>,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     process_chat_request_with_local_engine_access(
@@ -86,8 +123,12 @@ pub async fn process_chat_request_without_engine_autostart(
         sessions,
         config_service,
         engine_manager,
+        settings_service,
         sink,
-        LocalEngineAccess::RequireRunning,
+        ChatStreamExecutionOptions {
+            local_engine_access: LocalEngineAccess::RequireRunning,
+            message_id: None,
+        },
     )
     .await
 }
@@ -99,12 +140,14 @@ pub async fn process_chat_request_non_stream_without_engine_autostart(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     process_chat_request_non_stream_with_local_engine_access(
         request,
         sessions,
         config_service,
         engine_manager,
+        settings_service,
         LocalEngineAccess::RequireRunning,
     )
     .await
@@ -117,12 +160,14 @@ pub async fn process_chat_request_non_stream(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     process_chat_request_non_stream_with_local_engine_access(
         request,
         sessions,
         config_service,
         engine_manager,
+        settings_service,
         LocalEngineAccess::AutoStart,
     )
     .await
@@ -133,8 +178,9 @@ async fn process_chat_request_with_local_engine_access(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
     sink: Arc<dyn StreamSink>,
-    local_engine_access: LocalEngineAccess,
+    options: ChatStreamExecutionOptions,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     let _local_workload_guard = if engine_manager.has_definition(&request.provider).await {
         Some(engine_manager.acquire_local_workload().await)
@@ -147,7 +193,9 @@ async fn process_chat_request_with_local_engine_access(
         sessions,
         config_service,
         engine_manager,
-        local_engine_access,
+        settings_service,
+        options.local_engine_access,
+        options.message_id,
     )
     .await?;
     let session_id = request.session_id.clone();
@@ -183,6 +231,7 @@ async fn process_chat_request_non_stream_with_local_engine_access(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
     local_engine_access: LocalEngineAccess,
 ) -> Result<ChatResponse, crate::errors::AppError> {
     let _local_workload_guard = if engine_manager.has_definition(&request.provider).await {
@@ -196,7 +245,9 @@ async fn process_chat_request_non_stream_with_local_engine_access(
         sessions,
         config_service,
         engine_manager,
+        settings_service,
         local_engine_access,
+        None,
     )
     .await?;
     let session_id = request.session_id.clone();
@@ -225,7 +276,9 @@ async fn prepare_request_execution(
     sessions: &ChatSessionManager,
     config_service: &crate::domain::system::config_service::ConfigService,
     engine_manager: &crate::domain::engine::manager::EngineManager,
+    settings_service: &crate::infrastructure::config::settings::SettingsService,
     local_engine_access: LocalEngineAccess,
+    message_id: Option<String>,
 ) -> Result<PreparedRequestExecution, crate::errors::AppError> {
     let PreparedChatDispatch {
         base_url,
@@ -235,6 +288,7 @@ async fn prepare_request_execution(
         sessions,
         config_service,
         engine_manager,
+        settings_service,
         local_engine_access,
     )
     .await?;
@@ -243,7 +297,16 @@ async fn prepare_request_execution(
         .request_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let message_id = uuid::Uuid::new_v4().to_string();
+    let message_id = message_id
+        .and_then(|id| {
+            let trimmed = id.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     tracing::info!(
         "[AI] Starting request {} (msg {}) for model {}",
         request_id,

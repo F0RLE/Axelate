@@ -55,6 +55,13 @@ function createChatUI(options?: {
 
             await navigator.clipboard.writeText(text);
         },
+        readClipboardText: async () => {
+            if (!isTauriRuntime) {
+                return null;
+            }
+
+            return await invoke<string>('plugin:clipboard-manager|read_text');
+        },
         tracer: chatUiTracer,
     });
 }
@@ -178,6 +185,7 @@ describe('ChatUI lifecycle', () => {
             <div id="chat-messages">
                 <button class="chat-copy-own-btn" title="old-copy"></button>
                 <button class="chat-edit-own-btn" title="old-edit"></button>
+                <button class="chat-regenerate-own-btn" title="old-regenerate"></button>
                 <button class="code-copy-btn" title="old-code"><span>Old Copy</span></button>
                 <button class="chat-save-image-btn" title="old-save"></button>
                 <button class="chat-open-image-folder-btn" title="old-folder"></button>
@@ -196,9 +204,22 @@ describe('ChatUI lifecycle', () => {
         expect((document.querySelector('.chat-copy-own-btn') as HTMLButtonElement).title).toBe(
             't:ui.launcher.web.copy:Copy',
         );
+        expect(
+            (document.querySelector('.chat-copy-own-btn') as HTMLButtonElement).getAttribute(
+                'aria-label',
+            ),
+        ).toBe('t:ui.launcher.web.copy:Copy');
         expect((document.querySelector('.chat-edit-own-btn') as HTMLButtonElement).title).toBe(
             't:ui.launcher.web.edit_last:Edit last message',
         );
+        expect(
+            (document.querySelector('.chat-regenerate-own-btn') as HTMLButtonElement).title,
+        ).toBe('t:ui.launcher.web.regenerate:Regenerate');
+        expect(
+            (document.querySelector('.chat-regenerate-own-btn') as HTMLButtonElement).dataset[
+                'tooltip'
+            ],
+        ).toBe('t:ui.launcher.web.regenerate:Regenerate');
         expect((document.querySelector('.code-copy-btn') as HTMLButtonElement).title).toBe(
             't:ui.launcher.web.copy_code:Copy code',
         );
@@ -288,19 +309,21 @@ describe('ChatUI lifecycle', () => {
         expect(document.querySelector('.chat-row')).toBeNull();
     });
 
-    it('should show streaming status until first text chunk arrives', () => {
+    it('should replace the pending response state with streamed assistant text', () => {
         document.body.innerHTML = '<div id="chat-messages"></div><div id="chat-container"></div>';
 
         ui = createChatUI();
         const handle = ui.createStreamingMessage('assistant');
+        handle.setStatus('Preparing response...');
 
-        expect(document.querySelector('.chat-streaming-status')?.textContent).toBe(
-            't:ui.chat.streaming_text:Model is typing...',
+        expect(document.querySelector('.chat-streaming-state')?.textContent).toBe(
+            'Preparing response...',
         );
+        expect(document.querySelector('.markdown-body')?.textContent).toBe('');
 
         handle.update('hello');
 
-        expect(document.querySelector('.chat-streaming-status')).toBeNull();
+        expect(document.querySelector('.chat-streaming-state')).toBeNull();
         expect(document.querySelector('.markdown-body')?.textContent).toBe('hello');
     });
 
