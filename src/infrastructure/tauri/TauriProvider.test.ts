@@ -409,12 +409,23 @@ describe('TauriProvider', () => {
     });
 
     describe('readClipboardText', () => {
-        it('should call clipboard plugin in Tauri', async () => {
+        it('should call clipboard plugin in Tauri during approved UI flow', async () => {
             (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce('clipboard text');
 
-            await expect(provider.readClipboardText()).resolves.toBe('clipboard text');
+            await expect(
+                provider.withClipboardReadAccess(async () => await provider.readClipboardText()),
+            ).resolves.toBe('clipboard text');
 
             expect(mockedTauriInvoke).toHaveBeenCalledWith(
+                'plugin:clipboard-manager|read_text',
+                {},
+            );
+        });
+
+        it('should block Tauri clipboard reads outside approved UI flow', async () => {
+            await expect(provider.readClipboardText()).resolves.toBeNull();
+
+            expect(mockedTauriInvoke).not.toHaveBeenCalledWith(
                 'plugin:clipboard-manager|read_text',
                 {},
             );

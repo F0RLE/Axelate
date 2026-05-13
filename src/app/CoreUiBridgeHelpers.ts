@@ -50,7 +50,10 @@ export function createClipboardWriter(
 }
 
 export function createClipboardReader(tauriProvider: TauriProvider): () => Promise<string | null> {
-    return async () => await tauriProvider.readClipboardText();
+    return async () =>
+        await tauriProvider.withClipboardReadAccess(
+            async () => await tauriProvider.readClipboardText(),
+        );
 }
 
 export function createExternalUrlOpener(
