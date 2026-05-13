@@ -124,24 +124,29 @@ fn default_recognizer() -> Result<SpeechRecognizer, AppError> {
 async fn recognize_once(
     recognizer: &SpeechRecognizer,
 ) -> Result<SpeechRecognitionResult, AppError> {
-    let operation = recognizer
-        .RecognizeAsync()
-        .map_err(|error| map_windows_voice_error(&error))?;
-    let operation_id = operation
-        .Id()
-        .map_err(|error| external_error(format!("Could not read voice operation id: {error}")))?;
-    {
+    compile_recognizer_constraints(recognizer).await?;
+
+    let (operation_id, operation) = {
         let mut active = ACTIVE_RECOGNITION
             .lock()
             .map_err(|_| external_error("Voice recognition state is unavailable"))?;
         if let Some(previous) = active.take() {
             let _ = previous.operation.Cancel();
         }
+
+        let operation = recognizer
+            .RecognizeAsync()
+            .map_err(|error| map_windows_voice_error(&error))?;
+        let operation_id = operation.Id().map_err(|error| {
+            external_error(format!("Could not read voice operation id: {error}"))
+        })?;
         *active = Some(ActiveRecognition {
             id: operation_id,
             operation: operation.clone(),
         });
-    }
+
+        (operation_id, operation)
+    };
 
     let result = operation
         .await
@@ -149,6 +154,24 @@ async fn recognize_once(
 
     clear_active_recognition(operation_id);
     result
+}
+
+#[cfg(target_os = "windows")]
+async fn compile_recognizer_constraints(recognizer: &SpeechRecognizer) -> Result<(), AppError> {
+    let compilation = recognizer
+        .CompileConstraintsAsync()
+        .map_err(|error| map_windows_voice_error(&error))?
+        .await
+        .map_err(|error| map_windows_voice_error(&error))?;
+    let status = compilation.Status().map_err(|error| {
+        external_error(format!("Could not read voice compilation status: {error}"))
+    })?;
+
+    if status == SpeechRecognitionResultStatus::Success {
+        return Ok(());
+    }
+
+    Err(status_to_error(status))
 }
 
 #[cfg(target_os = "windows")]
