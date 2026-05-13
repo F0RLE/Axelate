@@ -186,6 +186,8 @@ export const commands = {
 	saveChatImageDefault: (base64Data: string, mimeType: string) => typedError<SavedChatImage, AppError>(__TAURI_INVOKE("save_chat_image_default", { base64Data, mimeType })),
 	// Captures one voice utterance with the native platform recognizer.
 	recognizeVoiceOnce: (request: VoiceRecognitionRequest) => typedError<VoiceRecognitionResponse, AppError>(__TAURI_INVOKE("recognize_voice_once", { request })),
+	// Cancels the active native voice recognition request, if one is running.
+	cancelVoiceRecognition: () => typedError<null, AppError>(__TAURI_INVOKE("cancel_voice_recognition")),
 	// Opens the native Windows speech privacy settings page.
 	openVoicePrivacySettings: () => typedError<null, AppError>(__TAURI_INVOKE("open_voice_privacy_settings")),
 	// Retrieves all custom AI models configured by the user

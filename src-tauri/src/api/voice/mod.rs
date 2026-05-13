@@ -4,10 +4,16 @@ use crate::errors::AppError;
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "windows")]
+use once_cell::sync::Lazy;
+#[cfg(target_os = "windows")]
+use std::sync::Mutex;
+#[cfg(target_os = "windows")]
 use windows::Media::SpeechRecognition::{
     SpeechRecognitionConfidence, SpeechRecognitionResult, SpeechRecognitionResultStatus,
     SpeechRecognizer,
 };
+#[cfg(target_os = "windows")]
+use windows_future::IAsyncOperation;
 
 #[cfg(target_os = "windows")]
 const SPEECH_SETTINGS_URI: &str = "ms-settings:privacy-speech";
@@ -15,6 +21,14 @@ const SPEECH_SETTINGS_URI: &str = "ms-settings:privacy-speech";
 const SPEECH_PRIVACY_POLICY_NOT_ACCEPTED: i32 = 0x8004_5509_u32.cast_signed();
 #[cfg(target_os = "windows")]
 const RECOGNIZER_UNAVAILABLE: &str = "Voice recognizer unavailable";
+#[cfg(target_os = "windows")]
+static ACTIVE_RECOGNITION: Lazy<Mutex<Option<ActiveRecognition>>> = Lazy::new(|| Mutex::new(None));
+
+#[cfg(target_os = "windows")]
+struct ActiveRecognition {
+    id: u32,
+    operation: IAsyncOperation<SpeechRecognitionResult>,
+}
 
 #[cfg(not(target_os = "windows"))]
 const WINDOWS_ONLY_RECOGNITION: &str =
@@ -54,6 +68,13 @@ pub async fn recognize_voice_once(
 #[specta::specta]
 pub async fn open_voice_privacy_settings() -> Result<(), AppError> {
     open_voice_privacy_settings_platform().await
+}
+
+/// Cancels the active native voice recognition request, if one is running.
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_voice_recognition() -> Result<(), AppError> {
+    cancel_voice_recognition_platform()
 }
 
 #[cfg(target_os = "windows")]
@@ -103,11 +124,66 @@ fn default_recognizer() -> Result<SpeechRecognizer, AppError> {
 async fn recognize_once(
     recognizer: &SpeechRecognizer,
 ) -> Result<SpeechRecognitionResult, AppError> {
-    recognizer
+    let operation = recognizer
         .RecognizeAsync()
-        .map_err(|error| map_windows_voice_error(&error))?
+        .map_err(|error| map_windows_voice_error(&error))?;
+    let operation_id = operation
+        .Id()
+        .map_err(|error| external_error(format!("Could not read voice operation id: {error}")))?;
+    {
+        let mut active = ACTIVE_RECOGNITION
+            .lock()
+            .map_err(|_| external_error("Voice recognition state is unavailable"))?;
+        if let Some(previous) = active.take() {
+            let _ = previous.operation.Cancel();
+        }
+        *active = Some(ActiveRecognition {
+            id: operation_id,
+            operation: operation.clone(),
+        });
+    }
+
+    let result = operation
         .await
-        .map_err(|error| map_windows_voice_error(&error))
+        .map_err(|error| map_windows_voice_error(&error));
+
+    clear_active_recognition(operation_id);
+    result
+}
+
+#[cfg(target_os = "windows")]
+fn clear_active_recognition(operation_id: u32) {
+    let Ok(mut active) = ACTIVE_RECOGNITION.lock() else {
+        return;
+    };
+
+    if active
+        .as_ref()
+        .is_some_and(|active| active.id == operation_id)
+    {
+        *active = None;
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn cancel_voice_recognition_platform() -> Result<(), AppError> {
+    let operation = ACTIVE_RECOGNITION
+        .lock()
+        .map_err(|_| external_error("Voice recognition state is unavailable"))?
+        .take();
+
+    if let Some(active) = operation {
+        active.operation.Cancel().map_err(|error| {
+            external_error(format!("Failed to cancel voice recognition: {error}"))
+        })?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn cancel_voice_recognition_platform() -> Result<(), AppError> {
+    Ok(())
 }
 
 #[cfg(target_os = "windows")]

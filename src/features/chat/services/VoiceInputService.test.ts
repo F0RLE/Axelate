@@ -64,6 +64,15 @@ describe('VoiceInputService', () => {
         expect(invokeMock).not.toHaveBeenCalled();
     });
 
+    it('is unsupported outside Windows', () => {
+        document.body.dataset['platform'] = 'linux';
+        const service = createService();
+
+        expect(service.isSupported()).toBe(false);
+        expect(service.start(vi.fn())).toBe(false);
+        expect(invokeMock).not.toHaveBeenCalled();
+    });
+
     it('starts native recognition and emits trimmed text', async () => {
         const pending = deferred<NativeVoiceResponse>();
         invokeMock.mockReturnValue(pending.promise);
@@ -113,13 +122,16 @@ describe('VoiceInputService', () => {
 
     it('stops the current session and ignores the late native result', async () => {
         const pending = deferred<NativeVoiceResponse>();
-        invokeMock.mockReturnValue(pending.promise);
+        invokeMock.mockImplementation((cmd: string) =>
+            cmd === 'cancel_voice_recognition' ? Promise.resolve() : pending.promise,
+        );
         const service = createService();
         const onResult = vi.fn();
         const onState = vi.fn();
 
         service.start(onResult, { onStateChange: onState });
         service.stop();
+        expect(invokeMock).toHaveBeenCalledWith('cancel_voice_recognition', undefined);
         pending.resolve({ text: 'late text', status: 'success' });
         await pending.promise;
         await Promise.resolve();
@@ -134,11 +146,14 @@ describe('VoiceInputService', () => {
     });
 
     it('stops existing session when start is called twice', () => {
-        invokeMock.mockReturnValue(new Promise(() => undefined));
+        invokeMock.mockImplementation((cmd: string) =>
+            cmd === 'cancel_voice_recognition' ? Promise.resolve() : new Promise(() => undefined),
+        );
         const service = createService();
 
         expect(service.start(vi.fn())).toBe(true);
         expect(service.start(vi.fn())).toBe(false);
+        expect(invokeMock).toHaveBeenCalledWith('cancel_voice_recognition', undefined);
         expect(service.isActive()).toBe(false);
     });
 

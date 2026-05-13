@@ -87,6 +87,11 @@ export class VoiceInputService {
             return;
         }
 
+        void this._hostBridge.invoke('cancel_voice_recognition').catch((error: unknown) => {
+            this._tracer.error(
+                `[VoiceInputService] Native recognition cancel failed: ${String(error)}`,
+            );
+        });
         this._sessionId += 1;
         this._setState('stopping');
         this._finishSession('user');

@@ -168,6 +168,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         ai::open_chat_image_location,
         ai::save_chat_image_default,
         voice::recognize_voice_once,
+        voice::cancel_voice_recognition,
         voice::open_voice_privacy_settings,
         custom_model_service::get_custom_models,
         custom_model_service::add_custom_model,

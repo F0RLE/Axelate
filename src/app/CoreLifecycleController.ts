@@ -182,6 +182,12 @@ export class CoreLifecycleController {
 
     public initGlobalShortcuts(globalShortcutKeydown?: (e: KeyboardEvent) => void): void {
         const keydownHandler = globalShortcutKeydown ?? this._deps.globalShortcutKeydown;
+        if (this._activeGlobalShortcutKeydown === keydownHandler) {
+            return;
+        }
+        if (this._activeGlobalShortcutKeydown !== null) {
+            globalThis.removeEventListener('keydown', this._activeGlobalShortcutKeydown);
+        }
         this._activeGlobalShortcutKeydown = keydownHandler;
         globalThis.addEventListener('keydown', keydownHandler);
     }
