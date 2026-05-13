@@ -415,9 +415,7 @@ export class ChatController {
         this._state.isDestroyed = false;
 
         this._tracer.debug('[Chat] Initializing TS Controller...');
-        void this._ui.init().catch((err: unknown) => {
-            this._tracer.error(`[Chat] UI init failed: ${String(err)}`);
-        });
+        await this._ui.init();
         this._ui.setEditMessageHandler(async (text) => {
             await this._historyController.editLastTurn(this._state.isSending, text);
         });

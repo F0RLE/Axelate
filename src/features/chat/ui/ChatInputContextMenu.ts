@@ -173,7 +173,7 @@ export class ChatInputContextMenu {
             menu.appendChild(this._createButton(input, item, state));
         });
 
-        if (this._openToken !== openToken || this._input !== input) {
+        if (openRequestId !== this._openRequestId || this._input !== input) {
             return;
         }
 

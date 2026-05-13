@@ -9,7 +9,6 @@ type ToastType = 'success' | 'error' | 'warning' | 'info' | (string & {});
 export interface ToastElement extends HTMLElement {
     _timeout?: ReturnType<typeof setTimeout>;
     _removeTimeout?: ReturnType<typeof setTimeout>;
-    _actionHandler?: () => void;
 }
 
 /**
@@ -173,7 +172,6 @@ export class ToastManager {
         toast.className = `toast ${type}`;
         this._bindToastClick(toast, onClick);
         toast.classList.remove('leaving');
-        this._setToastAction(toast, onClick);
         this._clearToastTimers(toast);
         this._scheduleToastRemoval(toast, duration);
     }
@@ -202,7 +200,6 @@ export class ToastManager {
             </div>
         `);
 
-        this._setToastAction(toast, onClick);
         container.appendChild(toast);
         this._scheduleToastRemoval(toast, duration);
     }
@@ -275,40 +272,6 @@ export class ToastManager {
             delete toast._removeTimeout;
         }
     }
-
-    private _setToastAction(toast: ToastElement, onClick: (() => void) | null): void {
-        if (toast._actionHandler !== undefined) {
-            toast.removeEventListener('click', toast._actionHandler);
-            toast.removeEventListener('keydown', this._handleActionKeydown);
-            delete toast._actionHandler;
-        }
-
-        if (onClick === null) {
-            toast.classList.remove('toast--actionable');
-            toast.removeAttribute('role');
-            toast.removeAttribute('tabindex');
-            return;
-        }
-
-        toast._actionHandler = onClick;
-        toast.classList.add('toast--actionable');
-        toast.setAttribute('role', 'button');
-        toast.setAttribute('tabindex', '0');
-        toast.addEventListener('click', onClick);
-        toast.addEventListener('keydown', this._handleActionKeydown);
-    }
-
-    private readonly _handleActionKeydown = (event: KeyboardEvent): void => {
-        if (event.key !== 'Enter' && event.key !== ' ') {
-            return;
-        }
-
-        event.preventDefault();
-        const toast = event.currentTarget;
-        if (toast instanceof HTMLElement) {
-            toast.click();
-        }
-    };
 
     private _cleanupContainer(): void {
         const container = document.getElementById(ToastManager._containerId);

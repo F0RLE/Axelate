@@ -207,7 +207,7 @@ async fn resolve_local_engine_request(
             .await?;
 
             let status = engine_manager.start(config).await?;
-            let mut messages_context = request.messages.clone();
+            let mut messages_context = prepared_messages_context.to_vec();
 
             if let Some(session_id) = &request.session_id {
                 messages_context = sessions.build_local_context(
