@@ -425,10 +425,7 @@ describe('TauriProvider', () => {
         it('should block Tauri clipboard reads outside approved UI flow', async () => {
             await expect(provider.readClipboardText()).resolves.toBeNull();
 
-            expect(mockedTauriInvoke).not.toHaveBeenCalledWith(
-                'plugin:clipboard-manager|read_text',
-                {},
-            );
+            expect(mockedTauriInvoke).not.toHaveBeenCalled();
         });
 
         it('should not use browser clipboard reads in web mode', async () => {
