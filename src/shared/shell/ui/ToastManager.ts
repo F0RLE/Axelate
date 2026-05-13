@@ -209,12 +209,23 @@ export class ToastManager {
             toast.removeAttribute('role');
             toast.removeAttribute('tabindex');
             toast.onclick = null;
+            toast.onkeydown = null;
             return;
         }
 
         toast.setAttribute('role', 'button');
         toast.tabIndex = 0;
         toast.onclick = onClick;
+        toast.onkeydown = (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
+            }
+
+            if (event.key === ' ') {
+                event.preventDefault();
+            }
+            onClick();
+        };
     }
 
     private _renderToastContent(message: string, title: string | null): string {

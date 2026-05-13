@@ -149,10 +149,12 @@ export class ChatInputContextMenu {
         clientY: number,
         openRequestId: number,
     ): Promise<void> {
-        this._clipboardText = await this._readClipboardForMenu();
+        const clipboardText = await this._readClipboardForMenu();
         if (openRequestId !== this._openRequestId || this._input !== input) {
             return;
         }
+
+        this._clipboardText = clipboardText;
 
         const menu = document.createElement('div');
         menu.className = 'chat-input-context-menu';

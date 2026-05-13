@@ -23,24 +23,40 @@ export class ChatViewHelper {
     }
 
     private _setEventBindings(mode: 'add' | 'remove'): void {
-        const method = mode === 'add' ? 'addEventListener' : 'removeEventListener';
         const fileInput = document.getElementById('chat-file-input') as HTMLInputElement | null;
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
 
         if (fileInput === null) {
-            this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-file-input during bind.');
+            if (mode === 'add') {
+                this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-file-input during bind.');
+            }
         } else {
-            fileInput[method]('change', this._deps.onFileInputChange);
+            if (mode === 'add') {
+                fileInput.addEventListener('change', this._deps.onFileInputChange);
+            } else {
+                fileInput.removeEventListener('change', this._deps.onFileInputChange);
+            }
         }
 
         if (chatInput === null) {
-            this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-input during bind.');
+            if (mode === 'add') {
+                this._deps.tracer?.warn('[ChatViewHelper] Missing #chat-input during bind.');
+            }
         } else {
-            chatInput[method]('keydown', this._deps.onChatInputKeydown as EventListener);
-            chatInput[method]('input', this._deps.onChatInputInput);
+            if (mode === 'add') {
+                chatInput.addEventListener('keydown', this._deps.onChatInputKeydown);
+                chatInput.addEventListener('input', this._deps.onChatInputInput);
+            } else {
+                chatInput.removeEventListener('keydown', this._deps.onChatInputKeydown);
+                chatInput.removeEventListener('input', this._deps.onChatInputInput);
+            }
         }
 
-        globalThis[method]('resize', this._deps.onViewportResize);
+        if (mode === 'add') {
+            globalThis.addEventListener('resize', this._deps.onViewportResize);
+        } else {
+            globalThis.removeEventListener('resize', this._deps.onViewportResize);
+        }
     }
 
     public randomizeGreeting(currentGreetingIndex: number, forceIndex?: number): number {

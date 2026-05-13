@@ -371,6 +371,7 @@ export class AIChatTransport implements IChatTransport {
     }
 
     public destroy(): void {
+        void this.cancelActiveChatRequest();
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.clear();
         this._streamListeners.clear();

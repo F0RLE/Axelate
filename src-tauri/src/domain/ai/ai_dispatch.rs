@@ -274,7 +274,17 @@ async fn prepend_local_system_prompt(
         return Ok(());
     }
 
-    let settings = settings_service.get_settings().await?;
+    let settings = match settings_service.get_settings().await {
+        Ok(settings) => settings,
+        Err(error) => {
+            tracing::warn!(
+                provider = %provider,
+                error = %error,
+                "Skipping local system prompt because settings could not be loaded"
+            );
+            return Ok(());
+        }
+    };
     let key = format!("{provider}_system_prompt");
     let prompt = settings
         .extra_settings

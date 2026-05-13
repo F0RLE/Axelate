@@ -200,7 +200,7 @@ export class TauriProvider implements IBridge {
             return;
         }
 
-        this._tracer.info(`[Mock Clipboard] Write: ${text}`);
+        this._tracer.info(`[Mock Clipboard] Write requested (${String(text.length)} chars)`);
     }
 
     public async readClipboardText(): Promise<string | null> {

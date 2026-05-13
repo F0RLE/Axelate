@@ -106,9 +106,19 @@ export class ChatUI {
             translate: this._translate,
             copyText: (text) => deps.copyText(text),
             readClipboardText: () => deps.readClipboardText(),
-            canPaste: () =>
-                deps.isTauriRuntime() ||
-                typeof globalThis.navigator.clipboard.readText === 'function',
+            canPaste: () => {
+                const browserGlobals = globalThis as unknown as {
+                    navigator?: {
+                        clipboard?: {
+                            readText?: unknown;
+                        };
+                    };
+                };
+                return (
+                    deps.isTauriRuntime() ||
+                    typeof browserGlobals.navigator?.clipboard?.readText === 'function'
+                );
+            },
             tracer: deps.tracer,
         });
         this._attachmentRenderer = new ChatAttachmentRenderer({

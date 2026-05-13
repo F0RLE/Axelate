@@ -116,10 +116,6 @@
     font-size: 0.78rem;
     line-height: 1.35;
     white-space: nowrap;
-}
-
-.chat-streaming-state-text {
-    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
 }

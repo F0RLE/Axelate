@@ -3,6 +3,11 @@ import { createMultimodalContent } from '@/features/ai/utils/chatRequestUtils';
 import type { ChatFileHandler } from './ChatFileHandler';
 import type { IChatAttachment, IChatMessage } from '../types/chatTypes';
 
+const estimateTextTokens = (text: string): number => {
+    const normalized = text.trim();
+    return normalized === '' ? 0 : Math.max(1, Math.ceil(normalized.length / 4));
+};
+
 type ChatSendFlowDeps = {
     fileHandler: Pick<ChatFileHandler, 'processForSend'>;
     getHistory: () => IChatMessage[];
@@ -26,9 +31,10 @@ export class ChatSendFlow {
             const tokens = attachment.tokens;
             return total + (typeof tokens === 'number' && Number.isFinite(tokens) ? tokens : 0);
         }, 0);
+        const textTokens = estimateTextTokens(text);
 
         return {
-            tokenCount: attachmentTokens,
+            tokenCount: textTokens + attachmentTokens,
             attachments,
             combinedText,
             historyHead,

@@ -99,7 +99,11 @@ export class ChatMessageInteractionController {
     }
 
     public async handleCopyClick(event: MouseEvent): Promise<void> {
-        const target = event.target as HTMLElement;
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+
+        const target = event.target;
         const regenerateBtn = target.closest('.chat-regenerate-own-btn');
         if (regenerateBtn instanceof HTMLElement) {
             event.preventDefault();

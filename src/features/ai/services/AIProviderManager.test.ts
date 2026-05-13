@@ -21,7 +21,7 @@ function createMockCore(
         return value !== null && value !== '';
     },
 ): AIProviderManagerContext {
-    return {
+    const context: AIProviderManagerContext = {
         tauriProvider: {
             isTauri: vi.fn().mockReturnValue(true),
             invoke: vi.fn(),
@@ -31,16 +31,17 @@ function createMockCore(
             hasSecureKey: vi.fn(hasKeyFn),
         },
         catalog: {
-            getCatalog: vi.fn().mockReturnValue({ ai: [], services: [] }),
+            getCatalog: vi.fn().mockReturnValue({ ai: [] }),
         },
         aiSettings: {
             setAiSessionId: vi.fn(),
             setSelectedAIModel: vi.fn(),
-            getSelectedAIModel: vi.fn().mockReturnValue(null),
+            getSelectedAIModel: vi.fn().mockReturnValue(undefined),
             getThinkingLevel: vi.fn().mockReturnValue('auto'),
             getInternetAccessEnabled: vi.fn().mockReturnValue(false),
         },
-    } as unknown as AIProviderManagerContext;
+    };
+    return context;
 }
 
 describe('AIProviderManager', () => {

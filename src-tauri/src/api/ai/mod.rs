@@ -524,26 +524,31 @@ pub async fn send_chat_message(
 ) -> Result<ChatResponse, AppError> {
     let mut request = request;
     let request_id = ensure_request_id(&mut request);
-    let model = request.model.clone();
-    fill_chat_request_api_key(&mut request, &config_service).await?;
-
+    let streamed_message_id = uuid::Uuid::new_v4().to_string();
     let cancellation = cancellation_registry.register(&request_id);
+    let model = request.model.clone();
+    if let Err(error) = fill_chat_request_api_key(&mut request, &config_service).await {
+        cancellation_registry.clear(&request_id);
+        return Err(error);
+    }
+
     let sink = create_stream_sink(request_id.clone(), chat_channel, thought_channel);
     let cancel_sink = Arc::clone(&sink);
 
     let result = tokio::select! {
-        result = ai_service::process_chat_request(
+        result = ai_service::process_chat_request_with_message_id(
             request,
             &sessions,
             &config_service,
             &engine_manager,
             settings_service.inner(),
             sink,
+            streamed_message_id.clone(),
         ) => result,
         _ = cancellation => {
             tracing::info!(request_id = %request_id, "AI request cancelled by frontend");
             cancel_sink.emit(StreamEvent::Done {
-                message_id: request_id.clone(),
+                message_id: streamed_message_id,
                 usage: None,
             });
             Ok(ChatResponse {

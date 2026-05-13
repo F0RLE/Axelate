@@ -856,6 +856,10 @@ fn handle_stream_json_line(
         .get("stop")
         .and_then(serde_json::Value::as_bool)
         .unwrap_or(false)
+        || json
+            .get("done")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
     {
         state.saw_terminal_chunk = true;
     }
@@ -891,6 +895,11 @@ fn handle_stream_json_line(
                 })
         })
         .or_else(|| json.get("content").and_then(extract_stream_text))
+        .or_else(|| {
+            json.get("message")
+                .and_then(|message| message.get("content"))
+                .and_then(extract_stream_text)
+        })
         .or_else(|| json.get("response").and_then(extract_stream_text))
         .or_else(|| {
             json.get("token")
@@ -1214,15 +1223,23 @@ mod tests {
     fn process_stream_chunk_normalizes_ollama_usage() {
         let sink = TestSink::default();
         let mut state = StreamingAccumulator::new();
-        let chunk = b"data: {\"message\":{\"content\":\"\"},\"done\":true,\"prompt_eval_count\":7,\"eval_count\":11}\n\n";
+        let chunk = b"data: {\"message\":{\"content\":\"hello\"},\"done\":true,\"prompt_eval_count\":7,\"eval_count\":11}\n\n";
 
         let result = process_stream_chunk(chunk, "msg-1", &sink, &mut state);
 
         assert!(matches!(result, StreamChunkResult::Continue));
+        assert_eq!(state.full_content, "hello");
+        assert!(state.saw_terminal_chunk);
         let usage = state.final_usage.expect("usage");
         assert_eq!(usage.prompt_tokens, 7);
         assert_eq!(usage.completion_tokens, 11);
         assert_eq!(usage.total_tokens, 18);
+
+        let events = sink.events.lock().expect("sink events");
+        assert!(matches!(
+            events.first(),
+            Some(StreamEvent::ChatChunk { content, .. }) if content == "hello"
+        ));
     }
 
     #[test]
