@@ -235,13 +235,22 @@ export class TauriProvider implements IBridge {
     }
 
     private async _writeBrowserClipboard(text: string): Promise<boolean> {
-        const clipboard = (globalThis.navigator as BrowserClipboardHost).clipboard;
+        const navigator = (globalThis as { navigator?: BrowserClipboardHost }).navigator;
+        if (navigator === undefined) {
+            return false;
+        }
+
+        const clipboard = navigator.clipboard;
         if (clipboard === undefined) {
             return false;
         }
 
-        await clipboard.writeText(text);
-        return true;
+        try {
+            await clipboard.writeText(text);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     /**

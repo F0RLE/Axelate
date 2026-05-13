@@ -262,14 +262,15 @@ impl<'a> LifecycleExecutor<'a> {
             }
         }
 
+        let mut process_scan_error = None;
         if let Some(entry_path) = script_entry_path.as_ref()
             && let Err(error) = self.kill_matching_script_processes(entry_path).await
         {
-            return ControlResponse {
-                success: false,
-                message: format!("Failed to scan matching script processes: {error}"),
-                status: Some("error".to_string()),
-            };
+            tracing::warn!(
+                "Failed to scan matching script processes for {} during stop: {error}",
+                self.module_id
+            );
+            process_scan_error = Some(error);
         }
 
         // 3. Escalation check (fallback for orphans or if still running)
@@ -306,8 +307,16 @@ impl<'a> LifecycleExecutor<'a> {
         let _ = std::fs::remove_file(self.module_path.join("module.pid"));
 
         ControlResponse {
-            success: true,
-            message: format!("Module {} stopped", self.module_id),
+            success: process_scan_error.is_none(),
+            message: process_scan_error.map_or_else(
+                || format!("Module {} stopped", self.module_id),
+                |error| {
+                    format!(
+                        "Module {} stopped; process scan failed: {error}",
+                        self.module_id
+                    )
+                },
+            ),
             status: Some("stopped".to_string()),
         }
     }

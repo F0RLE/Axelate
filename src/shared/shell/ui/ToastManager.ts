@@ -206,6 +206,7 @@ export class ToastManager {
 
     private _bindToastClick(toast: ToastElement, onClick: (() => void) | null): void {
         if (onClick === null) {
+            toast.classList.remove('toast--actionable');
             toast.removeAttribute('role');
             toast.removeAttribute('tabindex');
             toast.onclick = null;
@@ -213,6 +214,7 @@ export class ToastManager {
             return;
         }
 
+        toast.classList.add('toast--actionable');
         toast.setAttribute('role', 'button');
         toast.tabIndex = 0;
         toast.onclick = onClick;

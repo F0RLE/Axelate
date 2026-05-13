@@ -204,19 +204,89 @@ export class EngineStatusService {
 
     private _startDomSyncObserver(): void {
         this._domObserver?.disconnect();
-        this._domObserver = new MutationObserver(() => {
-            this._scheduleDomSync();
+        this._domObserver = new MutationObserver((records) => {
+            if (this._retargetDomSyncObserver(records)) {
+                this._scheduleDomSync();
+                return;
+            }
+
+            if (this._hasRelevantDomSyncMutation(records)) {
+                this._scheduleDomSync();
+            }
         });
-        const target =
-            document.querySelector<HTMLElement>('.models-grid') ??
-            document.querySelector<HTMLElement>('#page-modules') ??
-            document.body;
+        const target = this._getDomSyncTarget();
         this._domObserver.observe(target, {
             childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ['data-app-id', 'data-current-module'],
         });
+    }
+
+    private _getDomSyncTarget(): HTMLElement {
+        return (
+            document.querySelector<HTMLElement>('.models-grid') ??
+            document.querySelector<HTMLElement>('#page-modules') ??
+            document.body
+        );
+    }
+
+    private _retargetDomSyncObserver(records: MutationRecord[]): boolean {
+        const preferredTarget =
+            document.querySelector<HTMLElement>('.models-grid') ??
+            document.querySelector<HTMLElement>('#page-modules');
+        if (
+            preferredTarget === null ||
+            records.every((record) => record.target === preferredTarget)
+        ) {
+            return false;
+        }
+
+        const appearedInMutation = records.some((record) =>
+            Array.from(record.addedNodes).some((node) =>
+                this._nodeMatchesDomSyncTarget(node, '.models-grid, #page-modules'),
+            ),
+        );
+        if (!appearedInMutation) {
+            return false;
+        }
+
+        this._domObserver?.disconnect();
+        this._domObserver?.observe(preferredTarget, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['data-app-id', 'data-current-module'],
+        });
+        return true;
+    }
+
+    private _hasRelevantDomSyncMutation(records: MutationRecord[]): boolean {
+        return records.some((record) => {
+            if (
+                record.type === 'attributes' &&
+                record.target instanceof Element &&
+                this._elementMatchesEngineCard(record.target)
+            ) {
+                return true;
+            }
+
+            return Array.from(record.addedNodes).some((node) =>
+                this._nodeMatchesDomSyncTarget(node, '[data-app-id], [data-current-module]'),
+            );
+        });
+    }
+
+    private _nodeMatchesDomSyncTarget(node: Node, selector: string): boolean {
+        if (!(node instanceof Element)) {
+            return false;
+        }
+
+        return node.matches(selector) || node.querySelector(selector) !== null;
+    }
+
+    private _elementMatchesEngineCard(element: Element): boolean {
+        return element.hasAttribute('data-app-id') || element.hasAttribute('data-current-module');
     }
 
     private _scheduleDomSync(): void {
@@ -270,6 +340,8 @@ export class EngineStatusService {
 
         slots.forEach((slot) => {
             if (!slot.engine.healthy) {
+                previousActive.delete(slot.engine.id);
+                this.setEngineState(slot.engine.id, 'error');
                 return;
             }
             this._activeSlots.set(slot.engine.id, slot.engine.endpoint);

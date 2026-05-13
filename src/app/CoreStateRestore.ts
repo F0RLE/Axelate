@@ -65,6 +65,7 @@ export function restoreSelectedModules(args: RestoreSelectedModulesArgs): Restor
     }
 
     if (restoredSelections.aiText !== null && restoredSelections.aiImage !== null) {
+        // Intentional second refresh: image restore can change shared AI-card visibility/state.
         args.appUI.updateModuleCard('ai_text', restoredSelections.aiText);
     }
 
