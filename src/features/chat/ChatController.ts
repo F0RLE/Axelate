@@ -345,6 +345,11 @@ export class ChatController {
             appendUserMessage: (text, attachments, tokens) => {
                 this._ui.appendMessage('user', text, { attachments, tokens });
             },
+            rollbackOptimisticSend: (historySnapshot, inputText) => {
+                this._historyController.restoreLocalHistorySnapshot(historySnapshot);
+                this._inputCoordinator.restore(inputText);
+                void this._syncContextTokensFromHistory(historySnapshot);
+            },
             getSelectedModule: (category) => deps.getSelectedModule(category),
             getPreferredAiCategory: () => deps.getPreferredAiCategory(),
             isForceImageGeneration: () => this._forceImageGeneration,

@@ -53,6 +53,7 @@ type ChatSendControllerOptions = {
     clearInput: () => void;
     addContextTokens: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
+    rollbackOptimisticSend: (historySnapshot: IChatMessage[], inputText: string) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     getPreferredAiCategory: () => 'ai_text' | 'ai_image';
     isForceImageGeneration: () => boolean;
@@ -180,6 +181,8 @@ export class ChatSendController {
         let streamingHandle: StreamingMessageHandle | null = null;
         let imageHandle: ImageGenerationHandle | null = null;
         let shouldStopImageEngine = false;
+        let optimisticUserAppended = false;
+        const historySnapshot = this._cloneHistory(this._options.getHistory());
 
         try {
             const sendPlan = await this._sendFlow.prepare(text);
@@ -218,6 +221,7 @@ export class ChatSendController {
             this._options.addContextTokens(sendPlan.tokenCount);
             this._options.appendUserMessage(text, sendPlan.attachments, sendPlan.tokenCount);
             this._options.pushUserMessage(sendPlan.userContent);
+            optimisticUserAppended = true;
 
             const ensureStreamingHandle = (): StreamingMessageHandle => {
                 streamingHandle ??= this._options.createStreamingHandle(typingId);
@@ -267,6 +271,9 @@ export class ChatSendController {
             }
 
             await this._options.handleResponse(response, streamingHandle, imageHandle);
+            if (!response.ok) {
+                this._rollbackOptimisticSend(historySnapshot, text);
+            }
             return true;
         } catch (error: unknown) {
             this._cleanupStreamingState(listenerId, typingId);
@@ -276,6 +283,9 @@ export class ChatSendController {
                 return false;
             }
             if (!this._wasDestroyed()) {
+                if (optimisticUserAppended) {
+                    this._rollbackOptimisticSend(historySnapshot, text);
+                }
                 this._options.handleError(error);
             } else {
                 this._cancelStreamingHandle(streamingHandle);
@@ -382,6 +392,34 @@ export class ChatSendController {
     private _createSendId(): string {
         this._sendSequence += 1;
         return `${Date.now().toString(36)}-${this._sendSequence.toString(36)}`;
+    }
+
+    private _rollbackOptimisticSend(historySnapshot: IChatMessage[], inputText: string): void {
+        this._options.rollbackOptimisticSend(this._cloneHistory(historySnapshot), inputText);
+    }
+
+    private _cloneHistory(history: IChatMessage[]): IChatMessage[] {
+        return history.map((message) => ({
+            ...message,
+            content: this._cloneContent(message.content),
+        }));
+    }
+
+    private _cloneContent(content: IChatMessage['content']): IChatMessage['content'] {
+        if (typeof content === 'string') {
+            return content;
+        }
+
+        return content.map((part) => {
+            if (part.type === 'image_url') {
+                return {
+                    ...part,
+                    image_url: { ...part.image_url },
+                };
+            }
+
+            return { ...part };
+        });
     }
 
     public async tryAutoStartAi(prompt?: string): Promise<boolean> {

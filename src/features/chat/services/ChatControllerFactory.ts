@@ -123,6 +123,7 @@ type ChatSendFactoryDeps = {
     clearInput: () => void;
     addContextTokens: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
+    rollbackOptimisticSend: (historySnapshot: IChatMessage[], inputText: string) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     getPreferredAiCategory: () => 'ai_text' | 'ai_image';
     isForceImageGeneration: () => boolean;
@@ -287,6 +288,9 @@ export class ChatControllerFactory {
             },
             appendUserMessage: (text, attachments, tokens) => {
                 deps.appendUserMessage(text, attachments, tokens);
+            },
+            rollbackOptimisticSend: (historySnapshot, inputText) => {
+                deps.rollbackOptimisticSend(historySnapshot, inputText);
             },
             getSelectedModule: (category) => deps.getSelectedModule(category),
             getPreferredAiCategory: () => deps.getPreferredAiCategory(),

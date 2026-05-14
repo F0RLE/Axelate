@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatSendController } from './ChatSendController';
+import type { IChatMessage } from '../types/chatTypes';
 
 describe('ChatSendController', () => {
     const createController = () => {
@@ -42,7 +43,7 @@ describe('ChatSendController', () => {
             service: {
                 sendMessage,
             } as never,
-            getHistory: vi.fn(() => []),
+            getHistory: vi.fn<() => IChatMessage[]>(() => []),
             estimateTokens: vi.fn((text: string) => Promise.resolve(Math.ceil(text.length / 4))),
             pushUserMessage: vi.fn(),
             createStreamingHandle: vi.fn(() => streamingHandle),
@@ -53,6 +54,7 @@ describe('ChatSendController', () => {
             clearInput: vi.fn(),
             addContextTokens: vi.fn(),
             appendUserMessage: vi.fn(),
+            rollbackOptimisticSend: vi.fn(),
             getSelectedModule: vi.fn(),
             getPreferredAiCategory: vi.fn(() => 'ai_text' as const),
             isForceImageGeneration: vi.fn(() => false),
@@ -163,6 +165,42 @@ describe('ChatSendController', () => {
         expect(options.pushUserMessage).not.toHaveBeenCalled();
         expect(sendMessage).not.toHaveBeenCalled();
         expect(options.handleError).toHaveBeenCalled();
+        expect(options.rollbackOptimisticSend).not.toHaveBeenCalled();
+    });
+
+    it('rolls back the optimistic user turn when the provider returns an error', async () => {
+        const { controller, options, sendMessage, streamingHandle } = createController();
+        const existingHistory: IChatMessage[] = [{ role: 'assistant', content: 'previous' }];
+        options.getHistory.mockReturnValue(existingHistory);
+        sendMessage.mockResolvedValueOnce({ ok: false, error: 'provider failed' });
+        const input = document.createElement('textarea');
+        input.value = 'hello';
+
+        const result = await controller.sendChat(input);
+
+        expect(result).toBe(true);
+        expect(options.handleResponse).toHaveBeenCalledWith(
+            { ok: false, error: 'provider failed' },
+            streamingHandle,
+            null,
+        );
+        expect(options.rollbackOptimisticSend).toHaveBeenCalledWith(existingHistory, 'hello');
+        expect(options.handleError).not.toHaveBeenCalled();
+    });
+
+    it('rolls back the optimistic user turn when sending throws after render', async () => {
+        const { controller, options, sendMessage } = createController();
+        const existingHistory: IChatMessage[] = [{ role: 'assistant', content: 'previous' }];
+        options.getHistory.mockReturnValue(existingHistory);
+        sendMessage.mockRejectedValueOnce(new Error('network failed'));
+        const input = document.createElement('textarea');
+        input.value = 'hello';
+
+        const result = await controller.sendChat(input);
+
+        expect(result).toBe(false);
+        expect(options.rollbackOptimisticSend).toHaveBeenCalledWith(existingHistory, 'hello');
+        expect(options.handleError).toHaveBeenCalledWith(new Error('network failed'));
     });
 
     it('uses distinct stream listener ids when sends start in the same millisecond', async () => {
