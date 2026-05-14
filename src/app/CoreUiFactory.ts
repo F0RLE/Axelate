@@ -1,5 +1,5 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import type { ChatController } from '@/features/chat/chat';
+import type { ChatController } from '@/features/chat/ChatController';
 import { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { NavigationUI } from '@/infrastructure/navigation/NavigationUI';

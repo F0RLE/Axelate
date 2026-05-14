@@ -1,5 +1,5 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import { ChatController } from '@/features/chat/chat';
+import { ChatController } from '@/features/chat/ChatController';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';

@@ -8,7 +8,7 @@ import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { EventBus } from '@/shared/services/EventBus';
-import type { PendingChatRevealStore } from '../chat';
+import type { PendingChatRevealStore } from '../ChatController';
 import type { ChatContent } from '@/features/ai/types/aiTypes';
 import type { IApp } from '@/shared/types/coreTypes';
 import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';

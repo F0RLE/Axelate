@@ -1,5 +1,5 @@
 /**
- * @module chat/chat
+ * @module chat/ChatController
  * @description Main controller for the Chat module.
  * Composes VoiceController and FilePickerController for SRP compliance.
  */

@@ -99,7 +99,7 @@ vi.mock('./services/ChatFileHandler', () => ({
     },
 }));
 
-import { ChatController } from './chat';
+import { ChatController } from './ChatController';
 import { ChatContentHelper } from './services/ChatContentHelper';
 import { ChatUiStateHelper } from './services/ChatUiStateHelper';
 import { EventBus } from '@/shared/services/EventBus';
