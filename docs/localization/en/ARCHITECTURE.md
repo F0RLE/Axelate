@@ -11,6 +11,8 @@ Axelate is a Tauri 2 desktop app:
 - `src-tauri/` is the Rust backend and Tauri host.
 - Rust commands are exported to TypeScript through Specta bindings in
   `src/shared/types/bindings.ts`.
+- The current binding stack is `specta` `2.0.0-rc.25`,
+  `tauri-specta` `2.0.0-rc.25`, and `specta-typescript` `0.0.12`.
 - Runtime assets, built-in module manifests, and locales live under
   `src-tauri/resources/`.
 
@@ -86,6 +88,11 @@ Use this sequence when changing a frontend-visible backend contract:
 4. Run `npm --prefix src run typecheck`.
 
 If bindings are out of date, `npm --prefix src run bindings:check` should fail.
+
+Dynamic JSON fields such as provider payloads, module settings, config schemas,
+and chat content are exported as TypeScript `unknown`. Treat that as an
+intentional trust boundary: narrow the value at the frontend use site, or replace
+the Rust field with a typed DTO when the shape becomes stable.
 
 ## Cross-Platform Rule
 

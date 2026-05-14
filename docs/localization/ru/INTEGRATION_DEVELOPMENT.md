@@ -29,7 +29,7 @@ npm run integration:doctor -- ./my-integration
   iframe-протокола custom settings UI.
 
 Главный контракт все равно описан в [Integration API](../en/INTEGRATION_API.md)
-(англ., в `docs/en/INTEGRATION_API.md`): это локальный HTTP API лаунчера.
+(англ., в `docs/localization/en/INTEGRATION_API.md`): это локальный HTTP API лаунчера.
 
 ## Структура интеграции
 

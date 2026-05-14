@@ -94,30 +94,30 @@ git tag v0.1.5
 git push origin v0.1.5
 ```
 
-For the full release checklist, see [Releases](docs/en/RELEASES.md).
+For the full release checklist, see [Releases](docs/localization/en/RELEASES.md).
 
 ## Docs
 
 Start here:
 
-- [User Guide](docs/en/USER_GUIDE.md)
-- [Getting Started](docs/en/GETTING_STARTED.md)
-- [Development Workflow](docs/en/DEVELOPMENT_WORKFLOW.md)
-- [Architecture](docs/en/ARCHITECTURE.md)
-- [Integration Development](docs/en/INTEGRATION_DEVELOPMENT.md)
-- [Releases](docs/en/RELEASES.md)
-- [Current State](docs/en/CURRENT_STATE.md)
+- [User Guide](docs/localization/en/USER_GUIDE.md)
+- [Getting Started](docs/localization/en/GETTING_STARTED.md)
+- [Development Workflow](docs/localization/en/DEVELOPMENT_WORKFLOW.md)
+- [Architecture](docs/localization/en/ARCHITECTURE.md)
+- [Integration Development](docs/localization/en/INTEGRATION_DEVELOPMENT.md)
+- [Releases](docs/localization/en/RELEASES.md)
+- [Current State](docs/localization/en/CURRENT_STATE.md)
 - [Contributing](CONTRIBUTING.md)
 
 Current reference:
 
-- [Trust Model](docs/en/TRUST_MODEL.md)
-- Integration Development: [RU](docs/ru/INTEGRATION_DEVELOPMENT.md) · [ZH](docs/zh/INTEGRATION_DEVELOPMENT.md)
+- [Trust Model](docs/localization/en/TRUST_MODEL.md)
+- Integration Development: [RU](docs/localization/ru/INTEGRATION_DEVELOPMENT.md) · [ZH](docs/localization/zh/INTEGRATION_DEVELOPMENT.md)
 
 Planning only:
 
-- [Vision](docs/en/VISION.md)
-- [Roadmap](docs/en/ROADMAP.md)
+- [Vision](docs/localization/en/VISION.md)
+- [Roadmap](docs/localization/en/ROADMAP.md)
 
 `Vision` and `Roadmap` are planning documents. They are not setup guides and should not be read as a promise that those features already ship today.
 

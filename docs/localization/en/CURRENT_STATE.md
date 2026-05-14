@@ -33,7 +33,7 @@ Confirmed by the repository:
 - backend: Rust
 - desktop runtime: Tauri v2
 - frontend: vanilla TypeScript
-- shared contract generation: Specta
+- shared contract generation: Specta rc.25 with generated TypeScript bindings
 - async runtime: Tokio
 - HTTP client: reqwest
 - target operating system: Windows-first
@@ -43,7 +43,7 @@ Confirmed repository posture:
 - Rust owns domain logic and secure state
 - TypeScript owns desktop composition and UI orchestration
 - Tauri commands are used as thin adapters
-- frontend-visible bindings are generated from Rust types
+- frontend-visible bindings are generated from Rust types and validated by the exporter
 
 ## Current Repository Shape
 
@@ -52,7 +52,7 @@ Top-level areas:
 - `.github/` workflow runner, scripts, automation support
 - `src/` frontend app and shell
 - `src-tauri/` Rust backend, domain logic, config, commands
-- `docs/` canonical English product documentation
+- `docs/localization/en/` canonical English product documentation
 
 Current backend top-level areas:
 

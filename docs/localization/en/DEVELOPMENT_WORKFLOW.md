@@ -25,7 +25,7 @@ The repository currently splits responsibilities this way:
 - `.github/scripts/workflow.mjs`: root task runner for setup, dev, build, release, and verification
 - `src/`: vanilla TypeScript frontend, shell, tests, and frontend tooling
 - `src-tauri/`: Rust backend, domain logic, secure state, and build pipeline
-- `docs/en/`: current docs plus separate planning docs
+- `docs/localization/en/`: current English docs plus separate planning docs
 
 Rust toolchain policy:
 
@@ -143,6 +143,14 @@ Frontend bindings are generated from Rust. The intended workflow is:
 - rely on `npm run bindings:check`, `npm run typecheck`, and `npm run verify` for read-only validation
 
 If bindings are out of date, `typecheck` and `verify` should fail instead of silently rewriting files.
+
+Current Specta policy:
+
+- the binding stack is `specta` `2.0.0-rc.25`, `tauri-specta` `2.0.0-rc.25`, and `specta-typescript` `0.0.12`
+- `serde_json::Value` is exported to TypeScript as `unknown` because it is dynamic JSON, not a stable typed contract
+- Rust integer shapes that cross the Tauri JSON boundary are exported as TypeScript `number`; do not introduce frontend `bigint` unless the IPC path is changed deliberately
+- floating-point DTO fields use lossless-float generation so metrics and settings remain typed as numbers on the frontend
+- validate binding changes with `npm run bindings:check`, `npm run typecheck`, and the smallest relevant Rust/frontend tests
 
 ## Git Hooks
 
